@@ -443,7 +443,7 @@ Static schedules register in `worker.py` after `DBOS.launch()` with `DBOS.apply_
 | `TUMNIS_KILLPOINT` | Test-only kill point name for kill-and-resume tests | unset | tests |
 | `SENTRY_DSN` | GlitchTip DSN | unset | Coolify |
 | `EMBEDDING_DIMS` | Vector size for the default embedding model | 1024 (plan default) | Coolify |
-| `GENERATION__BASE_URL`, `GENERATION__MODEL` | The Generation slot's OpenAI-compatible endpoint (local vLLM, e.g. `http://vllm.lan:8000`) and served model name; either unset leaves the slot off and first actions stay pending (P1-03) | unset | Coolify |
+| `GENERATION__BASE_URL`, `GENERATION__MODEL` | The Generation slot's OpenAI-compatible endpoint (local vLLM, e.g. `http://vllm.lan:8000`) and served model name; either unset leaves the slot off and first actions stay pending (P1-03). `http://` only on a trusted, isolated LAN (task titles travel in cleartext); `https://` anywhere else | unset | Coolify |
 | `GENERATION__PLACEHOLDER_TIMEOUT_MS`, `GENERATION__SPOKEN_TIMEOUT_MS` | How long a placeholder first action or a spoken focus message may take before the caller gets None (R-30: short in tests) | 2000 (plan default) | Coolify |
 | `SCRUB_KEY` | Key for scrubbing recordings | unset | developer machine |
 | `APP_DB_PASSWORD`, `OWNER_DB_PASSWORD`, `POSTGRES_PASSWORD` | Compose interpolation only: role passwords set by initdb and placed in the database URLs (P0-04) | none (`deploy/test.env` for compose.test) | Coolify |

@@ -58,7 +58,11 @@ class GenerationSettings(BaseModel):
     """The Generation slot (P1-03, FR-11.8): the local OpenAI-compatible endpoint (vLLM) the
     worker asks for placeholder first actions and spoken focus messages, and how long a
     caller waits (R-30: tests shorten it). Unset `base_url` or `model` leaves the slot off:
-    the first action simply stays pending. Env: `GENERATION__BASE_URL` and so on."""
+    the first action simply stays pending. Env: `GENERATION__BASE_URL` and so on.
+
+    Transport: requests carry task titles and project names in cleartext over `http://`,
+    so an `http://` base URL is for a trusted, isolated LAN only (the homelab vLLM); use
+    `https://` anywhere else."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
