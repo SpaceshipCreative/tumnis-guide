@@ -11,10 +11,15 @@ gets `None` (the first action stays pending). Tests pass a provider directly.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Final
 
+from tumnis.core.adapters.registry import current_mode, resolve
+from tumnis.core.clock import SystemClock
 from tumnis.core.net import NetPolicy
 from tumnis.modules.decisions.adapters.port import GenerationProvider
 from tumnis.settings import GenerationSettings
+
+ADAPTER: Final = "decisions.vllm_generation"
 
 
 @dataclass
@@ -50,5 +55,26 @@ def settings() -> GenerationSettings:
 
 
 def provider() -> GenerationProvider | None:
-    """The configured provider; None when the slot has no endpoint."""
+    """The configured provider, built once; None when the slot has no endpoint."""
+    if not _slot.built:
+        _slot.provider = _build(_slot.settings, _slot.net_policy)
+        _slot.built = True
     return _slot.provider
+
+
+def _build(cfg: GenerationSettings, net_policy: NetPolicy) -> GenerationProvider | None:
+    mode = current_mode()
+    if mode == "fake":
+        fake: GenerationProvider = resolve(ADAPTER, "fake")
+        return fake
+    if cfg.base_url is None or cfg.model is None:
+        return None
+    real: GenerationProvider = resolve(
+        ADAPTER,
+        "real",
+        base_url=cfg.base_url,
+        model=cfg.model,
+        net_policy=net_policy,
+        clock=SystemClock(),
+    )
+    return real

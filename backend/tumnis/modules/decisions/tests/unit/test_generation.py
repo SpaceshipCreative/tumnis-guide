@@ -160,9 +160,12 @@ async def test_a_provider_that_hangs_is_cut_off_at_the_timeout() -> None:
 
 @pytest.mark.req("FR-11.8")
 @pytest.mark.wp("P1-03")
-async def test_a_failing_provider_or_no_endpoint_yields_none() -> None:
+async def test_a_failing_provider_or_no_endpoint_yields_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """An adapter error gives None, not an exception; a slot with no provider (no local
     endpoint configured) gives None without a call."""
+    monkeypatch.setenv("TUMNIS_ADAPTERS", "real")
     fake = FakeGeneration(
         fail=AdapterUnavailable("decisions.vllm_generation", "chat_completion", "down")
     )
@@ -200,3 +203,56 @@ async def test_spoken_focus_message_sends_only_the_text_and_keeps_one_sentence()
 
     use(FakeGeneration(text="Too slow.", delay_ms=200), spoken_timeout_ms=50)
     assert await spoken_focus_message(text=message, project_id=PROJECT_ID) is None
+
+
+@pytest.mark.req("FR-11.8")
+@pytest.mark.wp("P1-03")
+def test_slot_builds_its_provider_once_from_the_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Configured without a provider, the slot builds one on first use through the adapter
+    registry and keeps it: the fake under TUMNIS_ADAPTERS=fake; in real mode the vLLM
+    adapter for the configured endpoint and model, or none when either is unset."""
+    from tumnis.core.net import NetPolicy  # noqa: PLC0415
+
+    monkeypatch.setenv("TUMNIS_ADAPTERS", "fake")
+    configure_generation(GenerationSettings())
+    built = generation_config.provider()
+    assert isinstance(built, FakeGeneration)
+    assert generation_config.provider() is built
+
+    monkeypatch.setenv("TUMNIS_ADAPTERS", "real")
+    for partial in ({"base_url": "http://vllm.example.org:8000"}, {"model": "m"}):
+        configure_generation(GenerationSettings.model_validate(partial))
+        assert generation_config.provider() is None
+
+    configure_generation(
+        GenerationSettings(base_url="http://vllm.example.org:8000", model="Qwen/Qwen2.5-3B"),
+        net_policy=NetPolicy(mode="hosted"),
+    )
+    real = generation_config.provider()
+    assert type(real).__name__ == "VllmGeneration"
+    assert generation_config.provider() is real
+
+
+@pytest.mark.req("FR-11.8")
+@pytest.mark.wp("P1-03")
+def test_worker_configures_the_slot_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GENERATION__BASE_URL, GENERATION__MODEL and GENERATION__PLACEHOLDER_TIMEOUT_MS set
+    the deployment's slot (R-30: the timeout is configurable); the worker hands them to
+    the slot at start."""
+    from tumnis.settings import Settings  # noqa: PLC0415
+    from tumnis.worker import configure_generation as worker_configure  # noqa: PLC0415
+
+    monkeypatch.setenv("GENERATION__BASE_URL", "http://vllm.example.org:8000")
+    monkeypatch.setenv("GENERATION__MODEL", "Qwen/Qwen2.5-3B-Instruct")
+    monkeypatch.setenv("GENERATION__PLACEHOLDER_TIMEOUT_MS", "1500")
+    settings = Settings(database_url="postgresql://x/y", database_direct_url="postgresql://x/y")
+
+    worker_configure(settings)
+
+    assert generation_config.settings() == GenerationSettings(
+        base_url="http://vllm.example.org:8000",
+        model="Qwen/Qwen2.5-3B-Instruct",
+        placeholder_timeout_ms=1500,
+    )

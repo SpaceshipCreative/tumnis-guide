@@ -66,6 +66,12 @@ def register_audit_schedule() -> None:
     )
 
 
+def configure_generation(settings: Settings) -> None:
+    """The Generation slot's endpoint and timeouts (P1-03): only the worker asks it."""
+    decisions = importlib.import_module("tumnis.modules.decisions.api")
+    decisions.configure_generation(settings.generation, net_policy=settings.net_policy())
+
+
 def register_task_schedules() -> None:
     """The day-close tick (every 5 minutes, also the recurrence tick) and hourly
     housekeeping on the maintenance queue (P0-19), in every deployment, applied after
@@ -111,6 +117,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     db.configure(settings.database_direct_url, settings.database_direct_url)
     install_master_keys(settings)
     modules.configure(settings)
+    configure_generation(settings)
     cache.configure_backend(
         cache.InProcessCache(SystemClock(), publish=cache.pg_publisher(db.direct_engine))
     )
