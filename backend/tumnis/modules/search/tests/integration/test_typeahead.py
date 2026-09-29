@@ -29,7 +29,6 @@ P95_BUDGET_S = 0.100  # plan default: the quick-add typeahead budget
 
 @pytest.mark.req("FR-3.9", "PERF-1")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_typeahead_query_count_is_fixed(
     search_db: DbUrls,
     seed: SeedResult,
@@ -80,7 +79,6 @@ async def test_typeahead_query_count_is_fixed(
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_typeahead_latency_on_load_fixture(
     app: FastAPI, db: DbUrls, load_fixture: SeedResult
 ) -> None:
@@ -93,6 +91,9 @@ async def test_typeahead_latency_on_load_fixture(
     from tumnis.core.tests.integration._audit import signed_in  # noqa: PLC0415
 
     await _search.index_outbox(db)
+    # The frozen test clock never refills the per-principal bucket (burst 50); this
+    # measures the typeahead, as app_with_fakes does with rate limits off.
+    app.state.rate_limiter = None
     prefixes = ("inv", "dra", "rev", "sen", "pla", "rep", "upd", "est", "roa", "new")
     async with signed_in(app, load_fixture.ids["ws_load"], load_fixture.ids["u_load"]) as http:
         for warm in ("inv", "lo"):
@@ -111,7 +112,6 @@ async def test_typeahead_latency_on_load_fixture(
 
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_archived_projects_leave_the_typeahead(
     db: DbUrls, dbos: type[DBOS], session_client: SessionClient, clock: FixedClock
 ) -> None:
