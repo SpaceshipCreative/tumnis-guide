@@ -1,0 +1,101 @@
+{
+  "calendar_id": "avery@example.com",
+  "self_email": "avery@example.com",
+  "request": {
+    "pageToken": "a-p3",
+    "timeMin": "2026-03-08T05:00:00Z",
+    "timeMax": "2026-03-24T04:00:00Z"
+  },
+  "response": {
+    "kind": "calendar#events",
+    "etag": "\"p33example\"",
+    "summary": "avery@example.com",
+    "description": "",
+    "updated": "2026-03-02T15:04:05.000Z",
+    "timeZone": "America/New_York",
+    "accessRole": "owner",
+    "defaultReminders": [
+      {
+        "method": "popup",
+        "minutes": 10
+      }
+    ],
+    "items": [
+      {
+        "kind": "calendar#event",
+        "etag": "\"3140254764840818\"",
+        "id": "a-ooo",
+        "status": "confirmed",
+        "htmlLink": "https://calendar.example.com/event?eid=YS1vb28",
+        "created": "2026-02-20T10:00:00.000Z",
+        "updated": "2026-03-02T15:04:05.000Z",
+        "summary": "Out of office",
+        "creator": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "organizer": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "start": {
+          "date": "2026-03-13"
+        },
+        "end": {
+          "date": "2026-03-14"
+        },
+        "iCalUID": "a-ooo@example.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": true
+        },
+        "eventType": "default",
+        "transparency": "opaque"
+      },
+      {
+        "kind": "calendar#event",
+        "etag": "\"3000000000000017\"",
+        "id": "a-weekly_20260317T150000Z",
+        "status": "cancelled",
+        "recurringEventId": "a-weekly",
+        "originalStartTime": {
+          "dateTime": "2026-03-17T11:00:00-04:00",
+          "timeZone": "America/New_York"
+        }
+      },
+      {
+        "kind": "calendar#event",
+        "etag": "\"3650242009242207\"",
+        "id": "a-review",
+        "status": "confirmed",
+        "htmlLink": "https://calendar.example.com/event?eid=YS1yZXZpZXc",
+        "created": "2026-02-20T10:00:00.000Z",
+        "updated": "2026-03-02T15:04:05.000Z",
+        "summary": "Design review",
+        "creator": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "organizer": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "start": {
+          "dateTime": "2026-03-09T15:00:00-04:00",
+          "timeZone": "America/New_York"
+        },
+        "end": {
+          "dateTime": "2026-03-09T15:30:00-04:00",
+          "timeZone": "America/New_York"
+        },
+        "iCalUID": "a-review@example.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": true
+        },
+        "eventType": "default"
+      }
+    ]
+  },
+  "notes": "Scrubbed: people, addresses, calendar ids, event ids, iCalUIDs, etags and links are invented (example.com/example.org); times are the fixture week of 2026-03-09 in America/New_York."
+}

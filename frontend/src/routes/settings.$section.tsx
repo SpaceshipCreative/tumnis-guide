@@ -4,10 +4,12 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { AccountSection } from "../components/settings/AccountSection";
 import { AuditSection } from "../components/settings/AuditSection";
+import { CalendarSection } from "../components/settings/CalendarSection";
 import { DeadLettersSection } from "../components/settings/DeadLettersSection";
 import { KeysSection } from "../components/settings/KeysSection";
 import {
   accountQuery,
+  calendarAccountsQuery,
   deadLettersQuery,
   keysQuery,
   sessionsQuery,
@@ -33,6 +35,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   audit: AuditSection,
   "dead-letters": DeadLettersSection,
   workspace: WorkspaceSection,
+  calendar: () => <CalendarSection />,
   storage: StorageSection,
 };
 
@@ -66,6 +69,9 @@ export const Route = createFileRoute("/settings/$section")({
         break;
       case "workspace":
         started(queryClient.query(workspaceQuery()));
+        break;
+      case "calendar":
+        started(queryClient.query(calendarAccountsQuery()));
         break;
       case "storage":
         started(queryClient.query(storageQuery()));

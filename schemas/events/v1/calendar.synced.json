@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "SyncWindow": {
+      "properties": {
+        "end": {
+          "format": "date-time",
+          "title": "End",
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "SyncWindow",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/events/v1/calendar.synced.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "connection_id": {
+      "format": "uuid",
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "window": {
+      "$ref": "#/$defs/SyncWindow"
+    }
+  },
+  "required": [
+    "schema_version",
+    "connection_id",
+    "window"
+  ],
+  "title": "CalendarSyncedV1",
+  "type": "object"
+}
