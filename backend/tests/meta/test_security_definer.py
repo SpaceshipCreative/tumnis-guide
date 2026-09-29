@@ -39,6 +39,8 @@ ALLOWED: dict[str, str] = {
         "have no app role grant; locks the counters of one attempt"
     ),
     "app.auth_throttle_put": "P0-13: writes back or clears the counters locked above",
+    "app.dead_letter_counts": "P0-27: /metrics counts dead letters by status across workspaces",
+    "app.usage_totals": "P0-27: /metrics sums usage counters per counter across workspaces",
 }
 
 _DEFINERS = """

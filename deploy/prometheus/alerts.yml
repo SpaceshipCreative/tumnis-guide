@@ -1,0 +1,41 @@
+# Tumnis alert rules (P0-27, REL-5). Metric names are the contract with
+# backend/tumnis/core/metrics.py; unit tests in alerts.test.yml (promtool test rules).
+# Thresholds are plan defaults unless tied to REL-1. Routing (Alertmanager -> Discord)
+# lives in the homelab Prometheus stack, not here.
+groups:
+  - name: tumnis
+    rules:
+      - alert: TumnisQueueBacklog
+        expr: max by (queue) (tumnis_queue_depth) > 100
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Queue {{ $labels.queue }} has had more than 100 waiting items for 10 minutes" }
+      - alert: TumnisDeadLettersGrowing
+        expr: delta(tumnis_dead_letters{status="open"}[30m]) > 0
+        labels: { severity: warning }
+        annotations: { summary: "Dead letters are growing" }
+      - alert: TumnisWalArchiveStale # archive_timeout is 60 s; REL-1 allows 15 min
+        expr: time() - tumnis_wal_last_archived_timestamp_seconds > 300
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "No WAL segment archived for over 5 minutes" }
+      - alert: TumnisWalArchiveFailing
+        expr: increase(tumnis_wal_archive_failed_total[15m]) > 0
+        labels: { severity: critical }
+        annotations: { summary: "WAL archiving is failing" }
+      - alert: TumnisBackupMissing
+        expr: time() - max by (repo) (tumnis_backup_last_success_timestamp_seconds) > 26 * 3600
+        labels: { severity: critical }
+        annotations: { summary: "No successful backup to {{ $labels.repo }} in 26 hours" }
+      - alert: TumnisCertificateExpiring # from the homelab blackbox exporter
+        expr: probe_ssl_earliest_cert_expiry{job="tumnis-tls"} - time() < 14 * 86400
+        labels: { severity: warning }
+        annotations: { summary: "Tumnis TLS certificate expires within 14 days" }
+      - alert: TumnisAuditChainBroken
+        expr: tumnis_ops_check_ok{check="audit_chain"} == 0
+        labels: { severity: critical }
+        annotations: { summary: "Audit hash chain verification failed" }
+      - alert: TumnisAuditChainNotVerified
+        expr: time() - tumnis_ops_check_timestamp_seconds{check="audit_chain"} > 26 * 3600
+        labels: { severity: warning }
+        annotations: { summary: "Audit chain has not been verified in 26 hours" }

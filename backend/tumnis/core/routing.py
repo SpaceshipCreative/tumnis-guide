@@ -70,6 +70,7 @@ class RoutePolicy:
     idempotent: bool | None = None  # writes must say True, or False with not_idempotent_reason
     not_idempotent_reason: str | None = None
     paginated: bool = False  # required when the response model is Page[...]
+    unpaginated_reason: str | None = None  # a bare list only with a reason (bounded by input)
     project_param: str | None = None  # path/body field holding a project id (P0-14)
     csrf: bool = True  # session writes need CSRF (P0-13); False only with a reason
     rate_limit: str = "default"  # bucket name in ratelimit.BUCKETS
@@ -256,7 +257,7 @@ def _policy_violations(label: str, route: RouteContext, policy: RoutePolicy) -> 
         ):
             out.append(f"{label}: an idempotent write cannot stream its response")
     model = route.response_model
-    if _is_bare_collection(model):
+    if _is_bare_collection(model) and not policy.unpaginated_reason:
         out.append(f"{label}: returns a bare list; return Page[...] with paginated=True")
     elif _is_page(model):
         if not policy.paginated:

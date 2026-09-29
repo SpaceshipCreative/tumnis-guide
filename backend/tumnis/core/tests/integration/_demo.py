@@ -32,9 +32,14 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 import psycopg
 import pytest
 import sqlalchemy as sa
+from fastapi import Depends, Query
 from pydantic import BaseModel, ConfigDict
 
 from tests._pg import OWNER
+from tumnis.core.idempotency import SessionDep
+from tumnis.core.pagination import Page, PageParams, SortKey, page_params, paginate
+from tumnis.core.routing import RoutePolicy, route_policy, v1_router
+from tumnis.core.versioning import update_versioned
 
 if TYPE_CHECKING:
     import httpx
@@ -109,19 +114,8 @@ def principal_header(workspace: Any, principal: uuid.UUID) -> dict[str, str]:
 
 
 def build_router(state: DemoState) -> APIRouter:
-    from fastapi import Depends, Query  # noqa: PLC0415
-
-    from tumnis.core.idempotency import SessionDep  # noqa: PLC0415
-    from tumnis.core.pagination import (  # noqa: PLC0415
-        Page,
-        PageParams,
-        SortKey,
-        page_params,
-        paginate,
-    )
-    from tumnis.core.routing import RoutePolicy, route_policy, v1_router  # noqa: PLC0415
-    from tumnis.core.versioning import update_versioned  # noqa: PLC0415
-
+    # Endpoint annotations are strings (`from __future__ import annotations`): the names they
+    # use are module-level imports so FastAPI can resolve them.
     router = v1_router("demo", prefix="/demo-items", tags=["demo"])
     t = demo_items
 

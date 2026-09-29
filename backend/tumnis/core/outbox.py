@@ -12,7 +12,7 @@ from sqlalchemy import TIMESTAMP, Column, Integer, Table, Text, Uuid, insert, te
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import ids, tenancy
+from tumnis.core import ids, telemetry, tenancy
 from tumnis.core.base import Base
 from tumnis.core.events import EventPayload, EventSchemaError, registry
 
@@ -67,7 +67,7 @@ async def emit(session: AsyncSession, payload: EventPayload, *, occurred_at: dat
             schema_version=payload.schema_version,
             occurred_at=occurred_at,
             payload=body,
-            trace_context={},  # P0-27: telemetry.current_trace_context()
+            trace_context=telemetry.current_carrier(),  # the request's traceparent (P0-27)
         )
     )
     await session.execute(NOTIFY)

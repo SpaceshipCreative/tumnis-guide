@@ -905,3 +905,70 @@ async def session_client(
         http.account = account
         clock.advance(TOTP_STEP)
         yield http
+
+
+# --- Traces and JSON logs (P0-27) ----------------------------------------------------------
+
+
+@pytest.fixture
+def span_exporter() -> Iterator[Any]:
+    """An InMemorySpanExporter wired through `setup_tracing("api", exporter)`; spans finish
+    into it synchronously. Afterwards tracing goes back to no exporter."""
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (  # noqa: PLC0415
+        InMemorySpanExporter,
+    )
+
+    from tumnis.core import telemetry  # noqa: PLC0415
+
+    exporter = InMemorySpanExporter()
+    telemetry.setup_tracing("api", exporter)
+    try:
+        yield exporter
+    finally:
+        telemetry.setup_tracing("api")
+        exporter.clear()
+
+
+class JsonLogs:
+    """What the JSON log handler wrote while the fixture was active."""
+
+    def __init__(self, stream: Any) -> None:
+        self._stream = stream
+
+    def text(self) -> str:
+        return str(self._stream.getvalue())
+
+    def lines(self) -> list[dict[str, Any]]:
+        """Every non-empty line parsed as JSON (a line that is not JSON raises)."""
+        return [json.loads(line) for line in self.text().splitlines() if line.strip()]
+
+
+_LOGGERS_TOUCHED = ("", "dbos", "uvicorn", "uvicorn.error", "uvicorn.access")
+
+
+@pytest.fixture
+def capture_json_logs() -> Iterator[JsonLogs]:
+    """`configure_logging` pointed at an in-memory stream; the stdlib and structlog state it
+    changes is restored afterwards."""
+    import io  # noqa: PLC0415
+    import logging  # noqa: PLC0415
+
+    import structlog  # noqa: PLC0415
+
+    from tumnis.core import logging as tumnis_logging  # noqa: PLC0415
+
+    saved = {
+        name: (logging.getLogger(name), list(logging.getLogger(name).handlers))
+        for name in _LOGGERS_TOUCHED
+    }
+    state = {name: (lg.level, lg.propagate) for name, (lg, _) in saved.items()}
+    stream = io.StringIO()
+    tumnis_logging.configure_logging(stream=stream)
+    try:
+        yield JsonLogs(stream)
+    finally:
+        for name, (logger, handlers) in saved.items():
+            logger.handlers[:] = handlers
+            logger.setLevel(state[name][0])
+            logger.propagate = state[name][1]
+        structlog.reset_defaults()
