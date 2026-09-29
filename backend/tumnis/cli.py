@@ -102,8 +102,8 @@ def api(
     """Serve the HTTP API (and the built frontend) with uvicorn."""
     settings = load_settings()
     check_metrics_token(settings)
-    start_observability(settings, "api")
     run_boot_checks(settings)
+    start_observability(settings, "api")
     import uvicorn  # noqa: PLC0415
 
     uvicorn.run(
@@ -120,8 +120,8 @@ def api(
 def worker() -> None:
     """Launch DBOS: queues, workflows and schedules."""
     settings = load_settings()
-    start_observability(settings, "worker")
     run_boot_checks(settings)
+    start_observability(settings, "worker")
     from tumnis.worker import main as worker_main  # noqa: PLC0415
 
     worker_main(settings)

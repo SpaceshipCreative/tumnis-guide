@@ -110,9 +110,27 @@ def _formatter() -> structlog.stdlib.ProcessorFormatter:
     )
 
 
+class _StdoutHandler(logging.StreamHandler[IO[str]]):
+    """Writes to whatever `sys.stdout` is at emit time, so a swapped (and later closed)
+    stdout is never kept."""
+
+    def __init__(self) -> None:
+        super().__init__(sys.stdout)
+
+    @property
+    def stream(self) -> IO[str]:
+        return sys.stdout
+
+    @stream.setter
+    def stream(self, _value: IO[str]) -> None:
+        pass
+
+
 def configure_logging(*, stream: IO[str] | None = None, level: str = "INFO") -> None:
     """Every log record in the process becomes one JSON line on `stream` (stdout)."""
-    handler = logging.StreamHandler(stream if stream is not None else sys.stdout)
+    handler: logging.StreamHandler[IO[str]] = (
+        logging.StreamHandler(stream) if stream is not None else _StdoutHandler()
+    )
     handler.set_name(HANDLER_NAME)
     handler.setFormatter(_formatter())
 

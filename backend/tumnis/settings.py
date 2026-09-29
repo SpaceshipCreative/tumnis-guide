@@ -84,7 +84,7 @@ class Settings(BaseSettings):
         """The /metrics bearer token from METRICS_TOKEN_FILE, stripped (P0-27, FR-12.3).
         Prod refuses to start without one; elsewhere no file means no token, and /metrics
         answers 401 to everyone. A configured file that is missing or empty is an error."""
-        if self.metrics_token_file is None:
+        if not self.metrics_token_file:  # unset, or "" (compose.preview.yaml)
             if self.deployment_env == "prod":
                 raise SettingsError(
                     "metrics_token_file_required",
