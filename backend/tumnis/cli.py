@@ -93,10 +93,16 @@ def run_boot_checks(settings: Settings) -> None:
     starts."""
     from tumnis.core.crypto import MasterKeyError  # noqa: PLC0415
     from tumnis.core.modules import deployment_disabled  # noqa: PLC0415
-    from tumnis.settings import boot_checks, install_master_keys, install_peppers  # noqa: PLC0415
+    from tumnis.settings import (  # noqa: PLC0415
+        boot_checks,
+        install_master_keys,
+        install_peppers,
+        require_hosted_tls,
+    )
 
     try:
         deployment_disabled(settings)  # an unknown or required module in the kill list
+        require_hosted_tls(settings)
         asyncio.run(boot_checks(settings))
         install_master_keys(settings)
         install_peppers(settings)

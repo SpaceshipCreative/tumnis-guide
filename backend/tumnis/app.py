@@ -41,7 +41,7 @@ from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.request_meta import RequestMetaMiddleware
 from tumnis.core.routing import new_request_log
 from tumnis.modules.auth import router as auth_router
-from tumnis.settings import Settings, install_master_keys, install_peppers
+from tumnis.settings import Settings, install_master_keys, install_peppers, require_hosted_tls
 
 # The built frontend (P0-22 replaces the placeholder shell); present in the image.
 SHELL_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -151,6 +151,7 @@ def create_app(
     metrics_token = settings.metrics_token()  # SettingsError: prod needs METRICS_TOKEN_FILE
     settings.check_database_tls()  # SettingsError: prod needs sslmode=verify-full (P0-16)
     master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
+    require_hosted_tls(settings)  # SettingsError: hosted mode without an https base URL
     install_peppers(settings)  # session, CSRF and pre-auth tokens (P0-13)
     db.configure(settings.database_url, settings.database_direct_url)
     modules.configure(settings)  # the deployment's module kill list

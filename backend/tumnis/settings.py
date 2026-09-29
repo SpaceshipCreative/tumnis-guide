@@ -89,12 +89,6 @@ class Settings(BaseSettings):
                 )
             if self.typesafe_api_key is not None:
                 raise SettingsError("preview_has_production_secret", "a Jev key is set in preview")
-        if self.deployment_mode == "hosted" and not (self.public_base_url or "").startswith(
-            "https://"
-        ):
-            raise SettingsError(
-                "hosted_requires_https", "DEPLOYMENT_MODE=hosted needs an https:// PUBLIC_BASE_URL"
-            )
         try:
             parse_allowlist(self.outbound_allowlist.split(","))
         except ValueError as exc:
@@ -186,6 +180,18 @@ def install_master_keys(settings: Settings) -> MasterKeys | None:
     if settings.deployment_env == "prod" or Path(settings.master_key_file).exists():
         return settings.master_keys
     return None
+
+
+def require_hosted_tls(settings: Settings) -> None:
+    """Hosted mode serves only over TLS: it refuses to start without an https://
+    PUBLIC_BASE_URL (P0-13; the Origin check and the Secure cookies rely on it). Checked
+    when the api starts (create_app, the CLI's boot checks), not when Settings is built."""
+    if settings.deployment_mode == "hosted" and not (settings.public_base_url or "").startswith(
+        "https://"
+    ):
+        raise SettingsError(
+            "hosted_requires_https", "DEPLOYMENT_MODE=hosted needs an https:// PUBLIC_BASE_URL"
+        )
 
 
 def install_peppers(settings: Settings) -> MasterKeys | None:
