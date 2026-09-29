@@ -84,3 +84,40 @@ def test_one_limiter_per_credential_and_the_key_is_never_the_key() -> None:
         credential_fingerprint(key_b), clock=clock
     )
     assert limiter_for(fp_a, clock=clock).limit == LIMIT
+
+
+
+@pytest.mark.req("FR-11.9")
+@pytest.mark.wp("P1-01")
+def test_lowering_rpm_keeps_the_window_history() -> None:
+    """A changed `rpm` updates the credential's limiter in place: grants already taken in
+    the window still count, so lowering the limit cannot open a burst over the new one."""
+    from tumnis.core.clock import FixedClock  # noqa: PLC0415
+    from tumnis.modules.decisions.limiter import (  # noqa: PLC0415
+        _LIMITERS,
+        credential_fingerprint,
+        limiter_for,
+    )
+
+    clock = FixedClock(START)
+    fp = credential_fingerprint("ts_live_rpm_change_cccccccccccccccc")
+
+    async def run() -> None:
+        limiter = limiter_for(fp, rpm=5, clock=clock)
+        for _ in range(3):
+            await limiter.acquire()
+        clock.advance(timedelta(seconds=10))
+        lowered = limiter_for(fp, rpm=2, clock=clock)
+        assert lowered is limiter
+        assert lowered.limit == 2
+        with pytest.raises(TimeoutError):  # 3 grants in the window already: it must wait
+            await asyncio.wait_for(lowered.acquire(), timeout=0.05)
+        clock.advance(WINDOW)
+        assert await asyncio.wait_for(lowered.acquire(), timeout=1) == clock.now()
+
+    try:
+        asyncio.run(run())
+        with pytest.raises(ValueError, match="at least 1"):
+            limiter_for(fp, rpm=0, clock=clock)
+    finally:
+        _LIMITERS.pop(fp, None)
