@@ -56,7 +56,6 @@ def _outbox_rows(db: DbUrls) -> list[dict[str, Any]]:
 
 @pytest.mark.req("ADR-0011")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 @pytest.mark.usefixtures("core_db")
 async def test_rolled_back_write_leaves_no_outbox_row(
     db: DbUrls, workspace: WorkspaceHandle
@@ -90,7 +89,6 @@ async def test_rolled_back_write_leaves_no_outbox_row(
 
 @pytest.mark.req("ADR-0011")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 @pytest.mark.usefixtures("core_db")
 async def test_committed_write_inserts_one_row_and_notifies(
     db: DbUrls, workspace: WorkspaceHandle

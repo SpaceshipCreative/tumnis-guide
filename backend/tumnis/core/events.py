@@ -2,13 +2,13 @@
 workflow (P0-07, ADR-0011, ADR-0002)."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, ClassVar, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from tumnis.core.schemas import VersionedPayload
 
@@ -93,6 +93,27 @@ class EventEnvelope(BaseModel):
     actor: str
     trace_context: dict[str, str] = {}
     payload: dict[str, Any]
+
+    @classmethod
+    def from_outbox_row(cls, row: Mapping[str, Any]) -> "EventEnvelope":
+        return cls(
+            event_id=row["event_id"],
+            name=row["name"],
+            schema_version=row["schema_version"],
+            workspace_id=row["workspace_id"],
+            occurred_at=row["occurred_at"],
+            actor=row["actor"],
+            trace_context=row["trace_context"],
+            payload=row["payload"],
+        )
+
+    def typed(self) -> EventPayload:
+        """The payload validated with its registered model; EventSchemaError otherwise."""
+        model = registry.model(self.name, self.schema_version)
+        try:
+            return model.model_validate(self.payload)
+        except ValidationError as exc:
+            raise EventSchemaError(f"{self.name} v{self.schema_version}: {exc}") from exc
 
 
 Handler = Callable[[EventEnvelope], Awaitable[None]]

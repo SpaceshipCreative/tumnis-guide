@@ -33,7 +33,6 @@ ORDER BY 1
 
 @pytest.mark.req("ADR-0009")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 def test_security_definer_functions_are_allowlisted(db: DbUrls) -> None:
     """T-P0-07-16
     `pg_proc.prosecdef` functions equal the allow-list: `app.outbox_claim` and
