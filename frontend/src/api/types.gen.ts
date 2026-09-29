@@ -568,6 +568,20 @@ export type PageProjectOut = {
 };
 
 /**
+ * Page[SearchHit]
+ */
+export type PageSearchHit = {
+  /**
+   * Items
+   */
+  items: Array<SearchHit>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
  * Page[SessionOut]
  */
 export type PageSessionOut = {
@@ -891,6 +905,36 @@ export type RotateIn = {
    * Grace Minutes
    */
   grace_minutes?: number;
+};
+
+/**
+ * SearchHit
+ */
+export type SearchHit = {
+  /**
+   * Entity Id
+   */
+  entity_id: string;
+  /**
+   * Entity Type
+   */
+  entity_type: "task" | "project";
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Score
+   */
+  score: number;
+  /**
+   * Snippet
+   */
+  snippet: string;
+  /**
+   * Title
+   */
+  title: string;
 };
 
 /**
@@ -3253,6 +3297,85 @@ export type TasksListReviewKindsResponses = {
 export type TasksListReviewKindsResponse =
   TasksListReviewKindsResponses[keyof TasksListReviewKindsResponses];
 
+export type SearchSearchData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Q
+     *
+     * What the user typed
+     */
+    q?: string;
+    /**
+     * Scope
+     */
+    scope?: "all" | "tasks" | "projects";
+    /**
+     * Project Id
+     *
+     * Boosts this project's rows
+     */
+    project_id?: string | null;
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/search";
+};
+
+export type SearchSearchErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type SearchSearchError = SearchSearchErrors[keyof SearchSearchErrors];
+
+export type SearchSearchResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageSearchHit;
+};
+
+export type SearchSearchResponse =
+  SearchSearchResponses[keyof SearchSearchResponses];
+
 export type SettingsListModulesData = {
   body?: never;
   path?: never;
@@ -4188,6 +4311,148 @@ export type TasksChangeStatusResponses = {
 
 export type TasksChangeStatusResponse =
   TasksChangeStatusResponses[keyof TasksChangeStatusResponses];
+
+export type SearchTypeaheadProjectsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Q
+     *
+     * What the user typed
+     */
+    q?: string;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/typeahead/projects";
+};
+
+export type SearchTypeaheadProjectsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type SearchTypeaheadProjectsError =
+  SearchTypeaheadProjectsErrors[keyof SearchTypeaheadProjectsErrors];
+
+export type SearchTypeaheadProjectsResponses = {
+  /**
+   * Response Search Typeahead Projects
+   *
+   * Successful Response
+   */
+  200: Array<SearchHit>;
+};
+
+export type SearchTypeaheadProjectsResponse =
+  SearchTypeaheadProjectsResponses[keyof SearchTypeaheadProjectsResponses];
+
+export type SearchTypeaheadTasksData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Q
+     *
+     * What the user typed
+     */
+    q?: string;
+    /**
+     * Project Id
+     *
+     * Boosts this project's tasks
+     */
+    project_id?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/typeahead/tasks";
+};
+
+export type SearchTypeaheadTasksErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type SearchTypeaheadTasksError =
+  SearchTypeaheadTasksErrors[keyof SearchTypeaheadTasksErrors];
+
+export type SearchTypeaheadTasksResponses = {
+  /**
+   * Response Search Typeahead Tasks
+   *
+   * Successful Response
+   */
+  200: Array<SearchHit>;
+};
+
+export type SearchTypeaheadTasksResponse =
+  SearchTypeaheadTasksResponses[keyof SearchTypeaheadTasksResponses];
 
 export type UsageGetUsageData = {
   body?: never;
