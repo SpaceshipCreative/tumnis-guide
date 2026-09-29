@@ -14,7 +14,8 @@
 #   DRILL_SOURCE_PG    the running production Postgres container (name or id)
 #   DRILL_SOURCE_APP   a running api or worker container of the same release
 #   DRILL_PGBACKREST_CONF_D  host directory with secrets.conf (default /etc/pgbackrest/conf.d)
-# --mode rehearsal brings up deploy/compose.test.yaml as project tumnis-drill (api on
+# --mode rehearsal brings up deploy/compose.test.yaml with its backups overlay
+# (compose.test-backups.yaml: WAL archiving on, repo2 on MinIO) as project tumnis-drill (api on
 # 127.0.0.1:${TUMNIS_TEST_PORT:-18431}), destroys its Postgres container and volume, restores,
 # and removes the whole stack at the end (DRILL_KEEP_STACK=1 keeps it for debugging).
 # Host requirements: bash, docker (with compose), jq.
@@ -53,7 +54,10 @@ need() { command -v "$1" >/dev/null || fail "preflight: $1 is not installed"; }
 if [ "$MODE" = rehearsal ]; then
   PROJECT="${DRILL_PROJECT:-tumnis-drill}"
   export TUMNIS_TEST_PORT="${TUMNIS_TEST_PORT:-18431}"
-  COMPOSE=(docker compose -p "$PROJECT" -f "$REPO_ROOT/deploy/compose.test.yaml")
+  # compose.test keeps archiving off; the backups overlay turns it and the backup service
+  # back on (issue #21).
+  COMPOSE=(docker compose -p "$PROJECT" -f "$REPO_ROOT/deploy/compose.test.yaml"
+    -f "$REPO_ROOT/deploy/compose.test-backups.yaml")
   NETWORK="${PROJECT}_default"
   PGBR_ARGS=(
     --env-file "$REPO_ROOT/deploy/pgbackrest/rehearsal.env"

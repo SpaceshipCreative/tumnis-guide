@@ -241,8 +241,11 @@ def configure(system_database_url: str | None) -> None:
 
 
 def use_client(client: "DBOSClient | None") -> None:
-    """Use this client (tests: the `dbos_client` fixture); its owner destroys it."""
+    """Use this client (tests: the `dbos_client` fixture); its owner destroys it. A client
+    this module built is destroyed first, not left to the garbage collector with its
+    connections open."""
     global _client, _client_owned  # process-wide client
+    close()
     _client, _client_owned = client, False
 
 

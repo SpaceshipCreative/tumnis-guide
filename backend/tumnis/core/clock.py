@@ -34,6 +34,37 @@ class FixedClock:
         self._at = _aware_utc(at)
 
 
+class OverridableClock:
+    """A clock the test routes can fix (fakes only, `POST /v1/test/clock`): it reads its
+    base clock until `set` fixes an instant, which then moves only with `advance`; `clear`
+    goes back to the base. `create_app` wraps the app's clock in one when adapters are
+    fakes, so the rate limiter, the cache and every route read the same time."""
+
+    def __init__(self, base: Clock) -> None:
+        self.base = base
+        self._fixed: FixedClock | None = None
+
+    @property
+    def overridden(self) -> bool:
+        return self._fixed is not None
+
+    def now(self) -> datetime:
+        return (self._fixed or self.base).now()
+
+    def set(self, at: datetime) -> datetime:
+        self._fixed = FixedClock(at)
+        return self._fixed.now()
+
+    def advance(self, delta: timedelta) -> datetime:
+        """Moves the fixed instant; an unfixed clock is first fixed at the base's now."""
+        fixed = self._fixed or FixedClock(self.base.now())
+        self._fixed = fixed
+        return fixed.advance(delta)
+
+    def clear(self) -> None:
+        self._fixed = None
+
+
 def _aware_utc(at: datetime) -> datetime:
     if at.tzinfo is None or at.utcoffset() is None:
         raise ValueError("FixedClock needs an aware datetime")

@@ -33,6 +33,21 @@ async def core_db(db: DbUrls) -> AsyncIterator[None]:
         await core_db.dispose()
 
 
+@pytest.fixture(autouse=True)
+def scratch_subscribers() -> Iterator[None]:
+    """Unregister the subscribers a test in this file registers (T-P0-08-14's probes),
+    after the test. The registry is process-wide: a probe left on `test.ping` would reach
+    every later test on this xdist worker (the kill-and-resume harness would wait for its
+    deliveries). Subscribers other modules register on import stay."""
+    try:
+        yield
+    finally:
+        events = importlib.import_module("tumnis.core.events")
+        registry = events._subscribers
+        for name in [n for n, sub in registry.items() if sub.handler.__module__ == __name__]:
+            del registry[name]
+
+
 @pytest.fixture
 def deployment_flags() -> Iterator[None]:
     """Every create_app sets the deployment kill list; forget it after the test."""

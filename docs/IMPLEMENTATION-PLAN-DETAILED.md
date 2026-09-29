@@ -495,6 +495,7 @@ The work packages below add these names. Each WP's **Files** and **Interfaces** 
 | Fixtures | `pg_base`, `dbos_sys_db`, `pgbouncer`, `pg_tls_container`, `master_key_file`, `pepper_file`, `dbos_client`, `app_with_fakes`, `mcp_client`, `digest_consumer`, `master_key_client`, `DbClock`, `kill_point`, `tmp_location`, `fakes.oauth_server`, `load_eval_corpus`, `run_scheduled_until` | P0-02 onward |
 | Files | `tumnis/wiring.py`, `core/{routing,principal,request_meta,backoff,faults,canonical,migration_helpers,bodylimit,testing_routes,rank,etag,live,backups,ops_status,drill,workflows_ops}.py`, `deploy/pgbackrest/{rehearsal.env,test-conf.d/}` and the compose service `backup` (P0-28), `tasks/rules_recurrence.py`, `agents/{protocol,ws,packet_builder}.py`, `decisions/catalog.py`, `decisions/questions/` (package), `knowledge/{storage,sync_rules,extraction}.py`, `profiles/shared/jev-mcp/`, `perf/k6/*`, `perf/baseline.json`, `scripts/release/*`, `scripts/scrub_recording.py`, `.semgrep/`, `.squawk.toml`, `.github/required-checks.txt`, `.github/workflows/{deploy,preview,readme}.yml`, `tumnis/migrate.py` and `scripts/deploy/coolify.sh` (P0-04), `docs/{OPERATIONS,INSTALL-CHECKLIST,RELEASE-CHECKLIST}.md`, ADRs 0012 to 0014 | various |
 | Workspace settings | `planning.plan_time` 08:30, `triage.reserved_judgments`, `knowledge.quota_bytes` 10 GiB, `decisions.jev.rpm` 1200, `stuck_deadline_seconds`, `granola_post_meeting_offsets` (all plan defaults except the Jev rate) | P1-10 to P4-02 |
+| Files and names (issue #6) | `core.clock.OverridableClock` (`set`, `advance`, `clear`, `overridden`; `create_app` wraps the app clock in one when adapters are fakes); `POST /v1/test/clock` with `{time}` (aware ISO-8601) or `{advance_seconds}`, answering `{now}` (fakes only; `POST /v1/test/reset` clears it); Playwright `setServerClock(request, time)` and the `page` fixture override that sends `page.clock.install({time})`, `setFixedTime` and `setSystemTime` to it | P0-04 |
 
 ### A13 · Cross-work-package contracts (R-01 to R-38)
 
@@ -1916,7 +1917,7 @@ jobs:
 - CODEOWNERS: `* @<scott>`; `backend/tests/**`, `frontend/e2e/**`, `**/*.test.ts*` and `docs/plan/**` also `@<scott>`, so a spec PR always needs his review.
 - Coverage groups in `coverage_gates.py`: `rules_and_mcp` (every `tumnis/modules/*/rules*.py` and `*/mcp.py`, 80%); `full` (`tasks/rules.py`, `planning/rules.py`, `focus/rules.py`, `decisions/rules.py`, 100% lines). It reads `coverage json` output, so a group whose files have no statements yet passes instead of erroring.
 - Spec-guard compares ASTs, so reformatting (Ruff format) never counts as an edit, while any change to a constant, comparison or call does.
-- Do not let an agent's PR edit `scripts/ci/**` or `.github/**` without the `spec-change` label: spec-guard treats those paths as locked files too (any modification is a violation unless waived).
+- spec-guard locks existing test files only (Scott's decision, 2026-09-29): changes to `scripts/ci/**`, `.github/**` and other non-test files are not violations; CODEOWNERS review covers them.
 
 **Fixtures, fakes and data**
 

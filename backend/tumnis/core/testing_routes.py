@@ -1,16 +1,20 @@
 """Test-only routes (P0-04), mounted by create_app only when TUMNIS_ADAPTERS=fake; the
 preview guard guarantees previews always run with fakes, so real deployments never have
-them. `POST /v1/test/reset` empties the database and reloads a seed set; `GET
-/v1/test/requests` lists the last write requests (P0-10)."""
+them. `POST /v1/test/reset` empties the database, reloads a seed set and clears a test
+clock; `GET /v1/test/requests` lists the last write requests (P0-10); `POST
+/v1/test/clock` sets the server clock (A10; issue #6: A0.1 signs in with the TOTP code at
+the browser's installed clock, so the server must check it at the same instant)."""
 
-from typing import Annotated, Any
+from datetime import datetime, timedelta
+from typing import Annotated, Any, Self
 
 from fastapi import HTTPException, Query, Request, Response
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from tumnis.core.clock import OverridableClock
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.seed import SEED_PATHS, DatabaseSink, SeedSet, load_seed, writers_registered
@@ -76,6 +80,9 @@ async def reset(
     if settings.database_owner_url is None:
         raise HTTPException(status_code=500, detail="reset needs DATABASE_OWNER_URL")
     await truncate_tables(settings.database_owner_url)
+    clock = request.app.state.clock
+    if isinstance(clock, OverridableClock):
+        clock.clear()  # a fresh stack reads the real time again
     # A fresh stack: rate-limit buckets start full again (P0-13: every e2e test signs in
     # from the same address, which the `login` bucket would otherwise throttle).
     if isinstance(getattr(request.app.state, "rate_limiter", None), RateLimiter):
@@ -109,3 +116,39 @@ async def recorded_requests(request: Request) -> RecordedRequests:
     idempotency key, status and whether they replayed (A0.2)."""
     log: Any = getattr(request.app.state, "request_log", ())
     return RecordedRequests(items=[RecordedRequest.model_validate(entry) for entry in log])
+
+
+class ClockIn(BaseModel):
+    """Exactly one of `time` (an aware ISO-8601 instant the clock is fixed at) or
+    `advance_seconds` (moves the fixed instant; fixes an unset clock at now first)."""
+
+    time: AwareDatetime | None = None
+    advance_seconds: float | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> Self:
+        if (self.time is None) == (self.advance_seconds is None):
+            raise ValueError("give exactly one of time or advance_seconds")
+        return self
+
+
+class ClockOut(BaseModel):
+    now: datetime
+
+
+@router.post("/clock")
+@route_policy(
+    RoutePolicy(
+        auth="none", idempotent=False, not_idempotent_reason="test-only control of the clock"
+    )
+)
+async def set_clock(request: Request, body: ClockIn) -> ClockOut:
+    """Fixes the server clock (every route, TOTP checks and rate limits read it) until the
+    next `POST /v1/test/reset`. The Playwright fixtures call it when a test installs
+    `page.clock`, so both clocks show the same instant."""
+    clock = request.app.state.clock
+    if not isinstance(clock, OverridableClock):  # create_app wraps it whenever fakes are on
+        raise HTTPException(status_code=500, detail="the app clock cannot be overridden")
+    if body.time is not None:
+        return ClockOut(now=clock.set(body.time))
+    return ClockOut(now=clock.advance(timedelta(seconds=body.advance_seconds or 0)))
