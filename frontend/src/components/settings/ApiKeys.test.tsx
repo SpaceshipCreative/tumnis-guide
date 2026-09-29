@@ -45,107 +45,95 @@ function record(recorded: Recorded[]) {
 }
 
 describe("ApiKeys", () => {
-  test.fails(
-    "[P0-14][SEC-2] shows the new key once with copy, then hides it",
-    async () => {
-      const recorded: Recorded[] = [];
-      let items: unknown[] = [];
-      server.use(
-        http.get("*/v1/keys", () =>
-          HttpResponse.json({ items, next_cursor: null }),
-        ),
-        http.post("*/v1/keys", async (info) => {
-          await record(recorded)(info);
-          items = [keyRow()];
-          return HttpResponse.json(
-            { ...keyRow(), key: SECRET },
-            { status: 201 },
-          );
-        }),
-      );
-      const { user, queryClient } = renderWithProviders(<ApiKeys />);
-      const writeText = vi.spyOn(navigator.clipboard, "writeText");
+  test("[P0-14][SEC-2] shows the new key once with copy, then hides it", async () => {
+    const recorded: Recorded[] = [];
+    let items: unknown[] = [];
+    server.use(
+      http.get("*/v1/keys", () =>
+        HttpResponse.json({ items, next_cursor: null }),
+      ),
+      http.post("*/v1/keys", async (info) => {
+        await record(recorded)(info);
+        items = [keyRow()];
+        return HttpResponse.json({ ...keyRow(), key: SECRET }, { status: 201 });
+      }),
+    );
+    const { user, queryClient } = renderWithProviders(<ApiKeys />);
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
 
-      await user.type(
-        await screen.findByLabelText("Key name"),
-        "laptop script",
-      );
-      await user.click(screen.getByRole("checkbox", { name: "tasks:read" }));
-      await user.click(screen.getByRole("button", { name: "Create key" }));
+    await user.type(await screen.findByLabelText("Key name"), "laptop script");
+    await user.click(screen.getByRole("checkbox", { name: "tasks:read" }));
+    await user.click(screen.getByRole("button", { name: "Create key" }));
 
-      const dialog = await screen.findByRole("dialog");
-      expect(within(dialog).getByText(SECRET)).toBeInTheDocument();
-      await user.click(within(dialog).getByRole("button", { name: "Copy" }));
-      expect(writeText).toHaveBeenCalledWith(SECRET);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(SECRET)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Copy" }));
+    expect(writeText).toHaveBeenCalledWith(SECRET);
 
-      expect(recorded).toHaveLength(1);
-      expect(recorded[0]?.method).toBe("POST");
-      expect(recorded[0]?.idempotencyKey).toBeTruthy();
-      expect(recorded[0]?.body).toMatchObject({
-        name: "laptop script",
-        scopes: ["tasks:read"],
-      });
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]?.method).toBe("POST");
+    expect(recorded[0]?.idempotencyKey).toBeTruthy();
+    expect(recorded[0]?.body).toMatchObject({
+      name: "laptop script",
+      scopes: ["tasks:read"],
+    });
 
-      await user.click(within(dialog).getByRole("button", { name: "Done" }));
-      await waitFor(() => {
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      });
-      expect(await screen.findByText("abcdefghijkl")).toBeInTheDocument();
-      expect(document.body.textContent).not.toContain(SECRET);
-      const cached = JSON.stringify(
-        queryClient
-          .getQueryCache()
-          .getAll()
-          .map((query) => query.state.data),
-      );
-      expect(cached).not.toContain(SECRET);
-    },
-  );
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(await screen.findByText("abcdefghijkl")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(SECRET);
+    const cached = JSON.stringify(
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.state.data),
+    );
+    expect(cached).not.toContain(SECRET);
+  });
 
-  test.fails(
-    "[P0-14][FR-9.3] rotate and revoke call the right endpoints",
-    async () => {
-      const recorded: Recorded[] = [];
-      server.use(
-        http.get("*/v1/keys", () =>
-          HttpResponse.json({ items: [keyRow()], next_cursor: null }),
-        ),
-        http.post("*/v1/keys/:id/rotate", async (info) => {
-          await record(recorded)(info);
-          return HttpResponse.json({
-            ...keyRow({ prefix: "mnopqrstuvwx" }),
-            key: ROTATED,
-          });
-        }),
-        http.delete("*/v1/keys/:id", async (info) => {
-          await record(recorded)(info);
-          return new HttpResponse(null, { status: 204 });
-        }),
-      );
-      const { user } = renderWithProviders(<ApiKeys />);
+  test("[P0-14][FR-9.3] rotate and revoke call the right endpoints", async () => {
+    const recorded: Recorded[] = [];
+    server.use(
+      http.get("*/v1/keys", () =>
+        HttpResponse.json({ items: [keyRow()], next_cursor: null }),
+      ),
+      http.post("*/v1/keys/:id/rotate", async (info) => {
+        await record(recorded)(info);
+        return HttpResponse.json({
+          ...keyRow({ prefix: "mnopqrstuvwx" }),
+          key: ROTATED,
+        });
+      }),
+      http.delete("*/v1/keys/:id", async (info) => {
+        await record(recorded)(info);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { user } = renderWithProviders(<ApiKeys />);
 
-      const row = await screen.findByRole("row", { name: /laptop script/ });
-      await user.click(within(row).getByRole("button", { name: "Rotate" }));
-      const dialog = await screen.findByRole("dialog");
-      expect(within(dialog).getByText(ROTATED)).toBeInTheDocument();
-      await user.click(within(dialog).getByRole("button", { name: "Done" }));
-      await waitFor(() => {
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      });
-      expect(document.body.textContent).not.toContain(ROTATED);
+    const row = await screen.findByRole("row", { name: /laptop script/ });
+    await user.click(within(row).getByRole("button", { name: "Rotate" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(ROTATED)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain(ROTATED);
 
-      await user.click(within(row).getByRole("button", { name: "Revoke" }));
-      await waitFor(() => {
-        expect(recorded).toHaveLength(2);
-      });
+    await user.click(within(row).getByRole("button", { name: "Revoke" }));
+    await waitFor(() => {
+      expect(recorded).toHaveLength(2);
+    });
 
-      expect(recorded.map((r) => `${r.method} ${r.path}`)).toEqual([
-        `POST /v1/keys/${KEY_ID}/rotate`,
-        `DELETE /v1/keys/${KEY_ID}`,
-      ]);
-      for (const request of recorded) {
-        expect(request.idempotencyKey).toBeTruthy();
-      }
-    },
-  );
+    expect(recorded.map((r) => `${r.method} ${r.path}`)).toEqual([
+      `POST /v1/keys/${KEY_ID}/rotate`,
+      `DELETE /v1/keys/${KEY_ID}`,
+    ]);
+    for (const request of recorded) {
+      expect(request.idempotencyKey).toBeTruthy();
+    }
+  });
 });
