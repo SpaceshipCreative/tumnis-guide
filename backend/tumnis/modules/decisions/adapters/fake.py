@@ -131,3 +131,29 @@ class FakeDecisions:
 
     async def health(self) -> Health:
         return self._health
+
+
+# --- Generation slot (P1-03) ------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GenerationCall:
+    system: str
+    user: str
+    max_tokens: int
+    timeout_ms: int
+
+
+class FakeGeneration:
+    """The Generation slot's fake (P1-03): answers `text` after `delay_ms`."""
+
+    def __init__(self, *, text: str = "", delay_ms: int = 0) -> None:
+        self.text = text
+        self.delay_ms = delay_ms
+        self.calls: list[GenerationCall] = []
+
+    async def complete(self, *, system: str, user: str, max_tokens: int, timeout_ms: int) -> str:
+        raise NotImplementedError
+
+    async def health(self) -> Health:
+        raise NotImplementedError

@@ -42,3 +42,20 @@ def load_jev_recordings() -> list[tuple[str, dict[str, Any]]]:
 def answered_recordings() -> list[tuple[str, dict[str, Any]]]:
     """The recordings whose response is a 200 answer."""
     return [(name, rec) for name, rec in load_jev_recordings() if rec["response"]["status"] == 200]
+
+
+# --- Generation slot (P1-03) ------------------------------------------------------------
+
+GENERATION_RECORDINGS = TESTS / "recordings" / "vllm_generation"
+GENERATION_BASE_URL = "http://vllm.example.org:8000"
+GENERATION_MODEL = "Qwen/Qwen2.5-3B-Instruct"
+
+
+def load_generation_recordings() -> list[tuple[str, dict[str, Any]]]:
+    """(file name, recording) for every tests/recordings/vllm_generation/*.json, sorted by
+    name. Each is {input: {system, user, max_tokens}, request: {method, url, body},
+    response: {status, headers, body}, recorded_at, vllm_version, notes}."""
+    return [
+        (path.name, json.loads(path.read_text()))
+        for path in sorted(GENERATION_RECORDINGS.glob("*.json"))
+    ]
