@@ -37,6 +37,7 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("board_columns", "status_map"): "backlog",  # a task_status enum value
     ("tasks", "board_rank"): "a0",
     ("review_items", "kind"): "row_factory",  # ck_review_items_kind
+    ("recurrence_rules", "preset"): "daily",  # ck_recurrence_rules_preset_or_cron
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)

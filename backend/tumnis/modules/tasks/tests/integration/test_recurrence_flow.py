@@ -36,7 +36,6 @@ def _instances(db: DbUrls, rule_id: Any) -> list[tuple[Any, ...]]:
 
 @pytest.mark.req("FR-3.5")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 async def test_done_and_tick_race_creates_one_instance(  # noqa: PLR0917
     dbos: type[DBOS],
     workspace: WorkspaceHandle,
@@ -105,7 +104,6 @@ async def _task(ctx: Any, task_id: Any) -> Any:
 
 @pytest.mark.req("FR-3.5")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 async def test_recurrence_api_round_trip(  # noqa: PLR0915
     app: FastAPI,
     session_client: SessionClient,

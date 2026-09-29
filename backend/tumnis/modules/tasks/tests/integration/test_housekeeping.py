@@ -82,7 +82,6 @@ async def _today_tasks(make_task: MakeTask, set_status: SetStatus, n: int) -> li
 
 @pytest.mark.req("FR-3.6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 async def test_day_close_returns_today_tasks_and_increments(  # noqa: PLR0917
     dbos: type[DBOS],
     workspace: WorkspaceHandle,
@@ -125,7 +124,6 @@ async def test_day_close_returns_today_tasks_and_increments(  # noqa: PLR0917
 
 @pytest.mark.req("FR-3.6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 async def test_day_close_leaves_other_statuses(  # noqa: PLR0917
     dbos: type[DBOS],
     workspace: WorkspaceHandle,
@@ -175,7 +173,6 @@ async def test_day_close_leaves_other_statuses(  # noqa: PLR0917
 
 @pytest.mark.req("FR-3.6", "REL-3")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 async def test_day_close_resumes_after_worker_kill(  # noqa: PLR0917
     worker_killer: WorkerKillerFactory,
     workspace: WorkspaceHandle,
@@ -237,7 +234,6 @@ async def _enqueue_until_accepted(client: Any, options: dict[str, Any], *args: A
 
 @pytest.mark.req("FR-3.6", "REL-6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 async def test_changing_timezone_moves_next_day_close(  # noqa: PLR0917
     dbos: type[DBOS],
     app: FastAPI,
@@ -284,7 +280,6 @@ async def test_changing_timezone_moves_next_day_close(  # noqa: PLR0917
 
 @pytest.mark.req("REL-6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 async def test_trash_purge_after_retention(  # noqa: PLR0917
     dbos: type[DBOS],
     workspace: WorkspaceHandle,
@@ -335,7 +330,6 @@ async def test_trash_purge_after_retention(  # noqa: PLR0917
 
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 async def test_idempotency_keys_expire(
     dbos: type[DBOS], workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls
 ) -> None:
