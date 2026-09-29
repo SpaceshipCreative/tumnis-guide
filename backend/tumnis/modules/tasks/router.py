@@ -12,7 +12,7 @@ kind registry are for the signed-in app only.
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, Query, Request
+from fastapi import Depends, Query, Request, Response
 from pydantic import BaseModel, Field, StringConstraints
 
 from tumnis.core.clock import Clock
@@ -254,6 +254,63 @@ async def link_context_item(
         task_id,
         body.context_item_id,
         now=_clock(request).now(),
+    )
+
+
+# --- Recurrence (P0-19, FR-3.5) --------------------------------------------------------------
+
+
+@router.get("/tasks/{task_id}/recurrence")
+@route_policy(READ_TASK)
+async def get_recurrence(task_id: UUID, session: SessionDep) -> api.TaskRecurrenceOut:
+    """The task's recurrence rule; 404 when it has none."""
+    return await api.get_recurrence(session, task_id)
+
+
+@router.put("/tasks/{task_id}/recurrence")
+@route_policy(WRITE_TASK)
+async def put_recurrence(
+    task_id: UUID, body: api.RecurrenceIn, request: Request, session: SessionDep
+) -> api.TaskRecurrenceOut:
+    """Sets or changes the recurrence at the task's version (a preset or a cron, 422
+    `invalid_recurrence`); the task becomes the first instance."""
+    return await api.put_recurrence(
+        session, principal_of(request).actor, task_id, body, now=_clock(request).now()
+    )
+
+
+@router.delete("/tasks/{task_id}/recurrence", status_code=204)
+@route_policy(WRITE_TASK)
+async def delete_recurrence(
+    task_id: UUID,
+    request: Request,
+    session: SessionDep,
+    *,
+    version: Annotated[Version, Query()],
+) -> Response:
+    """Stops the recurrence at the task's version; the instances made so far stay."""
+    await api.delete_recurrence(
+        session, principal_of(request).actor, task_id, version, now=_clock(request).now()
+    )
+    return Response(status_code=204)
+
+
+@router.get("/recurrence")
+@route_policy(LIST)
+async def list_recurrence(
+    request: Request,
+    session: SessionDep,
+    *,
+    page: Annotated[PageParams, Depends(page_params)],
+    project_id: Annotated[UUID | None, Query()] = None,
+) -> Page[api.RecurrenceOut]:
+    """Recurrence rules, optionally of one project (the Schedule rail)."""
+    return await api.list_recurrence(
+        session,
+        project_id=project_id,
+        cursor=page.cursor,
+        limit=page.limit,
+        project_ids=principal_of(request).project_ids,
     )
 
 

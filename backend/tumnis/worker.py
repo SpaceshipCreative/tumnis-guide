@@ -6,6 +6,7 @@ session-level state do not survive transaction pooling).
 
 import asyncio
 import contextlib
+import importlib
 import signal
 from typing import TYPE_CHECKING
 
@@ -65,6 +66,32 @@ def register_audit_schedule() -> None:
     )
 
 
+def register_task_schedules() -> None:
+    """The day-close tick (every 5 minutes, also the recurrence tick) and hourly
+    housekeeping on the maintenance queue (P0-19), in every deployment, applied after
+    DBOS.launch(); applying again replaces them by name, so a restart adds no duplicates."""
+    from dbos import DBOS  # noqa: PLC0415
+
+    # Imported by name, as wiring does: the composition root reaches module workflows
+    # without a static edge (import-linter's modules-api-only sees static imports only).
+    tasks = importlib.import_module("tumnis.modules.tasks.workflows")
+    DBOS.apply_schedules(
+        [
+            {
+                "schedule_name": tasks.DAY_CLOSE_SCHEDULE_NAME,
+                "workflow_fn": tasks.day_close_tick,
+                "schedule": tasks.DAY_CLOSE_SCHEDULE,
+            },
+            {
+                "schedule_name": tasks.HOUSEKEEPING_SCHEDULE_NAME,
+                "workflow_fn": tasks.housekeeping,
+                "schedule": tasks.HOUSEKEEPING_SCHEDULE,
+                "queue_name": workflows_ops.MAINTENANCE_QUEUE,
+            },
+        ]
+    )
+
+
 def dbos_config(settings: Settings) -> "DBOSConfig":
     return {"name": "tumnis", "system_database_url": settings.dbos_system_url}
 
@@ -78,7 +105,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
 
     from dbos import DBOS  # noqa: PLC0415
 
-    import tumnis.wiring  # noqa: F401, PLC0415  # registers adapters (later: workflows)
+    import tumnis.wiring  # noqa: F401, PLC0415  # registers adapters, events and workflows
     from tumnis.core import db  # noqa: PLC0415
 
     db.configure(settings.database_direct_url, settings.database_direct_url)
@@ -95,6 +122,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     register_queues()
     register_schedules(settings)
     register_audit_schedule()
+    register_task_schedules()
     try:
         asyncio.run(_serve(settings))
     finally:

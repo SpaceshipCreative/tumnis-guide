@@ -28,17 +28,30 @@ health reads (registered at import) and the task seed writer.
 """
 
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Any, Final, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import RowMapping, Table, and_, case, func, select, update
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from sqlalchemy import (
+    RowMapping,
+    Select,
+    Table,
+    and_,
+    case,
+    delete,
+    func,
+    or_,
+    select,
+    true,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import rank, tenancy
-from tumnis.core.clock import SystemClock
+from tumnis.core.clock import SystemClock, local_to_utc
 from tumnis.core.errors import ProblemError
 from tumnis.core.ids import uuid7
 from tumnis.core.limits import MAX_ESTIMATE_MINUTES
@@ -49,11 +62,15 @@ from tumnis.core.routing import register_project_lookup
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR, ActorRef
 from tumnis.core.versioning import NotFound, StaleVersion, Version, update_versioned
+from tumnis.modules.auth import api as auth
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import rules
+from tumnis.modules.tasks import rules_recurrence as rr
 from tumnis.modules.tasks.models import (
     BoardColumn,
+    DayClose,
+    RecurrenceRule,
     Task,
     TaskChange,
     TaskComment,
@@ -77,6 +94,7 @@ from tumnis.modules.tasks.review import (
     review_kinds,
 )
 from tumnis.modules.tasks.rules import ActorKind, Label, Status
+from tumnis.modules.tasks.rules_recurrence import Preset
 from tumnis.seed import TaskSeed, register_seed_writer
 
 __all__ = [
@@ -426,12 +444,19 @@ async def _column_rows(s: AsyncSession, project_id: UUID) -> list[RowMapping]:
     return list(rows.mappings())
 
 
+async def _lock_project_board(s: AsyncSession, project_id: UUID) -> None:
+    """The project's board lock, held to the end of the transaction: every write that
+    places a task in a column takes it (through `_slot`), so it also orders the successor
+    writes of a recurrence rule (completion and the tick)."""
+    lock_key = func.hashtextextended(f"tasks.board_columns:{project_id}", 0)
+    await s.execute(select(func.pg_advisory_xact_lock(lock_key)))
+
+
 async def ensure_default_columns(s: AsyncSession, project_id: UUID) -> None:
     """The six default columns (FR-3.2), written once: nothing while the project has any
     live column or does not exist. Serialized per project by an advisory lock, so the
     subscriber and a first request never both write them."""
-    lock_key = func.hashtextextended(f"tasks.board_columns:{project_id}", 0)
-    await s.execute(select(func.pg_advisory_xact_lock(lock_key)))
+    await _lock_project_board(s, project_id)
     if not await projects.project_exists(s, project_id):
         return
     if await _column_rows(s, project_id):
@@ -631,6 +656,15 @@ async def _insert(
         .mappings()
         .one()
     )
+    out = await _announce_created(s, created, now)
+    change_id = await record_change(
+        s, actor, created["id"], {"deleted": True}, {"deleted": False}
+    )  # undoing a create puts the task in the trash
+    return out.model_copy(update={"change_id": change_id})
+
+
+async def _announce_created(s: AsyncSession, created: RowMapping, now: datetime | None) -> TaskOut:
+    """`task.created` and the live mark for a row just inserted."""
     at = _now(now)
     await emit(
         s,
@@ -645,10 +679,7 @@ async def _insert(
         occurred_at=at,
     )
     mark_changed(s, LIVE_ENTITY, created["id"])
-    change_id = await record_change(
-        s, actor, created["id"], {"deleted": True}, {"deleted": False}
-    )  # undoing a create puts the task in the trash
-    return _with_change(created, change_id)
+    return _out(created)
 
 
 async def create_task(
@@ -776,7 +807,10 @@ async def _transition(  # one path for /status and /move
         occurred_at=at,
     )
     mark_changed(s, LIVE_ENTITY, row["id"])
-    return _with_change(updated, await _record(s, actor, row, updated))
+    change_id = await _record(s, actor, row, updated)
+    if to is Status.DONE and updated["recurrence_rule_id"] is not None:
+        await _successor_on_done(s, updated, at)  # P0-19: the next instance, same transaction
+    return _with_change(updated, change_id)
 
 
 async def change_status(
@@ -1138,3 +1172,447 @@ async def seed_task(
 
 
 register_seed_writer("task", seed_task)
+
+
+# --- Recurrence (P0-19, FR-3.5) ----------------------------------------------------------------
+#
+# A recurring task belongs to a rule (`recurrence_rules`): the spec, a template snapshot of
+# the task and the latest instance's occurrence. Each instance is a task carrying the rule
+# and the local date it stands for (`occurrence_on`); `ux_tasks_ws_rule_occurrence` allows
+# one per rule and date. The next instance comes when the latest one is done (in that
+# transaction) or once it is overdue and still open (the recurrence tick), each through
+# `rules_recurrence.successor` and an INSERT ... ON CONFLICT DO NOTHING on that index, so a
+# race between the two makes one row. Instances are Backlog copies of the template, due on
+# their local date, with source `recurrence`.
+
+_recurrence: Table = RecurrenceRule.__table__  # type: ignore[assignment]
+_day_closes: Table = DayClose.__table__  # type: ignore[assignment]
+# What a successor copies from the task the rule was set on (plan: title, label, estimate,
+# first action, acceptance criteria, priority, project; plus who set the label and taint).
+TEMPLATE_FIELDS: Final = (
+    "title",
+    "label",
+    "label_source",
+    "priority",
+    "estimate_minutes",
+    "first_action",
+    "acceptance_criteria",
+    "tainted",
+)
+RECURRENCE_SOURCE: Final = "recurrence"
+_JUST_BEFORE: Final = timedelta(microseconds=1)
+
+
+class RecurrenceIn(BaseModel):
+    """`PUT /v1/tasks/{id}/recurrence`: a preset or a 5-field cron (never both), the
+    preset's weekday (weekly, 0 = Monday) or month day (monthly), the local due time and the
+    task's version. The task becomes the rule's first instance."""
+
+    model_config = ConfigDict(extra="forbid")
+    preset: Preset | None = None
+    cron: Annotated[str, StringConstraints(max_length=120, strip_whitespace=True)] | None = None
+    weekday: int | None = None
+    month_day: int | None = None
+    due_time: time = time(9, 0)
+    version: Version
+
+
+class RecurrenceOut(BaseModel):
+    """A recurrence rule: its spec, the template's title, its latest instance and the next
+    occurrence after it (UTC)."""
+
+    id: UUID
+    project_id: UUID
+    preset: Preset | None
+    cron: str | None
+    weekday: int | None
+    month_day: int | None
+    due_time: time
+    title: str
+    latest_task_id: UUID | None
+    latest_occurrence_on: date | None
+    next_due_at: datetime | None
+
+    @field_validator("next_due_at")
+    @classmethod
+    def _utc(cls, value: datetime | None) -> datetime | None:
+        return None if value is None else value.astimezone(UTC)
+
+
+class TaskRecurrenceOut(RecurrenceOut):
+    """The rule as seen from one of its tasks; `version` is the task's (send it back)."""
+
+    task_id: UUID
+    version: int
+
+
+def _spec(row: Mapping[Any, Any]) -> rr.RecurrenceSpec:
+    return rr.RecurrenceSpec(
+        preset=None if row["preset"] is None else rr.Preset(row["preset"]),
+        cron=row["cron"],
+        weekday=row["weekday"],
+        month_day=row["month_day"],
+        due_time=row["due_time"],
+    )
+
+
+def _invalid(exc: rr.InvalidRecurrence) -> ProblemError:
+    return ProblemError(422, exc.code, str(exc))
+
+
+async def _zone(s: AsyncSession) -> ZoneInfo:
+    found = await auth.workspace_timezone(s, _context().workspace_id)
+    return ZoneInfo(found.timezone)
+
+
+def _recurrence_select() -> Select[Any]:
+    """Rules with their template title and latest instance (the latest occurrence, trashed
+    instances included: the tick treats a trashed one as not done)."""
+    latest = (
+        select(_tasks.c.id, _tasks.c.occurrence_on)
+        .where(_tasks.c.recurrence_rule_id == _recurrence.c.id)
+        .order_by(_tasks.c.occurrence_on.desc(), _tasks.c.id.desc())
+        .limit(1)
+        .lateral("latest")
+    )
+    return (
+        select(
+            _recurrence.c.id,
+            _recurrence.c.project_id,
+            _recurrence.c.preset,
+            _recurrence.c.cron,
+            _recurrence.c.weekday,
+            _recurrence.c.month_day,
+            _recurrence.c.due_time,
+            _recurrence.c.next_due_at,
+            _recurrence.c.task_template["title"].astext.label("title"),
+            latest.c.id.label("latest_task_id"),
+            latest.c.occurrence_on.label("latest_occurrence_on"),
+        )
+        .select_from(_recurrence.outerjoin(latest, true()))
+        .where(_live(_recurrence))
+    )
+
+
+async def _live_rule(
+    s: AsyncSession, rule_id: UUID | None, *, lock: bool = False
+) -> RowMapping | None:
+    if rule_id is None:
+        return None
+    stmt = select(_recurrence).where(_recurrence.c.id == rule_id, _live(_recurrence))
+    if lock:
+        stmt = stmt.with_for_update()
+    return (await s.execute(stmt)).mappings().first()
+
+
+async def _latest_instance(s: AsyncSession, rule_id: UUID) -> RowMapping | None:
+    stmt = (
+        select(_tasks)
+        .where(_tasks.c.recurrence_rule_id == rule_id)
+        .order_by(_tasks.c.occurrence_on.desc(), _tasks.c.id.desc())
+        .limit(1)
+    )
+    return (await s.execute(stmt)).mappings().first()
+
+
+async def _task_recurrence(s: AsyncSession, task: Mapping[Any, Any]) -> TaskRecurrenceOut:
+    rule_id = task["recurrence_rule_id"]
+    found = (
+        (await s.execute(_recurrence_select().where(_recurrence.c.id == rule_id)))
+        .mappings()
+        .first()
+    )
+    if rule_id is None or found is None:
+        raise NotFound("recurrence_rules", task["id"])
+    return TaskRecurrenceOut(**dict(found), task_id=task["id"], version=task["version"])
+
+
+async def get_recurrence(s: AsyncSession, task_id: UUID) -> TaskRecurrenceOut:
+    """The rule of the task; 404 when the task (or a live rule on it) does not exist."""
+    return await _task_recurrence(s, await _row(s, task_id))
+
+
+async def put_recurrence(
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    body: RecurrenceIn,
+    *,
+    now: datetime | None = None,
+) -> TaskRecurrenceOut:
+    """Sets or changes the task's recurrence at the task's version. The rule snapshots the
+    task as its template. When the task is (or becomes) the rule's latest instance, it is
+    the first instance: its occurrence is the first one on or after its due date (or after
+    now) and its due date becomes that local date. 404, then 409 `stale_version`, then 422
+    `invalid_recurrence`."""
+    row = await _row(s, task_id, lock=True)  # 404 before any body rule (A0.3, #28)
+    if row["version"] != body.version:
+        raise _stale(row)
+    spec = rr.RecurrenceSpec(
+        body.preset, body.cron or None, body.weekday, body.month_day, body.due_time
+    )
+    at, tz = _now(now), await _zone(s)
+    rule = await _live_rule(s, row["recurrence_rule_id"])
+    latest = None if rule is None else await _latest_instance(s, rule["id"])
+    first_instance = latest is None or latest["id"] == row["id"]
+    try:
+        rr.validate_spec(spec)
+        if first_instance:
+            after = at
+            if row["due_on"] is not None:
+                start = local_to_utc(row["due_on"], time(0), tz)
+                after = max(at, start - _JUST_BEFORE)
+            occurrence = rr.next_occurrence(spec, after, tz)
+        else:
+            assert rule is not None  # noqa: S101  # a later instance has a rule
+            occurrence = rule["latest_occurrence_at"]
+        following = rr.next_occurrence(spec, occurrence, tz)
+    except rr.InvalidRecurrence as exc:
+        raise _invalid(exc) from None
+    values: dict[str, Any] = {
+        "preset": spec.preset,
+        "cron": spec.cron,
+        "weekday": spec.weekday,
+        "month_day": spec.month_day,
+        "due_time": spec.due_time,
+        "task_template": {field: row[field] for field in TEMPLATE_FIELDS},
+        "latest_occurrence_at": occurrence,
+        "next_due_at": following,
+    }
+    if rule is None:
+        rule_id: UUID = await s.scalar(
+            pg_insert(_recurrence)
+            .values(project_id=row["project_id"], created_by=actor, **values)
+            .returning(_recurrence.c.id)
+        )
+    else:
+        rule_id = rule["id"]
+        await s.execute(update(_recurrence).where(_recurrence.c.id == rule_id).values(**values))
+    task_values: dict[str, Any] = {"recurrence_rule_id": rule_id}
+    if first_instance:
+        day = occurrence.astimezone(tz).date()
+        task_values |= {"occurrence_on": day, "due_on": day}
+    updated = await _versioned(s, task_id, body.version, task_values)
+    if updated["due_on"] != row["due_on"]:
+        await _changed(s, updated, ["due_on"], now)
+    mark_changed(s, LIVE_ENTITY, task_id)
+    return await _task_recurrence(s, updated)
+
+
+async def delete_recurrence(
+    s: AsyncSession, actor: ActorRef, task_id: UUID, version: int, *, now: datetime | None = None
+) -> None:
+    """Stops the recurrence at the task's version: the rule goes to the trash (its
+    instances stay) and the task leaves it. 404 without a live rule, 409 `stale_version`."""
+    row = await _row(s, task_id, lock=True)
+    rule = await _live_rule(s, row["recurrence_rule_id"])
+    if rule is None:
+        raise NotFound("recurrence_rules", task_id)
+    if row["version"] != version:
+        raise _stale(row)
+    await s.execute(
+        update(_recurrence).where(_recurrence.c.id == rule["id"]).values(deleted_at=_now(now))
+    )
+    await _versioned(s, task_id, version, {"recurrence_rule_id": None, "occurrence_on": None})
+    mark_changed(s, LIVE_ENTITY, task_id)
+
+
+async def list_recurrence(
+    s: AsyncSession,
+    *,
+    project_id: UUID | None = None,
+    cursor: str | None = None,
+    limit: int = 50,
+    project_ids: frozenset[UUID] | None = None,
+) -> Page[RecurrenceOut]:
+    """Live rules in creation order, optionally of one project (the Schedule rail, P0-24);
+    `project_ids` limits them (a project-limited key, R-28)."""
+    stmt = _recurrence_select()
+    if project_id is not None:
+        stmt = stmt.where(_recurrence.c.project_id == project_id)
+    if project_ids is not None:
+        stmt = stmt.where(_recurrence.c.project_id.in_(project_ids))
+    return await paginate(
+        s,
+        stmt,
+        keys=[],
+        id_col=_recurrence.c.id,
+        cursor=cursor,
+        limit=limit,
+        model=RecurrenceOut,
+    )
+
+
+async def _create_successor(
+    s: AsyncSession, rule: Mapping[Any, Any], occurrence: datetime, tz: ZoneInfo, now: datetime
+) -> TaskOut | None:
+    """The instance for `occurrence`, or None when one exists already (the unique index
+    `ux_tasks_ws_rule_occurrence`: the loser of a race inserts nothing, without error)."""
+    day = occurrence.astimezone(tz).date()
+    template = rule["task_template"]
+    column_id, board_rank = await _slot(s, rule["project_id"], Status.BACKLOG)
+    created = (
+        (
+            await s.execute(
+                pg_insert(_tasks)
+                .values(
+                    **{field: template.get(field) for field in TEMPLATE_FIELDS},
+                    project_id=rule["project_id"],
+                    status=Status.BACKLOG,
+                    due_on=day,
+                    recurrence_rule_id=rule["id"],
+                    occurrence_on=day,
+                    column_id=column_id,
+                    board_rank=board_rank,
+                    source=RECURRENCE_SOURCE,
+                    created_by=SYSTEM_ACTOR,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=[
+                        _tasks.c.workspace_id,
+                        _tasks.c.recurrence_rule_id,
+                        _tasks.c.occurrence_on,
+                    ],
+                    index_where=_tasks.c.recurrence_rule_id.is_not(None),
+                )
+                .returning(*_tasks.c)
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if created is None:
+        return None
+    await s.execute(
+        update(_recurrence)
+        .where(_recurrence.c.id == rule["id"])
+        .values(
+            latest_occurrence_at=occurrence,
+            next_due_at=rr.next_occurrence(_spec(rule), occurrence, tz),
+        )
+    )
+    return await _announce_created(s, created, now)
+
+
+async def _successor_on_done(s: AsyncSession, task: Mapping[Any, Any], now: datetime) -> None:
+    """Done on a rule's latest instance makes the next one (FR-3.5). The board lock, then
+    the rule's row lock, before reading the rule: the tick takes them in the same order."""
+    await _lock_project_board(s, task["project_id"])
+    rule = await _live_rule(s, task["recurrence_rule_id"], lock=True)
+    if rule is None or rule["latest_occurrence_at"] is None:
+        return
+    latest = await _latest_instance(s, rule["id"])
+    if latest is None or latest["id"] != task["id"]:
+        return  # an earlier instance: its successor exists already
+    tz = await _zone(s)
+    occurrence = rr.successor(_spec(rule), rule["latest_occurrence_at"], True, "done", now, tz)
+    if occurrence is not None:
+        await _create_successor(s, rule, occurrence, tz, now)
+
+
+async def create_due_successors(s: AsyncSession, now: datetime) -> int:
+    """The recurrence tick for the workspace in context: every live rule whose latest
+    instance is due and still open gets its next instance (one, however many occurrences
+    were missed). Returns how many were created. Each rule is read again under its
+    project's board lock and its row lock (the order completion takes them, in a fixed
+    project order), so a completion committing meanwhile is seen, not raced."""
+    tz = await _zone(s)
+    listed = (
+        await s.execute(
+            select(_recurrence.c.id, _recurrence.c.project_id)
+            .where(_live(_recurrence))
+            .order_by(_recurrence.c.project_id, _recurrence.c.id)
+        )
+    ).all()
+    created = 0
+    for rule_id, project_id in listed:
+        await _lock_project_board(s, project_id)
+        rule = await _live_rule(s, rule_id, lock=True)
+        if rule is None:
+            continue  # stopped meanwhile
+        latest = await _latest_instance(s, rule["id"])
+        if latest is None or rule["latest_occurrence_at"] is None:
+            continue
+        done = latest["status"] == Status.DONE and latest["deleted_at"] is None
+        occurrence = rr.successor(_spec(rule), rule["latest_occurrence_at"], done, "tick", now, tz)
+        if occurrence is not None and await _create_successor(s, rule, occurrence, tz, now):
+            created += 1
+    return created
+
+
+# --- Day close (P0-19, FR-3.6) -----------------------------------------------------------------
+
+
+class DayCloseFacts(BaseModel):
+    """What the day-close tick needs from a workspace: its zone and the anchor (the later of
+    the last close and the last timezone change, REL-6)."""
+
+    timezone: str
+    anchor: datetime
+
+
+async def day_close_facts(s: AsyncSession) -> DayCloseFacts:
+    zone = await auth.workspace_timezone(s, _context().workspace_id)
+    last: datetime | None = await s.scalar(select(func.max(_day_closes.c.closed_at)))
+    anchor = zone.changed_at if last is None else max(last, zone.changed_at)
+    return DayCloseFacts(timezone=zone.timezone, anchor=anchor)
+
+
+async def roll_over_today(s: AsyncSession, day: date, now: datetime) -> int | None:
+    """Closes local `day` for the workspace in context: Today tasks go back to Backlog
+    through the state machine as the system (`rollover_count` + 1, `task.status_changed`
+    each) and one `day_closes` row records it. None, changing nothing, when the day was
+    closed already (a repeat or a replay)."""
+    closed: UUID | None = await s.scalar(
+        pg_insert(_day_closes)
+        .values(day=day, closed_at=now, rolled_over=0, created_by=SYSTEM_ACTOR)
+        .on_conflict_do_nothing(index_elements=[_day_closes.c.workspace_id, _day_closes.c.day])
+        .returning(_day_closes.c.id)
+    )
+    if closed is None:
+        return None
+    rows = (
+        (
+            await s.execute(
+                select(_tasks)
+                .where(_tasks.c.status == Status.TODAY, _live(_tasks))
+                .order_by(_tasks.c.id)
+                .with_for_update()
+            )
+        )
+        .mappings()
+        .all()
+    )
+    for row in rows:
+        await _transition(s, SYSTEM_ACTOR, row, Status.BACKLOG, row["version"], now=now)
+    await s.execute(
+        update(_day_closes).where(_day_closes.c.id == closed).values(rolled_over=len(rows))
+    )
+    return len(rows)
+
+
+# --- Trash purge (P0-19, REL-6) ----------------------------------------------------------------
+
+
+async def purge_trash(s: AsyncSession, cutoff: datetime, *, limit: int) -> int:
+    """Hard-deletes up to `limit` tasks of the workspace in context trashed before `cutoff`
+    (their comments and context links go with them, ON DELETE CASCADE). Subtasks go first,
+    and a task with a subtask that stays is kept. Returns how many went."""
+    child = _tasks.alias("child")
+    kept_child = (
+        select(child.c.id)
+        .where(
+            child.c.parent_id == _tasks.c.id,
+            or_(child.c.deleted_at.is_(None), child.c.deleted_at >= cutoff),
+        )
+        .exists()
+    )
+    batch = (
+        select(_tasks.c.id)
+        .where(_tasks.c.deleted_at < cutoff, ~kept_child)
+        .order_by(_tasks.c.parent_id.is_(None), _tasks.c.id)
+        .limit(limit)
+        .scalar_subquery()
+    )
+    result = await s.execute(delete(_tasks).where(_tasks.c.id.in_(batch)).returning(_tasks.c.id))
+    return len(result.all())

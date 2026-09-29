@@ -22,7 +22,7 @@ import hashlib
 import json
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Annotated, Any, Final
 
 from fastapi import Depends, Request
@@ -76,6 +76,14 @@ idempotency_keys = Table(
 _t = idempotency_keys
 
 Handler = Callable[[Request], Awaitable[Response]]
+
+
+async def delete_expired(session: AsyncSession, now: datetime, *, limit: int) -> int:
+    """Delete up to `limit` keys of the workspace in context whose `expires_at` has passed;
+    returns how many went (P0-19's housekeeping calls it until it returns 0)."""
+    batch = select(_t.c.id).where(_t.c.expires_at <= now).limit(limit).scalar_subquery()
+    result = await session.execute(delete(_t).where(_t.c.id.in_(batch)).returning(_t.c.id))
+    return len(result.all())
 
 
 class _Rollback(Exception):  # noqa: N818  # control flow: a 5xx leaves the transaction

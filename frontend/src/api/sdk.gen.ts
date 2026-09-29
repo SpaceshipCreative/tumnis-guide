@@ -137,12 +137,18 @@ import type {
   TasksCreateTaskData,
   TasksCreateTaskErrors,
   TasksCreateTaskResponses,
+  TasksDeleteRecurrenceData,
+  TasksDeleteRecurrenceErrors,
+  TasksDeleteRecurrenceResponses,
   TasksGetBoardData,
   TasksGetBoardErrors,
   TasksGetBoardResponses,
   TasksGetColumnsData,
   TasksGetColumnsErrors,
   TasksGetColumnsResponses,
+  TasksGetRecurrenceData,
+  TasksGetRecurrenceErrors,
+  TasksGetRecurrenceResponses,
   TasksGetReviewCountData,
   TasksGetReviewCountErrors,
   TasksGetReviewCountResponses,
@@ -155,6 +161,9 @@ import type {
   TasksListCommentsData,
   TasksListCommentsErrors,
   TasksListCommentsResponses,
+  TasksListRecurrenceData,
+  TasksListRecurrenceErrors,
+  TasksListRecurrenceResponses,
   TasksListReviewKindsData,
   TasksListReviewKindsErrors,
   TasksListReviewKindsResponses,
@@ -167,6 +176,9 @@ import type {
   TasksPutColumnsData,
   TasksPutColumnsErrors,
   TasksPutColumnsResponses,
+  TasksPutRecurrenceData,
+  TasksPutRecurrenceErrors,
+  TasksPutRecurrenceResponses,
   TasksTrashTaskData,
   TasksTrashTaskErrors,
   TasksTrashTaskResponses,
@@ -222,16 +234,20 @@ import {
   zTasksAddCommentResponse,
   zTasksChangeStatusResponse,
   zTasksCreateTaskResponse,
+  zTasksDeleteRecurrenceResponse,
   zTasksGetBoardResponse,
   zTasksGetColumnsResponse,
+  zTasksGetRecurrenceResponse,
   zTasksGetReviewCountResponse,
   zTasksGetTaskResponse,
   zTasksLinkContextItemResponse,
   zTasksListCommentsResponse,
+  zTasksListRecurrenceResponse,
   zTasksListReviewKindsResponse,
   zTasksListTasksResponse,
   zTasksMoveTaskResponse,
   zTasksPutColumnsResponse,
+  zTasksPutRecurrenceResponse,
   zTasksTrashTaskResponse,
   zTasksUndoTaskResponse,
   zTasksUpdateTaskResponse,
@@ -973,6 +989,29 @@ export const projectsUnarchiveProject = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List Recurrence
+ *
+ * Recurrence rules, optionally of one project (the Schedule rail).
+ */
+export const tasksListRecurrence = <ThrowOnError extends boolean = false>(
+  options?: Options<TasksListRecurrenceData, ThrowOnError>,
+): RequestResult<
+  TasksListRecurrenceResponses,
+  TasksListRecurrenceErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    TasksListRecurrenceResponses,
+    TasksListRecurrenceErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListRecurrenceResponse.parseAsync(data),
+    url: "/v1/recurrence",
+    ...options,
+  });
+
+/**
  * Get Review Count
  *
  * The badge: review items waiting now (not decided, trashed or snoozed).
@@ -1438,6 +1477,80 @@ export const tasksMoveTask = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zTasksMoveTaskResponse.parseAsync(data),
     url: "/v1/tasks/{task_id}/move",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Delete Recurrence
+ *
+ * Stops the recurrence at the task's version; the instances made so far stay.
+ */
+export const tasksDeleteRecurrence = <ThrowOnError extends boolean = false>(
+  options: Options<TasksDeleteRecurrenceData, ThrowOnError>,
+): RequestResult<
+  TasksDeleteRecurrenceResponses,
+  TasksDeleteRecurrenceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    TasksDeleteRecurrenceResponses,
+    TasksDeleteRecurrenceErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksDeleteRecurrenceResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/recurrence",
+    ...options,
+  });
+
+/**
+ * Get Recurrence
+ *
+ * The task's recurrence rule; 404 when it has none.
+ */
+export const tasksGetRecurrence = <ThrowOnError extends boolean = false>(
+  options: Options<TasksGetRecurrenceData, ThrowOnError>,
+): RequestResult<
+  TasksGetRecurrenceResponses,
+  TasksGetRecurrenceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TasksGetRecurrenceResponses,
+    TasksGetRecurrenceErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksGetRecurrenceResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/recurrence",
+    ...options,
+  });
+
+/**
+ * Put Recurrence
+ *
+ * Sets or changes the recurrence at the task's version (a preset or a cron, 422
+ * `invalid_recurrence`); the task becomes the first instance.
+ */
+export const tasksPutRecurrence = <ThrowOnError extends boolean = false>(
+  options: Options<TasksPutRecurrenceData, ThrowOnError>,
+): RequestResult<
+  TasksPutRecurrenceResponses,
+  TasksPutRecurrenceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    TasksPutRecurrenceResponses,
+    TasksPutRecurrenceErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksPutRecurrenceResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/recurrence",
     ...options,
     headers: {
       "Content-Type": "application/json",

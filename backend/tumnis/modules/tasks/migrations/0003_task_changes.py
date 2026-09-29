@@ -5,8 +5,7 @@ history fields): `before` and `after` hold only those, and `change_id` is the id
 answers. `undone_at` marks a change put back by `POST /v1/tasks/{id}/undo`; an undo is a
 change of its own. `workspace_id` leads both indexes.
 
-Chained after tasks_0001; P0-19's recurrence revision (tasks_0002) is built in parallel,
-so the chain is reordered at merge (tasks_0002 -> tasks_0003).
+Chained after P0-19's recurrence revision (tasks_0002).
 """
 
 import sqlalchemy as sa
@@ -15,7 +14,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from tumnis.core.migration_helpers import create_tenant_table, drop_tenant_table
 
 revision = "tasks_0003"
-down_revision = "tasks_0001"
+down_revision = "tasks_0002"
 branch_labels = None
 depends_on = None
 phase = "expand"

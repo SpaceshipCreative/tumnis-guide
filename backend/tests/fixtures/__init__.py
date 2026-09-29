@@ -637,6 +637,22 @@ class WorkerKiller:
         self._procs.append(proc)
         return proc
 
+    async def start_worker(self, *, armed: bool) -> asyncio.subprocess.Process:
+        """A worker on the harness databases, with the kill point armed or not, for tests
+        that enqueue their own workflow (P0-19) instead of emitting events."""
+        return await self._start(self.killpoint if armed else None)
+
+    async def stop_worker(self, proc: asyncio.subprocess.Process) -> None:
+        await self._stop(proc)
+
+    def dbos_client(self) -> DBOSClient:
+        """A DBOSClient on the harness's system database (closed with the killer)."""
+        from dbos import DBOSClient  # noqa: PLC0415
+
+        if self._client is None:
+            self._client = DBOSClient(system_database_url=self.sys_db.url(APP))
+        return self._client
+
     def log_tail(self, lines: int = 60) -> str:
         out = []
         for path in sorted(self.logs.glob("worker-*.log")):

@@ -229,6 +229,11 @@ export const zPageKeyOut = z.object({
 });
 
 /**
+ * Preset
+ */
+export const zPreset = z.enum(["daily", "weekdays", "weekly", "monthly"]);
+
+/**
  * Problem
  */
 export const zProblem = z.object({
@@ -324,6 +329,50 @@ export const zProjectPatch = z.object({
   status: z.enum(["active", "on_hold", "completed"]).nullish(),
   subtask_threshold_min: z.int().gte(1).lte(960).nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * RecurrenceIn
+ *
+ * `PUT /v1/tasks/{id}/recurrence`: a preset or a 5-field cron (never both), the
+ * preset's weekday (weekly, 0 = Monday) or month day (monthly), the local due time and the
+ * task's version. The task becomes the rule's first instance.
+ */
+export const zRecurrenceIn = z.object({
+  cron: z.string().max(120).nullish(),
+  due_time: z.iso.time().optional().default("09:00:00"),
+  month_day: z.int().nullish(),
+  preset: zPreset.nullish(),
+  version: z.int().gte(0).lte(2147483647),
+  weekday: z.int().nullish(),
+});
+
+/**
+ * RecurrenceOut
+ *
+ * A recurrence rule: its spec, the template's title, its latest instance and the next
+ * occurrence after it (UTC).
+ */
+export const zRecurrenceOut = z.object({
+  cron: z.string().nullable(),
+  due_time: z.iso.time(),
+  id: z.uuid(),
+  latest_occurrence_on: z.iso.date().nullable(),
+  latest_task_id: z.uuid().nullable(),
+  month_day: z.int().nullable(),
+  next_due_at: z.iso.datetime().nullable(),
+  preset: zPreset.nullable(),
+  project_id: z.uuid(),
+  title: z.string(),
+  weekday: z.int().nullable(),
+});
+
+/**
+ * Page[RecurrenceOut]
+ */
+export const zPageRecurrenceOut = z.object({
+  items: z.array(zRecurrenceOut),
+  next_cursor: z.string().nullable(),
 });
 
 /**
@@ -637,6 +686,27 @@ export const zTaskPatch = z.object({
   priority: z.enum(["low", "normal", "high", "urgent"]).nullish(),
   title: z.string().min(1).max(500).nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * TaskRecurrenceOut
+ *
+ * The rule as seen from one of its tasks; `version` is the task's (send it back).
+ */
+export const zTaskRecurrenceOut = z.object({
+  cron: z.string().nullable(),
+  due_time: z.iso.time(),
+  id: z.uuid(),
+  latest_occurrence_on: z.iso.date().nullable(),
+  latest_task_id: z.uuid().nullable(),
+  month_day: z.int().nullable(),
+  next_due_at: z.iso.datetime().nullable(),
+  preset: zPreset.nullable(),
+  project_id: z.uuid(),
+  task_id: z.uuid(),
+  title: z.string(),
+  version: z.int(),
+  weekday: z.int().nullable(),
 });
 
 /**
@@ -1026,6 +1096,17 @@ export const zProjectsUnarchiveProjectPath = z.object({
  */
 export const zProjectsUnarchiveProjectResponse = zProjectOut;
 
+export const zTasksListRecurrenceQuery = z.object({
+  project_id: z.uuid().nullish(),
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksListRecurrenceResponse = zPageRecurrenceOut;
+
 /**
  * Successful Response
  */
@@ -1204,6 +1285,39 @@ export const zTasksMoveTaskPath = z.object({
  * Successful Response
  */
 export const zTasksMoveTaskResponse = zTaskOut;
+
+export const zTasksDeleteRecurrencePath = z.object({
+  task_id: z.uuid(),
+});
+
+export const zTasksDeleteRecurrenceQuery = z.object({
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksDeleteRecurrenceResponse = z.void();
+
+export const zTasksGetRecurrencePath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksGetRecurrenceResponse = zTaskRecurrenceOut;
+
+export const zTasksPutRecurrenceBody = zRecurrenceIn;
+
+export const zTasksPutRecurrencePath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksPutRecurrenceResponse = zTaskRecurrenceOut;
 
 export const zTasksChangeStatusBody = zStatusIn;
 
