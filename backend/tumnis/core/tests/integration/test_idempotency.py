@@ -33,7 +33,6 @@ def _who(db: DbUrls) -> dict[str, str]:
 
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_same_key_same_body_replays_stored_response(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
@@ -64,7 +63,6 @@ async def test_same_key_same_body_replays_stored_response(
 
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_same_key_different_body_is_rejected(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
@@ -85,7 +83,6 @@ async def test_same_key_different_body_is_rejected(
 
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_key_expires_after_24_hours(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
@@ -114,7 +111,6 @@ async def test_key_expires_after_24_hours(
 
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_concurrent_requests_with_one_key_execute_once(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
@@ -141,7 +137,6 @@ async def test_concurrent_requests_with_one_key_execute_once(
 
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_write_without_key_is_rejected(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
@@ -164,7 +159,6 @@ async def test_write_without_key_is_rejected(
 
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_server_error_is_not_stored(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
@@ -189,7 +183,6 @@ async def test_server_error_is_not_stored(
 
 @pytest.mark.req("REL-2", "SAAS-1")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_keys_are_scoped_per_principal_and_workspace(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
