@@ -142,7 +142,6 @@ def test_flags_marker_removal_combined_with_edit(tmp_path: Path) -> None:
 
 @pytest.mark.req("Quality rule 1")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_flags_added_skip_or_plain_xfail(tmp_path: Path) -> None:
     """T-P0-03-05
     Adding @pytest.mark.skip or a non-spec xfail to an existing test is a violation.

@@ -28,6 +28,7 @@ from _tests_extract import (
     dump,
     is_python_test,
     is_spec_xfail,
+    is_weakening_decorator,
     locked_blocks,
     show,
 )
@@ -54,7 +55,7 @@ def unified_diff(before: str, after: str) -> str:
 def normalize(node: ast.AST) -> str:
     """Drop spec xfail decorators (and spec xfail entries in pytestmark), then dump."""
     node = copy.deepcopy(node)
-    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
         node.decorator_list = [d for d in node.decorator_list if not is_spec_xfail(d)]
     if isinstance(node, ast.Assign):
         if isinstance(node.value, ast.List | ast.Tuple):
@@ -72,6 +73,14 @@ def _marks(node: ast.AST) -> list[ast.expr]:
     return [] if value is None or is_spec_xfail(value) else [value]
 
 
+def _added_weakening(base: ast.AST, head: ast.AST) -> list[ast.expr]:
+    """Skip, skipif or non-spec xfail decorators on head that base did not have."""
+    if not isinstance(head, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        return []
+    before = {dump(d) for d in getattr(base, "decorator_list", [])}
+    return [d for d in head.decorator_list if is_weakening_decorator(d) and dump(d) not in before]
+
+
 def compare_python(path: str, base_src: str, head_src: str) -> list[Violation]:
     base, head = locked_blocks(base_src), locked_blocks(head_src)
     out: list[Violation] = []
@@ -81,6 +90,10 @@ def compare_python(path: str, base_src: str, head_src: str) -> list[Violation]:
             continue  # the line held only spec xfail markers
         if h is None:
             out.append(Violation(path, name, "deleted_test", "present on base, missing on head"))
+            continue
+        added = _added_weakening(b, h)
+        if added:
+            out.append(Violation(path, name, "added_skip_or_xfail", ast.unparse(added[0])))
             continue
         if normalize(b) != normalize(h):
             kind = "edited_pytestmark" if name == PYTESTMARK else "edited_test"

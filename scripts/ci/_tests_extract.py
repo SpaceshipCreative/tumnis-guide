@@ -8,6 +8,7 @@ module-level `pytestmark`. Blocks are compared as ASTs, so formatting never coun
 from __future__ import annotations
 
 import ast
+import copy
 import fnmatch
 import os
 import subprocess
@@ -156,7 +157,13 @@ def locked_blocks(src: str) -> dict[str, ast.AST]:
     def visit(node: ast.AST, prefix: str) -> None:
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.ClassDef):
+                before = len(out)
                 visit(child, f"{prefix}{child.name}.")
+                if len(out) > before:
+                    # The class's own markers (a skip there skips every method).
+                    shell = copy.copy(child)
+                    shell.body = [ast.Pass()]
+                    out[f"{prefix}{child.name}"] = shell
             elif isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef) and (
                 child.name.startswith("test") or _asserts(child) or _is_rule(child)
             ):
