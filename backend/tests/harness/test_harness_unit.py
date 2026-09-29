@@ -316,7 +316,6 @@ async def test_two_seed_loads_identical_apart_from_ids(clock: FixedClock) -> Non
 
 @pytest.mark.req("PERF-2")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 def test_load_generator_is_deterministic() -> None:
     """T-P0-02-13
     generate(projects=10, tasks=2000, seed=42) twice gives equal output; counts match;
