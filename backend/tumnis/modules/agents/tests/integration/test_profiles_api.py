@@ -6,12 +6,16 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
+import psycopg
 import pytest
+
+from tests._pg import OWNER
 
 if TYPE_CHECKING:
     from dbos import DBOS
 
     from tests._auth import SessionClient
+    from tests._pg import DbUrls
     from tests.fakes.fake_runner import FakeRunnerFactory
 
 pytestmark = [
@@ -95,3 +99,46 @@ async def test_register_profile_and_health(
     assert listed["status"] == "online"
     assert listed["profiles"] == ["tumnis-master"]
     assert "token" not in listed
+
+
+@pytest.mark.req("FR-5.1")
+@pytest.mark.wp("P1-04")
+async def test_profile_role_and_project_must_match(session_client: SessionClient) -> None:
+    """A `project` profile names its project and a `master` profile names none (422
+    `invalid_profile`): a project profile without one is never found for any project."""
+    project = await session_client.post("/v1/projects", json={"name": "Acme site"})
+    assert project.status_code == 201, project.text
+    project_id = project.json()["id"]
+
+    for body in (
+        {"name": "acme-site", "role": "project"},
+        {"name": "tumnis-master", "role": "master", "project_id": project_id},
+    ):
+        refused = await session_client.post(
+            "/v1/agents/profiles", json={**body, "transport": "daemon"}
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["code"] == "invalid_profile"
+
+    made = await session_client.post(
+        "/v1/agents/profiles",
+        json={"name": "acme-site", "role": "project", "project_id": project_id},
+    )
+    assert made.status_code == 201, made.text
+
+
+@pytest.mark.req("FR-5.11")
+@pytest.mark.wp("P1-04")
+async def test_runner_name_of_a_deleted_runner_is_409(
+    session_client: SessionClient, db: DbUrls
+) -> None:
+    """A runner name stays taken after its runner is soft-deleted (the unique index spans
+    deleted rows): a new runner with it is 409 `runner_exists`, not a 500."""
+    first = await session_client.post("/v1/runners", json={"name": "old-hermes"})
+    assert first.status_code == 201, first.text
+    with psycopg.connect(db.libpq(OWNER)) as conn:
+        conn.execute("UPDATE runners SET deleted_at = now() WHERE id = %s", (first.json()["id"],))
+
+    again = await session_client.post("/v1/runners", json={"name": "old-hermes"})
+    assert again.status_code == 409, again.text
+    assert again.json()["code"] == "runner_exists"
