@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "fetched_at": "2026-03-09T12:00:00Z",
+  "record_type": "note",
+  "external_id": "note-001",
+  "provider_url": "https://notes.example.com/n/note-001",
+  "title": "Kickoff",
+  "start_at": "2026-03-09T14:00:00Z",
+  "end_at": "2026-03-09T14:30:00Z",
+  "attendees": [
+    "client@example.com"
+  ],
+  "body_text": "Agreed on scope.",
+  "action_items": [
+    "Send quote"
+  ],
+  "event_external_id": "evt-009"
+}

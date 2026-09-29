@@ -1,0 +1,26 @@
+{
+  "raw": {
+    "external_id": "client@example.com",
+    "record_type": "person",
+    "fetched_at": "2026-03-09T12:00:00Z",
+    "payload": {
+      "email": "Client@Example.com",
+      "name": "Casey Client",
+      "emails": ["casey@client.example", "Client@Example.com", "casey@client.example"]
+    }
+  },
+  "expected": [
+    {
+      "schema_version": 1,
+      "record_type": "person",
+      "external_id": "client@example.com",
+      "provider_url": null,
+      "fetched_at": "2026-03-09T12:00:00Z",
+      "display_name": "Casey Client",
+      "primary_email": "client@example.com",
+      "emails": ["casey@client.example", "client@example.com"],
+      "domains": ["client.example", "example.com"]
+    }
+  ],
+  "notes": "Scrubbed: name and addresses invented. Addresses are lower-cased, deduplicated and sorted; domains come from every address."
+}

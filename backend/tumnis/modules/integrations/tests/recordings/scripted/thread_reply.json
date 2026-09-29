@@ -1,0 +1,50 @@
+{
+  "raw": {
+    "external_id": "msg-002",
+    "record_type": "message",
+    "fetched_at": "2026-03-09T12:00:00Z",
+    "payload": {
+      "id": "msg-002",
+      "from": "me@example.org",
+      "to": ["client@example.com"],
+      "subject": "Re: Invoice",
+      "text": "Paid today here",
+      "html": "<p>Paid <b>today</b><script>alert(1)</script> <a href=\"javascript:x()\">here</a></p>",
+      "sent_at": "2026-03-09T11:59:00Z",
+      "labels": ["sent"],
+      "thread": {
+        "id": "thr-001",
+        "subject": "Invoice",
+        "participants": ["client@example.com", "me@example.org"]
+      }
+    }
+  },
+  "expected": [
+    {
+      "schema_version": 1,
+      "record_type": "thread",
+      "external_id": "thr-001",
+      "provider_url": null,
+      "fetched_at": "2026-03-09T12:00:00Z",
+      "subject": "Invoice",
+      "participants": ["client@example.com", "me@example.org"],
+      "last_message_at": "2026-03-09T11:59:00Z"
+    },
+    {
+      "schema_version": 1,
+      "record_type": "message",
+      "external_id": "msg-002",
+      "provider_url": null,
+      "fetched_at": "2026-03-09T12:00:00Z",
+      "thread_external_id": "thr-001",
+      "sent_at": "2026-03-09T11:59:00Z",
+      "from_addr": "me@example.org",
+      "to_addrs": ["client@example.com"],
+      "subject": "Re: Invoice",
+      "body_text": "Paid today here",
+      "body_html_sanitized": "<p>Paid <b>today</b> <a rel=\"noopener noreferrer nofollow\">here</a></p>",
+      "labels": ["sent"]
+    }
+  ],
+  "notes": "Scrubbed: addresses replaced with example.com and example.org. The HTML body carries a script and a javascript: link, both removed by the sanitizer inside map."
+}

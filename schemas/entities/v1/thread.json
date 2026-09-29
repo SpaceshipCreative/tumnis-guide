@@ -1,0 +1,80 @@
+{
+  "$id": "https://tumnis.dev/schemas/entities/v1/thread.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "external_id": {
+      "minLength": 1,
+      "title": "External Id",
+      "type": "string"
+    },
+    "fetched_at": {
+      "format": "date-time",
+      "title": "Fetched At",
+      "type": "string"
+    },
+    "last_message_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Message At"
+    },
+    "participants": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Participants",
+      "type": "array"
+    },
+    "provider_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provider Url"
+    },
+    "record_type": {
+      "const": "thread",
+      "default": "thread",
+      "title": "Record Type",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "subject": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Subject"
+    }
+  },
+  "required": [
+    "schema_version",
+    "external_id",
+    "fetched_at"
+  ],
+  "title": "ThreadRecord",
+  "type": "object"
+}
