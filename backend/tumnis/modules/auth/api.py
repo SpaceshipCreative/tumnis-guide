@@ -15,7 +15,7 @@ from sqlalchemy import Table, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
-from tumnis.core import audit, crypto, db, request_meta
+from tumnis.core import audit, crypto, db, live, request_meta
 from tumnis.core.cache import invalidate_on_commit
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import ProblemError
@@ -776,6 +776,7 @@ GRACE_MINUTES_MAX: Final = 1_440  # plan: a rotation keeps the old secret 0 to 1
 LAST_USE_EVERY: Final = timedelta(minutes=1)  # plan: last_used_at at most once a minute
 _LAST_USE_MEMO_MAX: Final = 10_000
 _last_use: dict[UUID, datetime] = {}
+LIVE_ENTITY: Final = "api_key"  # /ws: create, rotate and revoke refresh the key list (P0-22)
 
 
 class KeyInvalid(ValueError):  # noqa: N818  # carries the problem code
@@ -907,6 +908,7 @@ async def create_key(
         )
         await emit(s, event, occurred_at=now)
         await keys.invalidate(s, "tmn", new.prefix)  # a cached "no such prefix"
+        live.mark_changed(s, LIVE_ENTITY, key_id)
         return KeyCreated(**_key_out(row).model_dump(), key=new.display)
 
     return await _in_session(ctx, session, work)
@@ -999,6 +1001,7 @@ async def rotate_key(
             occurred_at=now,
         )
         await keys.invalidate(s, "tmn", old["prefix"], old["previous_prefix"], new.prefix)
+        live.mark_changed(s, LIVE_ENTITY, key_id)
         return KeyCreated(**_key_out(row).model_dump(), key=new.display)
 
     return await _in_session(ctx, session, work)
@@ -1040,6 +1043,7 @@ async def revoke_key(
             occurred_at=now,
         )
         await keys.invalidate(s, "tmn", old["prefix"], old["previous_prefix"])
+        live.mark_changed(s, LIVE_ENTITY, key_id)
         return _key_out(row)
 
     return await _in_session(ctx, session, work)

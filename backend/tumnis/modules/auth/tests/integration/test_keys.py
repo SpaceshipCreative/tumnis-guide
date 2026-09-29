@@ -262,7 +262,6 @@ async def test_key_events_are_emitted(
 @pytest.mark.req("SEC-2", "ADR-0004")
 @pytest.mark.wp("P0-14")
 @pytest.mark.filterwarnings("ignore:Using `httpx` with `starlette.testclient`")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 def test_key_opens_the_live_socket_and_key_changes_go_live(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:

@@ -3,14 +3,18 @@
 // state while its dialog is open: the mutations keep nothing (gcTime 0, reset on close)
 // and never write it into the query cache; the list never carries it.
 import {
-  useMutation,
   useQuery,
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
 import { useId, useState, type SyntheticEvent } from "react";
 
-import { apiFetch, problemDetail } from "../../lib/fetch";
+import {
+  authListKeysOptions,
+  authListKeysQueryKey,
+} from "../../api/@tanstack/react-query.gen";
+import type { KeyCreated, KeyOut } from "../../api/types.gen";
+import { apiWrite, useWrite } from "../../lib/fetch";
 
 // FR-14.10; the server refuses any other (422 `unknown_scope`).
 export const SCOPES = [
@@ -23,67 +27,16 @@ export const SCOPES = [
   "ingest",
 ] as const;
 
-export interface ApiKey {
-  id: string;
-  name: string;
-  prefix: string;
-  scopes: string[];
-  project_ids: string[] | null;
-  created_at: string;
-  expires_at: string | null;
-  last_used_at: string | null;
-  revoked_at: string | null;
-}
+// The list query is the generated `authListKeys`, so a live `api_key` message (a key
+// made, rotated or revoked in another tab) refreshes it (lib/live-map.ts).
+const LIST = { query: { limit: 200 } };
 
-interface ApiKeyCreated extends ApiKey {
-  key: string;
-}
-
-const KEYS_QUERY = ["auth", "keys"] as const;
-
-async function expectOk(response: Response): Promise<Response> {
-  if (!response.ok) throw new Error(await problemDetail(response));
-  return response;
-}
-
-async function listKeys(): Promise<ApiKey[]> {
-  const response = await expectOk(await apiFetch("/v1/keys?limit=200"));
-  const page = (await response.json()) as { items: ApiKey[] };
-  return page.items;
-}
-
-async function createKey(body: {
-  name: string;
-  scopes: string[];
-}): Promise<ApiKeyCreated> {
-  const response = await expectOk(
-    await apiFetch("/v1/keys", { method: "POST", body: JSON.stringify(body) }),
-  );
-  return (await response.json()) as ApiKeyCreated;
-}
-
-async function rotateKey(id: string): Promise<ApiKeyCreated> {
-  const response = await expectOk(
-    await apiFetch(`/v1/keys/${encodeURIComponent(id)}/rotate`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    }),
-  );
-  return (await response.json()) as ApiKeyCreated;
-}
-
-async function revokeKey(id: string): Promise<void> {
-  await expectOk(
-    await apiFetch(`/v1/keys/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  );
-}
-
-function when(value: string | null, none: string): string {
-  return value === null ? none : new Date(value).toLocaleString();
+function when(value: string | null | undefined, none: string): string {
+  return value ? new Date(value).toLocaleString() : none;
 }
 
 function refresh(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: KEYS_QUERY });
+  void queryClient.invalidateQueries({ queryKey: authListKeysQueryKey(LIST) });
 }
 
 function ShownOnce({
@@ -122,7 +75,7 @@ function ShownOnce({
 
 export function ApiKeys() {
   const queryClient = useQueryClient();
-  const keys = useQuery({ queryKey: KEYS_QUERY, queryFn: listKeys });
+  const keys = useQuery(authListKeysOptions(LIST));
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<ReadonlySet<string>>(new Set());
   const [secret, setSecret] = useState<string | null>(null);
@@ -130,7 +83,7 @@ export function ApiKeys() {
 
   const shown = {
     gcTime: 0,
-    onSuccess: (created: ApiKeyCreated) => {
+    onSuccess: (created: KeyCreated) => {
       setSecret(created.key);
       refresh(queryClient);
     },
@@ -138,10 +91,39 @@ export function ApiKeys() {
       setError(failure.message);
     },
   };
-  const create = useMutation({ mutationFn: createKey, ...shown });
-  const rotate = useMutation({ mutationFn: rotateKey, ...shown });
-  const revoke = useMutation({
-    mutationFn: revokeKey,
+  const create = useWrite<
+    { name: string; scopes: string[]; idempotencyKey?: string },
+    KeyCreated
+  >({
+    mutationFn: ({ idempotencyKey, ...body }) =>
+      apiWrite<KeyCreated>({
+        kind: "create",
+        method: "POST",
+        path: "/keys",
+        body,
+        idempotencyKey,
+      }),
+    ...shown,
+  });
+  const rotate = useWrite<{ id: string; idempotencyKey?: string }, KeyCreated>({
+    mutationFn: ({ id, idempotencyKey }) =>
+      apiWrite<KeyCreated>({
+        kind: "create",
+        method: "POST",
+        path: `/keys/${encodeURIComponent(id)}/rotate`,
+        body: {},
+        idempotencyKey,
+      }),
+    ...shown,
+  });
+  const revoke = useWrite<{ id: string; idempotencyKey?: string }, undefined>({
+    mutationFn: ({ id, idempotencyKey }) =>
+      apiWrite<undefined>({
+        kind: "create",
+        method: "DELETE",
+        path: `/keys/${encodeURIComponent(id)}`,
+        idempotencyKey,
+      }),
     gcTime: 0,
     onSettled: () => {
       refresh(queryClient);
@@ -225,7 +207,7 @@ export function ApiKeys() {
             </tr>
           </thead>
           <tbody>
-            {(keys.data ?? []).map((key) => (
+            {(keys.data?.items ?? []).map((key: KeyOut) => (
               <tr key={key.id}>
                 <td>{key.name}</td>
                 <td>
@@ -248,7 +230,7 @@ export function ApiKeys() {
                         disabled={rotate.isPending}
                         onClick={() => {
                           setError(null);
-                          rotate.mutate(key.id);
+                          rotate.mutate({ id: key.id });
                         }}
                       >
                         Rotate
@@ -258,7 +240,7 @@ export function ApiKeys() {
                         disabled={revoke.isPending}
                         onClick={() => {
                           setError(null);
-                          revoke.mutate(key.id);
+                          revoke.mutate({ id: key.id });
                         }}
                       >
                         Revoke
