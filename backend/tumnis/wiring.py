@@ -1,7 +1,7 @@
 """Composition root: imports every module's adapters, api, events and workflows so they
-register (adapters, seed writers, event payload types and subscribers, DBOS workflows), and
-registers each module's optional `api.health()` as a non-critical readiness check (later:
-routers). Driven by the module registry, so a new module is wired automatically."""
+register (adapters, seed writers, event payload types, subscribers and DBOS workflows),
+and registers each module's optional `api.health()` as a non-critical readiness check
+(later: routers). Driven by the module registry, so a new module is wired automatically."""
 
 import importlib
 from typing import Protocol
@@ -38,8 +38,8 @@ def load_events() -> None:
 
 
 def load_workflows() -> None:
-    """Import every module's workflows, so DBOS knows each workflow and step by name before
-    it launches (the worker recovers and dequeues only registered workflows)."""
+    """Import every module's workflows, so DBOS knows them before launch (a restarted
+    worker recovers only registered workflows)."""
     for module in MODULES:
         importlib.import_module(f"tumnis.modules.{module}.workflows")
 

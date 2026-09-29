@@ -17,12 +17,14 @@ export const LIVE_MAP: Record<
   { details: string[]; lists: string[] }
 > = {
   // Any task change refreshes the lists and every board (a card may move between boards'
-  // columns, a subtask onto its parent's checklist), and search results (P0-20).
+  // columns, a subtask onto its parent's checklist), and search results (P0-20). A task's
+  // recurrence rule and the project's recurrence list change with its task messages (P0-19).
   task: {
-    details: ["tasksGetTask"],
+    details: ["tasksGetTask", "tasksGetRecurrence"],
     lists: [
       "tasksListTasks",
       "tasksGetBoard",
+      "tasksListRecurrence",
       "searchSearch",
       "searchTypeaheadTasks",
     ],

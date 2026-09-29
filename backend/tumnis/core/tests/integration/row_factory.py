@@ -46,6 +46,8 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("runs", "status"): "queued",
     ("run_events", "kind"): "dispatched",
     ("runner_messages", "direction"): "out",
+    ("recurrence_rules", "preset"): "daily",  # ck_recurrence_rules_preset_or_cron
+    ("recurrence_rules", "task_template"): Jsonb({"title": "x"}),  # RecurrenceOut.title
     ("search_index", "entity_type"): "task",  # ck_search_index_entity_type
 }
 

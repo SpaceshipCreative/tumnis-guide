@@ -10,6 +10,8 @@ session_client, key_client) come from backend/tests/fixtures.
 - `make_subtask(parent, **overrides)`: a task under `parent`, in its project.
 - `set_status(task, to, actor="human")`: `tasks.api.change_status` at the task's version.
 - `outbox(db, name)`: the payloads of that event's outbox rows, read as the owner.
+- `tz_workspace(tz, at=None)`: sets the workspace timezone at a given instant (P0-19).
+- `drain_workflows()`: waits until the DBOS workflows a tick enqueued have run (P0-19).
 
 The fixtures are plain (sync) and return coroutine functions: engines keep no idle
 connections (NullPool), so a test may drive them from any event loop.
@@ -29,6 +31,8 @@ import pytest
 from tests._pg import OWNER
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from tests._pg import DbUrls
     from tests.fixtures import WorkspaceHandle
     from tumnis.core.clock import FixedClock
@@ -142,3 +146,51 @@ def outbox(db: DbUrls, name: str) -> list[dict[str, Any]]:
     """Payloads of the outbox rows of event `name`, oldest first."""
     rows = owner_rows(db, "SELECT payload FROM outbox WHERE name = %s ORDER BY id", (name,))
     return [row[0] for row in rows]
+
+
+# --- Recurrence and day close (P0-19) ---------------------------------------------------------
+
+TzWorkspace = Callable[..., Awaitable[None]]
+
+
+@pytest.fixture
+def tz_workspace(db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock) -> TzWorkspace:
+    """`tz_workspace(tz, at=None)`: sets the workspace timezone through
+    `auth.api.put_workspace_settings` at `at` (default: the clock's now). The timezone's
+    change time is the day-close anchor, and a PUT keeping the zone leaves it, so the
+    helper then fixes `workspaces.timezone_changed_at` to `at` either way."""
+    from tumnis.modules.auth import api as auth  # noqa: PLC0415
+
+    async def set_timezone(tz: str, at: datetime | None = None) -> None:
+        when = at or clock.now()
+        [(version,)] = owner_rows(
+            db, "SELECT version FROM workspaces WHERE id = %s", (workspace.id,)
+        )
+        await auth.put_workspace_settings(
+            workspace.ctx, auth.WorkspaceSettingsIn(timezone=tz, version=version), now=when
+        )
+        with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+            conn.execute(
+                b"UPDATE workspaces SET timezone_changed_at = %s WHERE id = %s",
+                (when, workspace.id),
+            )
+
+    return set_timezone
+
+
+async def drain_workflows(timeout_s: float = 20) -> None:
+    """Wait until no DBOS workflow is enqueued or pending (the tick's children ran)."""
+    import asyncio  # noqa: PLC0415
+
+    from dbos import DBOS  # noqa: PLC0415
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_s
+    while True:
+        busy = await DBOS.list_workflows_async(status=["ENQUEUED", "PENDING"])
+        if not busy:
+            return
+        if loop.time() > deadline:
+            names = sorted(w.name for w in busy)
+            pytest.fail(f"workflows still running after {timeout_s} s: {names}")
+        await asyncio.sleep(0.05)

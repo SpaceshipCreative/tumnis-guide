@@ -22,6 +22,7 @@ class Workspace(Base):
     subtask_threshold_min: Mapped[int] = mapped_column(server_default=text("30"))  # FR-3.8
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+    timezone_changed_at: Mapped[datetime | None]  # auth_0005; NULL: never changed (P0-19)
     version: Mapped[int] = mapped_column(server_default=text("1"))
     deleted_at: Mapped[datetime | None]
     created_by: Mapped[str] = mapped_column(server_default=text("app.current_actor()"))
