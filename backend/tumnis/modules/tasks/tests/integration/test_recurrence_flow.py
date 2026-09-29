@@ -5,6 +5,7 @@ successor per occurrence when completion and the recurrence tick race (the uniqu
 from __future__ import annotations
 
 import asyncio
+import itertools
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -92,6 +93,19 @@ async def test_done_and_tick_race_creates_one_instance(  # noqa: PLR0917
     # a second tick at the same time makes nothing: the new instance is not due yet
     await recurrence_tick(workspace.id, clock.now())
     assert len(_instances(db, rec.id)) == 2
+
+
+async def _until_waiting_on_advisory_lock(db: DbUrls) -> None:
+    """Until a session of this database waits for an advisory lock (at most 10 s)."""
+    query = (
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted"
+        " AND database = (SELECT oid FROM pg_database WHERE datname = current_database())"
+    )
+    async with asyncio.timeout(10):
+        for _ in itertools.count():
+            if (await asyncio.to_thread(owner_rows, db, query))[0][0]:
+                return
+            await asyncio.sleep(0.05)
 
 
 async def _task(ctx: Any, task_id: Any) -> Any:
@@ -242,7 +256,8 @@ async def test_tick_waits_for_an_open_completion_on_the_rule(  # noqa: PLR0917
             now=datetime(2026, 3, 9, 14, tzinfo=UTC),
         )
         ticking = asyncio.create_task(tick())
-        await asyncio.sleep(0.5)  # the tick runs up to the lock while completion is open
+        await _until_waiting_on_advisory_lock(db)  # the tick is blocked, not finished
+        assert not ticking.done()
     assert await ticking == 0
 
     assert [(row[0], row[2]) for row in _instances(db, rec.id)] == [
