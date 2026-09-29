@@ -1,3 +1,3 @@
-// Placeholder so `tsc --noEmit` and `eslint .` have a file to check.
-// P0-02 replaces it with the Vite + React entry point.
+// Placeholder so `tsc --noEmit` and `eslint .` have a non-test source file.
+// P0-22 replaces it with the Vite + React entry point.
 export {};
