@@ -6,9 +6,11 @@ shared fixtures live in this plugin rather than in backend/tests/conftest.py.
 
 from __future__ import annotations
 
+import json
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -23,7 +25,11 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
     from testcontainers.community.postgres import PostgresContainer
 
+BACKEND = Path(__file__).resolve().parents[2]
 PG_IMAGE = "pgvector/pgvector:pg18"
+# Where recordings(provider) looks for a <provider>/ folder. The harness folder holds the
+# demo set its own contract test reads.
+RECORDING_ROOTS = ("tumnis/modules/*/tests/recordings", "tests/harness/recordings")
 
 # Monday of the US DST start week: the clocks sprang forward the day before.
 CLOCK_START = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
@@ -211,3 +217,34 @@ def query_counter() -> Iterator[QueryCounter]:
         yield counter
     finally:
         counter.close()
+
+
+# --- Recordings --------------------------------------------------------------------------
+
+Recording = tuple[dict[str, Any], list[Any]]
+
+
+def load_recordings(provider: str) -> list[Recording]:
+    """(raw, expected) pairs from <root>/<provider>/*.json, sorted by file name; each file
+    is {"raw": {...}, "expected": [...]}."""
+    folders = [
+        folder
+        for root in RECORDING_ROOTS
+        for folder in sorted(BACKEND.glob(f"{root}/{provider}"))
+        if folder.is_dir()
+    ]
+    if not folders:
+        raise FileNotFoundError(f"no recordings folder for provider {provider!r}")
+    if len(folders) > 1:
+        raise ValueError(f"provider {provider!r} has recordings in several modules: {folders}")
+    pairs: list[Recording] = []
+    for path in sorted(folders[0].glob("*.json")):
+        data = json.loads(path.read_text())
+        pairs.append((data["raw"], data["expected"]))
+    return pairs
+
+
+@pytest.fixture
+def recordings() -> Callable[[str], list[Recording]]:
+    """recordings("google_calendar") -> [(raw, expected), ...]."""
+    return load_recordings

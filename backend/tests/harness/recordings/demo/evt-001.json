@@ -1,0 +1,4 @@
+{
+  "raw": {"id": "evt-001", "summary": "Standup", "start": {"dateTime": "2026-03-09T09:30:00-04:00"}},
+  "expected": [{"type": "event", "external_id": "evt-001", "title": "Standup"}]
+}

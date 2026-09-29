@@ -14,7 +14,6 @@ Recordings = Callable[[str], list[tuple[dict[str, Any], list[Any]]]]
 
 @pytest.mark.req("Quality rule 5")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 def test_recordings_fixture_reads_folder_convention(recordings: Recordings) -> None:
     """T-P0-02-14
     recordings("demo") loads a demo folder into (raw, expected) pairs.
