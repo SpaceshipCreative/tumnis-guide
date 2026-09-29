@@ -44,7 +44,6 @@ async def _client(actor: str, request: pytest.FixtureRequest) -> Any:
 
 @pytest.mark.req("FR-3.2")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 @pytest.mark.parametrize(("actor", "frm", "to"), BLANK, ids=[f"{a}:{f}->{t}" for a, f, t in BLANK])
 async def test_disallowed_transition_returns_409(  # noqa: PLR0917
     actor: str,

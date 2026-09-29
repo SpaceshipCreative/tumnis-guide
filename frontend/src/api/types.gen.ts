@@ -87,6 +87,166 @@ export type AuditEntry = {
 };
 
 /**
+ * BoardColumnOut
+ */
+export type BoardColumnOut = {
+  /**
+   * Cards
+   */
+  cards: Array<CardOut>;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Name
+   */
+  name: string;
+  status: Status;
+};
+
+/**
+ * BoardOut
+ */
+export type BoardOut = {
+  /**
+   * Columns
+   */
+  columns: Array<BoardColumnOut>;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Threshold Min
+   */
+  threshold_min: number;
+};
+
+/**
+ * CardOut
+ */
+export type CardOut = {
+  /**
+   * Checklist
+   */
+  checklist: Array<TaskOut>;
+  task: TaskOut;
+};
+
+/**
+ * ColumnIn
+ */
+export type ColumnIn = {
+  /**
+   * Id
+   */
+  id?: string | null;
+  /**
+   * Name
+   */
+  name: string;
+  status: Status;
+};
+
+/**
+ * ColumnOut
+ */
+export type ColumnOut = {
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Sort Key
+   */
+  sort_key: string;
+  status: Status;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * ColumnsIn
+ */
+export type ColumnsIn = {
+  /**
+   * Columns
+   */
+  columns: Array<ColumnIn>;
+};
+
+/**
+ * ColumnsOut
+ */
+export type ColumnsOut = {
+  /**
+   * Items
+   */
+  items: Array<ColumnOut>;
+  /**
+   * Project Id
+   */
+  project_id: string;
+};
+
+/**
+ * CommentIn
+ */
+export type CommentIn = {
+  /**
+   * Body Md
+   */
+  body_md: string;
+};
+
+/**
+ * CommentOut
+ */
+export type CommentOut = {
+  /**
+   * Body Md
+   */
+  body_md: string;
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Created By
+   */
+  created_by: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * ContextItemIn
+ */
+export type ContextItemIn = {
+  /**
+   * Context Item Id
+   */
+  context_item_id: string;
+};
+
+/**
  * DeadLetterOut
  */
 export type DeadLetterOut = {
@@ -248,6 +408,11 @@ export type KeyOut = {
 };
 
 /**
+ * Label
+ */
+export type Label = "human" | "ai" | "hybrid";
+
+/**
  * LoginIn
  *
  * `provider` picks the sign-in provider; the other string fields are its credentials
@@ -326,6 +491,27 @@ export type ModuleFlagsOut = {
 };
 
 /**
+ * MoveIn
+ *
+ * One board drag (R-20): the target column, the rank between the new neighbours'
+ * ranks (core/rank.py) and the version read.
+ */
+export type MoveIn = {
+  /**
+   * Board Rank
+   */
+  board_rank: string;
+  /**
+   * Column Id
+   */
+  column_id: string;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
  * Page[AuditEntry]
  */
 export type PageAuditEntry = {
@@ -389,6 +575,20 @@ export type PageSessionOut = {
    * Items
    */
   items: Array<SessionOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
+ * Page[TaskOut]
+ */
+export type PageTaskOut = {
+  /**
+   * Items
+   */
+  items: Array<TaskOut>;
   /**
    * Next Cursor
    */
@@ -569,6 +769,10 @@ export type ProjectOut = {
    */
   status?: "active" | "on_hold" | "completed";
   /**
+   * Subtask Threshold Min
+   */
+  subtask_threshold_min?: number | null;
+  /**
    * Version
    */
   version: number;
@@ -618,6 +822,10 @@ export type ProjectPatch = {
    */
   status?: "active" | "on_hold" | "completed" | null;
   /**
+   * Subtask Threshold Min
+   */
+  subtask_threshold_min?: number | null;
+  /**
    * Version
    */
   version: number;
@@ -639,6 +847,54 @@ export type ReorderIn = {
    * Version
    */
   version: number;
+};
+
+/**
+ * ReviewCountOut
+ */
+export type ReviewCountOut = {
+  /**
+   * Count
+   */
+  count: number;
+};
+
+/**
+ * ReviewKindOut
+ */
+export type ReviewKindOut = {
+  /**
+   * Actions
+   */
+  actions: Array<string>;
+  /**
+   * Impact Scope
+   */
+  impact_scope: string;
+  /**
+   * Kind
+   */
+  kind: string;
+  /**
+   * Owner Module
+   */
+  owner_module: string;
+  /**
+   * Payload Schema
+   */
+  payload_schema: {
+    [key: string]: unknown;
+  };
+};
+
+/**
+ * ReviewKindsOut
+ */
+export type ReviewKindsOut = {
+  /**
+   * Items
+   */
+  items: Array<ReviewKindOut>;
 };
 
 /**
@@ -791,6 +1047,249 @@ export type SignedInOut = {
    * Workspace Id
    */
   workspace_id: string;
+};
+
+/**
+ * Status
+ */
+export type Status =
+  | "backlog"
+  | "today"
+  | "in_progress"
+  | "waiting_on_human"
+  | "in_review"
+  | "done";
+
+/**
+ * StatusIn
+ */
+export type StatusIn = {
+  to: Status;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * TaskContextItemOut
+ *
+ * A task's link to outside content: the ContextItem and what it points at.
+ */
+export type TaskContextItemOut = {
+  /**
+   * Context Item Id
+   */
+  context_item_id: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Tainted
+   */
+  tainted: boolean;
+  /**
+   * Target Id
+   */
+  target_id: string | null;
+  /**
+   * Target Type
+   */
+  target_type: string;
+  /**
+   * Target Url
+   */
+  target_url: string | null;
+  /**
+   * Task Id
+   */
+  task_id: string;
+};
+
+/**
+ * TaskCreate
+ */
+export type TaskCreate = {
+  /**
+   * Acceptance Criteria
+   */
+  acceptance_criteria?: string | null;
+  /**
+   * Due On
+   */
+  due_on?: string | null;
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes?: number | null;
+  /**
+   * First Action
+   */
+  first_action?: string | null;
+  label?: Label | null;
+  /**
+   * Parent Id
+   */
+  parent_id?: string | null;
+  /**
+   * Priority
+   */
+  priority?: "low" | "normal" | "high" | "urgent";
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Status
+   */
+  status?: "backlog" | "today";
+  /**
+   * Title
+   */
+  title: string;
+};
+
+/**
+ * TaskOut
+ */
+export type TaskOut = {
+  /**
+   * Acceptance Criteria
+   */
+  acceptance_criteria: string | null;
+  /**
+   * Actual Minutes
+   */
+  actual_minutes: number | null;
+  /**
+   * Assigned Agent Id
+   */
+  assigned_agent_id: string | null;
+  /**
+   * Board Rank
+   */
+  board_rank: string;
+  /**
+   * Column Id
+   */
+  column_id: string | null;
+  /**
+   * Completed At
+   */
+  completed_at: string | null;
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Due On
+   */
+  due_on: string | null;
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes: number | null;
+  /**
+   * First Action
+   */
+  first_action: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  label: Label | null;
+  /**
+   * Label Source
+   */
+  label_source: "user" | "jev" | "agent" | "fallback" | null;
+  /**
+   * Parent Id
+   */
+  parent_id: string | null;
+  /**
+   * Priority
+   */
+  priority: "low" | "normal" | "high" | "urgent";
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Rollover Count
+   */
+  rollover_count: number;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Source
+   */
+  source: string;
+  /**
+   * Started At
+   */
+  started_at: string | null;
+  status: Status;
+  /**
+   * Tainted
+   */
+  tainted: boolean;
+  /**
+   * Title
+   */
+  title: string;
+  /**
+   * Updated At
+   */
+  updated_at: string;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * TaskPatch
+ *
+ * Fields to change (absent: unchanged; null clears a nullable one) and the version
+ * read. Status changes go through `POST /status` or `/move`.
+ */
+export type TaskPatch = {
+  /**
+   * Acceptance Criteria
+   */
+  acceptance_criteria?: string | null;
+  /**
+   * Due On
+   */
+  due_on?: string | null;
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes?: number | null;
+  /**
+   * First Action
+   */
+  first_action?: string | null;
+  label?: Label | null;
+  /**
+   * Priority
+   */
+  priority?: "low" | "normal" | "high" | "urgent" | null;
+  /**
+   * Title
+   */
+  title?: string | null;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -2338,6 +2837,185 @@ export type ProjectsArchiveProjectResponses = {
 export type ProjectsArchiveProjectResponse =
   ProjectsArchiveProjectResponses[keyof ProjectsArchiveProjectResponses];
 
+export type TasksGetBoardData = {
+  body?: never;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/board";
+};
+
+export type TasksGetBoardErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksGetBoardError = TasksGetBoardErrors[keyof TasksGetBoardErrors];
+
+export type TasksGetBoardResponses = {
+  /**
+   * Successful Response
+   */
+  200: BoardOut;
+};
+
+export type TasksGetBoardResponse =
+  TasksGetBoardResponses[keyof TasksGetBoardResponses];
+
+export type TasksGetColumnsData = {
+  body?: never;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/columns";
+};
+
+export type TasksGetColumnsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksGetColumnsError =
+  TasksGetColumnsErrors[keyof TasksGetColumnsErrors];
+
+export type TasksGetColumnsResponses = {
+  /**
+   * Successful Response
+   */
+  200: ColumnsOut;
+};
+
+export type TasksGetColumnsResponse =
+  TasksGetColumnsResponses[keyof TasksGetColumnsResponses];
+
+export type TasksPutColumnsData = {
+  body: ColumnsIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/columns";
+};
+
+export type TasksPutColumnsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksPutColumnsError =
+  TasksPutColumnsErrors[keyof TasksPutColumnsErrors];
+
+export type TasksPutColumnsResponses = {
+  /**
+   * Successful Response
+   */
+  200: ColumnsOut;
+};
+
+export type TasksPutColumnsResponse =
+  TasksPutColumnsResponses[keyof TasksPutColumnsResponses];
+
 export type ProjectsReorderProjectData = {
   body: ReorderIn;
   path: {
@@ -2457,6 +3135,116 @@ export type ProjectsUnarchiveProjectResponses = {
 
 export type ProjectsUnarchiveProjectResponse =
   ProjectsUnarchiveProjectResponses[keyof ProjectsUnarchiveProjectResponses];
+
+export type TasksGetReviewCountData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/review/count";
+};
+
+export type TasksGetReviewCountErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksGetReviewCountError =
+  TasksGetReviewCountErrors[keyof TasksGetReviewCountErrors];
+
+export type TasksGetReviewCountResponses = {
+  /**
+   * Successful Response
+   */
+  200: ReviewCountOut;
+};
+
+export type TasksGetReviewCountResponse =
+  TasksGetReviewCountResponses[keyof TasksGetReviewCountResponses];
+
+export type TasksListReviewKindsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/review/kinds";
+};
+
+export type TasksListReviewKindsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksListReviewKindsError =
+  TasksListReviewKindsErrors[keyof TasksListReviewKindsErrors];
+
+export type TasksListReviewKindsResponses = {
+  /**
+   * Successful Response
+   */
+  200: ReviewKindsOut;
+};
+
+export type TasksListReviewKindsResponse =
+  TasksListReviewKindsResponses[keyof TasksListReviewKindsResponses];
 
 export type SettingsListModulesData = {
   body?: never;
@@ -2904,6 +3692,491 @@ export type AuthSetupTotpResponses = {
 
 export type AuthSetupTotpResponse =
   AuthSetupTotpResponses[keyof AuthSetupTotpResponses];
+
+export type TasksListTasksData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Status
+     */
+    status?: Status | null;
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/tasks";
+};
+
+export type TasksListTasksErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksListTasksError =
+  TasksListTasksErrors[keyof TasksListTasksErrors];
+
+export type TasksListTasksResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageTaskOut;
+};
+
+export type TasksListTasksResponse =
+  TasksListTasksResponses[keyof TasksListTasksResponses];
+
+export type TasksCreateTaskData = {
+  body: TaskCreate;
+  path?: never;
+  query?: never;
+  url: "/v1/tasks";
+};
+
+export type TasksCreateTaskErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksCreateTaskError =
+  TasksCreateTaskErrors[keyof TasksCreateTaskErrors];
+
+export type TasksCreateTaskResponses = {
+  /**
+   * Successful Response
+   */
+  201: TaskOut;
+};
+
+export type TasksCreateTaskResponse =
+  TasksCreateTaskResponses[keyof TasksCreateTaskResponses];
+
+export type TasksGetTaskData = {
+  body?: never;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}";
+};
+
+export type TasksGetTaskErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksGetTaskError = TasksGetTaskErrors[keyof TasksGetTaskErrors];
+
+export type TasksGetTaskResponses = {
+  /**
+   * Successful Response
+   */
+  200: TaskOut;
+};
+
+export type TasksGetTaskResponse =
+  TasksGetTaskResponses[keyof TasksGetTaskResponses];
+
+export type TasksUpdateTaskData = {
+  body: TaskPatch;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}";
+};
+
+export type TasksUpdateTaskErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksUpdateTaskError =
+  TasksUpdateTaskErrors[keyof TasksUpdateTaskErrors];
+
+export type TasksUpdateTaskResponses = {
+  /**
+   * Successful Response
+   */
+  200: TaskOut;
+};
+
+export type TasksUpdateTaskResponse =
+  TasksUpdateTaskResponses[keyof TasksUpdateTaskResponses];
+
+export type TasksAddCommentData = {
+  body: CommentIn;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/comments";
+};
+
+export type TasksAddCommentErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksAddCommentError =
+  TasksAddCommentErrors[keyof TasksAddCommentErrors];
+
+export type TasksAddCommentResponses = {
+  /**
+   * Successful Response
+   */
+  201: CommentOut;
+};
+
+export type TasksAddCommentResponse =
+  TasksAddCommentResponses[keyof TasksAddCommentResponses];
+
+export type TasksLinkContextItemData = {
+  body: ContextItemIn;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/context-items";
+};
+
+export type TasksLinkContextItemErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksLinkContextItemError =
+  TasksLinkContextItemErrors[keyof TasksLinkContextItemErrors];
+
+export type TasksLinkContextItemResponses = {
+  /**
+   * Successful Response
+   */
+  201: TaskContextItemOut;
+};
+
+export type TasksLinkContextItemResponse =
+  TasksLinkContextItemResponses[keyof TasksLinkContextItemResponses];
+
+export type TasksMoveTaskData = {
+  body: MoveIn;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/move";
+};
+
+export type TasksMoveTaskErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksMoveTaskError = TasksMoveTaskErrors[keyof TasksMoveTaskErrors];
+
+export type TasksMoveTaskResponses = {
+  /**
+   * Successful Response
+   */
+  200: TaskOut;
+};
+
+export type TasksMoveTaskResponse =
+  TasksMoveTaskResponses[keyof TasksMoveTaskResponses];
+
+export type TasksChangeStatusData = {
+  body: StatusIn;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/status";
+};
+
+export type TasksChangeStatusErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksChangeStatusError =
+  TasksChangeStatusErrors[keyof TasksChangeStatusErrors];
+
+export type TasksChangeStatusResponses = {
+  /**
+   * Successful Response
+   */
+  200: TaskOut;
+};
+
+export type TasksChangeStatusResponse =
+  TasksChangeStatusResponses[keyof TasksChangeStatusResponses];
 
 export type UsageGetUsageData = {
   body?: never;

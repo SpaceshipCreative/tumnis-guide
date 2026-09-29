@@ -43,7 +43,6 @@ def _target() -> Any:
 
 @pytest.mark.req("FR-3.1")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_any_module_can_add_a_review_item(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,
@@ -104,7 +103,6 @@ async def test_any_module_can_add_a_review_item(  # noqa: PLR0917
 
 @pytest.mark.req("FR-3.1")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_badge_counts_only_unreviewed_unsnoozed(
     app: FastAPI,
     session_client: SessionClient,
@@ -148,7 +146,6 @@ async def test_badge_counts_only_unreviewed_unsnoozed(
 
 @pytest.mark.req("FR-3.1")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_unknown_kind_and_bad_payload_are_rejected(
     app: FastAPI, conflict_kind: str, db: DbUrls
 ) -> None:

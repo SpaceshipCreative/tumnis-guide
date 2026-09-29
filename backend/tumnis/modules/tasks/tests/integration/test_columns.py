@@ -40,7 +40,6 @@ def _outbox_row(db: DbUrls, name: str) -> dict[str, Any]:
 
 @pytest.mark.req("FR-3.2")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_default_columns_and_edits(
     app: FastAPI, session_client: SessionClient, make_project: MakeProject, db: DbUrls
 ) -> None:

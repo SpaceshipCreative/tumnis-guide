@@ -522,6 +522,22 @@ async def link_context(
     return ContextItemOut.model_validate(row._mapping)
 
 
+async def get_context_item_ref(
+    ctx: WorkspaceContext, context_item_id: UUID, *, session: AsyncSession | None = None
+) -> ContextItemOut | None:
+    """A live context item of the caller's workspace, or None: how another module checks
+    an id it is asked to link (tasks, P0-18, FR-14.2)."""
+    async with session_for(ctx, session) as s:
+        row = (
+            await s.execute(
+                select(_context).where(
+                    _context.c.id == context_item_id, _context.c.deleted_at.is_(None)
+                )
+            )
+        ).first()
+    return None if row is None else ContextItemOut.model_validate(row._mapping)
+
+
 async def _target_taint(s: AsyncSession, target_type: str, target_id: UUID) -> bool:
     if target_type in _TABLES:
         table = _TABLES[target_type]

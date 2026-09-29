@@ -9,15 +9,21 @@ export const LIVE_MAP: Record<
   LiveEntity,
   { details: string[]; lists: string[] }
 > = {
-  // tasksGetTask; tasksListTasks, tasksGetBoard, searchSearch, searchTypeaheadTasks (P0-18, P0-20)
-  task: { details: [], lists: [] },
-  // searchTypeaheadProjects joins the lists with P0-20.
+  // Any task change refreshes the lists and every board (a card may move between boards'
+  // columns, a subtask onto its parent's checklist). searchSearch and
+  // searchTypeaheadTasks join the lists with P0-20.
+  task: {
+    details: ["tasksGetTask"],
+    lists: ["tasksListTasks", "tasksGetBoard"],
+  },
+  // A project's board and columns carry its id in their path: column edits and a new card
+  // threshold (FR-3.8) refresh them. searchTypeaheadProjects joins the lists with P0-20.
   project: {
-    details: ["projectsGetProject"],
+    details: ["projectsGetProject", "tasksGetBoard", "tasksGetColumns"],
     lists: ["projectsListProjects"],
   },
-  // tasksGetReviewCount (P0-18)
-  review_item: { details: [], lists: [] },
+  // The review badge (P0-18); the review queue joins with P1-13.
+  review_item: { details: [], lists: ["tasksGetReviewCount"] },
   // The workspace settings have no id in their path: any settings message refreshes them,
   // the sections and the module switches too (P0-26).
   settings: {
@@ -41,4 +47,6 @@ export const NOT_LIVE = [
   "usageGetUsage",
   "authListSessions",
   "authGetAccount",
+  // The review kinds are registered at startup; they change only with a deploy.
+  "tasksListReviewKinds",
 ] as const;

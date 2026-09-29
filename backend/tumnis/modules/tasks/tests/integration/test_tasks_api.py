@@ -26,7 +26,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-3.1")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_fr_3_1_fields_round_trip(
     app: FastAPI, session_client: SessionClient, make_task: MakeTask
 ) -> None:
@@ -74,7 +73,6 @@ async def test_fr_3_1_fields_round_trip(
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_agent_create_without_estimate_returns_422(
     app: FastAPI, key_client: KeyClientFactory, make_project: MakeProject
 ) -> None:
@@ -107,7 +105,6 @@ async def test_agent_create_without_estimate_returns_422(
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_actual_minutes_recorded_on_done(
     app: FastAPI,
     session_client: SessionClient,
@@ -150,7 +147,6 @@ async def test_actual_minutes_recorded_on_done(
 
 @pytest.mark.req("FR-14.2")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_context_item_link_is_the_only_outside_link(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,

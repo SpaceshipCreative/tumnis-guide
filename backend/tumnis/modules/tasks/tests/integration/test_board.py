@@ -51,7 +51,6 @@ def _all_cards(board: dict[str, Any]) -> list[str]:
 
 @pytest.mark.req("FR-3.8", "FR-3.4")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_threshold_change_relays_out_without_losing_data(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,

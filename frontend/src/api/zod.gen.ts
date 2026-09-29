@@ -32,6 +32,32 @@ export const zAuditEntry = z.object({
 });
 
 /**
+ * CommentIn
+ */
+export const zCommentIn = z.object({
+  body_md: z.string().min(1).max(20000),
+});
+
+/**
+ * CommentOut
+ */
+export const zCommentOut = z.object({
+  body_md: z.string(),
+  created_at: z.iso.datetime(),
+  created_by: z.string(),
+  id: z.uuid(),
+  task_id: z.uuid(),
+  version: z.int(),
+});
+
+/**
+ * ContextItemIn
+ */
+export const zContextItemIn = z.object({
+  context_item_id: z.uuid(),
+});
+
+/**
  * DeadLetterOut
  */
 export const zDeadLetterOut = z.object({
@@ -94,6 +120,11 @@ export const zKeyOut = z.object({
 });
 
 /**
+ * Label
+ */
+export const zLabel = z.enum(["human", "ai", "hybrid"]);
+
+/**
  * LoginIn
  *
  * `provider` picks the sign-in provider; the other string fields are its credentials
@@ -135,6 +166,18 @@ export const zModuleFlagOut = z.object({
  */
 export const zModuleFlagsOut = z.object({
   items: z.array(zModuleFlagOut),
+});
+
+/**
+ * MoveIn
+ *
+ * One board drag (R-20): the target column, the rank between the new neighbours'
+ * ranks (core/rank.py) and the version read.
+ */
+export const zMoveIn = z.object({
+  board_rank: z.string().min(1).max(48),
+  column_id: z.uuid(),
+  version: z.int().gte(0).lte(2147483647),
 });
 
 /**
@@ -227,6 +270,7 @@ export const zProjectOut = z.object({
     .enum(["active", "on_hold", "completed"])
     .optional()
     .default("active"),
+  subtask_threshold_min: z.int().nullish(),
   version: z.int(),
 });
 
@@ -254,6 +298,7 @@ export const zProjectPatch = z.object({
   profile_name: z.string().nullish(),
   repo_url: z.string().nullish(),
   status: z.enum(["active", "on_hold", "completed"]).nullish(),
+  subtask_threshold_min: z.int().gte(1).lte(960).nullish(),
   version: z.int().gte(0).lte(2147483647),
 });
 
@@ -264,6 +309,31 @@ export const zReorderIn = z.object({
   after_id: z.uuid().nullish(),
   before_id: z.uuid().nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * ReviewCountOut
+ */
+export const zReviewCountOut = z.object({
+  count: z.int(),
+});
+
+/**
+ * ReviewKindOut
+ */
+export const zReviewKindOut = z.object({
+  actions: z.array(z.string()),
+  impact_scope: z.string(),
+  kind: z.string(),
+  owner_module: z.string(),
+  payload_schema: z.record(z.string(), z.unknown()),
+});
+
+/**
+ * ReviewKindsOut
+ */
+export const zReviewKindsOut = z.object({
+  items: z.array(zReviewKindOut),
 });
 
 /**
@@ -345,6 +415,179 @@ export const zSetupTotpIn = z.object({
 export const zSignedInOut = z.object({
   user_id: z.uuid(),
   workspace_id: z.uuid(),
+});
+
+/**
+ * Status
+ */
+export const zStatus = z.enum([
+  "backlog",
+  "today",
+  "in_progress",
+  "waiting_on_human",
+  "in_review",
+  "done",
+]);
+
+/**
+ * ColumnIn
+ */
+export const zColumnIn = z.object({
+  id: z.uuid().nullish(),
+  name: z.string().min(1).max(60),
+  status: zStatus,
+});
+
+/**
+ * ColumnOut
+ */
+export const zColumnOut = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  sort_key: z.string(),
+  status: zStatus,
+  version: z.int(),
+});
+
+/**
+ * ColumnsIn
+ */
+export const zColumnsIn = z.object({
+  columns: z.array(zColumnIn).min(1).max(30),
+});
+
+/**
+ * ColumnsOut
+ */
+export const zColumnsOut = z.object({
+  items: z.array(zColumnOut),
+  project_id: z.uuid(),
+});
+
+/**
+ * StatusIn
+ */
+export const zStatusIn = z.object({
+  to: zStatus,
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * TaskContextItemOut
+ *
+ * A task's link to outside content: the ContextItem and what it points at.
+ */
+export const zTaskContextItemOut = z.object({
+  context_item_id: z.uuid(),
+  id: z.uuid(),
+  tainted: z.boolean(),
+  target_id: z.uuid().nullable(),
+  target_type: z.string(),
+  target_url: z.string().nullable(),
+  task_id: z.uuid(),
+});
+
+/**
+ * TaskCreate
+ */
+export const zTaskCreate = z.object({
+  acceptance_criteria: z.string().max(8000).nullish(),
+  due_on: z.iso.date().nullish(),
+  estimate_minutes: z.int().gt(0).lte(960).nullish(),
+  first_action: z.string().max(8000).nullish(),
+  label: zLabel.nullish(),
+  parent_id: z.uuid().nullish(),
+  priority: z
+    .enum(["low", "normal", "high", "urgent"])
+    .optional()
+    .default("normal"),
+  project_id: z.uuid(),
+  schema_version: z.literal(1).optional().default(1),
+  status: z.enum(["backlog", "today"]).optional().default("backlog"),
+  title: z.string().min(1).max(500),
+});
+
+/**
+ * TaskOut
+ */
+export const zTaskOut = z.object({
+  acceptance_criteria: z.string().nullable(),
+  actual_minutes: z.int().nullable(),
+  assigned_agent_id: z.uuid().nullable(),
+  board_rank: z.string(),
+  column_id: z.uuid().nullable(),
+  completed_at: z.iso.datetime().nullable(),
+  created_at: z.iso.datetime(),
+  due_on: z.iso.date().nullable(),
+  estimate_minutes: z.int().nullable(),
+  first_action: z.string().nullable(),
+  id: z.uuid(),
+  label: zLabel.nullable(),
+  label_source: z.enum(["user", "jev", "agent", "fallback"]).nullable(),
+  parent_id: z.uuid().nullable(),
+  priority: z.enum(["low", "normal", "high", "urgent"]),
+  project_id: z.uuid(),
+  rollover_count: z.int(),
+  schema_version: z.literal(1).optional().default(1),
+  source: z.string(),
+  started_at: z.iso.datetime().nullable(),
+  status: zStatus,
+  tainted: z.boolean(),
+  title: z.string(),
+  updated_at: z.iso.datetime(),
+  version: z.int(),
+});
+
+/**
+ * CardOut
+ */
+export const zCardOut = z.object({
+  checklist: z.array(zTaskOut),
+  task: zTaskOut,
+});
+
+/**
+ * BoardColumnOut
+ */
+export const zBoardColumnOut = z.object({
+  cards: z.array(zCardOut),
+  id: z.uuid(),
+  name: z.string(),
+  status: zStatus,
+});
+
+/**
+ * BoardOut
+ */
+export const zBoardOut = z.object({
+  columns: z.array(zBoardColumnOut),
+  project_id: z.uuid(),
+  threshold_min: z.int(),
+});
+
+/**
+ * Page[TaskOut]
+ */
+export const zPageTaskOut = z.object({
+  items: z.array(zTaskOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * TaskPatch
+ *
+ * Fields to change (absent: unchanged; null clears a nullable one) and the version
+ * read. Status changes go through `POST /status` or `/move`.
+ */
+export const zTaskPatch = z.object({
+  acceptance_criteria: z.string().max(8000).nullish(),
+  due_on: z.iso.date().nullish(),
+  estimate_minutes: z.int().gt(0).lte(960).nullish(),
+  first_action: z.string().max(8000).nullish(),
+  label: zLabel.nullish(),
+  priority: z.enum(["low", "normal", "high", "urgent"]).nullish(),
+  title: z.string().min(1).max(500).nullish(),
+  version: z.int().gte(0).lte(2147483647),
 });
 
 /**
@@ -637,6 +880,35 @@ export const zProjectsArchiveProjectPath = z.object({
  */
 export const zProjectsArchiveProjectResponse = zProjectOut;
 
+export const zTasksGetBoardPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksGetBoardResponse = zBoardOut;
+
+export const zTasksGetColumnsPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksGetColumnsResponse = zColumnsOut;
+
+export const zTasksPutColumnsBody = zColumnsIn;
+
+export const zTasksPutColumnsPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksPutColumnsResponse = zColumnsOut;
+
 export const zProjectsReorderProjectBody = zReorderIn;
 
 export const zProjectsReorderProjectPath = z.object({
@@ -659,6 +931,16 @@ export const zProjectsUnarchiveProjectPath = z.object({
  * Successful Response
  */
 export const zProjectsUnarchiveProjectResponse = zProjectOut;
+
+/**
+ * Successful Response
+ */
+export const zTasksGetReviewCountResponse = zReviewCountOut;
+
+/**
+ * Successful Response
+ */
+export const zTasksListReviewKindsResponse = zReviewKindsOut;
 
 /**
  * Successful Response
@@ -717,6 +999,89 @@ export const zAuthSetupTotpBody = zSetupTotpIn;
  * Successful Response
  */
 export const zAuthSetupTotpResponse = zSignedInOut;
+
+export const zTasksListTasksQuery = z.object({
+  project_id: z.uuid().nullish(),
+  status: zStatus.nullish(),
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksListTasksResponse = zPageTaskOut;
+
+export const zTasksCreateTaskBody = zTaskCreate;
+
+/**
+ * Successful Response
+ */
+export const zTasksCreateTaskResponse = zTaskOut;
+
+export const zTasksGetTaskPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksGetTaskResponse = zTaskOut;
+
+export const zTasksUpdateTaskBody = zTaskPatch;
+
+export const zTasksUpdateTaskPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksUpdateTaskResponse = zTaskOut;
+
+export const zTasksAddCommentBody = zCommentIn;
+
+export const zTasksAddCommentPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksAddCommentResponse = zCommentOut;
+
+export const zTasksLinkContextItemBody = zContextItemIn;
+
+export const zTasksLinkContextItemPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksLinkContextItemResponse = zTaskContextItemOut;
+
+export const zTasksMoveTaskBody = zMoveIn;
+
+export const zTasksMoveTaskPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksMoveTaskResponse = zTaskOut;
+
+export const zTasksChangeStatusBody = zStatusIn;
+
+export const zTasksChangeStatusPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksChangeStatusResponse = zTaskOut;
 
 export const zUsageGetUsageQuery = z.object({
   from: z.iso.date(),

@@ -136,7 +136,6 @@ def _machine(
 class TestTaskLifecyclePg:
     @pytest.mark.req("FR-3.2")
     @pytest.mark.wp("P0-18")
-    @pytest.mark.xfail(strict=True, reason="spec:P0-18")
     def test_random_lifecycles_match_the_matrix_on_postgres(
         self,
         db: DbUrls,

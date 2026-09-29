@@ -1,0 +1,91 @@
+{
+  "$defs": {
+    "Label": {
+      "enum": [
+        "human",
+        "ai",
+        "hybrid"
+      ],
+      "title": "Label",
+      "type": "string"
+    },
+    "TaskDoc": {
+      "description": "What search indexes for a task.",
+      "properties": {
+        "body": {
+          "default": "",
+          "maxLength": 8192,
+          "title": "Body",
+          "type": "string"
+        },
+        "deleted": {
+          "default": false,
+          "title": "Deleted",
+          "type": "boolean"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "TaskDoc",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/events/v1/task.created.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "doc": {
+      "$ref": "#/$defs/TaskDoc"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Label"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "project_id": {
+      "format": "uuid",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "tainted": {
+      "title": "Tainted",
+      "type": "boolean"
+    },
+    "task_id": {
+      "format": "uuid",
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "task_id",
+    "project_id",
+    "label",
+    "source",
+    "tainted",
+    "doc"
+  ],
+  "title": "TaskCreatedV1",
+  "type": "object"
+}

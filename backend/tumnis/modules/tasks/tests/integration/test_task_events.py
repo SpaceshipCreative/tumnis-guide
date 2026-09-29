@@ -33,7 +33,6 @@ def _validate(repo_root: Path, name: str, payload: dict[str, Any]) -> None:
 
 @pytest.mark.req("FR-3.1")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_task_created_and_status_changed_fire(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,
@@ -87,7 +86,6 @@ async def test_task_created_and_status_changed_fire(  # noqa: PLR0917
 
 @pytest.mark.req("FR-3.1")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_task_updated_payload_lists_changed_fields(
     app: FastAPI,
     session_client: SessionClient,

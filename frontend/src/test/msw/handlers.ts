@@ -6,7 +6,15 @@ import { http, HttpResponse, type RequestHandler } from "msw";
  */
 export function reviewKinds(kinds: readonly string[]): RequestHandler {
   return http.get("/v1/review/kinds", () =>
-    HttpResponse.json(kinds.map((kind) => ({ kind }))),
+    HttpResponse.json({
+      items: kinds.map((kind) => ({
+        kind,
+        owner_module: "test",
+        actions: ["accept", "reject"],
+        impact_scope: "workspace",
+        payload_schema: {},
+      })),
+    }),
   );
 }
 
