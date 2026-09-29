@@ -36,6 +36,15 @@ The runner daemon installs separately on the agent server; see [daemon/README.md
 
 Health is at `/health/live` (no I/O) and `/health/ready` (503 when Postgres or DBOS is down, 200 `degraded` when only a module check fails); metrics at `/metrics` (P0-27). Backups use pgBackRest with a quarterly restore drill (`scripts/drill/restore_drill.sh`, TBD).
 
+**Master key.** Per-workspace settings and secrets are sealed in Postgres with each workspace's data key, which is wrapped by the master key in `MASTER_KEY_FILE`: JSON `{"active": 1, "keys": {"1": "<base64 of 32 random bytes>"}}`. The api and worker refuse to start (exit 78) when the file is readable by group or others or, in prod, owned by anyone but root or the service user (uid 10001): keep `/etc/tumnis/secrets/` root-owned 0o700 and the file `chown 10001:root`, mode 0o400, bind-mounted read-only. Back the key file up with the API key pepper file, off the database host: losing either makes every secret unreadable (ADR-0010).
+
+Rotate the master key without downtime:
+
+1. Generate a key (`openssl rand -base64 32`), add it to the file as the next version and point `active` at it.
+2. Restart the api and the worker: new data keys are wrapped under the new version, and both versions stay loaded.
+3. Run `tumnis keys rotate-master --to <new version>` with `DATABASE_OWNER_URL` set: it re-wraps every data key; the sealed values do not change.
+4. Remove the old version from the file and restart again.
+
 ## Develop
 
 Prerequisites: [uv](https://docs.astral.sh/uv/) (Python 3.13), Node.js 22 or later with npm, [pre-commit](https://pre-commit.com/), and Docker for integration tests.

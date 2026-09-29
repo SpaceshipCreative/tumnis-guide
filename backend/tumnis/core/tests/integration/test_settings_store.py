@@ -122,7 +122,6 @@ async def test_put_setting_rejects_stale_version(
 
 @pytest.mark.req("SEC-6")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.usefixtures("core_db")
 async def test_rotating_master_key_rewraps_without_touching_ciphertexts(
     db: DbUrls, master_key_file: MasterKeyFile, owner_session: AsyncSession

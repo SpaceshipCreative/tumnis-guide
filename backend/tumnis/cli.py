@@ -22,6 +22,8 @@ from tumnis.settings import EXIT_CONFIG, Settings, SettingsError
 app = typer.Typer(name="tumnis", help="Tumnis Guide backend.", no_args_is_help=True)
 drill_app = typer.Typer(help="Restore drill results (P0-28).", no_args_is_help=True)
 app.add_typer(drill_app, name="drill")
+keys_app = typer.Typer(help="Master key maintenance (P0-08, SEC-6).", no_args_is_help=True)
+app.add_typer(keys_app, name="keys")
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -203,3 +205,38 @@ def drill_record(
     )
     if not result.ok:
         raise typer.Exit(1)
+
+
+@keys_app.command("rotate-master")
+def rotate_master(
+    to: Annotated[int, typer.Option("--to", help="Master key version to wrap every data key with")],
+) -> None:
+    """Re-wrap every workspace data key with master key version --to, as the owner role
+    (DATABASE_OWNER_URL). The key file must hold the old versions and the new one; the
+    sealed settings do not change (README, operate: master key rotation)."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: PLC0415
+    from sqlalchemy.pool import NullPool  # noqa: PLC0415
+
+    from tumnis.core.crypto import MasterKeyError, rewrap_all  # noqa: PLC0415
+
+    settings = load_settings()
+    owner_url = settings.database_owner_url
+    if owner_url is None:
+        _config_error("database_owner_url_missing: rotate-master runs as the owner role")
+    try:
+        master = settings.master_keys
+    except MasterKeyError as exc:
+        _config_error(exc)
+    if to not in master.keys:
+        _config_error(f"master key version {to} is not in {settings.master_key_file}")
+
+    async def run() -> int:
+        engine = create_async_engine(owner_url, poolclass=NullPool)
+        try:
+            async with async_sessionmaker(engine)() as session, session.begin():
+                return await rewrap_all(session, master, to_version=to)
+        finally:
+            await engine.dispose()
+
+    count = asyncio.run(run())
+    typer.echo(f"re-wrapped {count} data keys under master key {to} ({master.fingerprint(to)})")

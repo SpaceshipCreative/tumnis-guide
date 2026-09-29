@@ -24,6 +24,7 @@ from uuid import UUID
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 FORMAT_V1 = b"\x01"
@@ -193,5 +194,29 @@ def setting_aad(workspace_id: UUID, key: str) -> bytes:
     return f"tumnis:setting:v1:{workspace_id}:{key}".encode()
 
 
+_KEYS_TO_REWRAP = text(
+    "SELECT id, workspace_id, key_version, master_key_version, wrapped_key FROM workspace_keys "
+    "WHERE master_key_version <> :to ORDER BY id FOR UPDATE"
+)
+_REWRAPPED = text(
+    "UPDATE workspace_keys SET wrapped_key = :wrapped, master_key_version = :to WHERE id = :id"
+)
+
+
 async def rewrap_all(session: AsyncSession, master: MasterKeys, *, to_version: int) -> int:
-    raise NotImplementedError
+    """Owner-role maintenance (`tumnis keys rotate-master`): unwrap every workspace data key
+    with its recorded master version and wrap it again with `to_version`, in the caller's
+    transaction. Touches workspace_keys only; workspace_settings.value_enc is unchanged.
+    Returns how many data keys moved."""
+    if to_version not in master.keys:
+        raise MasterKeyError(f"master key version {to_version} is not loaded")
+    target = MasterKeys(active=to_version, keys=master.keys)
+    rows = (await session.execute(_KEYS_TO_REWRAP, {"to": to_version})).all()
+    for row in rows:
+        ids = {"workspace_id": row.workspace_id, "key_version": row.key_version}
+        data_key = unwrap(
+            master, bytes(row.wrapped_key), master_version=row.master_key_version, **ids
+        )
+        _, wrapped = wrap(target, data_key, **ids)
+        await session.execute(_REWRAPPED, {"wrapped": wrapped, "to": to_version, "id": row.id})
+    return len(rows)
