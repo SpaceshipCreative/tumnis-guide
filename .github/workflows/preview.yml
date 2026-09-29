@@ -1,0 +1,79 @@
+# A preview per PR (P0-04, REL-7): Coolify deploys compose.yaml + compose.preview.yaml
+# (fakes, seed set, a fresh database; the preview guard refuses anything else), then the
+# @smoke spec runs against it at phone width and the URL is posted as the `preview`
+# commit status. Homelab runner only (Coolify is private; plan B5 #15).
+#
+# Repository settings: variables COOLIFY_URL, COOLIFY_APP_UUID and PREVIEW_URL_TEMPLATE
+# (the Coolify preview URL with {pr} for the PR number, for example
+# https://pr-{pr}.tumnis.<tailnet>.ts.net); secret COOLIFY_TOKEN.
+name: preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  packages: write
+  statuses: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    # Never run code from a fork on the homelab runner.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, homelab]
+    timeout-minutes: 30
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/tumnis
+      COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+      COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Preview URL
+        run: echo "PREVIEW_URL=${PREVIEW_URL_TEMPLATE//\{pr\}/$PR}" >> "$GITHUB_ENV"
+        env:
+          PREVIEW_URL_TEMPLATE: ${{ vars.PREVIEW_URL_TEMPLATE }}
+      - name: Status pending
+        run: >-
+          gh api "repos/${{ github.repository }}/statuses/$SHA" -f state=pending
+          -f context=preview -f description="deploying" -f target_url="$PREVIEW_URL"
+      - name: Build and push the image
+        run: |
+          set -euo pipefail
+          image="${IMAGE,,}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -f deploy/Dockerfile -t "$image:pr-$PR-$SHA" .
+          docker push "$image:pr-$PR-$SHA"
+      - name: Deploy the preview and wait
+        run: |
+          set -euo pipefail
+          scripts/deploy/coolify.sh set-env TUMNIS_VERSION "pr-$PR-$SHA" preview
+          scripts/deploy/coolify.sh deploy "$PR"
+          for _ in $(seq 60); do
+            curl -fsS "$PREVIEW_URL/health/ready" && exit 0
+            sleep 5
+          done
+          echo "preview never became ready" >&2
+          exit 1
+      - name: Smoke test at phone width
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: ${{ env.PREVIEW_URL }}
+        run: |
+          npm ci
+          npx playwright install chromium
+          npx playwright test --grep @smoke --project phone
+      - name: Status
+        if: always()
+        run: >-
+          gh api "repos/${{ github.repository }}/statuses/$SHA"
+          -f state=${{ job.status == 'success' && 'success' || 'failure' }}
+          -f context=preview -f description="${{ job.status }}" -f target_url="$PREVIEW_URL"

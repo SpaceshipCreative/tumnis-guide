@@ -66,8 +66,11 @@ forbidden_modules =
     tumnis.worker
     tumnis.cli
     tumnis.wiring
-# Core's own tests may load the composition root to check what it wires (P0-09).
+# Core's own tests drive the app factory and the CLI (P0-04: health, boot guard, commands);
+# core code itself still never imports a composition root.
 ignore_imports =
+    tumnis.core.tests.** -> tumnis.app
+    tumnis.core.tests.** -> tumnis.cli
     tumnis.core.tests.** -> tumnis.wiring
 unmatched_ignore_imports_alerting = none
 

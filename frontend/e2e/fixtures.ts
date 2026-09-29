@@ -1,11 +1,12 @@
 // Shared Playwright fixtures. Specs import `test` and `expect` from here, never
 // from @playwright/test directly, so every spec can ask for these fixtures.
 //
-// Both fixtures are stubs until their work packages fill them in. A stub does
-// not throw during fixture setup: it hands the test a value that throws on
-// first use, so the failure happens inside the test body, after `test.fail()`
-// has marked an acceptance spec as an expected failure (P0-05). Fixtures are
-// lazy, so specs that do not request them (like harness.spec.ts) are unaffected.
+// `seededApp` resets the compose.test stack before each test (P0-04).
+// `signedInPage` is a stub until P0-13. The stub does not throw during fixture
+// setup: it hands the test a value that throws on first use, so the failure
+// happens inside the test body, after `test.fail()` has marked an acceptance
+// spec as an expected failure (P0-05). Fixtures are lazy, so specs that do not
+// request them are unaffected.
 //
 // Below the fixtures are helpers the acceptance specs share. Helpers hold no
 // assertions: they locate things and read the API, so the work packages that
@@ -16,12 +17,13 @@ import { readFileSync } from "node:fs";
 
 import {
   test as base,
+  expect,
   type APIRequestContext,
   type Locator,
   type Page,
 } from "@playwright/test";
 
-export { expect } from "@playwright/test";
+export { expect };
 
 /** The compose.test stack reset to the seed set (TUMNIS_ADAPTERS=fake). */
 export interface SeededApp {
@@ -55,14 +57,16 @@ function pending(fixture: string, wp: string, detail: string): object {
 }
 
 export const test = base.extend<E2EFixtures>({
-  seededApp: async ({ baseURL }, use) => {
-    await use(
-      pending(
-        "seededApp",
-        "P0-04",
-        `POST ${baseURL ?? ""}/v1/test/reset`,
-      ) as SeededApp,
-    );
+  seededApp: async ({ baseURL, request }, use) => {
+    // Mounted only with fake adapters (compose.test and previews).
+    const reset = async (set: "seed" | "load" = "seed"): Promise<void> => {
+      const response = await request.post("/v1/test/reset", {
+        params: set === "seed" ? {} : { set },
+      });
+      expect(response.status(), `POST /v1/test/reset (${set})`).toBe(204);
+    };
+    await reset();
+    await use({ baseURL: baseURL ?? "", reset });
   },
   signedInPage: async ({ page }, use) => {
     await use(

@@ -1,0 +1,102 @@
+# Self-hosted stack (ADR-0006): migrate, api, worker, Postgres 18 (pgvector, pgBackRest)
+# and PgBouncer. No service publishes a host port: Coolify's proxy reaches the api on the
+# Docker network, and Coolify itself is reachable only over the VPN or Tailscale (FR-9.1).
+#
+# Coolify (or the shell) provides APP_DB_PASSWORD, OWNER_DB_PASSWORD, POSTGRES_PASSWORD and
+# TUMNIS_VERSION. Passwords go into connection URLs, so keep them URL-safe (hex).
+# Overrides: compose.preview.yaml (PR previews), compose.test.yaml (CI e2e stack).
+name: tumnis
+
+x-env: &env
+  # The api goes through PgBouncer. That hop is inside the Docker network and unencrypted
+  # until P0-16 turns on client TLS in PgBouncer; PgBouncer to Postgres is TLS already.
+  DATABASE_URL: postgresql+psycopg://tumnis_app:${APP_DB_PASSWORD}@pgbouncer:6432/tumnis?sslmode=disable
+  # The worker, DBOS and LISTEN use the direct URL (DBOS_SYSTEM_DATABASE_URL defaults to
+  # this URL with the database tumnis_dbos).
+  DATABASE_DIRECT_URL: postgresql+psycopg://tumnis_app:${APP_DB_PASSWORD}@postgres:5432/tumnis?sslmode=require
+  DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-self-hosted}
+  DEPLOYMENT_ENV: ${DEPLOYMENT_ENV:-prod}
+  TUMNIS_ADAPTERS: ${TUMNIS_ADAPTERS:-real}
+
+x-app: &app
+  image: ghcr.io/spaceshipcreative/tumnis:${TUMNIS_VERSION:-latest}
+  environment: *env
+  volumes:
+    - /etc/tumnis/secrets:/run/secrets:ro
+  restart: unless-stopped
+
+services:
+  migrate:
+    <<: *app
+    command: ["tumnis", "migrate"]
+    environment:
+      <<: *env
+      DATABASE_OWNER_URL: postgresql+psycopg://tumnis_owner:${OWNER_DB_PASSWORD}@postgres:5432/tumnis?sslmode=require
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["tumnis", "api"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      pgbouncer: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 3
+      start_period: 60s
+      start_interval: 2s
+    expose: ["8080"]
+
+  worker:
+    <<: *app
+    command: ["tumnis", "worker"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  postgres:
+    build: ./postgres
+    image: tumnis-postgres:18
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      OWNER_DB_PASSWORD: ${OWNER_DB_PASSWORD}
+    volumes:
+      # Postgres 18 images keep data in /var/lib/postgresql/18/docker; mount the parent.
+      - pgdata:/var/lib/postgresql
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    shm_size: 256mb
+    healthcheck:
+      # Over TCP: the init-time server listens on the socket only, so this passes only
+      # once the real server is up.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+      start_interval: 1s
+    restart: unless-stopped
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0@sha256:7d7a27d9e90985cab5cf42256f5c13a3120baa4b055b69df37beb272b89b2340
+    environment:
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        umask 077
+        mkdir -p /tmp/pgbouncer
+        printf '"tumnis_app" "%s"\n' "$$APP_DB_PASSWORD" > /tmp/pgbouncer/userlist.txt
+        exec pgbouncer /etc/pgbouncer/pgbouncer.ini
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  pgdata: {}
