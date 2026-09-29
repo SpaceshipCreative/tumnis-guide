@@ -29,7 +29,6 @@ def _server_path(root: Path) -> StorageBackend:
 @pytest.mark.contract
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 class TestServerPathStorage(StorageContract):
     """T-P1-14-02
     The shared storage suite passes on a temp dir holding the `.tumnis-root` marker.
@@ -54,7 +53,6 @@ def _tree(path: Path) -> dict[str, bytes]:
 @pytest.mark.contract
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 async def test_symlink_escape_refused(tmp_location: Path, tmp_path: Path) -> None:
     """T-P1-14-07
     A symlink inside the root pointing outside it (to a file, and to a directory) is
