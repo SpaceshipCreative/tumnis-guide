@@ -48,7 +48,7 @@ Four boundary rules:
 | `module-graph-acyclic` | No cycles between sibling modules |
 | `search-usage-subscribe-only` | `search` and `usage` import no other module |
 
-A meta-test also parses every `rules*.py` and allows only pure stdlib (`datetime`, `zoneinfo`, `typing`, `dataclasses`, `enum`, `collections`, `itertools`, `functools`, `math`, `decimal`, `fractions`, `re`, `uuid`, `bisect`, `heapq`), `pydantic`, `tumnis.core.types` and the module's own `rules*`.
+A meta-test also parses every `rules*.py` and allows only pure stdlib (`datetime`, `zoneinfo`, `typing`, `dataclasses`, `enum`, `collections`, `itertools`, `functools`, `math`, `decimal`, `fractions`, `re`, `uuid`, `bisect`, `heapq`, `unicodedata`), `pydantic`, `tumnis.core.types` and the module's own `rules*`.
 
 The composition roots (`tumnis.app`, `tumnis.worker`, `tumnis.cli`, `tumnis.wiring`) may import every module's `router`, `mcp`, `workflows` and `events` to wire them. Keep module `__init__.py` files empty: a re-export there would bypass the api-only rule.
 

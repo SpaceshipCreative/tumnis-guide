@@ -58,7 +58,6 @@ _safe_segment = st.text(alphabet=_safe_char, min_size=1, max_size=20).filter(
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 @given(path=hostile_paths())
 def test_hostile_paths_always_refused(path: str) -> None:
     """T-P1-14-04
@@ -72,7 +71,6 @@ def test_hostile_paths_always_refused(path: str) -> None:
 
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 @given(segments=st.lists(_safe_segment, min_size=1, max_size=5))
 def test_safe_names_accepted_and_stable(segments: list[str]) -> None:
     """T-P1-14-05
@@ -107,7 +105,6 @@ ACCEPTED = [
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 @pytest.mark.parametrize(
     "case",
     [pytest.param(("refused", p, None), id=f"refused-{i}") for i, p in enumerate(REFUSED)]
@@ -129,3 +126,40 @@ def test_examples(case: tuple[str, str, str | None]) -> None:
             safe_rel_path(path)
     else:
         assert safe_rel_path(path) == want
+
+
+@pytest.mark.req("FR-15.7")
+@pytest.mark.wp("P1-14")
+@pytest.mark.parametrize(
+    ("fstype", "network"),
+    [
+        ("cifs", True),
+        ("smb3", True),
+        ("nfs", True),
+        ("NFS4", True),
+        ("fuse.sshfs", True),
+        ("smbfs", True),
+        ("ext4", False),
+        ("apfs", False),
+        ("", False),
+    ],
+)
+def test_network_filesystems(fstype: str, network: bool) -> None:
+    """Shares (SMB, NFS, sshfs) are network filesystems: no hard-link creates, no file
+    events; local disks are not."""
+    from tumnis.modules.knowledge.rules import is_network_fs  # noqa: PLC0415
+
+    assert is_network_fs(fstype) is network
+
+
+@pytest.mark.req("FR-15.7")
+@pytest.mark.wp("P1-14")
+def test_etag_equal_ignores_quotes_and_case() -> None:
+    """S3 answers ETags in quotes; the comparison ignores them and case, and None equals
+    only None."""
+    from tumnis.modules.knowledge.rules import etag_equal  # noqa: PLC0415
+
+    assert etag_equal('"ABC"', "abc")
+    assert not etag_equal("abc", "abd")
+    assert etag_equal(None, None)
+    assert not etag_equal(None, "abc")
