@@ -9,6 +9,7 @@ Routing, thresholds, fallback, the decision log, the cache and the rate limit be
 """
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Final, Literal, Self
 from uuid import UUID
 
@@ -16,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tumnis.core.clock import Clock
 from tumnis.core.settings_store import open_for_workspace, seal_for_workspace
 from tumnis.core.tenancy import WorkspaceContext, session_for
 from tumnis.modules.decisions.adapters.port import (
@@ -29,7 +31,7 @@ from tumnis.modules.decisions.adapters.port import (
 )
 from tumnis.modules.decisions.catalog import CATALOGUE, DecisionPoint, build_request
 from tumnis.modules.decisions.models import ProviderConfig as ProviderConfigRow
-from tumnis.modules.decisions.rules import is_pinned_model
+from tumnis.modules.decisions.rules import Route, Threshold, is_pinned_model
 
 __all__ = [
     "ChoiceAnswer",
@@ -158,3 +160,74 @@ async def ask_raw(
     req = build_request(point, inputs)
     timeout = CATALOGUE[point].timeout_ms if timeout_ms is None else timeout_ms
     return await provider.ask(req, model=model, timeout_ms=timeout)
+
+
+# --- decide (P1-02) ------------------------------------------------------------------------
+
+
+class SubjectRef(BaseModel):
+    """What a decision is about."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["task", "message", "note", "review_item", "focus_session", "run"]
+    id: UUID
+
+
+class Decision(BaseModel):
+    decision_id: UUID
+    point: DecisionPoint
+    route: Route
+    value: Any | None
+    answers: dict[str, TypedAnswer]
+    provider: Literal["jev", "vllm", "fake", "none"]
+    fallback: bool
+    fallback_reason: Literal["primary_failed", "local_only"] | None
+    model_version: str | None
+    cached: bool
+
+
+@dataclass(frozen=True)
+class Providers:
+    """The provider chain `decide` asks: the primary (Jev) and the vLLM fallback."""
+
+    jev: DecisionsProvider | None = None
+    vllm: DecisionsProvider | None = None
+
+
+class JevSettings(BaseModel):
+    """Workspace setting `decisions.jev`: the request limit per 60 s (FR-11.9)."""
+
+    rpm: int = 1_200
+
+
+async def put_threshold(
+    ctx: WorkspaceContext,
+    point: DecisionPoint,
+    threshold: Threshold,
+    *,
+    model_version: str | None = None,
+    session: AsyncSession | None = None,
+) -> None:
+    """Set the point's threshold (source `user`) for the model (the pinned one when not
+    given) and clear the point's cached answers."""
+    raise NotImplementedError
+
+
+async def decide(
+    point: DecisionPoint,
+    inputs: Mapping[str, Any],
+    *,
+    subject: SubjectRef,
+    project_id: UUID | None,
+    providers: Providers | None = None,
+    clock: Clock | None = None,
+) -> Decision:
+    """Worker-only. Order: local-only check, cache, limiter before each Jev call (R-32),
+    primary, fallback, route, log, emit."""
+    raise NotImplementedError
+
+
+async def record_outcome(decision_id: UUID, *, overridden: bool, final_value: Any) -> None:
+    """Record what the human did with the decision on its log row."""
+    raise NotImplementedError
