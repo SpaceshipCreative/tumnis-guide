@@ -109,3 +109,70 @@ async def test_callback_makes_no_outbound_call(  # noqa: PLR0917
     assert replay.status_code == 400
     assert replay.json()["code"] == "oauth_state_invalid"
     assert len(dbos_client.list_workflows(name="calendar_oauth_exchange")) == 1
+
+
+async def _callback(session_client: SessionClient, code: str) -> None:
+    start = await session_client.get("/v1/calendar/oauth/start")
+    assert start.status_code == 200, start.text
+    state = parse_qs(urlsplit(start.json()["url"]).query)["state"][0]
+    callback = await session_client.get(
+        "/v1/calendar/oauth/callback", params={"state": state, "code": code}
+    )
+    assert callback.status_code == 302, callback.text
+
+
+@pytest.mark.req("FR-14.4", "Data flow rule 5")
+@pytest.mark.wp("P1-09")
+async def test_exchange_not_repeated_when_a_later_step_fails(  # noqa: PLR0917
+    session_client: SessionClient,
+    dbos_client: DBOSClient,
+    google: FakeGoogleCalendar,
+    oauth_client: None,
+    workspace: WorkspaceHandle,
+    db: DbUrls,
+) -> None:
+    """The one-use code is exchanged once: when listing the calendars fails after the
+    exchange, the retry lists them again without a second exchange, and the account
+    connects. No recorded step output holds a token in plaintext."""
+    from tumnis.core.adapters.errors import AdapterUnavailable  # noqa: PLC0415
+    from tumnis.modules.calendar.api import list_accounts  # noqa: PLC0415
+
+    google.fail_calendar_list(AdapterUnavailable("calendar.google", "list_calendars", "503"))
+    await _callback(session_client, "code-a")
+
+    (workflow,) = await wait_for_workflows(dbos_client, "calendar_oauth_exchange")
+    assert workflow.status == "SUCCESS"
+    ops = [call[0] for call in google.calls]
+    assert ops.count("exchange_code") == 1
+    assert ops.count("list_calendars") == 2
+    (account,) = await list_accounts(workspace.ctx)
+    assert account.status == "connected"
+    steps = await dbos_client.list_workflow_steps_async(workflow.workflow_id)
+    recorded = repr([step["output"] for step in steps]).encode()
+    for secret in (refresh_token("a"), "fake-access-a"):
+        assert secret.encode() not in recorded
+
+
+@pytest.mark.req("FR-14.4")
+@pytest.mark.wp("P1-09")
+async def test_rejected_code_ends_exchange_and_consumes_grant(  # noqa: PLR0917
+    session_client: SessionClient,
+    dbos_client: DBOSClient,
+    google: FakeGoogleCalendar,
+    oauth_client: None,
+    workspace: WorkspaceHandle,
+    db: DbUrls,
+) -> None:
+    """Google refusing the code (`invalid_grant`) is final: the exchange is not retried,
+    the workflow ends, no account connects and the grant is used up."""
+    from tumnis.modules.calendar.api import list_accounts  # noqa: PLC0415
+
+    await _callback(session_client, "code-unknown")
+
+    (workflow,) = await wait_for_workflows(dbos_client, "calendar_oauth_exchange")
+    assert workflow.status == "SUCCESS"
+    assert [call[0] for call in google.calls].count("exchange_code") == 1
+    assert await list_accounts(workspace.ctx) == []
+    for pending in all_rows(db, "SELECT * FROM oauth_pending"):
+        assert pending["deleted_at"] is not None
+        assert pending["code_enc"] is None

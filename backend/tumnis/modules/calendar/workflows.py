@@ -7,8 +7,10 @@
   commits, kill point `calendar.sync.page_<n>.committed`. The last step clears the cursor,
   sets `last_sync_at` and emits one `calendar.synced`. A failed sync emits nothing.
 - `calendar_oauth_exchange(workspace_id, pending_id)`: the worker's half of the OAuth
-  callback (the api makes no outbound call, architecture principle 3): exchange the code,
-  list the calendars, store the account and consume the grant in one transaction.
+  callback (the api makes no outbound call, architecture principle 3). Step one exchanges
+  the one-use code (a refused code ends it and uses the grant up); step two lists the
+  calendars, stores the account and consumes the grant in one transaction, so its retry
+  never exchanges the code again.
 - `calendar_sync_tick`: every 10 minutes (plan default), a sync per connected account of
   every workspace.
 
@@ -16,6 +18,7 @@ Google and the clock come from `use()` (tests) or the adapter registry and the s
 clock.
 """
 
+import base64
 from datetime import datetime
 from typing import Any, Final
 from uuid import UUID
@@ -23,12 +26,14 @@ from uuid import UUID
 from dbos import DBOS, SetWorkflowID
 
 from tumnis.core import audit, db, faults
+from tumnis.core.adapters.errors import AdapterRejected
 from tumnis.core.adapters.registry import current_mode, resolve
 from tumnis.core.clock import Clock, SystemClock
+from tumnis.core.settings_store import open_for_workspace, seal_for_workspace
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.calendar import api
-from tumnis.modules.calendar.adapters.port import GoogleCalendarPort, GrantRevoked
+from tumnis.modules.calendar.adapters.port import GoogleCalendarPort, GrantRevoked, TokenSet
 from tumnis.modules.calendar.rules import SYNC_EVERY_MINUTES, needs_refresh
 from tumnis.modules.integrations import api as integrations
 
@@ -135,10 +140,16 @@ async def connector_sync(workspace_id: str, connection_id: str) -> dict[str, Any
 # --- OAuth exchange -----------------------------------------------------------------------------
 
 
+def _tokens_aad(pending_id: str) -> bytes:
+    return f"calendar_oauth_exchange:{pending_id}:tokens".encode()
+
+
 @DBOS.step(**STEP_RETRY)
-async def exchange_grant(workspace_id: str, pending_id: str) -> dict[str, Any]:
-    """Exchange the stored code, list the calendars, store the account and consume the
-    grant in one transaction. A grant already consumed (a retried step) is a no-op."""
+async def exchange_code(workspace_id: str, pending_id: str) -> dict[str, Any]:
+    """Exchange the stored one-use code, in a step of its own: DBOS records the answer, so
+    a retry of the next step never sends the code to Google again. The tokens come back
+    sealed with the workspace data key (the recorded output holds no token in plaintext).
+    A code Google refuses ends the exchange and uses the grant up."""
     ctx, pending = _ctx(workspace_id), UUID(pending_id)
     grant = await integrations.read_oauth_grant(ctx, pending)
     if grant is None:
@@ -146,14 +157,34 @@ async def exchange_grant(workspace_id: str, pending_id: str) -> dict[str, Any]:
     client = await api.oauth_client(ctx)
     if client is None:
         return {"status": "not_configured"}
-    google = _google()
-    tokens = await google.exchange_code(
-        client,
-        code=grant.code,
-        code_verifier=grant.code_verifier,
-        redirect_uri=grant.redirect_uri,
-    )
-    calendars = await google.list_calendars(tokens.access_token)
+    try:
+        tokens = await _google().exchange_code(
+            client,
+            code=grant.code,
+            code_verifier=grant.code_verifier,
+            redirect_uri=grant.redirect_uri,
+        )
+    except AdapterRejected:
+        await integrations.consume_oauth_grant(ctx, pending)
+        return {"status": "rejected"}
+    async with tenant_session(ctx) as s:
+        _, sealed = await seal_for_workspace(
+            s, ctx.workspace_id, tokens.model_dump_json().encode(), aad=_tokens_aad(pending_id)
+        )
+    return {"status": "exchanged", "tokens": base64.b64encode(sealed).decode()}
+
+
+@DBOS.step(**STEP_RETRY)
+async def connect_exchanged(workspace_id: str, pending_id: str, sealed: str) -> dict[str, Any]:
+    """List the account's calendars with the exchanged tokens, then store the account and
+    consume the grant in one transaction (a rerun reconnects the same account)."""
+    ctx, pending = _ctx(workspace_id), UUID(pending_id)
+    async with tenant_session(ctx) as s:
+        opened = await open_for_workspace(
+            s, ctx.workspace_id, base64.b64decode(sealed), aad=_tokens_aad(pending_id)
+        )
+    tokens = TokenSet.model_validate_json(opened)
+    calendars = await _google().list_calendars(tokens.access_token)
     async with tenant_session(ctx) as s:
         account = await api.connect_account(ctx, tokens, calendars, session=s)
         await integrations.consume_oauth_grant(ctx, pending, session=s)
@@ -162,7 +193,10 @@ async def exchange_grant(workspace_id: str, pending_id: str) -> dict[str, Any]:
 
 @DBOS.workflow(name=EXCHANGE_WORKFLOW)
 async def oauth_exchange(workspace_id: str, pending_id: str) -> dict[str, Any]:
-    return await exchange_grant(workspace_id, pending_id)
+    exchanged = await exchange_code(workspace_id, pending_id)
+    if exchanged["status"] != "exchanged":
+        return exchanged
+    return await connect_exchanged(workspace_id, pending_id, exchanged["tokens"])
 
 
 # --- Scheduled sync -----------------------------------------------------------------------------

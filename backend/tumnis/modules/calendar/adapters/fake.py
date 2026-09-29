@@ -7,8 +7,8 @@ avery@example.com or blake@example.org, each with its primary calendar.
 
 Scripting hooks: `script_pages` (the next sync's pages for a calendar), `revoke` (a refresh
 token answers the recorded `invalid_grant`), `fail_events` (every events.list of a calendar
-raises). `calls` records every call as (op, kwargs) without secrets; `refreshed` lists the
-refresh tokens used.
+raises), `fail_calendar_list` (the next calendarList calls raise). `calls` records every
+call as (op, kwargs) without secrets; `refreshed` lists the refresh tokens used.
 """
 
 import json
@@ -56,6 +56,7 @@ class FakeGoogleCalendar:
         self._pages = _recorded_pages()
         self._scripted: dict[str, list[dict[str, Any]]] = {}
         self._failing: dict[str, AdapterError] = {}
+        self._calendar_list_failures: list[AdapterError] = []
         self._revoked: set[str] = set()
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.refreshed: list[str] = []
@@ -73,6 +74,10 @@ class FakeGoogleCalendar:
     def fail_events(self, calendar_id: str, error: AdapterError) -> None:
         """Every events.list of this calendar raises `error`."""
         self._failing[calendar_id] = error
+
+    def fail_calendar_list(self, error: AdapterError, *, times: int = 1) -> None:
+        """The next `times` calendarList calls raise `error`."""
+        self._calendar_list_failures = [error] * times
 
     def health_state(self) -> Health:
         return "ok"
@@ -100,6 +105,8 @@ class FakeGoogleCalendar:
 
     async def list_calendars(self, access_token: str) -> list[CalendarInfo]:
         self.calls.append(("list_calendars", {}))
+        if self._calendar_list_failures:
+            raise self._calendar_list_failures.pop(0)
         email = ACCOUNTS.get(access_token.removeprefix("fake-access-"))
         if email is None:
             raise AdapterRejected(NAME, "list_calendars", "401 UNAUTHENTICATED")
