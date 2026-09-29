@@ -12,11 +12,13 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
+
+import tumnis
 
 Status = Literal["ok", "degraded", "down"]
 HealthCheck = Callable[[], Awaitable[Status]]
@@ -24,6 +26,8 @@ HealthCheck = Callable[[], Awaitable[Status]]
 CHECK_TIMEOUT_S = 1.0  # plan default
 _CHECKS: dict[str, HealthCheck] = {}  # "postgres", "dbos", "module:<name>"
 _CRITICAL: set[str] = set()
+# The build version on /health/live (P0-30): which release answers, for rollbacks and skew.
+VERSION_HEADER = "Tumnis-Version"
 _log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
@@ -65,8 +69,22 @@ async def readiness() -> tuple[Status, dict[str, Status]]:
     return "ok", checks
 
 
-@router.get("/health/live")
-async def live() -> dict[str, str]:
+@router.get(
+    "/health/live",
+    responses={
+        200: {
+            "description": "Successful Response",
+            "headers": {
+                VERSION_HEADER: {
+                    "description": "The build version (tag, or sha-<commit> for main)",
+                    "schema": {"type": "string"},
+                }
+            },
+        }
+    },
+)
+async def live(response: Response) -> dict[str, str]:
+    response.headers[VERSION_HEADER] = tumnis.__version__
     return {"status": "ok"}
 
 
@@ -94,6 +112,23 @@ def sql_check(engine: Callable[[], AsyncEngine], statement: str) -> HealthCheck:
         async with engine().connect() as conn:
             await conn.execute(text(statement))
         return "ok"
+
+    return check
+
+
+def schema_check(
+    engine: Callable[[], AsyncEngine], position: Callable[[set[str]], str]
+) -> HealthCheck:
+    """ok while the database is at this release's Alembic heads or ahead of them; down
+    while it is behind (migrate has not run). Ahead is a rollback: the later release's
+    migrations are expand-only, so its schema serves this one (P0-30, REL-4). `position`
+    is `tumnis.migrate.release_revisions().position`, given by the composition root."""
+
+    async def check() -> Status:
+        async with engine().connect() as conn:
+            rows = await conn.execute(text("SELECT version_num FROM alembic_version"))
+            current = {version for (version,) in rows}
+        return "down" if position(current) == "behind" else "ok"
 
     return check
 
