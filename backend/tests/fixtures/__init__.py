@@ -205,8 +205,8 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
     }
     DBOS(config=config)
     DBOS.reset_system_database(truncate=True)
-    register_queues()
     DBOS.launch()
+    register_queues()  # DBOS 3.1 persists queues in the system database: after launch
     try:
         yield DBOS
     finally:

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     import httpx
     from dbos import DBOS
 
+    from tests._pg import DbUrls
     from tumnis.core.backups import BackupFacts
     from tumnis.core.clock import FixedClock
 
@@ -50,7 +51,6 @@ def _facts(now: datetime, wal_age: timedelta) -> BackupFacts:
 
 @pytest.mark.req("REL-1")
 @pytest.mark.wp("P0-28")
-@pytest.mark.xfail(strict=True, reason="spec:P0-28")
 async def test_freshness_marks_health_degraded(
     dbos: type[DBOS], client: httpx.AsyncClient, clock: FixedClock
 ) -> None:
@@ -92,3 +92,24 @@ async def test_freshness_marks_health_degraded(
         ) == pytest.approx(later.timestamp())
     finally:
         workflows_ops.set_backup_facts_source(previous)
+
+
+@pytest.mark.req("REL-1")
+@pytest.mark.wp("P0-28")
+def test_freshness_is_scheduled_on_the_maintenance_queue_in_prod(
+    dbos: type[DBOS], db: DbUrls
+) -> None:
+    """The worker applies `backup-freshness` every 15 minutes on the maintenance queue in
+    production, and no backup schedule elsewhere (previews keep no backups)."""
+    from tests.fixtures import settings_for  # noqa: PLC0415
+    from tumnis.core import workflows_ops  # noqa: PLC0415
+    from tumnis.worker import register_schedules  # noqa: PLC0415
+
+    register_schedules(settings_for(db, deployment_env="dev"))
+    assert dbos.list_schedules() == []
+
+    register_schedules(settings_for(db, deployment_env="prod"))
+    (schedule,) = dbos.list_schedules()
+    assert schedule["schedule_name"] == "backup-freshness"
+    assert schedule["schedule"] == workflows_ops.BACKUP_FRESHNESS_SCHEDULE == "*/15 * * * *"
+    assert schedule["queue_name"] == workflows_ops.MAINTENANCE_QUEUE == "maintenance"
