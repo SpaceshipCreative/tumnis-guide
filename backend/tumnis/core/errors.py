@@ -1,24 +1,27 @@
 """One error model: RFC 9457 problem+json with a stable `code` (A3, Errors).
 
-Every error the api answers has the shape `{type, title, status, detail?, code, current?}`
-and the media type `application/problem+json`: `ProblemError` raised anywhere, FastAPI's
-own 404, 405 and request validation errors (code `validation_error`), `HTTPException`s,
-`StaleVersion` (409 `stale_version` with the current row), `NotFound` (404) and anything
+Every error the api answers has the shape
+`{schema_version, type, title, status, detail?, code, current?}` (the `api/problem` v1
+schema, P0-11) and the media type `application/problem+json`: `ProblemError` raised
+anywhere, FastAPI's own 404, 405 and request validation errors (code `validation_error`),
+`HTTPException`s, `StaleVersion` (409 `stale_version` with the current row), `NotFound`
+(404), `UnsupportedSchemaVersion` (422 `unsupported_schema_version`) and anything
 unexpected (500 `internal_error`, no detail). Tests assert on `code`.
 """
 
 import re
 from collections.abc import Mapping
 from http import HTTPStatus
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
+
+from tumnis.core.schemas import UnsupportedSchemaVersion, VersionedPayload, versioned
 
 PROBLEM_TYPE: Final = "https://tumnis.dev/problems/"
 MEDIA_TYPE: Final = "application/problem+json"
@@ -42,7 +45,9 @@ STATUS_CODES: Final[Mapping[int, str]] = {
 }
 
 
-class Problem(BaseModel):
+@versioned("api", "problem", 1)
+class Problem(VersionedPayload):
+    schema_version: Literal[1] = 1
     type: str  # "https://tumnis.dev/problems/<code>"
     title: str
     status: int
@@ -129,9 +134,27 @@ def _from_http(status: int, detail: Any) -> Problem:
     return problem(status, default, text)
 
 
-async def http_exception_handler(_request: Request, exc: Exception) -> Response:
+def _allowed_methods(request: Request) -> str | None:
+    """Every method any route serves at this path. Starlette's 405 names only the first
+    route that matched the path, so a path with GET and PUT on separate routes would
+    answer `Allow: GET` (found by the P0-11 fuzzer)."""
+    from starlette.routing import compile_path  # noqa: PLC0415
+
+    from tumnis.core.routing import walk_routes  # noqa: PLC0415  # routing imports errors
+
+    methods: set[str] = set()
+    for route in walk_routes(request.app):
+        if route.path and route.methods and compile_path(route.path)[0].match(request.url.path):
+            methods |= route.methods
+    return ", ".join(sorted(methods)) or None
+
+
+async def http_exception_handler(request: Request, exc: Exception) -> Response:
     assert isinstance(exc, StarletteHTTPException)  # noqa: S101
-    return problem_response(_from_http(exc.status_code, exc.detail), exc.headers)
+    headers = dict(exc.headers or {})
+    if exc.status_code == HTTPStatus.METHOD_NOT_ALLOWED and (allow := _allowed_methods(request)):
+        headers["Allow"] = allow
+    return problem_response(_from_http(exc.status_code, exc.detail), headers)
 
 
 def _location(loc: Any) -> str:
@@ -156,8 +179,28 @@ async def not_found_handler(_request: Request, exc: Exception) -> Response:
     return problem_response(problem(404, "not_found", "Not found"))
 
 
+async def unsupported_schema_version_handler(_request: Request, exc: Exception) -> Response:
+    assert isinstance(exc, UnsupportedSchemaVersion)  # noqa: S101
+    return problem_response(problem(422, exc.code, str(exc)))
+
+
 async def internal_error_handler(_request: Request, _exc: Exception) -> Response:
     return problem_response(problem(500, "internal_error"))
+
+
+def document_problem_media_type(spec: dict[str, Any]) -> dict[str, Any]:
+    """Problem answers are `application/problem+json`: move every response documented with
+    the Problem model from `application/json` to that media type, so the OpenAPI document
+    (and the fuzzer checking it) says what the api sends."""
+    ref = "#/components/schemas/Problem"
+    for operations in spec.get("paths", {}).values():
+        for operation in operations.values():
+            for response in operation.get("responses", {}).values():
+                content = response.get("content", {})
+                body = content.get("application/json")
+                if body is not None and body.get("schema", {}).get("$ref") == ref:
+                    content[MEDIA_TYPE] = content.pop("application/json")
+    return spec
 
 
 def install_problem_handlers(app: FastAPI) -> None:
@@ -168,4 +211,5 @@ def install_problem_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, validation_handler)
     app.add_exception_handler(StaleVersion, stale_version_handler)
     app.add_exception_handler(NotFound, not_found_handler)
+    app.add_exception_handler(UnsupportedSchemaVersion, unsupported_schema_version_handler)
     app.add_exception_handler(Exception, internal_error_handler)

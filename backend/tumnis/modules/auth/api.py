@@ -12,7 +12,7 @@ from tumnis.core import audit
 from tumnis.core.cache import invalidate_on_commit
 from tumnis.core.settings_store import SETTINGS_CACHE, settings_cache_key
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
-from tumnis.core.versioning import StaleVersion, update_versioned
+from tumnis.core.versioning import StaleVersion, Version, update_versioned
 from tumnis.modules.auth.models import Workspace
 from tumnis.modules.auth.rules import is_iana_zone
 
@@ -40,7 +40,7 @@ class WorkspaceSettingsIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     timezone: str | None = None
     subtask_threshold_min: int | None = None
-    version: int
+    version: Version
 
 
 @cache
@@ -108,7 +108,10 @@ async def put_workspace_settings(
             await session.execute(
                 select(WORKSPACES.c.timezone)
                 .where(WORKSPACES.c.id == ctx.workspace_id)
-                .with_for_update()
+                # FOR NO KEY UPDATE: the request's idempotency row (another connection,
+                # still open) holds FOR KEY SHARE on this row through its foreign key;
+                # FOR UPDATE would wait for it forever (found by P0-11's fuzzer).
+                .with_for_update(key_share=True)
             )
         ).scalar_one()
         try:

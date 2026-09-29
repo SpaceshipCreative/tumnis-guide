@@ -104,6 +104,17 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # openapi-ts and the pinned Prettier, for T-P0-11-04 and `make gen`.
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      # Schemas, generation, versions and the Schemathesis fuzzer (P0-11; it needs Docker
+      # for Postgres, and runs here only: the integration job skips contract tests).
       - name: Contract tests
         working-directory: backend
         run: |
@@ -114,8 +125,13 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: uv run python ../scripts/ci/squawk_migrations.py --changed-since "$BASE_SHA"
+      # A model, route or fixture changed without `make gen` (or a hand edit to a generated
+      # file) fails here; intent-to-add makes a new generated file show in the diff too.
       - name: Generated code is committed
-        run: make gen && git diff --exit-code # P0-11 fills `make gen`
+        run: |
+          make gen
+          git add --intent-to-add -- schemas frontend/src/api backend/tests/contract/generated
+          git diff --exit-code -- schemas frontend/src/api backend/tests/contract/generated
 
   integration:
     runs-on: ubuntu-latest
@@ -130,7 +146,7 @@ jobs:
         working-directory: backend
         run: |
           uv sync
-          uv run pytest -m integration -n auto
+          uv run pytest -m "integration and not contract" -n auto
 
   e2e:
     runs-on: ubuntu-latest

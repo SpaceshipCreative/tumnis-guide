@@ -1,0 +1,23 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/test.ping.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "note": {
+      "title": "Note",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "note"
+  ],
+  "title": "TestPingV1",
+  "type": "object"
+}
