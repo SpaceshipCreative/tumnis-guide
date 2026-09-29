@@ -19,7 +19,6 @@ HEX32 = re.compile(r"^[0-9a-f]{32}$")
 
 @pytest.mark.req("REL-5")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 async def test_every_line_is_json_with_trace_id(
     capture_json_logs: JsonLogs, span_exporter: InMemorySpanExporter
 ) -> None:
@@ -67,7 +66,6 @@ async def test_every_line_is_json_with_trace_id(
 
 @pytest.mark.req("REL-5", "SEC-6")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 def test_redaction_still_applies_after_trace_ids(
     capture_json_logs: JsonLogs, span_exporter: InMemorySpanExporter
 ) -> None:
