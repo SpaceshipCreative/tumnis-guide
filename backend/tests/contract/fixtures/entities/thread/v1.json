@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "fetched_at": "2026-03-09T12:00:00Z",
+  "record_type": "thread",
+  "external_id": "thr-001",
+  "provider_url": null,
+  "subject": "Invoice",
+  "participants": [
+    "client@example.com",
+    "me@example.org"
+  ],
+  "last_message_at": "2026-03-09T11:59:00Z"
+}

@@ -23,6 +23,9 @@ modules =
     tumnis.modules.usage
 ignore_imports =
     tumnis.modules.** -> tumnis.modules.*.api
+# The one sanctioned test-only exception (P0-12): every module's connector contract tests
+# subclass integrations' ConnectorContract.
+    tumnis.modules.*.tests.** -> tumnis.modules.integrations.connector_contract
 # Until modules call each other, the api ignore matches nothing; that is not an error.
 unmatched_ignore_imports_alerting = none
 
@@ -116,6 +119,10 @@ source_modules =
     tumnis.core.adapters.*
 forbidden_modules =
     tumnis.core.adapters.contract
+    tumnis.modules.integrations.connector_contract
+# The connector contract base (P0-12) builds on the adapter one and is test-only itself.
 ignore_imports =
     tumnis.**.tests.** -> tumnis.core.adapters.contract
+    tumnis.**.tests.** -> tumnis.modules.integrations.connector_contract
+    tumnis.modules.integrations.connector_contract -> tumnis.core.adapters.contract
 unmatched_ignore_imports_alerting = none

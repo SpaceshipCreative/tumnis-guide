@@ -1,0 +1,35 @@
+{
+  "raw": {
+    "external_id": "note-001",
+    "record_type": "note",
+    "fetched_at": "2026-03-09T12:00:00Z",
+    "payload": {
+      "id": "note-001",
+      "title": "Kickoff",
+      "start": "2026-03-09T14:00:00Z",
+      "end": "2026-03-09T14:30:00Z",
+      "attendees": ["client@example.com", "me@example.org"],
+      "text": "Agreed on scope.",
+      "action_items": ["Send quote", "Book follow-up call"],
+      "event_id": "evt-009",
+      "url": "https://notes.example.com/n/note-001"
+    }
+  },
+  "expected": [
+    {
+      "schema_version": 1,
+      "record_type": "note",
+      "external_id": "note-001",
+      "provider_url": "https://notes.example.com/n/note-001",
+      "fetched_at": "2026-03-09T12:00:00Z",
+      "title": "Kickoff",
+      "start_at": "2026-03-09T14:00:00Z",
+      "end_at": "2026-03-09T14:30:00Z",
+      "attendees": ["client@example.com", "me@example.org"],
+      "body_text": "Agreed on scope.",
+      "action_items": ["Send quote", "Book follow-up call"],
+      "event_external_id": "evt-009"
+    }
+  ],
+  "notes": "Scrubbed: attendees replaced with example.com and example.org"
+}
