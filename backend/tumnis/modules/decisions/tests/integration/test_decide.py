@@ -500,3 +500,60 @@ async def test_jev_limit_keyed_on_credential(
     assert len(waits) == 1
     assert clock.now() - started == timedelta(seconds=60)
     assert len(providers.jev.calls) == 5
+
+
+@pytest.mark.req("FR-11.3")
+@pytest.mark.wp("P1-02")
+async def test_nobody_answered_is_logged_as_the_fallback_it_tried(
+    workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
+) -> None:
+    """With Jev and the vLLM fallback both down, the decision, its log row and its
+    `decision.made` event say fallback (primary failed), matching the stricter threshold
+    the row records."""
+    _down(providers.jev, "quick_add_label")
+    _down(providers.vllm, "quick_add_label")
+    decision = await _decide("quick_add_label", providers, clock)
+
+    assert (decision.fallback, decision.fallback_reason) == (True, "primary_failed")
+    [row] = await _log(owner_session)
+    assert (row["fallback"], row["fallback_reason"]) == (True, "primary_failed")
+    assert row["threshold"]["min_confidence"] == pytest.approx(0.9)
+    made: dict[str, Any] = (
+        await owner_session.execute(text("SELECT payload FROM outbox WHERE name = 'decision.made'"))
+    ).scalar_one()
+    assert made["fallback"] is True
+
+
+@pytest.mark.req("Data flow rule 6")
+@pytest.mark.wp("P1-02")
+@pytest.mark.usefixtures("master_key_file")
+async def test_cached_jev_answer_is_not_reused_for_vllm(
+    workspace: WorkspaceHandle, providers: Any, clock: FixedClock
+) -> None:
+    """Even when the vLLM model has the same id as the pinned Jev model, a project turned
+    local-only after a Jev decision asks vLLM: the cached Jev answer is not served as a
+    vLLM one."""
+    from tumnis.core.settings_store import put_setting  # noqa: PLC0415
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+    from tumnis.modules.decisions.api import VllmSettings  # noqa: PLC0415
+    from tumnis.modules.projects import api as projects  # noqa: PLC0415
+
+    await put_setting(
+        workspace.ctx, "decisions.vllm", VllmSettings(model=PINNED), expected_version=None
+    )
+    async with tenant_session(workspace.ctx) as s:
+        project = await projects.create_project(
+            s, SYSTEM_ACTOR, projects.ProjectCreate(name="Beta app"), now=clock.now()
+        )
+    first = await _decide("quick_add_label", providers, clock, project_id=project.id)
+    async with tenant_session(workspace.ctx) as s:
+        patch = projects.ProjectPatch(local_decisions_only=True, version=project.version)
+        await projects.update_project(
+            s, SYSTEM_ACTOR, project.id, patch, project.version, now=clock.now()
+        )
+    second = await _decide("quick_add_label", providers, clock, project_id=project.id)
+
+    assert first.provider == "jev"
+    assert (second.provider, second.cached) == ("vllm", False)
+    assert len(providers.vllm.calls) == 1
