@@ -24,11 +24,17 @@ import {
 
 export { expect };
 
+/** The seed sets `POST /v1/test/reset?set=` loads (backend `tumnis.seed.SeedSet`). */
+export type SeedSetName = "seed" | "load" | "ten_projects";
+
 /** The compose.test stack reset to the seed set (TUMNIS_ADAPTERS=fake). */
 export interface SeededApp {
   readonly baseURL: string;
-  /** `POST /v1/test/reset` (`?set=load` for 10 projects and 2,000 tasks). */
-  reset(set?: "seed" | "load"): Promise<void>;
+  /**
+   * `POST /v1/test/reset` (`?set=load` for 10 projects and 2,000 tasks, `?set=ten_projects`
+   * for the seed plus 7 more projects, P0-23).
+   */
+  reset(set?: SeedSetName): Promise<void>;
 }
 
 interface E2EFixtures {
@@ -41,7 +47,7 @@ interface E2EFixtures {
 export const test = base.extend<E2EFixtures>({
   seededApp: async ({ baseURL, request }, use) => {
     // Mounted only with fake adapters (compose.test and previews).
-    const reset = async (set: "seed" | "load" = "seed"): Promise<void> => {
+    const reset = async (set: SeedSetName = "seed"): Promise<void> => {
       const response = await request.post("/v1/test/reset", {
         params: set === "seed" ? {} : { set },
       });
@@ -305,11 +311,16 @@ export async function markStartTime(
 // --- App shell (P0-22) ----------------------------------------------------------
 
 /**
- * Resets the stack to the seed set and signs the seed user in through the API (the
- * page's cookies carry the session). Throws instead of asserting.
+ * Resets the stack to a seed set (the seed by default) and signs the seed user in through
+ * the API (the page's cookies carry the session). Throws instead of asserting.
  */
-export async function signIn(request: APIRequestContext): Promise<void> {
-  const reset = await request.post("/v1/test/reset");
+export async function signIn(
+  request: APIRequestContext,
+  set: SeedSetName = "seed",
+): Promise<void> {
+  const reset = await request.post("/v1/test/reset", {
+    params: set === "seed" ? {} : { set },
+  });
   if (reset.status() !== 204) {
     throw new Error(`POST /v1/test/reset -> ${String(reset.status())}`);
   }
@@ -329,9 +340,16 @@ export async function signIn(request: APIRequestContext): Promise<void> {
   }
 }
 
-/** Signs in, opens the app shell at `path` and waits for `main` and the navigation. */
-export async function openShell(page: Page, path = "/"): Promise<void> {
-  await signIn(page.request);
+/**
+ * Signs in (after resetting to `set`), opens the app shell at `path` and waits for `main`
+ * and the navigation.
+ */
+export async function openShell(
+  page: Page,
+  path = "/",
+  set: SeedSetName = "seed",
+): Promise<void> {
+  await signIn(page.request, set);
   await page.goto(path);
   await page.getByRole("main").waitFor();
   await page
@@ -403,5 +421,28 @@ export async function scrollsSideways(page: Page): Promise<boolean> {
     () =>
       document.documentElement.scrollWidth >
       document.documentElement.clientWidth,
+  );
+}
+
+// --- Dashboard (P0-23) ---------------------------------------------------------
+
+/** Every project card on the dashboard. */
+export function projectCards(page: Page): Locator {
+  return page.locator("[data-project-id]");
+}
+
+/** The dashboard project card showing this project name. */
+export function projectCardNamed(page: Page, name: string): Locator {
+  return projectCards(page).filter({
+    has: page.getByRole("link", { name, exact: true }),
+  });
+}
+
+/** Whether the page scrolls vertically (A0.1's check at 1280 x 800). */
+export async function scrollsVertically(page: Page): Promise<boolean> {
+  return page.evaluate(
+    () =>
+      (document.scrollingElement?.scrollHeight ?? Infinity) >
+      window.innerHeight,
   );
 }
