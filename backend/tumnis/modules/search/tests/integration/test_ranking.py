@@ -39,7 +39,6 @@ async def _run(ctx: WorkspaceContext, q: str, clock: FixedClock, **kw: object) -
 
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_prefix_inv_finds_invoice(
     search_db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -57,7 +56,6 @@ async def test_prefix_inv_finds_invoice(
 
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_prefix_survives_stemming(
     search_db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -73,7 +71,6 @@ async def test_prefix_survives_stemming(
 
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_phrase_query(
     search_db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
