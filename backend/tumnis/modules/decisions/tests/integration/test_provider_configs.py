@@ -105,3 +105,34 @@ async def test_credentials_encrypted_at_rest(
     assert await get_provider_config(workspace.ctx, "generation") is None
     with pytest.raises(ValueError, match="pinned"):
         ProviderConfigIn(slot="decisions", primary="jev", model_version="jev-latest")
+
+
+@pytest.mark.req("FR-11.1")
+@pytest.mark.wp("P1-01")
+@pytest.mark.usefixtures("core_db", "master_key_file")
+async def test_put_after_soft_delete_revives_the_slot(
+    workspace: WorkspaceHandle, owner_session: AsyncSession
+) -> None:
+    """Storing a slot whose row was soft-deleted brings the row back: the upsert clears
+    `deleted_at`, so the version it returns is the config `get_provider_config` reads."""
+    from tumnis.modules.decisions.api import (  # noqa: PLC0415
+        ProviderConfigIn,
+        get_provider_config,
+        put_provider_config,
+    )
+
+    config = ProviderConfigIn(
+        slot="decisions", primary="jev", fallback="vllm", model_version="jev-1.13.0"
+    )
+    assert await put_provider_config(workspace.ctx, config) == 1
+    await owner_session.execute(
+        text("UPDATE provider_configs SET deleted_at = now() WHERE slot = 'decisions'")
+    )
+    await owner_session.commit()
+    assert await get_provider_config(workspace.ctx, "decisions") is None
+
+    revived = config.model_copy(update={"fallback": None})
+    version = await put_provider_config(workspace.ctx, revived)
+    got = await get_provider_config(workspace.ctx, "decisions")
+    assert got is not None
+    assert (got.primary, got.fallback, got.version) == ("jev", None, version)
