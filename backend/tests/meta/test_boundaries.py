@@ -149,7 +149,6 @@ def _rules_import_allowed(module: str, name: str) -> bool:
 
 @pytest.mark.req("ADR-0001")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_rules_files_import_only_allowlisted_modules() -> None:
     """T-P0-01-09
     Every tumnis/modules/*/rules*.py imports only RULES_ALLOWED or its own rules*;

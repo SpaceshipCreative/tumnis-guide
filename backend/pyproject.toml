@@ -68,3 +68,28 @@ ban-relative-imports = "all"
 "tests/**" = ["S101", "PLR2004", "S105", "S106"]
 "tumnis/modules/*/tests/**" = ["S101", "PLR2004", "S105", "S106"]
 "tumnis/modules/*/migrations/**" = ["N999"]
+
+[tool.mypy]
+python_version = "3.13"
+plugins = ["pydantic.mypy"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+exclude = ["tumnis/modules/.*/migrations/"]
+
+# mypy patterns take `*` only as a whole component, so the plan's "tumnis.modules.*.rules_*"
+# is rejected; a later rules_<x>.py gets its own entry here.
+[[tool.mypy.overrides]]
+module = ["tumnis.core.*", "tumnis.modules.*.rules", "tumnis.modules.*.api"]
+strict = true
+
+[tool.coverage.run]
+source = ["tumnis"]
+branch = true
+omit = ["tumnis/modules/*/migrations/*", "tumnis/modules/*/tests/*", "tumnis/core/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
