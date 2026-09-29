@@ -254,7 +254,6 @@ async def test_new_project_gets_default_policy_row(
 
 @pytest.mark.req("FR-1.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 async def test_health_uses_registered_stats_source(
     app: FastAPI,
     session_client: SessionClient,
