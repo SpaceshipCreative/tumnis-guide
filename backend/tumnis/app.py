@@ -6,11 +6,12 @@ boot checks run in the CLI before uvicorn starts, not in the ASGI lifespan).
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator
+import importlib
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
@@ -26,9 +27,12 @@ from tumnis.core import (
     ops_status,
     testing_routes,
 )
+from tumnis.core.bodylimit import BodyLimitMiddleware
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import install_problem_handlers
+from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.request_meta import RequestMetaMiddleware
+from tumnis.core.routing import new_request_log
 from tumnis.modules.auth import router as auth_router
 from tumnis.settings import Settings, install_master_keys
 
@@ -64,7 +68,46 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await db.dispose()
 
 
-def create_app(settings: Settings | None = None, clock: Clock | None = None) -> FastAPI:
+API_DESCRIPTION = """Tumnis Guide REST API. Every error is `application/problem+json` with a stable
+`code`. Every write takes an `Idempotency-Key` header (8 to 255 of `A-Z a-z 0-9 _ - : .`):
+a retry with the same key within 24 hours replays the stored response and adds the header
+`Idempotent-Replayed: true`; the same key with a different request is 422
+`idempotency_mismatch`. Writes name the `version` they read; a stale one is 409
+`stale_version` with `current`. Lists page by `cursor` and `limit` and return
+`next_cursor`. Limits: 429 `rate_limited` with `Retry-After`, 413 `body_too_large`."""
+
+
+def module_routers() -> list[APIRouter]:
+    """Each module's `router` (tumnis.modules.<m>.router.router), when it declares one."""
+    found = []
+    for module in modules.MODULES:
+        router = getattr(importlib.import_module(f"tumnis.modules.{module}.router"), "router", None)
+        if isinstance(router, APIRouter):
+            found.append(router)
+    return found
+
+
+def v1_routes(settings: Settings, extra_routers: Sequence[APIRouter] = ()) -> APIRouter:
+    """Everything under /v1: core's routers, every module's router and any extra ones
+    (tests); the test routes only with fakes."""
+    v1 = APIRouter(prefix="/v1")
+    v1.include_router(deadletter.router)
+    v1.include_router(audit_router.router)
+    v1.include_router(auth_router.settings_router)  # R-14
+    for router in module_routers():
+        v1.include_router(router)
+    if settings.tumnis_adapters == "fake":
+        v1.include_router(testing_routes.router)
+    for router in extra_routers:
+        v1.include_router(router)
+    return v1
+
+
+def create_app(
+    settings: Settings | None = None,
+    clock: Clock | None = None,
+    extra_routers: Sequence[APIRouter] = (),
+) -> FastAPI:
     settings = settings or Settings()  # values come from the environment
     master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
     db.configure(settings.database_url, settings.database_direct_url)
@@ -86,22 +129,27 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     app = FastAPI(
         title="Tumnis Guide",
         lifespan=lifespan,
+        description=API_DESCRIPTION,
         openapi_url="/v1/openapi.json",
         docs_url=None,
         redoc_url=None,
     )
     install_problem_handlers(app)
-    # Correlation ID, source address and user agent for the audit log (P0-15).
+    # Middleware, innermost first (add_middleware wraps what is there): correlation ID,
+    # source address and user agent for the audit log (P0-15); then the body limit
+    # outside it (P0-10). Authentication (P0-13) goes inside the correlation ID and
+    # security headers (P0-16) outside everything. Rate limits and CSRF run in TumnisRoute,
+    # where the route's policy is known.
     app.add_middleware(RequestMetaMiddleware)
+    app.add_middleware(BodyLimitMiddleware)
     app.state.settings = settings
     app.state.master_keys = master_keys
     app.state.clock = clock
-    app.include_router(health.router)
-    app.include_router(deadletter.router)
-    app.include_router(audit_router.router)
-    app.include_router(auth_router.settings_router)  # R-14; P0-10 moves it onto v1_router
+    app.state.rate_limiter = RateLimiter(clock)
     if settings.tumnis_adapters == "fake":
-        app.include_router(testing_routes.router)
+        app.state.request_log = new_request_log()  # GET /v1/test/requests (A0.2)
+    app.include_router(health.router)
+    app.include_router(v1_routes(settings, extra_routers))
     if SHELL_DIR.is_dir():
         app.mount("/", ShellFiles(directory=SHELL_DIR, html=True), name="shell")
     return app

@@ -110,9 +110,8 @@ def principal_header(workspace: Any, principal: uuid.UUID) -> dict[str, str]:
 
 def build_router(state: DemoState) -> APIRouter:
     from fastapi import Depends, Query  # noqa: PLC0415
-    from sqlalchemy.ext.asyncio import AsyncSession  # noqa: PLC0415
 
-    from tumnis.core.idempotency import get_session  # noqa: PLC0415
+    from tumnis.core.idempotency import SessionDep  # noqa: PLC0415
     from tumnis.core.pagination import (  # noqa: PLC0415
         Page,
         PageParams,
@@ -124,12 +123,11 @@ def build_router(state: DemoState) -> APIRouter:
     from tumnis.core.versioning import update_versioned  # noqa: PLC0415
 
     router = v1_router("demo", prefix="/demo-items", tags=["demo"])
-    Session = Annotated[AsyncSession, Depends(get_session)]  # noqa: N806
     t = demo_items
 
     @router.post("", status_code=201)
     @route_policy(RoutePolicy(auth="session_or_key", idempotent=True))
-    async def create_demo_item(body: DemoIn, session: Session) -> DemoItem:
+    async def create_demo_item(body: DemoIn, session: SessionDep) -> DemoItem:
         state.posts += 1
         row = (
             (
@@ -149,7 +147,9 @@ def build_router(state: DemoState) -> APIRouter:
 
     @router.patch("/{item_id}")
     @route_policy(RoutePolicy(auth="session_or_key", idempotent=True))
-    async def update_demo_item(item_id: uuid.UUID, body: DemoPatch, session: Session) -> DemoItem:
+    async def update_demo_item(
+        item_id: uuid.UUID, body: DemoPatch, session: SessionDep
+    ) -> DemoItem:
         state.patches += 1
         values = body.model_dump(exclude={"version"}, exclude_unset=True)
         row = await update_versioned(session, t, item_id, body.version, values)
@@ -158,7 +158,7 @@ def build_router(state: DemoState) -> APIRouter:
     @router.get("")
     @route_policy(RoutePolicy(auth="session_or_key", paginated=True))
     async def list_demo_items(
-        session: Session,
+        session: SessionDep,
         page: Annotated[PageParams, Depends(page_params)],
         sort: Annotated[Literal["id", "due_on"], Query()] = "id",
     ) -> Page[DemoItem]:

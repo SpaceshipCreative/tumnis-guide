@@ -44,10 +44,12 @@ async def test_same_key_same_body_replays_stored_response(
     from tumnis.core.tests.integration._demo import count_items  # noqa: PLC0415
 
     headers = _headers(_who(db), "replay-key-0001")
-    first = await demo_client.post("/v1/demo-items", json={"title": "a"}, headers=headers)
+    first = await demo_client.post(
+        "/v1/demo-items", json={"title": "a", "due_on": "2026-03-10"}, headers=headers
+    )
     # The same body with its keys in another order is the same request.
     second = await demo_client.post(
-        "/v1/demo-items", json={"due_on": None, "title": "a"}, headers=headers
+        "/v1/demo-items", json={"due_on": "2026-03-10", "title": "a"}, headers=headers
     )
 
     assert first.status_code == 201, first.text

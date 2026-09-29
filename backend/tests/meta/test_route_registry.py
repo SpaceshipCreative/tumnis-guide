@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -17,6 +18,12 @@ if TYPE_CHECKING:
 # Non-/v1 paths: operations endpoints and live channels only (A10).
 OPS_PATHS = frozenset({"/health/live", "/health/ready", "/metrics", "/mcp", "/ws", "/ws/runner"})
 DSN = "postgresql+psycopg://registry:registry@127.0.0.1:1/registry"
+
+
+class Thing(BaseModel):
+    """The synthetic app's model (module level: its routes' string annotations resolve here)."""
+
+    name: str
 
 
 def _app() -> FastAPI:
@@ -30,7 +37,6 @@ def _app() -> FastAPI:
 
 @pytest.mark.req("SAAS-1", "REL-2", "PERF-1")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 def test_every_v1_route_declares_policy_idempotency_and_pagination() -> None:
     """T-P0-10-15
     Over create_app()'s routes, nested routers included: every /v1 route has a policy with
@@ -62,14 +68,12 @@ def test_every_v1_route_declares_policy_idempotency_and_pagination() -> None:
 
 @pytest.mark.req("SAAS-1")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 def test_registry_flags_non_compliant_routes() -> None:
     """T-P0-10-16
     A synthetic app with a write lacking idempotency, a `list[...]` response, and a plain
     `APIRoute` yields three violations; a route without a policy cannot be declared.
     """
     from fastapi import APIRouter, FastAPI  # noqa: PLC0415
-    from pydantic import BaseModel  # noqa: PLC0415
 
     from tumnis.core.routing import (  # noqa: PLC0415
         RoutePolicy,
@@ -78,9 +82,6 @@ def test_registry_flags_non_compliant_routes() -> None:
         route_violations,
         v1_router,
     )
-
-    class Thing(BaseModel):
-        name: str
 
     router = v1_router("synthetic", prefix="/things")
 
@@ -118,7 +119,6 @@ def test_registry_flags_non_compliant_routes() -> None:
 
 @pytest.mark.req("SAAS-1")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 def test_only_ops_paths_live_outside_v1() -> None:
     """T-P0-10-17
     The non-/v1 paths are only /health/live, /health/ready, /metrics, /mcp, /ws, /ws/runner

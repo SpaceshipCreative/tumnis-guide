@@ -1,24 +1,20 @@
 """`GET /v1/audit` and `GET /v1/audit.csv` (P0-15, SEC-3): the signed-in session's
 workspace audit log, newest first (`auth="session"`).
 
-- `GET /v1/audit`: keyset pages on `(occurred_at, id)` descending; filters `action`,
-  `actor_type`, `from` (inclusive) and `to` (exclusive); `limit` 1 to 200, default 50; the
-  cursor is base64url(JSON {"v": 1, "k": [occurred_at], "id": id}), the shape P0-10's
-  `paginate()` uses, and a malformed one is 400 `invalid_cursor`.
+- `GET /v1/audit`: keyset pages on `(occurred_at, id)` descending through P0-10's
+  `paginate()`; filters `action`, `actor_type`, `from` (inclusive) and `to` (exclusive);
+  `limit` 1 to 200, default 50; a malformed cursor is 400 `invalid_cursor`.
 - `GET /v1/audit.csv`: the same filters, streamed. The export itself is audited as
   `audit.exported` (committed before the first byte, so a download cut short is still on
   record). A cell starting with `=`, `+`, `-`, `@`, tab or carriage return gets a leading
   `'`, so a spreadsheet shows it as text instead of running it as a formula.
 
-Session seam: P0-10 (`TumnisRoute`, `RoutePolicy(auth="session")`) and P0-13 (the
-authentication middleware) are not built yet. Until then `require_session` reads the
-signed-in context from `request.state.session_context`, which nothing sets, so every call
-is 401; P0-13 sets it (or replaces this dependency) and P0-10 moves these routes onto
-`v1_router` with their policy.
+Session seam: the routes are declared on `v1_router` with `RoutePolicy(auth="session")`
+(P0-10). `require_session` answers with the workspace context of a session principal on
+`request.state.principal` (set by P0-13's authentication middleware) or of
+`request.state.session_context`, and 401 otherwise; tests override it.
 """
 
-import base64
-import binascii
 import csv
 import io
 import json
@@ -29,17 +25,18 @@ from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from tumnis.core import audit
+from tumnis.core.pagination import Page, PageParams, SortKey, page_params, paginate
+from tumnis.core.principal import principal_of
+from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 
-router = APIRouter(prefix="/v1", tags=["audit"])
+router = v1_router("core", tags=["audit"])
 
-LIMIT_DEFAULT: Final = 50  # plan default, as P0-10's pagination
-LIMIT_MAX: Final = 200
 EXPORTED: Final = "audit.exported"
 FORMULA_START: Final = ("=", "+", "-", "@", "\t", "\r")
 CSV_FLUSH_BYTES: Final = 64 * 1024
@@ -97,9 +94,7 @@ class AuditEntry(BaseModel):
     details: dict[str, Any]
 
 
-class AuditPage(BaseModel):
-    items: list[AuditEntry]
-    next_cursor: str | None
+AuditPage = Page[AuditEntry]
 
 
 async def require_session(request: Request) -> WorkspaceContext:
@@ -107,6 +102,9 @@ async def require_session(request: Request) -> WorkspaceContext:
     ctx = getattr(request.state, "session_context", None)
     if isinstance(ctx, WorkspaceContext):
         return ctx
+    principal = principal_of(request)
+    if principal.kind == "session" and not principal.anonymous:
+        return principal.workspace_context()
     raise HTTPException(status_code=401, detail="unauthenticated")
 
 
@@ -154,50 +152,33 @@ def filters(
     return Filters(action, actor_type, _utc(since), _utc(until))
 
 
+def _where(ctx: WorkspaceContext, chosen: Filters) -> sa.Select[Any]:
+    return sa.select(*_COLUMNS).where(_log.c.workspace_id == ctx.workspace_id, *chosen.where())
+
+
 def _statement(ctx: WorkspaceContext, chosen: Filters) -> sa.Select[Any]:
-    return (
-        sa.select(*_COLUMNS)
-        .where(_log.c.workspace_id == ctx.workspace_id, *chosen.where())
-        .order_by(_log.c.occurred_at.desc(), _log.c.id.desc())
-    )
+    return _where(ctx, chosen).order_by(_log.c.occurred_at.desc(), _log.c.id.desc())
 
 
-def encode_cursor(occurred_at: datetime, row_id: UUID) -> str:
-    raw = json.dumps({"v": 1, "k": [occurred_at.isoformat()], "id": str(row_id)})
-    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
-
-
-def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
-    try:
-        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
-        value = json.loads(raw)
-        if value["v"] != 1:
-            raise ValueError(cursor)
-        at = datetime.fromisoformat(value["k"][0])
-        return at if at.tzinfo else at.replace(tzinfo=UTC), UUID(value["id"])
-    except (binascii.Error, ValueError, KeyError, IndexError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail="invalid_cursor") from exc
-
-
-@router.get("/audit", response_model=AuditPage)
+@router.get("/audit")
+@route_policy(RoutePolicy(auth="session", paginated=True))
 async def list_audit(
     ctx: Annotated[WorkspaceContext, Depends(require_session)],
     chosen: Annotated[Filters, Depends(filters)],
-    cursor: str | None = None,
-    limit: Annotated[int, Query(ge=1, le=LIMIT_MAX)] = LIMIT_DEFAULT,
+    page: Annotated[PageParams, Depends(page_params)],
 ) -> AuditPage:
     """The workspace's audit log, newest first."""
-    statement = _statement(ctx, chosen)
-    if cursor is not None:
-        at, row_id = decode_cursor(cursor)
-        statement = statement.where(sa.tuple_(_log.c.occurred_at, _log.c.id) < (at, row_id))
     async with tenant_session(ctx) as s:
-        rows = (await s.execute(statement.limit(limit + 1))).mappings().all()
-    items = [AuditEntry.model_validate(dict(row)) for row in rows[:limit]]
-    more = len(rows) > limit
-    last = items[-1] if items else None
-    next_cursor = encode_cursor(last.occurred_at, last.id) if more and last else None
-    return AuditPage(items=items, next_cursor=next_cursor)
+        return await paginate(
+            s,
+            _where(ctx, chosen),
+            keys=[SortKey(_log.c.occurred_at)],
+            id_col=_log.c.id,
+            cursor=page.cursor,
+            limit=page.limit,
+            model=AuditEntry,
+            descending=True,
+        )
 
 
 def _cell(value: Any) -> str:
@@ -228,6 +209,7 @@ async def _csv(ctx: WorkspaceContext, chosen: Filters) -> AsyncIterator[str]:
 
 
 @router.get("/audit.csv", response_class=StreamingResponse)
+@route_policy(RoutePolicy(auth="session"))
 async def export_audit_csv(
     request: Request,
     ctx: Annotated[WorkspaceContext, Depends(require_session)],

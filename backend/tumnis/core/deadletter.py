@@ -10,8 +10,9 @@ that is no longer `open` is a 409.
 
 The router (`/v1/dead-letters`) is session-only through the shared session seam
 (`audit_router.require_session`, filled by P0-13); retry and discard are audited
-(SEC-3). P0-10's `versioning.StaleVersion` and `pagination.Page` replace the
-local ones here when they land.
+(SEC-3). A stale version is P0-10's shared `versioning.StaleVersion` (409
+`stale_version` with `current`), a row that is not open is `DeadLetterNotOpen` (409
+`dead_letter_not_open`), and the list is a shared `pagination.Page` with its cursor.
 """
 
 import uuid
@@ -19,7 +20,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any, Final
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import Depends, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import (
     TIMESTAMP,
@@ -42,14 +43,18 @@ from tumnis.core import audit, tenancy
 from tumnis.core.audit_router import require_session
 from tumnis.core.base import Base
 from tumnis.core.clock import Clock, SystemClock
+from tumnis.core.errors import ProblemError
+from tumnis.core.pagination import Page, PageParams, page_params, paginate
+from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
+from tumnis.core.versioning import StaleVersion
 
 if TYPE_CHECKING:
     from dbos import DBOSClient
 
 EVENTS_QUEUE: Final = "events"  # tumnis.core.events.EVENTS_QUEUE (not imported: no cycle)
 DELIVER_WORKFLOW: Final = "deliver_event"
-LIMIT_DEFAULT, LIMIT_MAX = 50, 200  # plan defaults (P0-10)
+LIMIT_MAX: Final = 200  # plan default (P0-10's pagination)
 STATUSES: Final = ("open", "retrying", "resolved", "discarded")
 RETRIED: Final = "dead_letter.retried"  # SEC-3 audit actions
 DISCARDED: Final = "dead_letter.discarded"
@@ -94,31 +99,20 @@ class DeadLetterOut(BaseModel):
     version: int
 
 
-class Page(BaseModel):
-    items: list[DeadLetterOut]
-    next_cursor: str | None = None
+class DeadLetterNotOpen(ProblemError):  # noqa: N818  # plan name
+    """The row is not `open` any more (retrying, resolved or discarded): 409."""
 
-
-class DeadLetterError(Exception):
-    status: int = 409
-    code: str = "conflict"
-
-    def __init__(self, detail: str, current: Mapping[Any, Any] | None = None) -> None:
-        super().__init__(detail)
+    def __init__(self, detail: str, current: Mapping[str, Any] | None = None) -> None:
+        super().__init__(409, "dead_letter_not_open", detail, current=current)
         self.current = dict(current) if current is not None else None
 
 
-class DeadLetterNotOpen(DeadLetterError):  # noqa: N818  # plan name
-    code = "dead_letter_not_open"
+class DeadLetterNotFound(ProblemError):  # noqa: N818  # the plan's error family
+    def __init__(self, detail: str) -> None:
+        super().__init__(404, "not_found", detail)
 
 
-class StaleVersion(DeadLetterError):  # noqa: N818  # plan name (P0-10's versioning)
-    code = "stale_version"
-
-
-class DeadLetterNotFound(DeadLetterError):  # noqa: N818  # the plan's error family
-    status = 404
-    code = "not_found"
+__all__ = ["DeadLetterNotOpen", "DeadLetterOut", "Page", "StaleVersion"]
 
 
 # --- SQL, all of it, in the workspace in context -----------------------------------------
@@ -177,12 +171,18 @@ class DeadLetterRepo:
             .values(status="resolved", last_at=func.now())
         )
 
-    async def page(self, status: str, cursor: uuid.UUID | None, limit: int) -> list[RowMapping]:
+    async def page(self, status: str, cursor: str | None, limit: int) -> Page[DeadLetterOut]:
+        """Oldest first by id (uuidv7), keyset pages."""
         stmt = select(_t).where(_t.c.status == status, _t.c.deleted_at.is_(None))
-        if cursor is not None:
-            stmt = stmt.where(_t.c.id > cursor)
-        rows = await self.session.execute(stmt.order_by(_t.c.id).limit(limit))
-        return list(rows.mappings().all())
+        return await paginate(
+            self.session,
+            stmt,
+            keys=(),
+            id_col=_t.c.id,
+            cursor=cursor,
+            limit=limit,
+            model=DeadLetterOut,
+        )
 
     async def transition(
         self, row_id: uuid.UUID, expected_version: int, *, to: str, retry: bool = False
@@ -218,11 +218,11 @@ class DeadLetterRepo:
         if current is None or current["deleted_at"] is not None:
             raise DeadLetterNotFound(f"no dead letter {row_id}")
         if current["status"] != "open":
-            raise DeadLetterNotOpen(f"dead letter {row_id} is {current['status']}", current)
-        raise StaleVersion(
-            f"dead letter {row_id} is at version {current['version']}, not {expected_version}",
-            current,
-        )
+            raise DeadLetterNotOpen(
+                f"dead letter {row_id} is {current['status']}",
+                DeadLetterOut.model_validate(current).model_dump(),
+            )
+        raise StaleVersion(current=DeadLetterOut.model_validate(current).model_dump())
 
 
 # --- The DBOS client the api process enqueues with ---------------------------------------
@@ -270,17 +270,13 @@ def close() -> None:
 
 async def list_dead_letters(
     ctx: WorkspaceContext, *, status: str = "open", cursor: str | None = None, limit: int = 50
-) -> Page:
+) -> Page[DeadLetterOut]:
     """The workspace's dead letters in `status`, oldest first; `next_cursor` continues."""
     if status not in STATUSES:
         raise ValueError(f"status must be one of {STATUSES}")
     limit = max(1, min(limit, LIMIT_MAX))
-    after = uuid.UUID(cursor) if cursor else None
     async with tenancy.tenant_session(ctx) as session:
-        rows = await DeadLetterRepo(session).page(status, after, limit)
-    items = [DeadLetterOut.model_validate(row) for row in rows]
-    next_cursor = str(items[-1].id) if len(items) == limit else None
-    return Page(items=items, next_cursor=next_cursor)
+        return await DeadLetterRepo(session).page(status, cursor, limit)
 
 
 async def retry(
@@ -361,44 +357,35 @@ class VersionIn(BaseModel):
     version: int
 
 
-router = APIRouter(prefix="/v1/dead-letters", tags=["dead_letters"])
+router = v1_router("core", prefix="/dead-letters", tags=["dead_letters"])
+WRITE = RoutePolicy(auth="session", idempotent=True)
 
 
-def _http(exc: DeadLetterError) -> HTTPException:
-    return HTTPException(
-        status_code=exc.status, detail={"code": exc.code, "detail": str(exc), "current": None}
-    )
-
-
-@router.get("", response_model=Page)
+@router.get("")
+@route_policy(RoutePolicy(auth="session", paginated=True))
 async def get_dead_letters(
     ctx: Ctx,
+    page: Annotated[PageParams, Depends(page_params)],
     status: Annotated[str, Query(pattern="^(open|retrying|resolved|discarded)$")] = "open",
-    cursor: str | None = None,
-    limit: Annotated[int, Query(ge=1, le=LIMIT_MAX)] = LIMIT_DEFAULT,
-) -> Page:
-    return await list_dead_letters(ctx, status=status, cursor=cursor, limit=limit)
+) -> Page[DeadLetterOut]:
+    return await list_dead_letters(ctx, status=status, cursor=page.cursor, limit=page.limit)
 
 
-@router.post("/{dead_letter_id}/retry", response_model=DeadLetterOut)
+@router.post("/{dead_letter_id}/retry")
+@route_policy(WRITE)
 async def post_retry(
     dead_letter_id: uuid.UUID, body: VersionIn, ctx: Ctx, request: Request
 ) -> DeadLetterOut:
-    try:
-        return await retry(
-            ctx, dead_letter_id, expected_version=body.version, clock=request.app.state.clock
-        )
-    except DeadLetterError as exc:
-        raise _http(exc) from exc
+    return await retry(
+        ctx, dead_letter_id, expected_version=body.version, clock=request.app.state.clock
+    )
 
 
-@router.post("/{dead_letter_id}/discard", response_model=DeadLetterOut)
+@router.post("/{dead_letter_id}/discard")
+@route_policy(WRITE)
 async def post_discard(
     dead_letter_id: uuid.UUID, body: VersionIn, ctx: Ctx, request: Request
 ) -> DeadLetterOut:
-    try:
-        return await discard(
-            ctx, dead_letter_id, expected_version=body.version, clock=request.app.state.clock
-        )
-    except DeadLetterError as exc:
-        raise _http(exc) from exc
+    return await discard(
+        ctx, dead_letter_id, expected_version=body.version, clock=request.app.state.clock
+    )
