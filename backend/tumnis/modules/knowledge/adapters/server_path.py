@@ -376,15 +376,19 @@ class ServerPathStorage(AdapterBase):
         except FileExistsError:
             raise PreconditionFailed(self._stat_at(rel, dir_fd, name)) from None
         try:
-            src = os.open(tmp, _READ_FLAGS, dir_fd=dir_fd)
             try:
-                while chunk := os.read(src, CHUNK):
-                    _write_all(out, chunk)
+                src = os.open(tmp, _READ_FLAGS, dir_fd=dir_fd)
+                try:
+                    while chunk := os.read(src, CHUNK):
+                        _write_all(out, chunk)
+                finally:
+                    os.close(src)
+                os.fsync(out)
             finally:
-                os.close(src)
-            os.fsync(out)
-        finally:
-            os.close(out)
+                os.close(out)
+        except BaseException:
+            _unlink_quietly(dir_fd, name)  # never leave a truncated file under the real name
+            raise
 
     async def move(self, src: str, dst: str) -> None:
         def fn() -> None:

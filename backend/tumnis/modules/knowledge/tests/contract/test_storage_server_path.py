@@ -235,7 +235,6 @@ async def test_pr52_write_never_lands_outside_when_a_parent_is_swapped_mid_write
 @pytest.mark.contract
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 partial create")
 async def test_pr52_failed_copy_on_a_share_without_links_leaves_no_partial_file(
     tmp_location: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
