@@ -60,7 +60,6 @@ def _insert_tasks(db: DbUrls, workspace_id: uuid.UUID, project_id: str, n: int) 
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 async def test_reorder_writes_one_row(
     app: FastAPI,
     session_client: SessionClient,
@@ -99,7 +98,6 @@ async def test_reorder_writes_one_row(
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 async def test_reorder_rebalances_past_max_key_len(
     app: FastAPI, session_client: SessionClient, workspace: WorkspaceHandle, db: DbUrls
 ) -> None:
