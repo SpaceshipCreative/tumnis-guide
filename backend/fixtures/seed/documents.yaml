@@ -3,7 +3,7 @@ schema_version: 1
 documents:
   - key: d_acme_brief
     project: p_acme
-    title: Acme rebrand brief
+    title: Acme brand refresh brief
     role: brief
     body: |
       Acme wants a friendlier mark. Standing rule: no purple.

@@ -1,10 +1,15 @@
 # Three projects, ten tasks each (subtasks count). Every status and label appears,
 # including a pending label (null); p_acme holds a hybrid parent with a 45-minute and a
 # 20-minute human subtask, and p_dogfood subtasks sit at 29, 30 and 31 minutes.
+# Board order comes from core/rank.py's n_keys(3). One project per health state
+# (expected_health.yaml): p_acme blocked (a task waits on the human), p_authenticity at
+# risk (an overdue open task, none waiting), p_dogfood on track. The Acme project is not
+# called "Acme rebrand": journey J2 (A0.1) creates that project itself.
 schema_version: 1
 projects:
   - key: p_acme
-    name: Acme rebrand
+    name: Acme brand refresh
+    sort_key: a0
     client: Acme
     goal: Ship the new logo and brand guide
     deadline: +21d
@@ -32,6 +37,7 @@ projects:
 
   - key: p_authenticity
     name: Authenticity course
+    sort_key: a1
     client: Authenticity Collective
     goal: Launch the six-lesson course
     deadline: +45d
@@ -43,7 +49,7 @@ projects:
       - {key: t_auth_3, title: Transcribe the interview recordings, label: ai, status: done}
       - {key: t_auth_4, title: Edit the intro video, label: hybrid, status: in_progress,
          estimate_minutes: 90}
-      - {key: t_auth_5, title: Approve the course pricing, label: human, status: waiting_on_human,
+      - {key: t_auth_5, title: Approve the course pricing, label: human, status: in_review,
          estimate_minutes: 15}
       - {key: t_auth_6, title: Draft the launch email sequence, label: ai, status: backlog}
       - {key: t_auth_7, title: Set up the course platform, label: hybrid, status: backlog,
@@ -56,6 +62,7 @@ projects:
 
   - key: p_dogfood
     name: Tumnis dogfood
+    sort_key: a2
     goal: Run my own week on Tumnis
     tasks:
       - {key: t_dog_1, title: Import this week's tasks, label: human, status: done, estimate_minutes: 20}
@@ -74,9 +81,9 @@ projects:
           - {key: t_dog_3c, title: Check the backup restore steps, label: human, status: backlog,
              estimate_minutes: 31}
       - {key: t_dog_4, title: Summarise last week's notes, label: ai, status: in_progress}
-      - {key: t_dog_5, title: Decide the focus-mode defaults, label: human, status: waiting_on_human,
+      - {key: t_dog_5, title: Decide the focus-mode defaults, label: human, status: backlog,
          estimate_minutes: 30}
       - {key: t_dog_6, title: Review the agent run results, label: human, status: in_review,
          estimate_minutes: 20}
       - {key: t_dog_7, title: File expense receipts, label: human, status: backlog,
-         estimate_minutes: 25, due: -2d}
+         estimate_minutes: 25, due: +2d}
