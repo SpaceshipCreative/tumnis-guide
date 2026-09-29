@@ -20,7 +20,6 @@ def _recording_sleep(sleeps: list[float]) -> Callable[[float], Awaitable[None]]:
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 @settings(max_examples=300, deadline=None)
 @given(
     base=st.floats(min_value=0.001, max_value=5.0),
