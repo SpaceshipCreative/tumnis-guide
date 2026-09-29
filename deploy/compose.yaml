@@ -6,6 +6,8 @@
 # TUMNIS_VERSION. Passwords go into connection URLs, so keep them URL-safe (hex).
 # Backups (P0-28) need /etc/pgbackrest/conf.d/secrets.conf on the host (repo2-s3-key,
 # repo2-s3-key-secret, repo2-cipher-pass; root:999, mode 0640), see deploy/README.md.
+# /metrics (P0-27) needs /etc/tumnis/secrets/tumnis_metrics_token: the api refuses to start
+# in prod without it.
 # Overrides: compose.preview.yaml (PR previews), compose.test.yaml (CI e2e stack).
 name: tumnis
 
@@ -19,6 +21,9 @@ x-env: &env
   DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-self-hosted}
   DEPLOYMENT_ENV: ${DEPLOYMENT_ENV:-prod}
   TUMNIS_ADAPTERS: ${TUMNIS_ADAPTERS:-real}
+  # Observability (P0-27): unset keeps GlitchTip off and exports no traces.
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 
 x-app: &app
   image: ghcr.io/spaceshipcreative/tumnis:${TUMNIS_VERSION:-latest}
@@ -41,6 +46,9 @@ services:
   api:
     <<: *app
     command: ["tumnis", "api"]
+    environment:
+      <<: *env
+      METRICS_TOKEN_FILE: /run/secrets/tumnis_metrics_token # bearer for /metrics (P0-27)
     depends_on:
       migrate: { condition: service_completed_successfully }
       pgbouncer: { condition: service_started }

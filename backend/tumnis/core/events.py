@@ -17,7 +17,7 @@ from dbos._error import DBOSQueueDeduplicatedError  # dbos 3.1.0: not re-exporte
 from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy import text
 
-from tumnis.core import db, deadletter, faults, modules, tenancy
+from tumnis.core import db, deadletter, faults, modules, telemetry, tenancy
 from tumnis.core.backoff import full_jitter
 from tumnis.core.schemas import VersionedPayload
 from tumnis.core.types import SYSTEM_ACTOR
@@ -295,8 +295,21 @@ def _system(envelope: EventEnvelope) -> tenancy.WorkspaceContext:
 
 @DBOS.step()
 async def run_handler(subscriber: str, envelope: dict[str, Any]) -> None:
-    sub, env = get_subscriber(subscriber), EventEnvelope.model_validate(envelope)
-    with tenancy.use_workspace(_system(env)):
+    await run_subscriber(EventEnvelope.model_validate(envelope), subscriber)
+
+
+async def run_subscriber(env: EventEnvelope, subscriber: str) -> None:
+    """The subscriber's handler in the event's workspace, inside a span that continues the
+    trace of the request that emitted the event (P0-27; a retry is another span in it)."""
+    sub = get_subscriber(subscriber)
+    with (
+        telemetry.span_from_carrier(
+            f"event {env.name} -> {subscriber}",
+            env.trace_context,
+            **{"tumnis.event_id": str(env.event_id), "tumnis.subscriber": subscriber},
+        ),
+        tenancy.use_workspace(_system(env)),
+    ):
         await sub.handler(env)
 
 

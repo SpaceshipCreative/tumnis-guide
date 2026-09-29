@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     cache_backend: Literal["memory", "redis"] = "memory"
     redis_url: str | None = None
     tumnis_disabled_modules: str = ""  # comma-separated deployment kill list (P0-08)
+    metrics_token_file: str | None = None  # bearer for /metrics; required in prod (P0-27)
+    sentry_dsn: str | None = None  # GlitchTip; unset keeps the SDK off (P0-27)
 
     @model_validator(mode="after")
     def _preview_guard(self) -> Self:
@@ -77,6 +79,27 @@ class Settings(BaseSettings):
         """The master key file, loaded and checked once (MasterKeyError when unsafe). The
         owner check applies in prod only: tests and dev run as whoever owns their files."""
         return load_master_keys(self.master_key_file, strict_owner=self.deployment_env == "prod")
+
+    def metrics_token(self) -> str | None:
+        """The /metrics bearer token from METRICS_TOKEN_FILE, stripped (P0-27, FR-12.3).
+        Prod refuses to start without one; elsewhere no file means no token, and /metrics
+        answers 401 to everyone. A configured file that is missing or empty is an error."""
+        if not self.metrics_token_file:  # unset, or "" (compose.preview.yaml)
+            if self.deployment_env == "prod":
+                raise SettingsError(
+                    "metrics_token_file_required",
+                    "prod serves /metrics only behind a bearer token: set METRICS_TOKEN_FILE",
+                )
+            return None
+        try:
+            token = Path(self.metrics_token_file).read_text().strip()
+        except OSError as exc:
+            raise SettingsError(
+                "metrics_token_unreadable", f"{self.metrics_token_file}: {exc.strerror}"
+            ) from exc
+        if not token:
+            raise SettingsError("metrics_token_unreadable", f"{self.metrics_token_file} is empty")
+        return token
 
     @property
     def dbos_system_url(self) -> str:

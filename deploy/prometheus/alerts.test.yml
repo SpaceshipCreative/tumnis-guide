@@ -1,0 +1,173 @@
+# promtool test rules alerts.test.yml (P0-27, REL-5): one firing and one quiet case per
+# alert. https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/
+rule_files: [alerts.yml]
+evaluation_interval: 1m
+tests:
+  # --- TumnisQueueBacklog: over 100 waiting for 10 minutes, per queue ---------------------
+  - interval: 1m
+    input_series:
+      - series: 'tumnis_queue_depth{queue="events"}'
+        values: '150+0x20'
+      - series: 'tumnis_queue_depth{queue="runs"}'
+        values: '3+0x20'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: TumnisQueueBacklog
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: TumnisQueueBacklog
+        exp_alerts:
+          - exp_labels: { severity: warning, queue: events }
+            exp_annotations: { summary: "Queue events has had more than 100 waiting items for 10 minutes" }
+
+  # --- TumnisDeadLettersGrowing: open dead letters rose over 30 minutes -------------------
+  - interval: 1m
+    input_series:
+      - series: 'tumnis_dead_letters{status="open"}'
+        values: '0+0x20 0+1x20' # flat for 20 minutes, then one more every minute
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: TumnisDeadLettersGrowing
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: TumnisDeadLettersGrowing
+        exp_alerts:
+          - exp_labels: { severity: warning, status: open }
+            exp_annotations: { summary: "Dead letters are growing" }
+  - interval: 1m
+    input_series:
+      - series: 'tumnis_dead_letters{status="open"}'
+        values: '4+0x40' # some dead letters, none new
+      - series: 'tumnis_dead_letters{status="resolved"}'
+        values: '0+1x40' # resolved ones growing is good news
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: TumnisDeadLettersGrowing
+        exp_alerts: []
+
+  # --- TumnisWalArchiveStale: no segment archived for 5 minutes, held 5 minutes -----------
+  - interval: 1m
+    input_series:
+      - series: 'tumnis_wal_last_archived_timestamp_seconds'
+        values: '0+60x30' # archived every minute: healthy
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: TumnisWalArchiveStale
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: 'tumnis_wal_last_archived_timestamp_seconds'
+        values: '0+0x30' # stuck at t=0
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: TumnisWalArchiveStale
+        exp_alerts: [] # stale since 5m, "for" not yet satisfied
+      - eval_time: 12m
+        alertname: TumnisWalArchiveStale
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations: { summary: "No WAL segment archived for over 5 minutes" }
+
+  # --- TumnisWalArchiveFailing: any failed archive attempt in 15 minutes ------------------
+  - interval: 1m
+    input_series:
+      - series: 'tumnis_wal_archive_failed_total'
+        values: '0+0x5 1+0x15' # one failure at minute 6
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: TumnisWalArchiveFailing
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: TumnisWalArchiveFailing
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations: { summary: "WAL archiving is failing" }
+  - interval: 1m
+    input_series:
+      - series: 'tumnis_wal_archive_failed_total'
+        values: '3+0x30' # old failures only
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: TumnisWalArchiveFailing
+        exp_alerts: []
+
+  # --- TumnisBackupMissing: a repository without a success in 26 hours -------------------
+  - interval: 1h
+    input_series:
+      - series: 'tumnis_backup_last_success_timestamp_seconds{repo="1", type="diff"}'
+        values: '0x23 86400x23' # nightly: last success at hour 24
+      - series: 'tumnis_backup_last_success_timestamp_seconds{repo="2", type="full"}'
+        values: '0x47' # last success at hour 0, never again
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: TumnisBackupMissing
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: TumnisBackupMissing
+        exp_alerts:
+          - exp_labels: { severity: critical, repo: "2" }
+            exp_annotations: { summary: "No successful backup to 2 in 26 hours" }
+
+  # --- TumnisCertificateExpiring: under 14 days left on the TLS certificate ---------------
+  - interval: 1m
+    input_series:
+      - series: 'probe_ssl_earliest_cert_expiry{job="tumnis-tls", instance="tumnis.lan"}'
+        values: '864000+0x10' # expires at day 10
+      - series: 'probe_ssl_earliest_cert_expiry{job="tumnis-tls", instance="preview.tumnis.lan"}'
+        values: '2592000+0x10' # expires at day 30
+      - series: 'probe_ssl_earliest_cert_expiry{job="other-site", instance="other.lan"}'
+        values: '86400+0x10' # not ours
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: TumnisCertificateExpiring
+        exp_alerts:
+          - exp_labels: { severity: warning, job: tumnis-tls, instance: tumnis.lan }
+            exp_annotations: { summary: "Tumnis TLS certificate expires within 14 days" }
+  - interval: 1m
+    input_series:
+      - series: 'probe_ssl_earliest_cert_expiry{job="tumnis-tls", instance="tumnis.lan"}'
+        values: '7776000+0x10' # 90 days
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: TumnisCertificateExpiring
+        exp_alerts: []
+
+  # --- TumnisAuditChainBroken: the nightly verify found a break --------------------------
+  - interval: 1m
+    input_series:
+      - series: 'tumnis_ops_check_ok{check="audit_chain"}'
+        values: '1 1 0 0'
+      - series: 'tumnis_ops_check_ok{check="backups"}'
+        values: '0 0 0 0' # another check failing is not an audit alert
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: TumnisAuditChainBroken
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: TumnisAuditChainBroken
+        exp_alerts:
+          - exp_labels: { severity: critical, check: audit_chain }
+            exp_annotations: { summary: "Audit hash chain verification failed" }
+
+  # --- TumnisAuditChainNotVerified: no verify run in 26 hours ----------------------------
+  - interval: 1h
+    input_series:
+      - series: 'tumnis_ops_check_timestamp_seconds{check="audit_chain"}'
+        values: '0x23 86400x23' # verified nightly: last run at hour 24
+    alert_rule_test:
+      - eval_time: 30h
+        alertname: TumnisAuditChainNotVerified
+        exp_alerts: []
+  - interval: 1h
+    input_series:
+      - series: 'tumnis_ops_check_timestamp_seconds{check="audit_chain"}'
+        values: '0x40' # verified once at hour 0, never again
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: TumnisAuditChainNotVerified
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: TumnisAuditChainNotVerified
+        exp_alerts:
+          - exp_labels: { severity: warning, check: audit_chain }
+            exp_annotations: { summary: "Audit chain has not been verified in 26 hours" }
