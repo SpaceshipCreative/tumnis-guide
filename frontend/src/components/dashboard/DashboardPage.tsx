@@ -1,13 +1,14 @@
 // The dashboard (P0-23, FR-1.1, FR-1.2, FR-1.4, FR-1.5, UX 1): "what now?" on one screen.
-// Header with today's date in the workspace timezone and the review badge; the Today
-// panel and the activity feed beside the project cards on a laptop (5/12 and 7/12, no page
+// Header with today's date in the workspace timezone and the review badge; today's
+// calendar strip (P1-10), the Today panel and the activity feed beside the project cards on a laptop (5/12 and 7/12, no page
 // scroll at 1280 x 800), one column on a phone with quick add in thumb reach. The route
 // loader has filled the cache, so the first render has data.
 import { useQuery } from "@tanstack/react-query";
 import { useLayoutEffect, useRef } from "react";
 
 import { ActivityFeed } from "./ActivityFeed";
-import { formatToday } from "./format";
+import { CalendarStrip } from "./CalendarStrip";
+import { formatToday, localDay } from "./format";
 import { ProjectCardGrid } from "./ProjectCardGrid";
 import { QuickAddFab } from "./QuickAddFab";
 import {
@@ -72,6 +73,11 @@ export function DashboardPage() {
       </header>
       <div className="flex flex-col gap-6 md:grid md:min-h-0 md:flex-1 md:grid-cols-12">
         <div className="flex min-h-0 flex-col gap-4 md:col-span-5">
+          {workspace.data && (
+            <CalendarStrip
+              day={localDay(new Date(), workspace.data.timezone)}
+            />
+          )}
           <TodayPanel
             items={today.data?.items ?? []}
             total={today.data?.total ?? 0}

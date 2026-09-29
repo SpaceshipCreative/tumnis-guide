@@ -1,11 +1,13 @@
 // MSW handlers for the dashboard's reads (P0-23): the project list, the Today query
 // (`GET /v1/tasks?status=today&order=today&limit=5`, a `TaskPage` with `total`), the review
-// badge count (`ReviewCountOut`) and the workspace settings (for the timezone). Bodies are
+// badge count (`ReviewCountOut`), the workspace settings (for the timezone) and today's
+// calendar strip (P1-10). Bodies are
 // typed with the generated response types.
 import { http, HttpResponse, type RequestHandler } from "msw";
 
 import type { ReviewCountOut, TaskOut, TaskPage } from "../../api/types.gen";
 import type { makeProject } from "../factories";
+import { dayCalendar, NO_WINDOW } from "./planning";
 import { workspaceSettings } from "./settings";
 
 /** `GET /v1/projects` answering these projects on one page. */
@@ -46,10 +48,12 @@ export function workspaceTimezone(timezone: string): RequestHandler {
   );
 }
 
-/** The dashboard's reads, empty: no projects, nothing today, nothing to review. */
+/** The dashboard's reads, empty: no projects, nothing today, nothing to review, no
+ * working hours or events today. */
 export const dashboardDefaults: RequestHandler[] = [
   projectsList([]),
   todayTasks([]),
   reviewCount(0),
   workspaceTimezone("America/New_York"),
+  dayCalendar(NO_WINDOW),
 ];

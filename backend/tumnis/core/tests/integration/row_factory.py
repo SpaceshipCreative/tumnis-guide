@@ -43,6 +43,8 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("recurrence_rules", "preset"): "daily",  # ck_recurrence_rules_preset_or_cron
     ("recurrence_rules", "task_template"): Jsonb({"title": "x"}),  # RecurrenceOut.title
     ("search_index", "entity_type"): "task",  # ck_search_index_entity_type
+    ("working_hours", "start_local"): time(9, 0),  # ck_working_hours_order
+    ("working_hours", "end_local"): time(18, 0),
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)

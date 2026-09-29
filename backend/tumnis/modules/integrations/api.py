@@ -17,7 +17,7 @@ import base64
 import hashlib
 import json
 import secrets
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
@@ -264,6 +264,19 @@ async def connection_source(session: AsyncSession, connection_id: UUID) -> str:
     if row is None:
         raise NotFound("connections", connection_id)
     return f"{row.kind}:{row.provider}"
+
+
+async def connection_accounts(
+    session: AsyncSession, connection_ids: Collection[UUID]
+) -> dict[UUID, str]:
+    """The account (an address, "seed" for seed data) of each connection, in one query
+    whatever the number of ids (P1-10: the day calendar names each event's account)."""
+    rows = await session.execute(
+        select(_connections.c.id, _connections.c.account).where(
+            _connections.c.id.in_(list(connection_ids))
+        )
+    )
+    return {row.id: row.account for row in rows}
 
 
 async def seed_connection(

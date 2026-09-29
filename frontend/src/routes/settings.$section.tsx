@@ -14,6 +14,7 @@ import {
   keysQuery,
   sessionsQuery,
   storageQuery,
+  workingHoursQuery,
   workspaceQuery,
 } from "../components/settings/queries";
 import {
@@ -24,6 +25,7 @@ import {
 import { SessionsSection } from "../components/settings/SessionsSection";
 import { SettingsLayout } from "../components/settings/SettingsLayout";
 import { StorageSection } from "../components/settings/StorageSection";
+import { WorkingHoursSection } from "../components/settings/WorkingHoursSection";
 import { WorkspaceSection } from "../components/settings/WorkspaceSection";
 
 export const settingsSections = SETTINGS_SECTIONS;
@@ -35,6 +37,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   audit: AuditSection,
   "dead-letters": DeadLettersSection,
   workspace: WorkspaceSection,
+  "working-hours": WorkingHoursSection,
   calendar: () => <CalendarSection />,
   storage: StorageSection,
 };
@@ -69,6 +72,9 @@ export const Route = createFileRoute("/settings/$section")({
         break;
       case "workspace":
         started(queryClient.query(workspaceQuery()));
+        break;
+      case "working-hours":
+        started(queryClient.query(workingHoursQuery()));
         break;
       case "calendar":
         started(queryClient.query(calendarAccountsQuery()));
