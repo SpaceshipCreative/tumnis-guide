@@ -1,0 +1,32 @@
+{
+  "fields_sent": [
+    "event_kind",
+    "level",
+    "minutes_into_block",
+    "minutes_since_last_nudge",
+    "recent_responses",
+    "task_status"
+  ],
+  "point": "nudge_warranted",
+  "questions": {
+    "nudge": {
+      "criteria": {
+        "false": "A nudge now interrupts more than it helps.",
+        "true": "A nudge now helps more than it interrupts."
+      },
+      "instructions": "A nudge now helps the user more than it interrupts them.",
+      "type": "noul"
+    }
+  },
+  "state": {
+    "event_kind": "no_activity",
+    "level": "medium",
+    "minutes_into_block": 25,
+    "minutes_since_last_nudge": 20,
+    "recent_responses": [
+      "on_it",
+      "snooze"
+    ],
+    "task_status": "in_progress"
+  }
+}

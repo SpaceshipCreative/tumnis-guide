@@ -137,3 +137,33 @@ ignore_imports =
     tumnis.**.tests.** -> tumnis.modules.integrations.connector_contract
     tumnis.modules.integrations.connector_contract -> tumnis.core.adapters.contract
 unmatched_ignore_imports_alerting = none
+
+# P1-01: the Jev SDK is imported in one file, and the api process never reaches it (the
+# adapter registry builds JevDecisions lazily, in the worker). Tests reach the adapter
+# directly; ignoring the one sanctioned edge keeps them from counting as SDK importers.
+[importlinter:contract:typesafe-sdk-in-jev-only]
+name = Only the Jev adapter imports typesafe_sdk
+type = forbidden
+source_modules =
+    tumnis.**
+forbidden_modules =
+    typesafe_sdk
+ignore_imports =
+    tumnis.modules.decisions.adapters.jev -> typesafe_sdk
+unmatched_ignore_imports_alerting = none
+
+[importlinter:contract:api-never-calls-out]
+name = The api process never imports the Jev adapter or its SDK
+type = forbidden
+# The composition roots (tumnis.app, worker, cli, wiring) and every module's api, router
+# and mcp, as single modules: none reaches the adapter through static imports. The worker
+# builds JevDecisions lazily through the adapter registry.
+as_packages = False
+source_modules =
+    tumnis.*
+    tumnis.modules.*.api
+    tumnis.modules.*.router
+    tumnis.modules.*.mcp
+forbidden_modules =
+    tumnis.modules.decisions.adapters.jev
+    typesafe_sdk

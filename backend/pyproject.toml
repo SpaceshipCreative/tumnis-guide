@@ -10,6 +10,7 @@ dependencies = [
   "dbos==3.1.0",
   "fastapi==0.141.1",
   "httpx==0.28.1",
+  "httpx2==2.13.1",
   "nh3==0.3.7",
   "opentelemetry-api==1.45.0",
   "opentelemetry-exporter-otlp-proto-http==1.45.0",
@@ -25,6 +26,7 @@ dependencies = [
   "sqlalchemy[asyncio]==2.1.1",
   "structlog==26.1.0",
   "typer==0.27.2",
+  "typesafe-sdk==0.7.2",
   "tzdata==2026.4",
   "uvicorn==0.54.0",
 ]
