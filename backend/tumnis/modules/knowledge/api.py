@@ -640,8 +640,12 @@ async def check_location(
     s: AsyncSession, location_id: UUID, *, net: NetPolicy, resolver: Resolver = system_resolver
 ) -> LocationOut:
     """Test the connection now: the location's status follows its health, and a healthy
-    location drains its queued writes."""
+    location drains its queued writes. An S3 endpoint passes the SSRF guard again first
+    (its name may resolve elsewhere now, or the deployment may run hosted): a blocked one
+    is refused with 422 `ssrf_blocked`, and the location is not opened."""
     row = await _location_row(s, location_id)
+    if row["kind"] == "s3" and row["config_enc"] is not None:
+        await _check_endpoint(await _open_config(s, row), net, resolver)
     async with _opened(s, row, net=net, resolver=resolver) as backend:
         health = await _health(backend)
         row = await _set_status(s, location_id, health)
