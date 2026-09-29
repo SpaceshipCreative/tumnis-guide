@@ -4,6 +4,8 @@
 boot checks run in the CLI before uvicorn starts, not in the ASGI lifespan).
 """
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,10 +16,21 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 from tumnis import wiring
-from tumnis.core import audit_router, db, deadletter, health, ops_status, testing_routes
+from tumnis.core import (
+    audit_router,
+    cache,
+    db,
+    deadletter,
+    health,
+    modules,
+    ops_status,
+    testing_routes,
+)
 from tumnis.core.clock import Clock, SystemClock
+from tumnis.core.errors import install_problem_handlers
 from tumnis.core.request_meta import RequestMetaMiddleware
-from tumnis.settings import Settings
+from tumnis.modules.auth import router as auth_router
+from tumnis.settings import Settings, install_master_keys
 
 # The built frontend (P0-22 replaces the placeholder shell); present in the image.
 SHELL_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -34,15 +47,30 @@ class ShellFiles(StaticFiles):
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    yield
-    deadletter.close()
-    await db.dispose()
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """The cache invalidation listener runs beside the server (P0-08); it reconnects on its
+    own, so a database that is down at start does not stop the api."""
+    settings: Settings = app.state.settings
+    stop = asyncio.Event()
+    listener = cache.CacheInvalidationListener(settings.database_direct_url)
+    task = asyncio.create_task(listener.run(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(task, cache.POLL_S * 5)
+        deadletter.close()
+        await db.dispose()
 
 
 def create_app(settings: Settings | None = None, clock: Clock | None = None) -> FastAPI:
     settings = settings or Settings()  # values come from the environment
+    master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
     db.configure(settings.database_url, settings.database_direct_url)
+    modules.configure(settings)  # the deployment's module kill list
+    clock = clock or SystemClock()
+    cache.configure_backend(cache.InProcessCache(clock, publish=cache.pg_publisher(db.app_engine)))
     deadletter.configure(settings.dbos_system_url)  # the api enqueues through a DBOSClient
 
     health.clear_health()
@@ -62,13 +90,16 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
         docs_url=None,
         redoc_url=None,
     )
+    install_problem_handlers(app)
     # Correlation ID, source address and user agent for the audit log (P0-15).
     app.add_middleware(RequestMetaMiddleware)
     app.state.settings = settings
-    app.state.clock = clock or SystemClock()
+    app.state.master_keys = master_keys
+    app.state.clock = clock
     app.include_router(health.router)
     app.include_router(deadletter.router)
     app.include_router(audit_router.router)
+    app.include_router(auth_router.settings_router)  # R-14; P0-10 moves it onto v1_router
     if settings.tumnis_adapters == "fake":
         app.include_router(testing_routes.router)
     if SHELL_DIR.is_dir():

@@ -1411,6 +1411,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "cryptography" },
     { name = "dbos" },
     { name = "fastapi" },
     { name = "prometheus-client" },
@@ -1420,6 +1421,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "typer" },
+    { name = "tzdata" },
     { name = "uvicorn" },
 ]
 
@@ -1427,7 +1429,6 @@ dependencies = [
 dev = [
     { name = "aioboto3" },
     { name = "asyncssh" },
-    { name = "cryptography" },
     { name = "httpx" },
     { name = "hypothesis" },
     { name = "import-linter" },
@@ -1448,6 +1449,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = "==1.20.0" },
+    { name = "cryptography", specifier = "==50.0.1" },
     { name = "dbos", specifier = "==3.1.0" },
     { name = "fastapi", specifier = "==0.141.1" },
     { name = "prometheus-client", specifier = "==0.26.0" },
@@ -1457,6 +1459,7 @@ requires-dist = [
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = "==2.1.1" },
     { name = "typer", specifier = "==0.27.2" },
+    { name = "tzdata", specifier = "==2026.4" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
 
@@ -1464,7 +1467,6 @@ requires-dist = [
 dev = [
     { name = "aioboto3", specifier = "==15.5.0" },
     { name = "asyncssh", specifier = "==2.24.0" },
-    { name = "cryptography", specifier = "==50.0.1" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "hypothesis", specifier = "==6.168.3" },
     { name = "import-linter", specifier = "==2.15" },

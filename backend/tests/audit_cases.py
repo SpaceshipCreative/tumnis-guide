@@ -87,10 +87,22 @@ async def discard_dead_letter(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+async def change_timezone(ctx: Ctx) -> None:
+    """PUT /v1/settings/workspace with a new zone: `settings.changed` and
+    `workspace.timezone_changed` (P0-08)."""
+    current = await ctx.session_client.get("/v1/settings/workspace")
+    current.raise_for_status()
+    body = {"timezone": "Australia/Sydney", "version": current.json()["version"]}
+    response = await ctx.session_client.put("/v1/settings/workspace", json=body)
+    response.raise_for_status()
+
+
 AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("audit.exported", export_csv, "user"),
     AuditCase("dead_letter.retried", retry_dead_letter, "user"),
     AuditCase("dead_letter.discarded", discard_dead_letter, "user"),
+    AuditCase("settings.changed", change_timezone, "user"),
+    AuditCase("workspace.timezone_changed", change_timezone, "user"),
 )
 
 # action -> the work package that builds its operation and adds its case.
@@ -105,8 +117,8 @@ PENDING: dict[str, str] = {
     "key.created": "P0-14",
     "key.rotated": "P0-14",
     "key.revoked": "P0-14",
-    "settings.changed": "P0-08",
-    "workspace.timezone_changed": "P0-08",
-    "module.toggled": "P0-08",
+    # P0-08 records it in set_module_enabled; the route that toggles a module arrives with
+    # the Settings screen.
+    "module.toggled": "P0-26",
     "drill.completed": "P0-28",
 }

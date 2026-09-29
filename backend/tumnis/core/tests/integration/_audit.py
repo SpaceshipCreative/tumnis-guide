@@ -167,5 +167,7 @@ async def create_key(ctx: Ctx) -> str:
 
 
 async def change_secret_setting(ctx: Ctx) -> str:
-    """Change an encrypted workspace setting; returns its plaintext. P0-08 and P0-14."""
-    raise NotImplementedError("P0-08: encrypted workspace settings over HTTP")
+    """Change an encrypted workspace setting over HTTP; returns its plaintext. P0-08 built
+    the store (tumnis.core.settings_store); the /v1/settings/{section} routes that write a
+    secret arrive with P0-26 (provider keys with P0-14 and P1-01)."""
+    raise NotImplementedError("P0-26: encrypted workspace settings over HTTP")

@@ -5,6 +5,7 @@ routers, subscribers). Driven by the module registry, so a new module is wired a
 import importlib
 from typing import Protocol
 
+import tumnis.core.settings_store  # noqa: F401  # registers the settings cache (P0-08)
 from tumnis.core.adapters.registry import health_states, registered
 from tumnis.core.health import HealthCheck, Status, register_health
 from tumnis.core.modules import MODULES

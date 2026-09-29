@@ -9,8 +9,9 @@ import contextlib
 import signal
 from typing import TYPE_CHECKING
 
-from tumnis.core import audit_workflows, events, faults, workflows_ops
-from tumnis.settings import Settings
+from tumnis.core import audit_workflows, cache, events, faults, modules, workflows_ops
+from tumnis.core.clock import SystemClock
+from tumnis.settings import Settings, install_master_keys
 
 if TYPE_CHECKING:
     from dbos import DBOSConfig
@@ -81,6 +82,11 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     from tumnis.core import db  # noqa: PLC0415
 
     db.configure(settings.database_direct_url, settings.database_direct_url)
+    install_master_keys(settings)
+    modules.configure(settings)
+    cache.configure_backend(
+        cache.InProcessCache(SystemClock(), publish=cache.pg_publisher(db.direct_engine))
+    )
     config = dbos_config(settings)
     if app_version is not None:
         config["application_version"] = app_version
@@ -90,20 +96,24 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     register_schedules(settings)
     register_audit_schedule()
     try:
-        asyncio.run(_serve())
+        asyncio.run(_serve(settings))
     finally:
         DBOS.destroy()
 
 
-async def _serve() -> None:
-    """The relay on this thread's event loop (DBOS runs workflows on its own) until a
-    signal; then the relay is cancelled, not waited for (it may sit in a LISTEN wait)."""
+async def _serve(settings: Settings) -> None:
+    """The relay and the cache invalidation listener (P0-08) on this thread's event loop
+    (DBOS runs workflows on its own) until a signal; then both are cancelled, not waited
+    for (either may sit in a LISTEN wait)."""
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(signum, stop.set)
     relay = asyncio.create_task(events.relay_forever(stop), name="outbox-relay")
+    listener = cache.CacheInvalidationListener(settings.database_direct_url)
+    invalidations = asyncio.create_task(listener.run(stop), name="cache-invalidation")
     await stop.wait()
-    relay.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await relay
+    for task in (relay, invalidations):
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task

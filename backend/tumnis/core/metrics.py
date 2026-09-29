@@ -1,5 +1,7 @@
 """Prometheus registry (P0-27 adds the /metrics route and the request and queue metrics).
 
+P0-08 adds the cache hit and miss counters, labelled with the registered cache name.
+
 P0-28 adds the backup and operations gauges. They are refreshed from the database at
 scrape time (one query per source), so the api reports what the worker and the backup
 service recorded: `ops_status`, `ops_backup_runs` and `pg_stat_archiver`.
@@ -7,11 +9,18 @@ service recorded: `ops_status`, `ops_backup_runs` and `pg_stat_archiver`.
 P0-15 adds the audit chain gauges (tumnis.core.audit_workflows).
 """
 
-from prometheus_client import CollectorRegistry, Gauge
+from prometheus_client import CollectorRegistry, Counter, Gauge
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 REGISTRY = CollectorRegistry(auto_describe=True)
+
+CACHE_HITS = Counter(
+    "tumnis_cache_hits", "Cache lookups that found an entry", ["cache"], registry=REGISTRY
+)
+CACHE_MISSES = Counter(
+    "tumnis_cache_misses", "Cache lookups that found no entry", ["cache"], registry=REGISTRY
+)
 
 OPS_CHECK_OK = Gauge(
     "tumnis_ops_check_ok",

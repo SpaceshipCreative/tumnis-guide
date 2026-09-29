@@ -22,6 +22,10 @@ ALLOWED: dict[str, str] = {
     "app.outbox_claim": "P0-07: the relay claims unsent outbox rows of every workspace",
     "app.outbox_mark_sent": "P0-07: the relay marks the rows it claimed as sent",
     "app.list_workspace_ids": "P0-15: the audit chain verify walks every workspace",
+    "app.provider_setting_keys": (
+        "P0-08: the preview boot check sees which provider credential keys any workspace "
+        "holds (key names only)"
+    ),
 }
 
 _DEFINERS = """
