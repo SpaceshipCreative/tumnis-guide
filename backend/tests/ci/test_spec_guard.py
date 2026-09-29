@@ -105,7 +105,6 @@ def test_flags_deleted_test_and_deleted_file(tmp_path: Path) -> None:
 
 @pytest.mark.req("Quality rule 1")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_allows_removing_spec_xfail_marker_only(tmp_path: Path) -> None:
     """T-P0-03-03
     A diff that only drops the spec xfail passes, as a decorator or as a pytestmark entry.

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import copy
 import difflib
 import os
 import sys
@@ -26,16 +27,20 @@ from _tests_extract import (
     changes,
     dump,
     is_python_test,
+    is_spec_xfail,
     locked_blocks,
     show,
 )
+
+PYTESTMARK = "<pytestmark>"
 
 
 @dataclass(frozen=True)
 class Violation:
     path: str
     test: str
-    kind: str  # deleted_file | deleted_test | edited_test | added_skip_or_xfail | ...
+    kind: str  # deleted_file | deleted_test | edited_test | added_skip_or_xfail
+    #            | edited_pytestmark | edited_locked_file
     detail: str
 
 
@@ -47,7 +52,24 @@ def unified_diff(before: str, after: str) -> str:
 
 
 def normalize(node: ast.AST) -> str:
+    """Drop spec xfail decorators (and spec xfail entries in pytestmark), then dump."""
+    node = copy.deepcopy(node)
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        node.decorator_list = [d for d in node.decorator_list if not is_spec_xfail(d)]
+    if isinstance(node, ast.Assign):
+        if isinstance(node.value, ast.List | ast.Tuple):
+            node.value.elts = [e for e in node.value.elts if not is_spec_xfail(e)]
+        elif is_spec_xfail(node.value):
+            node.value = ast.List(elts=[], ctx=ast.Load())
     return dump(node)
+
+
+def _marks(node: ast.AST) -> list[ast.expr]:
+    """The markers a pytestmark assignment keeps once spec xfails are dropped."""
+    value = getattr(node, "value", None)
+    if isinstance(value, ast.List | ast.Tuple):
+        return [e for e in value.elts if not is_spec_xfail(e)]
+    return [] if value is None or is_spec_xfail(value) else [value]
 
 
 def compare_python(path: str, base_src: str, head_src: str) -> list[Violation]:
@@ -55,13 +77,14 @@ def compare_python(path: str, base_src: str, head_src: str) -> list[Violation]:
     out: list[Violation] = []
     for name, b in base.items():
         h = head.get(name)
+        if h is None and name == PYTESTMARK and not _marks(b):
+            continue  # the line held only spec xfail markers
         if h is None:
             out.append(Violation(path, name, "deleted_test", "present on base, missing on head"))
             continue
         if normalize(b) != normalize(h):
-            out.append(
-                Violation(path, name, "edited_test", unified_diff(ast.unparse(b), ast.unparse(h)))
-            )
+            kind = "edited_pytestmark" if name == PYTESTMARK else "edited_test"
+            out.append(Violation(path, name, kind, unified_diff(ast.unparse(b), ast.unparse(h))))
     return out
 
 
