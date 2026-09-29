@@ -41,7 +41,6 @@ def _catalog(db: DbUrls) -> tuple[int, list[str]]:
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P0-30")
-@pytest.mark.xfail(strict=True, reason="spec:P0-30")
 def test_migrate_exits_zero_when_database_is_ahead(
     db: DbUrls, monkeypatch: pytest.MonkeyPatch
 ) -> None:
