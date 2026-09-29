@@ -92,7 +92,11 @@ class AgentProfileDTO(BaseModel):
 def runner_status(last_heartbeat_at: datetime | None, now: datetime) -> RunnerStatus:
     """offline when now - last_heartbeat_at > MISSED_BEATS * HEARTBEAT_S (strictly
     greater); never_seen without any heartbeat."""
-    raise NotImplementedError(f"P1-04: {last_heartbeat_at} {now} {timedelta(0)}")
+    if last_heartbeat_at is None:
+        return "never_seen"
+    if now - last_heartbeat_at > timedelta(seconds=MISSED_BEATS * HEARTBEAT_S):
+        return "offline"
+    return "online"
 
 
 def validate_profile_name(name: str) -> str:

@@ -50,7 +50,6 @@ def _schema(repo_root: Path, type_: str) -> Draft202012Validator:
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 @pytest.mark.parametrize("type_", MESSAGE_TYPES)
 def test_messages_validate(type_: str, repo_root: Path) -> None:
     """T-P1-04-01
@@ -99,7 +98,6 @@ INVALID: dict[str, tuple[str, dict[str, Any], tuple[str, ...], str]] = {
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 @pytest.mark.parametrize("case", sorted(INVALID))
 def test_invalid_messages_rejected(case: str, repo_root: Path) -> None:
     """T-P1-04-02

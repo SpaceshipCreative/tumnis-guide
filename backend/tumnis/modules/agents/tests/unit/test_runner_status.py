@@ -11,7 +11,6 @@ LAST_BEAT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
 
 @pytest.mark.req("FR-5.9")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 def test_three_missed_heartbeats_mean_offline() -> None:
     """T-P1-04-04
     45 s after the last beat the runner is online; 45 s + 1 µs after it, offline; a runner

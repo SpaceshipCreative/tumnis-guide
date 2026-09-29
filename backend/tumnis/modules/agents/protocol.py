@@ -11,6 +11,7 @@ in either direction, with its own `ack{ack_of}`; protocol 2 (P2-07) adds batched
 `stream`, `cancel`, `upload_artifact`, `archive` and `status`.
 """
 
+import json
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Annotated, Any, Final, Literal
@@ -230,7 +231,22 @@ class InvalidMessage(ValueError):  # noqa: N818  # the protocol's own word
 
 
 def _parse[T](adapter: TypeAdapter[T], raw: str | bytes) -> T:
-    raise NotImplementedError(f"P1-04: {adapter} {raw!r}")
+    try:
+        data = json.loads(raw)
+    except ValueError as exc:
+        raise InvalidMessage("invalid_message", "frame is not JSON") from exc
+    if not isinstance(data, dict):
+        raise InvalidMessage("invalid_message", "frame is not a JSON object")
+    version = data.get("schema_version")
+    if version != 1 or isinstance(version, bool):
+        raise InvalidMessage(
+            "unsupported_schema_version", f"schema_version {version!r} is not supported"
+        )
+    try:
+        return adapter.validate_python(data)
+    except ValidationError as exc:
+        fields = sorted({".".join(str(p) for p in e["loc"]) for e in exc.errors()})
+        raise InvalidMessage("invalid_message", f"invalid fields: {', '.join(fields)}") from exc
 
 
 def parse_daemon(raw: str | bytes) -> DaemonMessage:
@@ -246,4 +262,5 @@ def parse_server(raw: str | bytes) -> ServerMessage:
 
 def negotiate(versions: Iterable[int]) -> int | None:
     """The highest protocol version both sides speak, None when they share none."""
-    raise NotImplementedError(f"P1-04: {list(versions)} {ValidationError}")
+    shared = set(versions) & set(SERVER_PROTOCOL_VERSIONS)
+    return max(shared) if shared else None
