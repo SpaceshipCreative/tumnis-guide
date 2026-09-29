@@ -92,7 +92,6 @@ def test_corpus_is_large_enough() -> None:
 
 @pytest.mark.req("SEC-4")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 @pytest.mark.parametrize("vector", VECTORS, ids=[f"{n:03d}" for n in range(1, len(VECTORS) + 1)])
 def test_every_xss_vector_is_neutralized(vector: str) -> None:
     """T-P0-16-03
@@ -108,7 +107,6 @@ def test_every_xss_vector_is_neutralized(vector: str) -> None:
 
 @pytest.mark.req("SEC-4")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 @pytest.mark.parametrize("case", KEEP_CASES)
 def test_allowed_formatting_is_kept(case: str) -> None:
     """T-P0-16-04
@@ -186,7 +184,6 @@ hostile_html = st.lists(_fragment(3), min_size=1, max_size=4).map("".join)
 
 @pytest.mark.req("SEC-4")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 @settings(max_examples=300, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(hostile_html)
 def test_sanitizer_is_idempotent_and_safe_on_random_html(source: str) -> None:
@@ -203,7 +200,6 @@ def test_sanitizer_is_idempotent_and_safe_on_random_html(source: str) -> None:
 
 @pytest.mark.req("SEC-4")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 def test_plain_text_drops_markup_and_scripts() -> None:
     """`to_plain_text` keeps the words, drops every tag and the content of script-like
     elements, and unescapes entities (search and notification text)."""

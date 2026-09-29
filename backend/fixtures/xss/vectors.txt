@@ -172,3 +172,9 @@ jaVasCript:/*-/*`/*\`/*'/*"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</
 <img src="https://tracker.example/pixel.gif" width=1 height=1>
 <picture><source srcset="https://tracker.example/p.png"><img src=x></picture>
 <a href="https://ok.example/" ping="https://tracker.example/">ping</a>
+# Found by the property test (T-P0-16-05): generic attributes, script URLs outside href, and
+# nesting that only settles on a second parse.
+<b title="javascript:alert(1)" lang="en">generic attributes</b>
+<a title="javascript:alert(1)" href="https://ok.example/">title script URL</a>
+<h1><audio formaction=x><h1 onmouseover=alert(1)>x</h1></audio></h1>
+<h1><x-custom><h1>nested</h1></x-custom>after<script>alert(1)</script></h1>
