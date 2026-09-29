@@ -1,7 +1,8 @@
 """Who is calling: the `Principal` on `request.state.principal` (P0-10, P0-13).
 
 The slot is anonymous by default. P0-13's authentication middleware (sessions) and P0-14's
-resolvers (API keys, task tokens, device tokens) fill it; tests install a header resolver
+bearer resolver (API keys, task tokens, device tokens; registered ahead of the session
+cookie) fill it; tests install a header resolver
 (`X-Test-Principal`, core's `_demo.py`) until then. Idempotency keys and rate-limit buckets
 are scoped by `Principal.key`; tenant work runs in `Principal.workspace_context()`.
 
@@ -15,10 +16,10 @@ its session resolver when its api is imported (tumnis.wiring).
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Final, Literal
+from typing import Final, Literal, cast
 from uuid import UUID
 
-from starlette.requests import Request
+from starlette.requests import HTTPConnection, Request
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from tumnis.core.errors import ProblemError
@@ -86,7 +87,9 @@ def auth_failure_of(request: Request) -> str:
 
 def unauthenticated(request: Request) -> ProblemError:
     code = auth_failure_of(request)
-    detail = FAILURE_DETAIL.get(code, "Sign in or send an API key")
+    failure = getattr(request.state, "auth_failure", None)
+    given = failure.detail if isinstance(failure, AuthFailure) else None
+    detail = given or FAILURE_DETAIL.get(code, "Sign in or send an API key")
     return ProblemError(401, code, detail)
 
 
@@ -103,9 +106,11 @@ async def require_principal(request: Request) -> Principal:
 
 @dataclass(frozen=True)
 class AuthFailure:
-    """Credentials a resolver recognised and refused; `code` is the 401's problem code."""
+    """Credentials a resolver recognised and refused; `code` is the 401's problem code and
+    `detail`, when set, its detail (an expired API key: `unauthenticated`, `key_expired`)."""
 
     code: str
+    detail: str | None = None
 
 
 FAILURE_DETAIL: Final[dict[str, str]] = {
@@ -116,9 +121,19 @@ Resolver = Callable[[Request], Awaitable[Principal | AuthFailure | None]]
 _resolvers: dict[str, Resolver] = {}
 
 
-def register_resolver(name: str, resolver: Resolver) -> None:
-    """Add (or replace) a resolver; they run in registration order."""
-    _resolvers[name] = resolver
+def register_resolver(name: str, resolver: Resolver, *, before: str | None = None) -> None:
+    """Add (or replace) a resolver; they run in registration order, or just ahead of the
+    resolver named `before` (P0-14 puts bearer keys ahead of the session cookie, so a stale
+    cookie never hides a valid key)."""
+    if before is None or before not in _resolvers or before == name:
+        _resolvers[name] = resolver
+        return
+    _resolvers.pop(name, None)
+    items = list(_resolvers.items())
+    at = [key for key, _ in items].index(before)
+    items.insert(at, (name, resolver))
+    _resolvers.clear()
+    _resolvers.update(items)
 
 
 def registered_resolvers() -> tuple[str, ...]:
@@ -126,7 +141,8 @@ def registered_resolvers() -> tuple[str, ...]:
 
 
 class AuthenticationMiddleware:
-    """Sets `request.state.principal` (and `auth_failure`) for every HTTP request from the
+    """Sets `request.state.principal` (and `auth_failure`) for every HTTP request and
+    WebSocket handshake from the
     first resolver that recognises its credentials. Pure ASGI, so the state reaches the
     route and a streamed body alike."""
 
@@ -134,8 +150,14 @@ class AuthenticationMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and _resolvers:
-            request = Request(scope)
+        if scope["type"] in ("http", "websocket") and _resolvers:
+            # A WebSocket handshake (/ws, P0-22) carries the same cookies; resolvers read
+            # only what the two share (headers, cookies, app state).
+            request = (
+                Request(scope)
+                if scope["type"] == "http"
+                else cast("Request", HTTPConnection(scope))
+            )
             for resolver in list(_resolvers.values()):
                 found = await resolver(request)
                 if isinstance(found, Principal):

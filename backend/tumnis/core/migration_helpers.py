@@ -89,3 +89,46 @@ def create_tenant_table(
 def drop_tenant_table(name: str) -> None:
     """Drops the table with its policy, trigger and indexes."""
     op.drop_table(name)
+
+
+def canonical_columns(
+    table: str, *, tainted: bool, optional_key: bool = False
+) -> list[sa.Column[Any] | sa.Index]:
+    """The common canonical columns (P0-12, FR-14.1) and the unique key
+    `uq_<table>_ws_conn_ext` on (workspace_id, connection_id, external_id), for a table
+    that holds provider records. Needs `connections` and `raw_payloads` (integrations
+    revision `integrations_0001`). `tainted` is the column default: outside text
+    (messages, threads, notes, people, documents) is tainted, artifacts and events are
+    not. `optional_key` (documents, which also hold text entries and uploads) makes
+    connection_id, external_id and fetched_at nullable and the unique key partial."""
+    key_where = sa.text("external_id IS NOT NULL") if optional_key else None
+    return [
+        sa.Column(
+            "connection_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("connections.id"),
+            nullable=optional_key,
+        ),
+        sa.Column("external_id", sa.Text, nullable=optional_key),
+        sa.Column("provider_url", sa.Text, nullable=True),
+        sa.Column("fetched_at", sa.TIMESTAMP(timezone=True), nullable=optional_key),
+        sa.Column(
+            "raw_payload_id", UUID(as_uuid=True), sa.ForeignKey("raw_payloads.id"), nullable=True
+        ),
+        sa.Column("content_hash", sa.LargeBinary, nullable=False),
+        sa.Column(
+            "tainted",
+            sa.Boolean,
+            nullable=False,
+            server_default=sa.text("true" if tainted else "false"),
+        ),
+        sa.Column("source", sa.Text, nullable=False),
+        sa.Index(
+            f"uq_{table}_ws_conn_ext",
+            "workspace_id",
+            "connection_id",
+            "external_id",
+            unique=True,
+            postgresql_where=key_where,
+        ),
+    ]

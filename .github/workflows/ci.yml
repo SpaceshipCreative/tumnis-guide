@@ -54,9 +54,9 @@ jobs:
       - name: CI scripts lint and types
         working-directory: backend
         run: |
-          uv run ruff check --config pyproject.toml ../scripts/ci
-          uv run ruff format --config pyproject.toml --check ../scripts/ci
-          uv run mypy --strict ../scripts/ci
+          uv run ruff check --config pyproject.toml ../scripts/ci ../scripts/release
+          uv run ruff format --config pyproject.toml --check ../scripts/ci ../scripts/release
+          uv run mypy --strict ../scripts/ci ../scripts/release
       - name: Frontend lint and types
         working-directory: frontend
         run: |

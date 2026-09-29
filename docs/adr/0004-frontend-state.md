@@ -16,6 +16,7 @@ State lives in four places, each with one owner: the URL (TanStack Router, searc
 - Machines are tested by sending events and asserting states, with no rendering; every guard and action a machine references is declared in `setup({ guards, actions })`.
 - Queries use a long `staleTime`, because the socket, not a timer, says when data changed.
 - Route loaders prefetch their queries so screens render with data on first paint.
+- Styling (P0-22): Tailwind CSS v4 with the design tokens as CSS variables in `frontend/src/styles.css` (dark mode through `prefers-color-scheme`, shared with the Tauri client), reduced motion respected everywhere, and Radix primitives added when a screen needs one (the plan default for architecture open question 2; Scott confirms).
 
 ## Sources
 - [TanStack Router search params guide](https://tanstack.com/router/latest/docs/framework/react/guide/search-params)

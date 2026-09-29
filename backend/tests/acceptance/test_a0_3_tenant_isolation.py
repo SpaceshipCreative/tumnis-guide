@@ -35,7 +35,6 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.req("Hosted readiness", "ADR-0009"),
     pytest.mark.wp("P0-05"),
-    pytest.mark.xfail(strict=True, reason="spec:P0-05"),
 ]
 
 

@@ -884,8 +884,8 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
 
 @dataclass(frozen=True)
 class AppWithFakes:
-    """The app with fakes on the per-test database, a workspace and a full-scope test
-    principal: send `principal_headers` with each request."""
+    """The app with fakes on the per-test database, a workspace and a full-scope API key
+    (P0-14): send `principal_headers` (`Authorization: Bearer tmn_...`) with each request."""
 
     app: FastAPI
     workspace: WorkspaceHandle
@@ -903,29 +903,36 @@ def app_with_fakes(  # noqa: PLR0917
     workspace: WorkspaceHandle,
 ) -> Iterator[AppWithFakes]:
     """create_app on `db` with TUMNIS_ADAPTERS=fake, the seed set loaded once its writers
-    exist (P0-17, P0-18), and `X-Test-Principal` read by the P0-10 test middleware (a
-    session principal in `workspace`; a real key header after P0-14). Rate limits are off:
-    the clock is fixed, so a bucket would never refill under the fuzzer's hundreds of
-    requests (P0-10's tests cover the limits). A sync fixture: the caller drives the app
-    through its own event loop (Schemathesis runs each request in a TestClient, whose
-    lifespan disposes the engines)."""
+    exist (P0-17, P0-18), and a real API key holding every scope (made through the auth
+    api, P0-14) for `workspace`. Rate limits are off: the clock is fixed, so a bucket would
+    never refill under the fuzzer's hundreds of requests (P0-10's tests cover the limits).
+    A sync fixture: the caller drives the app through its own event loop (Schemathesis
+    runs each request in a TestClient, whose lifespan disposes the engines)."""
     from tumnis.app import create_app  # noqa: PLC0415
     from tumnis.core import db as core_db  # noqa: PLC0415
-    from tumnis.core.tests.integration._demo import (  # noqa: PLC0415
-        TestPrincipalMiddleware,
-        principal_header,
-    )
+    from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
+    from tumnis.core.types import ActorRef  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth_api  # noqa: PLC0415
+    from tumnis.modules.auth.scopes import SCOPES  # noqa: PLC0415
     from tumnis.seed import writers_registered  # noqa: PLC0415
 
     if writers_registered():
         asyncio.run(_load_set(SEED_SET, db, clock))
     settings = settings_for(db, dbos_sys_db, api_key_pepper_file=str(pepper_file.path))
     app = create_app(settings=settings, clock=clock)
-    app.add_middleware(TestPrincipalMiddleware)
     app.state.rate_limiter = None
     app.state.auth_lockouts = False  # the same for sign-in lockouts (P0-13)
+    ctx = WorkspaceContext(workspace.id, ActorRef(f"user:{workspace.user_id}"))
+
+    async def make_key() -> str:
+        body = auth_api.KeyIn(name="fuzzer", scopes=sorted(SCOPES))
+        created = await auth_api.create_key(ctx, body, now=clock.now())
+        await core_db.dispose()
+        return created.key
+
+    key = asyncio.run(make_key())
     try:
-        yield AppWithFakes(app, workspace, principal_header(workspace.id, uuid.uuid4()))
+        yield AppWithFakes(app, workspace, {"Authorization": f"Bearer {key}"})
     finally:
         asyncio.run(core_db.dispose())
 
@@ -1060,6 +1067,40 @@ def session_client(
     http.account = run_async(start)
     clock.advance(TOTP_STEP)
     return http
+
+
+class KeyClientFactory(Protocol):
+    async def __call__(
+        self, scopes: Any, projects: Any = None
+    ) -> httpx.AsyncClient: ...  # a tests._keys.KeyClient
+
+
+@pytest.fixture
+def key_client(
+    app: FastAPI, clock: FixedClock, db: DbUrls, request: pytest.FixtureRequest
+) -> KeyClientFactory:
+    """`await key_client(scopes, projects=None)`: an httpx client on `app` sending
+    `Authorization: Bearer <key>` for a fresh API key with those scopes (limited to
+    `projects` when given), made through the auth api's `create_key` (P0-14). The key
+    belongs to the `workspace` fixture's workspace (made by its user), or to workspace B
+    when the test uses `two_workspaces` (A0.3). Writes get an `Idempotency-Key`; the client
+    carries `.key` and `.key_id`."""
+    from tests._keys import key_client_for  # noqa: PLC0415
+    from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR, ActorRef  # noqa: PLC0415
+
+    if "two_workspaces" in request.fixturenames:
+        b: WorkspaceHandle = request.getfixturevalue("two_workspaces")[1]
+        ctx = WorkspaceContext(b.id, SYSTEM_ACTOR)
+    else:
+        handle: WorkspaceHandle = request.getfixturevalue("workspace")
+        actor = ActorRef(f"user:{handle.user_id}") if handle.user_id else SYSTEM_ACTOR
+        ctx = WorkspaceContext(handle.id, actor)
+
+    async def make(scopes: Any, projects: Any = None) -> httpx.AsyncClient:
+        return await key_client_for(app, ctx, scopes, projects, now=clock.now())
+
+    return make
 
 
 # --- Traces and JSON logs (P0-27) ----------------------------------------------------------

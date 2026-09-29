@@ -98,7 +98,7 @@ async def test_action_rolled_back_leaves_no_audit_row(
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
+@pytest.mark.xfail(strict=True, reason="spec:P0-26")
 async def test_real_actions_store_no_secrets(audit_ctx: Ctx, db: DbUrls) -> None:
     """T-P0-15-10
     After a login, a key create and a secret setting change, the three actions are audited

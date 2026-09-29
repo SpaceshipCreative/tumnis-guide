@@ -1,0 +1,78 @@
+# Release a `v*.*.*` tag (P0-30, REL-4, SAAS-1, SEC-7). The rehearsal deploys the
+# previous tag (N), this commit (N+1), then N again on the homelab runner and fails on any
+# unhealthy step; only then does the release job check the changelog, push the image built
+# with VERSION=<tag>, write a CycloneDX SBOM of it (scripts/ci/sbom.sh, P0-16) and attach
+# the SBOM and schemas/openapi.json to a GitHub release whose notes are the tag's
+# CHANGELOG.md section. The process: README, "Releases and rollback".
+#
+# Actions are pinned by commit SHA; Renovate bumps the SHA and the version comment.
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write # gh release create
+  packages: write # push the tagged image
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  rehearsal:
+    runs-on: [self-hosted, homelab]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # git describe finds the previous tag
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rollback rehearsal (previous tag, this commit, previous tag)
+        run: |
+          if ! previous="$(git describe --tags --abbrev=0 --match 'v*.*.*' "${GITHUB_REF_NAME}^" 2>/dev/null)"; then
+            echo "::notice::${GITHUB_REF_NAME} is the first release: there is no N to roll back to"
+            exit 0
+          fi
+          scripts/release/rollback_rehearsal.sh "$previous" "${GITHUB_SHA}"
+
+  release:
+    needs: rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: SemVer tag with a dated CHANGELOG.md section
+        run: python3 scripts/release/check_changelog.py "${GITHUB_REF_NAME}"
+      - name: Image name (the one compose.yaml deploys; registry names are lowercase)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tumnis" >> "$GITHUB_ENV"
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          load: true # Trivy reads the image from the local daemon
+          build-args: VERSION=${{ github.ref_name }}
+          tags: ${{ env.IMAGE }}:${{ github.ref_name }}
+      - name: CycloneDX SBOM of the image
+        run: scripts/ci/sbom.sh "${IMAGE}:${GITHUB_REF_NAME}" sbom.cdx.json
+      - name: OpenAPI spec at this tag (the contract job keeps it equal to the code)
+        run: cp schemas/openapi.json "openapi-${GITHUB_REF_NAME}.json"
+      - name: Release notes from CHANGELOG.md
+        run: python3 scripts/release/check_changelog.py --extract "${GITHUB_REF_NAME}" > notes.md
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" sbom.cdx.json "openapi-${GITHUB_REF_NAME}.json"
+          --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag

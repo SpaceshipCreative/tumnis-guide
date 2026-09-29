@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "fetched_at": "2026-03-09T12:00:00Z",
+  "record_type": "document",
+  "external_id": "file-7",
+  "provider_url": "https://drive.example.com/f/file-7",
+  "title": "Brief",
+  "kind": "file",
+  "path": "Clients/Acme/Brief.docx",
+  "source_revision": "r12",
+  "tags": [
+    "brief"
+  ]
+}

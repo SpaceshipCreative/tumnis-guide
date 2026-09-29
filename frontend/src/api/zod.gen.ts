@@ -38,6 +38,47 @@ export const zDeadLetterOut = z.object({
 });
 
 /**
+ * KeyCreated
+ */
+export const zKeyCreated = z.object({
+  created_at: z.iso.datetime(),
+  expires_at: z.iso.datetime().nullable(),
+  id: z.uuid(),
+  key: z.string(),
+  last_used_at: z.iso.datetime().nullable(),
+  name: z.string(),
+  prefix: z.string(),
+  project_ids: z.array(z.uuid()).nullable(),
+  revoked_at: z.iso.datetime().nullable(),
+  scopes: z.array(z.string()),
+});
+
+/**
+ * KeyIn
+ */
+export const zKeyIn = z.object({
+  expires_at: z.iso.datetime().nullish(),
+  name: z.string().min(1).max(200),
+  project_ids: z.array(z.uuid()).max(200).nullish(),
+  scopes: z.array(z.string()).max(32),
+});
+
+/**
+ * KeyOut
+ */
+export const zKeyOut = z.object({
+  created_at: z.iso.datetime(),
+  expires_at: z.iso.datetime().nullable(),
+  id: z.uuid(),
+  last_used_at: z.iso.datetime().nullable(),
+  name: z.string(),
+  prefix: z.string(),
+  project_ids: z.array(z.uuid()).nullable(),
+  revoked_at: z.iso.datetime().nullable(),
+  scopes: z.array(z.string()),
+});
+
+/**
  * LoginIn
  *
  * `provider` picks the sign-in provider; the other string fields are its credentials
@@ -74,6 +115,14 @@ export const zPageDeadLetterOut = z.object({
 });
 
 /**
+ * Page[KeyOut]
+ */
+export const zPageKeyOut = z.object({
+  items: z.array(zKeyOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
  * Problem
  */
 export const zProblem = z.object({
@@ -84,6 +133,13 @@ export const zProblem = z.object({
   status: z.int(),
   title: z.string(),
   type: z.string(),
+});
+
+/**
+ * RotateIn
+ */
+export const zRotateIn = z.object({
+  grace_minutes: z.int().gte(0).lte(1440).optional().default(0),
 });
 
 /**
@@ -295,6 +351,43 @@ export const zDeadLettersPostRetryPath = z.object({
  * Successful Response
  */
 export const zDeadLettersPostRetryResponse = zDeadLetterOut;
+
+export const zAuthListKeysQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zAuthListKeysResponse = zPageKeyOut;
+
+export const zAuthCreateKeyBody = zKeyIn;
+
+/**
+ * Successful Response
+ */
+export const zAuthCreateKeyResponse = zKeyCreated;
+
+export const zAuthRevokeKeyPath = z.object({
+  id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAuthRevokeKeyResponse = z.void();
+
+export const zAuthRotateKeyBody = zRotateIn.default({ grace_minutes: 0 });
+
+export const zAuthRotateKeyPath = z.object({
+  id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAuthRotateKeyResponse = zKeyCreated;
 
 /**
  * Successful Response

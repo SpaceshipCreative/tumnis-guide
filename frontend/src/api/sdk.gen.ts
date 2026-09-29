@@ -15,6 +15,12 @@ import type {
   AuditListAuditData,
   AuditListAuditErrors,
   AuditListAuditResponses,
+  AuthCreateKeyData,
+  AuthCreateKeyErrors,
+  AuthCreateKeyResponses,
+  AuthListKeysData,
+  AuthListKeysErrors,
+  AuthListKeysResponses,
   AuthListSessionsData,
   AuthListSessionsErrors,
   AuthListSessionsResponses,
@@ -24,9 +30,15 @@ import type {
   AuthLogoutData,
   AuthLogoutErrors,
   AuthLogoutResponses,
+  AuthRevokeKeyData,
+  AuthRevokeKeyErrors,
+  AuthRevokeKeyResponses,
   AuthRevokeSessionData,
   AuthRevokeSessionErrors,
   AuthRevokeSessionResponses,
+  AuthRotateKeyData,
+  AuthRotateKeyErrors,
+  AuthRotateKeyResponses,
   AuthSetupData,
   AuthSetupErrors,
   AuthSetupResponses,
@@ -65,10 +77,14 @@ import type {
 } from "./types.gen";
 import {
   zAuditListAuditResponse,
+  zAuthCreateKeyResponse,
+  zAuthListKeysResponse,
   zAuthListSessionsResponse,
   zAuthLoginResponse,
   zAuthLogoutResponse,
+  zAuthRevokeKeyResponse,
   zAuthRevokeSessionResponse,
+  zAuthRotateKeyResponse,
   zAuthSetupResponse,
   zAuthSetupTotpResponse,
   zAuthSignOutOtherDevicesResponse,
@@ -359,6 +375,92 @@ export const deadLettersPostRetry = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zDeadLettersPostRetryResponse.parseAsync(data),
     url: "/v1/dead-letters/{dead_letter_id}/retry",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List Keys
+ *
+ * The workspace's API keys: name, prefix, scopes, projects, created, expires, last
+ * used, revoked; never the secret.
+ */
+export const authListKeys = <ThrowOnError extends boolean = false>(
+  options?: Options<AuthListKeysData, ThrowOnError>,
+): RequestResult<AuthListKeysResponses, AuthListKeysErrors, ThrowOnError> =>
+  (options?.client ?? client).get<
+    AuthListKeysResponses,
+    AuthListKeysErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthListKeysResponse.parseAsync(data),
+    url: "/v1/keys",
+    ...options,
+  });
+
+/**
+ * Create Key
+ *
+ * A new key; the response shows `key` once. 422 `unknown_scope`.
+ */
+export const authCreateKey = <ThrowOnError extends boolean = false>(
+  options: Options<AuthCreateKeyData, ThrowOnError>,
+): RequestResult<AuthCreateKeyResponses, AuthCreateKeyErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    AuthCreateKeyResponses,
+    AuthCreateKeyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthCreateKeyResponse.parseAsync(data),
+    url: "/v1/keys",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Revoke Key
+ *
+ * Revokes the key: every process refuses it within a second.
+ */
+export const authRevokeKey = <ThrowOnError extends boolean = false>(
+  options: Options<AuthRevokeKeyData, ThrowOnError>,
+): RequestResult<AuthRevokeKeyResponses, AuthRevokeKeyErrors, ThrowOnError> =>
+  (options.client ?? client).delete<
+    AuthRevokeKeyResponses,
+    AuthRevokeKeyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthRevokeKeyResponse.parseAsync(data),
+    url: "/v1/keys/{id}",
+    ...options,
+  });
+
+/**
+ * Rotate Key
+ *
+ * A new secret on the same key, shown once; the old one stops at once or after
+ * `grace_minutes` (0 to 1,440). 409 `key_revoked`.
+ */
+export const authRotateKey = <ThrowOnError extends boolean = false>(
+  options: Options<AuthRotateKeyData, ThrowOnError>,
+): RequestResult<AuthRotateKeyResponses, AuthRotateKeyErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    AuthRotateKeyResponses,
+    AuthRotateKeyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthRotateKeyResponse.parseAsync(data),
+    url: "/v1/keys/{id}/rotate",
     ...options,
     headers: {
       "Content-Type": "application/json",
