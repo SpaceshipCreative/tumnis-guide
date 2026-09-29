@@ -156,19 +156,24 @@ TzWorkspace = Callable[..., Awaitable[None]]
 @pytest.fixture
 def tz_workspace(db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock) -> TzWorkspace:
     """`tz_workspace(tz, at=None)`: sets the workspace timezone through
-    `auth.api.put_workspace_settings` at `at` (default: the clock's now). The settings row's
-    change time is the day-close anchor, so a test fixes it here."""
+    `auth.api.put_workspace_settings` at `at` (default: the clock's now). The timezone's
+    change time is the day-close anchor, and a PUT keeping the zone leaves it, so the
+    helper then fixes `workspaces.timezone_changed_at` to `at` either way."""
     from tumnis.modules.auth import api as auth  # noqa: PLC0415
 
     async def set_timezone(tz: str, at: datetime | None = None) -> None:
+        when = at or clock.now()
         [(version,)] = owner_rows(
             db, "SELECT version FROM workspaces WHERE id = %s", (workspace.id,)
         )
         await auth.put_workspace_settings(
-            workspace.ctx,
-            auth.WorkspaceSettingsIn(timezone=tz, version=version),
-            now=at or clock.now(),
+            workspace.ctx, auth.WorkspaceSettingsIn(timezone=tz, version=version), now=when
         )
+        with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+            conn.execute(
+                b"UPDATE workspaces SET timezone_changed_at = %s WHERE id = %s",
+                (when, workspace.id),
+            )
 
     return set_timezone
 

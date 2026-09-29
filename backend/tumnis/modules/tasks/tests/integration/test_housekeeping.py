@@ -278,6 +278,43 @@ async def test_changing_timezone_moves_next_day_close(  # noqa: PLR0917
     assert _day_closes(db) == [(date(2026, 3, 8), 1), (date(2026, 3, 9), 1)]
 
 
+@pytest.mark.req("FR-3.6", "REL-6")
+@pytest.mark.wp("P0-19")
+async def test_settings_write_keeping_timezone_keeps_day_close(  # noqa: PLR0917
+    dbos: type[DBOS],
+    session_client: SessionClient,
+    clock: FixedClock,
+    make_task: MakeTask,
+    set_status: SetStatus,
+    tz_workspace: TzWorkspace,
+    db: DbUrls,
+) -> None:
+    """A settings write that keeps the timezone does not move the day-close anchor. New
+    York midnight passes at 2026-03-09T04:00Z; before the next tick, one PUT changes only
+    the subtask threshold and another re-sends the same zone. The 04:05Z tick still closes
+    2026-03-08 and rolls the Today task over.
+    """
+    await tz_workspace("America/New_York", at=_at("2026-03-08T05:00Z"))
+    clock.set(_at("2026-03-09T03:50Z"))
+    [task] = await _today_tasks(make_task, set_status, 1)
+
+    for at, change in [
+        ("2026-03-09T04:01Z", {"subtask_threshold_min": 45}),
+        ("2026-03-09T04:02Z", {"timezone": "America/New_York"}),
+    ]:
+        clock.set(_at(at))
+        current = (await session_client.get("/v1/settings/workspace")).json()
+        put = await session_client.put(
+            "/v1/settings/workspace", json={**change, "version": current["version"]}
+        )
+        assert put.status_code == 200, put.text
+
+    clock.set(_at("2026-03-09T04:05Z"))
+    await _tick(clock)
+    assert _state(db, [task]) == [("backlog", 1)]
+    assert _day_closes(db) == [(date(2026, 3, 8), 1)]
+
+
 @pytest.mark.req("REL-6")
 @pytest.mark.wp("P0-19")
 async def test_trash_purge_after_retention(  # noqa: PLR0917
