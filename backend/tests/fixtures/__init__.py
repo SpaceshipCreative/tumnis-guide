@@ -66,6 +66,9 @@ class Fakes:
     def names(self) -> tuple[str, ...]:
         return tuple(spec.name for spec in registered())
 
+    def adapter_health(self) -> dict[str, str]:
+        raise NotImplementedError
+
 
 @pytest.fixture
 def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:

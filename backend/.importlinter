@@ -66,6 +66,10 @@ forbidden_modules =
     tumnis.worker
     tumnis.cli
     tumnis.wiring
+# Core's own tests may load the composition root to check what it wires (P0-09).
+ignore_imports =
+    tumnis.core.tests.** -> tumnis.wiring
+unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:module-graph-acyclic]
 name = No cycles between modules
