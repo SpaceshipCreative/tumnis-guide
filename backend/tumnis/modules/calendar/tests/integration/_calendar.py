@@ -30,8 +30,8 @@ if TYPE_CHECKING:
     from tests._pg import DbUrls
     from tumnis.core.clock import FixedClock
     from tumnis.core.tenancy import WorkspaceContext
-    from tumnis.modules.calendar.adapters.port import CalendarInfo
     from tumnis.modules.calendar.adapters.fake import FakeGoogleCalendar
+    from tumnis.modules.calendar.adapters.port import CalendarInfo
 
 Account = Literal["a", "b"]
 T0 = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)

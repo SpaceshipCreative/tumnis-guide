@@ -395,7 +395,7 @@ TEAM = "team@group.calendar.example.com"
 def _team_page() -> dict[str, Any]:
     """One events.list page of the shared team calendar: account a's last recorded page
     with its event ids renamed, so they never collide with the primary calendar's."""
-    response = recording("account_a_page3")["response"]
+    response: dict[str, Any] = recording("account_a_page3")["response"]
     for item in response["items"]:
         item["id"] = f"team-{item['id']}"
     return response
@@ -403,7 +403,6 @@ def _team_page() -> dict[str, Any]:
 
 @pytest.mark.req("FR-14.4")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="review:P1-09 reconnect prunes the selection")
 async def test_reconnect_drops_calendars_no_longer_listed(
     app_db: DbUrls,
     workspace: WorkspaceHandle,

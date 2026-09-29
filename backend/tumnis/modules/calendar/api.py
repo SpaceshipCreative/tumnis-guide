@@ -466,8 +466,10 @@ async def connect_account(
     """A Google account as the OAuth exchange leaves it: its connection (account = the
     primary calendar's id, the address) with the tokens sealed, and its `calendar_accounts`
     row `connected`. A first connect selects the primary calendar; a reconnect keeps the
-    selection (within the calendars still listed). A list with no calendar marked primary
-    is refused (ValueError): the address never comes from a shared or holiday calendar."""
+    selection within the calendars still listed (the primary when none is left) and
+    soft-deletes the events of the calendars it drops. A list with no calendar marked
+    primary is refused (ValueError): the address never comes from a shared or holiday
+    calendar."""
     primary = next((c for c in calendars if c.primary), None)
     if primary is None:
         raise ValueError("a Google account lists its primary calendar")
@@ -483,11 +485,21 @@ async def connect_account(
         await integrations.put_credentials(
             ctx, connection_id, _credentials(tokens, previous), session=s
         )
+        existing: list[str] = (
+            await s.execute(
+                select(_accounts.c.selected_calendar_ids)
+                .where(_accounts.c.connection_id == connection_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none() or []
+        listed_ids = {c.id for c in listed}
+        kept = [c for c in existing if c in listed_ids] or [primary.id]
+        dropped = sorted(set(existing) - set(kept))
         insert = pg_insert(_accounts).values(
             connection_id=connection_id,
             google_email=primary.id,
             calendars=[c.model_dump(mode="json") for c in listed],
-            selected_calendar_ids=[primary.id],
+            selected_calendar_ids=kept,
             status="connected",
         )
         row = (
@@ -498,6 +510,7 @@ async def connect_account(
                         set_={
                             "google_email": insert.excluded.google_email,
                             "calendars": insert.excluded.calendars,
+                            "selected_calendar_ids": insert.excluded.selected_calendar_ids,
                             "status": "connected",
                             "deleted_at": None,
                         },
@@ -507,7 +520,24 @@ async def connect_account(
             .mappings()
             .one()
         )
+        await _drop_calendar_events(s, connection_id, dropped)
     return _account_out(row)
+
+
+async def _drop_calendar_events(
+    s: AsyncSession, connection_id: UUID, calendar_ids: Sequence[str]
+) -> None:
+    """Soft-delete the live events of calendars no longer synced."""
+    if calendar_ids:
+        await s.execute(
+            update(_events)
+            .where(
+                _events.c.connection_id == connection_id,
+                _events.c.calendar_id.in_(calendar_ids),
+                _events.c.deleted_at.is_(None),
+            )
+            .values(deleted_at=func.now())
+        )
 
 
 async def select_calendars(
@@ -534,16 +564,7 @@ async def select_calendars(
             s, _accounts, account_id, expected_version, {"selected_calendar_ids": chosen}
         )
         dropped = sorted(set(current.selected_calendar_ids) - set(chosen))
-        if dropped:
-            await s.execute(
-                update(_events)
-                .where(
-                    _events.c.connection_id == current.connection_id,
-                    _events.c.calendar_id.in_(dropped),
-                    _events.c.deleted_at.is_(None),
-                )
-                .values(deleted_at=func.now())
-            )
+        await _drop_calendar_events(s, current.connection_id, dropped)
     return _account_out(row)
 
 
