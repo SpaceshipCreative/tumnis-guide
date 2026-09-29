@@ -22,10 +22,19 @@ type Saved = z.infer<typeof zProjectOut>;
 export function SettingsSection({ project }: { project: Shown }) {
   const queryClient = useQueryClient();
   const ids = { label: useId(), hint: useId() };
-  const [saved, setSaved] = useState({
+  const [written, setSaved] = useState({
     localOnly: project.local_decisions_only ?? false,
     version: project.version,
   });
+  // A refetch that brings a newer project (a rename elsewhere, a live update) wins over
+  // what this section last wrote, so the next toggle sends the current version.
+  const saved =
+    project.version > written.version
+      ? {
+          localOnly: project.local_decisions_only ?? false,
+          version: project.version,
+        }
+      : written;
   const [message, setMessage] = useState<string | null>(null);
 
   function show(current: Saved) {

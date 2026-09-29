@@ -50,6 +50,40 @@ async function togglesWithOnePatch(viewport: Viewport): Promise<void> {
 }
 
 describe("SettingsSection", () => {
+  test("[P1-02][REL-2] a refetched project's newer version is the one the toggle sends", async () => {
+    const project = {
+      ...makeProject({ name: "Beta app", version: 3 }),
+      local_decisions_only: false,
+    };
+    const recorder = new Recorder();
+    server.use(
+      http.patch("*/v1/projects/:projectId", async ({ request }) => {
+        const sent = await recorder.record(request);
+        return HttpResponse.json({
+          ...project,
+          ...(sent.body as Record<string, unknown>),
+          version: 6,
+        });
+      }),
+    );
+    const { user, rerender } = renderWithProviders(
+      <SettingsSection project={project} />,
+    );
+    rerender(<SettingsSection project={{ ...project, version: 5 }} />);
+
+    await user.click(
+      screen.getByRole("switch", { name: "Local decisions only" }),
+    );
+
+    await waitFor(() => {
+      expect(recorder.sent).toHaveLength(1);
+    });
+    expect(recorder.sent[0]?.body).toEqual({
+      local_decisions_only: true,
+      version: 5,
+    });
+  });
+
   test("[P1-02][Data flow rule 6] T-P1-02-16 local decisions toggle sends one PATCH at 375 px", async () => {
     await togglesWithOnePatch("phone");
   });
