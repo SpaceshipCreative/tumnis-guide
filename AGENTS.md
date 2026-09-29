@@ -48,7 +48,7 @@ Four boundary rules:
 | `module-graph-acyclic` | No cycles between sibling modules |
 | `search-usage-subscribe-only` | `search` and `usage` import no other module |
 
-A meta-test also parses every `rules*.py` and allows only pure stdlib (`datetime`, `zoneinfo`, `typing`, `dataclasses`, `enum`, `collections`, `itertools`, `functools`, `math`, `decimal`, `fractions`, `re`, `uuid`, `bisect`, `heapq`), `pydantic`, `tumnis.core.types` and the module's own `rules*`.
+A meta-test also parses every `rules*.py` and allows only pure stdlib (`datetime`, `zoneinfo`, `typing`, `dataclasses`, `enum`, `collections`, `itertools`, `functools`, `math`, `decimal`, `fractions`, `re`, `uuid`, `bisect`, `heapq`, `unicodedata`), `pydantic`, `tumnis.core.types` and the module's own `rules*`.
 
 The composition roots (`tumnis.app`, `tumnis.worker`, `tumnis.cli`, `tumnis.wiring`) may import every module's `router`, `mcp`, `workflows` and `events` to wire them. Keep module `__init__.py` files empty: a re-export there would bypass the api-only rule.
 
@@ -198,11 +198,11 @@ Some targets are filled in by later WPs; if a target is still empty, say so rath
 ## Never
 
 - Never hand-edit `frontend/src/api/`, `schemas/` or `backend/tests/contract/generated/`: `make gen` writes them, and the Contract job fails on any diff.
-- Never call out to the network from the api process; it writes and enqueues, and the worker makes every outbound call.
+- Never call out to the network from the api process; it writes and enqueues, and the worker makes every outbound call. Exception: knowledge storage (P1-14) calls a location from the api process when a user saves or tests it, checks a project folder, or saves a note. These calls are short, user-initiated and bounded by the adapter's timeouts, and they go only through the storage port (`knowledge.api.open_backend`) (approved by Scott, 2026-09-29).
 - Never read or write another module's tables, or import anything but another module's `api`.
 - Never use `datetime.now()` (or any clock, randomness or I/O) in `rules.py`.
 - Never store secrets in environment variables; the only secret-related variables are file paths (`MASTER_KEY_FILE`, `API_KEY_PEPPER_FILE`, `METRICS_TOKEN_FILE`). Per-workspace secrets live encrypted in Postgres.
 - Never edit an assertion in, or delete, an existing test; never add the `spec-change` label.
-- Never build an `httpx` client outside `tumnis.core.net`: outbound calls use `guarded_client(settings.net_policy(), timeout=...)` (SSRF guard, pinned IP, redirects re-checked by `follow_redirects`), and non-HTTP clients connect to the address `resolve_and_check` returns. Never import `requests` or `urllib.request` in `tumnis/`. Exception: the Jev SDK (`typesafe-sdk`) builds its own client to its third-party API in `tumnis/modules/decisions/adapters/jev.py` (approved by Scott, 2026-09-29).
+- Never build an `httpx` client outside `tumnis.core.net`: outbound calls use `guarded_client(settings.net_policy(), timeout=...)` (SSRF guard, pinned IP, redirects re-checked by `follow_redirects`), and non-HTTP clients connect to the address `resolve_and_check` returns. Never import `requests` or `urllib.request` in `tumnis/`. Exception: the Jev SDK (`typesafe-sdk`) builds its own client to its third-party API in `tumnis/modules/decisions/adapters/jev.py` (approved by Scott, 2026-09-29). Exception: `S3Storage` (`tumnis/modules/knowledge/adapters/s3.py`) talks to S3 through aioboto3's own HTTP stack. Its endpoint is checked against the same `NetPolicy` with `resolve_and_check` when a location is saved or tested (a blocked endpoint is refused with 422 `ssrf_blocked`, and nothing is sent), and every connection resolves through that check (approved by Scott, 2026-09-29).
 - Never render HTML with `dangerouslySetInnerHTML` outside `frontend/src/components/common/SafeHtml.tsx`; outside HTML goes through `tumnis.core.sanitize.sanitize_html` on ingest and again on every read.
 - Never log request or message bodies, prompts or tokens (no `body=` or `prompt=` on a logger call); log structured fields that describe them. The `redact` processor is a backstop, not permission. The Security job's Semgrep rules (`.semgrep/tumnis.yml`) enforce these three.

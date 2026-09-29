@@ -7,6 +7,7 @@ export const SETTINGS_SECTIONS = [
   "dead-letters",
   "workspace",
   "calendar",
+  "storage",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
@@ -18,6 +19,7 @@ export const SECTION_LABELS: Record<SettingsSection, string> = {
   "dead-letters": "Dead letters",
   workspace: "Workspace",
   calendar: "Calendar",
+  storage: "Storage",
 };
 
 export function isSettingsSection(value: string): value is SettingsSection {

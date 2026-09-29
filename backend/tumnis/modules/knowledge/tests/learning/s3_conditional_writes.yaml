@@ -1,0 +1,16 @@
+# How S3-compatible providers answer conditional writes (P1-14, FR-15.7; architecture open
+# question 6). `precondition_failed`: the provider answers 412 (or 409) and keeps the
+# object; `ignored`: the put succeeds and overwrites. S3Storage's probe
+# (`probe_conditional_writes`) produces the same record, and a location saves
+# `capabilities.conditional_put` from it: true only when both answers are
+# `precondition_failed`; otherwise writes fall back to a HEAD check just before the put.
+#
+# minio: checked on every PR against the image the `minio` fixture pins
+# (test_minio_behavior_matches_record).
+image: "chainguard/minio@sha256:71674988a1c7ddd5724928633199152b11e4ddefd6c6ce2d60772ff4a8f22ca9"
+if_none_match_star: precondition_failed
+stale_if_match: precondition_failed
+# Other providers, recorded by hand with test_b2_behavior_recorded (see its docstring);
+# null until someone runs it against a real bucket.
+providers:
+  b2: null

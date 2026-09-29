@@ -73,4 +73,6 @@ export const NOT_LIVE = [
   // The OAuth start mints a fresh consent URL per call; the callback is a browser redirect.
   "calendarOauthStart",
   "calendarOauthCallback",
+  // Storage locations change only from the Settings screen, which refetches after each write.
+  "knowledgeListLocations",
 ] as const;

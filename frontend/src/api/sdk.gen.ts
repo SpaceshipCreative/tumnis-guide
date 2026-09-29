@@ -91,6 +91,21 @@ import type {
   HealthReadyData,
   HealthReadyErrors,
   HealthReadyResponses,
+  KnowledgeCreateLocationData,
+  KnowledgeCreateLocationErrors,
+  KnowledgeCreateLocationResponses,
+  KnowledgeListLocationsData,
+  KnowledgeListLocationsErrors,
+  KnowledgeListLocationsResponses,
+  KnowledgeSetDefaultLocationData,
+  KnowledgeSetDefaultLocationErrors,
+  KnowledgeSetDefaultLocationResponses,
+  KnowledgeSetProjectFolderData,
+  KnowledgeSetProjectFolderErrors,
+  KnowledgeSetProjectFolderResponses,
+  KnowledgeTestLocationData,
+  KnowledgeTestLocationErrors,
+  KnowledgeTestLocationResponses,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectErrors,
   ProjectsArchiveProjectResponses,
@@ -220,6 +235,11 @@ import {
   zDeadLettersPostDiscardResponse,
   zDeadLettersPostRetryResponse,
   zHealthLiveResponse,
+  zKnowledgeCreateLocationResponse,
+  zKnowledgeListLocationsResponse,
+  zKnowledgeSetDefaultLocationResponse,
+  zKnowledgeSetProjectFolderResponse,
+  zKnowledgeTestLocationResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
   zProjectsGetProjectResponse,
@@ -817,6 +837,125 @@ export const authRotateKey = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zAuthRotateKeyResponse.parseAsync(data),
     url: "/v1/keys/{id}/rotate",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List Locations
+ */
+export const knowledgeListLocations = <ThrowOnError extends boolean = false>(
+  options?: Options<KnowledgeListLocationsData, ThrowOnError>,
+): RequestResult<
+  KnowledgeListLocationsResponses,
+  KnowledgeListLocationsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    KnowledgeListLocationsResponses,
+    KnowledgeListLocationsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeListLocationsResponse.parseAsync(data),
+    url: "/v1/knowledge/locations",
+    ...options,
+  });
+
+/**
+ * Create Location
+ */
+export const knowledgeCreateLocation = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeCreateLocationData, ThrowOnError>,
+): RequestResult<
+  KnowledgeCreateLocationResponses,
+  KnowledgeCreateLocationErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeCreateLocationResponses,
+    KnowledgeCreateLocationErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeCreateLocationResponse.parseAsync(data),
+    url: "/v1/knowledge/locations",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Set Default Location
+ */
+export const knowledgeSetDefaultLocation = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeSetDefaultLocationData, ThrowOnError>,
+): RequestResult<
+  KnowledgeSetDefaultLocationResponses,
+  KnowledgeSetDefaultLocationErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeSetDefaultLocationResponses,
+    KnowledgeSetDefaultLocationErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeSetDefaultLocationResponse.parseAsync(data),
+    url: "/v1/knowledge/locations/{storage_location_id}/default",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Test Location
+ */
+export const knowledgeTestLocation = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeTestLocationData, ThrowOnError>,
+): RequestResult<
+  KnowledgeTestLocationResponses,
+  KnowledgeTestLocationErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeTestLocationResponses,
+    KnowledgeTestLocationErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeTestLocationResponse.parseAsync(data),
+    url: "/v1/knowledge/locations/{storage_location_id}/test",
+    ...options,
+  });
+
+/**
+ * Set Project Folder
+ */
+export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeSetProjectFolderData, ThrowOnError>,
+): RequestResult<
+  KnowledgeSetProjectFolderResponses,
+  KnowledgeSetProjectFolderErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    KnowledgeSetProjectFolderResponses,
+    KnowledgeSetProjectFolderErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeSetProjectFolderResponse.parseAsync(data),
+    url: "/v1/knowledge/projects/{project_id}/folder",
     ...options,
     headers: {
       "Content-Type": "application/json",
