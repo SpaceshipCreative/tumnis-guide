@@ -10,7 +10,6 @@ import pytest
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-21")
-@pytest.mark.xfail(strict=True, reason="spec:P0-21")
 def test_known_events_map_to_counters() -> None:
     """T-P0-21-01
     `task.created` raises `tasks_created` by 1 and `project.created` raises
@@ -42,7 +41,6 @@ def test_known_events_map_to_counters() -> None:
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-21")
-@pytest.mark.xfail(strict=True, reason="spec:P0-21")
 def test_unknown_event_counts_nothing() -> None:
     """T-P0-21-02
     An event with no line in the map (and one with an empty payload) yields no increments
@@ -54,3 +52,16 @@ def test_unknown_event_counts_nothing() -> None:
     assert increments("test.ping", {"note": "x"}) == []
     assert increments("", {}) == []
     assert increments("task.status_changed", {"task_id": str(uuid.uuid4())}) == []
+
+
+@pytest.mark.req("Hosted readiness")
+@pytest.mark.wp("P0-21")
+def test_counter_map_is_read_only_and_days_need_a_timezone() -> None:
+    """The map cannot be changed after import; a naive timestamp has no UTC day."""
+    from tumnis.modules.usage.rules import COUNTERS, usage_day  # noqa: PLC0415
+
+    assert len(COUNTERS) == len(list(COUNTERS))
+    with pytest.raises(TypeError):
+        COUNTERS["x.y"] = ()  # type: ignore[index]
+    with pytest.raises(ValueError, match="timezone-aware"):
+        usage_day(datetime(2026, 3, 9, 12, 0))  # noqa: DTZ001
