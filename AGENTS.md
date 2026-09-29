@@ -76,6 +76,24 @@ Every module has the same shape:
 
 **Tables and migrations.** Every tenant table lives in `public` and is created in its module's Alembic revision with `tumnis.core.migration_helpers.create_tenant_table(name, *columns)`: base columns (`id` uuidv7, `workspace_id`, `created_at`, `updated_at`, `version`, `deleted_at`, `created_by` with `ACTOR_CHECK`), a `(workspace_id, id)` index, row-level security with the `tenant_isolation` policy and the touch trigger. `workspace_id` leads every unique or multi-column index. A table made any other way fails the table registry (`backend/tests/meta/test_table_registry.py`) unless its allow-list in `backend/tests/meta/_catalog.py` names it with a reason. Each module's first revision has `branch_labels = ("<module>",)` and `depends_on = "auth_0001"` (the `workspaces` table; add other modules' revisions it references); new revisions: `uv run alembic revision -m "..." --head <module>@head`. Every revision declares `phase = "expand"` (additive; squawk checks it in CI) or `phase = "contract"` (drops what the previous release needed). Read and write tenant rows inside `tumnis.core.tenancy.tenant_session(WorkspaceContext(workspace_id, actor))`: the app role sees only the workspace in context, and no context sees nothing.
 
+**Routes.** Every `/v1` route is declared on `tumnis.core.routing.v1_router("<module>", prefixed=True)` (routes are `TumnisRoute`s; `create_app` includes each module's `router` under `/v1`) with `@route_policy(RoutePolicy(...))` under the route decorator; a route without a policy cannot be built, and the route registry (`backend/tests/meta/test_route_registry.py`) fails any write that is neither `idempotent=True` nor `idempotent=False` with a `not_idempotent_reason`, any bare `list[...]` response without an `unpaginated_reason`, and any `Page[...]` response not declared `paginated=True` with `cursor` and `limit`:
+
+```python
+router = v1_router("tasks", prefixed=True)
+
+@router.patch("/{task_id}")
+@route_policy(RoutePolicy(auth="session_or_key", scopes=frozenset({"tasks:write"}), idempotent=True))
+async def update_task(task_id: UUID, body: TaskPatch, session: SessionDep) -> TaskOut: ...
+
+@router.get("")
+@route_policy(RoutePolicy(auth="session_or_key", scopes=frozenset({"tasks:read"}), paginated=True))
+async def list_tasks(session: SessionDep, page: Annotated[PageParams, Depends(page_params)]) -> Page[TaskOut]:
+    return await paginate(session, stmt, keys=[SortKey(t.c.due_on, nulls_last_sentinel=date.max)],
+                          id_col=t.c.id, cursor=page.cursor, limit=page.limit, model=TaskOut)
+```
+
+An idempotent write runs in one transaction with its `Idempotency-Key` row (`SessionDep` from `tumnis.core.idempotency` is that session; never commit yourself); a retry replays the stored response with `Idempotent-Replayed: true` for 24 hours. Versioned writes use `tumnis.core.versioning.update_versioned` (stale: `StaleVersion`, answered 409 `stale_version` with `current`). Raise `tumnis.core.errors.ProblemError(status, "<code>", detail)` for every other error: every answer is `application/problem+json` with a stable `code`. The caller is `tumnis.core.principal.principal_of(request)`; rate limits (`RoutePolicy.rate_limit`, 429) and body limits (`max_body_bytes`, 413) come with the policy.
+
 **Events.** A module that changes its rows emits in the same transaction: inside `tenant_session`, `await tumnis.core.outbox.emit(session, SomethingV1(...), occurred_at=now)` writes an `outbox` row and NOTIFYs the relay; a rollback drops both. Payload models subclass `tumnis.core.events.EventPayload`, declare `schema_version: Literal[1] = 1` and register with `@event_type("<name>", 1)`; `emit` refuses a payload that fails its model. Subscribers live in the module's `events.py`: `@subscribe("<event>", name="<module>.<handler>")` on `async def handler(envelope: EventEnvelope) -> None`. Each (event, subscriber) runs once as its own `deliver_event` DBOS workflow with ID `<event_id>:<subscriber>`, retried with full-jitter backoff (5 attempts by default), then dead-lettered (`/v1/dead-letters`: retry or discard) without holding up other subscribers. Every handler must be idempotent: a crash inside one re-runs it. Never rename a subscriber: its name is part of the workflow ID, so a renamed one receives old events again; add a new one and delete the old. Kill-and-resume tests put `tumnis.core.faults.killpoint("<step>")` where a crash must be survived; only the worker arms it (from `TUMNIS_KILLPOINT`, never in prod), and the `worker_killer` fixture drives it.
 
 **Audit.** A SEC-3 action calls `tumnis.core.audit.record(session, action, ...)` in the action's own transaction (never from an event subscriber), and a new SEC-3 action adds a case to `backend/tests/audit_cases.py`.
