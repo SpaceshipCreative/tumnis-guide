@@ -36,7 +36,6 @@ CASES = [
 
 @pytest.mark.req("FR-4.1")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 @pytest.mark.parametrize(("label", "signals", "reason"), CASES)
 def test_reason_agrees_with_label(label: str, signals: dict[str, float], reason: str) -> None:
     """T-P1-01-14

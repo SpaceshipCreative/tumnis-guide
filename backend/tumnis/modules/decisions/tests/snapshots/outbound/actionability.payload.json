@@ -1,0 +1,25 @@
+{
+  "fields_sent": [
+    "body_head",
+    "kind",
+    "sender_email",
+    "subject"
+  ],
+  "point": "actionability",
+  "questions": {
+    "actionable": {
+      "criteria": {
+        "false": "It is informational: nothing is asked of the user and nothing is promised.",
+        "true": "It asks the user to do or decide something, or records a commitment."
+      },
+      "instructions": "This item asks the user to do or decide something, or records a commitment.",
+      "type": "noul"
+    }
+  },
+  "state": {
+    "body_head": "Hi Scott, the three onboarding screens are in Figma. Can you approve them by Friday so we can start the build?",
+    "kind": "email",
+    "sender_email": "lee@beta.example.org",
+    "subject": "Can you approve the onboarding screens?"
+  }
+}

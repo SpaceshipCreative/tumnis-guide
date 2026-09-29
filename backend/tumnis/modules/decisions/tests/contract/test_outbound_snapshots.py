@@ -18,7 +18,6 @@ def serialize(payload: object) -> str:
 
 @pytest.mark.req("Data flow rule 6")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 @pytest.mark.parametrize("point", sorted(POINTS))
 def test_payload_matches_snapshot(point: str) -> None:
     """T-P1-01-07
