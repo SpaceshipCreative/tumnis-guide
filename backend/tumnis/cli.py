@@ -199,7 +199,11 @@ def _use_master_key_file() -> None:
 @app.command()
 def seed(
     set_name: Annotated[
-        SeedSet, typer.Option("--set", help="seed: 3 projects, 30 tasks; load: 2,000 tasks")
+        SeedSet,
+        typer.Option(
+            "--set",
+            help="seed: 3 projects, 30 tasks; load: 2,000 tasks; ten_projects: seed + 7 projects",
+        ),
     ] = SeedSet.seed,
     anchor: Annotated[
         datetime | None,

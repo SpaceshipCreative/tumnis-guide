@@ -1,5 +1,7 @@
 import { http, HttpResponse, type RequestHandler } from "msw";
 
+import { dashboardDefaults } from "./dashboard";
+
 /**
  * `GET /v1/review/kinds` answering these registered kinds (the P0-18 registry). The
  * response shape lives here, not in the tests, so it can follow the generated schema.
@@ -35,7 +37,12 @@ export function session(signedIn: boolean): RequestHandler {
   );
 }
 
-// Default handlers shared by every test: the reads the shell itself makes. Anything
-// else fails (setup.ts listens with the "error" strategy); a test declares the other
-// endpoints it needs with `server.use(...)`.
-export const handlers: RequestHandler[] = [session(true), reviewKinds([])];
+// Default handlers shared by every test: the reads the shell itself makes, and the
+// dashboard's (it is the landing page, P0-23), empty. Anything else fails (setup.ts
+// listens with the "error" strategy); a test declares the other endpoints it needs, or
+// its own answers, with `server.use(...)`.
+export const handlers: RequestHandler[] = [
+  session(true),
+  reviewKinds([]),
+  ...dashboardDefaults,
+];

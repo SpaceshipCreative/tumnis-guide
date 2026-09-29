@@ -12,7 +12,7 @@ writers register (projects P0-17, tasks P0-18, events P0-12, documents P0-17).
 from __future__ import annotations
 
 import uuid
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from enum import StrEnum
@@ -35,9 +35,16 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 class SeedSet(StrEnum):
     seed = "seed"
     load = "load"
+    ten_projects = "ten_projects"  # the seed plus seven projects (P0-23's dashboard layout)
 
 
-SEED_PATHS = {SeedSet.seed: FIXTURES / "seed", SeedSet.load: FIXTURES / "load" / "load.yaml"}
+# A seed set is a folder or file, or several read in order as one set.
+SeedPath = Path | Sequence[Path]
+SEED_PATHS: dict[SeedSet, SeedPath] = {
+    SeedSet.seed: FIXTURES / "seed",
+    SeedSet.load: FIXTURES / "load" / "load.yaml",
+    SeedSet.ten_projects: (FIXTURES / "seed", FIXTURES / "extra" / "ten_projects.yaml"),
+}
 DayOffset = Annotated[str, StringConstraints(pattern=r"^[+-]\d+d$")]
 LocalTime = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
 TaskStatus = Literal["backlog", "today", "in_progress", "waiting_on_human", "in_review", "done"]
@@ -290,9 +297,12 @@ class SeedResult:
     ids: dict[str, UUID]  # seed key -> id the sink minted
 
 
-def read_seed(path: Path) -> list[_SeedDocument]:
+def read_seed(path: SeedPath) -> list[_SeedDocument]:
     """Parse and validate a seed file, or every *.yaml in a folder (sorted by name) but
-    the `expected_*.yaml` answer files beside them (P0-17's expected health)."""
+    the `expected_*.yaml` answer files beside them (P0-17's expected health); several
+    paths are read in order and their documents joined."""
+    if not isinstance(path, Path):
+        return [doc for part in path for doc in read_seed(part)]
     if path.is_dir():
         files = sorted(p for p in path.glob("*.yaml") if not p.name.startswith("expected_"))
     else:
@@ -317,7 +327,7 @@ def _time(value: str) -> time:
 
 
 async def load_seed(
-    path: Path, sink: SeedSink, *, anchor: date | None = None, clock: Clock
+    path: SeedPath, sink: SeedSink, *, anchor: date | None = None, clock: Clock
 ) -> SeedResult:
     """Load a seed set into `sink`. `anchor` defaults to today in the workspace timezone."""
     docs = read_seed(path)
