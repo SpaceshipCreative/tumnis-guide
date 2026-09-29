@@ -70,7 +70,6 @@ def _trace_context(db: DbUrls, event_id: UUID) -> dict[str, Any]:
 
 @pytest.mark.req("REL-5")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 async def test_request_trace_id_is_stored_on_outbox_row(
     app: FastAPI,
     client: httpx.AsyncClient,

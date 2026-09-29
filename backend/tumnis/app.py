@@ -24,6 +24,7 @@ from tumnis.core import (
     health,
     modules,
     ops_status,
+    telemetry,
     testing_routes,
 )
 from tumnis.core.clock import Clock, SystemClock
@@ -91,6 +92,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
         redoc_url=None,
     )
     install_problem_handlers(app)
+    telemetry.instrument_app(app)  # a SERVER span per request (P0-27)
     # Correlation ID, source address and user agent for the audit log (P0-15).
     app.add_middleware(RequestMetaMiddleware)
     app.state.settings = settings
