@@ -27,6 +27,11 @@ import {
   authSignOutOtherDevices,
   authStartTotpEnrolment,
   authTotp,
+  calendarListAccounts,
+  calendarOauthCallback,
+  calendarOauthStart,
+  calendarSelectCalendars,
+  calendarSyncNow,
   deadLettersGetDeadLetters,
   deadLettersPostDiscard,
   deadLettersPostRetry,
@@ -112,6 +117,20 @@ import type {
   AuthTotpData,
   AuthTotpError,
   AuthTotpResponse,
+  CalendarListAccountsData,
+  CalendarListAccountsError,
+  CalendarListAccountsResponse,
+  CalendarOauthCallbackData,
+  CalendarOauthCallbackError,
+  CalendarOauthStartData,
+  CalendarOauthStartError,
+  CalendarOauthStartResponse,
+  CalendarSelectCalendarsData,
+  CalendarSelectCalendarsError,
+  CalendarSelectCalendarsResponse,
+  CalendarSyncNowData,
+  CalendarSyncNowError,
+  CalendarSyncNowResponse,
   DeadLettersGetDeadLettersData,
   DeadLettersGetDeadLettersError,
   DeadLettersGetDeadLettersResponse,
@@ -759,6 +778,144 @@ export const authConfirmTotpEnrolmentMutation = (
   };
   return mutationOptions;
 };
+
+export const calendarListAccountsQueryKey = (
+  options?: Options<CalendarListAccountsData>,
+) => createQueryKey("calendarListAccounts", options);
+
+/**
+ * List Accounts
+ */
+export const calendarListAccountsOptions = (
+  options?: Options<CalendarListAccountsData>,
+) =>
+  queryOptions<
+    CalendarListAccountsResponse,
+    CalendarListAccountsError,
+    CalendarListAccountsResponse,
+    ReturnType<typeof calendarListAccountsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await calendarListAccounts({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: calendarListAccountsQueryKey(options),
+  });
+
+/**
+ * Select Calendars
+ */
+export const calendarSelectCalendarsMutation = (
+  options?: Partial<Options<CalendarSelectCalendarsData>>,
+): UseMutationOptions<
+  CalendarSelectCalendarsResponse,
+  CalendarSelectCalendarsError,
+  Options<CalendarSelectCalendarsData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CalendarSelectCalendarsResponse,
+    CalendarSelectCalendarsError,
+    Options<CalendarSelectCalendarsData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await calendarSelectCalendars({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Sync Now
+ */
+export const calendarSyncNowMutation = (
+  options?: Partial<Options<CalendarSyncNowData>>,
+): UseMutationOptions<
+  CalendarSyncNowResponse,
+  CalendarSyncNowError,
+  Options<CalendarSyncNowData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CalendarSyncNowResponse,
+    CalendarSyncNowError,
+    Options<CalendarSyncNowData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await calendarSyncNow({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const calendarOauthCallbackQueryKey = (
+  options: Options<CalendarOauthCallbackData>,
+) => createQueryKey("calendarOauthCallback", options);
+
+/**
+ * Oauth Callback
+ */
+export const calendarOauthCallbackOptions = (
+  options: Options<CalendarOauthCallbackData>,
+) =>
+  queryOptions<
+    unknown,
+    CalendarOauthCallbackError,
+    unknown,
+    ReturnType<typeof calendarOauthCallbackQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await calendarOauthCallback({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: calendarOauthCallbackQueryKey(options),
+  });
+
+export const calendarOauthStartQueryKey = (
+  options?: Options<CalendarOauthStartData>,
+) => createQueryKey("calendarOauthStart", options);
+
+/**
+ * Oauth Start
+ */
+export const calendarOauthStartOptions = (
+  options?: Options<CalendarOauthStartData>,
+) =>
+  queryOptions<
+    CalendarOauthStartResponse,
+    CalendarOauthStartError,
+    CalendarOauthStartResponse,
+    ReturnType<typeof calendarOauthStartQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await calendarOauthStart({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: calendarOauthStartQueryKey(options),
+  });
 
 export const deadLettersGetDeadLettersQueryKey = (
   options?: Options<DeadLettersGetDeadLettersData>,

@@ -70,22 +70,20 @@ def register_audit_schedule() -> None:
 
 
 def register_module_schedules() -> None:
-    """Module schedules (A9), applied after DBOS.launch(): the calendar sync tick every 10
-    minutes on the sync queue (P1-09)."""
+    """Module schedules (A9), applied after DBOS.launch(): a module's `workflows.schedules()`
+    lists its own (P1-09: the calendar sync tick every 10 minutes on the sync queue)."""
+    import importlib  # noqa: PLC0415
+
     from dbos import DBOS  # noqa: PLC0415
 
-    from tumnis.modules.calendar import workflows as calendar  # noqa: PLC0415
-
-    DBOS.apply_schedules(
-        [
-            {
-                "schedule_name": calendar.TICK_SCHEDULE_NAME,
-                "workflow_fn": calendar.sync_tick,
-                "schedule": calendar.TICK_SCHEDULE,
-                "queue_name": SYNC_QUEUE,
-            }
-        ]
-    )
+    found = []
+    for module in modules.MODULES:
+        workflows = importlib.import_module(f"tumnis.modules.{module}.workflows")
+        declared = getattr(workflows, "schedules", None)
+        if declared is not None:
+            found += declared()
+    if found:
+        DBOS.apply_schedules(found)
 
 
 def dbos_config(settings: Settings) -> "DBOSConfig":

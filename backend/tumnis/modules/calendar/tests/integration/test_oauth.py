@@ -66,7 +66,6 @@ async def test_tokens_encrypted_at_rest(
 
 @pytest.mark.req("Architecture principle 3")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="spec:P1-09")
 async def test_callback_makes_no_outbound_call(  # noqa: PLR0917
     session_client: SessionClient,
     dbos_client: DBOSClient,

@@ -18,6 +18,7 @@ from sqlalchemy import Table, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tumnis.core import deadletter
 from tumnis.core.adapters.registry import Health
 from tumnis.core.canonical import (
     CanonicalRecord,
@@ -156,6 +157,10 @@ register_seed_writer("event", seed_event)
 
 PROVIDER = "google_calendar"
 OAUTH_SECTION = "calendar.google"
+SYNC_QUEUE = "sync"  # A9
+SYNC_WORKFLOW = "calendar_connector_sync"
+EXCHANGE_WORKFLOW = "calendar_oauth_exchange"
+CALLBACK_PATH = "/v1/calendar/oauth/callback"
 
 
 class GoogleOAuthClient(BaseModel):
@@ -697,6 +702,65 @@ async def connected_accounts(
             )
         )
         return list(rows.scalars())
+
+
+# --- OAuth over HTTP (the api half; the worker exchanges the code) -----------------------------
+
+
+class OAuthNotConfigured(Exception):  # noqa: N818  # reads as the condition
+    """Settings > Calendar has no Google OAuth client yet."""
+
+
+async def start_connect(ctx: WorkspaceContext, *, base_url: str, now: datetime) -> str:
+    """The consent URL for connecting one more Google account (a pending grant with PKCE
+    is stored first). OAuthNotConfigured without a client."""
+    client = await oauth_client(ctx)
+    if client is None:
+        raise OAuthNotConfigured
+    redirect_uri = base_url.rstrip("/") + CALLBACK_PATH
+    started = await integrations.begin_oauth(ctx, PROVIDER, redirect_uri=redirect_uri, now=now)
+    return consent_url(
+        client_id=client.client_id,
+        redirect_uri=redirect_uri,
+        state=started.state,
+        code_challenge=started.code_challenge,
+    )
+
+
+async def accept_callback(
+    ctx: WorkspaceContext, *, state: str, code: str, now: datetime
+) -> UUID | None:
+    """Store the code of the consent `state` names (sealed, once, within ten minutes) and
+    enqueue the worker's exchange; None for an unknown, used or expired state. Makes no
+    outbound call (architecture principle 3)."""
+    async with tenant_session(ctx) as s:
+        pending_id = await integrations.accept_oauth_code(
+            ctx, PROVIDER, state=state, code=code, now=now, session=s
+        )
+    if pending_id is None:
+        return None
+    await _enqueue(EXCHANGE_WORKFLOW, f"calendar-oauth:{pending_id}", ctx, pending_id)
+    return pending_id
+
+
+async def request_sync(
+    ctx: WorkspaceContext, account_id: UUID, *, now: datetime
+) -> CalendarAccountOut:
+    """Sync now: enqueue the account's sync (one per account and second)."""
+    account = await get_account(ctx, account_id)
+    if account is None:
+        raise NotFound("calendar_accounts", account_id)
+    workflow_id = f"calendar-sync:{account.connection_id}:{now.isoformat(timespec='seconds')}"
+    await _enqueue(SYNC_WORKFLOW, workflow_id, ctx, account.connection_id)
+    return account
+
+
+async def _enqueue(workflow: str, workflow_id: str, ctx: WorkspaceContext, arg: UUID) -> None:
+    await deadletter.dbos_client().enqueue_async(
+        {"queue_name": SYNC_QUEUE, "workflow_name": workflow, "workflow_id": workflow_id},
+        str(ctx.workspace_id),
+        str(arg),
+    )
 
 
 def _real_connector(**deps: Any) -> GoogleCalendar:

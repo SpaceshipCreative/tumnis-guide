@@ -32,9 +32,9 @@ from tumnis.modules.calendar.adapters.port import GoogleCalendarPort, GrantRevok
 from tumnis.modules.calendar.rules import SYNC_EVERY_MINUTES, needs_refresh
 from tumnis.modules.integrations import api as integrations
 
-SYNC_QUEUE: Final = "sync"
-SYNC_WORKFLOW: Final = "calendar_connector_sync"
-EXCHANGE_WORKFLOW: Final = "calendar_oauth_exchange"
+SYNC_QUEUE: Final = api.SYNC_QUEUE
+SYNC_WORKFLOW: Final = api.SYNC_WORKFLOW
+EXCHANGE_WORKFLOW: Final = api.EXCHANGE_WORKFLOW
 TICK_SCHEDULE_NAME: Final = "calendar-sync-tick"
 TICK_SCHEDULE: Final = f"*/{SYNC_EVERY_MINUTES} * * * *"
 STEP_RETRY: Final[dict[str, Any]] = {
@@ -180,12 +180,23 @@ async def connected_accounts() -> list[tuple[str, str]]:
     return found
 
 
+def schedules() -> list[Any]:
+    """This module's DBOS schedules, applied by the worker after launch."""
+    return [
+        {
+            "schedule_name": TICK_SCHEDULE_NAME,
+            "workflow_fn": sync_tick,
+            "schedule": TICK_SCHEDULE,
+            "queue_name": SYNC_QUEUE,
+        }
+    ]
+
+
 @DBOS.workflow(name="calendar_sync_tick")
-async def sync_tick(scheduled_at: datetime, context: Any) -> int:
+async def sync_tick(scheduled_at: datetime, context: Any) -> None:
     """Scheduled `*/10 * * * *` on the sync queue: one sync per connected account, with a
     workflow id per (connection, tick) so a replayed tick starts none twice."""
     accounts = await connected_accounts()
     for workspace_id, connection_id in accounts:
         with SetWorkflowID(f"calendar-sync:{connection_id}:{scheduled_at.isoformat()}"):
             await DBOS.start_workflow_async(connector_sync, workspace_id, connection_id)
-    return len(accounts)
