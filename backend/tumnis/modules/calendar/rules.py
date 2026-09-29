@@ -124,4 +124,29 @@ def free_blocks(
     """The window minus the union of the busy intervals, clipped to the window; gaps
     shorter than `min_minutes` are dropped. The result is sorted, pairwise disjoint and
     never touching (adjacent gaps are merged). No window (a day off) has no blocks."""
-    raise NotImplementedError
+    if window is None:
+        return []
+    return [gap for gap in subtract(window, busy) if gap.minutes >= min_minutes]
+
+
+def clip(interval: Interval, window: Interval) -> Interval | None:
+    """The part of `interval` inside `window`, or None when they do not overlap."""
+    start, end = max(interval.start, window.start), min(interval.end, window.end)
+    return Interval(start, end) if start < end else None
+
+
+def subtract(window: Interval, busy: Iterable[Interval]) -> list[Interval]:
+    """The gaps of `window` no busy interval covers, by one sweep over the busy intervals
+    in start order: each gap ends where the next busy time starts, and busy intervals that
+    overlap or touch merge into one, so two gaps never touch."""
+    gaps: list[Interval] = []
+    cursor = window.start
+    for event in sorted(busy):
+        if event.start >= window.end:
+            break
+        if event.start > cursor:
+            gaps.append(Interval(cursor, event.start))
+        cursor = max(cursor, event.end)
+    if cursor < window.end:
+        gaps.append(Interval(cursor, window.end))
+    return gaps

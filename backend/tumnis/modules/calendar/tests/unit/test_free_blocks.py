@@ -71,7 +71,6 @@ def _runs(minutes: set[int]) -> list[set[int]]:
 
 @pytest.mark.req("FR-1.3")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 @settings(max_examples=300, deadline=None)
 @given(_cases())
 def test_never_overlaps_busy(case: tuple[Interval, list[Interval], int]) -> None:
@@ -90,7 +89,6 @@ def test_never_overlaps_busy(case: tuple[Interval, list[Interval], int]) -> None
 
 @pytest.mark.req("FR-4.7")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 @settings(max_examples=300, deadline=None)
 @given(_cases())
 def test_inside_window(case: tuple[Interval, list[Interval], int]) -> None:
@@ -109,7 +107,6 @@ def test_inside_window(case: tuple[Interval, list[Interval], int]) -> None:
 
 @pytest.mark.req("FR-1.3")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 @settings(max_examples=300, deadline=None)
 @given(_cases())
 def test_merged_and_sorted(case: tuple[Interval, list[Interval], int]) -> None:
@@ -129,7 +126,6 @@ def test_merged_and_sorted(case: tuple[Interval, list[Interval], int]) -> None:
 
 @pytest.mark.req("FR-1.3")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 @settings(max_examples=300, deadline=None)
 @given(_cases())
 def test_accounts_for_whole_window(case: tuple[Interval, list[Interval], int]) -> None:
@@ -186,7 +182,6 @@ EXAMPLES: dict[str, dict[str, Any]] = {
 
 @pytest.mark.req("FR-1.3")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 @pytest.mark.parametrize("case", sorted(EXAMPLES))
 def test_examples(case: str) -> None:
     """T-P1-10-05
