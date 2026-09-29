@@ -8,7 +8,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-test.fails("[P0-22][ADR-0004] T-P0-22-18 ui store transitions", () => {
+test("[P0-22][ADR-0004] T-P0-22-18 ui store transitions", () => {
   const store = createUiStore();
   const context = () => store.getSnapshot().context;
   expect(context()).toMatchObject({

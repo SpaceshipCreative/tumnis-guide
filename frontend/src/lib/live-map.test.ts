@@ -15,26 +15,21 @@ function generatedQueryOps(): Set<string> {
   );
 }
 
-test.fails(
-  "[P0-22][ADR-0003] T-P0-22-11 every generated query op is mapped or declared not live",
-  () => {
-    const ops = generatedQueryOps();
-    const mapped = new Set(
-      Object.values(LIVE_MAP).flatMap((entry) => [
-        ...entry.details,
-        ...entry.lists,
-      ]),
-    );
-    const notLive = new Set<string>(NOT_LIVE);
+test("[P0-22][ADR-0003] T-P0-22-11 every generated query op is mapped or declared not live", () => {
+  const ops = generatedQueryOps();
+  const mapped = new Set(
+    Object.values(LIVE_MAP).flatMap((entry) => [
+      ...entry.details,
+      ...entry.lists,
+    ]),
+  );
+  const notLive = new Set<string>(NOT_LIVE);
 
-    expect(ops.size).toBeGreaterThan(0);
-    const unmapped = [...ops].filter(
-      (op) => !mapped.has(op) && !notLive.has(op),
-    );
-    expect(unmapped).toEqual([]);
-    const unknown = [...mapped, ...notLive].filter((op) => !ops.has(op));
-    expect(unknown).toEqual([]);
-    const both = [...mapped].filter((op) => notLive.has(op));
-    expect(both).toEqual([]);
-  },
-);
+  expect(ops.size).toBeGreaterThan(0);
+  const unmapped = [...ops].filter((op) => !mapped.has(op) && !notLive.has(op));
+  expect(unmapped).toEqual([]);
+  const unknown = [...mapped, ...notLive].filter((op) => !ops.has(op));
+  expect(unknown).toEqual([]);
+  const both = [...mapped].filter((op) => notLive.has(op));
+  expect(both).toEqual([]);
+});

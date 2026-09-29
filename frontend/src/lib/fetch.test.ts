@@ -173,29 +173,26 @@ test("[P0-22][REL-2] T-P0-22-06 a retried write reuses its key", async () => {
   );
 });
 
-test.fails(
-  "[P0-22][REL-2] T-P0-22-07 reads carry no Idempotency-Key",
-  async () => {
-    withCookie(`${CSRF_COOKIE}=csrf-token-1`);
-    const seen: Captured[] = [];
-    server.use(
-      http.get("/v1/settings/workspace", async (info) => {
-        await capture(seen)(info);
-        return HttpResponse.json({
-          timezone: "America/New_York",
-          subtask_threshold_min: 30,
-          version: 1,
-        });
-      }),
-    );
-    const queryClient = createTestQueryClient();
+test("[P0-22][REL-2] T-P0-22-07 reads carry no Idempotency-Key", async () => {
+  withCookie(`${CSRF_COOKIE}=csrf-token-1`);
+  const seen: Captured[] = [];
+  server.use(
+    http.get("/v1/settings/workspace", async (info) => {
+      await capture(seen)(info);
+      return HttpResponse.json({
+        timezone: "America/New_York",
+        subtask_threshold_min: 30,
+        version: 1,
+      });
+    }),
+  );
+  const queryClient = createTestQueryClient();
 
-    const data = await queryClient.query(settingsGetWorkspaceSettingsOptions());
+  const data = await queryClient.query(settingsGetWorkspaceSettingsOptions());
 
-    expect(data.timezone).toBe("America/New_York");
-    expect(seen).toHaveLength(1);
-    expect(seen[0]?.method).toBe("GET");
-    expect(seen[0]?.headers.has("Idempotency-Key")).toBe(false);
-    expect(seen[0]?.headers.has("X-CSRF-Token")).toBe(false);
-  },
-);
+  expect(data.timezone).toBe("America/New_York");
+  expect(seen).toHaveLength(1);
+  expect(seen[0]?.method).toBe("GET");
+  expect(seen[0]?.headers.has("Idempotency-Key")).toBe(false);
+  expect(seen[0]?.headers.has("X-CSRF-Token")).toBe(false);
+});
