@@ -104,7 +104,6 @@ async def test_each_event_reaches_each_subscriber_once(
 
 @pytest.mark.req("ADR-0011", "REL-3")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 async def test_worker_killed_between_enqueue_and_mark_sent_delivers_once(
     db: DbUrls, worker_killer: WorkerKillerFactory
 ) -> None:
@@ -127,7 +126,6 @@ async def test_worker_killed_between_enqueue_and_mark_sent_delivers_once(
 
 @pytest.mark.req("ADR-0002")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 async def test_worker_killed_after_handler_step_does_not_rerun_it(
     db: DbUrls, worker_killer: WorkerKillerFactory
 ) -> None:

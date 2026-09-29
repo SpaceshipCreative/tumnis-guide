@@ -16,7 +16,6 @@ START_WORKER = (
 
 @pytest.mark.req("ADR-0002")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 def test_killpoint_refuses_prod(monkeypatch: pytest.MonkeyPatch) -> None:
     """T-P0-07-17
     With DEPLOYMENT_ENV=prod and TUMNIS_KILLPOINT set, worker startup raises instead of

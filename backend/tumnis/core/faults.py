@@ -9,6 +9,7 @@ point, and a production deployment refuses to start with one set.
 import os
 
 KILLED_EXIT = 137
+ENV_VAR = "TUMNIS_KILLPOINT"
 
 _armed: str | None = None
 
@@ -18,8 +19,14 @@ class KillpointRefused(RuntimeError):  # noqa: N818  # plan name
 
 
 def arm(deployment_env: str) -> str | None:
-    """Not yet (P0-07): never arms."""
-    return None
+    """Arm the kill point named by TUMNIS_KILLPOINT, if any, and return its name. Raises
+    KillpointRefused, arming nothing, when the deployment is `prod`."""
+    global _armed  # noqa: PLW0603  # process-wide: one worker process, one kill point
+    name = os.environ.get(ENV_VAR) or None
+    if name is not None and deployment_env == "prod":
+        raise KillpointRefused(f"{ENV_VAR}={name} is set in a prod deployment; refusing to start")
+    _armed = name
+    return name
 
 
 def armed() -> str | None:
