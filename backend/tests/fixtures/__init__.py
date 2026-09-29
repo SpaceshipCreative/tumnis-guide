@@ -114,13 +114,21 @@ def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
 # --- Postgres: one container and template per xdist worker, one clone per test ---------
 
 
+# A throwaway server: no fsync. Every test creates and drops a database (each DROP forces a
+# checkpoint), and one container per xdist worker shares one Docker disk. With fsync on,
+# those flushes stalled commits for hundreds of milliseconds, and a DROP for up to a minute
+# (seen in teardown), which pushed the relay's 1 s latency tests over budget under load.
+PG_TEST_SETTINGS = ("fsync=off", "synchronous_commit=off", "full_page_writes=off")
+
+
 @pytest.fixture(scope="session")
 def pg_container() -> Iterator[PostgresContainer]:
     from testcontainers.community.postgres import PostgresContainer  # noqa: PLC0415
 
-    with PostgresContainer(
+    container = PostgresContainer(
         PG_IMAGE, username="postgres", password="postgres", dbname="postgres", driver=None
-    ) as pg:
+    ).with_command(" ".join(f"-c {setting}" for setting in PG_TEST_SETTINGS))
+    with container as pg:
         bootstrap_roles(pg.get_connection_url())
         yield pg
 
