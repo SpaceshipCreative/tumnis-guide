@@ -4,6 +4,7 @@ lets a path out of the location's root (P1-14, FR-15.7, SEC-5)."""
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 from typing import TYPE_CHECKING
 
@@ -42,6 +43,27 @@ class TestServerPathStorage(StorageContract):
     @pytest.fixture
     def subject(self, tmp_location: Path) -> StorageBackend:
         return _server_path(tmp_location)
+
+
+@pytest.mark.contract
+@pytest.mark.req("FR-15.7")
+@pytest.mark.wp("P1-14")
+class TestServerPathStorageWithoutHardLinks(StorageContract):
+    """The shared storage suite on a share that refuses link() (SMB, some FUSE): creates go
+    through the exclusive open and moves through the checked rename."""
+
+    impl = "real"
+    adapter_name = "knowledge.server_path"
+
+    @pytest.fixture
+    def subject(self, tmp_location: Path, monkeypatch: pytest.MonkeyPatch) -> StorageBackend:
+        from tumnis.modules.knowledge.adapters import server_path  # noqa: PLC0415
+
+        def no_link(*_args: object, **_kwargs: object) -> None:
+            raise OSError(errno.EPERM, "link() not supported")
+
+        monkeypatch.setattr(os, "link", no_link)  # the adapter calls os.link
+        return server_path.ServerPathStorage(tmp_location, network_fs=True)
 
 
 def _tree(path: Path) -> dict[str, bytes]:
@@ -136,7 +158,6 @@ def _race_setup(tmp_location: Path, tmp_path: Path) -> tuple[Path, _SwapParent]:
 @pytest.mark.contract
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 TOCTOU")
 async def test_pr52_read_refuses_a_parent_swapped_for_a_symlink_after_the_check(
     tmp_location: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -153,7 +174,6 @@ async def test_pr52_read_refuses_a_parent_swapped_for_a_symlink_after_the_check(
 @pytest.mark.contract
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 TOCTOU")
 async def test_pr52_delete_refuses_a_parent_swapped_for_a_symlink_after_the_check(
     tmp_location: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -171,7 +191,6 @@ async def test_pr52_delete_refuses_a_parent_swapped_for_a_symlink_after_the_chec
 @pytest.mark.contract
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 TOCTOU")
 async def test_pr52_stat_refuses_a_parent_swapped_for_a_symlink_after_the_check(
     tmp_location: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -190,7 +209,7 @@ async def test_pr52_stat_refuses_a_parent_swapped_for_a_symlink_after_the_check(
 @pytest.mark.wp("P1-14")
 @pytest.mark.parametrize(
     "network_fs",
-    [False, pytest.param(True, marks=pytest.mark.xfail(strict=True, reason="review:PR52 TOCTOU"))],
+    [False, True],
 )
 async def test_pr52_write_never_lands_outside_when_a_parent_is_swapped_mid_write(
     tmp_location: Path, tmp_path: Path, network_fs: bool
