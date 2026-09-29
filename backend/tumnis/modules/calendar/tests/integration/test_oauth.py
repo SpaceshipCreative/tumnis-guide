@@ -64,6 +64,38 @@ async def test_tokens_encrypted_at_rest(
     assert opened["access_token"] == "fake-access-a"
 
 
+@pytest.mark.req("Data flow rule 5")
+@pytest.mark.wp("P1-09")
+@pytest.mark.xfail(strict=True, reason="review:P1-09 soft-deleted connections keep tokens")
+async def test_soft_deleted_connection_hides_its_credentials(
+    app_db: DbUrls, workspace: WorkspaceHandle, oauth_client: None
+) -> None:
+    """A soft-deleted connection's tokens are neither opened nor rewritten, and its status
+    stays as it was; a reconnect (`upsert_connection`) brings the row back first."""
+    from tumnis.core.versioning import NotFound  # noqa: PLC0415
+    from tumnis.modules.integrations.api import (  # noqa: PLC0415
+        get_credentials,
+        put_credentials,
+        set_connection_status,
+    )
+
+    connection = await connect(workspace.ctx, "a")
+    all_rows(
+        app_db,
+        "UPDATE connections SET deleted_at = now() WHERE id = %s RETURNING id",
+        connection,
+    )
+
+    assert await get_credentials(workspace.ctx, connection) is None
+    with pytest.raises(NotFound):
+        await put_credentials(workspace.ctx, connection, {"refresh_token": "other"})
+    await set_connection_status(workspace.ctx, connection, "error", last_error="gone")
+    (row,) = all_rows(
+        app_db, "SELECT status, last_error FROM connections WHERE id = %s", connection
+    )
+    assert row == {"status": "ok", "last_error": None}
+
+
 @pytest.mark.req("Architecture principle 3")
 @pytest.mark.wp("P1-09")
 async def test_callback_makes_no_outbound_call(  # noqa: PLR0917
