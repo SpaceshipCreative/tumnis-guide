@@ -10,6 +10,7 @@ own table: integrations for people, threads, messages, notes and artifacts, cale
 events, knowledge for documents. No module writes another module's table.
 """
 
+import hashlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,7 +18,19 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field
-from sqlalchemy import ColumnElement, ForeignKey, LargeBinary, Table, text
+from sqlalchemy import (
+    Boolean,
+    ColumnElement,
+    ForeignKey,
+    LargeBinary,
+    Table,
+    func,
+    literal_column,
+    or_,
+    text,
+    update,
+)
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -41,7 +54,7 @@ class CanonicalRecord(VersionedPayload):
 def content_hash(rec: CanonicalRecord) -> bytes:
     """sha256 of the record's JSON without `fetched_at`: a re-fetch of the same content
     hashes the same, so its upsert is a no-op."""
-    raise NotImplementedError
+    return hashlib.sha256(rec.model_dump_json(exclude={"fetched_at"}).encode()).digest()
 
 
 @dataclass(frozen=True)
@@ -89,7 +102,42 @@ async def upsert_records[R: CanonicalRecord](  # noqa: PLR0917  # the plan's sig
     `raw_payloads` row; `column_map` gives the table-specific columns. `conflict` names
     another unique key (people upsert on their primary email) and `index_where` the
     predicate of a partial unique index (documents: external_id IS NOT NULL)."""
-    raise NotImplementedError
+    by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for rec in records:
+        row = {
+            **column_map(rec),
+            "connection_id": connection_id,
+            "external_id": rec.external_id,
+            "provider_url": rec.provider_url,
+            "fetched_at": rec.fetched_at,
+            "raw_payload_id": raw_ids.get(rec.external_id),
+            "content_hash": content_hash(rec),
+            "source": source,
+        }
+        # One statement may not touch a row twice: the last record for a key wins.
+        by_key[tuple(row.get(c) for c in conflict if c != "workspace_id")] = row
+    if not by_key:
+        return UpsertStats()
+    insert = pg_insert(table).values(list(by_key.values()))
+    kept = {"workspace_id", "connection_id", "external_id", *conflict}
+    changes = {c: insert.excluded[c] for c in next(iter(by_key.values())) if c not in kept}
+    upsert = insert.on_conflict_do_update(
+        index_elements=[table.c[c] for c in conflict],
+        index_where=index_where,
+        set_={**changes, "deleted_at": None},
+        where=or_(
+            table.c.content_hash.is_distinct_from(insert.excluded.content_hash),
+            table.c.deleted_at.is_not(None),
+        ),
+    ).returning(table.c.id, literal_column("xmax = 0", Boolean))
+    written = (await session.execute(upsert)).all()
+    inserted = sum(1 for _, new in written if new)
+    return UpsertStats(
+        inserted=inserted,
+        updated=len(written) - inserted,
+        unchanged=len(by_key) - len(written),
+        changed_ids=tuple(row_id for row_id, _ in written),
+    )
 
 
 async def soft_delete_records(
@@ -97,7 +145,19 @@ async def soft_delete_records(
 ) -> int:
     """Marks the connection's rows with these external ids deleted (the provider reported
     them gone); a later upsert of the same id restores the row. Returns the rows marked."""
-    raise NotImplementedError
+    if not external_ids:
+        return 0
+    stmt = (
+        update(table)
+        .where(
+            table.c.connection_id == connection_id,
+            table.c.external_id.in_(sorted(set(external_ids))),
+            table.c.deleted_at.is_(None),
+        )
+        .values(deleted_at=func.now())
+        .returning(table.c.id)
+    )
+    return len((await session.execute(stmt)).all())
 
 
 class CanonicalColumns:

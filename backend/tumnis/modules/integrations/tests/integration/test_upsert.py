@@ -34,7 +34,6 @@ PAGES = st.lists(st.lists(ITEMS, max_size=5), max_size=6)
 
 @pytest.mark.req("FR-14.3")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 @settings(
     max_examples=40,
     deadline=None,
@@ -69,7 +68,6 @@ async def test_repeated_ingest_never_duplicates(
 
 @pytest.mark.req("FR-14.3")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 async def test_provider_edit_shows_on_next_sync_and_bumps_version_once(
     app_db: DbUrls, workspace: WorkspaceHandle, connection: uuid.UUID
 ) -> None:
@@ -113,7 +111,6 @@ async def test_provider_edit_shows_on_next_sync_and_bumps_version_once(
 
 @pytest.mark.req("FR-14.3")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 async def test_provider_deletion_soft_deletes_and_reappearance_restores(
     app_db: DbUrls, workspace: WorkspaceHandle, connection: uuid.UUID
 ) -> None:
@@ -154,7 +151,6 @@ async def test_provider_deletion_soft_deletes_and_reappearance_restores(
 
 @pytest.mark.req("FR-14.1")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 async def test_records_owned_elsewhere_are_refused(
     app_db: DbUrls, workspace: WorkspaceHandle, connection: uuid.UUID
 ) -> None:

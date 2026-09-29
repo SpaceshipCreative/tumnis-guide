@@ -86,6 +86,11 @@ name = No cycles between modules
 type = acyclic_siblings
 ancestors =
     tumnis.modules
+# calendar and knowledge build on integrations (P0-12); integrations' own tests call their
+# upserts to prove records owned elsewhere go there (T-P0-12-11). Module code never does.
+ignore_imports =
+    tumnis.modules.integrations.tests.** -> tumnis.modules.calendar.api
+    tumnis.modules.integrations.tests.** -> tumnis.modules.knowledge.api
 
 [importlinter:contract:search-usage-subscribe-only]
 name = search and usage call no other module

@@ -26,7 +26,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-14.1")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 async def test_raw_payload_stored_and_linked(
     app_db: DbUrls, workspace: WorkspaceHandle, connection: uuid.UUID
 ) -> None:
@@ -61,7 +60,6 @@ async def test_raw_payload_stored_and_linked(
 
 @pytest.mark.req("FR-14.1")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 async def test_payload_column_uses_lz4(
     app_db: DbUrls, workspace: WorkspaceHandle, connection: uuid.UUID
 ) -> None:

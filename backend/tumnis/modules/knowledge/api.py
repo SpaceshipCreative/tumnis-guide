@@ -8,15 +8,20 @@ canonical unique key is partial.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import Field
+from sqlalchemy import Table, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core.canonical import CanonicalRecord, UpsertStats
+from tumnis.core.canonical import CanonicalRecord, UpsertStats, upsert_records
 from tumnis.core.schemas import versioned
-from tumnis.core.tenancy import WorkspaceContext
+from tumnis.core.tenancy import WorkspaceContext, session_for
+from tumnis.modules.integrations import api as integrations
+from tumnis.modules.knowledge.models import Document
+
+_documents: Table = Document.__table__  # type: ignore[assignment]
 
 
 @versioned("entities", "document", 1)
@@ -38,5 +43,38 @@ async def upsert_synced_documents(
     raw_ids: Mapping[str, UUID] | None = None,
     session: AsyncSession | None = None,
 ) -> UpsertStats:
-    """Upserts the connection's synced documents on (workspace, connection, external id)."""
-    raise NotImplementedError
+    """Upserts the connection's synced documents on (workspace, connection, external id)
+    (the partial unique key: text entries and uploads have no external id). New rows are
+    untrusted and tainted (the column defaults); a re-sync never changes either."""
+    async with session_for(ctx, session) as s:
+        source = await integrations.connection_source(s, connection_id)
+        return await upsert_records(
+            s,
+            _documents,
+            connection_id,
+            records,
+            raw_ids or {},
+            _columns,
+            source=source,
+            index_where=_documents.c.external_id.is_not(None),
+        )
+
+
+def _columns(rec: DocumentRecord) -> dict[str, Any]:
+    return {
+        "title": rec.title,
+        "kind": rec.kind,
+        "path": rec.path,
+        "source_revision": rec.source_revision,
+        "tags": rec.tags,
+    }
+
+
+async def _document_taint(session: AsyncSession, document_id: UUID) -> bool | None:
+    tainted: bool | None = await session.scalar(
+        select(_documents.c.tainted).where(_documents.c.id == document_id)
+    )
+    return tainted
+
+
+integrations.register_target_taint("document", _document_taint)
