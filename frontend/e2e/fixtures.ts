@@ -1,36 +1,301 @@
 // Shared Playwright fixtures. Specs import `test` and `expect` from here, never
 // from @playwright/test directly, so every spec can ask for these fixtures.
 //
-// `signedInPage` is a stub until P0-13: a spec that requests it fails loudly.
-// Fixtures are lazy, so specs that do not request them are unaffected.
-import { test as base, expect, type Page } from "@playwright/test";
+// `seededApp` resets the compose.test stack before each test (P0-04).
+// `signedInPage` is a stub until P0-13. The stub does not throw during fixture
+// setup: it hands the test a value that throws on first use, so the failure
+// happens inside the test body, after `test.fail()` has marked an acceptance
+// spec as an expected failure (P0-05). Fixtures are lazy, so specs that do not
+// request them are unaffected.
+//
+// Below the fixtures are helpers the acceptance specs share. Helpers hold no
+// assertions: they locate things and read the API, so the work packages that
+// build the UI and the routes may adjust them without touching a locked test
+// body (spec-guard locks the `test(...)` blocks, not this file).
+import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+import {
+  test as base,
+  expect,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 
 export { expect };
 
 /** The compose.test stack reset to the seed set (TUMNIS_ADAPTERS=fake). */
 export interface SeededApp {
   readonly baseURL: string;
+  /** `POST /v1/test/reset` (`?set=load` for 10 projects and 2,000 tasks). */
+  reset(set?: "seed" | "load"): Promise<void>;
 }
 
 interface E2EFixtures {
-  /** P0-04: resets the stack through `POST /v1/test/reset`. */
+  /** P0-04: resets the stack through `POST /v1/test/reset` before the test. */
   seededApp: SeededApp;
   /** P0-13: a page signed in as the seed user (TOTP from the seed secret). */
   signedInPage: Page;
 }
 
-function pending(fixture: string, wp: string, detail: string): never {
-  throw new Error(`${fixture} is a stub until ${wp} (${detail})`);
+/** A value that throws "<fixture> is a stub until <wp>" the moment it is used. */
+function pending(fixture: string, wp: string, detail: string): object {
+  const fail = (): never => {
+    throw new Error(`${fixture} is a stub until ${wp} (${detail})`);
+  };
+  return new Proxy(
+    {},
+    {
+      // `then` stays undefined so the stub is not mistaken for a promise.
+      get: (_target, key) => (key === "then" ? undefined : fail()),
+      set: fail,
+      has: fail,
+      apply: fail,
+    },
+  );
 }
 
 export const test = base.extend<E2EFixtures>({
   seededApp: async ({ baseURL, request }, use) => {
     // Mounted only with fake adapters (compose.test and previews).
-    const response = await request.post("/v1/test/reset");
-    expect(response.status(), "POST /v1/test/reset").toBe(204);
-    await use({ baseURL: baseURL ?? "" });
+    const reset = async (set: "seed" | "load" = "seed"): Promise<void> => {
+      const response = await request.post("/v1/test/reset", {
+        params: set === "seed" ? {} : { set },
+      });
+      expect(response.status(), `POST /v1/test/reset (${set})`).toBe(204);
+    };
+    await reset();
+    await use({ baseURL: baseURL ?? "", reset });
   },
   signedInPage: async ({ page }, use) => {
-    await use(pending("signedInPage", "P0-13", `sign-in from ${page.url()}`));
+    await use(
+      pending("signedInPage", "P0-13", `sign-in from ${page.url()}`) as Page,
+    );
   },
 });
+
+// --- Seed user and TOTP ------------------------------------------------------
+
+const SEED_WORKSPACE = new URL(
+  "../../backend/fixtures/seed/workspace.yaml",
+  import.meta.url,
+);
+
+export interface SeedUser {
+  readonly email: string;
+  readonly password: string;
+  readonly totpSecret: string;
+}
+
+/** The seed user from backend/fixtures/seed/workspace.yaml (the only user). */
+export function seedUser(): SeedUser {
+  const text = readFileSync(SEED_WORKSPACE, "utf8");
+  const field = (pattern: RegExp): string => {
+    const value = pattern.exec(text)?.[1];
+    if (value === undefined) {
+      throw new Error(`seed workspace.yaml has no ${pattern.source}`);
+    }
+    return value;
+  };
+  return {
+    email: field(/email:\s*([^\s,}]+)/),
+    password: field(/password:\s*"([^"]+)"/),
+    totpSecret: field(/totp_secret:\s*([A-Z2-7]+)/),
+  };
+}
+
+function base32(secret: string): Buffer {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const char of secret.replace(/=+$/, "").toUpperCase()) {
+    const index = alphabet.indexOf(char);
+    if (index < 0) throw new Error(`not base32: ${char}`);
+    bits += index.toString(2).padStart(5, "0");
+  }
+  const bytes = bits.match(/.{8}/g) ?? [];
+  return Buffer.from(bytes.map((byte) => parseInt(byte, 2)));
+}
+
+/** RFC 6238 TOTP (SHA-1, 30 s step, 6 digits) for `secret` at `at`. */
+export function totp(secret: string, at: Date): string {
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(at.getTime() / 30_000)));
+  const digest = createHmac("sha1", base32(secret)).update(counter).digest();
+  const offset = (digest.at(-1) ?? 0) & 0x0f;
+  const code = (digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000;
+  return code.toString().padStart(6, "0");
+}
+
+// --- API reads (the session rides on page.request's cookies) ------------------
+
+type Json = Record<string, unknown>;
+
+/** Items of a `Page[T]` response (`{items, next_cursor}`), following cursors. */
+async function listAll(
+  request: APIRequestContext,
+  path: string,
+  params: Record<string, string>,
+): Promise<Json[]> {
+  const items: Json[] = [];
+  let cursor: string | null = null;
+  do {
+    const query: Record<string, string> = cursor
+      ? { ...params, cursor }
+      : params;
+    const response = await request.get(path, { params: query });
+    if (!response.ok()) {
+      throw new Error(`GET ${path} -> ${String(response.status())}`);
+    }
+    const body = (await response.json()) as Json;
+    const page = Array.isArray(body)
+      ? (body as Json[])
+      : (body.items as Json[]);
+    items.push(...page);
+    cursor = Array.isArray(body) ? null : (body.next_cursor as string | null);
+  } while (cursor);
+  return items;
+}
+
+export interface TaskRow {
+  readonly id: string;
+  readonly title: string;
+  readonly version: number;
+  readonly column_id: string | null;
+  readonly board_rank: string | null;
+}
+
+/** `GET /v1/tasks?project_id=<id>`: every task in the project. */
+export async function listTasks(
+  request: APIRequestContext,
+  projectId: string,
+): Promise<TaskRow[]> {
+  const rows = await listAll(request, "/v1/tasks", { project_id: projectId });
+  return rows as unknown as TaskRow[];
+}
+
+/** The id of the one project with this exact name. */
+export async function projectIdByName(
+  request: APIRequestContext,
+  name: string,
+): Promise<string> {
+  const rows = await listAll(request, "/v1/projects", {});
+  const hits = rows.filter((row) => row.name === name);
+  if (hits.length !== 1) {
+    throw new Error(`${String(hits.length)} projects named ${name}`);
+  }
+  return String(hits[0]?.id);
+}
+
+/** Board columns of a project, `{id, name}` in board order. */
+export async function boardColumns(
+  request: APIRequestContext,
+  projectId: string,
+): Promise<{ id: string; name: string }[]> {
+  const response = await request.get(`/v1/projects/${projectId}/columns`);
+  if (!response.ok()) {
+    throw new Error(`columns of ${projectId} -> ${String(response.status())}`);
+  }
+  const body = (await response.json()) as Json | Json[];
+  const rows = Array.isArray(body) ? body : (body.items as Json[]);
+  return rows.map((row) => ({ id: String(row.id), name: String(row.name) }));
+}
+
+export interface RecordedWrite {
+  readonly method: string;
+  readonly path: string;
+  readonly idempotency_key: string | null;
+  readonly replayed: boolean;
+}
+
+/** `GET /v1/test/requests` (fakes only, P0-10): the last 500 write requests. */
+export async function recordedWrites(
+  request: APIRequestContext,
+  filter: { path: string; method: string },
+): Promise<RecordedWrite[]> {
+  const response = await request.get("/v1/test/requests", { params: filter });
+  if (!response.ok()) {
+    throw new Error(`GET /v1/test/requests -> ${String(response.status())}`);
+  }
+  const body = (await response.json()) as Json | Json[];
+  const rows = Array.isArray(body) ? body : (body.items as Json[]);
+  return rows as unknown as RecordedWrite[];
+}
+
+// --- UI locators and flows -----------------------------------------------------
+
+/** The quick-add dialog. */
+export function quickAddDialog(page: Page): Locator {
+  return page.getByRole("dialog", { name: "Quick add" });
+}
+
+/** Opens quick-add: `/` on a keyboard, the Quick add button on a phone. */
+export async function openQuickAdd(page: Page, phone: boolean): Promise<void> {
+  if (phone) {
+    await page.getByRole("button", { name: "Quick add" }).click();
+  } else {
+    await page.keyboard.press("/");
+  }
+}
+
+/** Types a title, picks the project through the typeahead, presses Enter. */
+export async function quickAdd(
+  page: Page,
+  phone: boolean,
+  title: string,
+  project: { typed: string; name: string },
+): Promise<void> {
+  await openQuickAdd(page, phone);
+  const dialog = quickAddDialog(page);
+  await dialog.getByRole("textbox", { name: "Title" }).fill(title);
+  await dialog.getByRole("combobox", { name: "Project" }).fill(project.typed);
+  await page.getByRole("option", { name: project.name, exact: true }).click();
+  await dialog.getByRole("textbox", { name: "Title" }).press("Enter");
+}
+
+/** A dashboard project card, found by its project id (names can repeat). */
+export function projectCard(page: Page, projectId: string): Locator {
+  return page.locator(`[data-project-id="${projectId}"]`);
+}
+
+/** A board column or task-list section by its heading. */
+export function section(page: Page, name: string): Locator {
+  return page.getByRole("region", { name, exact: true });
+}
+
+/** Task cards or rows with this exact title, on the page or inside `within`. */
+export function taskCards(
+  page: Page,
+  title: string,
+  within?: Locator,
+): Locator {
+  return (within ?? page).getByRole("listitem").filter({
+    has: page.getByText(title, { exact: true }),
+  });
+}
+
+/**
+ * `startTime` of the first performance mark named `name`, waiting for it
+ * (same approach as P0-29's timing helpers).
+ */
+export async function markStartTime(page: Page, name: string): Promise<number> {
+  return page.evaluate(
+    (markName) =>
+      new Promise<number>((resolve) => {
+        const seen = performance.getEntriesByName(markName, "mark")[0];
+        if (seen) {
+          resolve(seen.startTime);
+          return;
+        }
+        const observer = new PerformanceObserver((list) => {
+          const hit = list.getEntries().find((e) => e.name === markName);
+          if (hit) {
+            observer.disconnect();
+            resolve(hit.startTime);
+          }
+        });
+        observer.observe({ type: "mark", buffered: true });
+      }),
+    name,
+  );
+}

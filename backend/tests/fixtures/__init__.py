@@ -44,11 +44,20 @@ RECORDING_ROOTS = ("tumnis/modules/*/tests/recordings", "tests/harness/recording
 CLOCK_START = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
 
 
-def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Integration tests never forget to open the socket block."""
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Integration tests never forget to open the socket block, and `drill` tests (A0.4)
+    run only when the marker expression names them (`pytest -m drill`, the drill
+    workflow): every other run deselects them, so no PR job can pick one up. Plain
+    collection (`--collect-only`, the traceability job) still lists them."""
     for item in items:
         if item.get_closest_marker("integration"):
             item.add_marker(pytest.mark.enable_socket)
+    if "drill" in (config.option.markexpr or "") or config.option.collectonly:
+        return
+    drills = [item for item in items if item.get_closest_marker("drill")]
+    if drills:
+        config.hook.pytest_deselected(items=drills)
+        items[:] = [item for item in items if not item.get_closest_marker("drill")]
 
 
 @pytest.fixture
