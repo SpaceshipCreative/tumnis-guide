@@ -20,6 +20,7 @@ import pytest
 from tests._pg import OWNER
 
 if TYPE_CHECKING:
+    import httpx
     from dbos import DBOS, DBOSClient, WorkflowHandleAsync
 
     from tests._pg import DbUrls
@@ -77,7 +78,6 @@ def _step(info: Any) -> str:
 
 @pytest.mark.req("REL-3")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 async def test_failing_subscriber_retries_with_jittered_backoff_then_dead_letters(
     db: DbUrls, dbos: type[DBOS], workspace: WorkspaceHandle, flaky: Any
 ) -> None:
@@ -113,7 +113,6 @@ async def test_failing_subscriber_retries_with_jittered_backoff_then_dead_letter
 
 @pytest.mark.req("REL-3")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 async def test_sibling_subscribers_complete_when_one_fails(
     db: DbUrls, dbos: type[DBOS], workspace: WorkspaceHandle, flaky: Any
 ) -> None:
@@ -132,7 +131,6 @@ async def test_sibling_subscribers_complete_when_one_fails(
 
 @pytest.mark.req("REL-3")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 async def test_retrying_a_dead_letter_runs_it_once(
     db: DbUrls,
     dbos: type[DBOS],
@@ -181,7 +179,6 @@ async def test_retrying_a_dead_letter_runs_it_once(
 
 @pytest.mark.req("REL-3")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 async def test_discard_closes_the_item(
     db: DbUrls,
     dbos: type[DBOS],
@@ -208,3 +205,17 @@ async def test_discard_closes_the_item(
     assert (refused.value.status, refused.value.code) == (409, "dead_letter_not_open")
     (row,) = _dead_letters(db)
     assert (row["status"], row["retries"]) == ("discarded", 0)
+
+
+@pytest.mark.req("REL-3")
+@pytest.mark.wp("P0-07")
+async def test_dead_letter_routes_refuse_without_a_session(client: httpx.AsyncClient) -> None:
+    """The /v1/dead-letters routes are mounted and session-only: with no signed-in session
+    (P0-13 supplies it) every call is 401, never a listing or a write."""
+    item = uuid.uuid4()
+    responses = [
+        await client.get("/v1/dead-letters"),
+        await client.post(f"/v1/dead-letters/{item}/retry", json={"version": 1}),
+        await client.post(f"/v1/dead-letters/{item}/discard", json={"version": 1}),
+    ]
+    assert [r.status_code for r in responses] == [401, 401, 401]

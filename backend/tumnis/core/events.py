@@ -4,6 +4,7 @@ workflow (P0-07, ADR-0011, ADR-0002)."""
 import asyncio
 import contextlib
 import logging
+import random
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -16,7 +17,8 @@ from dbos._error import DBOSQueueDeduplicatedError  # dbos 3.1.0: not re-exporte
 from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy import text
 
-from tumnis.core import db, faults, tenancy
+from tumnis.core import db, deadletter, faults, tenancy
+from tumnis.core.backoff import full_jitter
 from tumnis.core.schemas import VersionedPayload
 from tumnis.core.types import SYSTEM_ACTOR
 
@@ -262,14 +264,63 @@ async def _listen_and_relay(stop: asyncio.Event, poll_s: float) -> None:
 
 @DBOS.workflow(name="deliver_event")
 async def deliver_event(subscriber: str, envelope: dict[str, Any]) -> str:
-    """Runs the subscriber's handler as a step. Deterministic between steps (ADR-0002)."""
-    await run_handler(subscriber, envelope)
-    faults.killpoint("deliver.after_handler")  # in the workflow body, after the step is recorded
-    return "delivered"
+    """Runs the subscriber's handler as a step, up to `max_attempts` times with full-jitter
+    backoff between attempts, then dead-letters it; returns "delivered" or "dead_lettered".
+    Deterministic between steps (ADR-0002): the jitter draw is the `backoff_delay` step's
+    output, so recovery replays the recorded delay. Catching a step's exception here is
+    safe: DBOS records the step's error and raises the same one on replay."""
+    sub = get_subscriber(subscriber)
+    for attempt in range(1, sub.max_attempts + 1):
+        try:
+            await run_handler(subscriber, envelope)
+        except Exception as exc:  # recorded by DBOS per step
+            if attempt == sub.max_attempts:
+                error = f"{type(exc).__name__}: {exc}"
+                await record_dead_letter(subscriber, envelope, error, attempt)
+                return "dead_lettered"
+            await DBOS.sleep_async(await backoff_delay(subscriber, attempt))
+            continue
+        faults.killpoint("deliver.after_handler")  # in the workflow body, after the step
+        await resolve_dead_letter_if_any(subscriber, envelope)
+        return "delivered"
+    raise AssertionError("unreachable")  # pragma: no cover  # max_attempts >= 1
+
+
+def _system(envelope: EventEnvelope) -> tenancy.WorkspaceContext:
+    return tenancy.WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
 
 
 @DBOS.step()
 async def run_handler(subscriber: str, envelope: dict[str, Any]) -> None:
     sub, env = get_subscriber(subscriber), EventEnvelope.model_validate(envelope)
-    with tenancy.use_workspace(tenancy.WorkspaceContext(env.workspace_id, SYSTEM_ACTOR)):
+    with tenancy.use_workspace(_system(env)):
         await sub.handler(env)
+
+
+@DBOS.step()
+async def backoff_delay(subscriber: str, attempt: int) -> float:
+    sub = get_subscriber(subscriber)  # the random draw is recorded by the step
+    return full_jitter(attempt, base=sub.base_delay_s, cap=sub.cap_s, rand=random.random)
+
+
+@DBOS.step()
+async def record_dead_letter(
+    subscriber: str, envelope: dict[str, Any], error: str, attempts: int
+) -> None:
+    env = EventEnvelope.model_validate(envelope)
+    async with tenancy.tenant_session(_system(env)) as session:
+        await deadletter.DeadLetterRepo(session).record(
+            event_id=env.event_id,
+            subscriber=subscriber,
+            event_name=env.name,
+            envelope=envelope,
+            error=error,
+            attempts=attempts,
+        )
+
+
+@DBOS.step()
+async def resolve_dead_letter_if_any(subscriber: str, envelope: dict[str, Any]) -> None:
+    env = EventEnvelope.model_validate(envelope)
+    async with tenancy.tenant_session(_system(env)) as session:
+        await deadletter.DeadLetterRepo(session).resolve(env.event_id, subscriber)
