@@ -1,6 +1,6 @@
 // End-to-end harness self test (P0-02). Needs no web server: it only reads
 // the viewport each Playwright project gives the page.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 const VIEWPORTS: Readonly<Record<string, { width: number; height: number }>> = {
   phone: { width: 375, height: 812 },
