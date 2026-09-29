@@ -9,7 +9,9 @@ Reads go through the `settings` cache (no TTL), which holds the sealed value and
 version, never plaintext; put_setting invalidates `ws:<id>:settings:<key>` on commit.
 """
 
+import re
 from dataclasses import dataclass
+from typing import Final
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -142,27 +144,45 @@ def _entry(version: int, blob: bytes) -> bytes:
 
 
 async def put_setting(
-    ctx: WorkspaceContext, key: str, value: BaseModel, *, expected_version: int | None
+    ctx: WorkspaceContext,
+    key: str,
+    value: BaseModel,
+    *,
+    expected_version: int | None,
+    session: AsyncSession | None = None,
 ) -> int:
     """Seal and upsert; returns the new version. `expected_version` None means the key must
     not exist yet; a stale or unexpected version raises StaleVersion (409 in P0-10) with
-    the current version."""
-    async with tenant_session(ctx) as session:
-        key_version, data_key = await _sealing_key(session, ctx.workspace_id)
-        blob = crypto.seal(
-            data_key,
-            key_version,
-            value.model_dump_json().encode(),
-            aad=crypto.setting_aad(ctx.workspace_id, key),
-        )
-        params = {"key": key, "blob": blob, "kv": key_version, "expected": expected_version}
-        written = await session.execute(_CREATE if expected_version is None else _UPDATE, params)
-        row = written.one_or_none()
-        if row is None:
-            current = (await session.execute(_CURRENT, {"key": key})).scalar_one_or_none()
-            raise StaleVersion(current={"key": key, "version": current})
-        await invalidate_on_commit(session, settings_cache_key(ctx.workspace_id, key))
-        return int(row.version)
+    the current version. With `session` (the request's idempotent transaction, where its
+    audit row goes too) it writes there; else in a transaction of its own."""
+    if session is not None:
+        return await _put(session, ctx, key, value, expected_version)
+    async with tenant_session(ctx) as own:
+        return await _put(own, ctx, key, value, expected_version)
+
+
+async def _put(
+    session: AsyncSession,
+    ctx: WorkspaceContext,
+    key: str,
+    value: BaseModel,
+    expected_version: int | None,
+) -> int:
+    key_version, data_key = await _sealing_key(session, ctx.workspace_id)
+    blob = crypto.seal(
+        data_key,
+        key_version,
+        value.model_dump_json().encode(),
+        aad=crypto.setting_aad(ctx.workspace_id, key),
+    )
+    params = {"key": key, "blob": blob, "kv": key_version, "expected": expected_version}
+    written = await session.execute(_CREATE if expected_version is None else _UPDATE, params)
+    row = written.one_or_none()
+    if row is None:
+        current = (await session.execute(_CURRENT, {"key": key})).scalar_one_or_none()
+        raise StaleVersion(current={"key": key, "version": current})
+    await invalidate_on_commit(session, settings_cache_key(ctx.workspace_id, key))
+    return int(row.version)
 
 
 async def seal_for_workspace(
@@ -183,3 +203,44 @@ async def open_for_workspace(
     key_version = crypto.sealed_key_version(blob)
     data_key = await _data_key(session, workspace_id, key_version)
     return crypto.open_sealed({key_version: data_key}, blob, aad=aad)
+
+
+# --- Sections (P0-26): the settings GET/PUT /v1/settings/{section} serves ------------------
+#
+# A module that keeps a per-workspace setting behind the Settings screen registers it as a
+# section: its pydantic model and the fields that are secrets. The route answers a
+# section's values with the secret fields left out (only whether each is set), so a secret
+# is write-only over HTTP and never lands in an idempotent replay. `workspace` and
+# `modules` have routes of their own and cannot be sections.
+
+RESERVED_SECTIONS: Final = frozenset({"workspace", "modules"})
+_SECTION_NAME: Final = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
+
+
+@dataclass(frozen=True)
+class SettingSection:
+    name: str  # also the workspace_settings key, for example "decisions.jev"
+    model: type[BaseModel]
+    secret_fields: frozenset[str] = frozenset()
+
+
+_sections: dict[str, SettingSection] = {}
+
+
+def register_section(section: SettingSection) -> None:
+    """Adds a section (the same one again is a no-op). ValueError for a reserved or
+    malformed name, a name another section holds, or a secret that is not a field."""
+    name = section.name
+    if name in RESERVED_SECTIONS or not _SECTION_NAME.match(name):
+        raise ValueError(f"{name!r} cannot be a settings section")
+    unknown = sorted(section.secret_fields - set(section.model.model_fields))
+    if unknown:
+        raise ValueError(f"{name}: secret fields {unknown} are not fields of the model")
+    held = _sections.get(name)
+    if held is not None and held != section:
+        raise ValueError(f"{name} is registered already with another model")
+    _sections[name] = section
+
+
+def registered_section(name: str) -> SettingSection | None:
+    return _sections.get(name)

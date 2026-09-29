@@ -171,6 +171,45 @@ async def setup_totp(body: api.SetupTotpIn, request: Request) -> JSONResponse:
     )
 
 
+# --- Account and second factor (P0-26) -------------------------------------------------------
+
+_ENROL = RoutePolicy(
+    auth="session",
+    idempotent=False,
+    not_idempotent_reason="credentials and one-time codes: a retry must check them again",
+)
+
+
+@router.get("/auth/account", response_model=api.AccountOut)
+@route_policy(RoutePolicy(auth="session"))
+async def get_account(caller: Caller) -> api.AccountOut:
+    """The signed-in user's email and second factor."""
+    return await api.get_account(caller)
+
+
+@router.post("/auth/totp/enrol", response_model=api.TotpEnrolOut)
+@route_policy(_ENROL)
+async def start_totp_enrolment(
+    body: api.TotpEnrolIn, request: Request, caller: Caller
+) -> api.TotpEnrolOut:
+    """With the password: a new TOTP secret (shown once) and its enrolment token. 401
+    `invalid_credentials`, 429 `locked_out`."""
+    return await api.start_totp_enrolment(
+        caller, body, clock=_clock(request), lockouts=_lockouts(request)
+    )
+
+
+@router.post("/auth/totp/enrol/confirm", status_code=204)
+@route_policy(_ENROL)
+async def confirm_totp_enrolment(
+    body: api.TotpEnrolConfirmIn, request: Request, caller: Caller
+) -> Response:
+    """A code from the new secret replaces the old one. 401 `invalid_code`,
+    `invalid_enrol_token`."""
+    await api.confirm_totp_enrolment(caller, body, now=_clock(request).now())
+    return Response(status_code=204)
+
+
 # --- API keys (P0-14, SEC-2, FR-9.3) --------------------------------------------------------
 #
 # Session only: no key can list, make, rotate or revoke keys (the authorization matrix

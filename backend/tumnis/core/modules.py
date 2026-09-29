@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Final
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import audit, tenancy
 from tumnis.core.cache import CacheKey, CacheSpec, invalidate_on_commit, register_cache
@@ -129,24 +130,39 @@ async def enabled(module: str, workspace_id: UUID) -> bool:
 
 
 async def set_module_enabled(
-    ctx: WorkspaceContext, module: str, on: bool, *, clock: Clock | None = None
+    ctx: WorkspaceContext,
+    module: str,
+    on: bool,
+    *,
+    clock: Clock | None = None,
+    session: AsyncSession | None = None,
 ) -> None:
     """Switch a module on or off for the workspace in `ctx` (ModuleRequired for a required
     module), audited as `module.toggled` (SEC-3); every process drops its cached flag on
-    commit."""
+    commit. With `session` (the request's idempotent transaction, P0-26's route) it writes
+    there; else in a transaction of its own."""
     if module not in MODULES:
         raise ValueError(f"unknown module {module!r}")
     if not on and module in REQUIRED_MODULES:
         raise ModuleRequired(module)
-    async with tenant_session(ctx) as session:
-        await session.execute(_WRITE_FLAG, {"m": module, "on": on})
-        await audit.record(
-            session,
-            "module.toggled",
-            details={"module": module, "enabled": on},
-            occurred_at=(clock or SystemClock()).now(),
-        )
-        await invalidate_on_commit(session, _flag_key(ctx.workspace_id, module))
+    if session is not None:
+        await _write_flag(session, ctx, module, on, clock)
+        return
+    async with tenant_session(ctx) as own:
+        await _write_flag(own, ctx, module, on, clock)
+
+
+async def _write_flag(
+    session: AsyncSession, ctx: WorkspaceContext, module: str, on: bool, clock: Clock | None
+) -> None:
+    await session.execute(_WRITE_FLAG, {"m": module, "on": on})
+    await audit.record(
+        session,
+        "module.toggled",
+        details={"module": module, "enabled": on},
+        occurred_at=(clock or SystemClock()).now(),
+    )
+    await invalidate_on_commit(session, _flag_key(ctx.workspace_id, module))
 
 
 def require_module(module: str) -> Callable[..., Awaitable[None]]:
