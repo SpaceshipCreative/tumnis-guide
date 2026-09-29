@@ -12,9 +12,10 @@ from typing import Final
 
 from pydantic import BaseModel
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from tumnis.core.events import EventEnvelope
+from tumnis.core.metrics import USAGE_TOTAL
 from tumnis.modules.usage.models import UsageCounter
 from tumnis.modules.usage.rules import increments, usage_day
 
@@ -72,3 +73,14 @@ async def report(s: AsyncSession, day_from: date, day_to: date) -> list[UsageRow
         .order_by(UsageCounter.day, UsageCounter.counter)
     )
     return [UsageRow(day=day, counter=counter, value=value) for day, counter, value in rows]
+
+
+_TOTALS: Final = text("SELECT counter, total FROM app.usage_totals()")
+
+
+async def export_metrics(conn: AsyncConnection) -> None:
+    """tumnis_usage_total{counter}: every counter summed over all days and workspaces, read
+    through the SECURITY DEFINER app.usage_totals() (the scrape has no workspace context).
+    tumnis.wiring registers it as a /metrics scrape source (P0-27)."""
+    rows = (await conn.execute(_TOTALS)).all()
+    USAGE_TOTAL.set_all({counter: float(total) for counter, total in rows})

@@ -26,6 +26,8 @@ ALLOWED: dict[str, str] = {
         "P0-08: the preview boot check sees which provider credential keys any workspace "
         "holds (key names only)"
     ),
+    "app.dead_letter_counts": "P0-27: /metrics counts dead letters by status across workspaces",
+    "app.usage_totals": "P0-27: /metrics sums usage counters per counter across workspaces",
 }
 
 _DEFINERS = """

@@ -23,3 +23,33 @@ One-time setup on the homelab host:
 5. The drill runs on the self-hosted `homelab` runner (docker, jq): set the repository variables `DRILL_SOURCE_PG` and `DRILL_SOURCE_APP` to the production Postgres and api container names, and the secret `DRILL_SOURCE_DATABASE_URL` for the threshold re-check. Then run `scripts/drill/b2_no_delete_check.sh` and `gh workflow run restore-drill.yml -f mode=prod`.
 
 Locally: `scripts/drill/restore_drill.sh --mode rehearsal` runs the whole drill against `compose.test.yaml` (repo2 on MinIO, throwaway keys in `pgbackrest/test-conf.d`, overrides in `pgbackrest/rehearsal.env`).
+
+## Observability (P0-27, REL-5, FR-12.3)
+
+Every api and worker log line is JSON on stdout with `trace_id` and `span_id` inside a request or a subscriber span; secrets, bodies and prompts are redacted before rendering. `GET /metrics` (root, not `/v1`) serves Prometheus text behind `Authorization: Bearer <token>`; the token is read from `METRICS_TOKEN_FILE` (`/etc/tumnis/secrets/tumnis_metrics_token` on the host, one line, `openssl rand -hex 32`), and the api refuses to start in prod without it. Alert rules live in `prometheus/alerts.yml` with unit tests in `prometheus/alerts.test.yml`:
+
+```bash
+docker run --rm -v "$PWD/deploy/prometheus:/rules:ro" -w /rules --entrypoint promtool prom/prometheus:v3.15.0 test rules alerts.test.yml
+```
+
+`SENTRY_DSN` (GlitchTip) and `OTEL_EXPORTER_OTLP_ENDPOINT` (an OTLP/HTTP collector) are optional; unset, the SDK stays off and spans go nowhere.
+
+Homelab Prometheus scrape job (the token file is readable by Prometheus only):
+
+```yaml
+scrape_configs:
+  - job_name: tumnis
+    scheme: https
+    metrics_path: /metrics
+    authorization: { type: Bearer, credentials_file: /etc/prometheus/secrets/tumnis_metrics_token }
+    static_configs: [{ targets: ["tumnis.lan"] }]
+  - job_name: tumnis-tls          # blackbox exporter: feeds TumnisCertificateExpiring
+    metrics_path: /probe
+    params: { module: [http_2xx] }
+    static_configs: [{ targets: ["https://tumnis.lan/health/live"] }]
+    relabel_configs:
+      - { source_labels: [__address__], target_label: __param_target }
+      - { source_labels: [__param_target], target_label: instance }
+      - { target_label: __address__, replacement: blackbox-exporter:9115 }
+rule_files: [/etc/prometheus/rules/tumnis-alerts.yml]   # a copy of prometheus/alerts.yml
+```

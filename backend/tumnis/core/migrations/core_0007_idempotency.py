@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from tumnis.core.migration_helpers import create_tenant_table, drop_tenant_table
 
 revision = "core_0007_idempotency"
-down_revision = "core_0005_settings"
+down_revision = "core_p027_metrics"
 branch_labels = None
 depends_on = "auth_0001"  # idempotency_keys.workspace_id -> workspaces
 phase = "expand"

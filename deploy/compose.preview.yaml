@@ -28,6 +28,7 @@ services:
     <<: *secrets
     environment:
       <<: *preview
+      METRICS_TOKEN_FILE: "" # no token in previews: /metrics answers 401
       # POST /v1/test/reset truncates as the owner role (fakes only).
       DATABASE_OWNER_URL: postgresql+psycopg://tumnis_owner:${OWNER_DB_PASSWORD}@postgres:5432/tumnis?sslmode=require
   worker:

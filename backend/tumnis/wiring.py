@@ -9,6 +9,7 @@ from typing import Protocol
 import tumnis.core.settings_store  # noqa: F401  # registers the settings cache (P0-08)
 from tumnis.core.adapters.registry import health_states, registered
 from tumnis.core.health import HealthCheck, Status, register_health
+from tumnis.core.metrics import register_scrape_source
 from tumnis.core.modules import MODULES
 
 
@@ -43,6 +44,17 @@ def register_module_health() -> None:
         check = getattr(importlib.import_module(f"tumnis.modules.{module}.api"), "health", None)
         if check is not None:
             register_health(f"module:{module}", check, critical=False)
+
+
+def register_module_metrics() -> None:
+    """A module that defines `async def export_metrics(conn: AsyncConnection) -> None` in
+    its api is called on every /metrics scrape with the app-role connection (P0-27)."""
+    for module in MODULES:
+        export = getattr(
+            importlib.import_module(f"tumnis.modules.{module}.api"), "export_metrics", None
+        )
+        if export is not None:
+            register_scrape_source(f"module:{module}", export)
 
 
 def register_adapter_health(register: RegisterHealth) -> None:
