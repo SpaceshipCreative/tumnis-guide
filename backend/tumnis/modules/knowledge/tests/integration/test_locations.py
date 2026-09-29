@@ -536,3 +536,40 @@ async def test_pr52_two_offline_saves_of_one_note_both_drain_and_the_newest_land
         await knowledge.check_location(s, location_id, net=SELF_HOSTED)
     assert _count(db, "SELECT count(*) FROM pending_writes") == 0
     assert (tmp_location / second.path).read_bytes() == b"# Plan v2\n"
+
+
+@pytest.mark.req("FR-15.12")
+@pytest.mark.wp("P1-14")
+@pytest.mark.xfail(strict=True, reason="review:PR52 folderless project")
+async def test_pr52_project_made_before_any_location_gets_its_folder_when_placed(
+    db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, tmp_location: Path
+) -> None:
+    """A project created while the workspace had no location has no folder; placing it
+    on a location makes its folder there (so notes can be saved), and a project that does
+    not exist still answers not found."""
+    from uuid import uuid4  # noqa: PLC0415
+
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.core.versioning import NotFound  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+
+    ws = knowledge_ws
+    project_id = await _project(ws, clock)
+    async with tenant_session(ws.ctx) as s:
+        assert await knowledge.assign_project_folder(s, project_id) is None
+    location_id = await _server_path_location(ws, tmp_location, "disk")
+
+    async with tenant_session(ws.ctx) as s:
+        folder = await knowledge.set_project_location(s, project_id, location_id, net=SELF_HOSTED)
+    assert (folder.location_id, folder.root_path) == (location_id, str(project_id))
+    async with tenant_session(ws.ctx) as s:
+        note_id = await knowledge.put_text_document(
+            s, project_id, title="Plan", body_md="# Plan\n", role=None
+        )
+        saved = await knowledge.save_note(s, note_id, net=SELF_HOSTED)
+    assert saved.status == "written"
+
+    with pytest.raises(NotFound):
+        async with tenant_session(ws.ctx) as s:
+            await knowledge.set_project_location(s, uuid4(), location_id, net=SELF_HOSTED)
+    assert _count(db, "SELECT count(*) FROM project_folders") == 1
