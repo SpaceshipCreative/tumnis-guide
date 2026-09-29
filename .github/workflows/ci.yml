@@ -146,7 +146,7 @@ jobs:
         working-directory: backend
         run: |
           uv sync
-          uv run pytest -m "integration and not contract" -n auto
+          uv run pytest -m "integration and not contract" -n auto --dist worksteal --durations=40
 
   e2e:
     runs-on: ubuntu-latest
