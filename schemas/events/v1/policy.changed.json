@@ -1,0 +1,88 @@
+{
+  "$defs": {
+    "PolicyDoc": {
+      "properties": {
+        "allowed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed",
+          "type": "array"
+        },
+        "gated": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Gated",
+          "type": "array"
+        },
+        "max_concurrent_runs": {
+          "title": "Max Concurrent Runs",
+          "type": "integer"
+        },
+        "max_run_minutes": {
+          "title": "Max Run Minutes",
+          "type": "integer"
+        },
+        "max_tasks_per_run": {
+          "title": "Max Tasks Per Run",
+          "type": "integer"
+        },
+        "tool_allowlist": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tool Allowlist",
+          "type": "array"
+        }
+      },
+      "required": [
+        "gated",
+        "allowed",
+        "tool_allowlist",
+        "max_concurrent_runs",
+        "max_run_minutes",
+        "max_tasks_per_run"
+      ],
+      "title": "PolicyDoc",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/events/v1/policy.changed.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "after": {
+      "$ref": "#/$defs/PolicyDoc"
+    },
+    "before": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PolicyDoc"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "project_id": {
+      "format": "uuid",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "project_id",
+    "before",
+    "after"
+  ],
+  "title": "PolicyChangedV1",
+  "type": "object"
+}

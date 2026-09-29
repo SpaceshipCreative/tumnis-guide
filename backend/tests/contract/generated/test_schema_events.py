@@ -31,6 +31,30 @@ CASES = [
     ),
     (
         "events",
+        "policy.changed",
+        1,
+        "backend/tests/contract/fixtures/events/policy.changed/v1.json",
+    ),
+    (
+        "events",
+        "project.archived",
+        1,
+        "backend/tests/contract/fixtures/events/project.archived/v1.json",
+    ),
+    (
+        "events",
+        "project.created",
+        1,
+        "backend/tests/contract/fixtures/events/project.created/v1.json",
+    ),
+    (
+        "events",
+        "project.updated",
+        1,
+        "backend/tests/contract/fixtures/events/project.updated/v1.json",
+    ),
+    (
+        "events",
         "test.ping",
         1,
         "backend/tests/contract/fixtures/events/test.ping/v1.json",

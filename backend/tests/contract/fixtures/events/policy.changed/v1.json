@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "project_id": "01a0ec82-72d7-7f23-8be6-203712701f10",
+  "before": null,
+  "after": {
+    "gated": ["send_email", "push_main"],
+    "allowed": ["read"],
+    "tool_allowlist": [],
+    "max_concurrent_runs": 2,
+    "max_run_minutes": 60,
+    "max_tasks_per_run": 20
+  }
+}

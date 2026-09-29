@@ -1,1 +1,28 @@
-"""knowledge event payload models and subscribers."""
+"""knowledge event payload models and subscribers.
+
+`knowledge.create_brief` (P0-17, FR-2.3): on `project.created`, the project's brief
+(`brief_md` from the payload) becomes its pinned, trusted text document. Idempotent: the
+brief index lets one row exist per project, so a redelivered event writes nothing. The
+payload is read as a dict, so knowledge needs nothing from projects. Never rename the
+subscriber: its name is part of every delivery's workflow ID.
+"""
+
+from typing import Any
+
+from tumnis.core.events import EventEnvelope, subscribe
+from tumnis.core.tenancy import WorkspaceContext, tenant_session
+from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.modules.knowledge import api
+
+
+@subscribe("project.created", name="knowledge.create_brief")
+async def create_brief(envelope: EventEnvelope) -> None:
+    payload: dict[str, Any] = envelope.payload
+    ctx = WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
+    async with tenant_session(ctx) as s:
+        await api.create_brief(
+            s,
+            project_id=payload["project_id"],
+            title=f"{payload.get('name', 'Project')} brief",
+            body_md=payload.get("brief_md", ""),
+        )
