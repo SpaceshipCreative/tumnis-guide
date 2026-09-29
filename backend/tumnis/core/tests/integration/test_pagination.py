@@ -94,7 +94,6 @@ async def _walk(  # noqa: PLR0917
 
 @pytest.mark.req("PERF-1")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 @PROPERTY
 @given(initial=st.integers(0, 60), ops=OPS, limit=st.integers(1, 7))
 async def test_every_row_once_while_rows_are_inserted(  # noqa: PLR0917
@@ -111,7 +110,6 @@ async def test_every_row_once_while_rows_are_inserted(  # noqa: PLR0917
 
 @pytest.mark.req("PERF-1")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 @PROPERTY
 @given(initial=st.lists(DUE, max_size=60), ops=OPS, limit=st.integers(1, 7))
 async def test_every_row_once_with_nullable_sort_key(  # noqa: PLR0917
@@ -139,7 +137,6 @@ def _b64(value: dict[str, Any]) -> str:
 
 @pytest.mark.req("PERF-1")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_malformed_cursor_is_400(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
