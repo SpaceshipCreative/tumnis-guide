@@ -442,6 +442,62 @@ async def test_pr52_hosted_mode_refuses_plain_http_s3_endpoints(
     assert _count(db, "SELECT count(*) FROM storage_locations") == 2
 
 
+@pytest.mark.req("SEC-5")
+@pytest.mark.wp("P1-14")
+async def test_pr52_connection_test_refuses_a_blocked_s3_endpoint(
+    db: DbUrls, knowledge_ws: WorkspaceHandle, fakes: Fakes
+) -> None:
+    """Testing a saved S3 location checks its endpoint against the NetPolicy again (Scott's
+    decision 6 on PR #52): when its name now resolves to the metadata address or loopback,
+    or the deployment now runs hosted and the address is private, the test is refused (422
+    `ssrf_blocked`), the location is not opened, and its status is unchanged."""
+    from tumnis.core.errors import ProblemError  # noqa: PLC0415
+    from tumnis.core.net import ScriptedResolver  # noqa: PLC0415
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+    from tumnis.modules.knowledge.adapters.fake import FakeStorage  # noqa: PLC0415
+    from tumnis.modules.knowledge.storage import Health  # noqa: PLC0415
+
+    ws = knowledge_ws
+    body = knowledge.LocationIn(
+        name="bucket",
+        kind="s3",
+        root="bucket/tumnis",
+        s3=knowledge.S3ConfigIn(
+            endpoint="https://s3.example.com",
+            region="us-east-1",
+            access_key="AKIA",
+            secret_key="secret",
+        ),
+    )
+    async with tenant_session(ws.ctx) as s:
+        created = await knowledge.create_location(
+            s, body, net=HOSTED, resolver=ScriptedResolver([["93.184.216.34"]])
+        )
+        async with knowledge.open_backend(s, created.id, net=HOSTED) as backend:
+            assert isinstance(backend, FakeStorage)
+            # Were the location opened, its status would follow this health.
+            backend.script(health=Health.degraded("opened"))
+    assert created.status == "online"
+
+    blocked = [
+        (HOSTED, "169.254.169.254"),
+        (SELF_HOSTED, "169.254.169.254"),
+        (SELF_HOSTED, "127.0.0.1"),
+        (HOSTED, "10.0.0.5"),
+    ]
+    for policy, answer in blocked:
+        resolver = ScriptedResolver([[answer]])
+        with pytest.raises(ProblemError) as e:
+            async with tenant_session(ws.ctx) as s:
+                await knowledge.check_location(s, created.id, net=policy, resolver=resolver)
+        assert (e.value.status, e.value.code) == (422, "ssrf_blocked"), answer
+        assert resolver.calls == [("s3.example.com", 443)], answer
+    async with tenant_session(ws.ctx) as s:
+        (listed,) = await knowledge.list_locations(s)
+    assert (listed.status, listed.version) == ("online", created.version)
+
+
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-14")
 async def test_pr52_s3_write_already_landed_counts_as_written(
