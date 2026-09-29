@@ -197,7 +197,6 @@ async def test_recurrence_api_round_trip(  # noqa: PLR0915
 
 @pytest.mark.req("FR-3.5")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 async def test_tick_waits_for_an_open_completion_on_the_rule(  # noqa: PLR0917
     dbos: type[DBOS],
     workspace: WorkspaceHandle,

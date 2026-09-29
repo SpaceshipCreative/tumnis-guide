@@ -423,12 +423,19 @@ async def _column_rows(s: AsyncSession, project_id: UUID) -> list[RowMapping]:
     return list(rows.mappings())
 
 
+async def _lock_project_board(s: AsyncSession, project_id: UUID) -> None:
+    """The project's board lock, held to the end of the transaction: every write that
+    places a task in a column takes it (through `_slot`), so it also orders the successor
+    writes of a recurrence rule (completion and the tick)."""
+    lock_key = func.hashtextextended(f"tasks.board_columns:{project_id}", 0)
+    await s.execute(select(func.pg_advisory_xact_lock(lock_key)))
+
+
 async def ensure_default_columns(s: AsyncSession, project_id: UUID) -> None:
     """The six default columns (FR-3.2), written once: nothing while the project has any
     live column or does not exist. Serialized per project by an advisory lock, so the
     subscriber and a first request never both write them."""
-    lock_key = func.hashtextextended(f"tasks.board_columns:{project_id}", 0)
-    await s.execute(select(func.pg_advisory_xact_lock(lock_key)))
+    await _lock_project_board(s, project_id)
     if not await projects.project_exists(s, project_id):
         return
     if await _column_rows(s, project_id):
@@ -1099,10 +1106,14 @@ def _recurrence_select() -> Select[Any]:
     )
 
 
-async def _live_rule(s: AsyncSession, rule_id: UUID | None) -> RowMapping | None:
+async def _live_rule(
+    s: AsyncSession, rule_id: UUID | None, *, lock: bool = False
+) -> RowMapping | None:
     if rule_id is None:
         return None
     stmt = select(_recurrence).where(_recurrence.c.id == rule_id, _live(_recurrence))
+    if lock:
+        stmt = stmt.with_for_update()
     return (await s.execute(stmt)).mappings().first()
 
 
@@ -1296,8 +1307,10 @@ async def _create_successor(
 
 
 async def _successor_on_done(s: AsyncSession, task: Mapping[Any, Any], now: datetime) -> None:
-    """Done on a rule's latest instance makes the next one (FR-3.5)."""
-    rule = await _live_rule(s, task["recurrence_rule_id"])
+    """Done on a rule's latest instance makes the next one (FR-3.5). The board lock, then
+    the rule's row lock, before reading the rule: the tick takes them in the same order."""
+    await _lock_project_board(s, task["project_id"])
+    rule = await _live_rule(s, task["recurrence_rule_id"], lock=True)
     if rule is None or rule["latest_occurrence_at"] is None:
         return
     latest = await _latest_instance(s, rule["id"])
@@ -1312,11 +1325,23 @@ async def _successor_on_done(s: AsyncSession, task: Mapping[Any, Any], now: date
 async def create_due_successors(s: AsyncSession, now: datetime) -> int:
     """The recurrence tick for the workspace in context: every live rule whose latest
     instance is due and still open gets its next instance (one, however many occurrences
-    were missed). Returns how many were created."""
+    were missed). Returns how many were created. Each rule is read again under its
+    project's board lock and its row lock (the order completion takes them, in a fixed
+    project order), so a completion committing meanwhile is seen, not raced."""
     tz = await _zone(s)
-    rules = (await s.execute(select(_recurrence).where(_live(_recurrence)))).mappings().all()
+    listed = (
+        await s.execute(
+            select(_recurrence.c.id, _recurrence.c.project_id)
+            .where(_live(_recurrence))
+            .order_by(_recurrence.c.project_id, _recurrence.c.id)
+        )
+    ).all()
     created = 0
-    for rule in rules:
+    for rule_id, project_id in listed:
+        await _lock_project_board(s, project_id)
+        rule = await _live_rule(s, rule_id, lock=True)
+        if rule is None:
+            continue  # stopped meanwhile
         latest = await _latest_instance(s, rule["id"])
         if latest is None or rule["latest_occurrence_at"] is None:
             continue
