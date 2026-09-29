@@ -163,3 +163,23 @@ async def put_setting(
             raise StaleVersion(current={"key": key, "version": current})
         await invalidate_on_commit(session, settings_cache_key(ctx.workspace_id, key))
         return int(row.version)
+
+
+async def seal_for_workspace(
+    session: AsyncSession, workspace_id: UUID, plaintext: bytes, *, aad: bytes
+) -> tuple[int, bytes]:
+    """Seal a value with the workspace's active data key inside the caller's transaction
+    (in that workspace's context); returns (data key version, sealed blob). Other modules'
+    secrets that live in their own columns use it (P0-13: users.totp_secret_enc)."""
+    key_version, data_key = await _sealing_key(session, workspace_id)
+    return key_version, crypto.seal(data_key, key_version, plaintext, aad=aad)
+
+
+async def open_for_workspace(
+    session: AsyncSession, workspace_id: UUID, blob: bytes, *, aad: bytes
+) -> bytes:
+    """Open a value sealed by `seal_for_workspace` (DecryptionError when it does not
+    authenticate under `aad`)."""
+    key_version = crypto.sealed_key_version(blob)
+    data_key = await _data_key(session, workspace_id, key_version)
+    return crypto.open_sealed({key_version: data_key}, blob, aad=aad)

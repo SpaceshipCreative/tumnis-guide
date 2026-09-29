@@ -214,6 +214,11 @@ class SeedWriterMissingError(LookupError):
     """No module has registered a database writer for this record kind yet."""
 
 
+class SeedWriterUnavailableError(RuntimeError):
+    """A writer exists but cannot store its record in this deployment (for example no
+    master key to seal a secret with); `skip_missing` sinks skip the record."""
+
+
 def writers_registered() -> bool:
     """False until the first module registers a writer (projects P0-17); a seed load before
     then has nothing to write to."""
@@ -227,14 +232,32 @@ def register_seed_writer(kind: str, writer: SeedWriter) -> None:
 
 
 class DatabaseSink:
-    """Writes each record through the owning module's api (writers register as modules land)."""
+    """Writes each record through the owning module's api (writers register as modules land).
+
+    `skip_missing=True` (the CLI and `POST /v1/test/reset`) loads what the modules that have
+    landed can store and skips record kinds with no writer yet (or whose writer cannot run
+    here, SeedWriterUnavailableError), naming them in `skipped`
+    (their ids are placeholders nothing is stored under); the default raises
+    SeedWriterMissingError."""
+
+    def __init__(self, *, skip_missing: bool = False) -> None:
+        self.skip_missing = skip_missing
+        self.skipped: set[str] = set()
 
     async def _write(self, kind: str, *args: Any) -> UUID:
+        writer = _WRITERS.get(kind)
+        if writer is None:
+            if self.skip_missing:
+                self.skipped.add(kind)
+                return uuid.uuid4()
+            raise SeedWriterMissingError(f"no seed writer registered for {kind!r}")
         try:
-            writer = _WRITERS[kind]
-        except KeyError:
-            raise SeedWriterMissingError(f"no seed writer registered for {kind!r}") from None
-        return await writer(*args)
+            return await writer(*args)
+        except SeedWriterUnavailableError:
+            if not self.skip_missing:
+                raise
+            self.skipped.add(kind)
+            return uuid.uuid4()
 
     async def workspace(self, rec: WorkspaceSeed) -> UUID:
         return await self._write("workspace", rec)

@@ -9,10 +9,12 @@ import contextlib
 import importlib
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
@@ -34,24 +36,37 @@ from tumnis.core import (
 from tumnis.core.bodylimit import BodyLimitMiddleware
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import document_problem_media_type, install_problem_handlers
+from tumnis.core.principal import AuthenticationMiddleware
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.request_meta import RequestMetaMiddleware
 from tumnis.core.routing import new_request_log
 from tumnis.modules.auth import router as auth_router
-from tumnis.settings import Settings, install_master_keys
+from tumnis.settings import Settings, install_master_keys, install_peppers, require_hosted_tls
 
 # The built frontend (P0-22 replaces the placeholder shell); present in the image.
 SHELL_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
+# Paths the single-page app never owns: an unknown one stays a 404, not the shell.
+NOT_SHELL = ("v1", "health", "metrics", "mcp", "ws", "assets")
+
+
 class ShellFiles(StaticFiles):
     """The built frontend. Anything but GET/HEAD is 404, not 405, so unknown API routes
-    (for example the test routes with real adapters) are not found rather than refused."""
+    (for example the test routes with real adapters) are not found rather than refused.
+    An unknown page path (`/login`, `/setup`, P0-13) gets the shell's index.html, so the
+    app's own router takes it."""
 
     async def get_response(self, path: str, scope: Scope) -> Response:
         if scope["method"] not in ("GET", "HEAD"):
             raise HTTPException(status_code=404)
-        return await super().get_response(path, scope)
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            first, last = path.partition("/")[0], path.rsplit("/", 1)[-1]
+            if exc.status_code != HTTPStatus.NOT_FOUND or first in NOT_SHELL or "." in last:
+                raise
+            return await super().get_response("index.html", scope)
 
 
 @asynccontextmanager
@@ -136,6 +151,8 @@ def create_app(
     metrics_token = settings.metrics_token()  # SettingsError: prod needs METRICS_TOKEN_FILE
     settings.check_database_tls()  # SettingsError: prod needs sslmode=verify-full (P0-16)
     master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
+    require_hosted_tls(settings)  # SettingsError: hosted mode without an https base URL
+    install_peppers(settings)  # session, CSRF and pre-auth tokens (P0-13)
     db.configure(settings.database_url, settings.database_direct_url)
     modules.configure(settings)  # the deployment's module kill list
     clock = clock or SystemClock()
@@ -172,9 +189,11 @@ def create_app(
     # Middleware, innermost first (add_middleware wraps what is there): correlation ID,
     # source address and user agent for the audit log (P0-15); the body limit outside it
     # (P0-10); outermost the request histogram, timing everything below it (P0-27).
-    # Authentication (P0-13) goes inside the correlation ID; the security headers (P0-16)
-    # sit outside all of it (installed above). Rate limits and CSRF run in TumnisRoute,
-    # where the route's policy is known.
+    # Authentication (P0-13, innermost: the principal from the session cookie) goes inside
+    # the correlation ID; the security headers (P0-16) sit outside all of it (installed
+    # above). Rate limits, the Origin check and CSRF run in TumnisRoute, where the route's
+    # policy is known.
+    app.add_middleware(AuthenticationMiddleware)
     app.add_middleware(RequestMetaMiddleware)
     app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(metrics.RequestMetricsMiddleware)

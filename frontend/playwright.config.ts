@@ -11,6 +11,10 @@ const startStack = !process.env.E2E_BASE_URL && existsSync(COMPOSE_TEST);
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
+  // One compose.test stack serves every test and each test resets it (seededApp),
+  // so tests run one at a time (P0-13: a reset also clears the seed user's used
+  // TOTP step, which a parallel sign-in with the same code would otherwise replay).
+  workers: 1,
   forbidOnly: !!process.env.CI,
   // A flaky test is a broken test (operating rule 12).
   retries: 0,

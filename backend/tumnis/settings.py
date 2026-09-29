@@ -22,7 +22,13 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
-from tumnis.core.crypto import MasterKeys, configure_master_keys, load_master_keys
+from tumnis.core.crypto import (
+    PEPPER_FILE,
+    MasterKeys,
+    configure_master_keys,
+    configure_peppers,
+    load_master_keys,
+)
 from tumnis.core.net import NetPolicy, parse_allowlist
 from tumnis.core.types import DeploymentMode
 
@@ -64,6 +70,9 @@ class Settings(BaseSettings):
     cache_backend: Literal["memory", "redis"] = "memory"
     redis_url: str | None = None
     tumnis_disabled_modules: str = ""  # comma-separated deployment kill list (P0-08)
+    # Base URL users reach (links, callbacks) and the only origin allowed to post to the
+    # sign-in routes (P0-13); unset, the request's own origin is used.
+    public_base_url: str | None = None
     metrics_token_file: str | None = None  # bearer for /metrics; required in prod (P0-27)
     sentry_dsn: str | None = None  # GlitchTip; unset keeps the SDK off (P0-27)
     # Comma-separated CIDR ranges (or addresses) the SSRF guard allows in hosted mode even
@@ -122,6 +131,16 @@ class Settings(BaseSettings):
         owner check applies in prod only: tests and dev run as whoever owns their files."""
         return load_master_keys(self.master_key_file, strict_owner=self.deployment_env == "prod")
 
+    @cached_property
+    def peppers(self) -> MasterKeys:
+        """The pepper file (API_KEY_PEPPER_FILE), loaded and checked once like the master
+        key file (P0-13)."""
+        return load_master_keys(
+            self.api_key_pepper_file,
+            strict_owner=self.deployment_env == "prod",
+            what=PEPPER_FILE,
+        )
+
     def metrics_token(self) -> str | None:
         """The /metrics bearer token from METRICS_TOKEN_FILE, stripped (P0-27, FR-12.3).
         Prod refuses to start without one; elsewhere no file means no token, and /metrics
@@ -160,6 +179,28 @@ def install_master_keys(settings: Settings) -> MasterKeys | None:
     configure_master_keys(lambda: settings.master_keys)
     if settings.deployment_env == "prod" or Path(settings.master_key_file).exists():
         return settings.master_keys
+    return None
+
+
+def require_hosted_tls(settings: Settings) -> None:
+    """Hosted mode serves only over TLS: it refuses to start without an https://
+    PUBLIC_BASE_URL (P0-13; the Origin check and the Secure cookies rely on it). Checked
+    when the api starts (create_app, the CLI's boot checks), not when Settings is built."""
+    if settings.deployment_mode == "hosted" and not (settings.public_base_url or "").startswith(
+        "https://"
+    ):
+        raise SettingsError(
+            "hosted_requires_https", "DEPLOYMENT_MODE=hosted needs an https:// PUBLIC_BASE_URL"
+        )
+
+
+def install_peppers(settings: Settings) -> MasterKeys | None:
+    """Point tumnis.core.crypto at the deployment's pepper file, loaded and checked now in
+    prod and whenever it exists (MasterKeyError); in dev and preview a missing file fails
+    only at the first sign-in."""
+    configure_peppers(lambda: settings.peppers)
+    if settings.deployment_env == "prod" or Path(settings.api_key_pepper_file).exists():
+        return settings.peppers
     return None
 
 
