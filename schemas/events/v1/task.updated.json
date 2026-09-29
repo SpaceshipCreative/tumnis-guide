@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "TaskDoc": {
+      "description": "What search indexes for a task.",
+      "properties": {
+        "body": {
+          "default": "",
+          "maxLength": 8192,
+          "title": "Body",
+          "type": "string"
+        },
+        "deleted": {
+          "default": false,
+          "title": "Deleted",
+          "type": "boolean"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "TaskDoc",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/events/v1/task.updated.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "changed_fields": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Changed Fields",
+      "type": "array"
+    },
+    "doc": {
+      "$ref": "#/$defs/TaskDoc"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task_id": {
+      "format": "uuid",
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "task_id",
+    "changed_fields",
+    "doc"
+  ],
+  "title": "TaskUpdatedV1",
+  "type": "object"
+}

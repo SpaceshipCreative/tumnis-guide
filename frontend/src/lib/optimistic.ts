@@ -3,45 +3,27 @@
 // local one) and says so; any other failure puts back what was there; either way the
 // row is refetched once the write settles.
 //
-// Seam until the tasks routes are generated (P0-18): `zTaskOut`, `taskQueryKey` and
-// `taskQueryOptions` stand in for the generated `zTaskOut`, `tasksGetTaskQueryKey` and
-// `tasksGetTaskOptions`, with the same key shape, so LIVE_MAP's `tasksGetTask` matches.
-import { queryOptions } from "@tanstack/react-query";
-import * as z from "zod";
+// `taskQueryKey` and `taskQueryOptions` name the generated `tasksGetTask` query of one
+// task (P0-18), so LIVE_MAP's `tasksGetTask` matches it.
+import type { z } from "zod";
 
+import {
+  tasksGetTaskOptions,
+  tasksGetTaskQueryKey,
+} from "../api/@tanstack/react-query.gen";
+import { zTaskOut } from "../api/zod.gen";
 import { uiStore } from "../stores/uiStore";
-import { apiUrl, apiWrite, ConflictError, useWrite } from "./fetch";
+import { apiWrite, ConflictError, useWrite } from "./fetch";
 
-export interface TaskOut {
-  id: string;
-  title: string;
-  version: number;
-}
-// Loose: the fields this pattern needs are checked, the rest of the row is kept.
-export const zTaskOut: z.ZodType<TaskOut> = z.looseObject({
-  id: z.string(),
-  title: z.string(),
-  version: z.int(),
-});
+export type TaskOut = z.infer<typeof zTaskOut>;
+export { zTaskOut };
 
 export function taskQueryKey(id: string) {
-  return [
-    { _id: "tasksGetTask", baseUrl: window.location.origin, path: { id } },
-  ] as const;
+  return tasksGetTaskQueryKey({ path: { task_id: id } });
 }
 
 export function taskQueryOptions(id: string) {
-  return queryOptions({
-    queryKey: taskQueryKey(id),
-    queryFn: async ({ signal }): Promise<TaskOut> => {
-      const response = await fetch(apiUrl(`/tasks/${id}`), {
-        credentials: "same-origin",
-        signal,
-      });
-      if (!response.ok) throw new Error(`GET task ${String(response.status)}`);
-      return zTaskOut.parse(await response.json());
-    },
-  });
+  return tasksGetTaskOptions({ path: { task_id: id } });
 }
 
 export interface UpdateTaskVars {

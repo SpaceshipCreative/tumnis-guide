@@ -113,6 +113,45 @@ import type {
   SettingsSetModuleData,
   SettingsSetModuleErrors,
   SettingsSetModuleResponses,
+  TasksAddCommentData,
+  TasksAddCommentErrors,
+  TasksAddCommentResponses,
+  TasksChangeStatusData,
+  TasksChangeStatusErrors,
+  TasksChangeStatusResponses,
+  TasksCreateTaskData,
+  TasksCreateTaskErrors,
+  TasksCreateTaskResponses,
+  TasksGetBoardData,
+  TasksGetBoardErrors,
+  TasksGetBoardResponses,
+  TasksGetColumnsData,
+  TasksGetColumnsErrors,
+  TasksGetColumnsResponses,
+  TasksGetReviewCountData,
+  TasksGetReviewCountErrors,
+  TasksGetReviewCountResponses,
+  TasksGetTaskData,
+  TasksGetTaskErrors,
+  TasksGetTaskResponses,
+  TasksLinkContextItemData,
+  TasksLinkContextItemErrors,
+  TasksLinkContextItemResponses,
+  TasksListReviewKindsData,
+  TasksListReviewKindsErrors,
+  TasksListReviewKindsResponses,
+  TasksListTasksData,
+  TasksListTasksErrors,
+  TasksListTasksResponses,
+  TasksMoveTaskData,
+  TasksMoveTaskErrors,
+  TasksMoveTaskResponses,
+  TasksPutColumnsData,
+  TasksPutColumnsErrors,
+  TasksPutColumnsResponses,
+  TasksUpdateTaskData,
+  TasksUpdateTaskErrors,
+  TasksUpdateTaskResponses,
   UsageGetUsageData,
   UsageGetUsageErrors,
   UsageGetUsageResponses,
@@ -151,6 +190,19 @@ import {
   zSettingsPutSectionResponse,
   zSettingsPutWorkspaceSettingsResponse,
   zSettingsSetModuleResponse,
+  zTasksAddCommentResponse,
+  zTasksChangeStatusResponse,
+  zTasksCreateTaskResponse,
+  zTasksGetBoardResponse,
+  zTasksGetColumnsResponse,
+  zTasksGetReviewCountResponse,
+  zTasksGetTaskResponse,
+  zTasksLinkContextItemResponse,
+  zTasksListReviewKindsResponse,
+  zTasksListTasksResponse,
+  zTasksMoveTaskResponse,
+  zTasksPutColumnsResponse,
+  zTasksUpdateTaskResponse,
   zUsageGetUsageResponse,
 } from "./zod.gen";
 
@@ -719,6 +771,74 @@ export const projectsArchiveProject = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Board
+ *
+ * The kanban: columns, cards and each card's checklist (FR-3.4).
+ */
+export const tasksGetBoard = <ThrowOnError extends boolean = false>(
+  options: Options<TasksGetBoardData, ThrowOnError>,
+): RequestResult<TasksGetBoardResponses, TasksGetBoardErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    TasksGetBoardResponses,
+    TasksGetBoardErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksGetBoardResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/board",
+    ...options,
+  });
+
+/**
+ * Get Columns
+ */
+export const tasksGetColumns = <ThrowOnError extends boolean = false>(
+  options: Options<TasksGetColumnsData, ThrowOnError>,
+): RequestResult<
+  TasksGetColumnsResponses,
+  TasksGetColumnsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TasksGetColumnsResponses,
+    TasksGetColumnsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksGetColumnsResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/columns",
+    ...options,
+  });
+
+/**
+ * Put Columns
+ *
+ * Renames, reorders, adds and removes columns in one request; every status keeps at
+ * least one column (422 `status_without_column`).
+ */
+export const tasksPutColumns = <ThrowOnError extends boolean = false>(
+  options: Options<TasksPutColumnsData, ThrowOnError>,
+): RequestResult<
+  TasksPutColumnsResponses,
+  TasksPutColumnsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    TasksPutColumnsResponses,
+    TasksPutColumnsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksPutColumnsResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/columns",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Reorder Project
  *
  * Moves the project between two neighbours (either may be null: an open end).
@@ -768,6 +888,52 @@ export const projectsUnarchiveProject = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Get Review Count
+ *
+ * The badge: review items waiting now (not decided, trashed or snoozed).
+ */
+export const tasksGetReviewCount = <ThrowOnError extends boolean = false>(
+  options?: Options<TasksGetReviewCountData, ThrowOnError>,
+): RequestResult<
+  TasksGetReviewCountResponses,
+  TasksGetReviewCountErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    TasksGetReviewCountResponses,
+    TasksGetReviewCountErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksGetReviewCountResponse.parseAsync(data),
+    url: "/v1/review/count",
+    ...options,
+  });
+
+/**
+ * List Review Kinds
+ *
+ * The registered review kinds and their actions (R-03, R-05).
+ */
+export const tasksListReviewKinds = <ThrowOnError extends boolean = false>(
+  options?: Options<TasksListReviewKindsData, ThrowOnError>,
+): RequestResult<
+  TasksListReviewKindsResponses,
+  TasksListReviewKindsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    TasksListReviewKindsResponses,
+    TasksListReviewKindsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListReviewKindsResponse.parseAsync(data),
+    url: "/v1/review/kinds",
+    ...options,
   });
 
 /**
@@ -961,6 +1127,194 @@ export const authSetupTotp = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zAuthSetupTotpResponse.parseAsync(data),
     url: "/v1/setup/totp",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List Tasks
+ *
+ * Tasks in creation order, optionally of one project and one status.
+ */
+export const tasksListTasks = <ThrowOnError extends boolean = false>(
+  options?: Options<TasksListTasksData, ThrowOnError>,
+): RequestResult<TasksListTasksResponses, TasksListTasksErrors, ThrowOnError> =>
+  (options?.client ?? client).get<
+    TasksListTasksResponses,
+    TasksListTasksErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListTasksResponse.parseAsync(data),
+    url: "/v1/tasks",
+    ...options,
+  });
+
+/**
+ * Create Task
+ */
+export const tasksCreateTask = <ThrowOnError extends boolean = false>(
+  options: Options<TasksCreateTaskData, ThrowOnError>,
+): RequestResult<
+  TasksCreateTaskResponses,
+  TasksCreateTaskErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TasksCreateTaskResponses,
+    TasksCreateTaskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksCreateTaskResponse.parseAsync(data),
+    url: "/v1/tasks",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Task
+ */
+export const tasksGetTask = <ThrowOnError extends boolean = false>(
+  options: Options<TasksGetTaskData, ThrowOnError>,
+): RequestResult<TasksGetTaskResponses, TasksGetTaskErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    TasksGetTaskResponses,
+    TasksGetTaskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksGetTaskResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}",
+    ...options,
+  });
+
+/**
+ * Update Task
+ */
+export const tasksUpdateTask = <ThrowOnError extends boolean = false>(
+  options: Options<TasksUpdateTaskData, ThrowOnError>,
+): RequestResult<
+  TasksUpdateTaskResponses,
+  TasksUpdateTaskErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    TasksUpdateTaskResponses,
+    TasksUpdateTaskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksUpdateTaskResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Add Comment
+ */
+export const tasksAddComment = <ThrowOnError extends boolean = false>(
+  options: Options<TasksAddCommentData, ThrowOnError>,
+): RequestResult<
+  TasksAddCommentResponses,
+  TasksAddCommentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TasksAddCommentResponses,
+    TasksAddCommentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksAddCommentResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/comments",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Link Context Item
+ *
+ * Links outside content by ContextItem id (FR-14.2); linking again keeps one link.
+ */
+export const tasksLinkContextItem = <ThrowOnError extends boolean = false>(
+  options: Options<TasksLinkContextItemData, ThrowOnError>,
+): RequestResult<
+  TasksLinkContextItemResponses,
+  TasksLinkContextItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TasksLinkContextItemResponses,
+    TasksLinkContextItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksLinkContextItemResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/context-items",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Move Task
+ *
+ * One board drag: column, rank and version in one request (R-20).
+ */
+export const tasksMoveTask = <ThrowOnError extends boolean = false>(
+  options: Options<TasksMoveTaskData, ThrowOnError>,
+): RequestResult<TasksMoveTaskResponses, TasksMoveTaskErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    TasksMoveTaskResponses,
+    TasksMoveTaskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksMoveTaskResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/move",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Change Status
+ *
+ * Moves the task through the state machine (FR-3.2).
+ */
+export const tasksChangeStatus = <ThrowOnError extends boolean = false>(
+  options: Options<TasksChangeStatusData, ThrowOnError>,
+): RequestResult<
+  TasksChangeStatusResponses,
+  TasksChangeStatusErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TasksChangeStatusResponses,
+    TasksChangeStatusErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksChangeStatusResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/status",
     ...options,
     headers: {
       "Content-Type": "application/json",

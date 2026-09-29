@@ -46,6 +46,19 @@ import {
   settingsPutSection,
   settingsPutWorkspaceSettings,
   settingsSetModule,
+  tasksAddComment,
+  tasksChangeStatus,
+  tasksCreateTask,
+  tasksGetBoard,
+  tasksGetColumns,
+  tasksGetReviewCount,
+  tasksGetTask,
+  tasksLinkContextItem,
+  tasksListReviewKinds,
+  tasksListTasks,
+  tasksMoveTask,
+  tasksPutColumns,
+  tasksUpdateTask,
   usageGetUsage,
 } from "../sdk.gen";
 import type {
@@ -150,6 +163,45 @@ import type {
   SettingsSetModuleData,
   SettingsSetModuleError,
   SettingsSetModuleResponse,
+  TasksAddCommentData,
+  TasksAddCommentError,
+  TasksAddCommentResponse,
+  TasksChangeStatusData,
+  TasksChangeStatusError,
+  TasksChangeStatusResponse,
+  TasksCreateTaskData,
+  TasksCreateTaskError,
+  TasksCreateTaskResponse,
+  TasksGetBoardData,
+  TasksGetBoardError,
+  TasksGetBoardResponse,
+  TasksGetColumnsData,
+  TasksGetColumnsError,
+  TasksGetColumnsResponse,
+  TasksGetReviewCountData,
+  TasksGetReviewCountError,
+  TasksGetReviewCountResponse,
+  TasksGetTaskData,
+  TasksGetTaskError,
+  TasksGetTaskResponse,
+  TasksLinkContextItemData,
+  TasksLinkContextItemError,
+  TasksLinkContextItemResponse,
+  TasksListReviewKindsData,
+  TasksListReviewKindsError,
+  TasksListReviewKindsResponse,
+  TasksListTasksData,
+  TasksListTasksError,
+  TasksListTasksResponse,
+  TasksMoveTaskData,
+  TasksMoveTaskError,
+  TasksMoveTaskResponse,
+  TasksPutColumnsData,
+  TasksPutColumnsError,
+  TasksPutColumnsResponse,
+  TasksUpdateTaskData,
+  TasksUpdateTaskError,
+  TasksUpdateTaskResponse,
   UsageGetUsageData,
   UsageGetUsageError,
   UsageGetUsageResponse,
@@ -1209,6 +1261,89 @@ export const projectsArchiveProjectMutation = (
   return mutationOptions;
 };
 
+export const tasksGetBoardQueryKey = (options: Options<TasksGetBoardData>) =>
+  createQueryKey("tasksGetBoard", options);
+
+/**
+ * Get Board
+ *
+ * The kanban: columns, cards and each card's checklist (FR-3.4).
+ */
+export const tasksGetBoardOptions = (options: Options<TasksGetBoardData>) =>
+  queryOptions<
+    TasksGetBoardResponse,
+    TasksGetBoardError,
+    TasksGetBoardResponse,
+    ReturnType<typeof tasksGetBoardQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksGetBoard({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksGetBoardQueryKey(options),
+  });
+
+export const tasksGetColumnsQueryKey = (
+  options: Options<TasksGetColumnsData>,
+) => createQueryKey("tasksGetColumns", options);
+
+/**
+ * Get Columns
+ */
+export const tasksGetColumnsOptions = (options: Options<TasksGetColumnsData>) =>
+  queryOptions<
+    TasksGetColumnsResponse,
+    TasksGetColumnsError,
+    TasksGetColumnsResponse,
+    ReturnType<typeof tasksGetColumnsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksGetColumns({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksGetColumnsQueryKey(options),
+  });
+
+/**
+ * Put Columns
+ *
+ * Renames, reorders, adds and removes columns in one request; every status keeps at
+ * least one column (422 `status_without_column`).
+ */
+export const tasksPutColumnsMutation = (
+  options?: Partial<Options<TasksPutColumnsData>>,
+): UseMutationOptions<
+  TasksPutColumnsResponse,
+  TasksPutColumnsError,
+  Options<TasksPutColumnsData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksPutColumnsResponse,
+    TasksPutColumnsError,
+    Options<TasksPutColumnsData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksPutColumns({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 /**
  * Reorder Project
  *
@@ -1264,6 +1399,66 @@ export const projectsUnarchiveProjectMutation = (
   };
   return mutationOptions;
 };
+
+export const tasksGetReviewCountQueryKey = (
+  options?: Options<TasksGetReviewCountData>,
+) => createQueryKey("tasksGetReviewCount", options);
+
+/**
+ * Get Review Count
+ *
+ * The badge: review items waiting now (not decided, trashed or snoozed).
+ */
+export const tasksGetReviewCountOptions = (
+  options?: Options<TasksGetReviewCountData>,
+) =>
+  queryOptions<
+    TasksGetReviewCountResponse,
+    TasksGetReviewCountError,
+    TasksGetReviewCountResponse,
+    ReturnType<typeof tasksGetReviewCountQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksGetReviewCount({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksGetReviewCountQueryKey(options),
+  });
+
+export const tasksListReviewKindsQueryKey = (
+  options?: Options<TasksListReviewKindsData>,
+) => createQueryKey("tasksListReviewKinds", options);
+
+/**
+ * List Review Kinds
+ *
+ * The registered review kinds and their actions (R-03, R-05).
+ */
+export const tasksListReviewKindsOptions = (
+  options?: Options<TasksListReviewKindsData>,
+) =>
+  queryOptions<
+    TasksListReviewKindsResponse,
+    TasksListReviewKindsError,
+    TasksListReviewKindsResponse,
+    ReturnType<typeof tasksListReviewKindsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListReviewKinds({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListReviewKindsQueryKey(options),
+  });
 
 export const settingsListModulesQueryKey = (
   options?: Options<SettingsListModulesData>,
@@ -1488,6 +1683,281 @@ export const authSetupTotpMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await authSetupTotp({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const tasksListTasksQueryKey = (options?: Options<TasksListTasksData>) =>
+  createQueryKey("tasksListTasks", options);
+
+/**
+ * List Tasks
+ *
+ * Tasks in creation order, optionally of one project and one status.
+ */
+export const tasksListTasksOptions = (options?: Options<TasksListTasksData>) =>
+  queryOptions<
+    TasksListTasksResponse,
+    TasksListTasksError,
+    TasksListTasksResponse,
+    ReturnType<typeof tasksListTasksQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListTasks({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListTasksQueryKey(options),
+  });
+
+export const tasksListTasksInfiniteQueryKey = (
+  options?: Options<TasksListTasksData>,
+): QueryKey<Options<TasksListTasksData>> =>
+  createQueryKey("tasksListTasks", options, true);
+
+/**
+ * List Tasks
+ *
+ * Tasks in creation order, optionally of one project and one status.
+ */
+export const tasksListTasksInfiniteOptions = (
+  options?: Options<TasksListTasksData>,
+) => {
+  const opts = infiniteQueryOptions<
+    TasksListTasksResponse,
+    TasksListTasksError,
+    InfiniteData<TasksListTasksResponse>,
+    QueryKey<Options<TasksListTasksData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<TasksListTasksData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<TasksListTasksData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await tasksListTasks({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: tasksListTasksInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Create Task
+ */
+export const tasksCreateTaskMutation = (
+  options?: Partial<Options<TasksCreateTaskData>>,
+): UseMutationOptions<
+  TasksCreateTaskResponse,
+  TasksCreateTaskError,
+  Options<TasksCreateTaskData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksCreateTaskResponse,
+    TasksCreateTaskError,
+    Options<TasksCreateTaskData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksCreateTask({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const tasksGetTaskQueryKey = (options: Options<TasksGetTaskData>) =>
+  createQueryKey("tasksGetTask", options);
+
+/**
+ * Get Task
+ */
+export const tasksGetTaskOptions = (options: Options<TasksGetTaskData>) =>
+  queryOptions<
+    TasksGetTaskResponse,
+    TasksGetTaskError,
+    TasksGetTaskResponse,
+    ReturnType<typeof tasksGetTaskQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksGetTask({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksGetTaskQueryKey(options),
+  });
+
+/**
+ * Update Task
+ */
+export const tasksUpdateTaskMutation = (
+  options?: Partial<Options<TasksUpdateTaskData>>,
+): UseMutationOptions<
+  TasksUpdateTaskResponse,
+  TasksUpdateTaskError,
+  Options<TasksUpdateTaskData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksUpdateTaskResponse,
+    TasksUpdateTaskError,
+    Options<TasksUpdateTaskData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksUpdateTask({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Add Comment
+ */
+export const tasksAddCommentMutation = (
+  options?: Partial<Options<TasksAddCommentData>>,
+): UseMutationOptions<
+  TasksAddCommentResponse,
+  TasksAddCommentError,
+  Options<TasksAddCommentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksAddCommentResponse,
+    TasksAddCommentError,
+    Options<TasksAddCommentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksAddComment({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Link Context Item
+ *
+ * Links outside content by ContextItem id (FR-14.2); linking again keeps one link.
+ */
+export const tasksLinkContextItemMutation = (
+  options?: Partial<Options<TasksLinkContextItemData>>,
+): UseMutationOptions<
+  TasksLinkContextItemResponse,
+  TasksLinkContextItemError,
+  Options<TasksLinkContextItemData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksLinkContextItemResponse,
+    TasksLinkContextItemError,
+    Options<TasksLinkContextItemData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksLinkContextItem({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Move Task
+ *
+ * One board drag: column, rank and version in one request (R-20).
+ */
+export const tasksMoveTaskMutation = (
+  options?: Partial<Options<TasksMoveTaskData>>,
+): UseMutationOptions<
+  TasksMoveTaskResponse,
+  TasksMoveTaskError,
+  Options<TasksMoveTaskData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksMoveTaskResponse,
+    TasksMoveTaskError,
+    Options<TasksMoveTaskData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksMoveTask({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Change Status
+ *
+ * Moves the task through the state machine (FR-3.2).
+ */
+export const tasksChangeStatusMutation = (
+  options?: Partial<Options<TasksChangeStatusData>>,
+): UseMutationOptions<
+  TasksChangeStatusResponse,
+  TasksChangeStatusError,
+  Options<TasksChangeStatusData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksChangeStatusResponse,
+    TasksChangeStatusError,
+    Options<TasksChangeStatusData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksChangeStatus({
         ...options,
         ...fnOptions,
         throwOnError: true,

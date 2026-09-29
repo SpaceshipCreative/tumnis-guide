@@ -18,7 +18,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-1.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 async def test_seed_projects_show_expected_health(
     db: DbUrls, seed: SeedResult, clock: FixedClock
 ) -> None:
