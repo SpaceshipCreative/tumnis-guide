@@ -5,6 +5,7 @@
 replays the recording named by HERMES_STUB_RECORDING line by line on stdout. With
 HERMES_STUB_SLEEP it first starts a child sharing its process group (both pids go to
 HERMES_STUB_PIDFILE), and sleeps that many seconds, so a timeout must kill the group.
+HERMES_STUB_STDERR_FILE gets the path the stub's stderr points at (Linux /proc).
 `profile show`, `version`, `mcp list` and `status` answer for the health check.
 """
 
@@ -20,6 +21,9 @@ def chat(args: list[str]) -> int:
     if not query.is_file():
         print(f"no query file {query}", file=sys.stderr)
         return 2
+    stderr_file = os.environ.get("HERMES_STUB_STDERR_FILE")
+    if stderr_file:
+        Path(stderr_file).write_text(os.readlink("/proc/self/fd/2"))
     pidfile = os.environ.get("HERMES_STUB_PIDFILE")
     sleep_s = float(os.environ.get("HERMES_STUB_SLEEP", "0"))
     if sleep_s:

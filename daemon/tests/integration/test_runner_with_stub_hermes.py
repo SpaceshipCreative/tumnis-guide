@@ -75,3 +75,18 @@ async def test_stream_json_result_becomes_result_message(
     while any(alive(pid) for pid in pids):
         assert loop.time() < deadline, f"still running: {[p for p in pids if alive(p)]}"
         await asyncio.sleep(0.05)
+
+
+@pytest.mark.req("FR-5.11")
+@pytest.mark.wp("P1-04")
+async def test_hermes_stderr_goes_to_devnull(
+    cfg: DaemonConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hermes's stderr is never read (nothing uses it), so it goes to /dev/null: a run that
+    logs heavily for its whole timeout cannot grow the daemon's memory."""
+    where = tmp_path / "stderr"
+    monkeypatch.setenv("HERMES_STUB_STDERR_FILE", str(where))
+    monkeypatch.setenv("HERMES_STUB_RECORDING", str(RECORDINGS / "enrich_ok.jsonl"))
+    result = await execute(make_run(), cfg)
+    assert result.status == "succeeded", result.error
+    assert where.read_text() == "/dev/null"
