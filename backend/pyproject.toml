@@ -31,6 +31,7 @@ dev = [
   "polyfactory==3.3.0",
   "pytest==9.1.1",
   "pytest-asyncio==1.4.0",
+  "pytest-cov==7.1.0",
   "pytest-randomly==5.0.0",
   "pytest-socket==0.8.1",
   "pytest-xdist==3.8.0",

@@ -46,6 +46,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     health.register_health("postgres", health.sql_check(db.app_engine, "SELECT 1"), critical=True)
     health.register_health("dbos", health.dbos_check(settings.dbos_system_url), critical=True)
     wiring.register_module_health()
+    wiring.register_adapter_health(health.register_health)
 
     app = FastAPI(
         title="Tumnis Guide",

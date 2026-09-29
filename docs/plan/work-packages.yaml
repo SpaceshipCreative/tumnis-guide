@@ -1,6 +1,8 @@
 # Tumnis Guide implementation plan: work packages
 # Source of truth for the phase tabs in the living doc and docs/IMPLEMENTATION-PLAN.md.
 # Each work package (WP) opens with failing tests ("red"), then the build ("green"), then a done-when check.
+# status (per phase): planned | active | done. traceability (P0-03) fails the build when a
+# requirement first scheduled in a done phase has no passing test.
 # size: S = up to 1 day, M = 1 to 2 days, L = 3 to 4 days (ships as two or more PRs). Days = agent-assisted days.
 schema_version: 1
 plan_date: 2026-09-28
@@ -8,6 +10,7 @@ plan_date: 2026-09-28
 phases:
 - id: 0
   name: Foundation
+  status: active
   weeks: 1 to 4
   lead: Phase 0 ships a Tumnis Scott can run on the homelab and use by hand, with every test layer, CI guard and safety baseline in place before any AI code.
   exit: User can run it on the homelab and manage real projects by hand (PRD). Here that means the A0 suite is green and Scott has run his real projects in it for 3 working days.
@@ -391,6 +394,7 @@ phases:
 
 - id: 1
   name: AI core loop
+  status: planned
   weeks: 5 to 7
   lead: Phase 1 makes the dashboard plan itself. Jev labels, the project agent estimates, the master builds Today, and the knowledge base feeds the packet.
   exit: User plans every day from the dashboard for 2 straight weeks (PRD), counted from plan.published and plan acceptance events.
@@ -644,6 +648,7 @@ phases:
 
 - id: 2
   name: Agent layer
+  status: planned
   weeks: 8 to 11
   lead: Phase 2 lets agents do real work through Tumnis, with every hop logged, every gated action approved and hostile content unable to steer a run.
   exit: One real task per day completed by an agent end to end, for 2 weeks (PRD).
@@ -878,6 +883,7 @@ phases:
 
 - id: 3
   name: Capture
+  status: planned
   weeks: 12 to 14
   lead: Phase 3 turns email, meetings and chat into proposed tasks with under 30 seconds of human time each, and widens the knowledge base.
   exit: Under 30 seconds of human time per captured task (PRD), measured from review timestamps over two weeks.
@@ -1042,6 +1048,7 @@ phases:
 
 - id: 4
   name: Hardening
+  status: planned
   weeks: "15, plan for 16"
   lead: Phase 4 finishes the focus dial, adds unattended runs and proves a second freelancer can install Tumnis from the README alone.
   exit: v1 tagged; a second freelancer can install it from the README alone (PRD).

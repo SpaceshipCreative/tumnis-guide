@@ -71,6 +71,7 @@ forbidden_modules =
 ignore_imports =
     tumnis.core.tests.** -> tumnis.app
     tumnis.core.tests.** -> tumnis.cli
+    tumnis.core.tests.** -> tumnis.wiring
 unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:module-graph-acyclic]
@@ -99,3 +100,18 @@ forbidden_modules =
     tumnis.modules.github
     tumnis.modules.coolify
     tumnis.modules.notifications
+
+# contract.py imports pytest (P0-09). The sources are listed per level because a package
+# never "imports" its own descendants: plain `tumnis` would miss tumnis.core.* importers.
+[importlinter:contract:contract-base-test-only]
+name = Only tests import the pytest-based adapter contract base
+type = forbidden
+source_modules =
+    tumnis.*
+    tumnis.core.*
+    tumnis.core.adapters.*
+forbidden_modules =
+    tumnis.core.adapters.contract
+ignore_imports =
+    tumnis.**.tests.** -> tumnis.core.adapters.contract
+unmatched_ignore_imports_alerting = none

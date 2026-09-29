@@ -1,0 +1,276 @@
+# CI: the architecture's eight jobs plus spec-guard, red-proof and traceability (P0-03).
+#
+# Job ids are the required-check names: .github/required-checks.txt lists them and
+# scripts/ci/branch_protection.sh requires them on main. Every job runs on every PR (no
+# `paths:` filters: a required check that never reports blocks a merge forever); jobs
+# that do not apply exit green instead. A test (T-P0-03-16) keeps this file,
+# required-checks.txt and the per-job budgets in step.
+#
+# Actions are pinned by commit SHA; Renovate bumps the SHA and the version comment.
+name: ci
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write # traceability comment
+  issues: read # spec-guard reads who added the spec-change label
+
+env:
+  UV_FROZEN: "1"
+  NODE_VERSION: "24"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Backend lint, types and boundaries
+        working-directory: backend
+        run: |
+          uv sync
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy tumnis
+          uv run lint-imports
+      - name: CI scripts lint and types
+        working-directory: backend
+        run: |
+          uv run ruff check --config pyproject.toml ../scripts/ci
+          uv run ruff format --config pyproject.toml --check ../scripts/ci
+          uv run mypy --strict ../scripts/ci
+      - name: Frontend lint and types
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run lint
+          npx tsc --noEmit
+
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # Before pytest: the spec-guard tests parse TypeScript with frontend/node_modules.
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Backend unit tests with coverage
+        working-directory: backend
+        run: |
+          uv sync
+          uv run pytest -m "not integration and not contract" -n auto --cov --cov-report=json
+      - name: Coverage gates
+        run: uv run --project backend python scripts/ci/coverage_gates.py backend/coverage.json
+      - name: Frontend unit tests
+        working-directory: frontend
+        run: npm run test -- --run
+
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Contract tests
+        working-directory: backend
+        run: |
+          uv sync
+          uv run pytest -m contract
+      - name: Generated code is committed
+        run: make gen && git diff --exit-code # P0-11 fills `make gen`
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Integration tests (Postgres 18, DBOS, MinIO, SFTP, clamd)
+        working-directory: backend
+        run: |
+          uv sync
+          uv run pytest -m integration -n auto
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Start the test stack (compose.test with fakes)
+        run: |
+          if [ -f deploy/compose.test.yaml ]; then
+            docker compose -f deploy/compose.test.yaml up -d --wait
+            echo "E2E_BASE_URL=http://localhost:8080" >> "$GITHUB_ENV"
+          else
+            echo "deploy/compose.test.yaml arrives with P0-04; running the harness specs only"
+          fi
+      - name: Playwright
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - name: Stack logs on failure
+        if: failure() && hashFiles('deploy/compose.test.yaml') != ''
+        run: docker compose -f deploy/compose.test.yaml logs --no-color --tail=200
+
+  # Skills and Performance need the homelab self-hosted runner (P1-05, P0-29). Until the
+  # repo variable HOMELAB_RUNNER is "true" they run as stubs on a GitHub-hosted runner, so
+  # a missing or offline homelab runner can never leave a required check queued.
+  skills:
+    runs-on: ${{ vars.HOMELAB_RUNNER == 'true' && fromJSON('["self-hosted", "homelab"]') || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - run: echo "Skills job is a stub until P1-05 (profiles harness on the homelab runner)"
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "Security job is filled by P0-16 (pip-audit, npm audit, Trivy, Semgrep, gitleaks)"
+
+  performance:
+    runs-on: ${{ vars.HOMELAB_RUNNER == 'true' && fromJSON('["self-hosted", "homelab"]') || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - run: echo "Performance job is a stub until P0-29 (k6, Lighthouse CI, bundle budget)"
+
+  # A job skipped by `if:` counts as passing for branch protection, which is why the two
+  # PR-only guards skip only on push to main.
+  spec-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install TypeScript for the test extractor
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund --ignore-scripts
+      - name: spec-guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPEC_CHANGE_ACTORS: ${{ vars.SPEC_CHANGE_ACTORS }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          python3 scripts/ci/spec_guard.py --base "$BASE_SHA" --head "$GITHUB_SHA"
+          --labels "$LABELS" --pr "$PR_NUMBER"
+
+  red-proof:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Not a bug PR
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'bug') }}
+        run: echo "no bug label; red-proof applies only to PRs labeled bug"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: contains(github.event.pull_request.labels.*.name, 'bug')
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        if: contains(github.event.pull_request.labels.*.name, 'bug')
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: contains(github.event.pull_request.labels.*.name, 'bug')
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: red-proof
+        if: contains(github.event.pull_request.labels.*.name, 'bug')
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          (cd frontend && npm ci --no-audit --no-fund)
+          (cd backend && uv sync)
+          uv run --project backend python scripts/ci/red_proof.py \
+            --base "$BASE_SHA" --head "$GITHUB_SHA" --pr "$PR_NUMBER"
+
+  traceability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Traceability matrix and gate
+        run: |
+          (cd frontend && npm ci --no-audit --no-fund --ignore-scripts)
+          (cd backend && uv sync)
+          uv run --project backend python scripts/ci/traceability.py \
+            --out trace.md --json traceability.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: traceability
+          path: |
+            trace.md
+            traceability.json
+          if-no-files-found: ignore
+      - name: Comment on the PR
+        if: always() && github.event_name == 'pull_request' && hashFiles('trace.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          gh pr comment "$PR_NUMBER" --body-file trace.md --edit-last
+          || gh pr comment "$PR_NUMBER" --body-file trace.md

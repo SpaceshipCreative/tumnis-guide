@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from tests._pg import APP, DbUrls, bootstrap_roles, build_template, clone, drop
-from tumnis.core.adapters.registry import AdapterMode, registered, resolve
+from tumnis.core.adapters.registry import AdapterMode, health_states, registered, resolve
 from tumnis.core.clock import FixedClock
 
 if TYPE_CHECKING:
@@ -68,6 +68,10 @@ class Fakes:
 
     def names(self) -> tuple[str, ...]:
         return tuple(spec.name for spec in registered())
+
+    def adapter_health(self) -> dict[str, str]:
+        """Adapter name -> "ok" or "degraded", over every live tracked instance (P0-09)."""
+        return dict(health_states())
 
 
 @pytest.fixture

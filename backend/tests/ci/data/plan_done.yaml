@@ -1,0 +1,28 @@
+# Traceability fixture: phase 0 is done, phase 1 is active.
+schema_version: 1
+phases:
+- id: 0
+  name: Foundation
+  status: done
+  acceptance:
+  - {id: A0.1, test: "Sign in and quick-add", layer: Playwright, traces: "J2, FR-1.1"}
+  milestones:
+  - id: M0.1
+    name: Harness
+    wps:
+    - id: P0-03
+      title: CI pipeline and TDD guards
+      traces: ["Quality rules 1, 2, 4"]
+    - id: P0-14
+      title: API keys
+      traces: [SEC-2, ADR-0009]
+- id: 1
+  name: AI core loop
+  status: active
+  milestones:
+  - id: M1.1
+    name: Decisions
+    wps:
+    - id: P1-01
+      title: Jev client
+      traces: [FR-11.9]

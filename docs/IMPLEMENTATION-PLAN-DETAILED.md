@@ -117,7 +117,7 @@ tumnis-guide/
 │   │   │   ├── crypto.py          # envelope encryption, master key loader
 │   │   │   ├── settings_store.py  # per-workspace encrypted settings
 │   │   │   ├── modules.py         # module registry + deployment/workspace flags
-│   │   │   ├── adapters/          # base.py, breaker.py, retry.py, registry.py, contract.py
+│   │   │   ├── adapters/          # base.py, errors.py, breaker.py, retry.py, registry.py, contract.py
 │   │   │   ├── net.py             # SSRF-guarded HTTP client with pinned IP
 │   │   │   ├── idempotency.py     # middleware + table
 │   │   │   ├── versioning.py      # optimistic concurrency helpers (409)
@@ -187,6 +187,7 @@ tumnis-guide/
 │   └── prometheus/alerts.yml  prometheus/alerts.test.yml
 ├── scripts/
 │   ├── ci/spec_guard.py  ci/red_proof.py  ci/traceability.py  ci/check_bundle.mjs
+│   ├── ci/_tests_extract.py  ci/ts_tests.mjs  ci/pytest_trace.py  ci/coverage_gates.py  ci/branch_protection.sh
 │   ├── readme_test.py
 │   └── drill/restore_drill.sh
 └── docs/
@@ -442,6 +443,9 @@ Static schedules register in `worker.py` after `DBOS.launch()` with `DBOS.apply_
 | `APP_DB_PASSWORD`, `OWNER_DB_PASSWORD`, `POSTGRES_PASSWORD` | Compose interpolation only: role passwords set by initdb and placed in the database URLs (P0-04) | none (`deploy/test.env` for compose.test) | Coolify |
 | `TUMNIS_VERSION` | Image tag compose.yaml runs (`sha-<commit>` from deploy.yml, `pr-<n>-<sha>` for previews) | `latest` | Coolify (set by deploy.yml / preview.yml) |
 | `TUMNIS_IMAGE`, `TUMNIS_TEST_PORT` | compose.test.yaml only: image to run (default `tumnis:test`, built from the checkout) and loopback port for the api (default 8080) | see meaning | developer machine, CI |
+| `SPEC_CHANGE_ACTORS` | Logins whose `spec-change` label waives spec-guard (P0-03) | Scott's login | GitHub repo variable |
+| `HOMELAB_RUNNER` | `true` moves the Skills and Performance jobs to `[self-hosted, homelab]` | unset (GitHub-hosted stubs) | GitHub repo variable |
+| `GH_API_STUB` | Test-only JSON file standing in for `gh api` in spec-guard | unset | tests |
 
 Everything per workspace (connector credentials, provider keys, thresholds, working hours, focus levels, timezone) lives in `workspace_settings`, encrypted (P0-08).
 
