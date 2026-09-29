@@ -10,6 +10,7 @@ import asyncio
 import base64
 import json
 import secrets
+import threading
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
@@ -372,16 +373,52 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
     }
     DBOS(config=config)
     DBOS.reset_system_database(truncate=True)
+    earlier = set(threading.enumerate())  # a destroyed instance's threads may linger
     DBOS.launch()
     # DBOS 3.1 persists queues in the system database, so they register after launch, and
     # it refuses the sync call inside a running event loop (a test that requests this
     # fixture mid-test): register from a thread of its own.
     with ThreadPoolExecutor(max_workers=1) as pool:
         pool.submit(register_queues).result()
+        queues = [queue.name for queue in pool.submit(DBOS.list_queues).result()]
+    _wait_for_queue_workers(queues, earlier)
     try:
         yield DBOS
     finally:
+        _stop_queue_workers(earlier)
         DBOS.destroy(destroy_registry=False)
+
+
+def _wait_for_queue_workers(
+    queues: list[str], earlier: set[threading.Thread], timeout_s: float = 10
+) -> None:
+    """Block until DBOS dequeues from every queue in `queues`. Its queue manager looks for
+    new queues once a second and starts a `queue-worker-<name>` thread for each (dbos
+    3.1.0), so without this wait the first enqueue in a test sat up to a second longer
+    than the queue's polling interval, and timing tests (T-P0-07-07, -08) measured DBOS's
+    startup instead of the relay."""
+    import time  # noqa: PLC0415
+
+    wanted = {f"queue-worker-{name}" for name in queues}
+    deadline = time.monotonic() + timeout_s
+    while not wanted <= {t.name for t in threading.enumerate() if t not in earlier}:
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"DBOS started no worker thread for {sorted(wanted)}")
+        time.sleep(0.01)
+
+
+def _stop_queue_workers(earlier: set[threading.Thread]) -> None:
+    """Stop DBOS dequeuing before DBOS.destroy stops its event loop. destroy (dbos 3.1.0)
+    signals its threads and stops the loop at once: a queue worker that had just dequeued
+    a workflow a test left queued then hands it to the stopped loop, and the coroutine it
+    made is never awaited (an unraisable-exception error at teardown)."""
+    from dbos._dbos import _get_dbos_instance  # noqa: PLC0415  # dbos 3.1.0: no public hook
+
+    for event in _get_dbos_instance().background_thread_stop_events:
+        event.set()
+    for thread in threading.enumerate():
+        if thread not in earlier and thread.name.startswith("queue-worker-"):
+            thread.join(timeout=10)
 
 
 @pytest.fixture
