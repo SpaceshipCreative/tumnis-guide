@@ -26,7 +26,6 @@ def _violations(db: DbUrls, kind: str) -> list[str]:
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_every_tenant_table_has_base_columns(db: DbUrls) -> None:
     """T-P0-06-01
     Each non-allow-listed `public` table has the 7 base columns with the right types,
@@ -41,7 +40,6 @@ def test_every_tenant_table_has_base_columns(db: DbUrls) -> None:
 
 @pytest.mark.req("PERF-1", "ADR-0009")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_workspace_id_leads_every_composite_index_and_unique_key(db: DbUrls) -> None:
     """T-P0-06-02
     For each index that is unique or multi-column (not the primary key), the first key
@@ -52,7 +50,6 @@ def test_workspace_id_leads_every_composite_index_and_unique_key(db: DbUrls) -> 
 
 @pytest.mark.req("ADR-0009")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_every_tenant_table_has_rls_and_policy(db: DbUrls) -> None:
     """T-P0-06-03
     `relrowsecurity` is true and a `tenant_isolation` policy for `tumnis_app` has both
@@ -63,7 +60,6 @@ def test_every_tenant_table_has_rls_and_policy(db: DbUrls) -> None:
 
 @pytest.mark.req("ADR-0009")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_registry_flags_an_unfenced_table(db: DbUrls) -> None:
     """T-P0-06-04
     A table created ad hoc without the helper is reported by `registry_violations()`, so
@@ -86,7 +82,6 @@ def test_registry_flags_an_unfenced_table(db: DbUrls) -> None:
 
 @pytest.mark.req("ADR-0009")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_allow_list_names_only_existing_tables(db: DbUrls) -> None:
     """The allow-list is closed: an entry whose table does not exist (and is not marked as
     arriving with a later work package) fails, so a stale entry cannot hide a new table."""
