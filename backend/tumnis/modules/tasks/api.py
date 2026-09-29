@@ -22,11 +22,11 @@ health reads (registered at import) and the task seed writer.
 """
 
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import RowMapping, Table, and_, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +64,7 @@ from tumnis.modules.tasks.review import (
     review_kinds,
 )
 from tumnis.modules.tasks.rules import ActorKind, Label, Status
+from tumnis.modules.tasks.rules_recurrence import Preset
 from tumnis.seed import TaskSeed, register_seed_writer
 
 __all__ = [
@@ -909,3 +910,77 @@ async def seed_task(
 
 
 register_seed_writer("task", seed_task)
+
+
+# --- Recurrence (P0-19, FR-3.5) ----------------------------------------------------------------
+# Interfaces only until the P0-19 spec tests turn green.
+
+
+class RecurrenceIn(BaseModel):
+    """`PUT /v1/tasks/{id}/recurrence`: a preset or a 5-field cron (never both), the
+    preset's weekday (weekly, 0 = Monday) or month day (monthly), the local due time and the
+    task's version. The task becomes the rule's first instance."""
+
+    model_config = ConfigDict(extra="forbid")
+    preset: Preset | None = None
+    cron: Annotated[str, StringConstraints(max_length=120, strip_whitespace=True)] | None = None
+    weekday: int | None = None
+    month_day: int | None = None
+    due_time: time = time(9, 0)
+    version: Version
+
+
+class RecurrenceOut(BaseModel):
+    """A recurrence rule: its spec, the template's title, its latest instance and the next
+    occurrence after it (UTC)."""
+
+    id: UUID
+    project_id: UUID
+    preset: Preset | None
+    cron: str | None
+    weekday: int | None
+    month_day: int | None
+    due_time: time
+    title: str
+    latest_task_id: UUID | None
+    latest_occurrence_on: date | None
+    next_due_at: datetime | None
+
+
+class TaskRecurrenceOut(RecurrenceOut):
+    """The rule as seen from one of its tasks; `version` is the task's (send it back)."""
+
+    task_id: UUID
+    version: int
+
+
+async def get_recurrence(s: AsyncSession, task_id: UUID) -> TaskRecurrenceOut:
+    raise NotImplementedError
+
+
+async def put_recurrence(
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    body: RecurrenceIn,
+    *,
+    now: datetime | None = None,
+) -> TaskRecurrenceOut:
+    raise NotImplementedError
+
+
+async def delete_recurrence(
+    s: AsyncSession, actor: ActorRef, task_id: UUID, version: int, *, now: datetime | None = None
+) -> None:
+    raise NotImplementedError
+
+
+async def list_recurrence(
+    s: AsyncSession,
+    *,
+    project_id: UUID | None = None,
+    cursor: str | None = None,
+    limit: int = 50,
+    project_ids: frozenset[UUID] | None = None,
+) -> Page[RecurrenceOut]:
+    raise NotImplementedError
