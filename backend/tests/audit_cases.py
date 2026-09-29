@@ -9,13 +9,17 @@ the `X-Request-ID` the client sent as `correlation_id`.
 
 `PENDING` names the phase 0 actions whose operation lands with a later work package; that
 work package adds the `record()` call and moves its action from `PENDING` to a case.
+`setup.completed` (P0-13) has no case here: setup runs only while no user exists, so it
+cannot run in a Ctx's workspace; T-P0-13-23 checks its row instead. `auth.totp_reset`
+(P0-13) is a CLI action with no request (no address or correlation ID): T-P0-13-29 checks
+its row.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from tumnis.core.tests.integration._audit import Ctx
@@ -97,23 +101,76 @@ async def change_timezone(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+# --- Sign-in and sessions (P0-13) --------------------------------------------------------
+
+
+async def _password_step(ctx: Ctx, password: str) -> Any:
+    return await ctx.session_client.post(
+        "/v1/auth/login", json={"email": ctx.email, "password": password}
+    )
+
+
+async def sign_in(ctx: Ctx) -> None:
+    """Password and TOTP through the routes: `auth.login`."""
+    from tumnis.core.tests.integration._audit import sign_in as sign_in_routes  # noqa: PLC0415
+
+    await sign_in_routes(ctx)
+
+
+async def wrong_password(ctx: Ctx) -> None:
+    """A wrong password on a known account: `auth.login_failed`."""
+    response = await _password_step(ctx, "not-the-password")
+    if response.status_code != 401:
+        raise RuntimeError(response.text)
+
+
+async def wrong_code(ctx: Ctx) -> None:
+    """The right password, then a wrong TOTP code: `auth.totp_failed`."""
+    from tests._auth import totp_code  # noqa: PLC0415
+
+    first = await _password_step(ctx, ctx.password or "")
+    first.raise_for_status()
+    right = totp_code(ctx.totp_secret or "", ctx.clock.now())
+    response = await ctx.session_client.post(
+        "/v1/auth/totp",
+        json={"preauth": first.json()["preauth"], "code": "000000" if right != "000000" else "1"},
+    )
+    if response.status_code != 401:
+        raise RuntimeError(response.text)
+
+
+async def lock_out(ctx: Ctx) -> None:
+    """Five wrong passwords: the fifth locks the email, `auth.locked_out` once."""
+    for _ in range(5):
+        await wrong_password(ctx)
+
+
+async def log_out(ctx: Ctx) -> None:
+    response = await ctx.session_client.post("/v1/auth/logout")
+    response.raise_for_status()
+
+
+async def sign_out_other_devices(ctx: Ctx) -> None:
+    response = await ctx.session_client.delete("/v1/auth/sessions")
+    response.raise_for_status()
+
+
 AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("audit.exported", export_csv, "user"),
     AuditCase("dead_letter.retried", retry_dead_letter, "user"),
     AuditCase("dead_letter.discarded", discard_dead_letter, "user"),
     AuditCase("settings.changed", change_timezone, "user"),
     AuditCase("workspace.timezone_changed", change_timezone, "user"),
+    AuditCase("auth.login", sign_in, "user"),
+    AuditCase("auth.login_failed", wrong_password, "user"),
+    AuditCase("auth.totp_failed", wrong_code, "user"),
+    AuditCase("auth.locked_out", lock_out, "user"),
+    AuditCase("auth.logout", log_out, "user"),
+    AuditCase("auth.sessions_revoked", sign_out_other_devices, "user"),
 )
 
 # action -> the work package that builds its operation and adds its case.
 PENDING: dict[str, str] = {
-    "auth.login": "P0-13",
-    "auth.login_failed": "P0-13",
-    "auth.totp_failed": "P0-13",
-    "auth.locked_out": "P0-13",
-    "auth.logout": "P0-13",
-    "auth.sessions_revoked": "P0-13",
-    "setup.completed": "P0-13",
     "key.created": "P0-14",
     "key.rotated": "P0-14",
     "key.revoked": "P0-14",

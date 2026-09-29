@@ -9,9 +9,10 @@ spec-guard locks the test bodies, and this module is the harness they drive.
   `GET /v1/demo-items` (paginated, `sort=id|due_on`), declared
   through `v1_router` and `route_policy`. `DemoState` counts handler runs and scripts a
   delay or a failure inside the write's transaction.
-- `TestPrincipalMiddleware`: `X-Test-Principal: <workspace>:<principal>` becomes a session
-  principal on `request.state.principal`. It stands in for P0-13's authentication
-  middleware and is installed only by `demo_app` (HTTP requests and WebSocket handshakes).
+- `TestPrincipalMiddleware`: `X-Test-Principal: <workspace>:<principal>` becomes an API
+  key principal on `request.state.principal` (a key, so session CSRF does not apply,
+  P0-13). It stands in for P0-14's key resolver and is installed only by `demo_app` (HTTP
+  requests and WebSocket handshakes).
 - Fixtures: `demo_items` (creates the table), `demo_app` (`create_app(extra_routers=[demo])` plus
   the test principal middleware; yields `Demo(app, state, clock)`), `demo_client` (httpx
   on it; application errors come back as 500 responses instead of raising).
@@ -111,7 +112,7 @@ class DemoItem(BaseModel):
 
 
 def principal_header(workspace: Any, principal: uuid.UUID) -> dict[str, str]:
-    """The test resolver's header: acts as `user:<principal>` in the workspace."""
+    """The test resolver's header: acts as `api_key:<principal>` in the workspace."""
     return {PRINCIPAL_HEADER: f"{getattr(workspace, 'id', workspace)}:{principal}"}
 
 
@@ -183,7 +184,7 @@ def build_router(state: DemoState) -> APIRouter:
 
 
 class TestPrincipalMiddleware:
-    """`X-Test-Principal: <workspace>:<principal>` -> a session principal (until P0-13)."""
+    """`X-Test-Principal: <workspace>:<principal>` -> an API key principal (until P0-14)."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -197,7 +198,7 @@ class TestPrincipalMiddleware:
             if value is not None:
                 workspace, principal = value.decode().split(":")
                 scope.setdefault("state", {})["principal"] = Principal(
-                    kind="session",
+                    kind="api_key",
                     workspace_id=uuid.UUID(workspace),
                     subject_id=uuid.UUID(principal),
                 )

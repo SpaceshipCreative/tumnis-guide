@@ -28,6 +28,7 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("ops_backup_runs", "type"): "full",
     ("ops_drill_markers", "kind"): "marker",
     ("audit_log", "actor_type"): "system",
+    ("memberships", "role"): "owner",
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
@@ -94,7 +95,7 @@ def _parent(
     conn: Conn, table: str, column: str, workspace_id: UUID | None, seen: frozenset[str]
 ) -> Any:
     """An existing referenced value in the same workspace, or a new parent row's."""
-    if table == "workspaces" and column == "id":
+    if table == "workspaces" and column == "id" and workspace_id is not None:
         return workspace_id
     where, params = sql.SQL(""), []
     if workspace_id is not None and _has_workspace(conn, table):

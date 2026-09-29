@@ -5,14 +5,48 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { createElement, type ReactNode } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { settingsGetWorkspaceSettingsOptions } from "../api/@tanstack/react-query.gen";
 import { makeTask } from "../test/factories";
 import { server } from "../test/msw/server";
 import { createTestQueryClient } from "../test/render";
-import { apiWrite, CSRF_COOKIE, useWrite } from "./fetch";
+import { apiFetch, apiWrite, CSRF_COOKIE, readCookie, useWrite } from "./fetch";
 import { useUpdateTask } from "./optimistic";
+
+describe("apiFetch", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(document, "cookie");
+  });
+
+  test("[P0-13][SEC-1] reads a cookie by name", () => {
+    expect(readCookie("b", "a=1; b=two%20words; c=3")).toBe("two words");
+    expect(readCookie("missing", "a=1")).toBeUndefined();
+  });
+
+  test("[P0-13][SEC-1] writes send the CSRF cookie as X-CSRF-Token and an Idempotency-Key", async () => {
+    // jsdom refuses a __Host- cookie on http://; the browser sets it over https.
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      get: () => "other=1; __Host-tumnis_csrf=token-123",
+    });
+    const spy = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
+    vi.stubGlobal("fetch", spy);
+    await apiFetch("/v1/auth/logout", { method: "post" });
+    await apiFetch("/v1/auth/sessions");
+    const [write, read] = spy.mock.calls as unknown as [string, RequestInit][];
+    const writeHeaders = new Headers(write?.[1].headers);
+    expect(write?.[1].method).toBe("POST");
+    expect(writeHeaders.get("X-CSRF-Token")).toBe("token-123");
+    expect(writeHeaders.get("Idempotency-Key")).toBeTruthy();
+    const readHeaders = new Headers(read?.[1].headers);
+    expect(readHeaders.get("X-CSRF-Token")).toBeNull();
+    expect(readHeaders.get("Idempotency-Key")).toBeNull();
+  });
+});
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -95,52 +129,49 @@ test.fails(
   },
 );
 
-test.fails(
-  "[P0-22][REL-2] T-P0-22-06 a retried write reuses its key",
-  async () => {
-    const seen: Captured[] = [];
-    server.use(
-      http.post("/v1/tasks", async (info) => {
-        await capture(seen)(info);
-        return seen.length === 1
-          ? HttpResponse.json(
-              { code: "unavailable", title: "Unavailable", status: 503 },
-              { status: 503 },
-            )
-          : HttpResponse.json(makeTask({ title: "Retried" }), { status: 201 });
+test("[P0-22][REL-2] T-P0-22-06 a retried write reuses its key", async () => {
+  const seen: Captured[] = [];
+  server.use(
+    http.post("/v1/tasks", async (info) => {
+      await capture(seen)(info);
+      return seen.length === 1
+        ? HttpResponse.json(
+            { code: "unavailable", title: "Unavailable", status: 503 },
+            { status: 503 },
+          )
+        : HttpResponse.json(makeTask({ title: "Retried" }), { status: 201 });
+    }),
+  );
+  const queryClient = createTestQueryClient();
+  const { result } = renderHook(
+    () =>
+      useWrite({
+        mutationFn: (v: { title: string; idempotencyKey: string }) =>
+          apiWrite({
+            kind: "create",
+            method: "POST",
+            path: "/tasks",
+            body: { title: v.title },
+            idempotencyKey: v.idempotencyKey,
+          }),
+        retry: 1,
+        retryDelay: 0,
       }),
-    );
-    const queryClient = createTestQueryClient();
-    const { result } = renderHook(
-      () =>
-        useWrite({
-          mutationFn: (v: { title: string; idempotencyKey: string }) =>
-            apiWrite({
-              kind: "create",
-              method: "POST",
-              path: "/tasks",
-              body: { title: v.title },
-              idempotencyKey: v.idempotencyKey,
-            }),
-          retry: 1,
-          retryDelay: 0,
-        }),
-      { wrapper: wrapper(queryClient) },
-    );
+    { wrapper: wrapper(queryClient) },
+  );
 
-    result.current.mutate({ title: "Retried" });
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
+  result.current.mutate({ title: "Retried" });
+  await waitFor(() => {
+    expect(result.current.isSuccess).toBe(true);
+  });
 
-    expect(seen).toHaveLength(2);
-    const [first, second] = seen;
-    expect(first?.headers.get("Idempotency-Key")).toMatch(UUID);
-    expect(second?.headers.get("Idempotency-Key")).toBe(
-      first?.headers.get("Idempotency-Key"),
-    );
-  },
-);
+  expect(seen).toHaveLength(2);
+  const [first, second] = seen;
+  expect(first?.headers.get("Idempotency-Key")).toMatch(UUID);
+  expect(second?.headers.get("Idempotency-Key")).toBe(
+    first?.headers.get("Idempotency-Key"),
+  );
+});
 
 test.fails(
   "[P0-22][REL-2] T-P0-22-07 reads carry no Idempotency-Key",
