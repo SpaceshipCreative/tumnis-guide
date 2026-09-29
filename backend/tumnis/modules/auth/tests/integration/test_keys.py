@@ -257,3 +257,40 @@ async def test_key_events_are_emitted(
 
     listed = (await session_client.get("/v1/keys")).json()["items"]
     assert listed[0]["revoked_at"] is not None
+
+
+@pytest.mark.req("SEC-2", "ADR-0004")
+@pytest.mark.wp("P0-14")
+@pytest.mark.filterwarnings("ignore:Using `httpx` with `starlette.testclient`")
+@pytest.mark.xfail(strict=True, reason="spec:P0-14")
+def test_key_opens_the_live_socket_and_key_changes_go_live(
+    app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
+) -> None:
+    """T-P0-14-18
+    An API key authenticates the `/ws` handshake (the bearer resolver runs for WebSocket
+    connections too); creating and revoking a key in its workspace reach the socket as
+    `{"entity": "api_key", "id": ...}` (the P0-22 live map refreshes the key list).
+    """
+    from starlette.testclient import TestClient  # noqa: PLC0415
+
+    from tests._auth import run_async  # noqa: PLC0415
+    from tumnis.core.tests.integration._live import (  # noqa: PLC0415
+        ORIGIN,
+        receive_within,
+        wait_until_listening,
+    )
+    from tumnis.modules.auth import api  # noqa: PLC0415
+
+    def new_key(name: str) -> Any:
+        body = api.KeyIn(name=name, scopes=["tasks:read"])
+        return run_async(lambda: api.create_key(workspace.ctx, body, now=clock.now()))
+
+    listener = new_key("listener")
+    with TestClient(app) as client:
+        wait_until_listening(app)
+        headers = {"Authorization": f"Bearer {listener.key}", "Origin": ORIGIN}
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            other = new_key("other")
+            assert receive_within(socket, 1.0) == {"entity": "api_key", "id": str(other.id)}
+            run_async(lambda: api.revoke_key(workspace.ctx, other.id, now=clock.now()))
+            assert receive_within(socket, 1.0) == {"entity": "api_key", "id": str(other.id)}
