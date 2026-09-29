@@ -192,3 +192,29 @@ async def test_required_modules_cannot_be_disabled(db: DbUrls) -> None:
         "calendar",
         "github",
     }
+
+
+@pytest.mark.req("SEC-3")
+@pytest.mark.wp("P0-08")
+@pytest.mark.usefixtures("core_db")
+async def test_module_toggle_is_audited(db: DbUrls, clock: FixedClock) -> None:
+    """Switching a module off and on writes one `module.toggled` row each, in the
+    workspace, with the module, the new state and the clock's time."""
+    from tests.fixtures import make_workspace  # noqa: PLC0415
+    from tumnis.core.modules import set_module_enabled  # noqa: PLC0415
+    from tumnis.core.tests.integration._audit import owner_rows  # noqa: PLC0415
+
+    ws = make_workspace(db)
+    await set_module_enabled(_ctx(ws), "calendar", False, clock=clock)
+    clock.advance(minutes=1)
+    await set_module_enabled(_ctx(ws), "calendar", True, clock=clock)
+
+    rows = owner_rows(
+        db,
+        "SELECT workspace_id, action, details, occurred_at FROM audit_log ORDER BY seq",
+    )
+    assert [(r[0], r[1], r[2]) for r in rows] == [
+        (ws, "module.toggled", {"module": "calendar", "enabled": False}),
+        (ws, "module.toggled", {"module": "calendar", "enabled": True}),
+    ]
+    assert rows[1][3] == clock.now()
