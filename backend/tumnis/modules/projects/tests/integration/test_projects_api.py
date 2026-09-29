@@ -139,7 +139,6 @@ async def test_reorder_rebalances_past_max_key_len(
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 async def test_archive_hides_from_lists_and_keeps_data(
     app: FastAPI, session_client: SessionClient, workspace: WorkspaceHandle, db: DbUrls
 ) -> None:
@@ -184,7 +183,6 @@ async def test_archive_hides_from_lists_and_keeps_data(
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 async def test_unarchive_restores_to_lists(
     app: FastAPI, session_client: SessionClient, workspace: WorkspaceHandle
 ) -> None:
