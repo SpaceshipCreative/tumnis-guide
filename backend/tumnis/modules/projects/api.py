@@ -23,13 +23,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import rank, tenancy
+from tumnis.core.cache import CacheKey, CacheSpec, invalidate_on_commit, register_cache
 from tumnis.core.clock import SystemClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.limits import MAX_ESTIMATE_MINUTES
 from tumnis.core.live import mark_changed
 from tumnis.core.outbox import emit
 from tumnis.core.pagination import Page, SortKey, paginate
-from tumnis.core.tenancy import WorkspaceContext, tenant_session
+from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR, ActorRef
 from tumnis.core.versioning import NotFound, StaleVersion, Version, update_versioned
 from tumnis.modules.auth import api as auth
@@ -101,6 +102,7 @@ class ProjectOut(ProjectCreate):
     next_milestone: date | None
     last_agent_activity_at: datetime | None = None  # always None until P2-04
     subtask_threshold_min: int | None = None  # None: the workspace's threshold (FR-3.8)
+    local_decisions_only: bool = False  # decisions never go to Jev (P1-02, Data flow rule 6)
 
 
 class ProjectPatch(BaseModel):
@@ -117,6 +119,7 @@ class ProjectPatch(BaseModel):
     links: list[ProjectLinkIn] | None = None
     profile_name: str | None = None
     subtask_threshold_min: Threshold | None = None
+    local_decisions_only: bool | None = None
     version: Version
 
 
@@ -189,6 +192,7 @@ class _Row(BaseModel):
     profile_name: str | None
     archived_at: datetime | None
     subtask_threshold_min: int | None
+    local_decisions_only: bool = False
 
 
 def _now(now: datetime | None) -> datetime:
@@ -318,6 +322,34 @@ async def effective_subtask_threshold(s: AsyncSession, project_id: UUID) -> int:
     if row.subtask_threshold_min is not None:
         return row.subtask_threshold_min
     return (await auth.get_workspace_settings(_context())).subtask_threshold_min
+
+
+LOCAL_ONLY_CACHE: Final = register_cache(
+    CacheSpec("projects.local_only", "workspace", None, ("update_project (local_decisions_only)",))
+)
+
+
+def _local_only_key(workspace_id: UUID, project_id: UUID) -> CacheKey:
+    return CacheKey.for_workspace(workspace_id, "projects.local_only", str(project_id))
+
+
+async def local_decisions_only(project_id: UUID, *, session: AsyncSession | None = None) -> bool:
+    """Whether the project keeps its decisions local (P1-02, Data flow rule 6): the hot
+    lookup every decision makes, cached until `update_project` changes the switch. False
+    for a project that does not exist (or was deleted)."""
+    ctx = _context()
+    key = _local_only_key(ctx.workspace_id, project_id)
+    cached = await LOCAL_ONLY_CACHE.get(key)
+    if cached is not None:
+        return cached == b"1"
+    token = LOCAL_ONLY_CACHE.token()
+    async with session_for(ctx, session) as s:
+        value = await s.scalar(
+            select(_projects.c.local_decisions_only).where(_projects.c.id == project_id, _live())
+        )
+    flag = bool(value)
+    await LOCAL_ONLY_CACHE.fill(key, b"1" if flag else b"0", since=token)
+    return flag
 
 
 async def project_exists(s: AsyncSession, project_id: UUID) -> bool:
@@ -463,7 +495,7 @@ async def update_project(
     emits `project.updated` with the changed field names."""
     current = await _row(s, project_id)  # 404 before any body rule (A0.3, #28)
     values = patch.model_dump(exclude_unset=True, exclude={"version", "links"})
-    for required in ("name", "status"):
+    for required in ("name", "status", "local_decisions_only"):
         if required in values and values[required] is None:
             raise ProblemError(422, "validation_error", f"{required} cannot be null")
     if "code_path" in values or "repo_url" in values:
@@ -474,6 +506,8 @@ async def update_project(
     if patch.links is not None:
         fields.append("links")
     row = await _versioned(s, project_id, version, values or {"updated_at": func.now()}, now)
+    if "local_decisions_only" in values:
+        await invalidate_on_commit(s, _local_only_key(_context().workspace_id, project_id))
     if patch.links is not None:
         await s.execute(delete(_links).where(_links.c.project_id == project_id))
         await _write_links(s, project_id, patch.links)
