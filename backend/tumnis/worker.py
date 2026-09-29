@@ -1,6 +1,43 @@
-"""DBOS worker: launch, queue registration, relay, schedules (P0-02+)."""
+"""DBOS worker: launch, queue registration, relay, schedules.
+
+The worker and DBOS use the direct database URL, never PgBouncer (LISTEN/NOTIFY and
+session-level state do not survive transaction pooling).
+"""
+
+import signal
+import threading
+from typing import TYPE_CHECKING
+
+from tumnis.settings import Settings
+
+if TYPE_CHECKING:
+    from dbos import DBOSConfig
 
 
 def register_queues() -> None:
     """Register every DBOS queue (A9). Empty until P0-07 adds `events`; the test harness
     calls it before DBOS.launch() exactly as the worker will."""
+
+
+def dbos_config(settings: Settings) -> "DBOSConfig":
+    return {"name": "tumnis", "system_database_url": settings.dbos_system_url}
+
+
+def main(settings: Settings) -> None:
+    """Launch DBOS and block until SIGTERM or SIGINT."""
+    from dbos import DBOS  # noqa: PLC0415
+
+    import tumnis.wiring  # noqa: F401, PLC0415  # registers adapters (later: workflows)
+    from tumnis.core import db  # noqa: PLC0415
+
+    db.configure(settings.database_direct_url, settings.database_direct_url)
+    stop = threading.Event()
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(signum, lambda *_: stop.set())
+    DBOS(config=dbos_config(settings))
+    register_queues()
+    DBOS.launch()
+    try:
+        stop.wait()
+    finally:
+        DBOS.destroy()

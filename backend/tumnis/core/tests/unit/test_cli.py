@@ -9,7 +9,6 @@ import pytest
 
 @pytest.mark.req("FR-12.4")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 def test_image_commands_exist() -> None:
     """T-P0-04-11
     `tumnis --help` lists api, worker, migrate and seed.
