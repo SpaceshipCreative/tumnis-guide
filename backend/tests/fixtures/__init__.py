@@ -1011,6 +1011,40 @@ def session_client(
     return http
 
 
+class KeyClientFactory(Protocol):
+    async def __call__(
+        self, scopes: Any, projects: Any = None
+    ) -> httpx.AsyncClient: ...  # a tests._keys.KeyClient
+
+
+@pytest.fixture
+def key_client(
+    app: FastAPI, clock: FixedClock, db: DbUrls, request: pytest.FixtureRequest
+) -> KeyClientFactory:
+    """`await key_client(scopes, projects=None)`: an httpx client on `app` sending
+    `Authorization: Bearer <key>` for a fresh API key with those scopes (limited to
+    `projects` when given), made through the auth api's `create_key` (P0-14). The key
+    belongs to the `workspace` fixture's workspace (made by its user), or to workspace B
+    when the test uses `two_workspaces` (A0.3). Writes get an `Idempotency-Key`; the client
+    carries `.key` and `.key_id`."""
+    from tests._keys import key_client_for  # noqa: PLC0415
+    from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR, ActorRef  # noqa: PLC0415
+
+    if "two_workspaces" in request.fixturenames:
+        b: WorkspaceHandle = request.getfixturevalue("two_workspaces")[1]
+        ctx = WorkspaceContext(b.id, SYSTEM_ACTOR)
+    else:
+        handle: WorkspaceHandle = request.getfixturevalue("workspace")
+        actor = ActorRef(f"user:{handle.user_id}") if handle.user_id else SYSTEM_ACTOR
+        ctx = WorkspaceContext(handle.id, actor)
+
+    async def make(scopes: Any, projects: Any = None) -> httpx.AsyncClient:
+        return await key_client_for(app, ctx, scopes, projects, now=clock.now())
+
+    return make
+
+
 # --- Traces and JSON logs (P0-27) ----------------------------------------------------------
 
 

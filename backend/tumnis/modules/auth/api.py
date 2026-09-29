@@ -758,3 +758,46 @@ async def reset_totp(email: str, *, now: datetime) -> str:
             occurred_at=now,
         )
     return provisioning_uri(secret, email.strip())
+
+
+# --- API keys (P0-14, SEC-2, FR-9.3, FR-14.10): spec skeleton -------------------------------
+
+
+class KeyIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=200)
+    scopes: list[str] = Field(max_length=32)
+    project_ids: list[UUID] | None = Field(default=None, max_length=200)
+    expires_at: datetime | None = None
+
+
+class KeyOut(BaseModel):
+    id: UUID
+    name: str
+    prefix: str
+    scopes: list[str]
+    project_ids: list[UUID] | None
+    created_at: datetime
+    expires_at: datetime | None
+    last_used_at: datetime | None
+    revoked_at: datetime | None
+
+
+class KeyCreated(KeyOut):
+    key: str  # shown once; never stored for an idempotent replay
+
+
+async def create_key(
+    ctx: WorkspaceContext, body: KeyIn, *, now: datetime, session: AsyncSession | None = None
+) -> KeyCreated:
+    raise NotImplementedError("P0-14")
+
+
+async def revoke_key(
+    ctx: WorkspaceContext, key_id: UUID, *, now: datetime, session: AsyncSession | None = None
+) -> KeyOut:
+    raise NotImplementedError("P0-14")
+
+
+async def authenticate_bearer(token: str, *, now: datetime) -> Principal | AuthFailure | None:
+    raise NotImplementedError("P0-14")
