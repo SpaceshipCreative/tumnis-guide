@@ -4339,17 +4339,17 @@
         ]
       }
     },
-    "/v1/calendar/accounts/{account_id}/calendars": {
+    "/v1/calendar/accounts/{calendar_account_id}/calendars": {
       "put": {
         "operationId": "calendar_select_calendars",
         "parameters": [
           {
             "in": "path",
-            "name": "account_id",
+            "name": "calendar_account_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Account Id",
+              "title": "Calendar Account Id",
               "type": "string"
             }
           }
@@ -4462,17 +4462,17 @@
         ]
       }
     },
-    "/v1/calendar/accounts/{account_id}/sync": {
+    "/v1/calendar/accounts/{calendar_account_id}/sync": {
       "post": {
         "operationId": "calendar_sync_now",
         "parameters": [
           {
             "in": "path",
-            "name": "account_id",
+            "name": "calendar_account_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Account Id",
+              "title": "Calendar Account Id",
               "type": "string"
             }
           }

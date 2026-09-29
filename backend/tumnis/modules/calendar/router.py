@@ -1,13 +1,15 @@
 """calendar FastAPI router under /v1/calendar; thin calls into api.py (P1-09).
 
 - `GET /oauth/start`: the Google consent URL for one more account (read-only scopes,
-  offline access, PKCE); 409 `calendar_oauth_not_configured` without an OAuth client.
+  offline access, PKCE); 404 `calendar_oauth_not_configured` without an OAuth client.
 - `GET /oauth/callback?code&state`: Google sends the browser back here. The code is stored
   sealed and the exchange enqueued for the worker (no outbound call here); 302 to
-  Settings > Calendar. An unknown, used or expired state is 400 `oauth_state_invalid`.
+  Settings > Calendar (`?connect_error=1` when Google sent no code). A state this workspace
+  never started is 404 `oauth_state_unknown`; a used or expired one 400
+  `oauth_state_invalid`.
 - `GET /accounts`: the connected accounts with their calendars, choice and sync status.
-- `PUT /accounts/{account_id}/calendars`: choose the calendars to sync (versioned).
-- `POST /accounts/{account_id}/sync`: Sync now (202).
+- `PUT /accounts/{calendar_account_id}/calendars`: choose the calendars to sync (versioned).
+- `POST /accounts/{calendar_account_id}/sync`: Sync now (202).
 
 All session-only: connecting accounts is the signed-in owner's job.
 """
@@ -62,7 +64,7 @@ async def oauth_start(request: Request, ctx: Session) -> OAuthStartOut:
         url = await api.start_connect(ctx, base_url=_base_url(request), now=_clock(request).now())
     except api.OAuthNotConfigured:
         raise ProblemError(
-            409,
+            404,
             "calendar_oauth_not_configured",
             "Add the Google OAuth client in Settings > Calendar first",
         ) from None
@@ -78,11 +80,15 @@ async def oauth_callback(
     code: Annotated[str | None, Query(max_length=2048)] = None,
     error: Annotated[str | None, Query(max_length=256)] = None,
 ) -> RedirectResponse:
-    if error is not None or code is None:
+    accepted = await api.accept_callback(
+        ctx, state=state, code=None if error is not None else code, now=_clock(request).now()
+    )
+    if accepted.outcome == "unknown":
+        raise ProblemError(404, "oauth_state_unknown", "No sign-in with Google is pending here")
+    if accepted.outcome == "invalid":
+        raise ProblemError(400, "oauth_state_invalid", "This sign-in link is used or expired")
+    if accepted.outcome == "declined":
         return RedirectResponse(f"{SETTINGS_PATH}?connect_error=1", status_code=302)
-    pending = await api.accept_callback(ctx, state=state, code=code, now=_clock(request).now())
-    if pending is None:
-        raise ProblemError(400, "oauth_state_invalid", "This sign-in link is unknown or used")
     return RedirectResponse(f"{SETTINGS_PATH}?connecting=1", status_code=302)
 
 
@@ -94,17 +100,17 @@ async def list_accounts(ctx: Session) -> list[api.CalendarAccountOut]:
     return await api.list_accounts(ctx)
 
 
-@router.put("/accounts/{account_id}/calendars")
+@router.put("/accounts/{calendar_account_id}/calendars")
 @route_policy(WRITE)
 async def select_calendars(
-    account_id: UUID, body: CalendarsIn, ctx: Session, session: SessionDep
+    calendar_account_id: UUID, body: CalendarsIn, ctx: Session, session: SessionDep
 ) -> api.CalendarAccountOut:
-    if await api.get_account(ctx, account_id, session=session) is None:
-        raise NotFound("calendar_accounts", account_id)
+    if await api.get_account(ctx, calendar_account_id, session=session) is None:
+        raise NotFound("calendar_accounts", calendar_account_id)
     try:
         return await api.select_calendars(
             ctx,
-            account_id,
+            calendar_account_id,
             body.selected_calendar_ids,
             expected_version=body.version,
             session=session,
@@ -113,7 +119,7 @@ async def select_calendars(
         raise ProblemError(422, "unknown_calendar", str(exc)) from None
 
 
-@router.post("/accounts/{account_id}/sync", status_code=202)
+@router.post("/accounts/{calendar_account_id}/sync", status_code=202)
 @route_policy(
     RoutePolicy(
         auth="session",
@@ -121,5 +127,7 @@ async def select_calendars(
         not_idempotent_reason="enqueues a sync; a repeat within the second is the same one",
     )
 )
-async def sync_now(account_id: UUID, request: Request, ctx: Session) -> api.CalendarAccountOut:
-    return await api.request_sync(ctx, account_id, now=_clock(request).now())
+async def sync_now(
+    calendar_account_id: UUID, request: Request, ctx: Session
+) -> api.CalendarAccountOut:
+    return await api.request_sync(ctx, calendar_account_id, now=_clock(request).now())

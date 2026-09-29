@@ -2263,12 +2263,12 @@ export type CalendarSelectCalendarsData = {
   body: CalendarsIn;
   path: {
     /**
-     * Account Id
+     * Calendar Account Id
      */
-    account_id: string;
+    calendar_account_id: string;
   };
   query?: never;
-  url: "/v1/calendar/accounts/{account_id}/calendars";
+  url: "/v1/calendar/accounts/{calendar_account_id}/calendars";
 };
 
 export type CalendarSelectCalendarsErrors = {
@@ -2323,12 +2323,12 @@ export type CalendarSyncNowData = {
   body?: never;
   path: {
     /**
-     * Account Id
+     * Calendar Account Id
      */
-    account_id: string;
+    calendar_account_id: string;
   };
   query?: never;
-  url: "/v1/calendar/accounts/{account_id}/sync";
+  url: "/v1/calendar/accounts/{calendar_account_id}/sync";
 };
 
 export type CalendarSyncNowErrors = {

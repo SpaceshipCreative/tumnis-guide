@@ -809,7 +809,7 @@ export const zCalendarListAccountsResponse = z.array(zCalendarAccountOut);
 export const zCalendarSelectCalendarsBody = zCalendarsIn;
 
 export const zCalendarSelectCalendarsPath = z.object({
-  account_id: z.uuid(),
+  calendar_account_id: z.uuid(),
 });
 
 /**
@@ -818,7 +818,7 @@ export const zCalendarSelectCalendarsPath = z.object({
 export const zCalendarSelectCalendarsResponse = zCalendarAccountOut;
 
 export const zCalendarSyncNowPath = z.object({
-  account_id: z.uuid(),
+  calendar_account_id: z.uuid(),
 });
 
 /**

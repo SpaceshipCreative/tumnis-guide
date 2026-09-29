@@ -786,44 +786,59 @@ async def begin_oauth(
     )
 
 
+class OAuthAccepted(BaseModel):
+    """What the callback found: `accepted` (code stored), `declined` (the user or Google
+    sent no code; the state is used up), `invalid` (used or expired) or `unknown` (no such
+    consent in this workspace)."""
+
+    outcome: Literal["accepted", "declined", "invalid", "unknown"]
+    pending_id: UUID | None = None
+
+
 async def accept_oauth_code(
     ctx: WorkspaceContext,
     provider: str,
     *,
     state: str,
-    code: str,
+    code: str | None,
     now: datetime,
     session: AsyncSession | None = None,
-) -> UUID | None:
+) -> OAuthAccepted:
     """The callback's half: the pending consent `state` names, if it is this provider's,
-    unexpired and unused; the code is stored sealed and the state used up. None when the
-    state is unknown, expired or used (the route answers 400 `oauth_state_invalid`)."""
+    unexpired and unused, is used up and its code stored sealed."""
     async with session_for(ctx, session) as s:
-        pending_id: UUID | None = (
-            await s.execute(
-                update(_pending)
-                .where(
-                    _pending.c.state_hash == _state_hash(state),
-                    _pending.c.provider == provider,
-                    _pending.c.used_at.is_(None),
-                    _pending.c.deleted_at.is_(None),
-                    _pending.c.expires_at > now,
+        row = (
+            (
+                await s.execute(
+                    select(
+                        _pending.c.id,
+                        _pending.c.used_at,
+                        _pending.c.expires_at,
+                        _pending.c.deleted_at,
+                    )
+                    .where(
+                        _pending.c.state_hash == _state_hash(state),
+                        _pending.c.provider == provider,
+                    )
+                    .with_for_update()
                 )
-                .values(used_at=now)
-                .returning(_pending.c.id)
             )
-        ).scalar_one_or_none()
-        if pending_id is None:
-            return None
-        key_version, sealed = await seal_for_workspace(
-            s, ctx.workspace_id, code.encode(), aad=_pending_aad(pending_id, "code")
+            .mappings()
+            .first()
         )
-        await s.execute(
-            update(_pending)
-            .where(_pending.c.id == pending_id)
-            .values(code_enc=sealed, key_version=key_version)
-        )
-    return pending_id
+        if row is None:
+            return OAuthAccepted(outcome="unknown")
+        pending_id: UUID = row["id"]
+        if row["used_at"] is not None or row["deleted_at"] is not None or row["expires_at"] <= now:
+            return OAuthAccepted(outcome="invalid", pending_id=pending_id)
+        values: dict[str, Any] = {"used_at": now}
+        if code is not None:
+            key_version, sealed = await seal_for_workspace(
+                s, ctx.workspace_id, code.encode(), aad=_pending_aad(pending_id, "code")
+            )
+            values |= {"code_enc": sealed, "key_version": key_version}
+        await s.execute(update(_pending).where(_pending.c.id == pending_id).values(**values))
+    return OAuthAccepted(outcome="declined" if code is None else "accepted", pending_id=pending_id)
 
 
 async def read_oauth_grant(

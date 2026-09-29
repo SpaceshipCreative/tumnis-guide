@@ -728,19 +728,18 @@ async def start_connect(ctx: WorkspaceContext, *, base_url: str, now: datetime) 
 
 
 async def accept_callback(
-    ctx: WorkspaceContext, *, state: str, code: str, now: datetime
-) -> UUID | None:
+    ctx: WorkspaceContext, *, state: str, code: str | None, now: datetime
+) -> integrations.OAuthAccepted:
     """Store the code of the consent `state` names (sealed, once, within ten minutes) and
-    enqueue the worker's exchange; None for an unknown, used or expired state. Makes no
-    outbound call (architecture principle 3)."""
+    enqueue the worker's exchange. Makes no outbound call (architecture principle 3)."""
     async with tenant_session(ctx) as s:
-        pending_id = await integrations.accept_oauth_code(
+        accepted = await integrations.accept_oauth_code(
             ctx, PROVIDER, state=state, code=code, now=now, session=s
         )
-    if pending_id is None:
-        return None
-    await _enqueue(EXCHANGE_WORKFLOW, f"calendar-oauth:{pending_id}", ctx, pending_id)
-    return pending_id
+    if accepted.outcome == "accepted" and accepted.pending_id is not None:
+        pending_id = accepted.pending_id
+        await _enqueue(EXCHANGE_WORKFLOW, f"calendar-oauth:{pending_id}", ctx, pending_id)
+    return accepted
 
 
 async def request_sync(

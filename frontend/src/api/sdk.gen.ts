@@ -550,7 +550,7 @@ export const calendarSelectCalendars = <ThrowOnError extends boolean = false>(
   >({
     responseValidator: async (data) =>
       await zCalendarSelectCalendarsResponse.parseAsync(data),
-    url: "/v1/calendar/accounts/{account_id}/calendars",
+    url: "/v1/calendar/accounts/{calendar_account_id}/calendars",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -575,7 +575,7 @@ export const calendarSyncNow = <ThrowOnError extends boolean = false>(
   >({
     responseValidator: async (data) =>
       await zCalendarSyncNowResponse.parseAsync(data),
-    url: "/v1/calendar/accounts/{account_id}/sync",
+    url: "/v1/calendar/accounts/{calendar_account_id}/sync",
     ...options,
   });
 
