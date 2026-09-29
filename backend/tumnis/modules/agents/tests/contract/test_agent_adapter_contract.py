@@ -4,6 +4,7 @@ HermesAgent over the MCP endpoint transport against an in-process fake MCP serve
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -149,7 +150,6 @@ class _Endpoint:
 @pytest.mark.contract
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 class TestHermesMcpEndpointTransport(AgentAdapterContract):
     """T-P1-04-11
     AgentAdapterContract passes for HermesAgent(McpEndpointTransport) against an
@@ -161,10 +161,23 @@ class TestHermesMcpEndpointTransport(AgentAdapterContract):
 
     @pytest.fixture
     async def endpoint(self) -> AsyncIterator[_Endpoint]:
+        # The session manager's task group must be entered and left in one task, and
+        # pytest-asyncio sets a fixture up and tears it down in different ones: it runs in
+        # a task of its own for the test's length.
         server = _fake_mcp_server()
         app = server.streamable_http_app()
-        async with server.session_manager.run():
-            yield _Endpoint(app)
+        ready, stop = asyncio.Event(), asyncio.Event()
+
+        async def serve() -> None:
+            async with server.session_manager.run():
+                ready.set()
+                await stop.wait()
+
+        task = asyncio.create_task(serve())
+        await asyncio.wait_for(ready.wait(), 10)
+        yield _Endpoint(app)
+        stop.set()
+        await task
 
     @pytest.fixture
     def profile_id(self) -> uuid.UUID:

@@ -16,18 +16,21 @@ of two transports.
 
 import json
 from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from typing import Any, Final, Protocol
 from uuid import UUID, uuid5
 
 import httpx
 import psycopg
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
 from sqlalchemy import Table, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import db
 from tumnis.core.clock import Clock
-from tumnis.core.net import NetPolicy
+from tumnis.core.net import NetPolicy, guarded_client
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.modules.agents.adapters.port import (
     AgentCapabilities,
@@ -45,6 +48,10 @@ RUNNER_CHANNEL: Final = "runner_mailbox"
 RUN_EVENTS_CHANNEL: Final = "agents_run_events"
 PHASE_1_SKILLS: Final = frozenset({"enrich", "plan"})
 STREAM_POLL_S: Final = 1.0
+RUN_TOOL: Final = "run_skill"
+MCP_GRACE_S: Final = 30  # the run's timeout plus this for the call
+HEALTH_TIMEOUT_S: Final = 10.0
+RESULT_STATUSES: Final = frozenset({"succeeded", "failed", "timed_out"})
 _STREAMED: Final = frozenset({"dispatched", "result", "failed"})
 _TERMINAL: Final = frozenset({"result", "failed"})
 
@@ -292,7 +299,21 @@ class DaemonTransport:
             await _notify(s, RUNNER_CHANNEL, {"runner": str(runner_id), "close": False})
 
 
+def _unreachable(exc: BaseException) -> bool:
+    """A refused or failed connection, possibly inside the SDK's task-group exception
+    groups."""
+    if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, OSError)):
+        return True
+    if isinstance(exc, BaseExceptionGroup):
+        return any(_unreachable(inner) for inner in exc.exceptions)
+    return False
+
+
 class McpEndpointTransport:
+    """A profile kept running as a server: the endpoint's `run_skill(profile, skill,
+    packet_json)` tool, over the MCP SDK's Streamable HTTP client through the SSRF-guarded
+    httpx client. The call returns when the run ends, so the run's events are kept here."""
+
     def __init__(
         self,
         endpoint: str,
@@ -309,19 +330,119 @@ class McpEndpointTransport:
         self.token = token
         self.net_policy = net_policy
         self.client_factory = client_factory
+        self._events: dict[UUID, list[RunEvent]] = {}
 
     def capabilities(self) -> AgentCapabilities:
-        raise NotImplementedError("P1-04")
+        return AgentCapabilities(
+            transport="mcp_endpoint",
+            skills=PHASE_1_SKILLS,
+            supports_stream=False,
+            supports_cancel=False,
+        )
+
+    def _client(self, timeout_s: float) -> httpx.AsyncClient:
+        if self.client_factory is not None:
+            client = self.client_factory()
+        else:
+            policy = self.net_policy
+            if policy is None:
+                from tumnis.settings import Settings  # noqa: PLC0415
+
+                policy = Settings().net_policy()
+            client = guarded_client(policy, timeout=timeout_s)
+        if self.token:
+            client.headers["Authorization"] = f"Bearer {self.token}"
+        return client
+
+    @asynccontextmanager
+    async def _session(self, timeout_s: float) -> AsyncIterator[ClientSession]:
+        async with (
+            self._client(timeout_s) as client,
+            streamable_http_client(self.endpoint, http_client=client) as (read, write, *_),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            yield session
 
     async def dispatch(self, packet: TaskPacket) -> RunHandle:
-        raise NotImplementedError(f"P1-04 {packet}")
+        started = self.clock.now()
+        arguments = {
+            "profile": self.profile,
+            "skill": packet.skill,
+            "packet_json": packet.model_dump_json(),
+        }
+        try:
+            async with self._session(packet.timeout_s + MCP_GRACE_S) as session:
+                answer = await session.call_tool(RUN_TOOL, arguments)
+        except Exception as exc:
+            if _unreachable(exc):
+                raise AgentUnavailable(packet.profile_id, "endpoint unreachable") from None
+            raise
+        result = _tool_result(answer)
+        self._events[packet.run_id] = [
+            RunEvent(
+                run_id=packet.run_id,
+                message_id=uuid5(packet.run_id, "dispatched"),
+                kind="dispatched",
+                payload={"profile": self.profile, "skill": packet.skill},
+                at=started,
+            ),
+            RunEvent(
+                run_id=packet.run_id,
+                message_id=uuid5(packet.run_id, "result"),
+                kind="result",
+                payload=result,
+                at=self.clock.now(),
+            ),
+        ]
+        return RunHandle(
+            run_id=packet.run_id,
+            profile_id=packet.profile_id,
+            transport="mcp_endpoint",
+            correlation_id=packet.correlation_id,
+        )
 
     async def stream(self, run: RunHandle) -> AsyncIterator[RunEvent]:
-        raise NotImplementedError(f"P1-04 {run}")
-        yield  # pragma: no cover
+        for event in self._events.get(run.run_id, []):
+            yield event
 
     async def cancel(self, run: RunHandle) -> None:
-        raise NotImplementedError(f"P1-04 {run}")
+        """Phase 1 has no agent-side cancel; the call has already returned."""
 
     async def health(self, profile_id: UUID) -> AgentHealth:
-        raise NotImplementedError(f"P1-04 {profile_id}")
+        """`ok` when the endpoint lists the run tool, `unsupported` when it answers without
+        it (the pinned Hermes `mcp serve`), `offline` when it does not answer."""
+        try:
+            async with self._session(HEALTH_TIMEOUT_S) as session:
+                tools = await session.list_tools()
+        except Exception as exc:
+            if _unreachable(exc):
+                return AgentHealth(status="offline", reachable=False, detail="endpoint unreachable")
+            raise
+        if RUN_TOOL in {tool.name for tool in tools.tools}:
+            return AgentHealth(status="ok", reachable=True)
+        return AgentHealth(
+            status="unsupported", reachable=True, detail=f"no {RUN_TOOL} tool on the endpoint"
+        )
+
+
+def _tool_result(answer: Any) -> dict[str, Any]:
+    """The run's result from the tool's JSON text: `{status, output_json, text, error,
+    duration_ms}`; a tool error or text that is not that is a failed run."""
+    texts = [getattr(part, "text", "") for part in answer.content]
+    if answer.isError or not texts:
+        return {"status": "failed", "output_json": None, "error": " ".join(texts) or "tool_error"}
+    try:
+        body = json.loads(texts[0])
+    except ValueError:
+        return {"status": "failed", "output_json": None, "error": "no_json"}
+    if not isinstance(body, dict) or body.get("status") not in RESULT_STATUSES:
+        return {"status": "failed", "output_json": None, "error": "invalid_result"}
+    output = body.get("output_json")
+    return {
+        "status": body["status"],
+        "output_json": output if isinstance(output, dict) else None,
+        "error": body.get("error"),
+        "text": body.get("text", ""),
+        "duration_ms": body.get("duration_ms"),
+    }
