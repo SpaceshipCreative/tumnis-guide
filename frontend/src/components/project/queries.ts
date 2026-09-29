@@ -13,7 +13,7 @@ import {
   tasksListCommentsOptions,
   tasksListTasksOptions,
 } from "../../api/@tanstack/react-query.gen";
-import { tasksListTasks } from "../../api/sdk.gen";
+import { tasksListComments, tasksListTasks } from "../../api/sdk.gen";
 import { apiUrl } from "../../lib/fetch";
 
 export const TASK_PAGE_LIMIT = 200; // the API's largest page
@@ -58,8 +58,39 @@ export const boardQuery = (projectId: string) =>
 export const briefQuery = (projectId: string) =>
   knowledgeGetBriefOptions({ path: { project_id: projectId } });
 
-export const commentsQuery = (taskId: string) =>
-  tasksListCommentsOptions({ path: { task_id: taskId }, query: { limit: 50 } });
+/**
+ * Every comment of the task, oldest first: follows `next_cursor` like
+ * `projectTasksQuery` and answers one page holding all of them, under the generated op's
+ * key, so a new comment's invalidation refetches the whole list.
+ */
+export const commentsQuery = (taskId: string) => {
+  const path = { task_id: taskId };
+  const query = { limit: 50 };
+  return queryOptions({
+    ...tasksListCommentsOptions({ path, query }),
+    queryFn: async ({ signal }) => {
+      const { data: first } = await tasksListComments({
+        path,
+        query,
+        signal,
+        throwOnError: true,
+      });
+      const items = [...first.items];
+      let cursor = first.next_cursor;
+      while (cursor) {
+        const { data: page } = await tasksListComments({
+          path,
+          query: { ...query, cursor },
+          signal,
+          throwOnError: true,
+        });
+        items.push(...page.items);
+        cursor = page.next_cursor;
+      }
+      return { ...first, items, next_cursor: null };
+    },
+  });
+};
 
 // --- Recurrence (P0-19's routes) -------------------------------------------------------
 
