@@ -72,7 +72,6 @@ def _new_lines(logs: JsonLogs, seen: int) -> tuple[str, int]:
 
 @pytest.mark.req("SEC-6")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 @settings(
     max_examples=150, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture]
 )
@@ -148,3 +147,21 @@ def test_bodies_and_prompts_are_dropped(capture_json_logs: JsonLogs) -> None:
     text = json.dumps(lines)
     assert "CONTENT-OF-" not in text
     assert lines[0]["nested"]["status"] == 200
+
+
+@pytest.mark.req("SEC-6")
+@pytest.mark.wp("P0-16")
+def test_access_log_omits_query_strings(capture_json_logs: JsonLogs) -> None:
+    """uvicorn's access line keeps the method, path and status but never the query
+    string, where some providers put tokens."""
+    logging.getLogger("uvicorn.access").info(
+        '%s - "%s %s HTTP/%s" %d',
+        "198.51.100.7:5000",
+        "GET",
+        "/v1/oauth/callback?code=QUERY-SECRET-123&state=xyz",
+        "1.1",
+        200,
+    )
+    (line,) = capture_json_logs.lines()
+    assert "QUERY-SECRET-123" not in json.dumps(line)
+    assert '"GET /v1/oauth/callback HTTP/1.1" 200' in line["event"]

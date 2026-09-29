@@ -30,8 +30,10 @@ MASK_KEYS: Final = re.compile(
 )
 # Replaced inside every string, the event message included.
 VALUE_PATTERNS: Final = (
-    re.compile(r"\btm[ntd]_[a-z2-7]{12}_[A-Za-z0-9_-]{43}\b"),  # Tumnis keys and tokens
-    re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+"),
+    # Tumnis keys and tokens. The secret part is base64url, so it may end in "-": the end is
+    # "no more token characters", not a word boundary (which "-" would not give).
+    re.compile(r"\btm[ntd]_[a-z2-7]{12}_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])"),
+    re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=_-]+"),  # RFC 6750 token68, base64url included
     re.compile(r"\beyJ[\w-]+\.[\w-]+\.[\w-]+\b"),  # JWT-shaped
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),  # AWS access key id
     re.compile(r"(?i)\b(api[_-]?key|secret|password|token)=[^\s&]+"),
@@ -73,6 +75,18 @@ def redact(_: Any, __: str, event_dict: MutableMapping[str, Any]) -> MutableMapp
     event_dict.update(scrub(rest))
     event_dict.update(meta)
     return event_dict
+
+
+class OmitQueryString(logging.Filter):
+    """uvicorn's access line without the query string: some providers put tokens there
+    (P0-16, SEC-6). uvicorn logs `'%s - "%s %s HTTP/%s" %d'` with (client, method,
+    path?query, version, status)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):  # noqa: PLR2004  # the path's position
+            record.args = (*args[:2], args[2].split("?", 1)[0], *args[3:])
+        return True
 
 
 def add_trace_ids(
@@ -142,6 +156,9 @@ def configure_logging(*, stream: IO[str] | None = None, level: str = "INFO") -> 
         logger = logging.getLogger(name)
         logger.handlers.clear()
         logger.propagate = True
+    access = logging.getLogger("uvicorn.access")
+    access.filters[:] = [f for f in access.filters if not isinstance(f, OmitQueryString)]
+    access.addFilter(OmitQueryString())
     dbos = logging.getLogger(_DBOS_LOGGER)
     dbos.handlers[:] = [handler]
     dbos.propagate = False
