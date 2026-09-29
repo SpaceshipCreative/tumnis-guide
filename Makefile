@@ -10,6 +10,7 @@ check:
 	$(BACKEND) uv run mypy tumnis
 	$(BACKEND) uv run lint-imports
 	$(BACKEND) uv run pytest -q -n auto -m "not integration and not contract"
+	cd daemon && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest -q
 	@if [ -d frontend/node_modules ]; then \
 		npm --prefix frontend run lint && npm --prefix frontend run test --if-present -- --run \
 			&& node --test scripts/ci/check_bundle.test.mjs; \
