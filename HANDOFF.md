@@ -1,7 +1,7 @@
 # P0-24 handoff 3: Project page with Tasks and Board views
 
-Worktree `/Users/sjordan/Projects/Tumnis-Guide-wt/p0-24`, branch `wp/P0-24` (pushed to
-origin). Read the coordinator's footer rules, AGENTS.md, CLAUDE.md and the plan section
+Worktree `/Users/sjordan/Projects/Tumnis-Guide-wt/p0-24`, branch `wp/P0-24`. NOT pushed:
+the permission system denied `git push -u origin wp/P0-24`, so Scott must push it. Read the coordinator's footer rules, AGENTS.md, CLAUDE.md and the plan section
 `#### P0-24` (docs/IMPLEMENTATION-PLAN-DETAILED.md, line ~6503; use offset/limit) first. Do
 not redo committed work; trust `git log --oneline main..HEAD`.
 
