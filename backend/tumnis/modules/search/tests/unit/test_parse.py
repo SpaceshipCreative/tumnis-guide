@@ -14,7 +14,6 @@ TSQUERY_SYNTAX = frozenset("&|!():*<>'\\")
 
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 def test_parse_cases() -> None:
     """T-P0-20-01
     `'"send invoice" acme inv'` -> phrases ("send invoice",), terms ("acme",), prefix
@@ -43,7 +42,6 @@ def test_parse_cases() -> None:
 
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 @given(q=st.text(max_size=200))
 def test_parse_never_emits_tsquery_syntax(q: str) -> None:
     """T-P0-20-02
