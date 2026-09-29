@@ -307,7 +307,7 @@ class ServerPathStorage(AdapterBase):
                     await asyncio.to_thread(self._commit, rel, dir_fd, name, tmp, if_match)
                 finally:
                     await asyncio.to_thread(_unlink_quietly, dir_fd, tmp)
-                st = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+                st = await asyncio.to_thread(os.stat, name, dir_fd=dir_fd, follow_symlinks=False)
             finally:
                 os.close(dir_fd)
             mtime = datetime.fromtimestamp(st.st_mtime, UTC)

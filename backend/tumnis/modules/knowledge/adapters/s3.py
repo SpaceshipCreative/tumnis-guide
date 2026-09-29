@@ -264,14 +264,24 @@ class S3Storage(Adapter):
         safe = safe_prefix(prefix)
 
         async def fn() -> Page[FileStat]:
+            # A raw page can hold only keys Tumnis leaves out; fetch on until one holds a
+            # file or the listing ends, so an empty page always means the end.
+            token = cursor
+            while True:
+                page = await fetch(token)
+                if page.items or page.next_cursor is None:
+                    return page
+                token = page.next_cursor
+
+        async def fetch(token: str | None) -> Page[FileStat]:
             s3 = await self._s3()
             kw: dict[str, Any] = {
                 "Bucket": self.bucket,
                 "Prefix": self.prefix + safe,
                 "MaxKeys": LIST_PAGE_SIZE,
             }
-            if cursor:
-                kw["ContinuationToken"] = cursor
+            if token:
+                kw["ContinuationToken"] = token
             r = await s3.list_objects_v2(**kw)
             items = []
             for obj in r.get("Contents", []):

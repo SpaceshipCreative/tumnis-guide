@@ -45,7 +45,6 @@ def _storage(client: _ScriptedS3) -> S3Storage:
 
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 S3 empty page")
 async def test_pr52_s3_list_skips_a_page_of_hidden_keys() -> None:
     client = _ScriptedS3(
         {
@@ -66,7 +65,6 @@ async def test_pr52_s3_list_skips_a_page_of_hidden_keys() -> None:
 
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 S3 empty page")
 async def test_pr52_s3_list_ends_empty_when_only_hidden_keys_remain() -> None:
     client = _ScriptedS3(
         {
