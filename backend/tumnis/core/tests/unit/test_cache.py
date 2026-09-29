@@ -39,7 +39,6 @@ def registered_cache_names() -> list[str]:
 
 @pytest.mark.req("Caching")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.parametrize("name", registered_cache_names())
 async def test_every_registered_cache_write_is_visible_on_next_read(
     name: str, clock: FixedClock
@@ -73,7 +72,6 @@ async def test_every_registered_cache_write_is_visible_on_next_read(
 
 @pytest.mark.req("Caching")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 def test_every_registered_cache_declares_an_invalidation_rule() -> None:
     """T-P0-08-02
     `invalidated_by` is non-empty for every registered cache spec, and the settings cache
@@ -91,7 +89,6 @@ def test_every_registered_cache_declares_an_invalidation_rule() -> None:
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 def test_key_without_workspace_prefix_is_rejected() -> None:
     """T-P0-08-03
     `CacheKey("tasks:1")` raises; a workspace key needs a real workspace id; `system` keys
@@ -116,7 +113,6 @@ def test_key_without_workspace_prefix_is_rejected() -> None:
 
 @pytest.mark.req("Caching")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 async def test_ttl_and_tags_follow_the_clock(clock: FixedClock) -> None:
     """T-P0-08-04
     An entry expires when the FixedClock passes its TTL (not before); an entry without a
@@ -151,7 +147,6 @@ async def test_ttl_and_tags_follow_the_clock(clock: FixedClock) -> None:
 
 @pytest.mark.req("Caching")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 async def test_hit_and_miss_counters_are_exported(clock: FixedClock) -> None:
     """T-P0-08-16
     `tumnis_cache_hits_total` and `tumnis_cache_misses_total`, labelled with the cache name,
