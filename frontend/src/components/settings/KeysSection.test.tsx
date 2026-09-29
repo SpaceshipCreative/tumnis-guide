@@ -13,7 +13,7 @@ const ROTATED = "tmn_mnopqrstuvwx_ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210zyxwvut";
 const LAST_USED = "2026-03-09T11:58:00Z";
 
 describe("KeysSection", () => {
-  test.fails(
+  test(
     "[P0-26][FR-9.3] T-P0-26-04 a new key is shown once and never cached",
     async () => {
       const recorder = new Recorder();
@@ -70,7 +70,7 @@ describe("KeysSection", () => {
     },
   );
 
-  test.fails(
+  test(
     "[P0-26][FR-9.3] T-P0-26-05 rotate and revoke call the right endpoints and last use shows",
     async () => {
       const recorder = new Recorder();

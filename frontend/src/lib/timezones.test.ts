@@ -3,7 +3,7 @@ import { expect, test, vi } from "vitest";
 import { mockIntlZone } from "../test/intl";
 import { browserZone, ianaZones } from "./timezones";
 
-test.fails(
+test(
   "[P0-26][REL-6] T-P0-26-16 ianaZones always holds UTC, with or without Intl.supportedValuesOf",
   () => {
     const zones = ianaZones();

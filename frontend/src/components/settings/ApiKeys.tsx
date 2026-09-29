@@ -1,13 +1,14 @@
 // API keys in Settings (P0-14, SEC-2, FR-9.3): create, copy once, rotate, revoke, last
-// use. Mounted by the Settings screen (P0-26). The secret lives only in this component's
-// state while its dialog is open: the mutations keep nothing (gcTime 0, reset on close)
-// and never write it into the query cache; the list never carries it.
+// use. Mounted by the Settings screen (KeysSection, P0-26), which asks before a revoke
+// (`confirmRevoke`). The secret lives only in this component's state while its dialog is
+// open: the mutations keep nothing (gcTime 0, reset on close) and never write it into the
+// query cache; the list never carries it.
 import {
   useQuery,
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { useId, useState, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 
 import {
   authListKeysOptions,
@@ -15,6 +16,17 @@ import {
 } from "../../api/@tanstack/react-query.gen";
 import type { KeyCreated, KeyOut } from "../../api/types.gen";
 import { apiWrite, useWrite } from "../../lib/fetch";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { KeyCreatedDialog } from "./KeyCreatedDialog";
+import {
+  BUTTON,
+  DANGER,
+  HEADING,
+  INPUT,
+  LABEL,
+  SECONDARY,
+  SECTION,
+} from "./styles";
 
 // FR-14.10; the server refuses any other (422 `unknown_scope`).
 export const SCOPES = [
@@ -39,47 +51,18 @@ function refresh(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: authListKeysQueryKey(LIST) });
 }
 
-function ShownOnce({
-  secret,
-  onClose,
+export function ApiKeys({
+  confirmRevoke = false,
 }: {
-  secret: string;
-  onClose: () => void;
+  confirmRevoke?: boolean;
 }) {
-  const titleId = useId();
-  const [copied, setCopied] = useState(false);
-  return (
-    <div role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <h3 id={titleId}>Copy your new key</h3>
-      <p>It is shown only now. Store it somewhere safe before closing.</p>
-      <code style={{ overflowWrap: "anywhere" }}>{secret}</code>
-      <div>
-        <button
-          type="button"
-          onClick={() => {
-            void navigator.clipboard.writeText(secret).then(() => {
-              setCopied(true);
-            });
-          }}
-        >
-          Copy
-        </button>
-        <button type="button" onClick={onClose}>
-          Done
-        </button>
-        {copied && <span role="status">Copied</span>}
-      </div>
-    </div>
-  );
-}
-
-export function ApiKeys() {
   const queryClient = useQueryClient();
   const keys = useQuery(authListKeysOptions(LIST));
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<ReadonlySet<string>>(new Set());
   const [secret, setSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<KeyOut | null>(null);
 
   const shown = {
     gcTime: 0,
@@ -126,6 +109,7 @@ export function ApiKeys() {
       }),
     gcTime: 0,
     onSettled: () => {
+      setRevoking(null);
       refresh(queryClient);
     },
     onError: (failure: Error) => {
@@ -156,44 +140,80 @@ export function ApiKeys() {
     rotate.reset();
   }
 
+  function askRevoke(key: KeyOut) {
+    setError(null);
+    if (confirmRevoke) setRevoking(key);
+    else revoke.mutate({ id: key.id });
+  }
+
   return (
-    <section aria-labelledby="api-keys-title">
-      <h2 id="api-keys-title">API keys</h2>
-      <form onSubmit={submit}>
-        <label>
+    <section aria-labelledby="api-keys-title" className={SECTION}>
+      <h2 id="api-keys-title" className={HEADING}>
+        API keys
+      </h2>
+      <form onSubmit={submit} className="flex flex-col gap-3">
+        <label className={LABEL}>
           Key name
           <input
             required
             maxLength={200}
+            className={INPUT}
             value={name}
             onChange={(e) => {
               setName(e.target.value);
             }}
           />
         </label>
-        <fieldset>
-          <legend>Scopes</legend>
-          {SCOPES.map((scope) => (
-            <label key={scope}>
-              <input
-                type="checkbox"
-                checked={scopes.has(scope)}
-                onChange={() => {
-                  toggle(scope);
-                }}
-              />
-              {scope}
-            </label>
-          ))}
+        <fieldset className="flex flex-col gap-1">
+          <legend className="text-sm font-medium">Scopes</legend>
+          <div className="flex flex-wrap gap-x-4">
+            {SCOPES.map((scope) => (
+              <label key={scope} className="flex min-h-11 items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="size-5"
+                  checked={scopes.has(scope)}
+                  onChange={() => {
+                    toggle(scope);
+                  }}
+                />
+                {scope}
+              </label>
+            ))}
+          </div>
         </fieldset>
-        <button type="submit" disabled={create.isPending}>
-          Create key
-        </button>
+        <div>
+          <button type="submit" className={BUTTON} disabled={create.isPending}>
+            Create key
+          </button>
+        </div>
       </form>
-      {error !== null && <p role="alert">{error}</p>}
-      {secret !== null && <ShownOnce secret={secret} onClose={close} />}
-      <div style={{ overflowX: "auto" }}>
-        <table>
+      {error !== null && (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      )}
+      {secret !== null && <KeyCreatedDialog secret={secret} onClose={close} />}
+      {revoking !== null && (
+        <ConfirmDialog
+          title="Revoke this key?"
+          confirmLabel="Revoke key"
+          busy={revoke.isPending}
+          onCancel={() => {
+            setRevoking(null);
+          }}
+          onConfirm={() => {
+            revoke.mutate({ id: revoking.id });
+          }}
+        >
+          <p>
+            Anything using <strong>{revoking.name}</strong> stops working at
+            once. This cannot be undone.
+          </p>
+        </ConfirmDialog>
+      )}
+      <div className="max-w-full overflow-x-auto">
+        <table className="w-full text-left text-sm">
           <thead>
             <tr>
               <th scope="col">Name</th>
@@ -202,31 +222,32 @@ export function ApiKeys() {
               <th scope="col">Last used</th>
               <th scope="col">Status</th>
               <th scope="col">
-                <span className="visually-hidden">Actions</span>
+                <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
           <tbody>
             {(keys.data?.items ?? []).map((key: KeyOut) => (
-              <tr key={key.id}>
-                <td>{key.name}</td>
-                <td>
+              <tr key={key.id} className="border-t border-border align-top">
+                <td className="py-2 pr-3">{key.name}</td>
+                <td className="py-2 pr-3">
                   <code>{key.prefix}</code>
                 </td>
-                <td>{key.scopes.join(", ")}</td>
-                <td>{when(key.last_used_at, "never")}</td>
-                <td>
+                <td className="py-2 pr-3">{key.scopes.join(", ")}</td>
+                <td className="py-2 pr-3">{when(key.last_used_at, "never")}</td>
+                <td className="py-2 pr-3">
                   {key.revoked_at !== null
                     ? "revoked"
                     : key.expires_at === null
                       ? "active"
                       : `expires ${when(key.expires_at, "")}`}
                 </td>
-                <td>
+                <td className="py-2">
                   {key.revoked_at === null && (
-                    <>
+                    <div className="flex gap-2">
                       <button
                         type="button"
+                        className={SECONDARY}
                         disabled={rotate.isPending}
                         onClick={() => {
                           setError(null);
@@ -237,15 +258,15 @@ export function ApiKeys() {
                       </button>
                       <button
                         type="button"
+                        className={DANGER}
                         disabled={revoke.isPending}
                         onClick={() => {
-                          setError(null);
-                          revoke.mutate({ id: key.id });
+                          askRevoke(key);
                         }}
                       >
                         Revoke
                       </button>
-                    </>
+                    </div>
                   )}
                 </td>
               </tr>
