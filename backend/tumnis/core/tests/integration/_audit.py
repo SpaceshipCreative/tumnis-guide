@@ -13,7 +13,8 @@ the test bodies, and this module is where later work packages plug in their shap
   and the client sends the CSRF token and an Idempotency-Key on writes.
 - `audit_ctx(app, db, clock)`: the `Ctx` the cases in backend/tests/audit_cases.py drive.
 - `sign_in`, `create_key`, `change_secret_setting`: the real actions T-P0-15-10 checks;
-  P0-13 (sign-in, filled), P0-14 and P0-08 fill them in.
+  P0-13 (sign-in) and P0-14 (keys) filled theirs; the secret setting over HTTP waits on
+  P0-26.
 """
 
 from __future__ import annotations
@@ -207,7 +208,12 @@ async def sign_in(ctx: Ctx) -> str:
 
 async def create_key(ctx: Ctx) -> str:
     """Create an API key through POST /v1/keys; returns the secret shown once. P0-14."""
-    raise NotImplementedError("P0-14: API keys")
+    response = await ctx.session_client.post(
+        "/v1/keys", json={"name": "audit secrets", "scopes": ["tasks:read"]}
+    )
+    response.raise_for_status()
+    key: str = response.json()["key"]
+    return key
 
 
 async def change_secret_setting(ctx: Ctx) -> str:

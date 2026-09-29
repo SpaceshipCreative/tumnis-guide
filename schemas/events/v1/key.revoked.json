@@ -1,0 +1,41 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/key.revoked.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "key_id": {
+      "format": "uuid",
+      "title": "Key Id",
+      "type": "string"
+    },
+    "prefix": {
+      "title": "Prefix",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source_ip": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Ip"
+    }
+  },
+  "required": [
+    "schema_version",
+    "key_id",
+    "prefix"
+  ],
+  "title": "KeyRevokedV1",
+  "type": "object"
+}

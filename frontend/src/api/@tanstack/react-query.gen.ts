@@ -12,10 +12,14 @@ import { client } from "../client.gen";
 import {
   auditExportAuditCsv,
   auditListAudit,
+  authCreateKey,
+  authListKeys,
   authListSessions,
   authLogin,
   authLogout,
+  authRevokeKey,
   authRevokeSession,
+  authRotateKey,
   authSetup,
   authSetupTotp,
   authSignOutOtherDevices,
@@ -36,6 +40,12 @@ import type {
   AuditListAuditData,
   AuditListAuditError,
   AuditListAuditResponse,
+  AuthCreateKeyData,
+  AuthCreateKeyError,
+  AuthCreateKeyResponse,
+  AuthListKeysData,
+  AuthListKeysError,
+  AuthListKeysResponse,
   AuthListSessionsData,
   AuthListSessionsError,
   AuthListSessionsResponse,
@@ -45,9 +55,15 @@ import type {
   AuthLogoutData,
   AuthLogoutError,
   AuthLogoutResponse,
+  AuthRevokeKeyData,
+  AuthRevokeKeyError,
+  AuthRevokeKeyResponse,
   AuthRevokeSessionData,
   AuthRevokeSessionError,
   AuthRevokeSessionResponse,
+  AuthRotateKeyData,
+  AuthRotateKeyError,
+  AuthRotateKeyResponse,
   AuthSetupData,
   AuthSetupError,
   AuthSetupResponse,
@@ -674,6 +690,178 @@ export const deadLettersPostRetryMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await deadLettersPostRetry({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const authListKeysQueryKey = (options?: Options<AuthListKeysData>) =>
+  createQueryKey("authListKeys", options);
+
+/**
+ * List Keys
+ *
+ * The workspace's API keys: name, prefix, scopes, projects, created, expires, last
+ * used, revoked; never the secret.
+ */
+export const authListKeysOptions = (options?: Options<AuthListKeysData>) =>
+  queryOptions<
+    AuthListKeysResponse,
+    AuthListKeysError,
+    AuthListKeysResponse,
+    ReturnType<typeof authListKeysQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await authListKeys({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: authListKeysQueryKey(options),
+  });
+
+export const authListKeysInfiniteQueryKey = (
+  options?: Options<AuthListKeysData>,
+): QueryKey<Options<AuthListKeysData>> =>
+  createQueryKey("authListKeys", options, true);
+
+/**
+ * List Keys
+ *
+ * The workspace's API keys: name, prefix, scopes, projects, created, expires, last
+ * used, revoked; never the secret.
+ */
+export const authListKeysInfiniteOptions = (
+  options?: Options<AuthListKeysData>,
+) => {
+  const opts = infiniteQueryOptions<
+    AuthListKeysResponse,
+    AuthListKeysError,
+    InfiniteData<AuthListKeysResponse>,
+    QueryKey<Options<AuthListKeysData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<AuthListKeysData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<AuthListKeysData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await authListKeys({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: authListKeysInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Create Key
+ *
+ * A new key; the response shows `key` once. 422 `unknown_scope`.
+ */
+export const authCreateKeyMutation = (
+  options?: Partial<Options<AuthCreateKeyData>>,
+): UseMutationOptions<
+  AuthCreateKeyResponse,
+  AuthCreateKeyError,
+  Options<AuthCreateKeyData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthCreateKeyResponse,
+    AuthCreateKeyError,
+    Options<AuthCreateKeyData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authCreateKey({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Revoke Key
+ *
+ * Revokes the key: every process refuses it within a second.
+ */
+export const authRevokeKeyMutation = (
+  options?: Partial<Options<AuthRevokeKeyData>>,
+): UseMutationOptions<
+  AuthRevokeKeyResponse,
+  AuthRevokeKeyError,
+  Options<AuthRevokeKeyData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthRevokeKeyResponse,
+    AuthRevokeKeyError,
+    Options<AuthRevokeKeyData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authRevokeKey({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Rotate Key
+ *
+ * A new secret on the same key, shown once; the old one stops at once or after
+ * `grace_minutes` (0 to 1,440). 409 `key_revoked`.
+ */
+export const authRotateKeyMutation = (
+  options?: Partial<Options<AuthRotateKeyData>>,
+): UseMutationOptions<
+  AuthRotateKeyResponse,
+  AuthRotateKeyError,
+  Options<AuthRotateKeyData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthRotateKeyResponse,
+    AuthRotateKeyError,
+    Options<AuthRotateKeyData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authRotateKey({
         ...options,
         ...fnOptions,
         throwOnError: true,

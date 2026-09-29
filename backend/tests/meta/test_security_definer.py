@@ -39,6 +39,13 @@ ALLOWED: dict[str, str] = {
         "have no app role grant; locks the counters of one attempt"
     ),
     "app.auth_throttle_put": "P0-13: writes back or clears the counters locked above",
+    "app.auth_resolve_api_key": (
+        "P0-14: the bearer resolver finds an API key by its prefix before the workspace is known"
+    ),
+    "app.auth_resolve_token": (
+        "P0-14: the bearer resolver finds a task or device token by its prefix before the "
+        "workspace is known"
+    ),
     "app.dead_letter_counts": "P0-27: /metrics counts dead letters by status across workspaces",
     "app.usage_totals": "P0-27: /metrics sums usage counters per counter across workspaces",
 }

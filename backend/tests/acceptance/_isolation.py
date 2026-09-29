@@ -311,17 +311,24 @@ def requests_for(case: RouteCase, tables: Mapping[str, str]) -> Iterator[SweepRe
         for q in route.dependant.query_params
         if (t := _table(case.path, q.name, tables)) is not None
     }
+    # Required query parameters that name no row (a date range, say) get a valid sample,
+    # so the request reaches the route instead of stopping at validation (P0-14).
+    required = {
+        q.alias or q.name: _sample(_annotation(q))
+        for q in route.dependant.query_params
+        if q.field_info.is_required() and q.name not in id_filters
+    }
     if case.method in READS:
         if row_param:
-            yield SweepRequest("row", case.method, url, {}, None)
+            yield SweepRequest("row", case.method, url, required, None)
             return
-        yield SweepRequest("list", case.method, url, {}, None)
+        yield SweepRequest("list", case.method, url, required, None)
         if id_filters:
-            yield SweepRequest("list", case.method, url, id_filters, None)
+            yield SweepRequest("list", case.method, url, {**required, **id_filters}, None)
         return
     body, body_names_a = _body(route, case.path, tables)
     kind = "row" if row_param or body_names_a or id_filters else "write"
-    yield SweepRequest(kind, case.method, url, id_filters, body)
+    yield SweepRequest(kind, case.method, url, {**required, **id_filters}, body)
 
 
 # --- B's clients ---------------------------------------------------------------------------

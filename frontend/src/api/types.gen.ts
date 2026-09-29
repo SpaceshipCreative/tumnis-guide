@@ -111,6 +111,116 @@ export type DeadLetterOut = {
 };
 
 /**
+ * KeyCreated
+ */
+export type KeyCreated = {
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Expires At
+   */
+  expires_at: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Key
+   */
+  key: string;
+  /**
+   * Last Used At
+   */
+  last_used_at: string | null;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Prefix
+   */
+  prefix: string;
+  /**
+   * Project Ids
+   */
+  project_ids: Array<string> | null;
+  /**
+   * Revoked At
+   */
+  revoked_at: string | null;
+  /**
+   * Scopes
+   */
+  scopes: Array<string>;
+};
+
+/**
+ * KeyIn
+ */
+export type KeyIn = {
+  /**
+   * Expires At
+   */
+  expires_at?: string | null;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Project Ids
+   */
+  project_ids?: Array<string> | null;
+  /**
+   * Scopes
+   */
+  scopes: Array<string>;
+};
+
+/**
+ * KeyOut
+ */
+export type KeyOut = {
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Expires At
+   */
+  expires_at: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Last Used At
+   */
+  last_used_at: string | null;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Prefix
+   */
+  prefix: string;
+  /**
+   * Project Ids
+   */
+  project_ids: Array<string> | null;
+  /**
+   * Revoked At
+   */
+  revoked_at: string | null;
+  /**
+   * Scopes
+   */
+  scopes: Array<string>;
+};
+
+/**
  * LoginIn
  *
  * `provider` picks the sign-in provider; the other string fields are its credentials
@@ -175,6 +285,20 @@ export type PageDeadLetterOut = {
 };
 
 /**
+ * Page[KeyOut]
+ */
+export type PageKeyOut = {
+  /**
+   * Items
+   */
+  items: Array<KeyOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
  * Page[SessionOut]
  */
 export type PageSessionOut = {
@@ -222,6 +346,16 @@ export type Problem = {
    * Type
    */
   type: string;
+};
+
+/**
+ * RotateIn
+ */
+export type RotateIn = {
+  /**
+   * Grace Minutes
+   */
+  grace_minutes?: number;
 };
 
 /**
@@ -487,7 +621,7 @@ export type AuditListAuditErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -559,7 +693,7 @@ export type AuditExportAuditCsvErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -611,7 +745,7 @@ export type AuthLoginErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -664,7 +798,7 @@ export type AuthLogoutErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -717,7 +851,7 @@ export type AuthSignOutOtherDevicesErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -781,7 +915,7 @@ export type AuthListSessionsErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -841,7 +975,7 @@ export type AuthRevokeSessionErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -896,7 +1030,7 @@ export type AuthTotpErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -962,7 +1096,7 @@ export type DeadLettersGetDeadLettersErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -1022,7 +1156,7 @@ export type DeadLettersPostDiscardErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -1082,7 +1216,7 @@ export type DeadLettersPostRetryErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -1120,6 +1254,241 @@ export type DeadLettersPostRetryResponses = {
 export type DeadLettersPostRetryResponse =
   DeadLettersPostRetryResponses[keyof DeadLettersPostRetryResponses];
 
+export type AuthListKeysData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/keys";
+};
+
+export type AuthListKeysErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthListKeysError = AuthListKeysErrors[keyof AuthListKeysErrors];
+
+export type AuthListKeysResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageKeyOut;
+};
+
+export type AuthListKeysResponse =
+  AuthListKeysResponses[keyof AuthListKeysResponses];
+
+export type AuthCreateKeyData = {
+  body: KeyIn;
+  path?: never;
+  query?: never;
+  url: "/v1/keys";
+};
+
+export type AuthCreateKeyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthCreateKeyError = AuthCreateKeyErrors[keyof AuthCreateKeyErrors];
+
+export type AuthCreateKeyResponses = {
+  /**
+   * Successful Response
+   */
+  201: KeyCreated;
+};
+
+export type AuthCreateKeyResponse =
+  AuthCreateKeyResponses[keyof AuthCreateKeyResponses];
+
+export type AuthRevokeKeyData = {
+  body?: never;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/v1/keys/{id}";
+};
+
+export type AuthRevokeKeyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthRevokeKeyError = AuthRevokeKeyErrors[keyof AuthRevokeKeyErrors];
+
+export type AuthRevokeKeyResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type AuthRevokeKeyResponse =
+  AuthRevokeKeyResponses[keyof AuthRevokeKeyResponses];
+
+export type AuthRotateKeyData = {
+  body?: RotateIn;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/v1/keys/{id}/rotate";
+};
+
+export type AuthRotateKeyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthRotateKeyError = AuthRotateKeyErrors[keyof AuthRotateKeyErrors];
+
+export type AuthRotateKeyResponses = {
+  /**
+   * Successful Response
+   */
+  200: KeyCreated;
+};
+
+export type AuthRotateKeyResponse =
+  AuthRotateKeyResponses[keyof AuthRotateKeyResponses];
+
 export type SettingsGetWorkspaceSettingsData = {
   body?: never;
   path?: never;
@@ -1137,7 +1506,7 @@ export type SettingsGetWorkspaceSettingsErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -1192,7 +1561,7 @@ export type SettingsPutWorkspaceSettingsErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -1247,7 +1616,7 @@ export type AuthSetupErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -1300,7 +1669,7 @@ export type AuthSetupTotpErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**
@@ -1363,7 +1732,7 @@ export type UsageGetUsageErrors = {
    */
   401: Problem;
   /**
-   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
    */
   403: Problem;
   /**

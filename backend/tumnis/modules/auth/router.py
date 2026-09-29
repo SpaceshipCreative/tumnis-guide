@@ -17,6 +17,7 @@ from tumnis.core.audit_router import require_session
 from tumnis.core.clock import Clock
 from tumnis.core.errors import ProblemError
 from tumnis.core.idempotency import SessionDep
+from tumnis.core.pagination import PageParams, page_params
 from tumnis.core.principal import Principal, require_principal
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
@@ -168,3 +169,71 @@ async def setup_totp(body: api.SetupTotpIn, request: Request) -> JSONResponse:
     return _signed_in(
         await api.confirm_setup(body, clock=_clock(request), lockouts=_lockouts(request))
     )
+
+
+# --- API keys (P0-14, SEC-2, FR-9.3) --------------------------------------------------------
+#
+# Session only: no key can list, make, rotate or revoke keys (the authorization matrix
+# checks it). The create and rotate responses carry the key once; an idempotent replay
+# stores and answers them without it (`redact_on_replay`).
+
+_KEY_ONCE: Final = ("key",)
+_NO_GRACE: Final = api.RotateIn()  # no body: the old secret stops at once
+
+
+def _invalid(exc: api.KeyInvalid) -> ProblemError:
+    return ProblemError(422, exc.code, str(exc))
+
+
+@router.get("/keys", response_model=api.KeyPage)
+@route_policy(RoutePolicy(auth="session", paginated=True))
+async def list_keys(
+    ctx: Session, session: SessionDep, page: Annotated[PageParams, Depends(page_params)]
+) -> api.KeyPage:
+    """The workspace's API keys: name, prefix, scopes, projects, created, expires, last
+    used, revoked; never the secret."""
+    return await api.list_keys(session, cursor=page.cursor, limit=page.limit)
+
+
+@router.post("/keys", status_code=201, response_model=api.KeyCreated)
+@route_policy(RoutePolicy(auth="session", idempotent=True, redact_on_replay=_KEY_ONCE))
+async def create_key(
+    body: api.KeyIn, request: Request, ctx: Session, session: SessionDep
+) -> api.KeyCreated:
+    """A new key; the response shows `key` once. 422 `unknown_scope`."""
+    try:
+        return await api.create_key(ctx, body, now=_clock(request).now(), session=session)
+    except api.KeyInvalid as invalid:
+        raise _invalid(invalid) from None
+
+
+@router.post("/keys/{id}/rotate", response_model=api.KeyCreated)
+@route_policy(RoutePolicy(auth="session", idempotent=True, redact_on_replay=_KEY_ONCE))
+async def rotate_key(
+    id: UUID,  # the plan's path, /v1/keys/{id}; the A0.3 sweep maps {id} after keys
+    request: Request,
+    ctx: Session,
+    session: SessionDep,
+    body: api.RotateIn = _NO_GRACE,
+) -> api.KeyCreated:
+    """A new secret on the same key, shown once; the old one stops at once or after
+    `grace_minutes` (0 to 1,440). 409 `key_revoked`."""
+    try:
+        return await api.rotate_key(
+            ctx, id, grace_minutes=body.grace_minutes, now=_clock(request).now(), session=session
+        )
+    except api.KeyInvalid as invalid:
+        raise _invalid(invalid) from None
+
+
+@router.delete("/keys/{id}", status_code=204)
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def revoke_key(
+    id: UUID,  # the plan's path, /v1/keys/{id}; the A0.3 sweep maps {id} after keys
+    request: Request,
+    ctx: Session,
+    session: SessionDep,
+) -> Response:
+    """Revokes the key: every process refuses it within a second."""
+    await api.revoke_key(ctx, id, now=_clock(request).now(), session=session)
+    return Response(status_code=204)

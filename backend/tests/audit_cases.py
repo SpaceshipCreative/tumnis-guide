@@ -155,6 +155,37 @@ async def sign_out_other_devices(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+# --- API keys (P0-14) ----------------------------------------------------------------------
+
+
+async def _new_key(ctx: Ctx) -> str:
+    response = await ctx.session_client.post(
+        "/v1/keys", json={"name": "audit case", "scopes": ["tasks:read"]}
+    )
+    response.raise_for_status()
+    key_id: str = response.json()["id"]
+    return key_id
+
+
+async def create_key(ctx: Ctx) -> None:
+    """POST /v1/keys: `key.created`."""
+    await _new_key(ctx)
+
+
+async def rotate_key(ctx: Ctx) -> None:
+    """POST /v1/keys/{id}/rotate: `key.rotated`."""
+    key_id = await _new_key(ctx)
+    response = await ctx.session_client.post(f"/v1/keys/{key_id}/rotate", json={})
+    response.raise_for_status()
+
+
+async def revoke_key(ctx: Ctx) -> None:
+    """DELETE /v1/keys/{id}: `key.revoked`."""
+    key_id = await _new_key(ctx)
+    response = await ctx.session_client.delete(f"/v1/keys/{key_id}")
+    response.raise_for_status()
+
+
 AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("audit.exported", export_csv, "user"),
     AuditCase("dead_letter.retried", retry_dead_letter, "user"),
@@ -167,13 +198,13 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("auth.locked_out", lock_out, "user"),
     AuditCase("auth.logout", log_out, "user"),
     AuditCase("auth.sessions_revoked", sign_out_other_devices, "user"),
+    AuditCase("key.created", create_key, "user"),
+    AuditCase("key.rotated", rotate_key, "user"),
+    AuditCase("key.revoked", revoke_key, "user"),
 )
 
 # action -> the work package that builds its operation and adds its case.
 PENDING: dict[str, str] = {
-    "key.created": "P0-14",
-    "key.rotated": "P0-14",
-    "key.revoked": "P0-14",
     # P0-08 records it in set_module_enabled; the route that toggles a module arrives with
     # the Settings screen.
     "module.toggled": "P0-26",
