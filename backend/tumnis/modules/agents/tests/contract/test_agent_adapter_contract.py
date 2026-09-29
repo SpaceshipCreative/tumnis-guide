@@ -34,7 +34,6 @@ MCP_PROFILE = "acme-site"
 @pytest.mark.contract
 @pytest.mark.req("FR-14.6")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 class TestFakeAgent(AgentAdapterContract):
     """T-P1-04-09
     AgentAdapterContract passes for FakeAgent (in memory, no socket).
