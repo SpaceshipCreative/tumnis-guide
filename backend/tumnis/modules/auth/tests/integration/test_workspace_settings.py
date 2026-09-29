@@ -33,7 +33,6 @@ async def core_db(db: DbUrls) -> AsyncIterator[None]:
 
 @pytest.mark.req("REL-6", "FR-3.8")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.usefixtures("core_db")
 async def test_get_returns_timezone_threshold_and_version(workspace: WorkspaceHandle) -> None:
     """T-P0-08-18
@@ -50,7 +49,6 @@ async def test_get_returns_timezone_threshold_and_version(workspace: WorkspaceHa
 
 @pytest.mark.req("REL-6", "REL-2")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.usefixtures("core_db")
 async def test_put_updates_bumps_version_and_rejects_stale_or_invalid(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock

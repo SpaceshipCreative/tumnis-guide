@@ -18,6 +18,7 @@ class Workspace(Base):
     name: Mapped[str]
     timezone: Mapped[str] = mapped_column(server_default="UTC")
     deployment_mode: Mapped[str] = mapped_column(server_default="self-hosted")
+    subtask_threshold_min: Mapped[int] = mapped_column(server_default=text("30"))  # FR-3.8
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
     version: Mapped[int] = mapped_column(server_default=text("1"))

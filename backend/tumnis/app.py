@@ -18,6 +18,7 @@ from starlette.types import Scope
 from tumnis import wiring
 from tumnis.core import cache, db, health, ops_status, testing_routes
 from tumnis.core.clock import Clock, SystemClock
+from tumnis.core.errors import install_problem_handlers
 from tumnis.settings import Settings, install_master_keys
 
 # The built frontend (P0-22 replaces the placeholder shell); present in the image.
@@ -75,6 +76,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
         docs_url=None,
         redoc_url=None,
     )
+    install_problem_handlers(app)
     app.state.settings = settings
     app.state.master_keys = master_keys
     app.state.clock = clock

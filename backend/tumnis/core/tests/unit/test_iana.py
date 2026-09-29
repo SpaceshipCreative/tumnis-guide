@@ -9,7 +9,6 @@ import pytest
 
 @pytest.mark.req("REL-6")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 def test_timezone_accepts_only_iana_names() -> None:
     """T-P0-08-12
     Accepts America/New_York, Australia/Sydney and UTC; rejects the legacy abbreviations
