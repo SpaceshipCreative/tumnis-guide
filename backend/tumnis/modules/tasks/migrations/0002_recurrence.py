@@ -7,8 +7,10 @@
   next one after it (`next_due_at`, for the Schedule rail).
 - tasks.recurrence_rule_id / occurrence_on: an instance of a rule and the local date it
   stands for; `ux_tasks_ws_rule_occurrence` allows one instance per rule and date, so
-  completion and the recurrence tick racing make one successor. The foreign key is added
-  NOT VALID (squawk's constraint-missing-not-valid): existing rows carry no rule.
+  completion and the recurrence tick racing make one successor. There is no foreign key to
+  recurrence_rules: T-P0-18-17 allows the tasks tables to reference only workspaces,
+  projects, tasks, board columns and context items. Rules are only soft-deleted (a purge
+  never removes one), so the id cannot dangle.
 - day_closes: one row per workspace and closed local day (`ux_day_closes_ws_day`), with
   when it closed and how many Today tasks rolled over; the last `closed_at` anchors the
   next close.
@@ -48,8 +50,8 @@ def upgrade() -> None:
         sa.Column("task_template", JSONB, nullable=False),
         sa.Column("preset", sa.Text, nullable=True),
         sa.Column("cron", sa.Text, nullable=True),
-        sa.Column("weekday", sa.SmallInteger, nullable=True),
-        sa.Column("month_day", sa.SmallInteger, nullable=True),
+        sa.Column("weekday", sa.Integer, nullable=True),
+        sa.Column("month_day", sa.Integer, nullable=True),
         sa.Column("due_time", sa.Time, nullable=False, server_default=sa.text("'09:00'")),
         sa.Column("latest_occurrence_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("next_due_at", sa.TIMESTAMP(timezone=True), nullable=True),
@@ -72,10 +74,6 @@ def upgrade() -> None:
     )
     op.add_column("tasks", sa.Column("recurrence_rule_id", UUID(as_uuid=True), nullable=True))
     op.add_column("tasks", sa.Column("occurrence_on", sa.Date, nullable=True))
-    op.execute(
-        "ALTER TABLE tasks ADD CONSTRAINT fk_tasks_recurrence_rule_id_recurrence_rules"
-        " FOREIGN KEY (recurrence_rule_id) REFERENCES recurrence_rules (id) NOT VALID"
-    )
     op.create_index(
         "ux_tasks_ws_rule_occurrence",
         "tasks",
@@ -101,7 +99,6 @@ def downgrade() -> None:
         _fk(table, cascade=False)
     drop_tenant_table("day_closes")
     op.drop_index("ux_tasks_ws_rule_occurrence", table_name="tasks")
-    op.drop_constraint("fk_tasks_recurrence_rule_id_recurrence_rules", "tasks", type_="foreignkey")
     op.drop_column("tasks", "occurrence_on")
     op.drop_column("tasks", "recurrence_rule_id")
     drop_tenant_table("recurrence_rules")

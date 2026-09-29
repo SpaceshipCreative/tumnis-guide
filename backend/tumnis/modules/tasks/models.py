@@ -7,7 +7,7 @@ from datetime import date, datetime, time
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, SmallInteger, Text, text
+from sqlalchemy import ForeignKey, Text, text
 from sqlalchemy.dialects.postgresql import ENUM, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -59,7 +59,9 @@ class Task(TenantBase, Base):
     actual_minutes: Mapped[int | None]
     tainted: Mapped[bool] = mapped_column(server_default=text("false"))
     source: Mapped[str] = mapped_column(server_default=text("'user'"))
-    recurrence_rule_id: Mapped[UUID | None] = mapped_column(ForeignKey("recurrence_rules.id"))
+    # No foreign key: T-P0-18-17 lets the tasks tables reference only workspaces, projects,
+    # tasks, board columns and context items. Rules are only soft-deleted.
+    recurrence_rule_id: Mapped[UUID | None]
     occurrence_on: Mapped[date | None]  # the local date this instance of its rule stands for
 
 
@@ -101,8 +103,8 @@ class RecurrenceRule(TenantBase, Base):
     task_template: Mapped[dict[str, Any]] = mapped_column(JSONB)
     preset: Mapped[str | None]
     cron: Mapped[str | None]
-    weekday: Mapped[int | None] = mapped_column(SmallInteger)
-    month_day: Mapped[int | None] = mapped_column(SmallInteger)
+    weekday: Mapped[int | None]
+    month_day: Mapped[int | None]
     due_time: Mapped[time] = mapped_column(server_default=text("'09:00'"))
     latest_occurrence_at: Mapped[datetime | None]
     next_due_at: Mapped[datetime | None]
