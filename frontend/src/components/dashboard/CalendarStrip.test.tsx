@@ -18,7 +18,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test.fails("[P1-10][FR-1.3] T-P1-10-12 free blocks highlighted", async () => {
+test("[P1-10][FR-1.3] T-P1-10-12 free blocks highlighted", async () => {
   vi.useFakeTimers({ toFake: ["Date"], now: NOW });
   for (const viewport of VIEWPORTS) {
     const days: string[] = [];

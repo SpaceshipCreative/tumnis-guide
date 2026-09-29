@@ -124,6 +124,13 @@ def _validate(body: WorkspaceSettingsIn) -> None:
         )
 
 
+def workspace_settings_tag(workspace_id: UUID) -> str:
+    """The cache tag of entries computed from the workspace settings (the timezone):
+    put_workspace_settings drops them on commit, so another module's cache (planning's day
+    calendar, P1-10) follows a timezone change (REL-6)."""
+    return f"ws:{workspace_id}:settings:{WORKSPACE_SETTINGS_KEY}"
+
+
 async def get_workspace_settings(ctx: WorkspaceContext) -> WorkspaceSettingsOut:
     """The workspace's timezone, subtask threshold and version, through the settings cache
     (so a changed timezone reaches the next planner tick in every process, REL-6)."""
@@ -205,6 +212,7 @@ async def _put_workspace_settings(
     await invalidate_on_commit(
         session, settings_cache_key(ctx.workspace_id, WORKSPACE_SETTINGS_KEY)
     )
+    await invalidate_on_commit(session, tag=workspace_settings_tag(ctx.workspace_id))
     return _out(row)
 
 

@@ -24,7 +24,6 @@ TUESDAY = date(2026, 3, 10)  # after the US spring change: New York is UTC-4, Lo
 
 @pytest.mark.req("REL-6")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 async def test_timezone_change_recomputes_blocks(
     app: FastAPI, session_client: SessionClient, workspace: WorkspaceHandle
 ) -> None:
@@ -90,7 +89,6 @@ async def test_timezone_change_recomputes_blocks(
 
 @pytest.mark.req("FR-1.3")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 async def test_strip_endpoint_shape_and_query_count(
     app: FastAPI,
     session_client: SessionClient,

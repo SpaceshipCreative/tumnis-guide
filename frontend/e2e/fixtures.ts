@@ -463,6 +463,7 @@ export const SETTINGS_SECTIONS: readonly (readonly [
   ["Audit log", (page) => page.getByRole("link", { name: "Export CSV" })],
   ["Dead letters", (page) => page.getByRole("combobox", { name: "Status" })],
   ["Workspace", (page) => page.getByRole("button", { name: "Save" })],
+  ["Working hours", (page) => page.getByRole("button", { name: "Save" })],
 ];
 
 /**

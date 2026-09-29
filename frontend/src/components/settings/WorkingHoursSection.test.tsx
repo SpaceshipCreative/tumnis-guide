@@ -14,7 +14,7 @@ import { WorkingHoursSection } from "./WorkingHoursSection";
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 describe("WorkingHoursSection", () => {
-  test.fails("[P1-10][FR-4.7] T-P1-10-13 edit weekday hours", async () => {
+  test("[P1-10][FR-4.7] T-P1-10-13 edit weekday hours", async () => {
     const recorder = new Recorder();
     server.use(...workingHoursHandlers(recorder));
     const { user } = renderWithProviders(<WorkingHoursSection />);
