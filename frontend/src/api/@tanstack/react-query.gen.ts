@@ -12,7 +12,9 @@ import { client } from "../client.gen";
 import {
   auditExportAuditCsv,
   auditListAudit,
+  authConfirmTotpEnrolment,
   authCreateKey,
+  authGetAccount,
   authListKeys,
   authListSessions,
   authLogin,
@@ -23,6 +25,7 @@ import {
   authSetup,
   authSetupTotp,
   authSignOutOtherDevices,
+  authStartTotpEnrolment,
   authTotp,
   deadLettersGetDeadLetters,
   deadLettersPostDiscard,
@@ -37,8 +40,12 @@ import {
   projectsReorderProject,
   projectsUnarchiveProject,
   projectsUpdateProject,
+  settingsGetSection,
   settingsGetWorkspaceSettings,
+  settingsListModules,
+  settingsPutSection,
   settingsPutWorkspaceSettings,
+  settingsSetModule,
   usageGetUsage,
 } from "../sdk.gen";
 import type {
@@ -47,9 +54,15 @@ import type {
   AuditListAuditData,
   AuditListAuditError,
   AuditListAuditResponse,
+  AuthConfirmTotpEnrolmentData,
+  AuthConfirmTotpEnrolmentError,
+  AuthConfirmTotpEnrolmentResponse,
   AuthCreateKeyData,
   AuthCreateKeyError,
   AuthCreateKeyResponse,
+  AuthGetAccountData,
+  AuthGetAccountError,
+  AuthGetAccountResponse,
   AuthListKeysData,
   AuthListKeysError,
   AuthListKeysResponse,
@@ -80,6 +93,9 @@ import type {
   AuthSignOutOtherDevicesData,
   AuthSignOutOtherDevicesError,
   AuthSignOutOtherDevicesResponse,
+  AuthStartTotpEnrolmentData,
+  AuthStartTotpEnrolmentError,
+  AuthStartTotpEnrolmentResponse,
   AuthTotpData,
   AuthTotpError,
   AuthTotpResponse,
@@ -116,12 +132,24 @@ import type {
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectError,
   ProjectsUpdateProjectResponse,
+  SettingsGetSectionData,
+  SettingsGetSectionError,
+  SettingsGetSectionResponse,
   SettingsGetWorkspaceSettingsData,
   SettingsGetWorkspaceSettingsError,
   SettingsGetWorkspaceSettingsResponse,
+  SettingsListModulesData,
+  SettingsListModulesError,
+  SettingsListModulesResponse,
+  SettingsPutSectionData,
+  SettingsPutSectionError,
+  SettingsPutSectionResponse,
   SettingsPutWorkspaceSettingsData,
   SettingsPutWorkspaceSettingsError,
   SettingsPutWorkspaceSettingsResponse,
+  SettingsSetModuleData,
+  SettingsSetModuleError,
+  SettingsSetModuleResponse,
   UsageGetUsageData,
   UsageGetUsageError,
   UsageGetUsageResponse,
@@ -363,6 +391,33 @@ export const auditExportAuditCsvOptions = (
     queryKey: auditExportAuditCsvQueryKey(options),
   });
 
+export const authGetAccountQueryKey = (options?: Options<AuthGetAccountData>) =>
+  createQueryKey("authGetAccount", options);
+
+/**
+ * Get Account
+ *
+ * The signed-in user's email and second factor.
+ */
+export const authGetAccountOptions = (options?: Options<AuthGetAccountData>) =>
+  queryOptions<
+    AuthGetAccountResponse,
+    AuthGetAccountError,
+    AuthGetAccountResponse,
+    ReturnType<typeof authGetAccountQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await authGetAccount({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: authGetAccountQueryKey(options),
+  });
+
 /**
  * Login
  *
@@ -583,6 +638,66 @@ export const authTotpMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await authTotp({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Start Totp Enrolment
+ *
+ * With the password: a new TOTP secret (shown once) and its enrolment token. 401
+ * `invalid_credentials`, 429 `locked_out`.
+ */
+export const authStartTotpEnrolmentMutation = (
+  options?: Partial<Options<AuthStartTotpEnrolmentData>>,
+): UseMutationOptions<
+  AuthStartTotpEnrolmentResponse,
+  AuthStartTotpEnrolmentError,
+  Options<AuthStartTotpEnrolmentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthStartTotpEnrolmentResponse,
+    AuthStartTotpEnrolmentError,
+    Options<AuthStartTotpEnrolmentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authStartTotpEnrolment({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Confirm Totp Enrolment
+ *
+ * A code from the new secret replaces the old one. 401 `invalid_code`,
+ * `invalid_enrol_token`.
+ */
+export const authConfirmTotpEnrolmentMutation = (
+  options?: Partial<Options<AuthConfirmTotpEnrolmentData>>,
+): UseMutationOptions<
+  AuthConfirmTotpEnrolmentResponse,
+  AuthConfirmTotpEnrolmentError,
+  Options<AuthConfirmTotpEnrolmentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthConfirmTotpEnrolmentResponse,
+    AuthConfirmTotpEnrolmentError,
+    Options<AuthConfirmTotpEnrolmentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authConfirmTotpEnrolment({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -1150,6 +1265,65 @@ export const projectsUnarchiveProjectMutation = (
   return mutationOptions;
 };
 
+export const settingsListModulesQueryKey = (
+  options?: Options<SettingsListModulesData>,
+) => createQueryKey("settingsListModules", options);
+
+/**
+ * List Modules
+ *
+ * Every module, whether it is on for this workspace, and whether it can be off.
+ */
+export const settingsListModulesOptions = (
+  options?: Options<SettingsListModulesData>,
+) =>
+  queryOptions<
+    SettingsListModulesResponse,
+    SettingsListModulesError,
+    SettingsListModulesResponse,
+    ReturnType<typeof settingsListModulesQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await settingsListModules({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: settingsListModulesQueryKey(options),
+  });
+
+/**
+ * Set Module
+ *
+ * Switches the module on or off for this workspace. 422 `module_required`.
+ */
+export const settingsSetModuleMutation = (
+  options?: Partial<Options<SettingsSetModuleData>>,
+): UseMutationOptions<
+  SettingsSetModuleResponse,
+  SettingsSetModuleError,
+  Options<SettingsSetModuleData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    SettingsSetModuleResponse,
+    SettingsSetModuleError,
+    Options<SettingsSetModuleData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await settingsSetModule({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const settingsGetWorkspaceSettingsQueryKey = (
   options?: Options<SettingsGetWorkspaceSettingsData>,
 ) => createQueryKey("settingsGetWorkspaceSettings", options);
@@ -1195,6 +1369,66 @@ export const settingsPutWorkspaceSettingsMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await settingsPutWorkspaceSettings({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const settingsGetSectionQueryKey = (
+  options: Options<SettingsGetSectionData>,
+) => createQueryKey("settingsGetSection", options);
+
+/**
+ * Get Section
+ *
+ * The section's values without its secrets; 404 `not_found` for an unknown section.
+ */
+export const settingsGetSectionOptions = (
+  options: Options<SettingsGetSectionData>,
+) =>
+  queryOptions<
+    SettingsGetSectionResponse,
+    SettingsGetSectionError,
+    SettingsGetSectionResponse,
+    ReturnType<typeof settingsGetSectionQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await settingsGetSection({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: settingsGetSectionQueryKey(options),
+  });
+
+/**
+ * Put Section
+ *
+ * Merges `values` into the section at `version`; 409 `stale_version`, 422
+ * `validation_error`, 404 `not_found`.
+ */
+export const settingsPutSectionMutation = (
+  options?: Partial<Options<SettingsPutSectionData>>,
+): UseMutationOptions<
+  SettingsPutSectionResponse,
+  SettingsPutSectionError,
+  Options<SettingsPutSectionData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    SettingsPutSectionResponse,
+    SettingsPutSectionError,
+    Options<SettingsPutSectionData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await settingsPutSection({
         ...options,
         ...fnOptions,
         throwOnError: true,

@@ -5,6 +5,28 @@ export type ClientOptions = {
 };
 
 /**
+ * AccountOut
+ */
+export type AccountOut = {
+  /**
+   * Email
+   */
+  email: string;
+  /**
+   * Second Factor
+   */
+  second_factor: "totp";
+  /**
+   * Totp Confirmed At
+   */
+  totp_confirmed_at: string | null;
+  /**
+   * User Id
+   */
+  user_id: string;
+};
+
+/**
  * AuditEntry
  */
 export type AuditEntry = {
@@ -259,6 +281,48 @@ export type LoginOut = {
    * Step
    */
   step?: "totp";
+};
+
+/**
+ * ModuleFlagIn
+ */
+export type ModuleFlagIn = {
+  /**
+   * Enabled
+   */
+  enabled: boolean;
+  /**
+   * Module
+   */
+  module: string;
+};
+
+/**
+ * ModuleFlagOut
+ */
+export type ModuleFlagOut = {
+  /**
+   * Enabled
+   */
+  enabled: boolean;
+  /**
+   * Module
+   */
+  module: string;
+  /**
+   * Required
+   */
+  required: boolean;
+};
+
+/**
+ * ModuleFlagsOut
+ */
+export type ModuleFlagsOut = {
+  /**
+   * Items
+   */
+  items: Array<ModuleFlagOut>;
 };
 
 /**
@@ -626,6 +690,46 @@ export type SessionOut = {
 };
 
 /**
+ * SettingSectionIn
+ */
+export type SettingSectionIn = {
+  /**
+   * Values
+   */
+  values: {
+    [key: string]: unknown;
+  };
+  /**
+   * Version
+   */
+  version?: number | null;
+};
+
+/**
+ * SettingSectionOut
+ */
+export type SettingSectionOut = {
+  /**
+   * Secrets Set
+   */
+  secrets_set: Array<string>;
+  /**
+   * Section
+   */
+  section: string;
+  /**
+   * Values
+   */
+  values: {
+    [key: string]: unknown;
+  };
+  /**
+   * Version
+   */
+  version: number | null;
+};
+
+/**
  * SetupIn
  */
 export type SetupIn = {
@@ -687,6 +791,44 @@ export type SignedInOut = {
    * Workspace Id
    */
   workspace_id: string;
+};
+
+/**
+ * TotpEnrolConfirmIn
+ */
+export type TotpEnrolConfirmIn = {
+  /**
+   * Code
+   */
+  code: string;
+  /**
+   * Enrol Token
+   */
+  enrol_token: string;
+};
+
+/**
+ * TotpEnrolIn
+ */
+export type TotpEnrolIn = {
+  /**
+   * Password
+   */
+  password: string;
+};
+
+/**
+ * TotpEnrolOut
+ */
+export type TotpEnrolOut = {
+  /**
+   * Enrol Token
+   */
+  enrol_token: string;
+  /**
+   * Otpauth Uri
+   */
+  otpauth_uri: string;
 };
 
 /**
@@ -966,6 +1108,61 @@ export type AuditExportAuditCsvResponses = {
    */
   200: unknown;
 };
+
+export type AuthGetAccountData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/auth/account";
+};
+
+export type AuthGetAccountErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthGetAccountError =
+  AuthGetAccountErrors[keyof AuthGetAccountErrors];
+
+export type AuthGetAccountResponses = {
+  /**
+   * Successful Response
+   */
+  200: AccountOut;
+};
+
+export type AuthGetAccountResponse =
+  AuthGetAccountResponses[keyof AuthGetAccountResponses];
 
 export type AuthLoginData = {
   body: LoginIn;
@@ -1304,6 +1501,116 @@ export type AuthTotpResponses = {
 };
 
 export type AuthTotpResponse = AuthTotpResponses[keyof AuthTotpResponses];
+
+export type AuthStartTotpEnrolmentData = {
+  body: TotpEnrolIn;
+  path?: never;
+  query?: never;
+  url: "/v1/auth/totp/enrol";
+};
+
+export type AuthStartTotpEnrolmentErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthStartTotpEnrolmentError =
+  AuthStartTotpEnrolmentErrors[keyof AuthStartTotpEnrolmentErrors];
+
+export type AuthStartTotpEnrolmentResponses = {
+  /**
+   * Successful Response
+   */
+  200: TotpEnrolOut;
+};
+
+export type AuthStartTotpEnrolmentResponse =
+  AuthStartTotpEnrolmentResponses[keyof AuthStartTotpEnrolmentResponses];
+
+export type AuthConfirmTotpEnrolmentData = {
+  body: TotpEnrolConfirmIn;
+  path?: never;
+  query?: never;
+  url: "/v1/auth/totp/enrol/confirm";
+};
+
+export type AuthConfirmTotpEnrolmentErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthConfirmTotpEnrolmentError =
+  AuthConfirmTotpEnrolmentErrors[keyof AuthConfirmTotpEnrolmentErrors];
+
+export type AuthConfirmTotpEnrolmentResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type AuthConfirmTotpEnrolmentResponse =
+  AuthConfirmTotpEnrolmentResponses[keyof AuthConfirmTotpEnrolmentResponses];
 
 export type DeadLettersGetDeadLettersData = {
   body?: never;
@@ -2151,6 +2458,116 @@ export type ProjectsUnarchiveProjectResponses = {
 export type ProjectsUnarchiveProjectResponse =
   ProjectsUnarchiveProjectResponses[keyof ProjectsUnarchiveProjectResponses];
 
+export type SettingsListModulesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/settings/modules";
+};
+
+export type SettingsListModulesErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type SettingsListModulesError =
+  SettingsListModulesErrors[keyof SettingsListModulesErrors];
+
+export type SettingsListModulesResponses = {
+  /**
+   * Successful Response
+   */
+  200: ModuleFlagsOut;
+};
+
+export type SettingsListModulesResponse =
+  SettingsListModulesResponses[keyof SettingsListModulesResponses];
+
+export type SettingsSetModuleData = {
+  body: ModuleFlagIn;
+  path?: never;
+  query?: never;
+  url: "/v1/settings/modules";
+};
+
+export type SettingsSetModuleErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type SettingsSetModuleError =
+  SettingsSetModuleErrors[keyof SettingsSetModuleErrors];
+
+export type SettingsSetModuleResponses = {
+  /**
+   * Successful Response
+   */
+  200: ModuleFlagOut;
+};
+
+export type SettingsSetModuleResponse =
+  SettingsSetModuleResponses[keyof SettingsSetModuleResponses];
+
 export type SettingsGetWorkspaceSettingsData = {
   body?: never;
   path?: never;
@@ -2260,6 +2677,126 @@ export type SettingsPutWorkspaceSettingsResponses = {
 
 export type SettingsPutWorkspaceSettingsResponse =
   SettingsPutWorkspaceSettingsResponses[keyof SettingsPutWorkspaceSettingsResponses];
+
+export type SettingsGetSectionData = {
+  body?: never;
+  path: {
+    /**
+     * Section
+     */
+    section: string;
+  };
+  query?: never;
+  url: "/v1/settings/{section}";
+};
+
+export type SettingsGetSectionErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type SettingsGetSectionError =
+  SettingsGetSectionErrors[keyof SettingsGetSectionErrors];
+
+export type SettingsGetSectionResponses = {
+  /**
+   * Successful Response
+   */
+  200: SettingSectionOut;
+};
+
+export type SettingsGetSectionResponse =
+  SettingsGetSectionResponses[keyof SettingsGetSectionResponses];
+
+export type SettingsPutSectionData = {
+  body: SettingSectionIn;
+  path: {
+    /**
+     * Section
+     */
+    section: string;
+  };
+  query?: never;
+  url: "/v1/settings/{section}";
+};
+
+export type SettingsPutSectionErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type SettingsPutSectionError =
+  SettingsPutSectionErrors[keyof SettingsPutSectionErrors];
+
+export type SettingsPutSectionResponses = {
+  /**
+   * Successful Response
+   */
+  200: SettingSectionOut;
+};
+
+export type SettingsPutSectionResponse =
+  SettingsPutSectionResponses[keyof SettingsPutSectionResponses];
 
 export type AuthSetupData = {
   body: SetupIn;

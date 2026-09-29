@@ -7,10 +7,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
-from typing import Any, Final, Literal, cast
+from typing import Annotated, Any, Final, Literal, cast
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
 from sqlalchemy import Table, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
@@ -41,12 +41,13 @@ from tumnis.modules.auth.providers import (
     SignInResult,
     check_totp,
     factor,
+    matched_offset,
     new_totp_secret,
     provider,
     provisioning_uri,
     totp_aad,
 )
-from tumnis.modules.auth.rules import is_iana_zone
+from tumnis.modules.auth.rules import is_iana_zone, totp_step
 from tumnis.modules.auth.sessions import user_context
 from tumnis.seed import (
     SeedWriterUnavailableError,
@@ -75,10 +76,25 @@ class WorkspaceSettingsOut(BaseModel):
     version: int  # the workspaces row version: one optimistic lock for the resource
 
 
+# The threshold's bounds, published in the OpenAPI schema so the generated zod schema
+# carries them (P0-26: the browser refuses what the server would). Only published:
+# `_validate` enforces them with the stable `validation_error` code.
+ThresholdMinutes = Annotated[
+    int,
+    WithJsonSchema(
+        {
+            "type": "integer",
+            "minimum": SUBTASK_THRESHOLD_RANGE[0],
+            "maximum": SUBTASK_THRESHOLD_RANGE[1],
+        }
+    ),
+]
+
+
 class WorkspaceSettingsIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     timezone: str | None = None
-    subtask_threshold_min: int | None = None
+    subtask_threshold_min: ThresholdMinutes | None = None
     version: Version
 
 
@@ -342,6 +358,18 @@ async def sign_in_password(body: LoginIn, *, clock: Clock, lockouts: bool = True
     401 `invalid_credentials` (the same for an unknown email), 403 `setup_incomplete`
     before the first code is confirmed, 429 `locked_out` with Retry-After."""
     now = clock.now()
+    result = await _check_password(body, clock=clock, lockouts=lockouts)
+    if not await _totp_confirmed(result.user_id, result.workspace_id):
+        raise ProblemError(403, "setup_incomplete", "Confirm the first code to finish setup")
+    claims = {"u": str(result.user_id), "w": str(result.workspace_id), "pr": body.provider}
+    return LoginOut(preauth=sign("preauth", claims, expires_at=now + PREAUTH_TTL))
+
+
+async def _check_password(body: LoginIn, *, clock: Clock, lockouts: bool) -> SignInResult:
+    """The provider's check under the email and address lockouts: the account, or 401
+    `invalid_credentials` (audited as `auth.login_failed` on a known account) or 429
+    `locked_out`."""
+    now = clock.now()
     credentials = body.credentials()
     chosen = provider(body.provider)
     keys = [throttle.address_key(_address())]
@@ -378,10 +406,7 @@ async def sign_in_password(body: LoginIn, *, clock: Clock, lockouts: bool = True
         else:
             log.info("auth.login_failed for no known account", extra={"source": _address()})
         raise _invalid_credentials()
-    if not await _totp_confirmed(result.user_id, result.workspace_id):
-        raise ProblemError(403, "setup_incomplete", "Confirm the first code to finish setup")
-    claims = {"u": str(result.user_id), "w": str(result.workspace_id), "pr": body.provider}
-    return LoginOut(preauth=sign("preauth", claims, expires_at=now + PREAUTH_TTL))
+    return result
 
 
 async def _open_session(
@@ -759,6 +784,122 @@ async def reset_totp(email: str, *, now: datetime) -> str:
             occurred_at=now,
         )
     return provisioning_uri(secret, email.strip())
+
+
+# --- Account and second-factor re-enrolment (P0-26, SEC-1) -------------------------------
+#
+# Settings shows the signed-in account and its second factor, and moves the TOTP secret to
+# a new authenticator: the password (under the sign-in lockouts) answers a new secret and a
+# signed enrolment token bound to this user and session; a code from the new secret
+# confirms it, replacing the old one (audited as `auth.totp_reset`, `via: settings`). Until
+# then the old secret keeps working. A lost phone is still `tumnis admin reset-totp`.
+
+ENROL_TTL: Final = timedelta(minutes=10)  # plan default: time to scan and type a code
+_ENROL: Final = "totp_enrol"
+
+
+class AccountOut(BaseModel):
+    user_id: UUID
+    email: str
+    second_factor: Literal["totp"]
+    totp_confirmed_at: datetime | None
+
+
+class TotpEnrolIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    password: str = Field(max_length=1024)
+
+
+class TotpEnrolOut(BaseModel):
+    otpauth_uri: str  # shown once: the new secret for the authenticator app
+    enrol_token: str  # proves this enrolment to POST /v1/auth/totp/enrol/confirm
+
+
+class TotpEnrolConfirmIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enrol_token: str = Field(max_length=2048)
+    code: str = Field(max_length=16)
+
+
+def _signed_in_user(principal: Principal) -> tuple[UUID, UUID, UUID]:
+    """(user, workspace, session) of a session principal; 403 `session_required` else."""
+    user_id, session_id = _session_of(principal)
+    if principal.workspace_id is None:
+        raise ProblemError(403, "session_required", "Only a signed-in session can do this")
+    return user_id, principal.workspace_id, session_id
+
+
+async def get_account(principal: Principal) -> AccountOut:
+    """The signed-in user's email and second factor."""
+    user_id, workspace_id, _ = _signed_in_user(principal)
+    async with tenant_session(user_context(workspace_id, user_id)) as s:
+        row = (
+            await s.execute(
+                select(USERS.c.email, USERS.c.totp_confirmed_at).where(USERS.c.id == user_id)
+            )
+        ).one()
+    return AccountOut(
+        user_id=user_id,
+        email=row.email,
+        second_factor=TOTP,
+        totp_confirmed_at=row.totp_confirmed_at,
+    )
+
+
+async def start_totp_enrolment(
+    principal: Principal, body: TotpEnrolIn, *, clock: Clock, lockouts: bool = True
+) -> TotpEnrolOut:
+    """The password again (401 `invalid_credentials`, 429 `locked_out`, as at sign-in),
+    then a new secret and its enrolment token; nothing is stored yet."""
+    user_id, workspace_id, session_id = _signed_in_user(principal)
+    account = await get_account(principal)
+    checked = await _check_password(
+        LoginIn(email=account.email, password=body.password), clock=clock, lockouts=lockouts
+    )
+    if checked.user_id != user_id:
+        raise _invalid_credentials()
+    secret = new_totp_secret()
+    claims = {"u": str(user_id), "w": str(workspace_id), "sid": str(session_id), "s": secret}
+    token = sign(_ENROL, claims, expires_at=clock.now() + ENROL_TTL)
+    return TotpEnrolOut(otpauth_uri=provisioning_uri(secret, account.email), enrol_token=token)
+
+
+async def confirm_totp_enrolment(
+    principal: Principal, body: TotpEnrolConfirmIn, *, now: datetime
+) -> None:
+    """A code from the new secret makes it the user's second factor (confirmed now, this
+    code's step used). 401 `invalid_enrol_token` for a token that is expired or not this
+    session's; 401 `invalid_code` for a code the new secret does not make."""
+    user_id, workspace_id, session_id = _signed_in_user(principal)
+    claims = unsign(_ENROL, body.enrol_token, now=now)
+    if claims is None or (claims.get("u"), claims.get("sid")) != (str(user_id), str(session_id)):
+        raise ProblemError(401, "invalid_enrol_token", "Start again: set up a new authenticator")
+    secret = str(claims["s"])
+    offset = matched_offset(secret, body.code, now)
+    if offset is None:
+        raise ProblemError(401, "invalid_code", "The code is not right")
+    async with tenant_session(user_context(workspace_id, user_id)) as s:
+        version, sealed = await seal_for_workspace(
+            s, workspace_id, secret.encode(), aad=totp_aad(user_id)
+        )
+        await s.execute(
+            update(USERS)
+            .where(USERS.c.id == user_id)
+            .values(
+                totp_secret_enc=sealed,
+                totp_key_version=version,
+                totp_confirmed_at=now,
+                totp_last_step=totp_step(now) + offset,
+                updated_at=now,
+            )
+        )
+        await audit.record(
+            s,
+            "auth.totp_reset",
+            target=("user", user_id),
+            details={"via": "settings"},
+            occurred_at=now,
+        )
 
 
 # --- API keys (P0-14, SEC-2, FR-9.3, FR-14.10, ADR-0010) ---------------------------------

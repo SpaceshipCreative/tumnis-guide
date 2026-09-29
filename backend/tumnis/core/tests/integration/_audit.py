@@ -13,8 +13,7 @@ the test bodies, and this module is where later work packages plug in their shap
   and the client sends the CSRF token and an Idempotency-Key on writes.
 - `audit_ctx(app, db, clock)`: the `Ctx` the cases in backend/tests/audit_cases.py drive.
 - `sign_in`, `create_key`, `change_secret_setting`: the real actions T-P0-15-10 checks;
-  P0-13 (sign-in) and P0-14 (keys) filled theirs; the secret setting over HTTP waits on
-  P0-26.
+  P0-13 (sign-in), P0-14 (keys) and P0-26 (the secret setting over HTTP) filled them.
 """
 
 from __future__ import annotations
@@ -26,6 +25,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import psycopg
+from pydantic import BaseModel, ConfigDict
 
 from tests._pg import OWNER
 
@@ -195,14 +195,20 @@ async def audit_ctx(app: FastAPI, db: DbUrls, clock: FixedClock) -> AsyncIterato
 
 async def sign_in(ctx: Ctx) -> str:
     """Sign in with the password and the TOTP code at the clock's time through the routes
-    (`auth.login`); returns the password used. P0-13."""
+    (`auth.login`); returns the password used. P0-13. The client then holds only the new
+    session's cookies (the ones the sign-in set, replacing the Ctx's own), so later writes
+    through it send one CSRF token."""
     from tests._auth import Account  # noqa: PLC0415
     from tests._auth import sign_in as sign_in_routes  # noqa: PLC0415
 
     if not (ctx.email and ctx.password and ctx.totp_secret):
         raise RuntimeError("audit_ctx made this Ctx without sign-in credentials")
     account = Account(ctx.email, ctx.password, ctx.totp_secret, ctx.user_id, ctx.workspace_id)
-    await sign_in_routes(ctx.session_client, account, ctx.clock)
+    response = await sign_in_routes(ctx.session_client, account, ctx.clock)
+    fresh = dict(response.cookies.items())
+    ctx.session_client.cookies.clear()
+    for name, value in fresh.items():
+        ctx.session_client.cookies.set(name, value)
     return ctx.password
 
 
@@ -216,8 +222,34 @@ async def create_key(ctx: Ctx) -> str:
     return key
 
 
+# A section registered by these tests: phase 0 has no provider slot of its own yet (the
+# first real one, `decisions.jev`, arrives with P1-01), so T-P0-15-10 writes through the
+# real /v1/settings/{section} route into this one.
+AUDIT_SECRET_SECTION = "test.audit_secret"
+
+
+class AuditSecret(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str | None = None
+    label: str = ""
+
+
+def register_audit_secret_section() -> None:
+    from tumnis.core.settings_store import SettingSection, register_section  # noqa: PLC0415
+
+    register_section(
+        SettingSection(AUDIT_SECRET_SECTION, AuditSecret, secret_fields=frozenset({"token"}))
+    )
+
+
 async def change_secret_setting(ctx: Ctx) -> str:
-    """Change an encrypted workspace setting over HTTP; returns its plaintext. P0-08 built
-    the store (tumnis.core.settings_store); the /v1/settings/{section} routes that write a
-    secret arrive with P0-26 (provider keys with P0-14 and P1-01)."""
-    raise NotImplementedError("P0-26: encrypted workspace settings over HTTP")
+    """Change an encrypted workspace setting over HTTP (PUT /v1/settings/{section}, P0-26);
+    returns its plaintext."""
+    register_audit_secret_section()
+    plaintext = f"sk-audit-{uuid.uuid4().hex}"
+    response = await ctx.session_client.put(
+        f"/v1/settings/{AUDIT_SECRET_SECTION}",
+        json={"values": {"token": plaintext, "label": "audit"}, "version": None},
+    )
+    response.raise_for_status()
+    return plaintext

@@ -357,3 +357,51 @@ export async function focusRing(element: Locator): Promise<boolean> {
     return outline || style.boxShadow !== "none";
   });
 }
+
+// --- Settings (P0-26) --------------------------------------------------------
+
+/** Each Settings section's name in the section list and its primary control. */
+export const SETTINGS_SECTIONS: readonly (readonly [
+  string,
+  (page: Page) => Locator,
+])[] = [
+  [
+    "Account",
+    (page) => page.getByRole("button", { name: "Set up a new authenticator" }),
+  ],
+  [
+    "Sessions",
+    (page) => page.getByRole("button", { name: "Sign out other devices" }),
+  ],
+  ["API keys", (page) => page.getByRole("button", { name: "Create key" })],
+  ["Audit log", (page) => page.getByRole("link", { name: "Export CSV" })],
+  ["Dead letters", (page) => page.getByRole("combobox", { name: "Status" })],
+  ["Workspace", (page) => page.getByRole("button", { name: "Save" })],
+];
+
+/**
+ * Opens a Settings section through the section list: on a phone the list sits behind
+ * the "All settings" back button; on a laptop it is the side navigation.
+ */
+export async function openSettingsSection(
+  page: Page,
+  label: string,
+): Promise<void> {
+  await page.getByRole("heading", { level: 1, name: "Settings" }).waitFor();
+  const back = page.getByRole("button", { name: "All settings" });
+  if (await back.isVisible()) await back.click();
+  await page
+    .getByRole("navigation", { name: "Settings sections" })
+    .getByRole("link", { name: label, exact: true })
+    .click();
+  await page.getByRole("heading", { level: 2, name: label }).waitFor();
+}
+
+/** Whether the page scrolls sideways. */
+export async function scrollsSideways(page: Page): Promise<boolean> {
+  return page.evaluate(
+    () =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth,
+  );
+}
