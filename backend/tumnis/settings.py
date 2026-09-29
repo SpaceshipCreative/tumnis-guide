@@ -74,6 +74,10 @@ class Settings(BaseSettings):
             )
         return self
 
+    def check_database_tls(self) -> None:
+        """Prod connects to Postgres and PgBouncer only with verify-full (P0-16, SEC-9)."""
+        raise NotImplementedError
+
     @cached_property
     def master_keys(self) -> MasterKeys:
         """The master key file, loaded and checked once (MasterKeyError when unsafe). The
