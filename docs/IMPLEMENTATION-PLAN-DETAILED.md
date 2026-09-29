@@ -188,6 +188,7 @@ tumnis-guide/
 ├── scripts/
 │   ├── ci/spec_guard.py  ci/red_proof.py  ci/traceability.py  ci/check_bundle.mjs
 │   ├── ci/_tests_extract.py  ci/ts_tests.mjs  ci/pytest_trace.py  ci/coverage_gates.py  ci/branch_protection.sh
+│   ├── ci/squawk_migrations.py    # squawk over changed expand revisions (P0-06)
 │   ├── readme_test.py
 │   └── drill/restore_drill.sh
 └── docs/
@@ -230,10 +231,11 @@ markers = [
   "integration: needs Postgres or containers (sockets allowed)",
   "contract: adapter, connector or schema contract",
   "slow: over 5 seconds",
+  "drill: restore drill only, never on PRs",
 ]
 ```
 
-Integration tests carry `@pytest.mark.enable_socket` through a module-level `pytestmark`. Spec tests waiting for code carry `@pytest.mark.xfail(strict=True, reason="spec:P0-18")`; the `spec:` prefix is what spec-guard and the traceability job look for.
+Integration tests carry `@pytest.mark.enable_socket` through a module-level `pytestmark`. Spec tests waiting for code carry `@pytest.mark.xfail(strict=True, reason="spec:P0-18")`; the `spec:` prefix is what spec-guard and the traceability job look for. `drill` tests run only when the marker expression names them (`pytest -m drill` in `restore-drill.yml`); the shared fixtures plugin deselects them from every other run, while `--collect-only` (traceability) still lists them (P0-05).
 
 **Vitest.** Titles carry tags in brackets: `test.fails('[P0-25][FR-3.10] replays each queued item once', …)`. `test.fails` is the expected-failure form; it flips to `test` when the code lands.
 
@@ -273,8 +275,9 @@ Integration tests carry `@pytest.mark.enable_socket` through a module-level `pyt
 | `db_template` | session | Database migrated to head, used as `TEMPLATE` |
 | `db` | function | Fresh database `CREATE DATABASE t_<uuid> TEMPLATE db_template`; dropped after |
 | `app_role_session` / `owner_session` | function | SQLAlchemy async sessions as each role |
-| `workspace` | function | A workspace + user + membership; enters the workspace context |
-| `two_workspaces` | function | A and B with seeded rows each, for isolation tests |
+| `workspace` | function | A workspace (`WorkspaceHandle`: `id`, `name`, `ctx`) + user + membership (P0-13); enters the workspace context |
+| `two_workspaces` | function | A and B with seeded rows each (`row_factory.minimal_row` for tables the seed leaves empty), for isolation tests |
+| `pgbouncer` | session | PgBouncer in transaction mode (pool size 1) in front of `pg_container`; `.libpq(role, dbname)` (P0-06) |
 | `clock` | function | `FixedClock` set to 2026-03-09T12:00Z (US DST start week) with `advance()` |
 | `dbos` | function | DBOS destroyed, configured on `db`, system tables reset with truncate, launched |
 | `worker_killer` | function | Runs a workflow in a subprocess worker and kills it at a named step |
@@ -291,7 +294,7 @@ Integration tests carry `@pytest.mark.enable_socket` through a module-level `pyt
 
 **Frontend (`frontend/src/test/`)**: `renderWithProviders(ui, {route, queryClient})`, MSW `server` with per-test `server.use(...)`, `vi.useFakeTimers()` helpers, `resetIdb()` over fake-indexeddb, `makeTask()`/`makeProject()` factories generated from zod schemas.
 
-**Playwright (`frontend/e2e/fixtures.ts`)**: `seededApp` (resets the compose.test stack to the seed set through `POST /v1/test/reset`, available only when `TUMNIS_ADAPTERS=fake`), `signedInPage` (TOTP computed from the seed secret), `page.clock` for time travel (`install`, `setFixedTime`, `fastForward`, `runFor`), `fakes` (REST handle to script adapter fakes in the test stack).
+**Playwright (`frontend/e2e/fixtures.ts`)**: `seededApp` (resets the compose.test stack to the seed set through `POST /v1/test/reset`, available only when `TUMNIS_ADAPTERS=fake`), `signedInPage` (TOTP computed from the seed secret), `page.clock` for time travel (`install`, `setFixedTime`, `fastForward`, `runFor`), `fakes` (REST handle to script adapter fakes in the test stack). Until P0-04 and P0-13 fill them, `seededApp` and `signedInPage` are stubs that throw on first use inside the test body (after `test.fail()`), never during fixture setup. Shared helpers, without assertions, live beside them (P0-05): `seedUser()`, `totp(secret, at)`, `listTasks`, `projectIdByName`, `boardColumns`, `recordedWrites`, `quickAddDialog`, `openQuickAdd`, `quickAdd`, `projectCard`, `section`, `taskCards`, `markStartTime`.
 
 ### A6 · Adapter and fake inventory
 
@@ -446,6 +449,8 @@ Static schedules register in `worker.py` after `DBOS.launch()` with `DBOS.apply_
 | `SPEC_CHANGE_ACTORS` | Logins whose `spec-change` label waives spec-guard (P0-03) | Scott's login | GitHub repo variable |
 | `HOMELAB_RUNNER` | `true` moves the Skills and Performance jobs to `[self-hosted, homelab]` | unset (GitHub-hosted stubs) | GitHub repo variable |
 | `GH_API_STUB` | Test-only JSON file standing in for `gh api` in spec-guard | unset | tests |
+| `DRILL_SOURCE_DATABASE_URL` | Source database the restore drill records to; `restore-drill.yml` passes it to `pytest -m drill` as `DATABASE_DIRECT_URL` (P0-05, filled in P0-28) | unset | GitHub secret, homelab runner |
+| `DRILL_MODE`, `DRILL_STARTED_AT` | Set by `restore-drill.yml` for `test_a0_4_restore_drill.py`: `prod` or `rehearsal`, and the run's start (ISO 8601 UTC) | set by the workflow | drill workflow |
 
 Everything per workspace (connector credentials, provider keys, thresholds, working hours, focus levels, timezone) lives in `workspace_settings`, encrypted (P0-08).
 
@@ -456,6 +461,8 @@ The work packages below add these names. Each WP's **Files** and **Interfaces** 
 | Kind | Addition | Introduced by |
 | --- | --- | --- |
 | Schema and SQL | Schema `app` with helper functions and eight SECURITY DEFINER functions (relay claim, auth lookups, workspace list), fixed by an allow-list test | P0-06, P0-13 |
+| Schema and SQL | `app.deployment_markers()`, the SECURITY DEFINER reader the boot checks call (the app role has no grant on `deployment_marker`); revision `core_0003` | P0-06 |
+| Files | `backend/tests/meta/_catalog.py` (`ALLOW_LIST`, `registry_violations`, `fenced_tables`), `backend/tests/_pg.py` (`create_database`, `prepare_database`, `schema_dump`), `make_workspace` in `backend/tests/fixtures`, harness revision `harness_0002` (`tenant_probe`, `tenant_probe_child`), `.squawk.toml` | P0-06 |
 | Tables | `auth_throttle`, `deployment_marker`, `audit_anchors`, `ops_backup_runs`, `ops_status`, `ops_drill_markers`, `day_closes`, `usage_ledger`, `task_changes` | P0-06 to P0-28 |
 | Tables | `runner_messages`, `plan_issues`, `plan_pins`, `project_folders`, `pending_writes`, `extraction_artifacts`, `calendar_accounts` | P1-04 to P1-17 |
 | Tables | `digest_entries`, `agent_pauses`, `archived_blobs`, `test_clock` (fakes only); daemon-side SQLite outbox | P2-03 to P2-18 |

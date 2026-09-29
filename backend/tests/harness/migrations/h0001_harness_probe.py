@@ -7,6 +7,7 @@ revision = "harness_0001"
 down_revision = None
 branch_labels = ("harness",)
 depends_on = None
+phase = "expand"
 
 
 def upgrade() -> None:

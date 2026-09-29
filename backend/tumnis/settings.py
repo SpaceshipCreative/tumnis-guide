@@ -116,19 +116,28 @@ def check_markers(settings: Settings, markers: Sequence[Marker]) -> None:
         )
 
 
+# Before migrate has run: no schema app, no reader function or no table behind it.
+_MARKER_MISSING = (
+    pg_errors.InvalidSchemaName,
+    pg_errors.UndefinedFunction,
+    pg_errors.UndefinedTable,
+)
+
+
 async def read_markers(url: str) -> list[Marker]:
-    """The marker rows, read as the (owner-free) app role on the direct URL."""
+    """The marker rows, read as the (owner-free) app role on the direct URL through the
+    SECURITY DEFINER function app.deployment_markers() (P0-06: no table grant)."""
     engine = create_async_engine(url, poolclass=NullPool)
     try:
         for attempt in range(1, BOOT_DB_ATTEMPTS + 1):
             try:
                 async with engine.connect() as conn:
                     rows = await conn.execute(
-                        text("SELECT env, master_key_fingerprint FROM deployment_marker")
+                        text("SELECT env, master_key_fingerprint FROM app.deployment_markers()")
                     )
                     return [Marker(env, fingerprint) for env, fingerprint in rows]
             except ProgrammingError as exc:
-                if isinstance(exc.orig, pg_errors.UndefinedTable):
+                if isinstance(exc.orig, _MARKER_MISSING):
                     raise SettingsError(
                         "deployment_marker_missing", "no deployment_marker table; run migrate"
                     ) from exc
