@@ -133,3 +133,35 @@ async def test_ready_checks_dbos_system_tables(
             conn.execute(
                 sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name))
             )
+
+
+@pytest.mark.req("REL-4")
+@pytest.mark.wp("P0-30")
+@pytest.mark.xfail(strict=True, reason="spec:P0-30")
+async def test_live_reports_version(clock: FixedClock, monkeypatch: pytest.MonkeyPatch) -> None:
+    """T-P0-30-06
+    The image's VERSION build arg reaches `tumnis.__version__` (TUMNIS_BUILD_VERSION), and
+    /health/live reports it in the Tumnis-Version header; the body stays {"status": "ok"}
+    (T-P0-04-01).
+    """
+    import subprocess  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    import tumnis  # noqa: PLC0415
+
+    probe = await asyncio.to_thread(
+        subprocess.run,
+        [sys.executable, "-c", "import tumnis; print(tumnis.__version__)"],
+        env={"TUMNIS_BUILD_VERSION": "v9.8.7", "PATH": ""},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert probe.stdout.strip() == "v9.8.7"
+
+    monkeypatch.setattr(tumnis, "__version__", "v0.1.0", raising=False)
+    async with _client(_app_without_postgres(clock)) as client:
+        response = await client.get("/health/live")
+    assert response.status_code == 200
+    assert response.headers["Tumnis-Version"] == "v0.1.0"
+    assert response.json() == {"status": "ok"}
