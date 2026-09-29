@@ -72,6 +72,8 @@ ignore_imports =
     tumnis.core.tests.** -> tumnis.app
     tumnis.core.tests.** -> tumnis.cli
     tumnis.core.tests.** -> tumnis.wiring
+# T-P0-08-12 lives with core's tests (plan) but checks auth's pure is_iana_zone rule.
+    tumnis.core.tests.unit.test_iana -> tumnis.modules.auth.rules
 unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:module-graph-acyclic]

@@ -6,9 +6,11 @@ shared fixtures live in this plugin rather than in backend/tests/conftest.py.
 
 from __future__ import annotations
 
+import base64
 import json
+import secrets
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -392,6 +394,48 @@ def settings_for(db: DbUrls, dbos_db: DbUrls | None = None, **overrides: Any) ->
         **overrides,
     }
     return Settings(**values)
+
+
+# --- The master key file (P0-08, SEC-6) ---------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MasterKeyFile:
+    """A key file written for a test: its path, the raw keys by version and the active one."""
+
+    path: Path
+    keys: dict[int, bytes]
+    active: int
+
+
+def write_master_key_file(
+    path: Path, keys: Mapping[int, bytes], active: int, mode: int = 0o600
+) -> Path:
+    """The key file format `tumnis.core.crypto.load_master_keys` reads:
+    {"active": <version>, "keys": {"<version>": "<base64 of 32 bytes>"}}, chmod `mode`."""
+    body = {
+        "active": active,
+        "keys": {str(version): base64.b64encode(key).decode() for version, key in keys.items()},
+    }
+    path.write_text(json.dumps(body))
+    path.chmod(mode)
+    return path
+
+
+@pytest.fixture
+def master_key_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[MasterKeyFile]:
+    """A JSON key file (one fresh key, version 1) with mode 0o600 in tmp_path;
+    MASTER_KEY_FILE points at it and tumnis.core.crypto loads its keys."""
+    from tumnis.core import crypto  # noqa: PLC0415
+
+    keys = {1: secrets.token_bytes(32)}
+    path = write_master_key_file(tmp_path / "master_key.json", keys, active=1)
+    monkeypatch.setenv("MASTER_KEY_FILE", str(path))
+    crypto.configure_master_keys(lambda: crypto.load_master_keys(str(path), strict_owner=False))
+    try:
+        yield MasterKeyFile(path, keys, active=1)
+    finally:
+        crypto.reset_master_keys()
 
 
 @pytest.fixture
