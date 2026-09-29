@@ -38,7 +38,7 @@ from tumnis.modules.agents.adapters.port import (
 )
 from tumnis.modules.agents.models import AgentProfile, RunEventRow, Runner, RunnerMessage, RunRow
 from tumnis.modules.agents.packet_builder import TaskPacket
-from tumnis.modules.agents.protocol import Run
+from tumnis.modules.agents.protocol import HealthCheck, Run
 
 # Channels (agents.api names them too; adapters may not import the api).
 RUNNER_CHANNEL: Final = "runner_mailbox"
@@ -263,6 +263,33 @@ class DaemonTransport:
             except AgentUnavailable as exc:
                 return AgentHealth(status="offline", reachable=False, detail=exc.reason)
         return AgentHealth(status="ok", reachable=True)
+
+    async def request_health(self, profile_id: UUID, request_id: UUID) -> None:
+        """Queue a `health_check` for the profile on its runner (message id
+        uuid5(request_id, "health_check"), so a replayed step queues it once); the runner's
+        `health_report` reaches workflow `profile-health:<request_id>`. AgentUnavailable
+        when the runner is offline or does not list the profile."""
+        async with tenant_session(self.ctx) as s:
+            profile, runner_id = await self._runner_for(s, profile_id)
+            check = HealthCheck(
+                message_id=uuid5(request_id, "health_check"),
+                correlation_id=f"req:{request_id}",
+                sent_at=self.clock.now(),
+                request_id=request_id,
+                profile=profile,
+            )
+            await s.execute(
+                insert(_messages)
+                .values(
+                    runner_id=runner_id,
+                    message_id=check.message_id,
+                    direction="out",
+                    type=check.type,
+                    payload=check.model_dump(mode="json"),
+                )
+                .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
+            )
+            await _notify(s, RUNNER_CHANNEL, {"runner": str(runner_id), "close": False})
 
 
 class McpEndpointTransport:

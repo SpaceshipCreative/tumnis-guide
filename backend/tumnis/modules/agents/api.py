@@ -73,6 +73,7 @@ __all__ = [
 RUNNER_CHANNEL: Final = "runner_mailbox"  # NOTIFY {"runner": id, "close": bool}
 RUN_EVENTS_CHANNEL: Final = "agents_run_events"  # NOTIFY {"run": id}
 RUNS_QUEUE: Final = "runs"  # A9: run_skill and check_profile_health
+HEALTH_TOPIC: Final = "health"  # check_profile_health receives the runner's report on it
 LIVE_RUNNER: Final = "runner"
 LIVE_PROFILE: Final = "agent_profile"
 TERMINAL: Final = TERMINAL_STATUSES
@@ -435,7 +436,13 @@ async def request_health_check(
 
 
 def health_workflow_id(request_id: UUID) -> str:
+    """The `check_profile_health` workflow of a request; the runner's report goes to it."""
     return f"profile-health:{request_id}"
+
+
+def run_topic(run_id: UUID) -> str:
+    """The DBOS topic a `run_skill` workflow receives its result (or runner_lost) on."""
+    return f"run:{run_id}"
 
 
 async def profile_health(ctx: WorkspaceContext, profile_id: UUID) -> ProfileHealth | None:

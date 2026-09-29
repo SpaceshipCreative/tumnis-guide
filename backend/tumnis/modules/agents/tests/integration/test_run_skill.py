@@ -35,7 +35,6 @@ def _owner(db: DbUrls, query: str, params: tuple[Any, ...] = ()) -> list[tuple[A
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 async def test_result_reaches_workflow_once(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -92,7 +91,6 @@ async def test_result_reaches_workflow_once(
 @pytest.mark.req("FR-14.6")
 @pytest.mark.wp("P1-04")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 async def test_kill_worker_mid_run_resumes(
     worker_killer: WorkerKillerFactory,
     app_factory: AppFactory,

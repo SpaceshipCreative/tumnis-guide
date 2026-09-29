@@ -731,6 +731,11 @@ async def worker_killer(
             sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(name), sql.Identifier(APP))
         )
     sys_db = DbUrls(pg_base.host, pg_base.port, name)
+    # DBOS's tables up front, so a test may enqueue through a DBOSClient (which never
+    # migrates) before its first worker starts (P1-04).
+    from dbos import run_dbos_database_migrations  # noqa: PLC0415
+
+    await asyncio.to_thread(run_dbos_database_migrations, sys_db.url(APP))
     made: list[WorkerKiller] = []
 
     def factory(killpoint: str, *, events: int = 5, event: str = "test.ping") -> WorkerKiller:

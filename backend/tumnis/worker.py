@@ -6,8 +6,9 @@ session-level state do not survive transaction pooling).
 
 import asyncio
 import contextlib
+import importlib
 import signal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from tumnis.core import audit_workflows, cache, events, faults, modules, workflows_ops
 from tumnis.core.clock import SystemClock
@@ -15,6 +16,12 @@ from tumnis.settings import Settings, install_master_keys
 
 if TYPE_CHECKING:
     from dbos import DBOSConfig
+
+
+def _agents() -> Any:
+    """agents.workflows, imported by name (as wiring does) so no module's tests import
+    another module through this composition root."""
+    return importlib.import_module("tumnis.modules.agents.workflows")
 
 
 def register_queues() -> None:
@@ -28,6 +35,9 @@ def register_queues() -> None:
         polling_interval_sec=events.EVENTS_QUEUE_POLL_S,
     )
     DBOS.register_queue(workflows_ops.MAINTENANCE_QUEUE, worker_concurrency=1)
+    # Agent runs and profile health checks (P1-04), partitioned by profile.
+    agents = _agents()
+    DBOS.register_queue(agents.RUNS_QUEUE, partition_concurrency=agents.RUNS_PARTITION_CONCURRENCY)
 
 
 def register_schedules(settings: Settings) -> None:
@@ -46,6 +56,24 @@ def register_schedules(settings: Settings) -> None:
                 }
             ]
         )
+
+
+def register_runner_sweep() -> None:
+    """The runner sweep (P1-04), each minute on the maintenance queue, in every
+    deployment: runners offline after three missed heartbeats, their runs `runner_lost`."""
+    from dbos import DBOS  # noqa: PLC0415
+
+    agents = _agents()
+    DBOS.apply_schedules(
+        [
+            {
+                "schedule_name": agents.RUNNER_SWEEP_NAME,
+                "workflow_fn": agents.runner_sweep,
+                "schedule": agents.RUNNER_SWEEP_SCHEDULE,
+                "queue_name": workflows_ops.MAINTENANCE_QUEUE,
+            }
+        ]
+    )
 
 
 def register_audit_schedule() -> None:
@@ -78,7 +106,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
 
     from dbos import DBOS  # noqa: PLC0415
 
-    import tumnis.wiring  # noqa: F401, PLC0415  # registers adapters (later: workflows)
+    import tumnis.wiring  # noqa: F401, PLC0415  # registers adapters and workflows
     from tumnis.core import db  # noqa: PLC0415
 
     db.configure(settings.database_direct_url, settings.database_direct_url)
@@ -95,6 +123,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     register_queues()
     register_schedules(settings)
     register_audit_schedule()
+    register_runner_sweep()
     try:
         asyncio.run(_serve(settings))
     finally:

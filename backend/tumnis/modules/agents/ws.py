@@ -72,7 +72,6 @@ RETRY_S: Final = 1.0
 RETRY_MAX_S: Final = 30.0
 POLICY_VIOLATION: Final = 1008
 NIL: Final = UUID(int=0)
-HEALTH_TOPIC: Final = "health"
 
 _runners: Table = RunnerModel.__table__  # type: ignore[assignment]
 _messages: Table = RunnerMessage.__table__  # type: ignore[assignment]
@@ -80,11 +79,6 @@ _runs: Table = RunRow.__table__  # type: ignore[assignment]
 _events: Table = RunEventRow.__table__  # type: ignore[assignment]
 _NOTIFY = text("SELECT pg_notify(:channel, :payload)")
 _log = logging.getLogger(__name__)
-
-
-def run_topic(run_id: UUID) -> str:
-    """The DBOS topic a `run_skill` workflow receives its result on."""
-    return f"run:{run_id}"
 
 
 # --- The hub: LISTEN runner_mailbox, wake the runner's socket ------------------------------
@@ -528,7 +522,7 @@ class _RunnerSocket:
             await self.hub.client().send_async(
                 workflow_id,
                 message.model_dump(mode="json"),
-                run_topic(message.run_id),
+                api.run_topic(message.run_id),
                 str(message.message_id),
             )
         except Exception:  # not acked: the daemon resends and the send is idempotent
@@ -541,7 +535,7 @@ class _RunnerSocket:
             await self.hub.client().send_async(
                 api.health_workflow_id(message.request_id),
                 message.model_dump(mode="json"),
-                HEALTH_TOPIC,
+                api.HEALTH_TOPIC,
                 str(message.message_id),
             )
         except Exception:  # a report nobody waits for any more
