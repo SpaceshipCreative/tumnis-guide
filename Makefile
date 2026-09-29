@@ -29,8 +29,11 @@ test-int:
 e2e:
 	cd frontend && npx playwright test
 
+## Regenerate JSON Schemas, schemas/openapi.json, the schema contract tests and the
+## openapi-ts client in frontend/src/api (P0-11); commit the result. CI fails on a diff.
 gen:
-	@echo "not yet (P0-11)"
+	$(BACKEND) uv run tumnis gen all --out ..
+	cd frontend && npx --no-install openapi-ts && npx --no-install prettier --write src/api
 
 ## Load the seed set into DATABASE_URL (SET=load for the 2,000-task set, ANCHOR=YYYY-MM-DD).
 seed:

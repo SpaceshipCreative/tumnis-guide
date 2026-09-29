@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from tumnis.settings import Settings
 
 BACKEND = Path(__file__).resolve().parents[2]
+REPO_ROOT = BACKEND.parent
 SEED_SET = BACKEND / "fixtures" / "seed"
 LOAD_SET = BACKEND / "fixtures" / "load" / "load.yaml"
 PG_IMAGE = "pgvector/pgvector:pg18"
@@ -67,6 +68,12 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if drills:
         config.hook.pytest_deselected(items=drills)
         items[:] = [item for item in items if not item.get_closest_marker("drill")]
+
+
+@pytest.fixture
+def repo_root() -> Path:
+    """The repository root (P0-11): generated schemas, fixtures and the frontend hang off it."""
+    return REPO_ROOT
 
 
 @pytest.fixture
@@ -823,6 +830,51 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="https://test") as http:
         yield http
+
+
+@dataclass(frozen=True)
+class AppWithFakes:
+    """The app with fakes on the per-test database, a workspace and a full-scope test
+    principal: send `principal_headers` with each request."""
+
+    app: FastAPI
+    workspace: WorkspaceHandle
+    principal_headers: dict[str, str]
+
+
+@pytest.fixture
+def app_with_fakes(  # noqa: PLR0917
+    db: DbUrls,
+    dbos_sys_db: DbUrls,
+    clock: FixedClock,
+    fakes: Fakes,
+    master_key_file: MasterKeyFile,
+    workspace: WorkspaceHandle,
+) -> Iterator[AppWithFakes]:
+    """create_app on `db` with TUMNIS_ADAPTERS=fake, the seed set loaded once its writers
+    exist (P0-17, P0-18), and `X-Test-Principal` read by the P0-10 test middleware (a
+    session principal in `workspace`; a real key header after P0-14). Rate limits are off:
+    the clock is fixed, so a bucket would never refill under the fuzzer's hundreds of
+    requests (P0-10's tests cover the limits). A sync fixture: the caller drives the app
+    through its own event loop (Schemathesis runs each request in a TestClient, whose
+    lifespan disposes the engines)."""
+    from tumnis.app import create_app  # noqa: PLC0415
+    from tumnis.core import db as core_db  # noqa: PLC0415
+    from tumnis.core.tests.integration._demo import (  # noqa: PLC0415
+        TestPrincipalMiddleware,
+        principal_header,
+    )
+    from tumnis.seed import writers_registered  # noqa: PLC0415
+
+    if writers_registered():
+        asyncio.run(_load_set(SEED_SET, db, clock))
+    app = create_app(settings=settings_for(db, dbos_sys_db), clock=clock)
+    app.add_middleware(TestPrincipalMiddleware)
+    app.state.rate_limiter = None
+    try:
+        yield AppWithFakes(app, workspace, principal_header(workspace.id, uuid.uuid4()))
+    finally:
+        asyncio.run(core_db.dispose())
 
 
 class QueryCounter:

@@ -47,7 +47,7 @@ from tumnis.core.errors import ProblemError
 from tumnis.core.pagination import Page, PageParams, page_params, paginate
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
-from tumnis.core.versioning import StaleVersion
+from tumnis.core.versioning import StaleVersion, Version
 
 if TYPE_CHECKING:
     from dbos import DBOSClient
@@ -354,7 +354,7 @@ Ctx = Annotated[WorkspaceContext, Depends(require_session)]
 class VersionIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    version: int
+    version: Version
 
 
 router = v1_router("core", prefix="/dead-letters", tags=["dead_letters"])

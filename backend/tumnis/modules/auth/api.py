@@ -25,7 +25,7 @@ from tumnis.core.principal import AuthFailure, Principal, register_resolver
 from tumnis.core.settings_store import SETTINGS_CACHE, seal_for_workspace, settings_cache_key
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
-from tumnis.core.versioning import StaleVersion, update_versioned
+from tumnis.core.versioning import StaleVersion, Version, update_versioned
 from tumnis.modules.auth import sessions, throttle
 from tumnis.modules.auth.csrf import SESSION_COOKIE, sign, unsign
 from tumnis.modules.auth.events import AuthFailedV1
@@ -78,7 +78,7 @@ class WorkspaceSettingsIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     timezone: str | None = None
     subtask_threshold_min: int | None = None
-    version: int
+    version: Version
 
 
 @cache
@@ -159,7 +159,9 @@ async def _put_workspace_settings(
         await session.execute(
             select(WORKSPACES.c.timezone)
             .where(WORKSPACES.c.id == ctx.workspace_id)
-            .with_for_update()
+            # FOR NO KEY UPDATE: an idempotent request's own row holds FOR KEY SHARE on
+            # this row through its foreign key (P0-11's fuzzer found the wait).
+            .with_for_update(key_share=True)
         )
     ).scalar_one()
     try:

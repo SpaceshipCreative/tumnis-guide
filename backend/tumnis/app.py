@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -33,7 +34,7 @@ from tumnis.core import (
 )
 from tumnis.core.bodylimit import BodyLimitMiddleware
 from tumnis.core.clock import Clock, SystemClock
-from tumnis.core.errors import install_problem_handlers
+from tumnis.core.errors import document_problem_media_type, install_problem_handlers
 from tumnis.core.principal import AuthenticationMiddleware
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.request_meta import RequestMetaMiddleware
@@ -95,6 +96,13 @@ a retry with the same key within 24 hours replays the stored response and adds t
 `next_cursor`. Limits: 429 `rate_limited` with `Retry-After`, 413 `body_too_large`."""
 
 
+def operation_id(route: Any) -> str:
+    """Stable operation IDs, `<first tag>_<function name>` (R-19): the generated client's
+    names (`usage_get_usage` -> `usageGetUsage`) change only when a route is renamed."""
+    tags = getattr(route, "tags", None)
+    return f"{tags[0]}_{route.name}" if tags else str(route.name)
+
+
 def module_routers() -> list[APIRouter]:
     """Each module's `router` (tumnis.modules.<m>.router.router), when it declares one."""
     found = []
@@ -119,6 +127,18 @@ def v1_routes(settings: Settings, extra_routers: Sequence[APIRouter] = ()) -> AP
     for router in extra_routers:
         v1.include_router(router)
     return v1
+
+
+def _document_problems(app: FastAPI) -> None:
+    """The generated OpenAPI document, with problem answers as application/problem+json."""
+    generate = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        if app.openapi_schema is None:
+            app.openapi_schema = document_problem_media_type(generate())
+        return app.openapi_schema
+
+    app.openapi = openapi  # type: ignore[method-assign]  # FastAPI's documented override
 
 
 def create_app(
@@ -153,10 +173,12 @@ def create_app(
         lifespan=lifespan,
         description=API_DESCRIPTION,
         openapi_url="/v1/openapi.json",
+        generate_unique_id_function=operation_id,
         docs_url=None,
         redoc_url=None,
     )
     install_problem_handlers(app)
+    _document_problems(app)
     telemetry.instrument_app(app)  # a SERVER span per request (P0-27)
     # Middleware, innermost first (add_middleware wraps what is there): correlation ID,
     # source address and user agent for the audit log (P0-15); the body limit outside it
