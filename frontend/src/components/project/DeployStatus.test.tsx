@@ -119,39 +119,34 @@ function expectStatus(scope: HTMLElement): void {
   );
 }
 
-test.fails(
-  "[P2-14][FR-12.2] T-P2-14-05 card shows last deploy and previews",
-  async () => {
-    for (const viewport of VIEWPORTS) {
-      const alone = await renderWithRouter(
-        <DeployStatus apps={APPS} timeZone={TZ} />,
-        { viewport },
-      );
-      expectStatus(screen.getByRole("list", { name: "Deployments" }));
-      alone.unmount();
-
-      const project = makeProject({ name: "Dune portal" });
-      const { unmount } = await renderWithRouter(
-        <ProjectCard project={project} timeZone={TZ} deploy={APPS} />,
-        { viewport },
-      );
-      const card = screen.getByRole("article", { name: "Dune portal" });
-      expectStatus(card);
-      unmount();
-    }
-
-    // A project with no linked application shows no deploy list on its card.
-    await renderWithRouter(
-      <ProjectCard
-        project={makeProject({ name: "Plain" })}
-        timeZone={TZ}
-        deploy={[]}
-      />,
-      { viewport: "laptop" },
+test("[P2-14][FR-12.2] T-P2-14-05 card shows last deploy and previews", async () => {
+  for (const viewport of VIEWPORTS) {
+    const alone = await renderWithRouter(
+      <DeployStatus apps={APPS} timeZone={TZ} />,
+      { viewport },
     );
-    const plain = screen.getByRole("article", { name: "Plain" });
-    expect(
-      within(plain).queryByRole("list", { name: "Deployments" }),
-    ).toBeNull();
-  },
-);
+    expectStatus(screen.getByRole("list", { name: "Deployments" }));
+    alone.unmount();
+
+    const project = makeProject({ name: "Dune portal" });
+    const { unmount } = await renderWithRouter(
+      <ProjectCard project={project} timeZone={TZ} deploy={APPS} />,
+      { viewport },
+    );
+    const card = screen.getByRole("article", { name: "Dune portal" });
+    expectStatus(card);
+    unmount();
+  }
+
+  // A project with no linked application shows no deploy list on its card.
+  await renderWithRouter(
+    <ProjectCard
+      project={makeProject({ name: "Plain" })}
+      timeZone={TZ}
+      deploy={[]}
+    />,
+    { viewport: "laptop" },
+  );
+  const plain = screen.getByRole("article", { name: "Plain" });
+  expect(within(plain).queryByRole("list", { name: "Deployments" })).toBeNull();
+});

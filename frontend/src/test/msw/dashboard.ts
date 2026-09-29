@@ -4,7 +4,12 @@
 // typed with the generated response types.
 import { http, HttpResponse, type RequestHandler } from "msw";
 
-import type { ReviewCountOut, TaskOut, TaskPage } from "../../api/types.gen";
+import type {
+  ProjectDeployStatus,
+  ReviewCountOut,
+  TaskOut,
+  TaskPage,
+} from "../../api/types.gen";
 import type { makeProject } from "../factories";
 import { workspaceSettings } from "./settings";
 
@@ -46,8 +51,16 @@ export function workspaceTimezone(timezone: string): RequestHandler {
   );
 }
 
-/** The dashboard's reads, empty: no projects, nothing today, nothing to review. */
+/** `GET /v1/coolify/status`: each project's linked Coolify applications (P2-14). */
+export function deployStatus(
+  entries: readonly ProjectDeployStatus[] = [],
+): RequestHandler {
+  return http.get("/v1/coolify/status", () => HttpResponse.json(entries));
+}
+
+/** The dashboard's reads, empty: no projects, nothing today, nothing to review, no apps. */
 export const dashboardDefaults: RequestHandler[] = [
+  deployStatus(),
   projectsList([]),
   todayTasks([]),
   reviewCount(0),
