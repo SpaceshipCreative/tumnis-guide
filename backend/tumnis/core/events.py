@@ -17,7 +17,7 @@ from dbos._error import DBOSQueueDeduplicatedError  # dbos 3.1.0: not re-exporte
 from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy import text
 
-from tumnis.core import db, deadletter, faults, tenancy
+from tumnis.core import db, deadletter, faults, modules, tenancy
 from tumnis.core.backoff import full_jitter
 from tumnis.core.schemas import VersionedPayload
 from tumnis.core.types import SYSTEM_ACTOR
@@ -220,13 +220,16 @@ async def _enqueue(subscriber: str, envelope: EventEnvelope) -> None:
 
 async def relay_once(limit: int = RELAY_BATCH) -> int:
     """Claim up to `limit` unsent rows (app role, direct connection, no workspace), enqueue
-    a delivery per subscriber, mark them sent, in one transaction. Returns the rows claimed."""
+    a delivery per subscriber, mark them sent, in one transaction. Returns the rows claimed.
+    A subscriber whose module is off for the event's workspace (or the deployment) is
+    skipped (P0-08)."""
     async with db.direct_sessionmaker()() as session, session.begin():
         rows = (await session.execute(CLAIM, {"n": limit})).mappings().all()
         for row in rows:
             envelope = EventEnvelope.from_outbox_row(row)
             for sub in subscribers_for(envelope.name):
-                await _enqueue(sub.name, envelope)
+                if await modules.enabled(sub.module, envelope.workspace_id):  # P0-08
+                    await _enqueue(sub.name, envelope)
             faults.killpoint("relay.after_enqueue")
         if rows:
             await session.execute(MARK_SENT, {"ids": [row["id"] for row in rows]})

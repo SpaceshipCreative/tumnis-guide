@@ -120,7 +120,6 @@ async def test_disabled_module_hides_its_routes(
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 async def test_disabled_module_subscribers_are_skipped(
     db: DbUrls, dbos: Any, clock: FixedClock
 ) -> None:
@@ -154,13 +153,13 @@ async def test_disabled_module_subscribers_are_skipped(
     while await events.relay_once():
         pass
 
-    def status(workspace_id: uuid.UUID, subscriber: str) -> Any:
-        return dbos.get_workflow_status(f"{event_ids[workspace_id]}:{subscriber}")
+    async def status(workspace_id: uuid.UUID, subscriber: str) -> Any:
+        return await dbos.get_workflow_status_async(f"{event_ids[workspace_id]}:{subscriber}")
 
-    assert status(off, "calendar.p0_08_flag_probe") is None
-    assert status(off, "tasks.p0_08_flag_probe") is not None
-    assert status(on, "calendar.p0_08_flag_probe") is not None
-    assert status(on, "tasks.p0_08_flag_probe") is not None
+    assert await status(off, "calendar.p0_08_flag_probe") is None
+    assert await status(off, "tasks.p0_08_flag_probe") is not None
+    assert await status(on, "calendar.p0_08_flag_probe") is not None
+    assert await status(on, "tasks.p0_08_flag_probe") is not None
 
 
 @pytest.mark.req("Hosted readiness")
