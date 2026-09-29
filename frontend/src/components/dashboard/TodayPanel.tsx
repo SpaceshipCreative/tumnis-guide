@@ -13,6 +13,7 @@ export function TodayPanel({
   total,
   projectNames,
   unavailable = false,
+  pending = false,
   className = "",
 }: {
   items: readonly TodayTask[];
@@ -20,6 +21,8 @@ export function TodayPanel({
   projectNames: Readonly<Record<string, string>>;
   /** The Today query failed: say so instead of claiming an empty day. */
   unavailable?: boolean;
+  /** No answer yet (a retry after a failure): claim nothing. */
+  pending?: boolean;
   className?: string;
 }) {
   const headingId = useId();
@@ -33,7 +36,7 @@ export function TodayPanel({
       <h2 id={headingId} className="text-lg font-semibold">
         Today
       </h2>
-      {unavailable ? (
+      {pending ? null : unavailable ? (
         <p className="text-sm text-muted">Today's tasks could not be loaded.</p>
       ) : shown.length === 0 ? (
         <p className="text-sm text-muted">Nothing planned for today.</p>

@@ -7,20 +7,17 @@ import { reviewCount } from "../../test/msw/dashboard";
 import { server } from "../../test/msw/server";
 import { renderRoute } from "../../test/render";
 
-test.fails(
-  "[P0-23][FR-1.4] T-P0-23-06 badge shows the count and opens the review route",
-  async () => {
-    const empty = await renderRoute("/");
-    expect(
-      await screen.findByRole("link", { name: "0 to review" }),
-    ).toBeInTheDocument();
-    empty.unmount();
+test("[P0-23][FR-1.4] T-P0-23-06 badge shows the count and opens the review route", async () => {
+  const empty = await renderRoute("/");
+  expect(
+    await screen.findByRole("link", { name: "0 to review" }),
+  ).toBeInTheDocument();
+  empty.unmount();
 
-    server.use(reviewCount(3));
-    const { router, user } = await renderRoute("/");
-    await user.click(await screen.findByRole("link", { name: "3 to review" }));
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/review");
-    });
-  },
-);
+  server.use(reviewCount(3));
+  const { router, user } = await renderRoute("/");
+  await user.click(await screen.findByRole("link", { name: "3 to review" }));
+  await waitFor(() => {
+    expect(router.state.location.pathname).toBe("/review");
+  });
+});

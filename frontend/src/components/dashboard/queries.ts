@@ -69,6 +69,24 @@ export interface TodayPage {
   readonly total: number;
 }
 
+/** A read the server answered with an error status. */
+class ReadError extends Error {
+  constructor(
+    readonly path: string,
+    readonly status: number,
+  ) {
+    super(`GET /v1${path} failed (${String(status)})`);
+    this.name = "ReadError";
+  }
+}
+
+// One retry for network and server errors; a 4xx answer will not change on a retry.
+function retryOnce(failureCount: number, error: Error): boolean {
+  return (
+    failureCount < 1 && !(error instanceof ReadError && error.status < 500)
+  );
+}
+
 async function getJson(path: string, signal: AbortSignal): Promise<unknown> {
   const response = await fetch(apiUrl(path), {
     credentials: "same-origin",
@@ -76,9 +94,7 @@ async function getJson(path: string, signal: AbortSignal): Promise<unknown> {
     signal,
   });
   if (response.status === 401) onUnauthorized();
-  if (!response.ok) {
-    throw new Error(`GET /v1${path} failed (${String(response.status)})`);
-  }
+  if (!response.ok) throw new ReadError(path, response.status);
   return response.json();
 }
 
@@ -94,6 +110,7 @@ export function todayQuery() {
       const page = zTodayPage.parse(await getJson(`/tasks?${search}`, signal));
       return { items: page.items, total: page.total ?? page.items.length };
     },
+    retry: retryOnce,
   });
 }
 
@@ -108,6 +125,7 @@ export function reviewCountQuery() {
     queryKey: [{ _id: "tasksGetReviewCount" }] as const,
     queryFn: async ({ signal }): Promise<number> =>
       zCount.parse(await getJson("/review/count", signal)),
+    retry: retryOnce,
   });
 }
 

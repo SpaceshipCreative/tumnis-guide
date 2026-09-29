@@ -6,19 +6,16 @@ import { expect, test } from "vitest";
 import { renderWithProviders } from "../../test/render";
 import { ActivityFeed } from "./ActivityFeed";
 
-test.fails(
-  "[P0-23][FR-1.5] T-P0-23-07 feed is collapsed by default",
-  async () => {
-    const { user } = renderWithProviders(<ActivityFeed />);
+test("[P0-23][FR-1.5] T-P0-23-07 feed is collapsed by default", async () => {
+  const { user } = renderWithProviders(<ActivityFeed />);
 
-    const summary = screen.getByText("Agent activity");
-    const details = summary.closest("details");
-    expect(details).not.toBeNull();
-    expect(details?.open).toBe(false);
-    expect(screen.getByText("Nothing from the agents yet.")).not.toBeVisible();
+  const summary = screen.getByText("Agent activity");
+  const details = summary.closest("details");
+  expect(details).not.toBeNull();
+  expect(details?.open).toBe(false);
+  expect(screen.getByText("Nothing from the agents yet.")).not.toBeVisible();
 
-    await user.click(summary);
-    expect(details?.open).toBe(true);
-    expect(screen.getByText("Nothing from the agents yet.")).toBeVisible();
-  },
-);
+  await user.click(summary);
+  expect(details?.open).toBe(true);
+  expect(screen.getByText("Nothing from the agents yet.")).toBeVisible();
+});

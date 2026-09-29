@@ -172,3 +172,22 @@ test("[P0-23][FR-1.2][UX 5] T-P0-23-05 a task without a first action says so", a
     unmount();
   }
 });
+
+test("[P0-23][FR-1.2] a pending label says so", async () => {
+  const items = [
+    makeTask({
+      project_id: ACME,
+      title: "Sort the inbox",
+      label: null,
+      estimate_minutes: 20,
+      first_action: "Open the inbox",
+      status: "today",
+    }),
+  ];
+  await renderWithRouter(
+    <TodayPanel items={items} total={1} projectNames={PROJECT_NAMES} />,
+  );
+  const [row] = rowsOf(screen.getByRole("region", { name: "Today" }));
+  expect(row).toHaveTextContent("No label yet");
+  expect(row).not.toHaveTextContent("20 min");
+});
