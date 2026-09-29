@@ -1,9 +1,25 @@
 """Envelope encryption: the master key file, per-workspace data keys, AES-256-GCM seal and
-open, and the master key re-wrap (P0-08, SEC-6, ADR-0010)."""
+open, and the master key re-wrap (P0-08, SEC-6, ADR-0010).
 
+Each workspace has a random 256-bit data key (`workspace_keys`), stored wrapped by the
+deployment master key; settings are sealed with the data key. The master key file is
+JSON, {"active": 2, "keys": {"1": "<base64>", "2": "<base64>"}}, readable by its owner
+only. Rotation adds a version, points `active` at it, re-wraps every data key
+(`tumnis keys rotate-master --to <v>`) and then drops the old version: the sealed values
+never change.
+
+Never log a DecryptionError's inputs; the messages here never carry them.
+"""
+
+import base64
+import binascii
+import hashlib
+import json
 import os
+import stat
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from uuid import UUID
 
 from cryptography.exceptions import InvalidTag
@@ -30,23 +46,86 @@ class MasterKeys:
     keys: Mapping[int, bytes]
 
     def fingerprint(self, version: int) -> str:
-        raise NotImplementedError
+        """sha256 hex of the key, first 16 characters (safe to log and to compare)."""
+        return hashlib.sha256(self.keys[version]).hexdigest()[:16]
+
+
+GROUP_OR_OTHERS = 0o077
 
 
 def load_master_keys(path: str, *, strict_owner: bool) -> MasterKeys:
-    raise NotImplementedError
+    """Reads the key file. Refuses (MasterKeyError) a file that is missing, not a regular
+    file, readable (or writable) by group or others, malformed, or, with `strict_owner`
+    (prod), owned by anyone but root or the process user."""
+    try:
+        info = os.stat(path)
+    except FileNotFoundError:
+        raise MasterKeyError(f"master key file not found: {path}") from None
+    except OSError as exc:
+        raise MasterKeyError(f"master key file unreadable: {path}: {exc.strerror}") from None
+    if not stat.S_ISREG(info.st_mode):
+        raise MasterKeyError("master key file must be a regular file")
+    if info.st_mode & GROUP_OR_OTHERS:
+        raise MasterKeyError("master key file must not be readable by group or others")
+    if strict_owner and info.st_uid not in (0, os.getuid()):
+        raise MasterKeyError("master key file must be owned by root or the service user")
+    try:
+        body = json.loads(Path(path).read_bytes())
+        active = int(body["active"])
+        keys = {
+            int(version): base64.b64decode(value, validate=True)
+            for version, value in body["keys"].items()
+        }
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, binascii.Error):
+        raise MasterKeyError(
+            'master key file must be JSON {"active": <n>, "keys": {"<n>": "<base64>"}}'
+        ) from None
+    if active not in keys:
+        raise MasterKeyError(f"master key file names active version {active} but lacks it")
+    if any(len(key) != KEY_BYTES for key in keys.values()):
+        raise MasterKeyError(f"every master key must be {KEY_BYTES} bytes")
+    return MasterKeys(active=active, keys=keys)
+
+
+@dataclass
+class _State:
+    loader: Callable[[], MasterKeys] | None = None
+    keys: MasterKeys | None = None
+    # Unwrapped data keys by (workspace, key version): this process's memory only.
+    data_keys: dict[tuple[UUID, int], bytes] = field(default_factory=dict)
+
+
+_state = _State()
 
 
 def configure_master_keys(loader: Callable[[], MasterKeys]) -> None:
-    raise NotImplementedError
+    """Where this process gets its master keys (create_app, the worker, tests). Forgets the
+    keys loaded before and every data key they unwrapped."""
+    _state.loader, _state.keys = loader, None
+    _state.data_keys.clear()
 
 
 def reset_master_keys() -> None:
-    raise NotImplementedError
+    configure_master_keys(_unconfigured)
+
+
+def _unconfigured() -> MasterKeys:
+    raise MasterKeyError("no master key file is configured in this process")
 
 
 def master_keys() -> MasterKeys:
-    raise NotImplementedError
+    """The configured master keys, loaded once."""
+    if _state.keys is None:
+        _state.keys = (_state.loader or _unconfigured)()
+    return _state.keys
+
+
+def remembered_data_key(workspace_id: UUID, key_version: int) -> bytes | None:
+    return _state.data_keys.get((workspace_id, key_version))
+
+
+def remember_data_key(workspace_id: UUID, key_version: int, data_key: bytes) -> None:
+    _state.data_keys[(workspace_id, key_version)] = data_key
 
 
 def new_data_key() -> bytes:

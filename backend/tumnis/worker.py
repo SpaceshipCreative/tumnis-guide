@@ -9,7 +9,7 @@ import threading
 from typing import TYPE_CHECKING
 
 from tumnis.core import workflows_ops
-from tumnis.settings import Settings
+from tumnis.settings import Settings, install_master_keys
 
 if TYPE_CHECKING:
     from dbos import DBOSConfig
@@ -54,6 +54,7 @@ def main(settings: Settings) -> None:
     from tumnis.core import db  # noqa: PLC0415
 
     db.configure(settings.database_direct_url, settings.database_direct_url)
+    install_master_keys(settings)
     stop = threading.Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda *_: stop.set())

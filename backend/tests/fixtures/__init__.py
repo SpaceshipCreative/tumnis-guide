@@ -445,9 +445,14 @@ def master_key_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
 
 @pytest.fixture
 async def app(
-    db: DbUrls, dbos_sys_db: DbUrls, clock: FixedClock, fakes: Fakes
+    db: DbUrls,
+    dbos_sys_db: DbUrls,
+    clock: FixedClock,
+    fakes: Fakes,
+    master_key_file: MasterKeyFile,
 ) -> AsyncIterator[FastAPI]:
-    """create_app on the per-test database with fakes; engines disposed afterwards."""
+    """create_app on the per-test database with fakes and a master key file; engines
+    disposed afterwards."""
     from tumnis.app import create_app  # noqa: PLC0415
     from tumnis.core import db as core_db  # noqa: PLC0415
 

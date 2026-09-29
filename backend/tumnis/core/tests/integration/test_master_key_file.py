@@ -31,7 +31,6 @@ SETTINGS_ENV = (
 
 @pytest.mark.req("SEC-6")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.parametrize("mode", [0o640, 0o644, 0o604, 0o600, 0o400])
 def test_startup_fails_when_key_file_readable_by_group_or_others(
     mode: int, db: DbUrls, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

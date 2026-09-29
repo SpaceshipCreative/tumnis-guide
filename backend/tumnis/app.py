@@ -16,7 +16,7 @@ from starlette.types import Scope
 from tumnis import wiring
 from tumnis.core import db, health, ops_status, testing_routes
 from tumnis.core.clock import Clock, SystemClock
-from tumnis.settings import Settings
+from tumnis.settings import Settings, install_master_keys
 
 # The built frontend (P0-22 replaces the placeholder shell); present in the image.
 SHELL_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -40,6 +40,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 def create_app(settings: Settings | None = None, clock: Clock | None = None) -> FastAPI:
     settings = settings or Settings()  # values come from the environment
+    master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
     db.configure(settings.database_url, settings.database_direct_url)
 
     health.clear_health()
@@ -60,6 +61,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
         redoc_url=None,
     )
     app.state.settings = settings
+    app.state.master_keys = master_keys
     app.state.clock = clock or SystemClock()
     app.include_router(health.router)
     if settings.tumnis_adapters == "fake":

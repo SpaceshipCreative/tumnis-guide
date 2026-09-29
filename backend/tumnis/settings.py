@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Literal, Self
 
@@ -20,6 +21,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
+
+from tumnis.core.crypto import MasterKeys, configure_master_keys, load_master_keys
 
 
 class SettingsError(RuntimeError):
@@ -62,6 +65,12 @@ class Settings(BaseSettings):
                 raise SettingsError("preview_has_production_secret", "a Jev key is set in preview")
         return self
 
+    @cached_property
+    def master_keys(self) -> MasterKeys:
+        """The master key file, loaded and checked once (MasterKeyError when unsafe). The
+        owner check applies in prod only: tests and dev run as whoever owns their files."""
+        return load_master_keys(self.master_key_file, strict_owner=self.deployment_env == "prod")
+
     @property
     def dbos_system_url(self) -> str:
         """DBOS system database: DBOS_SYSTEM_DATABASE_URL, else the direct URL (never
@@ -70,6 +79,16 @@ class Settings(BaseSettings):
             return self.dbos_system_database_url
         direct = make_url(self.database_direct_url).set(database=DBOS_DATABASE)
         return direct.render_as_string(hide_password=False)
+
+
+def install_master_keys(settings: Settings) -> MasterKeys | None:
+    """Point tumnis.core.crypto at the deployment's key file, and load and check the file now
+    (MasterKeyError) in prod and whenever it exists. In dev and preview a missing file fails
+    only at the first secret read or write, so stacks without secrets need no key file."""
+    configure_master_keys(lambda: settings.master_keys)
+    if settings.deployment_env == "prod" or Path(settings.master_key_file).exists():
+        return settings.master_keys
+    return None
 
 
 # --- Deployment marker ------------------------------------------------------------------
