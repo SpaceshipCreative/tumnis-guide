@@ -28,7 +28,6 @@ async def _verify(workspace: WorkspaceHandle) -> list[tuple[int, str]]:
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 async def test_verify_catches_an_edited_row(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -52,7 +51,6 @@ async def test_verify_catches_an_edited_row(
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 async def test_verify_catches_a_deleted_row(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -98,7 +96,6 @@ async def test_verify_catches_truncation_after_anchor(
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 async def test_concurrent_writers_keep_one_chain(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
