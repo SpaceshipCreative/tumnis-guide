@@ -44,13 +44,18 @@ export const LIVE_MAP: Record<
       "settingsGetWorkspaceSettings",
       "settingsGetSection",
       "settingsListModules",
+      "settingsGetWorkingHours",
     ],
   },
   // Created, rotated and revoked keys (P0-14): the Settings list refreshes.
   api_key: { details: [], lists: ["authListKeys"] },
   dead_letter: { details: [], lists: ["deadLettersGetDeadLetters"] },
-  // Connected Google accounts (P1-09): a sync or a revoked grant refreshes the list.
-  calendar_account: { details: [], lists: ["calendarListAccounts"] },
+  // Connected Google accounts (P1-09): a sync or a revoked grant refreshes the list, and
+  // the day's events and free blocks (P1-10) come from the same synced events.
+  calendar_account: {
+    details: [],
+    lists: ["calendarListAccounts", "planningGetDayCalendar"],
+  },
 };
 
 export const NOT_LIVE = [
