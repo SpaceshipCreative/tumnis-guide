@@ -57,7 +57,8 @@ PROBLEM_RESPONSES: Final[dict[int | str, dict[str, Any]]] = {
     status: {"model": Problem, "description": description}
     for status, description in (
         (400, "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"),
-        (401, "Unauthenticated"),
+        (401, "Unauthenticated (`unauthenticated`, `session_expired`)"),
+        (403, "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)"),
         (404, "Not found"),
         (409, "Conflict (`stale_version` with `current`)"),
         (413, "Body too large"),

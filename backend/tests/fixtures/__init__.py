@@ -380,7 +380,8 @@ async def _load_set(path: Path, db: DbUrls, clock: FixedClock) -> SeedResult:
     from tumnis.seed import DatabaseSink, load_seed  # noqa: PLC0415
 
     core_db.configure(app_url=db.app, direct_url=db.app, pooled=False)
-    return await load_seed(path, DatabaseSink(), anchor=clock.now().date(), clock=clock)
+    sink = DatabaseSink(skip_missing=True)  # kinds whose module has not landed are skipped
+    return await load_seed(path, sink, anchor=clock.now().date(), clock=clock)
 
 
 @pytest.fixture
@@ -871,6 +872,7 @@ def app_with_fakes(  # noqa: PLR0917
     app = create_app(settings=settings_for(db, dbos_sys_db), clock=clock)
     app.add_middleware(TestPrincipalMiddleware)
     app.state.rate_limiter = None
+    app.state.auth_lockouts = False  # the same for sign-in lockouts (P0-13)
     try:
         yield AppWithFakes(app, workspace, principal_header(workspace.id, uuid.uuid4()))
     finally:

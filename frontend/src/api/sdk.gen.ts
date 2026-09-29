@@ -15,6 +15,30 @@ import type {
   AuditListAuditData,
   AuditListAuditErrors,
   AuditListAuditResponses,
+  AuthListSessionsData,
+  AuthListSessionsErrors,
+  AuthListSessionsResponses,
+  AuthLoginData,
+  AuthLoginErrors,
+  AuthLoginResponses,
+  AuthLogoutData,
+  AuthLogoutErrors,
+  AuthLogoutResponses,
+  AuthRevokeSessionData,
+  AuthRevokeSessionErrors,
+  AuthRevokeSessionResponses,
+  AuthSetupData,
+  AuthSetupErrors,
+  AuthSetupResponses,
+  AuthSetupTotpData,
+  AuthSetupTotpErrors,
+  AuthSetupTotpResponses,
+  AuthSignOutOtherDevicesData,
+  AuthSignOutOtherDevicesErrors,
+  AuthSignOutOtherDevicesResponses,
+  AuthTotpData,
+  AuthTotpErrors,
+  AuthTotpResponses,
   DeadLettersGetDeadLettersData,
   DeadLettersGetDeadLettersErrors,
   DeadLettersGetDeadLettersResponses,
@@ -41,6 +65,14 @@ import type {
 } from "./types.gen";
 import {
   zAuditListAuditResponse,
+  zAuthListSessionsResponse,
+  zAuthLoginResponse,
+  zAuthLogoutResponse,
+  zAuthRevokeSessionResponse,
+  zAuthSetupResponse,
+  zAuthSetupTotpResponse,
+  zAuthSignOutOtherDevicesResponse,
+  zAuthTotpResponse,
   zDeadLettersGetDeadLettersResponse,
   zDeadLettersPostDiscardResponse,
   zDeadLettersPostRetryResponse,
@@ -129,6 +161,139 @@ export const auditExportAuditCsv = <ThrowOnError extends boolean = false>(
     AuditExportAuditCsvErrors,
     ThrowOnError
   >({ url: "/v1/audit.csv", ...options });
+
+/**
+ * Login
+ *
+ * The password step: answers `{"step": "totp", "preauth": ...}` and sets no cookie.
+ */
+export const authLogin = <ThrowOnError extends boolean = false>(
+  options: Options<AuthLoginData, ThrowOnError>,
+): RequestResult<AuthLoginResponses, AuthLoginErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    AuthLoginResponses,
+    AuthLoginErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthLoginResponse.parseAsync(data),
+    url: "/v1/auth/login",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Logout
+ *
+ * Ends this session and clears its cookies.
+ */
+export const authLogout = <ThrowOnError extends boolean = false>(
+  options?: Options<AuthLogoutData, ThrowOnError>,
+): RequestResult<AuthLogoutResponses, AuthLogoutErrors, ThrowOnError> =>
+  (options?.client ?? client).post<
+    AuthLogoutResponses,
+    AuthLogoutErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthLogoutResponse.parseAsync(data),
+    url: "/v1/auth/logout",
+    ...options,
+  });
+
+/**
+ * Sign Out Other Devices
+ *
+ * Revokes every session of this user but the calling one (R-21).
+ */
+export const authSignOutOtherDevices = <ThrowOnError extends boolean = false>(
+  options?: Options<AuthSignOutOtherDevicesData, ThrowOnError>,
+): RequestResult<
+  AuthSignOutOtherDevicesResponses,
+  AuthSignOutOtherDevicesErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).delete<
+    AuthSignOutOtherDevicesResponses,
+    AuthSignOutOtherDevicesErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthSignOutOtherDevicesResponse.parseAsync(data),
+    url: "/v1/auth/sessions",
+    ...options,
+  });
+
+/**
+ * List Sessions
+ *
+ * This user's signed-in devices, newest first, the calling one `current`.
+ */
+export const authListSessions = <ThrowOnError extends boolean = false>(
+  options?: Options<AuthListSessionsData, ThrowOnError>,
+): RequestResult<
+  AuthListSessionsResponses,
+  AuthListSessionsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    AuthListSessionsResponses,
+    AuthListSessionsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthListSessionsResponse.parseAsync(data),
+    url: "/v1/auth/sessions",
+    ...options,
+  });
+
+/**
+ * Revoke Session
+ *
+ * Revokes one of this user's sessions.
+ */
+export const authRevokeSession = <ThrowOnError extends boolean = false>(
+  options: Options<AuthRevokeSessionData, ThrowOnError>,
+): RequestResult<
+  AuthRevokeSessionResponses,
+  AuthRevokeSessionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    AuthRevokeSessionResponses,
+    AuthRevokeSessionErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthRevokeSessionResponse.parseAsync(data),
+    url: "/v1/auth/sessions/{session_id}",
+    ...options,
+  });
+
+/**
+ * Totp
+ *
+ * The TOTP step: sets the session and CSRF cookies.
+ */
+export const authTotp = <ThrowOnError extends boolean = false>(
+  options: Options<AuthTotpData, ThrowOnError>,
+): RequestResult<AuthTotpResponses, AuthTotpErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    AuthTotpResponses,
+    AuthTotpErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) => await zAuthTotpResponse.parseAsync(data),
+    url: "/v1/auth/totp",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
 
 /**
  * Get Dead Letters
@@ -244,6 +409,53 @@ export const settingsPutWorkspaceSettings = <
     responseValidator: async (data) =>
       await zSettingsPutWorkspaceSettingsResponse.parseAsync(data),
     url: "/v1/settings/workspace",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Setup
+ *
+ * First run: creates the workspace and its owner and shows the TOTP secret once.
+ * 409 `already_set_up`; 403 `signup_disabled` in hosted mode.
+ */
+export const authSetup = <ThrowOnError extends boolean = false>(
+  options: Options<AuthSetupData, ThrowOnError>,
+): RequestResult<AuthSetupResponses, AuthSetupErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    AuthSetupResponses,
+    AuthSetupErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthSetupResponse.parseAsync(data),
+    url: "/v1/setup",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Setup Totp
+ *
+ * Confirms the first code; completes setup and signs the owner in.
+ */
+export const authSetupTotp = <ThrowOnError extends boolean = false>(
+  options: Options<AuthSetupTotpData, ThrowOnError>,
+): RequestResult<AuthSetupTotpResponses, AuthSetupTotpErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    AuthSetupTotpResponses,
+    AuthSetupTotpErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthSetupTotpResponse.parseAsync(data),
+    url: "/v1/setup/totp",
     ...options,
     headers: {
       "Content-Type": "application/json",

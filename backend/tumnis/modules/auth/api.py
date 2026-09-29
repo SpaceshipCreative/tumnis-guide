@@ -333,7 +333,7 @@ async def _totp_confirmed(user_id: UUID, workspace_id: UUID) -> bool:
     return confirmed is not None
 
 
-async def sign_in_password(body: LoginIn, *, clock: Clock) -> LoginOut:
+async def sign_in_password(body: LoginIn, *, clock: Clock, lockouts: bool = True) -> LoginOut:
     """The password step: a pre-auth token (5 minutes) for the TOTP step, never a session.
     401 `invalid_credentials` (the same for an unknown email), 403 `setup_incomplete`
     before the first code is confirmed, 429 `locked_out` with Retry-After."""
@@ -346,7 +346,7 @@ async def sign_in_password(body: LoginIn, *, clock: Clock) -> LoginOut:
     result: SignInResult | None = None
     refused: InvalidCredentials | None = None
     try:
-        async with throttle.Attempt(keys, now) as attempt:
+        async with throttle.Attempt(keys, now, enabled=lockouts) as attempt:
             try:
                 if chosen is None:
                     raise InvalidCredentials
@@ -404,7 +404,7 @@ async def _open_session(
 
 
 async def _second_factor(
-    user_id: UUID, workspace_id: UUID, code: str, *, clock: Clock, setup: bool
+    user_id: UUID, workspace_id: UUID, code: str, *, clock: Clock, setup: bool, lockouts: bool
 ) -> None:
     """Checks the code under the user's TOTP lockout; raises 401 `invalid_code` or
     `totp_replayed` (audited as `auth.totp_failed`), or 429 `locked_out`."""
@@ -412,7 +412,7 @@ async def _second_factor(
     key = throttle.totp_key(user_id)
     outcome = "invalid"
     try:
-        async with throttle.Attempt([key], now) as attempt:
+        async with throttle.Attempt([key], now, enabled=lockouts) as attempt:
             if setup:
                 outcome = await check_totp(user_id, workspace_id, code, now, confirmed=False)
             else:
@@ -445,7 +445,7 @@ async def _second_factor(
     raise ProblemError(401, "invalid_code", "The code is not right")
 
 
-async def sign_in_totp(body: TotpIn, *, clock: Clock) -> SignedIn:
+async def sign_in_totp(body: TotpIn, *, clock: Clock, lockouts: bool = True) -> SignedIn:
     """The TOTP step: a pre-auth token from the password step and a fresh code open a
     session (audited as `auth.login`)."""
     now = clock.now()
@@ -453,7 +453,9 @@ async def sign_in_totp(body: TotpIn, *, clock: Clock) -> SignedIn:
     if claims is None:
         raise ProblemError(401, "invalid_preauth", "Sign in with your password again")
     user_id, workspace_id = UUID(claims["u"]), UUID(claims["w"])
-    await _second_factor(user_id, workspace_id, body.code, clock=clock, setup=False)
+    await _second_factor(
+        user_id, workspace_id, body.code, clock=clock, setup=False, lockouts=lockouts
+    )
     details = {"provider": str(claims.get("pr", LOCAL_PASSWORD)), "second_factor": TOTP}
     return await _open_session(user_id, workspace_id, action="auth.login", details=details, now=now)
 
@@ -532,7 +534,7 @@ async def _insert_user(
     await s.execute(MEMBERSHIPS.insert().values(user_id=user_id, role="owner"))
 
 
-async def confirm_setup(body: SetupTotpIn, *, clock: Clock) -> SignedIn:
+async def confirm_setup(body: SetupTotpIn, *, clock: Clock, lockouts: bool = True) -> SignedIn:
     """The first code: completes setup (`setup.completed`) and signs the owner in."""
     now = clock.now()
     claims = unsign("setup", body.setup_token, now=now)
@@ -541,7 +543,9 @@ async def confirm_setup(body: SetupTotpIn, *, clock: Clock) -> SignedIn:
     user_id, workspace_id = UUID(claims["u"]), UUID(claims["w"])
     if await _totp_confirmed(user_id, workspace_id):
         raise ProblemError(409, "already_set_up", "Setup is complete; sign in instead")
-    await _second_factor(user_id, workspace_id, body.code, clock=clock, setup=True)
+    await _second_factor(
+        user_id, workspace_id, body.code, clock=clock, setup=True, lockouts=lockouts
+    )
     return await _open_session(
         user_id, workspace_id, action="setup.completed", details={"second_factor": TOTP}, now=now
     )

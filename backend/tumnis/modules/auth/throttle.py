@@ -64,10 +64,11 @@ def totp_key(user_id: object) -> Key:
 class Attempt:
     """`async with Attempt(keys, now) as attempt:` raises LockedOut on entry when any key
     is locked; inside, call `failed()` or `succeeded(*keys_to_reset)`; the counters are
-    written when the block ends without an unexpected error."""
+    written when the block ends without an unexpected error. `enabled=False` counts
+    nothing (an app whose `state.auth_lockouts` is False: the schema fuzzer's test app)."""
 
-    def __init__(self, keys: list[Key], now: datetime) -> None:
-        self.keys = keys
+    def __init__(self, keys: list[Key], now: datetime, *, enabled: bool = True) -> None:
+        self.keys = keys if enabled else []
         self.now = now
         self.locked_now: list[Key] = []  # keys this failure locked
         self._rows: dict[bytes, rules.Throttle] = {}
@@ -75,6 +76,8 @@ class Attempt:
         self._session: AsyncSession | None = None
 
     async def __aenter__(self) -> Self:
+        if not self.keys:
+            return self
         session = db.app_sessionmaker()()
         await session.begin()
         self._session = session
@@ -128,7 +131,8 @@ class Attempt:
             await self._close(commit=False)
             return
         session = self._session
-        assert session is not None  # noqa: S101  # set in __aenter__
+        if session is None:  # no keys: lockouts off
+            return
         try:
             if self._outcome is not None:
                 kind, touched = self._outcome

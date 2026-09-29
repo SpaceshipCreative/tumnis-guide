@@ -81,6 +81,12 @@ def _clock(request: Request) -> Clock:
     return clock
 
 
+def _lockouts(request: Request) -> bool:
+    """Lockouts count unless the app switched them off (`state.auth_lockouts = False`, the
+    schema fuzzer's test app only, like its `rate_limiter = None`)."""
+    return getattr(request.app.state, "auth_lockouts", True) is not False
+
+
 def _signed_in(signed_in: api.SignedIn) -> JSONResponse:
     response = JSONResponse(signed_in.out.model_dump(mode="json"))
     set_session_cookies(response, signed_in.token, signed_in.csrf)
@@ -91,14 +97,16 @@ def _signed_in(signed_in: api.SignedIn) -> JSONResponse:
 @route_policy(_SIGN_IN)
 async def login(body: api.LoginIn, request: Request) -> api.LoginOut:
     """The password step: answers `{"step": "totp", "preauth": ...}` and sets no cookie."""
-    return await api.sign_in_password(body, clock=_clock(request))
+    return await api.sign_in_password(body, clock=_clock(request), lockouts=_lockouts(request))
 
 
 @router.post("/auth/totp", response_model=api.SignedInOut)
 @route_policy(_SIGN_IN)
 async def totp(body: api.TotpIn, request: Request) -> JSONResponse:
     """The TOTP step: sets the session and CSRF cookies."""
-    return _signed_in(await api.sign_in_totp(body, clock=_clock(request)))
+    return _signed_in(
+        await api.sign_in_totp(body, clock=_clock(request), lockouts=_lockouts(request))
+    )
 
 
 @router.post("/auth/logout", status_code=204)
@@ -157,4 +165,6 @@ async def setup(body: api.SetupIn, request: Request) -> api.SetupOut:
 @route_policy(_SETUP)
 async def setup_totp(body: api.SetupTotpIn, request: Request) -> JSONResponse:
     """Confirms the first code; completes setup and signs the owner in."""
-    return _signed_in(await api.confirm_setup(body, clock=_clock(request)))
+    return _signed_in(
+        await api.confirm_setup(body, clock=_clock(request), lockouts=_lockouts(request))
+    )
