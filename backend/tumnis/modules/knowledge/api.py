@@ -7,26 +7,62 @@ have no connection or external id, which is why those columns are nullable here 
 canonical unique key is partial.
 """
 
+import dataclasses
 import hashlib
+import json
+import os
+import re
 from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from pathlib import Path, PurePosixPath
 from typing import Any, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from sqlalchemy import Table, select
+from sqlalchemy import RowMapping, Table, delete, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import tenancy
+from tumnis.core import settings_store, tenancy
+from tumnis.core.adapters.errors import AdapterError, AdapterRejected, AdapterUnavailable
+from tumnis.core.adapters.registry import current_mode
 from tumnis.core.canonical import CanonicalRecord, UpsertStats, upsert_records
-from tumnis.core.net import NetPolicy, Resolver, system_resolver
+from tumnis.core.errors import ProblemError
+from tumnis.core.ids import uuid7
+from tumnis.core.net import NetPolicy, Resolver, SsrfBlocked, resolve_and_check, system_resolver
 from tumnis.core.schemas import versioned
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
-from tumnis.core.versioning import NotFound
+from tumnis.core.versioning import NotFound, update_versioned
 from tumnis.modules.integrations import api as integrations
-from tumnis.modules.knowledge.models import Document
-from tumnis.modules.knowledge.storage import FileStat
+from tumnis.modules.knowledge.adapters.fake import FakeStorage
+from tumnis.modules.knowledge.adapters.s3 import (
+    S3Config,
+    S3Storage,
+    endpoint_host_port,
+    endpoint_policy,
+)
+from tumnis.modules.knowledge.adapters.server_path import ServerPathStorage
+from tumnis.modules.knowledge.models import (
+    Document,
+    DocumentVersion,
+    PendingWrite,
+    ProjectFolder,
+    StorageLocation,
+)
+from tumnis.modules.knowledge.rules import etag_equal, is_network_fs, safe_rel_path
+from tumnis.modules.knowledge.storage import (
+    FileStat,
+    Health,
+    LocationOffline,
+    PathRejected,
+    PreconditionFailed,
+    StorageBackend,
+    StorageError,
+    TooLarge,
+    safe_prefix,
+)
+from tumnis.modules.knowledge.storage import NotFound as FileMissing
 from tumnis.seed import DocumentSeed, register_seed_writer
 
 _documents: Table = Document.__table__  # type: ignore[assignment]
@@ -201,8 +237,27 @@ register_seed_writer("document", seed_document)
 
 
 # --- Storage locations and project folders (P1-14, FR-15.7, FR-15.12, SEC-5) -------------
+#
+# A location is a server path or an S3 bucket/prefix; its S3 endpoint and keys are sealed
+# in `config_enc` with the workspace data key. Each project gets a folder
+# (`<project id>/`) on the workspace default location when it is created. A location whose
+# health is degraded (a share without its marker, an unreachable bucket) goes offline:
+# uploads to it answer 409 `location_offline`, note saves (whose text is already in
+# Postgres) queue in `pending_writes`, and the next healthy check drains the queue in
+# insertion order. Every storage call goes through `open_backend`.
 
 LocationKind = Literal["server_path", "s3"]
+Row = Mapping[Any, Any]  # a location or folder row (RowMapping), or the dict of one
+
+_locations: Table = StorageLocation.__table__  # type: ignore[assignment]
+_folders: Table = ProjectFolder.__table__  # type: ignore[assignment]
+_versions: Table = DocumentVersion.__table__  # type: ignore[assignment]
+_pending: Table = PendingWrite.__table__  # type: ignore[assignment]
+
+_BUCKET: Final = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
+_MOUNTINFO: Final = Path("/proc/self/mountinfo")
+# Per-location fakes in fakes mode (TUMNIS_ADAPTERS=fake): the tree outlives one request.
+_FAKES: dict[UUID, FakeStorage] = {}
 
 
 class S3ConfigIn(BaseModel):
@@ -249,32 +304,431 @@ class NoteWrite(BaseModel):
     path: str  # relative to the location's root
 
 
+_PROBLEMS: Final[tuple[tuple[type[Exception], int, str, str], ...]] = (
+    (LocationOffline, 409, "location_offline", "The location is offline."),
+    (PathRejected, 422, "path_rejected", "That path is not allowed."),
+    (TooLarge, 413, "too_large", "The file is over 50 MiB."),
+    (FileMissing, 404, "not_found", "No file at that path."),
+    (SsrfBlocked, 422, "ssrf_blocked", "That endpoint is not allowed."),
+    (AdapterRejected, 502, "location_refused", "The location refused the request."),
+)
+
+
+def _storage_problem(exc: Exception) -> ProblemError:
+    """A storage or adapter failure as the problem the caller sees."""
+    if isinstance(exc, PreconditionFailed):
+        current = exc.current.model_dump(mode="json") if exc.current else None
+        return ProblemError(409, "precondition_failed", "The file changed.", current=current)
+    for kind, status, code, detail in _PROBLEMS:
+        if isinstance(exc, kind):
+            return ProblemError(status, code, detail)
+    return ProblemError(503, "location_unavailable", "The location did not answer.")
+
+
+def _s3_root(root: str) -> tuple[str, str]:
+    """`bucket/prefix` as (bucket, prefix); ProblemError 422 when either is unusable."""
+    bucket, _, prefix = root.strip("/").partition("/")
+    if not _BUCKET.match(bucket):
+        raise ProblemError(422, "invalid_location", "The bucket name is not valid.")
+    try:
+        safe_prefix(prefix + "/" if prefix else "")
+    except PathRejected as exc:
+        raise ProblemError(422, "invalid_location", "The prefix is not a safe path.") from exc
+    return bucket, prefix
+
+
+def _server_root(root: str) -> str:
+    path = PurePosixPath(root)
+    if not path.is_absolute() or ".." in path.parts:
+        raise ProblemError(422, "invalid_location", "The folder must be an absolute path.")
+    return str(path)
+
+
+def _fstype(root: str) -> str | None:
+    """The filesystem type of the mount holding `root`, from /proc/self/mountinfo (Linux);
+    None elsewhere."""
+    try:
+        lines = _MOUNTINFO.read_text().splitlines()
+    except OSError:
+        return None
+    best, fstype = "", None
+    target = os.path.realpath(root)
+    for line in lines:
+        fields, _, rest = line.partition(" - ")
+        parts = fields.split()
+        mount = parts[4] if len(parts) > 4 else ""  # noqa: PLR2004
+        inside = target == mount or target.startswith(mount.rstrip("/") + "/")
+        if mount and inside and len(mount) >= len(best):
+            best, fstype = mount, next(iter(rest.split()), None)
+    return fstype
+
+
+def _s3_config(blob: bytes) -> S3Config:
+    data = json.loads(blob)
+    return S3Config(
+        endpoint=data["endpoint"],
+        region=data["region"],
+        access_key=data["access_key"],
+        secret_key=data["secret_key"],
+        path_style=data["path_style"],
+        sse=data.get("sse"),
+    )
+
+
+async def _open_config(s: AsyncSession, row: Row) -> S3Config:
+    blob = await settings_store.open_for_workspace(
+        s, row["workspace_id"], row["config_enc"], aad=_aad(row["id"])
+    )
+    return _s3_config(blob)
+
+
+def _aad(location_id: UUID) -> bytes:
+    return f"storage_locations:{location_id}".encode()
+
+
+def _backend(
+    row: Row,
+    config: S3Config | None,
+    *,
+    net: NetPolicy,
+    resolver: Resolver,
+) -> StorageBackend:
+    if current_mode() == "fake":
+        return _FAKES.setdefault(row["id"], FakeStorage())
+    caps = row["capabilities"] or {}
+    if row["kind"] == "server_path":
+        return ServerPathStorage(row["root"], network_fs=bool(caps.get("network_fs")))
+    if row["kind"] == "s3" and config is not None:
+        bucket, prefix = _s3_root(row["root"])
+        return S3Storage(
+            config,
+            bucket=bucket,
+            prefix=prefix,
+            conditional_put=bool(caps.get("conditional_put")),
+            health_write=bool(row["is_default"]),
+            net_policy=net,
+            resolver=resolver,
+        )
+    raise ProblemError(422, "invalid_location", f"{row['kind']} locations are not supported yet")
+
+
+@asynccontextmanager
+async def _opened(
+    s: AsyncSession, row: RowMapping, *, net: NetPolicy, resolver: Resolver
+) -> AsyncIterator[StorageBackend]:
+    config = await _open_config(s, row) if row["config_enc"] is not None else None
+    backend = _backend(row, config, net=net, resolver=resolver)
+    try:
+        yield backend
+    finally:
+        if isinstance(backend, S3Storage):
+            await backend.aclose()
+
+
+async def _location_row(s: AsyncSession, location_id: UUID) -> RowMapping:
+    row = (
+        (
+            await s.execute(
+                select(_locations).where(
+                    _locations.c.id == location_id, _locations.c.deleted_at.is_(None)
+                )
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise NotFound("storage_locations", location_id)
+    return row
+
+
+def open_backend(
+    s: AsyncSession,
+    location_id: UUID,
+    *,
+    net: NetPolicy,
+    resolver: Resolver = system_resolver,
+) -> AbstractAsyncContextManager[StorageBackend]:
+    """The one way to reach a location's files: `async with open_backend(...) as b`. In
+    fakes mode each location is a `FakeStorage` kept for the process."""
+
+    @asynccontextmanager
+    async def opened() -> AsyncIterator[StorageBackend]:
+        row = await _location_row(s, location_id)
+        async with _opened(s, row, net=net, resolver=resolver) as backend:
+            yield backend
+
+    return opened()
+
+
+async def _health(backend: StorageBackend) -> Health:
+    try:
+        return await backend.health()
+    except (StorageError, AdapterError) as exc:
+        return Health.degraded(getattr(exc, "code", None) or type(exc).__name__)
+
+
+async def _location_out(s: AsyncSession, row: Row) -> LocationOut:
+    endpoint = None
+    if row["kind"] == "s3" and row["config_enc"] is not None:
+        endpoint = (await _open_config(s, row)).endpoint
+    return LocationOut(
+        id=row["id"],
+        name=row["name"],
+        kind=row["kind"],
+        root=row["root"],
+        endpoint=endpoint,
+        status=row["status"],
+        status_reason=row["status_reason"],
+        is_default=row["is_default"],
+        capabilities={k: bool(v) for k, v in (row["capabilities"] or {}).items()},
+        version=row["version"],
+    )
+
+
+async def _set_status(s: AsyncSession, location_id: UUID, health: Health) -> RowMapping:
+    online = health.status == "ok"
+    stmt = (
+        update(_locations)
+        .where(_locations.c.id == location_id)
+        .values(
+            status="online" if online else "offline",
+            status_reason=None if online else health.reason,
+        )
+        .returning(*_locations.c)
+    )
+    return (await s.execute(stmt)).mappings().one()
+
+
+async def _clear_default(s: AsyncSession, keep: UUID | None) -> None:
+    stmt = update(_locations).where(_locations.c.is_default, _locations.c.deleted_at.is_(None))
+    if keep is not None:
+        stmt = stmt.where(_locations.c.id != keep)
+    await s.execute(stmt.values(is_default=False))
+
+
 async def create_location(
     s: AsyncSession, body: LocationIn, *, net: NetPolicy, resolver: Resolver = system_resolver
 ) -> LocationOut:
-    raise NotImplementedError
+    """Save a location after checking it: the root's shape, the S3 endpoint against the
+    SSRF guard (422 `ssrf_blocked`, nothing saved), then its health and capabilities (a
+    share's filesystem type; whether the provider honours conditional puts). The first
+    location, or one saved with `is_default`, becomes the workspace default."""
+    location_id = uuid7()
+    taken = await s.scalar(
+        select(_locations.c.id).where(
+            func.lower(_locations.c.name) == body.name.lower(), _locations.c.deleted_at.is_(None)
+        )
+    )
+    if taken is not None:
+        raise ProblemError(409, "name_taken", "A location with that name exists.")
+    config: S3Config | None = None
+    if body.kind == "server_path":
+        root = _server_root(body.root)
+        fstype = _fstype(root)
+        caps = {"network_fs": fstype is not None and is_network_fs(fstype)}
+    else:
+        if body.s3 is None:
+            raise ProblemError(422, "invalid_location", "An S3 location needs its endpoint.")
+        bucket, prefix = _s3_root(body.root)
+        root = f"{bucket}/{prefix}" if prefix else bucket
+        config = S3Config(**body.s3.model_dump())
+        await _check_endpoint(config, net, resolver)
+        caps = {"conditional_put": False}
+    row: dict[str, Any] = {
+        "id": location_id,
+        "name": body.name,
+        "kind": body.kind,
+        "root": root,
+        "config_enc": None,
+        "is_default": False,
+        "capabilities": caps,
+    }
+    health, caps = await _first_check(row, config, caps, net=net, resolver=resolver)
+    if config is not None:
+        workspace_id = await s.scalar(text("SELECT app.current_workspace_id()"))
+        blob = json.dumps(dataclasses.asdict(config)).encode()
+        _, row["config_enc"] = await settings_store.seal_for_workspace(
+            s, workspace_id, blob, aad=_aad(location_id)
+        )
+    has_default = await s.scalar(
+        select(_locations.c.id).where(_locations.c.is_default, _locations.c.deleted_at.is_(None))
+    )
+    if body.is_default:
+        await _clear_default(s, None)
+    online = health.status == "ok"
+    row |= {
+        "capabilities": caps,
+        "is_default": body.is_default or has_default is None,
+        "status": "online" if online else "offline",
+        "status_reason": None if online else health.reason,
+    }
+    saved = (await s.execute(insert(_locations).values(**row).returning(*_locations.c))).mappings()
+    return await _location_out(s, saved.one())
+
+
+async def _check_endpoint(config: S3Config, net: NetPolicy, resolver: Resolver) -> None:
+    url = config.endpoint_url()
+    try:
+        host, port = endpoint_host_port(url)
+        await resolve_and_check(host, port, endpoint_policy(net, url), resolver)
+    except ValueError as exc:
+        raise ProblemError(422, "invalid_location", "The endpoint is not an http(s) URL.") from exc
+    except SsrfBlocked as exc:
+        raise _storage_problem(exc) from exc
+    except AdapterError as exc:
+        raise ProblemError(422, "invalid_location", "The endpoint does not resolve.") from exc
+
+
+async def _first_check(
+    row: Row,
+    config: S3Config | None,
+    caps: dict[str, bool],
+    *,
+    net: NetPolicy,
+    resolver: Resolver,
+) -> tuple[Health, dict[str, bool]]:
+    """Health, and for S3 the conditional-write probe, before the row exists."""
+    backend = _backend(row, config, net=net, resolver=resolver)
+    try:
+        health = await _health(backend)
+        if isinstance(backend, S3Storage) and health.status == "ok":
+            try:
+                probe = await backend.probe_conditional_writes()
+            except (StorageError, AdapterError):
+                pass  # unknown: the HEAD check covers writes until the next test
+            else:
+                caps = {**caps, "conditional_put": probe.conditional_put}
+    finally:
+        if isinstance(backend, S3Storage):
+            await backend.aclose()
+    return health, caps
 
 
 async def list_locations(s: AsyncSession) -> list[LocationOut]:
-    raise NotImplementedError
+    rows = (
+        (
+            await s.execute(
+                select(_locations)
+                .where(_locations.c.deleted_at.is_(None))
+                .order_by(func.lower(_locations.c.name), _locations.c.id)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    return [await _location_out(s, row) for row in rows]
 
 
 async def check_location(
     s: AsyncSession, location_id: UUID, *, net: NetPolicy, resolver: Resolver = system_resolver
 ) -> LocationOut:
-    raise NotImplementedError
+    """Test the connection now: the location's status follows its health, and a healthy
+    location drains its queued writes."""
+    row = await _location_row(s, location_id)
+    async with _opened(s, row, net=net, resolver=resolver) as backend:
+        health = await _health(backend)
+        row = await _set_status(s, location_id, health)
+        if health.status == "ok":
+            await _drain(s, location_id, backend)
+    return await _location_out(s, row)
+
+
+async def _drain(s: AsyncSession, location_id: UUID, backend: StorageBackend) -> None:
+    """Write the location's queued notes in insertion order, deleting each row once its
+    bytes are there. A precondition failure whose current content is the queued content
+    counts as landed (a crash between the write and the delete); any other is a conflict
+    left queued for the sync engine (P1-15). An outage stops the drain."""
+    queued = (
+        (
+            await s.execute(
+                select(_pending, _versions.c.body_md, _versions.c.content_hash)
+                .join(_versions, _versions.c.id == _pending.c.document_version_id)
+                .where(_pending.c.location_id == location_id, _pending.c.deleted_at.is_(None))
+                .order_by(_pending.c.created_at, _pending.c.id)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    for item in queued:
+        body = item["body_md"].encode()
+        try:
+            await backend.write(item["path"], _one_chunk(body), item["if_match"])
+        except PreconditionFailed as exc:
+            if exc.current is None or not etag_equal(exc.current.etag, item["content_hash"].hex()):
+                await _note_attempt(s, item["id"], "precondition_failed")
+                continue
+        except (StorageError, AdapterError) as exc:
+            await _note_attempt(s, item["id"], type(exc).__name__)
+            return
+        await s.execute(delete(_pending).where(_pending.c.id == item["id"]))
+
+
+async def _note_attempt(s: AsyncSession, pending_id: UUID, error: str) -> None:
+    await s.execute(
+        update(_pending)
+        .where(_pending.c.id == pending_id)
+        .values(attempts=_pending.c.attempts + 1, last_error=error)
+    )
+
+
+async def _one_chunk(data: bytes) -> AsyncIterator[bytes]:
+    yield data
 
 
 async def set_default_location(s: AsyncSession, location_id: UUID, version: int) -> LocationOut:
-    raise NotImplementedError
+    """Make the location the workspace default (versioned: StaleVersion on a stale row)."""
+    await _location_row(s, location_id)
+    await _clear_default(s, location_id)
+    row = await update_versioned(s, _locations, location_id, version, {"is_default": True})
+    return await _location_out(s, row)
+
+
+def _folder_out(row: Row) -> ProjectFolderOut:
+    return ProjectFolderOut.model_validate(dict(row))
 
 
 async def assign_project_folder(s: AsyncSession, project_id: UUID) -> ProjectFolderOut | None:
-    raise NotImplementedError
+    """The project's folder (`<project id>`) on the workspace default location, once: a
+    second call finds it and writes nothing. None while the workspace has no default."""
+    default = await s.scalar(
+        select(_locations.c.id).where(_locations.c.is_default, _locations.c.deleted_at.is_(None))
+    )
+    if default is None:
+        return None
+    await s.execute(
+        pg_insert(_folders)
+        .values(project_id=project_id, location_id=default, root_path=str(project_id))
+        .on_conflict_do_nothing(index_elements=[_folders.c.workspace_id, _folders.c.project_id])
+    )
+    return await get_project_folder(s, project_id)
+
+
+async def _folder_row(s: AsyncSession, project_id: UUID) -> RowMapping:
+    row = (
+        (
+            await s.execute(
+                select(_folders).where(
+                    _folders.c.project_id == project_id, _folders.c.deleted_at.is_(None)
+                )
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise NotFound("project_folders", project_id)
+    return row
 
 
 async def get_project_folder(s: AsyncSession, project_id: UUID) -> ProjectFolderOut:
-    raise NotImplementedError
+    return _folder_out(await _folder_row(s, project_id))
+
+
+def _require_online(row: Row) -> None:
+    if row["status"] != "online":
+        raise ProblemError(409, "location_offline", "The location is offline.")
 
 
 async def set_project_location(
@@ -285,7 +739,28 @@ async def set_project_location(
     net: NetPolicy,
     resolver: Resolver = system_resolver,
 ) -> ProjectFolderOut:
-    raise NotImplementedError
+    """Move the project's folder to another location while it holds no file (409
+    `folder_not_empty` once it does; moving files is P3-14). The old location must answer
+    (409 `location_offline`), so an unreachable folder is never assumed empty."""
+    target = await _location_row(s, location_id)
+    folder = await _folder_row(s, project_id)
+    if folder["location_id"] == target["id"]:
+        return _folder_out(folder)
+    old = await _location_row(s, folder["location_id"])
+    _require_online(old)
+    async with _opened(s, old, net=net, resolver=resolver) as backend:
+        if (await _health(backend)).status != "ok":
+            raise ProblemError(409, "location_offline", "The current location is offline.")
+        try:
+            page = await backend.list(folder["root_path"] + "/", None)
+        except (StorageError, AdapterError) as exc:
+            raise _storage_problem(exc) from exc
+    if page.items:
+        raise ProblemError(409, "folder_not_empty", "The project folder already holds files.")
+    row = await update_versioned(
+        s, _folders, folder["id"], folder["version"], {"location_id": target["id"]}
+    )
+    return _folder_out(row)
 
 
 async def write_project_file(
@@ -298,7 +773,22 @@ async def write_project_file(
     net: NetPolicy,
     resolver: Resolver = system_resolver,
 ) -> FileStat:
-    raise NotImplementedError
+    """Write a file into the project's folder; 409 `location_offline` while the location
+    is offline, whether marked so or found so now, and nothing reaches it."""
+    folder = await _folder_row(s, project_id)
+    location = await _location_row(s, folder["location_id"])
+    _require_online(location)
+    try:
+        rel = f"{folder['root_path']}/{safe_rel_path(path)}"
+    except PathRejected as exc:
+        raise _storage_problem(exc) from exc
+    async with _opened(s, location, net=net, resolver=resolver) as backend:
+        if (await _health(backend)).status != "ok":
+            raise ProblemError(409, "location_offline", "The location is offline.")
+        try:
+            return await backend.write(rel, data, if_match)
+        except (StorageError, AdapterError) as exc:
+            raise _storage_problem(exc) from exc
 
 
 async def save_note(
@@ -309,4 +799,66 @@ async def save_note(
     net: NetPolicy,
     resolver: Resolver = system_resolver,
 ) -> NoteWrite:
-    raise NotImplementedError
+    """Snapshot a text document into `document_versions` and write it to
+    `<folder>/notes/<document id>.md`. While the location is offline the write queues in
+    `pending_writes` (the text is safe in Postgres) and lands on the next healthy check."""
+    doc = (
+        (
+            await s.execute(
+                select(_documents.c.project_id, _documents.c.body_md).where(
+                    _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+                )
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if doc is None or doc["project_id"] is None:
+        raise NotFound("documents", document_id)
+    folder = await _folder_row(s, doc["project_id"])
+    location = await _location_row(s, folder["location_id"])
+    body = (doc["body_md"] or "").encode()
+    digest = hashlib.sha256(body)
+    last = await s.scalar(
+        select(func.max(_versions.c.version_no)).where(_versions.c.document_id == document_id)
+    )
+    version_id = await s.scalar(
+        insert(_versions)
+        .values(
+            document_id=document_id,
+            version_no=(last or 0) + 1,
+            content_hash=digest.digest(),
+            body_md=doc["body_md"] or "",
+            size=len(body),
+        )
+        .returning(_versions.c.id)
+    )
+    path = f"{folder['root_path']}/notes/{document_id}.md"
+    written = NoteWrite(status="written", location_id=location["id"], path=path)
+    queued = NoteWrite(status="queued", location_id=location["id"], path=path)
+    online = location["status"] == "online"
+    async with _opened(s, location, net=net, resolver=resolver) as backend:
+        if online:
+            health = await _health(backend)
+            if health.status != "ok":
+                await _set_status(s, location["id"], health)
+                online = False
+        if online:
+            try:
+                await backend.write(path, _one_chunk(body), if_match)
+            except PreconditionFailed as exc:
+                if exc.current is None or not etag_equal(exc.current.etag, digest.hexdigest()):
+                    raise _storage_problem(exc) from exc
+            except (LocationOffline, AdapterUnavailable) as exc:
+                await _set_status(s, location["id"], Health.degraded(type(exc).__name__))
+                online = False
+            except (StorageError, AdapterError) as exc:
+                raise _storage_problem(exc) from exc
+    if online:
+        return written
+    await s.execute(
+        insert(_pending).values(
+            location_id=location["id"], path=path, document_version_id=version_id, if_match=if_match
+        )
+    )
+    return queued

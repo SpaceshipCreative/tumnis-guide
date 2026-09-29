@@ -112,7 +112,6 @@ def _lan_endpoint(minio: S3Endpoint) -> str:
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 async def test_missing_marker_takes_location_offline_and_queues_writes(
     db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, tmp_location: Path
 ) -> None:
@@ -165,7 +164,6 @@ async def test_missing_marker_takes_location_offline_and_queues_writes(
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 async def test_upload_to_offline_location_refused(
     db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, tmp_location: Path
 ) -> None:
@@ -207,7 +205,6 @@ async def test_upload_to_offline_location_refused(
 
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 async def test_default_and_project_override(
     db: DbUrls,
     dbos: type[DBOS],
@@ -266,7 +263,6 @@ async def test_default_and_project_override(
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 async def test_s3_endpoint_passes_ssrf_guard(
     db: DbUrls, knowledge_ws: WorkspaceHandle, minio: S3Endpoint
 ) -> None:
@@ -322,7 +318,6 @@ async def test_s3_endpoint_passes_ssrf_guard(
 
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 async def test_location_credentials_encrypted(
     db: DbUrls, knowledge_ws: WorkspaceHandle, minio: S3Endpoint
 ) -> None:
