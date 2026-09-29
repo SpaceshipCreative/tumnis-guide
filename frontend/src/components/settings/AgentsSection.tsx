@@ -237,6 +237,10 @@ export function AgentsSection() {
     onError: (error) => {
       setMessage(problemText(error));
     },
+    onSettled: () => {
+      // the result lands on the profile later; a fallback for the live socket
+      invalidate(queryClient, "agentsListProfiles");
+    },
   });
 
   const runnerItems = runners.data?.items ?? [];
