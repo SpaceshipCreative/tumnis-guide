@@ -12,8 +12,10 @@ The roles and the per-database setup come from the same files compose runs on fi
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import psycopg
 from alembic import command
@@ -76,9 +78,23 @@ def roles_sql(passwords: dict[str, str]) -> list[str]:
 
 def bootstrap_roles(superuser_dsn: str) -> None:
     """Run 01-roles.sh's SQL with the test passwords (the same file compose runs)."""
-    with psycopg.connect(superuser_dsn, autocommit=True) as conn:
+    with _first_connect(superuser_dsn) as conn:
         for statement in roles_sql(PASSWORDS):
             conn.execute(statement.encode())
+
+
+def _first_connect(dsn: str, timeout_s: float = 30) -> psycopg.Connection[Any]:
+    """The first connection to a new container, retried: testcontainers waits for psql
+    inside the container, but Docker Desktop's published port can still close the first
+    host connections ("server closed the connection unexpectedly") for a moment after."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            return psycopg.connect(dsn, autocommit=True)
+        except psycopg.OperationalError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.2)
 
 
 def prepare_database(base: DbUrls, name: str) -> None:
