@@ -22,7 +22,6 @@ def _vectors() -> list[dict[str, Any]]:
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 @pytest.mark.parametrize("row", _vectors(), ids=lambda row: f"{row['a']}-{row['b']}")
 def test_vectors(row: dict[str, Any]) -> None:
     """T-P0-17-05
@@ -60,7 +59,6 @@ steps = st.lists(st.tuples(st.integers(min_value=0, max_value=10_000), st.boolea
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 @given(built=steps, pick=st.integers(min_value=0, max_value=10_000))
 def test_between_is_strictly_between(built: list[tuple[int, bool]], pick: int) -> None:
     """T-P0-17-06
@@ -85,7 +83,6 @@ def test_between_is_strictly_between(built: list[tuple[int, bool]], pick: int) -
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 @settings(max_examples=25, deadline=None)
 @given(seed=st.integers(min_value=0, max_value=2**32))
 def test_1000_random_moves_stay_ordered(seed: int) -> None:
