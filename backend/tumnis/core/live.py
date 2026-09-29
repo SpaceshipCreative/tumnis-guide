@@ -26,7 +26,7 @@ from uuid import UUID
 
 import anyio
 import psycopg
-from fastapi import APIRouter, WebSocket
+from fastapi import WebSocket
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, UOWTransaction
@@ -192,13 +192,10 @@ def origin_allowed(origin: str | None, host: str | None, public_base_url: str | 
     return bool(host) and urlsplit(given).netloc == (host or "").lower()
 
 
-router = APIRouter()
-
-
-@router.websocket("/ws")
 async def live_socket(websocket: WebSocket) -> None:
-    """1. Origin must be this app, 2. a session (or key) must be signed in, else 1008;
-    3. accept, then forward `{entity, id}` for this workspace only, with a ping every 25 s."""
+    """`WS /ws` (mounted by create_app). 1. Origin must be this app, 2. a session (or
+    key) must be signed in, else 1008; 3. accept, then forward `{entity, id}` for this
+    workspace only, with a ping every 25 s."""
     settings = getattr(websocket.app.state, "settings", None)
     public_base_url = getattr(settings, "public_base_url", None)
     if not origin_allowed(

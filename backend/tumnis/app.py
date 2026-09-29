@@ -225,7 +225,9 @@ def create_app(
     app.include_router(metrics.router)  # GET /metrics, bearer (P0-27)
     app.include_router(v1_routes(settings, extra_routers))
     app.state.live_hub = live.LiveHub(settings.database_direct_url)
-    app.include_router(live.router)  # WS /ws (P0-22)
+    # WS /ws (P0-22). Added on the app itself: FastAPI's walker loses the path of a
+    # WebSocket route inside an included router, and the route sweeps read it.
+    app.add_api_websocket_route("/ws", live.live_socket, name="live_socket")
     shell = shell_dir or SHELL_DIR
     if shell.is_dir():
         app.mount("/", ShellFiles(directory=shell, html=True), name="shell")
