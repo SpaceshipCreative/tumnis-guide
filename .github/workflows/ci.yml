@@ -178,7 +178,14 @@ jobs:
           npx playwright test
       - name: Stack logs on failure
         if: failure() && hashFiles('deploy/compose.test.yaml') != ''
-        run: docker compose -f deploy/compose.test.yaml logs --no-color --tail=200
+        run: |
+          docker compose -f deploy/compose.test.yaml logs --no-color --tail=200
+          # The tail above often starts after the failing request; the errors of the whole
+          # run, from the api and Postgres, say why it failed.
+          echo "::group::api and postgres errors over the whole run"
+          docker compose -f deploy/compose.test.yaml logs --no-color api postgres \
+            | grep -E 'ERROR|FATAL|Traceback|deadlock|" 5[0-9][0-9]' | grep -v 'violates foreign key' | tail -n 300 || true
+          echo "::endgroup::"
 
   # Skills and Performance need the homelab self-hosted runner (P1-05, P0-29). Until the
   # repo variable HOMELAB_RUNNER is "true" they run as stubs on a GitHub-hosted runner, so
