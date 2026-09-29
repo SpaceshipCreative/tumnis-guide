@@ -14,6 +14,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from fastapi import Request  # runtime: the probe route's annotation resolves here
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator, Sequence
@@ -132,8 +133,6 @@ async def swept_app(  # noqa: PLR0917
 
 def _probe_router(max_body_bytes: int) -> APIRouter:
     """POST /v1/probe (small body limit) and GET /v1/probe/boom (always raises)."""
-    from fastapi import Request  # noqa: PLC0415
-
     from tumnis.core.routing import RoutePolicy, route_policy, v1_router  # noqa: PLC0415
 
     router = v1_router("probe", prefix="/probe")
@@ -199,7 +198,6 @@ def test_sweep_covers_ops_v1_and_static_routes() -> None:
 
 @pytest.mark.req("SEC-4")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 @pytest.mark.parametrize(("method", "path"), ROUTE_CASES, ids=list(_ids(ROUTE_CASES)))
 async def test_every_route_sends_security_headers(
     swept_app: FastAPI, method: str, path: str
@@ -219,7 +217,6 @@ async def test_every_route_sends_security_headers(
 
 @pytest.mark.req("SEC-4")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 async def test_error_responses_send_security_headers(error_app: FastAPI) -> None:
     """T-P0-16-02
     A 404 on an unknown path, a 405, a 413 and a forced 500 (an unhandled exception, answered

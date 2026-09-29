@@ -26,6 +26,7 @@ from tumnis.core import (
     metrics,
     modules,
     ops_status,
+    security_headers,
     telemetry,
     testing_routes,
 )
@@ -142,11 +143,14 @@ def create_app(
     )
     install_problem_handlers(app)
     telemetry.instrument_app(app)  # a SERVER span per request (P0-27)
+    # Security headers wrap the whole stack, server errors included (P0-16, SEC-4); after
+    # the instrumentation, which wraps the stack too, so the headers stay outermost.
+    security_headers.install(app)
     # Middleware, innermost first (add_middleware wraps what is there): correlation ID,
     # source address and user agent for the audit log (P0-15); the body limit outside it
     # (P0-10); outermost the request histogram, timing everything below it (P0-27).
-    # Authentication (P0-13) goes inside the correlation ID and security headers (P0-16)
-    # outside the body limit. Rate limits and CSRF run in TumnisRoute, where the route's
+    # Authentication (P0-13) goes inside the correlation ID; the security headers (P0-16)
+    # sit outside all of it (installed above). Rate limits and CSRF run in TumnisRoute, where the route's
     # policy is known.
     app.add_middleware(RequestMetaMiddleware)
     app.add_middleware(BodyLimitMiddleware)
