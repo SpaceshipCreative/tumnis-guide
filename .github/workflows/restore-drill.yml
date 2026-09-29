@@ -31,6 +31,10 @@ permissions:
 env:
   UV_FROZEN: "1"
   DRILL_MODE: ${{ inputs.mode || 'prod' }}
+  # --mode prod reads from the running production containers (P0-28); repository variables
+  # set on the homelab runner's repo. The secrets stay in /etc/pgbackrest/conf.d on the host.
+  DRILL_SOURCE_PG: ${{ vars.DRILL_SOURCE_PG }}
+  DRILL_SOURCE_APP: ${{ vars.DRILL_SOURCE_APP }}
 
 jobs:
   drill:
@@ -40,10 +44,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start time (the drill's audit row is read from here on)
         run: echo "DRILL_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - name: B2 backup key cannot delete a version (T-P0-28-03)
+        run: scripts/drill/b2_no_delete_check.sh
       - name: Restore drill
         run: scripts/drill/restore_drill.sh --mode "$DRILL_MODE"
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        if: env.DRILL_MODE == 'prod'
+      # A rehearsal destroys its own source, so only a prod drill leaves a row to re-check.
       - name: Thresholds from the recorded drill (pytest -m drill)
+        if: env.DRILL_MODE == 'prod'
         working-directory: backend
         env:
           # The source database the drill recorded to (runner-local secret, P0-28).
