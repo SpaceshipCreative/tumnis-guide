@@ -200,7 +200,6 @@ async def test_two_accounts_merge(
 
 @pytest.mark.req("FR-14.4")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="spec:P1-09")
 async def test_killed_mid_page_resumes_from_cursor(  # noqa: PLR0917
     app_db: DbUrls,
     workspace: WorkspaceHandle,
