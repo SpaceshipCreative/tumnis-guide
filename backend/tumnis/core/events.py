@@ -3,12 +3,14 @@ workflow (P0-07, ADR-0011, ADR-0002)."""
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, ClassVar, Literal, TypeVar
 from uuid import UUID
 
+import psycopg
 from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
 from dbos._error import DBOSQueueDeduplicatedError  # dbos 3.1.0: not re-exported
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -17,6 +19,8 @@ from sqlalchemy import text
 from tumnis.core import db, faults, tenancy
 from tumnis.core.schemas import VersionedPayload
 from tumnis.core.types import SYSTEM_ACTOR
+
+log = logging.getLogger(__name__)
 
 EVENTS_QUEUE = "events"
 EVENTS_WORKER_CONCURRENCY = 8  # A9
@@ -229,7 +233,28 @@ async def relay_once(limit: int = RELAY_BATCH) -> int:
 
 
 async def relay_forever(stop: asyncio.Event, poll_s: float = POLL_SECONDS) -> None:
-    raise NotImplementedError("P0-07")
+    """LISTEN outbox on its own direct connection; relay whenever a NOTIFY arrives, and at
+    least every `poll_s` seconds as a backstop (a row committed without NOTIFY, or a
+    notification lost while reconnecting). A backlog drains in batches before it sleeps.
+    Errors are logged and retried after `poll_s`; cancel the task to stop it at once."""
+    while not stop.is_set():
+        try:
+            await _listen_and_relay(stop, poll_s)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # the supervisor loop: log, back off, reconnect
+            log.exception("outbox relay failed; retrying in %s s", poll_s)
+            await asyncio.sleep(poll_s)
+
+
+async def _listen_and_relay(stop: asyncio.Event, poll_s: float) -> None:
+    async with await psycopg.AsyncConnection.connect(db.direct_dsn(), autocommit=True) as conn:
+        await conn.execute("LISTEN outbox")
+        while not stop.is_set():
+            while await relay_once() == RELAY_BATCH:
+                pass  # drain a backlog before sleeping
+            async for _ in conn.notifies(timeout=poll_s, stop_after=1):
+                pass  # wake on NOTIFY or after poll_s
 
 
 # --- Delivery: one workflow per (event, subscriber) -------------------------------------

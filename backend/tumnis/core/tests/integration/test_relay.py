@@ -203,7 +203,6 @@ async def _stop_relay(stop: asyncio.Event, task: asyncio.Task[None]) -> None:
 
 @pytest.mark.req("ADR-0011")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 async def test_notify_wakes_relay_before_poll(
     db: DbUrls, dbos: type[DBOS], workspace: WorkspaceHandle
 ) -> None:
@@ -224,7 +223,6 @@ async def test_notify_wakes_relay_before_poll(
 
 @pytest.mark.req("ADR-0011")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 async def test_poll_backstop_delivers_without_notify(
     db: DbUrls, dbos: type[DBOS], workspace: WorkspaceHandle
 ) -> None:
