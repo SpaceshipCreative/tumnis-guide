@@ -45,7 +45,6 @@ def _no_ci_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.req("Quality rule 2")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_fails_when_bug_test_passes_on_base(tmp_path: Path) -> None:
     """T-P0-03-10
     A new test_issue_42_* that already passes on the base commit makes red-proof exit 1.
@@ -64,7 +63,6 @@ def test_fails_when_bug_test_passes_on_base(tmp_path: Path) -> None:
 
 @pytest.mark.req("Quality rule 2")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_passes_when_bug_test_fails_on_base(tmp_path: Path) -> None:
     """T-P0-03-11
     The same test failing on the base commit (the bug is there) exits 0.
@@ -83,7 +81,6 @@ def test_passes_when_bug_test_fails_on_base(tmp_path: Path) -> None:
 
 @pytest.mark.req("Quality rule 2")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_requires_issue_named_test(tmp_path: Path) -> None:
     """T-P0-03-12
     A bug PR with no new test, or with no test_issue_<n>_ name for its issue, exits 1.
