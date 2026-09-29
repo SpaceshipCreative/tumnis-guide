@@ -1,6 +1,7 @@
-"""Composition root: imports every module's adapters and api so they register, and
-registers each module's optional `api.health()` as a non-critical readiness check (later:
-routers, subscribers). Driven by the module registry, so a new module is wired automatically."""
+"""Composition root: imports every module's adapters, api and events so they register
+(adapters, seed writers, event payload types and subscribers), and registers each module's
+optional `api.health()` as a non-critical readiness check (later: routers). Driven by the
+module registry, so a new module is wired automatically."""
 
 import importlib
 from typing import Protocol
@@ -26,6 +27,13 @@ def load_apis() -> None:
     """Import every module's api, so seed writers (and later subscribers) register."""
     for module in MODULES:
         importlib.import_module(f"tumnis.modules.{module}.api")
+
+
+def load_events() -> None:
+    """Import every module's events, so its payload types and subscribers register (the
+    worker's relay enqueues a delivery per registered subscriber)."""
+    for module in MODULES:
+        importlib.import_module(f"tumnis.modules.{module}.events")
 
 
 def register_module_health() -> None:
@@ -56,3 +64,4 @@ def _adapter_check(name: str) -> HealthCheck:
 
 load_adapters()
 load_apis()
+load_events()
