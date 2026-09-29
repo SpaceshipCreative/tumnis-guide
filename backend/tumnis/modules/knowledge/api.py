@@ -653,7 +653,9 @@ async def _drain(s: AsyncSession, location_id: UUID, backend: StorageBackend) ->
     """Write the location's queued notes in insertion order, deleting each row once its
     bytes are there. A precondition failure whose current content is the queued content
     counts as landed (a crash between the write and the delete); any other is a conflict
-    left queued for the sync engine (P1-15). An outage stops the drain."""
+    left queued for the sync engine (P1-15). Rows for one path chain: each after the first
+    takes the etag the previous one left, since they were queued against the same file.
+    An outage stops the drain."""
     queued = (
         (
             await s.execute(
@@ -666,17 +668,22 @@ async def _drain(s: AsyncSession, location_id: UUID, backend: StorageBackend) ->
         .mappings()
         .all()
     )
+    landed: dict[str, str] = {}  # path -> etag an earlier row of this drain left there
     for item in queued:
-        body = item["body_md"].encode()
+        body, path = item["body_md"].encode(), item["path"]
         try:
-            await backend.write(item["path"], _one_chunk(body), item["if_match"])
+            written = await backend.write(
+                path, _one_chunk(body), landed.get(path, item["if_match"])
+            )
         except PreconditionFailed as exc:
-            if not await _holds(backend, item["path"], body, exc.current):
+            if exc.current is None or not await _holds(backend, path, body, exc.current):
                 await _note_attempt(s, item["id"], "precondition_failed")
                 continue
+            written = exc.current
         except (StorageError, AdapterError) as exc:
             await _note_attempt(s, item["id"], type(exc).__name__)
             return
+        landed[path] = written.etag
         await s.execute(delete(_pending).where(_pending.c.id == item["id"]))
 
 

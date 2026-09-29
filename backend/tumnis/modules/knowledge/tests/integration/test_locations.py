@@ -503,7 +503,6 @@ async def test_pr52_s3_write_already_landed_counts_as_written(
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 drain chain")
 async def test_pr52_two_offline_saves_of_one_note_both_drain_and_the_newest_lands(
     db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, tmp_location: Path
 ) -> None:
