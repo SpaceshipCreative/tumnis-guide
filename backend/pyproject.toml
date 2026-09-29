@@ -1,0 +1,38 @@
+[project]
+name = "tumnis"
+version = "0.1.0"
+description = "Tumnis Guide backend: modular monolith (ADR-0001)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "pydantic==2.13.5",
+  "typer==0.27.2",
+]
+
+[project.scripts]
+tumnis = "tumnis.cli:app"
+
+[dependency-groups]
+dev = [
+  "import-linter==2.15",
+  "mypy==2.3.1",
+  "pytest==9.1.1",
+  "ruff==0.16.9",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "tumnis"
+module-root = ""
+
+# Minimal test config so the P0-01 meta-tests run; P0-02 owns the full harness.
+[tool.pytest.ini_options]
+testpaths = ["tests", "tumnis"]
+addopts = "--strict-markers"
+xfail_strict = true
+markers = [
+  "req(*ids): PRD requirement IDs this test proves",
+  "wp(id): work package that introduced the test",
+]
