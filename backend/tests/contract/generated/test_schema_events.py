@@ -19,6 +19,12 @@ CASES = [
     ),
     (
         "events",
+        "human.decided",
+        1,
+        "backend/tests/contract/fixtures/events/human.decided/v1.json",
+    ),
+    (
+        "events",
         "key.created",
         1,
         "backend/tests/contract/fixtures/events/key.created/v1.json",
@@ -52,6 +58,24 @@ CASES = [
         "project.updated",
         1,
         "backend/tests/contract/fixtures/events/project.updated/v1.json",
+    ),
+    (
+        "events",
+        "task.created",
+        1,
+        "backend/tests/contract/fixtures/events/task.created/v1.json",
+    ),
+    (
+        "events",
+        "task.status_changed",
+        1,
+        "backend/tests/contract/fixtures/events/task.status_changed/v1.json",
+    ),
+    (
+        "events",
+        "task.updated",
+        1,
+        "backend/tests/contract/fixtures/events/task.updated/v1.json",
     ),
     (
         "events",

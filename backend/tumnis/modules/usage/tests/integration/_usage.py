@@ -2,10 +2,11 @@
 locks the test bodies, and this module is where later work packages plug in their shapes.
 
 - `configured(db)`: tumnis.core.db pointed at the per-test database (no pooling).
-- `create_task(ctx, occurred_at)`: one task creation, which emits one `task.created`.
-  Until P0-18's `tasks.api` exists it writes that event's outbox row (and the NOTIFY)
-  itself, in the workspace's transaction, as `emit` would; P0-18 swaps the body for a
-  real `tasks.api` call and the tests keep calling it. Returns the event id.
+- `create_task(ctx, occurred_at)`: one task created through `tasks.api.create_task`
+  (P0-18), which emits one `task.created`; returns that event's id. Its project is
+  inserted directly, so the outbox holds no `project.created` beside it (the tests relay
+  exactly one row). The one import of another module in usage (tests only; the
+  import-linter contract ignores it).
 - `outbox_envelope(db, event_id)`: the envelope the relay built from that outbox row.
 - `counter_value(db, workspace_id, day, counter)`: `usage_counters.value`, read as the
   owner (None when there is no row).
@@ -45,33 +46,27 @@ async def configured(db: DbUrls) -> AsyncIterator[None]:
 
 async def create_task(ctx: WorkspaceContext, occurred_at: datetime) -> uuid.UUID:
     """One task created in ctx's workspace; returns its `task.created` event id."""
-    from sqlalchemy import insert  # noqa: PLC0415
+    from sqlalchemy import select, text  # noqa: PLC0415
 
-    from tumnis.core.outbox import NOTIFY, outbox_table  # noqa: PLC0415
+    from tumnis.core.outbox import outbox_table  # noqa: PLC0415
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.tasks import api as tasks  # noqa: PLC0415
 
-    event_id = uuid.uuid4()
-    payload = {
-        "task_id": str(uuid.uuid4()),
-        "project_id": str(uuid.uuid4()),
-        "label": None,
-        "source": "user",
-        "tainted": False,
-        "schema_version": 1,
-    }
     async with tenant_session(ctx) as session:
-        await session.execute(
-            insert(outbox_table).values(
-                workspace_id=ctx.workspace_id,
-                event_id=event_id,
-                name="task.created",
-                schema_version=1,
-                occurred_at=occurred_at,
-                payload=payload,
-                trace_context={},
+        project_id = await session.scalar(
+            text("INSERT INTO projects (name, sort_key) VALUES (:name, 'a0') RETURNING id"),
+            {"name": f"Usage project {uuid.uuid4().hex[:8]}"},
+        )
+        data = tasks.TaskCreate(project_id=project_id, title="Counted task")
+        task = await tasks.create_task(session, ctx.actor, data, now=occurred_at)
+        event_id: uuid.UUID | None = await session.scalar(
+            select(outbox_table.c.event_id).where(
+                outbox_table.c.name == "task.created",
+                outbox_table.c.payload["task_id"].astext == str(task.id),
             )
         )
-        await session.execute(NOTIFY)
+    if event_id is None:
+        raise LookupError(f"no task.created outbox row for task {task.id}")
     return event_id
 
 

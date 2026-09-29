@@ -16,9 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core.canonical import CanonicalRecord, UpsertStats, upsert_records
 from tumnis.core.schemas import versioned
-from tumnis.core.tenancy import WorkspaceContext, session_for
+from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
+from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.calendar.models import Event
 from tumnis.modules.integrations import api as integrations
+from tumnis.seed import EventSeed, register_seed_writer
 
 _events: Table = Event.__table__  # type: ignore[assignment]
 
@@ -72,3 +74,38 @@ async def _event_taint(session: AsyncSession, event_id: UUID) -> bool | None:
 
 
 integrations.register_target_taint("event", _event_taint)
+
+
+# --- Seed writer (P0-02's seed sets) ----------------------------------------------------------
+
+SEED_PROVIDER = "seed"
+
+
+async def seed_event(workspace_id: UUID, rec: EventSeed) -> UUID:
+    """A seed event as the system actor, on the workspace's seed calendar connection
+    (created on first use); the seed key is its external id, so a reload updates it."""
+    record = EventRecord(
+        external_id=rec.key,
+        fetched_at=rec.fetched_at or rec.start_at,
+        title=rec.title,
+        start_at=rec.start_at,
+        end_at=rec.end_at,
+        busy=rec.busy,
+    )
+    ctx = WorkspaceContext(workspace_id, SYSTEM_ACTOR)
+    async with tenant_session(ctx) as s:
+        connection_id = await integrations.seed_connection(
+            s, "calendar", SEED_PROVIDER, SEED_PROVIDER
+        )
+        await upsert_events(ctx, connection_id, [record], session=s)
+        event_id: UUID = (
+            await s.execute(
+                select(_events.c.id).where(
+                    _events.c.connection_id == connection_id, _events.c.external_id == rec.key
+                )
+            )
+        ).scalar_one()
+    return event_id
+
+
+register_seed_writer("event", seed_event)

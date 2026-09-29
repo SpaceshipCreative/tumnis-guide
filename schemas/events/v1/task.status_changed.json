@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "Status": {
+      "enum": [
+        "backlog",
+        "today",
+        "in_progress",
+        "waiting_on_human",
+        "in_review",
+        "done"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/events/v1/task.status_changed.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "title": "Actor",
+      "type": "string"
+    },
+    "from": {
+      "$ref": "#/$defs/Status"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task_id": {
+      "format": "uuid",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "to": {
+      "$ref": "#/$defs/Status"
+    }
+  },
+  "required": [
+    "schema_version",
+    "task_id",
+    "from",
+    "to",
+    "actor"
+  ],
+  "title": "TaskStatusChangedV1",
+  "type": "object"
+}
