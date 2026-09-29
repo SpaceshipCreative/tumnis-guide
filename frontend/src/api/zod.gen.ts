@@ -74,6 +74,22 @@ export const zDeadLetterOut = z.object({
 });
 
 /**
+ * DocumentDTO
+ */
+export const zDocumentDto = z.object({
+  body_md: z.string().nullable(),
+  id: z.uuid(),
+  kind: z.string(),
+  pinned: z.boolean(),
+  project_id: z.uuid().nullable(),
+  role: z.string().nullable(),
+  tainted: z.boolean(),
+  title: z.string(),
+  trust: z.enum(["trusted", "untrusted"]),
+  version: z.int(),
+});
+
+/**
  * Health
  */
 export const zHealth = z.enum(["blocked", "at_risk", "on_track"]);
@@ -604,6 +620,14 @@ export const zTaskPatch = z.object({
 });
 
 /**
+ * TextDocumentPatch
+ */
+export const zTextDocumentPatch = z.object({
+  body_md: z.string().max(100000),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
  * TotpEnrolConfirmIn
  */
 export const zTotpEnrolConfirmIn = z.object({
@@ -860,6 +884,17 @@ export const zAuthRotateKeyPath = z.object({
  */
 export const zAuthRotateKeyResponse = zKeyCreated;
 
+export const zKnowledgeUpdateDocumentBody = zTextDocumentPatch;
+
+export const zKnowledgeUpdateDocumentPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeUpdateDocumentResponse = zDocumentDto;
+
 export const zProjectsListProjectsQuery = z.object({
   include_archived: z.boolean().optional().default(false),
   cursor: z.string().max(2048).nullish(),
@@ -918,6 +953,15 @@ export const zTasksGetBoardPath = z.object({
  * Successful Response
  */
 export const zTasksGetBoardResponse = zBoardOut;
+
+export const zKnowledgeGetBriefPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeGetBriefResponse = zDocumentDto;
 
 export const zTasksGetColumnsPath = z.object({
   project_id: z.uuid(),

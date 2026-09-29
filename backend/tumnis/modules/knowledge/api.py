@@ -19,10 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import tenancy
 from tumnis.core.canonical import CanonicalRecord, UpsertStats, upsert_records
+from tumnis.core.errors import ProblemError
+from tumnis.core.live import mark_changed
+from tumnis.core.routing import register_project_lookup
 from tumnis.core.schemas import versioned
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
-from tumnis.core.versioning import NotFound
+from tumnis.core.versioning import NotFound, StaleVersion, update_versioned
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.knowledge.models import Document
 from tumnis.seed import DocumentSeed, register_seed_writer
@@ -196,3 +199,45 @@ async def seed_document(workspace_id: UUID, project_id: UUID | None, rec: Docume
 
 
 register_seed_writer("document", seed_document)
+
+
+# --- Text documents edited in the app (P0-24: the project page's Brief rail) --------------
+
+
+async def project_of(ctx: WorkspaceContext, document_id: UUID) -> UUID | None:
+    """The document's project in `ctx`'s workspace (the `lookup:knowledge` routes, R-28)."""
+    async with tenant_session(ctx) as s:
+        found: UUID | None = await s.scalar(
+            select(_documents.c.project_id).where(
+                _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+            )
+        )
+    return found
+
+
+register_project_lookup("knowledge", project_of)
+
+
+async def update_text_document(
+    s: AsyncSession, document_id: UUID, *, body_md: str, version: int
+) -> DocumentDTO:
+    """Replace a text entry's Markdown body (versioned). Synced files and uploads are not
+    edited here: anything but `kind == "text"` is 409 `not_text`."""
+    kind = await s.scalar(
+        select(_documents.c.kind).where(
+            _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+        )
+    )
+    if kind is None:
+        raise NotFound("documents", document_id)
+    if kind != "text":
+        raise ProblemError(409, "not_text", "Only text entries can be edited here")
+    values = {"body_md": body_md, "content_hash": hashlib.sha256(body_md.encode()).digest()}
+    try:
+        row = await update_versioned(s, _documents, document_id, version, values)
+    except StaleVersion as exc:
+        current = DocumentDTO.model_validate(dict(exc.current)).model_dump(mode="json")
+        raise StaleVersion(current=current) from None
+    if row["project_id"] is not None:
+        mark_changed(s, "project", row["project_id"])
+    return DocumentDTO.model_validate(dict(row))

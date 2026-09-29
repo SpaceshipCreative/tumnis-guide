@@ -13,13 +13,19 @@ export const LIVE_MAP: Record<
   // columns, a subtask onto its parent's checklist). searchSearch and
   // searchTypeaheadTasks join the lists with P0-20.
   task: {
-    details: ["tasksGetTask"],
+    details: ["tasksGetTask", "tasksListComments"],
     lists: ["tasksListTasks", "tasksGetBoard"],
   },
   // A project's board and columns carry its id in their path: column edits and a new card
-  // threshold (FR-3.8) refresh them. searchTypeaheadProjects joins the lists with P0-20.
+  // threshold (FR-3.8) refresh them, a saved brief its Brief rail section (P0-24).
+  // searchTypeaheadProjects joins the lists with P0-20.
   project: {
-    details: ["projectsGetProject", "tasksGetBoard", "tasksGetColumns"],
+    details: [
+      "projectsGetProject",
+      "tasksGetBoard",
+      "tasksGetColumns",
+      "knowledgeGetBrief",
+    ],
     lists: ["projectsListProjects"],
   },
   // The review badge (P0-18); the review queue joins with P1-13.

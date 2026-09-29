@@ -293,6 +293,52 @@ export type DeadLetterOut = {
 };
 
 /**
+ * DocumentDTO
+ */
+export type DocumentDto = {
+  /**
+   * Body Md
+   */
+  body_md: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Kind
+   */
+  kind: string;
+  /**
+   * Pinned
+   */
+  pinned: boolean;
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Role
+   */
+  role: string | null;
+  /**
+   * Tainted
+   */
+  tainted: boolean;
+  /**
+   * Title
+   */
+  title: string;
+  /**
+   * Trust
+   */
+  trust: "trusted" | "untrusted";
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
  * Health
  */
 export type Health = "blocked" | "at_risk" | "on_track";
@@ -1311,6 +1357,20 @@ export type TaskPatch = {
    * Title
    */
   title?: string | null;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * TextDocumentPatch
+ */
+export type TextDocumentPatch = {
+  /**
+   * Body Md
+   */
+  body_md: string;
   /**
    * Version
    */
@@ -2585,6 +2645,66 @@ export type AuthRotateKeyResponses = {
 export type AuthRotateKeyResponse =
   AuthRotateKeyResponses[keyof AuthRotateKeyResponses];
 
+export type KnowledgeUpdateDocumentData = {
+  body: TextDocumentPatch;
+  path: {
+    /**
+     * Document Id
+     */
+    document_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/documents/{document_id}";
+};
+
+export type KnowledgeUpdateDocumentErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeUpdateDocumentError =
+  KnowledgeUpdateDocumentErrors[keyof KnowledgeUpdateDocumentErrors];
+
+export type KnowledgeUpdateDocumentResponses = {
+  /**
+   * Successful Response
+   */
+  200: DocumentDto;
+};
+
+export type KnowledgeUpdateDocumentResponse =
+  KnowledgeUpdateDocumentResponses[keyof KnowledgeUpdateDocumentResponses];
+
 export type ProjectsListProjectsData = {
   body?: never;
   path?: never;
@@ -2946,6 +3066,66 @@ export type TasksGetBoardResponses = {
 
 export type TasksGetBoardResponse =
   TasksGetBoardResponses[keyof TasksGetBoardResponses];
+
+export type KnowledgeGetBriefData = {
+  body?: never;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/brief";
+};
+
+export type KnowledgeGetBriefErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeGetBriefError =
+  KnowledgeGetBriefErrors[keyof KnowledgeGetBriefErrors];
+
+export type KnowledgeGetBriefResponses = {
+  /**
+   * Successful Response
+   */
+  200: DocumentDto;
+};
+
+export type KnowledgeGetBriefResponse =
+  KnowledgeGetBriefResponses[keyof KnowledgeGetBriefResponses];
 
 export type TasksGetColumnsData = {
   body?: never;

@@ -32,6 +32,8 @@ import {
   deadLettersPostRetry,
   healthLive,
   healthReady,
+  knowledgeGetBrief,
+  knowledgeUpdateDocument,
   type Options,
   projectsArchiveProject,
   projectsCreateProject,
@@ -127,6 +129,12 @@ import type {
   HealthLiveData,
   HealthLiveResponse,
   HealthReadyData,
+  KnowledgeGetBriefData,
+  KnowledgeGetBriefError,
+  KnowledgeGetBriefResponse,
+  KnowledgeUpdateDocumentData,
+  KnowledgeUpdateDocumentError,
+  KnowledgeUpdateDocumentResponse,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectError,
   ProjectsArchiveProjectResponse,
@@ -1079,6 +1087,35 @@ export const authRotateKeyMutation = (
   return mutationOptions;
 };
 
+/**
+ * Update Document
+ *
+ * Replace a text entry's Markdown body; 409 `stale_version` with the current entry.
+ */
+export const knowledgeUpdateDocumentMutation = (
+  options?: Partial<Options<KnowledgeUpdateDocumentData>>,
+): UseMutationOptions<
+  KnowledgeUpdateDocumentResponse,
+  KnowledgeUpdateDocumentError,
+  Options<KnowledgeUpdateDocumentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeUpdateDocumentResponse,
+    KnowledgeUpdateDocumentError,
+    Options<KnowledgeUpdateDocumentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeUpdateDocument({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const projectsListProjectsQueryKey = (
   options?: Options<ProjectsListProjectsData>,
 ) => createQueryKey("projectsListProjects", options);
@@ -1298,6 +1335,36 @@ export const tasksGetBoardOptions = (options: Options<TasksGetBoardData>) =>
       return data;
     },
     queryKey: tasksGetBoardQueryKey(options),
+  });
+
+export const knowledgeGetBriefQueryKey = (
+  options: Options<KnowledgeGetBriefData>,
+) => createQueryKey("knowledgeGetBrief", options);
+
+/**
+ * Get Brief
+ *
+ * The project's pinned brief (a text entry); 404 until the project's subscriber ran.
+ */
+export const knowledgeGetBriefOptions = (
+  options: Options<KnowledgeGetBriefData>,
+) =>
+  queryOptions<
+    KnowledgeGetBriefResponse,
+    KnowledgeGetBriefError,
+    KnowledgeGetBriefResponse,
+    ReturnType<typeof knowledgeGetBriefQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetBrief({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetBriefQueryKey(options),
   });
 
 export const tasksGetColumnsQueryKey = (

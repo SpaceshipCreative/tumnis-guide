@@ -74,6 +74,12 @@ import type {
   HealthReadyData,
   HealthReadyErrors,
   HealthReadyResponses,
+  KnowledgeGetBriefData,
+  KnowledgeGetBriefErrors,
+  KnowledgeGetBriefResponses,
+  KnowledgeUpdateDocumentData,
+  KnowledgeUpdateDocumentErrors,
+  KnowledgeUpdateDocumentResponses,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectErrors,
   ProjectsArchiveProjectResponses,
@@ -186,6 +192,8 @@ import {
   zDeadLettersPostDiscardResponse,
   zDeadLettersPostRetryResponse,
   zHealthLiveResponse,
+  zKnowledgeGetBriefResponse,
+  zKnowledgeUpdateDocumentResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
   zProjectsGetProjectResponse,
@@ -664,6 +672,33 @@ export const authRotateKey = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Update Document
+ *
+ * Replace a text entry's Markdown body; 409 `stale_version` with the current entry.
+ */
+export const knowledgeUpdateDocument = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeUpdateDocumentData, ThrowOnError>,
+): RequestResult<
+  KnowledgeUpdateDocumentResponses,
+  KnowledgeUpdateDocumentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    KnowledgeUpdateDocumentResponses,
+    KnowledgeUpdateDocumentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeUpdateDocumentResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * List Projects
  *
  * Projects in board order; archived ones with `include_archived=true`.
@@ -798,6 +833,29 @@ export const tasksGetBoard = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zTasksGetBoardResponse.parseAsync(data),
     url: "/v1/projects/{project_id}/board",
+    ...options,
+  });
+
+/**
+ * Get Brief
+ *
+ * The project's pinned brief (a text entry); 404 until the project's subscriber ran.
+ */
+export const knowledgeGetBrief = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeGetBriefData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetBriefResponses,
+  KnowledgeGetBriefErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeGetBriefResponses,
+    KnowledgeGetBriefErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeGetBriefResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/brief",
     ...options,
   });
 
