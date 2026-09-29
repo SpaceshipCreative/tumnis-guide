@@ -1,0 +1,6 @@
+# Trivy findings accepted for a while (P0-16, SEC-7). Empty by rule: add an entry only for a
+# HIGH or CRITICAL finding with no fix yet, one per line, with an issue link (on the line or
+# in the comment right above it) and an expiry no more than 30 days out, for example:
+#   # https://github.com/SpaceshipCreative/Tumnis-Guide/issues/123 no fixed version yet
+#   CVE-2026-12345 exp:2026-10-29
+# backend/tests/meta/test_security_job.py checks the format.

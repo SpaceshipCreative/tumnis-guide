@@ -1,16 +1,25 @@
-"""Who is calling: the `Principal` on `request.state.principal` (P0-10).
+"""Who is calling: the `Principal` on `request.state.principal` (P0-10, P0-13).
 
 The slot is anonymous by default. P0-13's authentication middleware (sessions) and P0-14's
 resolvers (API keys, task tokens, device tokens) fill it; tests install a header resolver
 (`X-Test-Principal`, core's `_demo.py`) until then. Idempotency keys and rate-limit buckets
 are scoped by `Principal.key`; tenant work runs in `Principal.workspace_context()`.
+
+`AuthenticationMiddleware` (P0-13) asks each registered resolver in turn
+(`register_resolver`); the first that recognises the request's credentials returns its
+`Principal`. A resolver that recognises them but refuses them (an expired or revoked
+session) returns an `AuthFailure`, whose code the 401 carries (`session_expired`);
+routes that need no auth are unaffected. Core imports no module: the auth module registers
+its session resolver when its api is imported (tumnis.wiring).
 """
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Final, Literal
 from uuid import UUID
 
 from starlette.requests import Request
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from tumnis.core.errors import ProblemError
 from tumnis.core.tenancy import WorkspaceContext
@@ -34,6 +43,8 @@ class Principal:
     subject_id: UUID | None = None  # user, key, token or device id
     scopes: frozenset[str] = field(default_factory=frozenset)  # sessions: all scopes (P0-14)
     project_ids: frozenset[UUID] | None = None  # None = unrestricted
+    session_id: UUID | None = None  # sessions (P0-13): the sessions row
+    csrf_token: str | None = field(default=None, repr=False)  # what X-CSRF-Token must be
 
     @property
     def anonymous(self) -> bool:
@@ -66,9 +77,71 @@ def principal_of(request: Request) -> Principal:
     return found if isinstance(found, Principal) else ANONYMOUS
 
 
+def auth_failure_of(request: Request) -> str:
+    """The code a 401 carries: why the credentials sent were refused, or
+    `unauthenticated` when none were recognised."""
+    failure = getattr(request.state, "auth_failure", None)
+    return failure.code if isinstance(failure, AuthFailure) else "unauthenticated"
+
+
+def unauthenticated(request: Request) -> ProblemError:
+    code = auth_failure_of(request)
+    detail = FAILURE_DETAIL.get(code, "Sign in or send an API key")
+    return ProblemError(401, code, detail)
+
+
 async def require_principal(request: Request) -> Principal:
-    """FastAPI dependency: the principal, or 401 `unauthenticated`."""
+    """FastAPI dependency: the principal, or 401 (`unauthenticated`, `session_expired`)."""
     principal = principal_of(request)
     if principal.anonymous:
-        raise ProblemError(401, "unauthenticated", "Sign in or send an API key")
+        raise unauthenticated(request)
     return principal
+
+
+# --- Authentication (P0-13) ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AuthFailure:
+    """Credentials a resolver recognised and refused; `code` is the 401's problem code."""
+
+    code: str
+
+
+FAILURE_DETAIL: Final[dict[str, str]] = {
+    "session_expired": "The session ended after 30 days without use; sign in again",
+}
+
+Resolver = Callable[[Request], Awaitable[Principal | AuthFailure | None]]
+_resolvers: dict[str, Resolver] = {}
+
+
+def register_resolver(name: str, resolver: Resolver) -> None:
+    """Add (or replace) a resolver; they run in registration order."""
+    _resolvers[name] = resolver
+
+
+def registered_resolvers() -> tuple[str, ...]:
+    return tuple(_resolvers)
+
+
+class AuthenticationMiddleware:
+    """Sets `request.state.principal` (and `auth_failure`) for every HTTP request from the
+    first resolver that recognises its credentials. Pure ASGI, so the state reaches the
+    route and a streamed body alike."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and _resolvers:
+            request = Request(scope)
+            for resolver in list(_resolvers.values()):
+                found = await resolver(request)
+                if isinstance(found, Principal):
+                    request.state.principal = found
+                    break
+                if isinstance(found, AuthFailure):
+                    request.state.auth_failure = found
+                    break
+        await self.app(scope, receive, send)

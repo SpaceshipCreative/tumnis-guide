@@ -104,6 +104,17 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # openapi-ts and the pinned Prettier, for T-P0-11-04 and `make gen`.
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      # Schemas, generation, versions and the Schemathesis fuzzer (P0-11; it needs Docker
+      # for Postgres, and runs here only: the integration job skips contract tests).
       - name: Contract tests
         working-directory: backend
         run: |
@@ -114,8 +125,13 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: uv run python ../scripts/ci/squawk_migrations.py --changed-since "$BASE_SHA"
+      # A model, route or fixture changed without `make gen` (or a hand edit to a generated
+      # file) fails here; intent-to-add makes a new generated file show in the diff too.
       - name: Generated code is committed
-        run: make gen && git diff --exit-code # P0-11 fills `make gen`
+        run: |
+          make gen
+          git add --intent-to-add -- schemas frontend/src/api backend/tests/contract/generated
+          git diff --exit-code -- schemas frontend/src/api backend/tests/contract/generated
 
   integration:
     runs-on: ubuntu-latest
@@ -130,7 +146,7 @@ jobs:
         working-directory: backend
         run: |
           uv sync
-          uv run pytest -m integration -n auto
+          uv run pytest -m "integration and not contract" -n auto
 
   e2e:
     runs-on: ubuntu-latest
@@ -169,11 +185,61 @@ jobs:
     steps:
       - run: echo "Skills job is a stub until P1-05 (profiles harness on the homelab runner)"
 
+  # Security (P0-16, SEC-7): every tool exits non-zero on a high or critical finding, and
+  # the job is required, so such a finding blocks the merge. A finding with no fix yet goes
+  # in .trivyignore with an issue link and an expiry at most 30 days out (T-P0-16-17).
   security:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: echo "Security job is filled by P0-16 (pip-audit, npm audit, Trivy, Semgrep, gitleaks)"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # gitleaks reads the commits this change adds
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Python dependencies (pip-audit, strict)
+        working-directory: backend
+        run: |
+          uv export --frozen --no-emit-project -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit==2.10.1 --strict --disable-pip --progress-spinner off -r "$RUNNER_TEMP/requirements.txt"
+      - name: npm dependencies (npm audit, high and critical)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+      - name: Secrets (gitleaks over the commits this change adds)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          range="$BASE_SHA..$GITHUB_SHA"
+          case "$BASE_SHA" in "" | 0000000000000000000000000000000000000000) range="$GITHUB_SHA" ;; esac
+          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            git /repo --config /repo/.gitleaks.toml --log-opts="$range" --redact --no-banner --exit-code 1
+      # avoid-sqlalchemy-text flags every text() call; tumnis-sql-fstring is the stricter,
+      # exact rule for what it looks for (SQL built with f-strings).
+      - name: Code (Semgrep, registry packs and the custom rules)
+        run: >-
+          uvx --from semgrep==1.178.0 semgrep scan --metrics=off
+          --config p/python --config p/typescript --config p/secrets --config .semgrep/tumnis.yml
+          --exclude-rule python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+          --error
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          tags: tumnis:ci
+          load: true
+          cache-from: type=gha,scope=tumnis-image
+          cache-to: type=gha,scope=tumnis-image,mode=max
+      - name: Image (Trivy, high and critical findings that have a fix)
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          -v "$PWD/.trivyignore:/.trivyignore:ro"
+          aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+          image --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /.trivyignore --exit-code 1
+          tumnis:ci
 
   performance:
     runs-on: ${{ vars.HOMELAB_RUNNER == 'true' && fromJSON('["self-hosted", "homelab"]') || 'ubuntu-latest' }}

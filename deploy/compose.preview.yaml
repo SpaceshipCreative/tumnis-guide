@@ -8,6 +8,8 @@ x-preview: &preview
 x-secrets: &secrets
   volumes:
     - preview_secrets:/run/secrets:ro
+  depends_on:
+    secrets: { condition: service_completed_successfully }
 
 services:
   # A preview never archives or backs up: its WAL must never reach the production stanza,
@@ -21,6 +23,27 @@ services:
     restart: "no"
     volumes:
       - preview_pgbackrest:/etc/pgbackrest/conf.d:ro
+  # A preview's own throwaway master key and pepper (P0-13: the seed user's TOTP secret is
+  # sealed, sessions are HMACs under the pepper), made once in its secrets volume. Never
+  # production's: that directory is not mounted here.
+  secrets:
+    image: ghcr.io/spaceshipcreative/tumnis:${TUMNIS_VERSION:-latest}
+    user: "0"
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import base64, json, os
+        for name in ("tumnis_master_key", "tumnis_pepper"):
+            path = "/run/secrets/" + name
+            if not os.path.exists(path):
+                key = base64.b64encode(os.urandom(32)).decode()
+                with open(path, "w") as out:
+                    json.dump({"active": 1, "keys": {"1": key}}, out)
+            os.chown(path, 10001, 10001)
+            os.chmod(path, 0o600)
+    volumes:
+      - preview_secrets:/run/secrets
+    restart: "no"
   migrate:
     <<: *secrets
     environment: *preview
@@ -30,7 +53,7 @@ services:
       <<: *preview
       METRICS_TOKEN_FILE: "" # no token in previews: /metrics answers 401
       # POST /v1/test/reset truncates as the owner role (fakes only).
-      DATABASE_OWNER_URL: postgresql+psycopg://tumnis_owner:${OWNER_DB_PASSWORD}@postgres:5432/tumnis?sslmode=require
+      DATABASE_OWNER_URL: postgresql+psycopg://tumnis_owner:${OWNER_DB_PASSWORD}@postgres:5432/tumnis?sslmode=verify-full&sslrootcert=/etc/tumnis/tls/ca.crt
   worker:
     <<: *secrets
     environment: *preview

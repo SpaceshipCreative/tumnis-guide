@@ -1,0 +1,118 @@
+# Tumnis's own Semgrep rules (P0-16, SEC-7). The Security CI job runs them with --error
+# beside the registry packs; `semgrep --test .semgrep` proves each against its cases in
+# tumnis.py and tumnis.tsx (`ruleid:` lines must match, `ok:` lines must not;
+# backend/tests/meta/test_security_job.py runs it). Test mode ignores `paths:`.
+#
+# A deliberate exception carries `# nosemgrep: <rule-id>` with the reason on the same line.
+rules:
+  - id: tumnis-secret-eq
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Compare secrets, tokens and MACs with hmac.compare_digest (or
+      secrets.compare_digest), never with == or !=: an early-exit comparison leaks
+      timing.
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: $A == $B
+                  - pattern: $A != $B
+              - metavariable-regex:
+                  metavariable: $A
+                  regex: (?i).*(secret|token|hmac|signature|digest|pepper).*
+          - patterns:
+              - pattern-either:
+                  - pattern: $A == $B
+                  - pattern: $A != $B
+              - metavariable-regex:
+                  metavariable: $B
+                  regex: (?i).*(secret|token|hmac|signature|digest|pepper).*
+      # Comparing with None, a number or a string literal compares no secret.
+      - pattern-not: $A == None
+      - pattern-not: $A != None
+      - pattern-not: None == $B
+      - pattern-not: $A == "..."
+      - pattern-not: $A != "..."
+      - pattern-not: '"..." == $B'
+      - pattern-not-regex: (==|!=)\s*-?\d+(\.\d+)?\b
+      - pattern-not-regex: \b\d+(\.\d+)?\s*(==|!=)
+      - pattern-not: len($X) == $Y
+      - pattern-not: len($X) != $Y
+    paths:
+      include: ["backend/tumnis/"]
+      exclude: ["**/tests/**"]
+
+  - id: tumnis-raw-httpx
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Outbound HTTP goes through tumnis.core.net.guarded_client (SSRF guard, pinned IP,
+      no redirects, no proxy variables); build no httpx client anywhere else.
+    pattern-either:
+      - pattern: httpx.AsyncClient(...)
+      - pattern: httpx.Client(...)
+    paths:
+      include: ["backend/tumnis/"]
+      exclude: ["backend/tumnis/core/net.py", "**/tests/**"]
+
+  - id: tumnis-no-requests
+    languages: [python]
+    severity: ERROR
+    message: >-
+      No requests and no urllib.request in tumnis/: outbound HTTP goes through
+      tumnis.core.net.guarded_client.
+    pattern-either:
+      - pattern: import requests
+      - pattern: from requests import $X
+      - pattern: import urllib.request
+      - pattern: from urllib.request import $X
+      - pattern: from urllib import request
+    paths:
+      include: ["backend/tumnis/"]
+
+  - id: tumnis-sql-fstring
+    languages: [python]
+    severity: ERROR
+    message: >-
+      No SQL built with f-strings: bind values as parameters, and quote identifiers with
+      psycopg.sql or the dialect's identifier preparer.
+    pattern-either:
+      - pattern: text(f"...")
+      - pattern: sa.text(f"...")
+      - pattern: sqlalchemy.text(f"...")
+      - pattern: $X.execute(f"...", ...)
+      - pattern: $X.exec_driver_sql(f"...", ...)
+    paths:
+      include: ["backend/"]
+      exclude: ["**/tests/**"]
+
+  - id: tumnis-inner-html
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      HTML is rendered only through components/common/SafeHtml.tsx, with the
+      server-sanitized string; no dangerouslySetInnerHTML anywhere else.
+    pattern-regex: \bdangerouslySetInnerHTML\b
+    paths:
+      include: ["frontend/src/"]
+      exclude: ["frontend/src/components/common/SafeHtml.tsx"]
+
+  - id: tumnis-log-body
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Never log request or message bodies or prompts (SEC-6); log structured fields
+      that describe them (sizes, ids, counts).
+    patterns:
+      - pattern-either:
+          - pattern: $LOG.$METHOD(..., body=$V, ...)
+          - pattern: $LOG.$METHOD(..., prompt=$V, ...)
+          - pattern: $LOG.$METHOD(..., body_text=$V, ...)
+          - pattern: $LOG.$METHOD(..., messages=$V, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(debug|info|warning|warn|error|exception|critical|fatal|msg|log)$
+    paths:
+      include: ["backend/tumnis/"]
+      exclude: ["**/tests/**"]

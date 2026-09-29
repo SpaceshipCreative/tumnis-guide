@@ -12,7 +12,8 @@ The React PWA talks to the FastAPI backend over `/v1` REST. The API is versioned
 `make gen` exports the OpenAPI spec from the FastAPI app and runs `@hey-api/openapi-ts` to write the client, Query hooks and zod schemas into `frontend/src/api/`. That folder is generated and never edited by hand. OpenAPI operation IDs stay `<tag>_<function>` so generated names are stable.
 
 ## Consequences
-- The OpenAPI spec is a build artifact; the Contract CI job regenerates it and the client and fails on any diff from what is committed (`make gen && git diff --exit-code`).
+- The OpenAPI spec is a build artifact; the Contract CI job regenerates it and the client and fails on any diff from what is committed (`make gen && git diff --exit-code`). [`make gen`](../../Makefile) runs `tumnis gen all` (JSON Schemas, `schemas/openapi.json`, generated contract tests) and then openapi-ts with [`frontend/openapi-ts.config.ts`](../../frontend/openapi-ts.config.ts); the [Contract job](../../.github/workflows/ci.yml) runs it with the contract tests and the Schemathesis fuzzer (P0-11).
+- The fetch client runtime openapi-ts copies into `src/api/client` and `src/api/core` is not written for `exactOptionalPropertyTypes`, so those copied files carry `// @ts-nocheck`; everything generated from our document is type-checked.
 - Renaming a backend function or tag renames generated hooks, so it is a visible, reviewed change.
 - The shared fetch wrapper (idempotency key, `version`, CSRF header) lives outside `src/api/` in `src/lib/fetch.ts`.
 

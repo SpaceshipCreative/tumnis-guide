@@ -3,7 +3,7 @@
 # runs the database, the backup scheduler (compose service `backup`) and the drill's
 # scratch restore, so a restore always uses the release's Postgres major and extensions.
 # Build through compose: the `pgbackrest` build context is deploy/pgbackrest.
-# P0-16 swaps the self-signed certificate for a CA-issued one.
+# TLS (P0-16): tumnis-db-tls.sh issues the database certificates (compose service db-tls).
 
 FROM pgvector/pgvector:pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a AS base
 
@@ -27,7 +27,7 @@ RUN apt-get update \
 COPY --from=supercronic --chmod=0755 /supercronic /usr/local/bin/supercronic
 COPY postgresql.conf pg_hba.conf /etc/postgresql/
 COPY conf.d/ /etc/postgresql/conf.d/
-COPY tumnis-entrypoint.sh /usr/local/bin/tumnis-entrypoint.sh
+COPY tumnis-entrypoint.sh tumnis-db-tls.sh /usr/local/bin/
 COPY --from=pgbackrest --chmod=0644 pgbackrest.conf crontab /etc/pgbackrest/
 COPY --from=pgbackrest --chmod=0755 run-backup.sh init-stanza.sh /usr/local/bin/
 

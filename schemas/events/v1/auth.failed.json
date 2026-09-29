@@ -1,0 +1,50 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/auth.failed.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "locked": {
+      "default": false,
+      "title": "Locked",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source_ip": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Source Ip"
+    },
+    "step": {
+      "enum": [
+        "password",
+        "totp"
+      ],
+      "title": "Step",
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "title": "User Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "user_id",
+    "source_ip",
+    "step"
+  ],
+  "title": "AuthFailedV1",
+  "type": "object"
+}

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
+import functools
 import json
 import secrets
 import threading
@@ -34,12 +36,14 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
     from testcontainers.community.postgres import PostgresContainer
 
+    from tests._auth import Account, SessionClient
     from tumnis.core.events import EventEnvelope
     from tumnis.core.tenancy import WorkspaceContext
     from tumnis.seed import SeedResult
     from tumnis.settings import Settings
 
 BACKEND = Path(__file__).resolve().parents[2]
+REPO_ROOT = BACKEND.parent
 SEED_SET = BACKEND / "fixtures" / "seed"
 LOAD_SET = BACKEND / "fixtures" / "load" / "load.yaml"
 PG_IMAGE = "pgvector/pgvector:pg18"
@@ -65,6 +69,12 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if drills:
         config.hook.pytest_deselected(items=drills)
         items[:] = [item for item in items if not item.get_closest_marker("drill")]
+
+
+@pytest.fixture
+def repo_root() -> Path:
+    """The repository root (P0-11): generated schemas, fixtures and the frontend hang off it."""
+    return REPO_ROOT
 
 
 @pytest.fixture
@@ -149,6 +159,10 @@ class WorkspaceHandle:
     id: uuid.UUID
     name: str
     ctx: WorkspaceContext
+    # Its user (P0-13): an owner membership, a password and no TOTP secret yet.
+    user_id: uuid.UUID | None = None
+    email: str | None = None
+    password: str | None = None
 
 
 def make_workspace(db: DbUrls, name: str = "Test", timezone: str = "America/New_York") -> uuid.UUID:
@@ -167,17 +181,61 @@ def make_workspace(db: DbUrls, name: str = "Test", timezone: str = "America/New_
     return workspace_id
 
 
+@functools.cache
+def _test_password_hash() -> str:
+    from tests._auth import TEST_PASSWORD  # noqa: PLC0415
+    from tumnis.modules.auth.passwords import hash_password  # noqa: PLC0415
+
+    return hash_password(TEST_PASSWORD)
+
+
+def make_user(db: DbUrls, workspace_id: uuid.UUID) -> tuple[uuid.UUID, str]:
+    """An owner user of the workspace (password `tests._auth.TEST_PASSWORD`, no TOTP yet),
+    inserted as the owner role; returns (user_id, email)."""
+    import psycopg  # noqa: PLC0415
+
+    from tests._pg import OWNER  # noqa: PLC0415
+
+    email = f"user-{workspace_id.hex[-12:]}@example.test"
+    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+        row = conn.execute(
+            "INSERT INTO users (email, password_hash, home_workspace_id) VALUES (%s, %s, %s)"
+            " RETURNING id",
+            (email, _test_password_hash(), workspace_id),
+        ).fetchone()
+        assert row is not None
+        user_id: uuid.UUID = row[0]
+        conn.execute(
+            "INSERT INTO memberships (workspace_id, user_id, role, created_by)"
+            " VALUES (%s, %s, 'owner', 'system')",
+            (workspace_id, user_id),
+        )
+    return user_id, email
+
+
 @pytest.fixture
 def workspace(db: DbUrls) -> Iterator[WorkspaceHandle]:
-    """A workspace (name "Test", America/New_York) made as the owner; the test runs inside
-    its context as the system actor. P0-13 adds a user and a membership."""
+    """A workspace (name "Test", America/New_York) made as the owner, with its owner user
+    (`user_id`, `email`, `password`; no TOTP secret until `enroll_workspace_user`); the
+    test runs inside its context as the system actor."""
+    from tests._auth import TEST_PASSWORD  # noqa: PLC0415
     from tumnis.core.tenancy import WorkspaceContext, use_workspace  # noqa: PLC0415
     from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
 
     ws = make_workspace(db)
-    handle = WorkspaceHandle(ws, "Test", WorkspaceContext(ws, SYSTEM_ACTOR))
-    with use_workspace(handle.ctx):
+    user_id, email = make_user(db, ws)
+    handle = WorkspaceHandle(
+        ws, "Test", WorkspaceContext(ws, SYSTEM_ACTOR), user_id, email, TEST_PASSWORD
+    )
+    entered = use_workspace(handle.ctx)
+    entered.__enter__()
+    try:
         yield handle
+    finally:
+        # Set up from inside an async test (request.getfixturevalue), the context var was
+        # set in the test's own context, which is gone by teardown.
+        with contextlib.suppress(ValueError):
+            entered.__exit__(None, None, None)
 
 
 @pytest.fixture
@@ -323,7 +381,8 @@ async def _load_set(path: Path, db: DbUrls, clock: FixedClock) -> SeedResult:
     from tumnis.seed import DatabaseSink, load_seed  # noqa: PLC0415
 
     core_db.configure(app_url=db.app, direct_url=db.app, pooled=False)
-    return await load_seed(path, DatabaseSink(), anchor=clock.now().date(), clock=clock)
+    sink = DatabaseSink(skip_missing=True)  # kinds whose module has not landed are skipped
+    return await load_seed(path, sink, anchor=clock.now().date(), clock=clock)
 
 
 @pytest.fixture
@@ -726,23 +785,82 @@ def master_key_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
         crypto.reset_master_keys()
 
 
+@dataclass(frozen=True)
+class PepperFile:
+    """The pepper file written for a test (P0-13; P0-14 reuses it): same format and checks
+    as the master key file."""
+
+    path: Path
+    keys: dict[int, bytes]
+    active: int
+
+
 @pytest.fixture
-async def app(
+def pepper_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[PepperFile]:
+    """A pepper file (one fresh 32-byte pepper, version 1, mode 0o600) in tmp_path;
+    API_KEY_PEPPER_FILE points at it and tumnis.core.crypto loads its peppers."""
+    from tumnis.core import crypto  # noqa: PLC0415
+
+    keys = {1: secrets.token_bytes(32)}
+    path = write_master_key_file(tmp_path / "pepper.json", keys, active=1)
+    monkeypatch.setenv("API_KEY_PEPPER_FILE", str(path))
+    crypto.configure_peppers(
+        lambda: crypto.load_master_keys(str(path), strict_owner=False, what=crypto.PEPPER_FILE)
+    )
+    try:
+        yield PepperFile(path, keys, active=1)
+    finally:
+        crypto.reset_peppers()
+
+
+@pytest.fixture
+def app(  # noqa: PLR0917
     db: DbUrls,
     dbos_sys_db: DbUrls,
     clock: FixedClock,
     fakes: Fakes,
     master_key_file: MasterKeyFile,
-) -> AsyncIterator[FastAPI]:
-    """create_app on the per-test database with fakes and a master key file; engines
-    disposed afterwards."""
+    pepper_file: PepperFile,
+) -> FastAPI:
+    """create_app on the per-test database with fakes, a master key file and a pepper
+    file. A plain (sync) fixture, so an async test may also reach it through
+    `request.getfixturevalue` (T-P0-08-20 asks for `session_client` that way): its engines
+    keep no idle connections (NullPool), so there is nothing to dispose afterwards."""
     from tumnis.app import create_app  # noqa: PLC0415
     from tumnis.core import db as core_db  # noqa: PLC0415
 
-    try:
-        yield create_app(settings=settings_for(db, dbos_sys_db), clock=clock)
-    finally:
-        await core_db.dispose()
+    settings = settings_for(db, dbos_sys_db, api_key_pepper_file=str(pepper_file.path))
+    built = create_app(settings=settings, clock=clock)
+    core_db.configure(app_url=db.app, direct_url=db.app, owner_url=db.owner, pooled=False)
+    return built
+
+
+class AppFactory(Protocol):
+    def __call__(self, **overrides: Any) -> FastAPI: ...
+
+
+@pytest.fixture
+def app_factory(  # noqa: PLR0917
+    db: DbUrls,
+    dbos_sys_db: DbUrls,
+    clock: FixedClock,
+    fakes: Fakes,
+    master_key_file: MasterKeyFile,
+    pepper_file: PepperFile,
+) -> AppFactory:
+    """`app_factory(**settings_overrides)`: another create_app on the per-test database
+    with fakes and the test clock, for tests that need a second deployment shape (hosted
+    mode, P0-13). Like `app`, its engines keep no idle connections."""
+    from tumnis.app import create_app  # noqa: PLC0415
+    from tumnis.core import db as core_db  # noqa: PLC0415
+
+    def build(**overrides: Any) -> FastAPI:
+        overrides.setdefault("api_key_pepper_file", str(pepper_file.path))
+        built = create_app(settings=settings_for(db, dbos_sys_db, **overrides), clock=clock)
+        core_db.configure(app_url=db.app, direct_url=db.app, owner_url=db.owner, pooled=False)
+        return built
+
+    return build
 
 
 @pytest.fixture
@@ -753,6 +871,52 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="https://test") as http:
         yield http
+
+
+@dataclass(frozen=True)
+class AppWithFakes:
+    """The app with fakes on the per-test database, a workspace and a full-scope test
+    principal: send `principal_headers` with each request."""
+
+    app: FastAPI
+    workspace: WorkspaceHandle
+    principal_headers: dict[str, str]
+
+
+@pytest.fixture
+def app_with_fakes(  # noqa: PLR0917
+    db: DbUrls,
+    dbos_sys_db: DbUrls,
+    clock: FixedClock,
+    fakes: Fakes,
+    master_key_file: MasterKeyFile,
+    workspace: WorkspaceHandle,
+) -> Iterator[AppWithFakes]:
+    """create_app on `db` with TUMNIS_ADAPTERS=fake, the seed set loaded once its writers
+    exist (P0-17, P0-18), and `X-Test-Principal` read by the P0-10 test middleware (a
+    session principal in `workspace`; a real key header after P0-14). Rate limits are off:
+    the clock is fixed, so a bucket would never refill under the fuzzer's hundreds of
+    requests (P0-10's tests cover the limits). A sync fixture: the caller drives the app
+    through its own event loop (Schemathesis runs each request in a TestClient, whose
+    lifespan disposes the engines)."""
+    from tumnis.app import create_app  # noqa: PLC0415
+    from tumnis.core import db as core_db  # noqa: PLC0415
+    from tumnis.core.tests.integration._demo import (  # noqa: PLC0415
+        TestPrincipalMiddleware,
+        principal_header,
+    )
+    from tumnis.seed import writers_registered  # noqa: PLC0415
+
+    if writers_registered():
+        asyncio.run(_load_set(SEED_SET, db, clock))
+    app = create_app(settings=settings_for(db, dbos_sys_db), clock=clock)
+    app.add_middleware(TestPrincipalMiddleware)
+    app.state.rate_limiter = None
+    app.state.auth_lockouts = False  # the same for sign-in lockouts (P0-13)
+    try:
+        yield AppWithFakes(app, workspace, principal_header(workspace.id, uuid.uuid4()))
+    finally:
+        asyncio.run(core_db.dispose())
 
 
 class QueryCounter:
@@ -826,6 +990,65 @@ def load_recordings(provider: str) -> list[Recording]:
 def recordings() -> Callable[[str], list[Recording]]:
     """recordings("google_calendar") -> [(raw, expected), ...]."""
     return load_recordings
+
+
+# --- Signed-in clients (P0-13) ----------------------------------------------------------
+
+
+async def enroll_workspace_user(workspace: WorkspaceHandle, clock: FixedClock) -> Account:
+    """Give the `workspace` fixture's user a confirmed TOTP secret (through the auth api)
+    and return what signing in as that user needs."""
+    import pyotp  # noqa: PLC0415
+
+    from tests._auth import Account  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth_api  # noqa: PLC0415
+
+    assert workspace.user_id is not None
+    assert workspace.email is not None
+    assert workspace.password is not None
+    secret = pyotp.random_base32()
+    await auth_api.enroll_totp(workspace.user_id, workspace.id, secret, confirmed_at=clock.now())
+    return Account(workspace.email, workspace.password, secret, workspace.user_id, workspace.id)
+
+
+@pytest.fixture
+def session_client(
+    app: FastAPI, clock: FixedClock, db: DbUrls, request: pytest.FixtureRequest
+) -> SessionClient:
+    """An httpx client signed in (password and TOTP at the clock's time) as the
+    `workspace` fixture's user, or as a new owner of workspace B when the test uses
+    `two_workspaces` (A0.3: B plays the caller's own workspace). It sends `X-CSRF-Token`
+    (`session_client.csrf`) and an `Idempotency-Key` on every write that lacks them. The
+    clock moves one TOTP step on afterwards, so another sign-in in the test gets a fresh
+    code.
+
+    A plain fixture (async tests may ask for it with `request.getfixturevalue`): the
+    sign-in runs on an event loop of its own in a helper thread; the in-process app and
+    its NullPool engines serve it there as they serve the test later."""
+    from tests._auth import (  # noqa: PLC0415
+        TEST_PASSWORD,
+        TOTP_STEP,
+        run_async,
+        session_client_for,
+        sign_in,
+    )
+
+    if "two_workspaces" in request.fixturenames:
+        b: WorkspaceHandle = request.getfixturevalue("two_workspaces")[1]
+        user_id, email = make_user(db, b.id)
+        handle = WorkspaceHandle(b.id, b.name, b.ctx, user_id, email, TEST_PASSWORD)
+    else:
+        handle = request.getfixturevalue("workspace")
+    http = session_client_for(app)
+
+    async def start() -> Account:
+        account = await enroll_workspace_user(handle, clock)
+        await sign_in(http, account, clock)
+        return account
+
+    http.account = run_async(start)
+    clock.advance(TOTP_STEP)
+    return http
 
 
 # --- Traces and JSON logs (P0-27) ----------------------------------------------------------

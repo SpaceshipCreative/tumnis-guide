@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.seed import SEED_PATHS, DatabaseSink, SeedSet, load_seed, writers_registered
 
@@ -47,11 +48,14 @@ async def truncate_tables(owner_url: str) -> list[str]:
                 guards = (await conn.execute(_TRUNCATE_GUARDS)).all()
                 for table, trigger in guards:
                     await conn.execute(
+                        # nosemgrep: tumnis-sql-fstring  # identifiers, quoted by the dialect
                         text(f"ALTER TABLE {quote(table)} DISABLE TRIGGER {quote(trigger)}")
                     )
+                # nosemgrep: tumnis-sql-fstring  # `listed` is quoted identifiers only
                 await conn.execute(text(f"TRUNCATE {listed} RESTART IDENTITY CASCADE"))
                 for table, trigger in guards:
                     await conn.execute(
+                        # nosemgrep: tumnis-sql-fstring  # identifiers, quoted by the dialect
                         text(f"ALTER TABLE {quote(table)} ENABLE TRIGGER {quote(trigger)}")
                     )
     finally:
@@ -72,8 +76,16 @@ async def reset(
     if settings.database_owner_url is None:
         raise HTTPException(status_code=500, detail="reset needs DATABASE_OWNER_URL")
     await truncate_tables(settings.database_owner_url)
+    # A fresh stack: rate-limit buckets start full again (P0-13: every e2e test signs in
+    # from the same address, which the `login` bucket would otherwise throttle).
+    if isinstance(getattr(request.app.state, "rate_limiter", None), RateLimiter):
+        request.app.state.rate_limiter = RateLimiter(request.app.state.clock)
     if writers_registered():  # from P0-17 on; before that the seed has nowhere to go
-        await load_seed(SEED_PATHS[seed_set], DatabaseSink(), clock=request.app.state.clock)
+        await load_seed(
+            SEED_PATHS[seed_set],
+            DatabaseSink(skip_missing=True),
+            clock=request.app.state.clock,
+        )
     return Response(status_code=204)
 
 

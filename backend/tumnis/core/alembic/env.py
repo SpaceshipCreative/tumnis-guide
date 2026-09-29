@@ -39,6 +39,7 @@ def _url() -> str:
 
 def _run() -> None:
     with context.begin_transaction():
+        # nosemgrep: tumnis-sql-fstring  # LOCK_TIMEOUT is a module constant
         context.execute(f"SET lock_timeout = '{LOCK_TIMEOUT}'")
         context.run_migrations()
 

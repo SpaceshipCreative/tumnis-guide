@@ -381,6 +381,7 @@ class CacheInvalidationListener:
                 async with await psycopg.AsyncConnection.connect(
                     self._dsn, autocommit=True
                 ) as conn:
+                    # nosemgrep: tumnis-sql-fstring  # CHANNEL is a module constant
                     await conn.execute(f"LISTEN {CHANNEL}")
                     self._local().clear()
                     self.ready.set()
