@@ -134,7 +134,6 @@ def test_csrf_exempt_writes_give_a_reason(capsys: pytest.CaptureFixture[str]) ->
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 @pytest.mark.parametrize("case", _cases("key"))
 async def test_api_key_requests_skip_csrf(
     case: str, app: FastAPI, request: pytest.FixtureRequest
