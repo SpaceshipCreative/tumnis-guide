@@ -68,7 +68,8 @@ class TaskStatusChangedV1(EventPayload):
     from_: Status = Field(alias="from")
     to: Status
     actor: str
-    via: Literal["undo"] | None = None  # set when an undo put the status back (P0-24)
+    # set when an undo put the status back (P0-24); left out of the payload otherwise
+    via: Literal["undo"] | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 @event_type("human.decided", 1)
