@@ -36,7 +36,6 @@ def _write(db: DbUrls, clock: FixedClock, *workspaces: uuid.UUID, n: int = 3) ->
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 def test_audit_verify_cli_exit_codes(db: DbUrls, clock: FixedClock) -> None:
     """T-P0-15-13
     `tumnis audit verify` exits 0 when every workspace's chain is clean; after the owner
@@ -71,7 +70,6 @@ def test_audit_verify_cli_exit_codes(db: DbUrls, clock: FixedClock) -> None:
 
 @pytest.mark.req("SEC-3", "REL-5")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 async def test_nightly_verify_sets_metric_and_anchors(
     dbos: type[DBOS], db: DbUrls, clock: FixedClock
 ) -> None:
@@ -99,3 +97,48 @@ async def test_nightly_verify_sets_metric_and_anchors(
     assert anchors == [(a, 3, head[0][0], clock.now())]
     assert REGISTRY.get_sample_value("tumnis_audit_chain_ok", {"workspace": str(a)}) == 1
     assert REGISTRY.get_sample_value("tumnis_audit_chain_ok", {"workspace": str(b)}) == 0
+
+
+@pytest.mark.req("SEC-3", "REL-5")
+@pytest.mark.wp("P0-15")
+def test_audit_verify_is_scheduled_nightly_on_the_maintenance_queue(dbos: type[DBOS]) -> None:
+    """The worker applies `audit-verify` at 03:23 UTC on the maintenance queue in every
+    deployment."""
+    from tumnis.core import audit_workflows  # noqa: PLC0415
+    from tumnis.worker import register_audit_schedule  # noqa: PLC0415
+
+    register_audit_schedule()
+    (schedule,) = dbos.list_schedules()
+    assert schedule["schedule_name"] == "audit-verify"
+    assert schedule["schedule"] == audit_workflows.AUDIT_VERIFY_SCHEDULE == "23 3 * * *"
+    assert schedule["queue_name"] == "maintenance"
+
+
+@pytest.mark.req("SEC-3")
+@pytest.mark.wp("P0-15")
+async def test_verify_reports_an_anchor_that_no_longer_matches(
+    db: DbUrls, clock: FixedClock
+) -> None:
+    """An anchored row whose hash was rewritten (and the chain re-hashed after it, as an
+    attacker with the owner password could) still differs from its anchor."""
+    from tests.fixtures import make_workspace  # noqa: PLC0415
+    from tumnis.core import audit  # noqa: PLC0415
+    from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+    from tumnis.core.tests.integration._audit import configured, tamper, write_rows  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    ws = make_workspace(db)
+    ctx = WorkspaceContext(ws, SYSTEM_ACTOR)
+    async with configured(db):
+        await write_rows(ctx, 2, clock)
+        async with tenant_session(ctx) as s:
+            await audit.anchor(s, ws, clock.now())
+        assert (
+            tamper(
+                db, "UPDATE audit_log SET hash = %s WHERE workspace_id = %s AND seq = 2", (b"x", ws)
+            )
+            == 1
+        )
+        async with tenant_session(ctx) as s:
+            breaks = await audit.verify_chain(s, ws)
+    assert [(b.seq, b.kind) for b in breaks] == [(2, "hash_mismatch"), (2, "anchor_mismatch")]

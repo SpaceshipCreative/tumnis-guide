@@ -70,7 +70,6 @@ async def test_verify_catches_a_deleted_row(
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 async def test_verify_catches_truncation_after_anchor(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:

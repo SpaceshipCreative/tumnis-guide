@@ -15,7 +15,7 @@ import ipaddress
 import json
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 from typing import Any, Final, Literal
@@ -24,7 +24,9 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import request_meta
+from tumnis.core import db, request_meta
+from tumnis.core.tenancy import WorkspaceContext, tenant_session
+from tumnis.core.types import SYSTEM_ACTOR
 
 GENESIS: Final = bytes(32)
 SENSITIVE_KEY: Final = re.compile(
@@ -120,6 +122,11 @@ _INSERT = text(
     " prev_hash, hash) VALUES (:workspace_id, :seq, :occurred_at, :actor_type, :actor_id,"
     " :action, :target_type, :target_id, CAST(:source_ip AS inet), :user_agent,"
     " :correlation_id, :reason, CAST(:details AS jsonb), :prev_hash, :hash)"
+)
+_ANCHORS = text("SELECT seq, hash FROM audit_anchors WHERE workspace_id = :ws ORDER BY seq")
+_ANCHOR = text(
+    "INSERT INTO audit_anchors (workspace_id, seq, hash, anchored_at)"
+    " VALUES (:ws, :seq, :hash, :anchored_at) ON CONFLICT (workspace_id, seq) DO NOTHING"
 )
 _PAGE = text(
     "SELECT workspace_id, seq, occurred_at, actor_type, actor_id, action, target_type,"
@@ -243,10 +250,18 @@ def _row(values: Any) -> AuditRow:
 
 
 async def verify_chain(session: AsyncSession, workspace_id: UUID) -> list[ChainBreak]:
-    """Walks seq 1..head in pages of 1,000 recomputing hashes. A row whose recomputed hash
-    or `prev_hash` does not match is a `hash_mismatch`; a missing seq is a `gap` (the row
-    after it starts a new link, so one deletion is one break)."""
+    """Walks seq 1..head in pages of 1,000 (plan default) recomputing hashes; checks every
+    anchor's (seq, hash) matches the row at that seq and that head >= the latest anchor.
+
+    A row whose recomputed hash or `prev_hash` does not match is a `hash_mismatch`; a
+    missing seq is a `gap` (the row after it starts a new link, so one deletion is one
+    break); an anchor whose row is gone or differs is an `anchor_mismatch`; a head below
+    the latest anchor is `truncated_after_anchor`, reported at the anchored seq."""
+    anchors = {
+        seq: bytes(hash_) for seq, hash_ in await session.execute(_ANCHORS, {"ws": workspace_id})
+    }
     breaks: list[ChainBreak] = []
+    seen: dict[int, bytes] = {}
     expected_seq, expected_prev = 1, GENESIS
     while True:
         page = (
@@ -263,10 +278,52 @@ async def verify_chain(session: AsyncSession, workspace_id: UUID) -> list[ChainB
                 expected_prev = prev_hash
             if prev_hash != expected_prev or chain_hash(expected_prev, _row(values)) != stored:
                 breaks.append(ChainBreak(workspace_id, values.seq, "hash_mismatch"))
+            if values.seq in anchors:
+                seen[values.seq] = stored
             expected_seq, expected_prev = values.seq + 1, stored
         if len(page) < VERIFY_PAGE:
-            return breaks
+            break
+    head = expected_seq - 1
+    for seq, hash_ in sorted(anchors.items()):
+        if seq <= head and seen.get(seq) != hash_:
+            breaks.append(ChainBreak(workspace_id, seq, "anchor_mismatch"))
+    if anchors and max(anchors) > head:
+        breaks.append(ChainBreak(workspace_id, max(anchors), "truncated_after_anchor"))
+    return breaks
+
+
+async def head(session: AsyncSession, workspace_id: UUID) -> tuple[int, bytes] | None:
+    """The workspace's latest (seq, hash), or None before its first row."""
+    row = (await session.execute(_HEAD, {"ws": workspace_id})).first()
+    return (int(row.seq), bytes(row.hash)) if row else None
 
 
 async def anchor(session: AsyncSession, workspace_id: UUID, now: datetime) -> None:
-    raise NotImplementedError("P0-15")
+    """Inserts (head seq, head hash) into audit_anchors after a clean verify; nothing
+    before the first row, and nothing new when the head was anchored already."""
+    current = await head(session, workspace_id)
+    if current is None:
+        return
+    seq, hash_ = current
+    await session.execute(
+        _ANCHOR, {"ws": workspace_id, "seq": seq, "hash": hash_, "anchored_at": now}
+    )
+
+
+async def workspace_ids(session: AsyncSession) -> list[UUID]:
+    """Every workspace, through app.list_workspace_ids() (the app role sees none without a
+    context); callable in a session with no workspace in context."""
+    return list((await session.execute(text("SELECT app.list_workspace_ids()"))).scalars())
+
+
+async def verify_workspaces(only: Sequence[UUID] | None = None) -> dict[UUID, list[ChainBreak]]:
+    """`verify_chain` for every workspace (or `only` those), each in its own transaction as
+    the app role with that workspace in context, as `system`."""
+    if only is None:
+        async with db.app_sessionmaker()() as s, s.begin():
+            only = await workspace_ids(s)
+    results: dict[UUID, list[ChainBreak]] = {}
+    for workspace_id in only:
+        async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
+            results[workspace_id] = await verify_chain(s, workspace_id)
+    return results
