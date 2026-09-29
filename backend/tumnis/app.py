@@ -14,7 +14,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 from tumnis import wiring
-from tumnis.core import db, health, testing_routes
+from tumnis.core import db, health, ops_status, testing_routes
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.settings import Settings
 
@@ -45,6 +45,10 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     health.clear_health()
     health.register_health("postgres", health.sql_check(db.app_engine, "SELECT 1"), critical=True)
     health.register_health("dbos", health.dbos_check(settings.dbos_system_url), critical=True)
+    # Backups (P0-28): degraded, never down, while the last freshness check failed.
+    health.register_health(
+        "backups", ops_status.health_check(db.app_engine, "backups"), critical=False
+    )
     wiring.register_module_health()
     wiring.register_adapter_health(health.register_health)
 

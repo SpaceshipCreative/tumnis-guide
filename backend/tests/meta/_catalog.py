@@ -44,15 +44,9 @@ ALLOW_LIST: dict[str, Allowed] = {
         "own_columns", "workspace-scoped, no version or deleted_at", arrives_with="P0-10"
     ),
     "audit_log": Allowed("own_columns", "append-only, own columns", arrives_with="P0-15"),
-    "ops_backup_runs": Allowed(
-        "global", "deployment-level operations data, no workspace", arrives_with="P0-28"
-    ),
-    "ops_status": Allowed(
-        "global", "deployment-level operations data, no workspace", arrives_with="P0-28"
-    ),
-    "ops_drill_markers": Allowed(
-        "global", "deployment-level operations data, no workspace", arrives_with="P0-28"
-    ),
+    "ops_backup_runs": Allowed("global", "deployment-level operations data, no workspace"),
+    "ops_status": Allowed("global", "deployment-level operations data, no workspace"),
+    "ops_drill_markers": Allowed("global", "deployment-level operations data, no workspace"),
 }
 # Alembic's version table (and any per-branch variant) is bookkeeping, not data.
 ALEMBIC_PREFIX = "alembic_version"

@@ -24,6 +24,9 @@ Conn = psycopg.Connection[Any]
 # (table, column) -> value, for columns a check constraint pins to a set of values.
 COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("deployment_marker", "env"): "dev",
+    ("ops_backup_runs", "repo"): 1,
+    ("ops_backup_runs", "type"): "full",
+    ("ops_drill_markers", "kind"): "marker",
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
