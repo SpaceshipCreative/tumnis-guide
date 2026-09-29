@@ -17,7 +17,6 @@ ANCHOR = date(2026, 3, 9)
 
 @pytest.mark.req("UX 1")
 @pytest.mark.wp("P0-23")
-@pytest.mark.xfail(strict=True, reason="spec:P0-23")
 async def test_ten_projects_set_is_the_seed_plus_seven_projects(clock: FixedClock) -> None:
     """`ten_projects` loads the seed set unchanged, then seven projects sorted after it."""
     from tumnis.seed import SEED_PATHS, InMemorySink, SeedSet, load_seed  # noqa: PLC0415

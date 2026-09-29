@@ -1,0 +1,20 @@
+# Seven more projects for the `ten_projects` seed set (P0-23): loaded after the seed set
+# (`POST /v1/test/reset?set=ten_projects`), so the dashboard shows ten projects, the most
+# the PRD expects anyone to run at once. Board keys follow the seed's a0..a2. No tasks:
+# the set exercises the card grid, not the Today panel.
+schema_version: 1
+projects:
+  - {key: p_harbour, name: Harbour cafe website, sort_key: a3, client: Harbour Cafe,
+     goal: Launch the new menu pages, deadline: +10d}
+  - {key: p_orchard, name: Orchard newsletter, sort_key: a4, client: Orchard Co-op,
+     goal: Send the spring issue}
+  - {key: p_studio, name: Studio move, sort_key: a5, goal: Pack and move the studio,
+     deadline: +30d}
+  - {key: p_podcast, name: Maker podcast season two, sort_key: a6,
+     goal: Record eight episodes}
+  - {key: p_tax, name: Tax return 2025, sort_key: a7, goal: File before the deadline,
+     deadline: +40d}
+  - {key: p_garden, name: Community garden signage, sort_key: a8, client: Northside Garden,
+     goal: Print and install six signs}
+  - {key: p_talk, name: Conference talk, sort_key: a9, goal: Give the design systems talk,
+     deadline: +60d}
