@@ -46,7 +46,6 @@ class AgentProfile(TenantBase, Base):
     transport: Mapped[str]
     endpoint: Mapped[str | None]
     credentials_enc: Mapped[bytes | None] = mapped_column(BYTEA)
-    api_key_id: Mapped[UUID | None]
     profile_version: Mapped[str | None]  # the plan's `version`; the base `version` is the row's
     capabilities: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     status: Mapped[str] = mapped_column(server_default=text("'registered'"))
@@ -83,7 +82,7 @@ class RunEventRow(TenantBase, Base):
 class RunnerMessage(TenantBase, Base):
     __tablename__ = "runner_messages"
 
-    runner_id: Mapped[UUID]
+    runner_id: Mapped[UUID] = mapped_column(ForeignKey("runners.id"))
     message_id: Mapped[UUID]
     direction: Mapped[str]
     type: Mapped[str]

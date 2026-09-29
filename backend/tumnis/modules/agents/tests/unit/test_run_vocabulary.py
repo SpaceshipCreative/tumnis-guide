@@ -44,7 +44,6 @@ def _check_values(name: str) -> set[str]:
 
 @pytest.mark.req("FR-14.6")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 def test_run_enums_match_table_checks() -> None:
     """T-P1-04-21
     RunKind and RunStatus hold exactly the R-22 values, and the `runs` table's

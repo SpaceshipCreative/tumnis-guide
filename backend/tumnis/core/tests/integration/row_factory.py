@@ -37,6 +37,14 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("board_columns", "status_map"): "backlog",  # a task_status enum value
     ("tasks", "board_rank"): "a0",
     ("review_items", "kind"): "row_factory",  # ck_review_items_kind
+    ("runners", "name"): "row-factory",  # ck_runners_name
+    ("agent_profiles", "name"): "row-factory",  # ck_agent_profiles_name
+    ("agent_profiles", "role"): "project",
+    ("agent_profiles", "transport"): "daemon",
+    ("runs", "kind"): "enrich",
+    ("runs", "status"): "queued",
+    ("run_events", "kind"): "dispatched",
+    ("runner_messages", "direction"): "out",
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
