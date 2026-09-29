@@ -78,56 +78,53 @@ function wrapper(queryClient: QueryClient) {
     createElement(QueryClientProvider, { client: queryClient }, children);
 }
 
-test.fails(
-  "[P0-22][REL-2] T-P0-22-05 writes carry Idempotency-Key, CSRF and version",
-  async () => {
-    withCookie(`theme=dark; ${CSRF_COOKIE}=csrf-token-1; other=1`);
-    const seen: Captured[] = [];
-    const task = makeTask({ title: "Before", version: 3 });
-    server.use(
-      http.patch("/v1/tasks/:id", async (info) => {
-        await capture(seen)(info);
-        return HttpResponse.json({ ...task, title: "x", version: 4 });
-      }),
-      http.get("/v1/tasks/:id", () =>
-        HttpResponse.json({ ...task, title: "x", version: 4 }),
-      ),
-      http.post("/v1/tasks", async (info) => {
-        await capture(seen)(info);
-        return HttpResponse.json(makeTask({ title: "y" }), { status: 201 });
-      }),
-    );
-    const queryClient = createTestQueryClient();
-    const { result } = renderHook(() => useUpdateTask(), {
-      wrapper: wrapper(queryClient),
-    });
+test("[P0-22][REL-2] T-P0-22-05 writes carry Idempotency-Key, CSRF and version", async () => {
+  withCookie(`theme=dark; ${CSRF_COOKIE}=csrf-token-1; other=1`);
+  const seen: Captured[] = [];
+  const task = makeTask({ title: "Before", version: 3 });
+  server.use(
+    http.patch("/v1/tasks/:id", async (info) => {
+      await capture(seen)(info);
+      return HttpResponse.json({ ...task, title: "x", version: 4 });
+    }),
+    http.get("/v1/tasks/:id", () =>
+      HttpResponse.json({ ...task, title: "x", version: 4 }),
+    ),
+    http.post("/v1/tasks", async (info) => {
+      await capture(seen)(info);
+      return HttpResponse.json(makeTask({ title: "y" }), { status: 201 });
+    }),
+  );
+  const queryClient = createTestQueryClient();
+  const { result } = renderHook(() => useUpdateTask(), {
+    wrapper: wrapper(queryClient),
+  });
 
-    result.current.mutate({ id: task.id, patch: { title: "x" }, version: 3 });
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-    await apiWrite({
-      kind: "create",
-      method: "POST",
-      path: "/tasks",
-      body: { title: "y" },
-      idempotencyKey: crypto.randomUUID(),
-    });
+  result.current.mutate({ id: task.id, patch: { title: "x" }, version: 3 });
+  await waitFor(() => {
+    expect(result.current.isSuccess).toBe(true);
+  });
+  await apiWrite({
+    kind: "create",
+    method: "POST",
+    path: "/tasks",
+    body: { title: "y" },
+    idempotencyKey: crypto.randomUUID(),
+  });
 
-    const [update, create] = seen;
-    expect(update?.method).toBe("PATCH");
-    expect(update?.path).toBe(`/v1/tasks/${task.id}`);
-    expect(update?.headers.get("Idempotency-Key")).toMatch(UUID);
-    expect(update?.headers.get("X-CSRF-Token")).toBe("csrf-token-1");
-    expect(update?.body).toEqual({ title: "x", version: 3 });
+  const [update, create] = seen;
+  expect(update?.method).toBe("PATCH");
+  expect(update?.path).toBe(`/v1/tasks/${task.id}`);
+  expect(update?.headers.get("Idempotency-Key")).toMatch(UUID);
+  expect(update?.headers.get("X-CSRF-Token")).toBe("csrf-token-1");
+  expect(update?.body).toEqual({ title: "x", version: 3 });
 
-    expect(create?.method).toBe("POST");
-    expect(create?.headers.get("Idempotency-Key")).toMatch(UUID);
-    expect(create?.headers.get("X-CSRF-Token")).toBe("csrf-token-1");
-    expect(create?.body).toEqual({ title: "y" });
-    expect(create?.body).not.toHaveProperty("version");
-  },
-);
+  expect(create?.method).toBe("POST");
+  expect(create?.headers.get("Idempotency-Key")).toMatch(UUID);
+  expect(create?.headers.get("X-CSRF-Token")).toBe("csrf-token-1");
+  expect(create?.body).toEqual({ title: "y" });
+  expect(create?.body).not.toHaveProperty("version");
+});
 
 test("[P0-22][REL-2] T-P0-22-06 a retried write reuses its key", async () => {
   const seen: Captured[] = [];
