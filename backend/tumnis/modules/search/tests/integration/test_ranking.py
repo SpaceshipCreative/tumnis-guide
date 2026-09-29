@@ -144,7 +144,6 @@ async def test_results_are_workspace_isolated(
 
 @pytest.mark.req("FR-3.9", "PERF-1")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_cursor_pages_are_stable(
     search_db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -171,7 +170,9 @@ async def test_cursor_pages_are_stable(
             page = await api.search(s, "invoice", cursor=cursor, limit=4, now=clock.now())
         seen.extend(page.items)
         if turn == 0:
-            await _search.insert_doc(workspace.ctx, "Invoice newest", clock.now())
+            # Ranks above every row walked so far (three matches, age 0): it lands before
+            # the cursor, so the walk must neither repeat nor skip a row.
+            await _search.insert_doc(workspace.ctx, "Invoice invoice invoice", clock.now())
             clock.advance(timedelta(days=30))
         cursor = page.next_cursor
         if cursor is None:
