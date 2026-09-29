@@ -1,0 +1,63 @@
+"""The Jev request limiter (P1-01, FR-11.9, R-32): at most 1,200 provider calls in any
+60-second window, per Jev credential."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from hypothesis import HealthCheck, example, given, settings
+from hypothesis import strategies as st
+
+START = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
+WINDOW = timedelta(seconds=60)
+LIMIT = 1_200
+
+
+async def _grants(offsets: list[float]) -> list[datetime]:
+    from tumnis.core.clock import FixedClock  # noqa: PLC0415
+    from tumnis.modules.decisions.limiter import SlidingWindowLimiter  # noqa: PLC0415
+
+    clock = FixedClock(START)
+
+    async def sleep(seconds: float) -> None:  # waiting moves the fake clock
+        clock.advance(timedelta(seconds=seconds))
+
+    limiter = SlidingWindowLimiter(limit=LIMIT, window_s=60, clock=clock, sleep=sleep)
+    grants: list[datetime] = []
+    for offset in offsets:
+        arrival = START + timedelta(seconds=offset)
+        if clock.now() < arrival:
+            clock.set(arrival)
+        await limiter.acquire()
+        grants.append(clock.now())
+    return grants
+
+
+@pytest.mark.req("FR-11.9")
+@pytest.mark.wp("P1-01")
+@pytest.mark.xfail(strict=True, reason="spec:P1-01")
+@settings(max_examples=40, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(st.lists(st.floats(0, 600), max_size=5_000).map(sorted))
+@example([0.0] * 3_000)
+@example([n * 0.01 for n in range(4_000)])
+def test_never_more_than_1200_in_any_60s_window(offsets: list[float]) -> None:
+    """T-P1-01-11
+    For sorted random arrival times on a FixedClock (waiting advances the clock), the
+    grants in any window [t, t+60 s) starting at a grant number at most 1,200; every call
+    is granted, in order, never before it arrived, and a burst is served at full rate.
+    """
+    grants = asyncio.run(_grants(offsets))
+    assert len(grants) == len(offsets)
+    assert grants == sorted(grants)
+    for offset, granted in zip(offsets, grants, strict=True):
+        assert granted >= START + timedelta(seconds=offset) - timedelta(microseconds=1)
+    end = 0
+    for start, t in enumerate(grants):
+        end = max(end, start)
+        while end < len(grants) and grants[end] < t + WINDOW:
+            end += 1
+        assert end - start <= LIMIT, (t, end - start)
+    if len(offsets) > LIMIT and offsets[LIMIT] - offsets[0] < 1:
+        assert grants[LIMIT - 1] - grants[0] < WINDOW  # the first 1,200 go without waiting
