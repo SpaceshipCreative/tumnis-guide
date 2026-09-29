@@ -1137,7 +1137,9 @@ export const authSetupTotp = <ThrowOnError extends boolean = false>(
 /**
  * List Tasks
  *
- * Tasks in creation order, optionally of one project and one status.
+ * Tasks, optionally of one project and one status, and how many match (`total`).
+ * `order=created` (default) is creation order; `order=today` is the Today order
+ * (priority, then due date, then created time; P0-23).
  */
 export const tasksListTasks = <ThrowOnError extends boolean = false>(
   options?: Options<TasksListTasksData, ThrowOnError>,

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from tumnis.core.clock import Clock
 from tumnis.core.idempotency import SessionDep
-from tumnis.core.pagination import Page, PageParams, page_params
+from tumnis.core.pagination import PageParams, page_params
 from tumnis.core.principal import principal_of
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.versioning import Version
@@ -115,15 +115,20 @@ def _clock(request: Request) -> Clock:
 async def list_tasks(
     request: Request,
     session: SessionDep,
+    *,
     page: Annotated[PageParams, Depends(page_params)],
     project_id: Annotated[UUID | None, Query()] = None,
     status: Annotated[api.Status | None, Query()] = None,
-) -> Page[api.TaskOut]:
-    """Tasks in creation order, optionally of one project and one status."""
+    order: Annotated[api.TaskOrder, Query()] = "created",
+) -> api.TaskPage:
+    """Tasks, optionally of one project and one status, and how many match (`total`).
+    `order=created` (default) is creation order; `order=today` is the Today order
+    (priority, then due date, then created time; P0-23)."""
     return await api.list_tasks(
         session,
         project_id=project_id,
         status=status,
+        order=order,
         cursor=page.cursor,
         limit=page.limit,
         project_ids=principal_of(request).project_ids,
