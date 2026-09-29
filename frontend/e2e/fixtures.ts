@@ -387,6 +387,7 @@ export async function openSettingsSection(
   page: Page,
   label: string,
 ): Promise<void> {
+  await page.getByRole("heading", { level: 1, name: "Settings" }).waitFor();
   const back = page.getByRole("button", { name: "All settings" });
   if (await back.isVisible()) await back.click();
   await page

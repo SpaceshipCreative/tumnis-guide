@@ -17,7 +17,6 @@ test(
   "T-P0-26-10 every phase 0 setting is reachable on the phone",
   { tag: ["@P0-26", "@UX-11", "@FR-9.3"] },
   async ({ page }) => {
-    test.fail();
     await openShell(page);
     await shellNavLinks(page).filter({ hasText: "Settings" }).click();
     await expect(page).toHaveURL(/\/settings\/account$/);
