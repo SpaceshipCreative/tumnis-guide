@@ -81,7 +81,6 @@ async def test_timeout_returns_none() -> None:
 
 @pytest.mark.req("Data flow rule 6")
 @pytest.mark.wp("P1-03")
-@pytest.mark.xfail(strict=True, reason="spec:P1-03")
 async def test_only_title_and_project_name_sent() -> None:
     """T-P1-03-03
     The fake's captured prompt holds the title and project name and nothing else from the

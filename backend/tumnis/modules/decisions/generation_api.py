@@ -38,6 +38,14 @@ _log = structlog.get_logger(__name__)
 SYSTEM_PROMPT: Final = "Write one short imperative first step for this task. No preamble."
 MAX_PLACEHOLDER_CHARS: Final = 120  # plan default
 PLACEHOLDER_MAX_TOKENS: Final = 48  # plan default: one short sentence
+TITLE_CHARS: Final = 300  # the two fields that leave the server, and their caps
+PROJECT_NAME_CHARS: Final = 120
+
+
+def placeholder_prompt(title: str, project_name: str) -> str:
+    """The user message: the task title and the project name, capped, and nothing else
+    from the task (Data flow rule 6)."""
+    return f"Task: {title[:TITLE_CHARS]}\nProject: {project_name[:PROJECT_NAME_CHARS]}"
 
 
 async def placeholder_first_action(
@@ -49,7 +57,7 @@ async def placeholder_first_action(
         "placeholder",
         project_id,
         system=SYSTEM_PROMPT,
-        user=f"Task: {title}\nProject: {project_name}",
+        user=placeholder_prompt(title, project_name),
         max_tokens=PLACEHOLDER_MAX_TOKENS,
         timeout_ms=generation_config.settings().placeholder_timeout_ms,
     )
