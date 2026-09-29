@@ -35,7 +35,63 @@ async def export_csv(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
-AUDIT_CASES: tuple[AuditCase, ...] = (AuditCase("audit.exported", export_csv, "user"),)
+def _open_dead_letter(ctx: Ctx) -> str:
+    """One open dead letter in the case's workspace, written as the owner (P0-07)."""
+    import uuid  # noqa: PLC0415
+
+    import psycopg  # noqa: PLC0415
+    from psycopg.types.json import Jsonb  # noqa: PLC0415
+
+    from tests._pg import OWNER  # noqa: PLC0415
+
+    event_id = uuid.uuid4()
+    envelope = {
+        "event_id": str(event_id),
+        "name": "test.ping",
+        "schema_version": 1,
+        "workspace_id": str(ctx.workspace_id),
+        "occurred_at": ctx.clock.now().isoformat(),
+        "actor": "system",
+        "trace_context": {},
+        "payload": {"schema_version": 1, "note": "audit"},
+    }
+    with psycopg.connect(ctx.db.libpq(OWNER), autocommit=True) as conn:
+        row = conn.execute(
+            "INSERT INTO dead_letters (workspace_id, event_id, subscriber, event_name, envelope,"
+            " error, attempts, last_at) VALUES (%s, %s, 'testa.record', 'test.ping', %s,"
+            " 'RuntimeError: boom', 5, now()) RETURNING id",
+            (ctx.workspace_id, event_id, Jsonb(envelope)),
+        ).fetchone()
+    assert row is not None
+    return str(row[0])
+
+
+async def retry_dead_letter(ctx: Ctx) -> None:
+    """POST /v1/dead-letters/{id}/retry; the api enqueues through a DBOSClient, which needs
+    the DBOS schema in the app's system database (a launched worker would have made it)."""
+    import asyncio  # noqa: PLC0415
+
+    from dbos import run_dbos_database_migrations  # noqa: PLC0415
+
+    await asyncio.to_thread(run_dbos_database_migrations, ctx.app.state.settings.dbos_system_url)
+    item = _open_dead_letter(ctx)
+    response = await ctx.session_client.post(f"/v1/dead-letters/{item}/retry", json={"version": 1})
+    response.raise_for_status()
+
+
+async def discard_dead_letter(ctx: Ctx) -> None:
+    item = _open_dead_letter(ctx)
+    response = await ctx.session_client.post(
+        f"/v1/dead-letters/{item}/discard", json={"version": 1}
+    )
+    response.raise_for_status()
+
+
+AUDIT_CASES: tuple[AuditCase, ...] = (
+    AuditCase("audit.exported", export_csv, "user"),
+    AuditCase("dead_letter.retried", retry_dead_letter, "user"),
+    AuditCase("dead_letter.discarded", discard_dead_letter, "user"),
+)
 
 # action -> the work package that builds its operation and adds its case.
 PENDING: dict[str, str] = {
@@ -52,7 +108,5 @@ PENDING: dict[str, str] = {
     "settings.changed": "P0-08",
     "workspace.timezone_changed": "P0-08",
     "module.toggled": "P0-08",
-    "dead_letter.retried": "P0-07",
-    "dead_letter.discarded": "P0-07",
     "drill.completed": "P0-28",
 }

@@ -8,8 +8,9 @@ The api process lists them and, on retry, enqueues `deliver_event` again through
 `<event_id>:<subscriber>:retry:<n>`. Every write is versioned: a stale version or a row
 that is no longer `open` is a 409.
 
-The router (`/v1/dead-letters`) is session-only; P0-13's session auth supplies the
-workspace context. P0-10's `versioning.StaleVersion` and `pagination.Page` replace the
+The router (`/v1/dead-letters`) is session-only through the shared session seam
+(`audit_router.require_session`, filled by P0-13); retry and discard are audited
+(SEC-3). P0-10's `versioning.StaleVersion` and `pagination.Page` replace the
 local ones here when they land.
 """
 
@@ -37,8 +38,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import tenancy
+from tumnis.core import audit, tenancy
+from tumnis.core.audit_router import require_session
 from tumnis.core.base import Base
+from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.tenancy import WorkspaceContext
 
 if TYPE_CHECKING:
@@ -48,6 +51,8 @@ EVENTS_QUEUE: Final = "events"  # tumnis.core.events.EVENTS_QUEUE (not imported:
 DELIVER_WORKFLOW: Final = "deliver_event"
 LIMIT_DEFAULT, LIMIT_MAX = 50, 200  # plan defaults (P0-10)
 STATUSES: Final = ("open", "retrying", "resolved", "discarded")
+RETRIED: Final = "dead_letter.retried"  # SEC-3 audit actions
+DISCARDED: Final = "dead_letter.discarded"
 
 # Mirrors revision core_0004_outbox (the migration creates it; this is for queries).
 dead_letters_table = Table(
@@ -228,8 +233,10 @@ _client_url: str | None = None
 
 
 def configure(system_database_url: str | None) -> None:
-    """Where the client connects; it is built on first use (create_app does no I/O)."""
+    """Where the client connects; it is built on first use (create_app does no I/O). Drops
+    any client in use, so a new app never enqueues through an old one."""
     global _client_url  # noqa: PLW0603  # process-wide client settings
+    close()
     _client_url = system_database_url
 
 
@@ -277,15 +284,21 @@ async def list_dead_letters(
 
 
 async def retry(
-    ctx: WorkspaceContext, dead_letter_id: uuid.UUID, *, expected_version: int
+    ctx: WorkspaceContext,
+    dead_letter_id: uuid.UUID,
+    *,
+    expected_version: int,
+    clock: Clock | None = None,
 ) -> DeadLetterOut:
     """open -> retrying; enqueues deliver_event through DBOSClient with workflow ID
     f"{event_id}:{subscriber}:retry:{retries+1}". Anything but 'open' -> 409
-    dead_letter_not_open; another version -> 409 stale_version."""
+    dead_letter_not_open; another version -> 409 stale_version. Audited as
+    `dead_letter.retried` in the same transaction (SEC-3)."""
     async with tenancy.tenant_session(ctx) as session:
         row = await DeadLetterRepo(session).transition(
             dead_letter_id, expected_version, to="retrying", retry=True
         )
+        await _audit(session, RETRIED, row, clock)
         wf_id = f"{row['event_id']}:{row['subscriber']}:retry:{row['retries']}"
         # Enqueued before commit: if the enqueue fails the row stays open. The workflow ID
         # makes a repeated enqueue return the same workflow.
@@ -303,30 +316,43 @@ async def retry(
 
 
 async def discard(
-    ctx: WorkspaceContext, dead_letter_id: uuid.UUID, *, expected_version: int
+    ctx: WorkspaceContext,
+    dead_letter_id: uuid.UUID,
+    *,
+    expected_version: int,
+    clock: Clock | None = None,
 ) -> DeadLetterOut:
-    """open -> discarded: the item is closed and can no longer be retried."""
+    """open -> discarded: the item is closed and can no longer be retried. Audited as
+    `dead_letter.discarded` in the same transaction (SEC-3)."""
     async with tenancy.tenant_session(ctx) as session:
         row = await DeadLetterRepo(session).transition(
             dead_letter_id, expected_version, to="discarded"
         )
+        await _audit(session, DISCARDED, row, clock)
     return DeadLetterOut.model_validate(row)
+
+
+async def _audit(session: AsyncSession, action: str, row: RowMapping, clock: Clock | None) -> None:
+    await audit.record(
+        session,
+        action,
+        target=("dead_letter", row["id"]),
+        details={
+            "event_id": str(row["event_id"]),
+            "event_name": row["event_name"],
+            "subscriber": row["subscriber"],
+            "retries": row["retries"],
+        },
+        occurred_at=(clock or SystemClock()).now(),
+    )
 
 
 # --- Router: /v1/dead-letters, session only -------------------------------------------------
 
 
-def session_context(request: Request) -> WorkspaceContext:
-    """The signed-in session's workspace. P0-13's session auth sets
-    `request.state.workspace_ctx`; until then nothing does, so every call is 401 (fail
-    closed)."""
-    ctx = getattr(request.state, "workspace_ctx", None)
-    if not isinstance(ctx, WorkspaceContext):
-        raise HTTPException(status_code=401, detail={"code": "not_authenticated"})
-    return ctx
-
-
-Ctx = Annotated[WorkspaceContext, Depends(session_context)]
+# The one session seam (P0-15's audit_router.require_session): P0-13 fills it, and the
+# tests' signed-in client overrides it for every session-only route at once.
+Ctx = Annotated[WorkspaceContext, Depends(require_session)]
 
 
 class VersionIn(BaseModel):
@@ -355,16 +381,24 @@ async def get_dead_letters(
 
 
 @router.post("/{dead_letter_id}/retry", response_model=DeadLetterOut)
-async def post_retry(dead_letter_id: uuid.UUID, body: VersionIn, ctx: Ctx) -> DeadLetterOut:
+async def post_retry(
+    dead_letter_id: uuid.UUID, body: VersionIn, ctx: Ctx, request: Request
+) -> DeadLetterOut:
     try:
-        return await retry(ctx, dead_letter_id, expected_version=body.version)
+        return await retry(
+            ctx, dead_letter_id, expected_version=body.version, clock=request.app.state.clock
+        )
     except DeadLetterError as exc:
         raise _http(exc) from exc
 
 
 @router.post("/{dead_letter_id}/discard", response_model=DeadLetterOut)
-async def post_discard(dead_letter_id: uuid.UUID, body: VersionIn, ctx: Ctx) -> DeadLetterOut:
+async def post_discard(
+    dead_letter_id: uuid.UUID, body: VersionIn, ctx: Ctx, request: Request
+) -> DeadLetterOut:
     try:
-        return await discard(ctx, dead_letter_id, expected_version=body.version)
+        return await discard(
+            ctx, dead_letter_id, expected_version=body.version, clock=request.app.state.clock
+        )
     except DeadLetterError as exc:
         raise _http(exc) from exc
