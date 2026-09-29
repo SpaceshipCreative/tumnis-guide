@@ -9,9 +9,9 @@ import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -40,6 +40,18 @@ class Settings(BaseSettings):
     master_key_file: str = "/run/secrets/tumnis_master_key"
     api_key_pepper_file: str = "/run/secrets/tumnis_pepper"
     typesafe_api_key: SecretStr | None = Field(default=None, alias="TYPESAFE_API_KEY")
+
+    @model_validator(mode="after")
+    def _preview_guard(self) -> Self:
+        """A preview runs the seed set on fakes and must never hold a production secret."""
+        if self.deployment_env == "preview":
+            if self.tumnis_adapters != "fake":
+                raise SettingsError(
+                    "preview_requires_fakes", "preview runs only with TUMNIS_ADAPTERS=fake"
+                )
+            if self.typesafe_api_key is not None:
+                raise SettingsError("preview_has_production_secret", "a Jev key is set in preview")
+        return self
 
     @property
     def dbos_system_url(self) -> str:

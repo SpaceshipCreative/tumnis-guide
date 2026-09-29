@@ -39,7 +39,6 @@ def _cli_exit_code(command: str) -> int:
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 def test_preview_refuses_real_adapters(monkeypatch: pytest.MonkeyPatch) -> None:
     """T-P0-04-05
     DEPLOYMENT_ENV=preview with TUMNIS_ADAPTERS=real raises SettingsError
@@ -58,7 +57,6 @@ def test_preview_refuses_real_adapters(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 def test_preview_refuses_jev_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """T-P0-04-06
     DEPLOYMENT_ENV=preview with fakes but TYPESAFE_API_KEY set raises SettingsError
