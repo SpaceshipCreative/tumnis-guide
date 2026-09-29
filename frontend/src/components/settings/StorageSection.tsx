@@ -66,6 +66,7 @@ interface Draft {
   kind: Kind;
   root: string;
   endpoint: string;
+  region: string;
   accessKey: string;
   secretKey: string;
 }
@@ -75,6 +76,7 @@ const EMPTY: Draft = {
   kind: "server_path",
   root: "",
   endpoint: "",
+  region: "",
   accessKey: "",
   secretKey: "",
 };
@@ -91,6 +93,7 @@ function requestBody(draft: Draft): Record<string, unknown> {
     ...base,
     s3: {
       endpoint: draft.endpoint.trim(),
+      region: draft.region.trim() || "us-east-1",
       access_key: draft.accessKey.trim(),
       secret_key: draft.secretKey,
     },
@@ -104,6 +107,7 @@ export function StorageSection() {
     kind: useId(),
     root: useId(),
     endpoint: useId(),
+    region: useId(),
     accessKey: useId(),
     secretKey: useId(),
   };
@@ -339,6 +343,19 @@ export function StorageSection() {
                 placeholder="https://s3.example.com"
                 value={draft.endpoint}
                 onChange={set("endpoint")}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor={ids.region} className={LABEL}>
+                Region
+              </label>
+              <input
+                id={ids.region}
+                className={INPUT}
+                placeholder="us-east-1"
+                autoComplete="off"
+                value={draft.region}
+                onChange={set("region")}
               />
             </div>
             <div className="flex flex-col gap-1">
