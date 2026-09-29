@@ -128,7 +128,6 @@ BreakerMachine.TestCase.settings = settings(max_examples=100, stateful_step_coun
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 class TestBreakerMachine(BreakerMachine.TestCase):  # type: ignore[misc,valid-type]
     """T-P0-09-03
     Hypothesis stateful test: CircuitBreaker matches a reference model over random request,
@@ -183,7 +182,6 @@ async def test_opens_after_n_failures_and_fails_fast(clock: FixedClock) -> None:
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 def test_half_opens_after_cooldown_and_closes_on_success(clock: FixedClock) -> None:
     """T-P0-09-05
     At cooldown_s one trial is allowed; success closes; a second concurrent trial is refused.
@@ -219,7 +217,6 @@ def test_half_opens_after_cooldown_and_closes_on_success(clock: FixedClock) -> N
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 def test_half_open_failure_reopens_and_restarts_cooldown(clock: FixedClock) -> None:
     """T-P0-09-06
     Failure in half-open sets opened_at = now, so the cooldown starts again from the failure.
