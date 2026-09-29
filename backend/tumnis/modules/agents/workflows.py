@@ -41,6 +41,9 @@ HEALTH_TIMEOUT_S: Final = 30
 RUNS_PARTITION_CONCURRENCY: Final = 2  # runs at once per profile (plan default)
 RUNNER_SWEEP_SCHEDULE: Final = "* * * * *"
 RUNNER_SWEEP_NAME: Final = "runner-sweep"
+# Its own queue, not maintenance: a long audit or housekeeping run must not delay the
+# three-missed-heartbeat detection (FR-5.9).
+RUNNER_SWEEP_QUEUE: Final = "agents-sweep"
 RUNS_QUEUE: Final = api.RUNS_QUEUE
 
 _profiles: Table = AgentProfile.__table__  # type: ignore[assignment]

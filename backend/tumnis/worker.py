@@ -38,6 +38,7 @@ def register_queues() -> None:
     # Agent runs and profile health checks (P1-04), partitioned by profile.
     agents = _agents()
     DBOS.register_queue(agents.RUNS_QUEUE, partition_concurrency=agents.RUNS_PARTITION_CONCURRENCY)
+    DBOS.register_queue(agents.RUNNER_SWEEP_QUEUE, worker_concurrency=1)
 
 
 def register_schedules(settings: Settings) -> None:
@@ -59,8 +60,9 @@ def register_schedules(settings: Settings) -> None:
 
 
 def register_runner_sweep() -> None:
-    """The runner sweep (P1-04), each minute on the maintenance queue, in every
-    deployment: runners offline after three missed heartbeats, their runs `runner_lost`."""
+    """The runner sweep (P1-04), each minute on its own queue (never behind a long
+    maintenance job), in every deployment: runners offline after three missed heartbeats,
+    their runs `runner_lost`."""
     from dbos import DBOS  # noqa: PLC0415
 
     agents = _agents()
@@ -70,7 +72,7 @@ def register_runner_sweep() -> None:
                 "schedule_name": agents.RUNNER_SWEEP_NAME,
                 "workflow_fn": agents.runner_sweep,
                 "schedule": agents.RUNNER_SWEEP_SCHEDULE,
-                "queue_name": workflows_ops.MAINTENANCE_QUEUE,
+                "queue_name": agents.RUNNER_SWEEP_QUEUE,
             }
         ]
     )
