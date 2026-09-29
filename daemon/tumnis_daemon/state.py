@@ -83,5 +83,17 @@ class StateStore:
         for data in self.unacked():
             await ws.send(data)
 
+    def claim_run(self, run_id: UUID) -> bool:
+        """True the first time this daemon sees `run_id`; its run directory is the durable
+        record. The directory goes when the run's result is acked, so a `run` the server
+        resends (its ack was lost) is not executed twice while its result is kept. A run cut
+        off by a daemon restart is not started again; the server times it out."""
+        run_dir = self.runs_dir / str(run_id)
+        if run_id in self.running or run_dir.exists():
+            return False
+        run_dir.mkdir(mode=0o700, parents=True)
+        self.running.add(run_id)
+        return True
+
     def running_run_ids(self) -> list[UUID]:
         return sorted(self.running)

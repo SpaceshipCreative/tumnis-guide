@@ -163,7 +163,7 @@ async def receive_loop(
             continue
         match msg:
             case Run():
-                if msg.run_id not in state.running:  # a resent run already executing
+                if state.claim_run(msg.run_id):  # a resent run: running, or its result kept
                     _spawn(tasks, _guarded(runs, run_skill(msg, state, cfg)))
             case HealthCheck():
                 _spawn(tasks, check_health(msg, state, cfg))
