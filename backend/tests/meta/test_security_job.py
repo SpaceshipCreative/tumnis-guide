@@ -74,7 +74,6 @@ def trivyignore_problems(text: str, today: dt.date) -> list[str]:
 @pytest.mark.req("SEC-7")
 @pytest.mark.wp("P0-16")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 def test_semgrep_rules_pass_their_own_tests() -> None:
     """T-P0-16-16
     `semgrep --test .semgrep` (the version ci.yml pins) exits 0: each custom rule fires on
@@ -107,7 +106,6 @@ def test_semgrep_rules_pass_their_own_tests() -> None:
 
 @pytest.mark.req("SEC-7")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 def test_security_job_blocks_on_high_findings() -> None:
     """T-P0-16-17
     The Security job runs pip-audit (`--strict`), npm audit (`--audit-level=high`), Trivy on

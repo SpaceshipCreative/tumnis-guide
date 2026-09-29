@@ -12,7 +12,6 @@ test(
   "T-P0-16-18 app shell has no inline script and no CSP violations",
   { tag: ["@SEC-4", "@P0-16"] },
   async ({ page }) => {
-    test.fail();
     await page.addInitScript(() => {
       window.__cspViolations = [];
       document.addEventListener("securitypolicyviolation", (event) => {
