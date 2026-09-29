@@ -33,6 +33,7 @@ from uuid import UUID, uuid4, uuid5
 
 import psycopg
 from fastapi import WebSocket
+from psycopg import sql
 from sqlalchemy import Table, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from starlette.websockets import WebSocketDisconnect, WebSocketState
@@ -150,7 +151,9 @@ class RunnerHub:
                     async with await psycopg.AsyncConnection.connect(
                         self._dsn, autocommit=True
                     ) as conn:
-                        await conn.execute(f"LISTEN {api.RUNNER_CHANNEL}")
+                        await conn.execute(
+                            sql.SQL("LISTEN {}").format(sql.Identifier(api.RUNNER_CHANNEL))
+                        )
                         self.listening = True
                         delay = RETRY_S
                         while not stop.is_set():

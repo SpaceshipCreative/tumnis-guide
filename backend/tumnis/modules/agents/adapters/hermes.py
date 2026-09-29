@@ -24,6 +24,7 @@ import httpx
 import psycopg
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from psycopg import sql
 from sqlalchemy import Table, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -250,7 +251,7 @@ class DaemonTransport:
         run events channel, with a poll as a backstop; replayed for a finished run."""
         seen: set[UUID] = set()
         async with await psycopg.AsyncConnection.connect(db.direct_dsn(), autocommit=True) as conn:
-            await conn.execute(f"LISTEN {RUN_EVENTS_CHANNEL}")
+            await conn.execute(sql.SQL("LISTEN {}").format(sql.Identifier(RUN_EVENTS_CHANNEL)))
             while True:
                 for event in await self._events_after(run.run_id, seen):
                     yield event
