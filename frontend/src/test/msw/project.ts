@@ -3,8 +3,11 @@
 // with the change log undo reads (R-09). Writes change the fake's state, so a refetch
 // after a write answers what the server would; `recorder.sent` holds every write.
 //
-// Shapes follow the generated types (TaskOut, BoardOut, ProjectOut). The recurrence and
-// brief shapes are this WP's seams until P0-19 and the knowledge routes are generated.
+// Shapes follow the generated types (TaskOut, BoardOut, ProjectOut, DocumentDto). The
+// recurrence shapes follow P0-19's routes (`GET/PUT/DELETE /v1/tasks/{id}/recurrence`,
+// `GET /v1/recurrence?project_id=`) until they are generated: a PUT takes the task's
+// version for a new rule, answers `due_time` as "HH:MM:SS" and leaves the task, and the
+// rule, one version on.
 import { http, HttpResponse, type RequestHandler } from "msw";
 
 import type * as z from "zod";
@@ -32,6 +35,9 @@ const STATUSES: readonly [string, Status][] = [
 export interface RecurrenceStub {
   id: string;
   task_id: string;
+  project_id?: string;
+  latest_task_id?: string;
+  latest_occurrence_on?: string | null;
   title: string;
   preset: "daily" | "weekdays" | "weekly" | "monthly" | null;
   cron: string | null;
@@ -173,7 +179,7 @@ export class ProjectFake {
 
   private out(row: Row, changeId: string | null = null): TaskOut {
     const task = without(row, "deleted") as TaskOut;
-    return { ...task, change_id: changeId } as TaskOut;
+    return { ...task, change_id: changeId };
   }
 
   // Applies `next` as a new version and records the change; answers the task.
@@ -240,7 +246,11 @@ export class ProjectFake {
           .filter((t) => !projectId || t.project_id === projectId)
           .filter((t) => !status || t.status === status)
           .map((t) => this.out(t));
-        return HttpResponse.json({ items, next_cursor: null });
+        return HttpResponse.json({
+          items,
+          next_cursor: null,
+          total: items.length,
+        });
       }),
       http.post("/v1/tasks", async ({ request }) => {
         const sent = await this.recorder.record(request);
@@ -274,6 +284,7 @@ export class ProjectFake {
           version: 1,
           created_at: now,
           updated_at: now,
+          change_id: null,
         };
         this.put(row);
         const id = crypto.randomUUID();
@@ -431,19 +442,30 @@ export class ProjectFake {
       http.put("/v1/tasks/:id/recurrence", async ({ params, request }) => {
         const sent = await this.recorder.record(request);
         const taskId = String(params.id);
+        const task = this.tasks.get(taskId);
+        if (!task || task.deleted) return problem(404, "not_found");
         const body = sent.body as Partial<RecurrenceStub>;
         const existing = this.recurrences.find((r) => r.task_id === taskId);
+        if (body.version !== (existing?.version ?? task.version)) {
+          return problem(409, "stale_version", { current: this.out(task) });
+        }
+        const version = task.version + 1;
+        this.put({ ...task, version });
+        const time = body.due_time ?? "09:00";
         const rule: RecurrenceStub = {
           id: existing?.id ?? crypto.randomUUID(),
           task_id: taskId,
-          title: this.tasks.get(taskId)?.title ?? "",
+          project_id: task.project_id,
+          latest_task_id: taskId,
+          latest_occurrence_on: task.due_on,
+          title: task.title,
           preset: body.preset ?? null,
           cron: body.cron ?? null,
           weekday: body.weekday ?? null,
           month_day: body.month_day ?? null,
-          due_time: body.due_time ?? "09:00",
+          due_time: time.length === 5 ? `${time}:00` : time,
           next_due_at: null,
-          version: (existing?.version ?? 0) + 1,
+          version,
         };
         this.recurrences = [
           ...this.recurrences.filter((r) => r.task_id !== taskId),

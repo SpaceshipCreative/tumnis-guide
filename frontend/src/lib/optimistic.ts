@@ -14,6 +14,8 @@ import {
 import { zTaskOut } from "../api/zod.gen";
 import { uiStore } from "../stores/uiStore";
 import { apiWrite, ConflictError, useWrite } from "./fetch";
+import { invalidateTaskViews } from "./task-cache";
+import { remember } from "./undo";
 
 export type TaskOut = z.infer<typeof zTaskOut>;
 export { zTaskOut };
@@ -59,8 +61,10 @@ export function useUpdateTask() {
       );
       return { key, previous };
     },
-    onSuccess: (task, _v, snap, ctx) => {
+    onSuccess: (task, v, snap, ctx) => {
       ctx.client.setQueryData(snap.key, task);
+      const onlyTitle = Object.keys(v.patch).every((k) => k === "title");
+      remember(task, onlyTitle ? "Title changed" : "Task changed"); // P0-24 undo
     },
     onError: (err, _v, snap, ctx) => {
       if (!snap) return;
@@ -73,7 +77,7 @@ export function useUpdateTask() {
         ctx.client.setQueryData(snap.key, snap.previous);
       }
     },
-    onSettled: (_d, _e, v, _s, ctx) =>
-      ctx.client.invalidateQueries({ queryKey: taskQueryKey(v.id) }),
+    // The task, and the lists and boards that show it (P0-24).
+    onSettled: (_d, _e, _v, _s, ctx) => invalidateTaskViews(ctx.client),
   });
 }

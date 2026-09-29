@@ -10,7 +10,7 @@ import { server } from "../../test/msw/server";
 import { renderRoute } from "../../test/render";
 import { sortByDue } from "./sorting";
 
-test.fails("[P0-24][FR-3.7] T-P0-24-10 plain list sorts by due date", async () => {
+test("[P0-24][FR-3.7] T-P0-24-10 plain list sorts by due date", async () => {
   const acme = makeProject({ name: "Acme site" });
   const course = makeProject({ name: "Authenticity course" });
   const t = (title: string, due_on: string | null, priority = "normal") =>

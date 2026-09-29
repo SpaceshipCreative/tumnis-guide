@@ -40,7 +40,10 @@ export function ProjectHeader({
         <p className="text-sm text-muted">Nothing planned for today</p>
       ) : (
         <div className="flex flex-col gap-1">
-          <ul aria-label="Today's tasks" className="flex flex-col gap-1 text-sm">
+          <ul
+            aria-label="Today's tasks"
+            className="flex flex-col gap-1 text-sm"
+          >
             {today.map((task) => (
               <li
                 key={task.id}

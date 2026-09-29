@@ -110,67 +110,64 @@ const ACTIONS: Action[] = [
   },
 ];
 
-test.fails(
-  "[P0-24][UX 9] T-P0-24-11 status, move, edit and delete each undo",
-  async () => {
-    for (const action of ACTIONS) {
-      for (const trigger of ["button", "keyboard"] as Trigger[]) {
-        for (const entry of undoStore.getSnapshot().context.entries) {
-          undoStore.trigger.drop({ changeId: entry.changeId });
-        }
-        const project = makeProject({ name: "Acme site" });
-        const task = makeTask({
-          project_id: project.id,
-          parent_id: null,
-          title: TITLE,
-          status: "in_progress",
-          label: "human",
-          estimate_minutes: 30,
-        });
-        const fake = new ProjectFake({ project, tasks: [task] });
-        server.resetHandlers();
-        server.use(...fake.handlers);
-        const label = `${action.name} (${trigger})`;
-
-        const { user, unmount } = await renderRoute(
-          `/projects/${project.id}?view=${action.view}`,
-          { viewport: "laptop" },
-        );
-        await action.perform(user, TITLE);
-
-        // The ids the action answered: its change and the version after it.
-        const changes = [...fake.changes.values()].filter(
-          (c) => c.taskId === task.id,
-        );
-        const changeId = changes.at(-1)?.id;
-        const afterVersion = fake.task(task.id).version;
-        expect(changeId, label).toBeDefined();
-
-        const toast = await screen.findByRole("status", { name: "Undo" });
-        expect(toast, label).toHaveTextContent(action.toast);
-        if (trigger === "button") {
-          await user.click(within(toast).getByRole("button", { name: "Undo" }));
-        } else {
-          (document.activeElement as HTMLElement | null)?.blur();
-          await user.keyboard("{Control>}z{/Control}");
-        }
-
-        await waitFor(() => {
-          expect(
-            fake.sent("POST", `/v1/tasks/${task.id}/undo`),
-            label,
-          ).toHaveLength(1);
-        });
-        expect(
-          fake.sent("POST", `/v1/tasks/${task.id}/undo`)[0]?.body,
-          label,
-        ).toEqual({
-          change_id: changeId,
-          version: afterVersion,
-        });
-        await action.restored(TITLE);
-        unmount();
+test("[P0-24][UX 9] T-P0-24-11 status, move, edit and delete each undo", async () => {
+  for (const action of ACTIONS) {
+    for (const trigger of ["button", "keyboard"] as Trigger[]) {
+      for (const entry of undoStore.getSnapshot().context.entries) {
+        undoStore.trigger.drop({ changeId: entry.changeId });
       }
+      const project = makeProject({ name: "Acme site" });
+      const task = makeTask({
+        project_id: project.id,
+        parent_id: null,
+        title: TITLE,
+        status: "in_progress",
+        label: "human",
+        estimate_minutes: 30,
+      });
+      const fake = new ProjectFake({ project, tasks: [task] });
+      server.resetHandlers();
+      server.use(...fake.handlers);
+      const label = `${action.name} (${trigger})`;
+
+      const { user, unmount } = await renderRoute(
+        `/projects/${project.id}?view=${action.view}`,
+        { viewport: "laptop" },
+      );
+      await action.perform(user, TITLE);
+
+      // The ids the action answered: its change and the version after it.
+      const changes = [...fake.changes.values()].filter(
+        (c) => c.taskId === task.id,
+      );
+      const changeId = changes.at(-1)?.id;
+      const afterVersion = fake.task(task.id).version;
+      expect(changeId, label).toBeDefined();
+
+      const toast = await screen.findByRole("status", { name: "Undo" });
+      expect(toast, label).toHaveTextContent(action.toast);
+      if (trigger === "button") {
+        await user.click(within(toast).getByRole("button", { name: "Undo" }));
+      } else {
+        (document.activeElement as HTMLElement | null)?.blur();
+        await user.keyboard("{Control>}z{/Control}");
+      }
+
+      await waitFor(() => {
+        expect(
+          fake.sent("POST", `/v1/tasks/${task.id}/undo`),
+          label,
+        ).toHaveLength(1);
+      });
+      expect(
+        fake.sent("POST", `/v1/tasks/${task.id}/undo`)[0]?.body,
+        label,
+      ).toEqual({
+        change_id: changeId,
+        version: afterVersion,
+      });
+      await action.restored(TITLE);
+      unmount();
     }
-  },
-);
+  }
+});
