@@ -1596,7 +1596,7 @@ async def roll_over_today(s: AsyncSession, day: date, now: datetime) -> int | No
 
 async def purge_trash(s: AsyncSession, cutoff: datetime, *, limit: int) -> int:
     """Hard-deletes up to `limit` tasks of the workspace in context trashed before `cutoff`
-    (their comments and context links go with them, ON DELETE CASCADE). Subtasks go first,
+    (their comments, context links and undo log go with them, ON DELETE CASCADE). Subtasks go first,
     and a task with a subtask that stays is kept. Returns how many went."""
     child = _tasks.alias("child")
     kept_child = (

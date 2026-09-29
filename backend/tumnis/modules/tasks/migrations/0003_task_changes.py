@@ -3,7 +3,9 @@
 Every task write records the undoable fields it changed (`rules.UNDO_FIELDS`, never the
 history fields): `before` and `after` hold only those, and `change_id` is the id the write
 answers. `undone_at` marks a change put back by `POST /v1/tasks/{id}/undo`; an undo is a
-change of its own. `workspace_id` leads both indexes.
+change of its own. `workspace_id` leads both indexes. A task's changes go with it when the
+trash purge hard-deletes it (ON DELETE CASCADE, as P0-19 made its comments and context
+links).
 
 Chained after P0-19's recurrence revision (tasks_0002).
 """
@@ -23,7 +25,12 @@ phase = "expand"
 def upgrade() -> None:
     create_tenant_table(
         "task_changes",
-        sa.Column("task_id", UUID(as_uuid=True), sa.ForeignKey("tasks.id"), nullable=False),
+        sa.Column(
+            "task_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("tasks.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("change_id", UUID(as_uuid=True), nullable=False),
         sa.Column("actor", sa.Text, nullable=False),
         sa.Column("before", JSONB, nullable=False),
