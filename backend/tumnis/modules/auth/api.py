@@ -14,7 +14,7 @@ from sqlalchemy import Table, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
-from tumnis.core import audit, crypto, request_meta
+from tumnis.core import audit, crypto, db, request_meta
 from tumnis.core.cache import invalidate_on_commit
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import ProblemError
@@ -206,6 +206,9 @@ SESSIONS_LIMIT_DEFAULT, SESSIONS_LIMIT_MAX = 50, 200
 USERS = cast("Table", User.__table__)
 MEMBERSHIPS = cast("Table", Membership.__table__)
 _USER_EXISTS: Final = text("SELECT app.auth_user_exists()")
+_LOGIN_LOOKUP: Final = text(
+    "SELECT user_id, password_hash, workspace_id FROM app.auth_login_lookup(:email)"
+)
 _SETUP_LOCK: Final = text("SELECT pg_advisory_xact_lock(hashtextextended('tumnis:setup', 0))")
 
 log = logging.getLogger(__name__)
@@ -714,3 +717,44 @@ async def seed_user(workspace_id: UUID, rec: UserSeed) -> UUID:
 
 register_seed_writer("workspace", seed_workspace)
 register_seed_writer("user", seed_user)
+
+
+# --- Admin (P0-13): a lost phone ------------------------------------------------------------
+
+
+class UnknownUser(LookupError):  # noqa: N818  # names what is missing
+    """No user has this email."""
+
+
+async def reset_totp(email: str, *, now: datetime) -> str:
+    """A new, confirmed TOTP secret for the user with this email (`tumnis admin
+    reset-totp`, run by the owner on the server when the phone is lost); audited as
+    `auth.totp_reset`. Returns the otpauth URI to scan; UnknownUser for no such email."""
+    async with db.app_sessionmaker()() as s, s.begin():
+        row = (await s.execute(_LOGIN_LOOKUP, {"email": email.strip()})).first()
+    if row is None:
+        raise UnknownUser(email)
+    secret = new_totp_secret()
+    async with tenant_session(user_context(row.workspace_id, row.user_id)) as s:
+        version, sealed = await seal_for_workspace(
+            s, row.workspace_id, secret.encode(), aad=totp_aad(row.user_id)
+        )
+        await s.execute(
+            update(USERS)
+            .where(USERS.c.id == row.user_id)
+            .values(
+                totp_secret_enc=sealed,
+                totp_key_version=version,
+                totp_confirmed_at=now,
+                totp_last_step=0,
+                updated_at=now,
+            )
+        )
+        await audit.record(
+            s,
+            "auth.totp_reset",
+            target=("user", row.user_id),
+            details={"via": "cli"},
+            occurred_at=now,
+        )
+    return provisioning_uri(secret, email.strip())

@@ -27,6 +27,8 @@ keys_app = typer.Typer(help="Master key maintenance (P0-08, SEC-6).", no_args_is
 app.add_typer(keys_app, name="keys")
 audit_app = typer.Typer(help="Audit log (P0-15).", no_args_is_help=True)
 app.add_typer(audit_app, name="audit")
+admin_app = typer.Typer(help="Account recovery (P0-13).", no_args_is_help=True)
+app.add_typer(admin_app, name="admin")
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -381,3 +383,30 @@ def audit_verify(
     typer.echo(f"audit verify: {len(results)} workspaces checked, {bad} broken")
     if broken:
         raise typer.Exit(1)
+
+
+@admin_app.command("reset-totp")
+def admin_reset_totp(email: Annotated[str, typer.Argument(help="The user's email")]) -> None:
+    """Give the user a new TOTP secret (a lost phone) and print its otpauth:// URI to scan;
+    the old codes stop working. Audited as auth.totp_reset. Exit 1 for an unknown email."""
+    from tumnis.core import db  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth_api  # noqa: PLC0415
+    from tumnis.settings import install_master_keys  # noqa: PLC0415
+
+    settings = load_settings()
+    install_master_keys(settings)
+    db.configure(settings.database_direct_url, settings.database_direct_url, pooled=False)
+
+    async def run() -> str:
+        try:
+            return await auth_api.reset_totp(email, now=make_clock().now())
+        finally:
+            await db.dispose()
+
+    try:
+        uri = asyncio.run(run())
+    except auth_api.UnknownUser:
+        typer.echo(f"reset-totp: no user with the email {email}", err=True)
+        raise typer.Exit(1) from None
+    typer.echo("Scan this in the authenticator app; it is shown once:")
+    typer.echo(uri)

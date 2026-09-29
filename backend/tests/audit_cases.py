@@ -10,7 +10,9 @@ the `X-Request-ID` the client sent as `correlation_id`.
 `PENDING` names the phase 0 actions whose operation lands with a later work package; that
 work package adds the `record()` call and moves its action from `PENDING` to a case.
 `setup.completed` (P0-13) has no case here: setup runs only while no user exists, so it
-cannot run in a Ctx's workspace; T-P0-13-23 checks its row instead.
+cannot run in a Ctx's workspace; T-P0-13-23 checks its row instead. `auth.totp_reset`
+(P0-13) is a CLI action with no request (no address or correlation ID): T-P0-13-29 checks
+its row.
 """
 
 from __future__ import annotations
