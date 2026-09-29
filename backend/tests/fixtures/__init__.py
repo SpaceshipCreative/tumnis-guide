@@ -646,6 +646,22 @@ class WorkerKiller:
         self._procs.append(proc)
         return proc
 
+    async def start_worker(self, *, armed: bool) -> asyncio.subprocess.Process:
+        """A worker on the harness databases, with the kill point armed or not, for tests
+        that enqueue their own workflow (P0-19) instead of emitting events."""
+        return await self._start(self.killpoint if armed else None)
+
+    async def stop_worker(self, proc: asyncio.subprocess.Process) -> None:
+        await self._stop(proc)
+
+    def dbos_client(self) -> DBOSClient:
+        """A DBOSClient on the harness's system database (closed with the killer)."""
+        from dbos import DBOSClient  # noqa: PLC0415
+
+        if self._client is None:
+            self._client = DBOSClient(system_database_url=self.sys_db.url(APP))
+        return self._client
+
     def log_tail(self, lines: int = 60) -> str:
         out = []
         for path in sorted(self.logs.glob("worker-*.log")):
@@ -666,20 +682,13 @@ class WorkerKiller:
                 f"worker not killed at {self.killpoint} in {timeout_s} s\n{self.log_tail()}"
             )
 
-    def _dbos(self) -> DBOSClient:
-        from dbos import DBOSClient  # noqa: PLC0415
-
-        if self._client is None:
-            self._client = DBOSClient(system_database_url=self.sys_db.url(APP))
-        return self._client
-
     async def _migrated(self, proc: asyncio.subprocess.Process, timeout_s: float) -> None:
         """Wait until the worker has created DBOS's system tables (a client never does)."""
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout_s
         while True:
             try:
-                await asyncio.to_thread(self._dbos().list_workflows, limit=1)
+                await asyncio.to_thread(self.dbos_client().list_workflows, limit=1)
             except Exception:  # tables not there yet
                 self.close_client()
             else:
@@ -707,7 +716,7 @@ class WorkerKiller:
             "workflow_id": workflow_id,
             "app_version": KILLER_APP_VERSION,
         }
-        await self._dbos().enqueue_async(options, *args)  # type: ignore[arg-type]
+        await self.dbos_client().enqueue_async(options, *args)  # type: ignore[arg-type]
         try:
             return await asyncio.wait_for(proc.wait(), timeout_s)
         except TimeoutError:
@@ -728,7 +737,9 @@ class WorkerKiller:
                 if proc.returncode is not None:
                     pytest.fail(f"worker exited with {proc.returncode}\n{self.log_tail()}")
                 status = (
-                    await asyncio.to_thread(self._dbos().retrieve_workflow(workflow_id).get_status)
+                    await asyncio.to_thread(
+                        self.dbos_client().retrieve_workflow(workflow_id).get_status
+                    )
                 ).status
                 if status not in {"PENDING", "ENQUEUED"}:
                     return str(status)
@@ -753,7 +764,7 @@ class WorkerKiller:
 
     def _deliveries(self) -> tuple[dict[str, Any], int]:
         """(workflow_id -> output of each succeeded delivery, number not yet succeeded)."""
-        workflows = self._dbos().list_workflows(name="deliver_event")
+        workflows = self.dbos_client().list_workflows(name="deliver_event")
         done = {w.workflow_id: w.output for w in workflows if w.status == "SUCCESS"}
         return done, len(workflows) - len(done)
 

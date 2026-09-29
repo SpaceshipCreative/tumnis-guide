@@ -3,6 +3,8 @@
 //
 // `seededApp` resets the compose.test stack before each test (P0-04); the reset
 // also gives the server its real clock back.
+// `fakes` (phase 1) wraps the test-only tick and fake-scripting hooks
+// (testHooks.ts); it does nothing until a test calls it.
 // `signedInPage` (P0-13) resets the stack too, then signs in as the seed user
 // through the API (password, then the TOTP code of the seed secret at the real
 // time: after a reset the stack's clock is real), so the page carries the
@@ -29,7 +31,10 @@ import {
   type Page,
 } from "@playwright/test";
 
+import { testFakes, type TestFakes } from "./testHooks";
+
 export { expect };
+export type { TestFakes };
 
 /** The seed sets `POST /v1/test/reset?set=` loads (backend `tumnis.seed.SeedSet`). */
 export type SeedSetName = "seed" | "load" | "ten_projects";
@@ -49,6 +54,8 @@ interface E2EFixtures {
   seededApp: SeededApp;
   /** P0-13: a page signed in as the seed user (TOTP from the seed secret). */
   signedInPage: Page;
+  /** Phase 1: `POST /v1/test/tick/…` and `/v1/test/fakes/…` on the page's request context. */
+  fakes: TestFakes;
 }
 
 type ClockTime = number | string | Date;
@@ -113,6 +120,9 @@ export const test = base.extend<E2EFixtures>({
     };
     await reset();
     await use({ baseURL: baseURL ?? "", reset });
+  },
+  fakes: async ({ page }, use) => {
+    await use(testFakes(page.request));
   },
   signedInPage: async ({ page, seededApp }, use) => {
     expect(seededApp.baseURL).toBeTruthy(); // the seed user exists, no code used yet

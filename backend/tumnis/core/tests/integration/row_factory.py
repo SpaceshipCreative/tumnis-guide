@@ -39,6 +39,8 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("tasks", "board_rank"): "a0",
     ("review_items", "kind"): "row_factory",  # ck_review_items_kind
     ("calendar_accounts", "status"): "connected",  # ck_calendar_accounts_status
+    ("recurrence_rules", "preset"): "daily",  # ck_recurrence_rules_preset_or_cron
+    ("recurrence_rules", "task_template"): Jsonb({"title": "x"}),  # RecurrenceOut.title
     ("search_index", "entity_type"): "task",  # ck_search_index_entity_type
 }
 
