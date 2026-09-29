@@ -103,7 +103,6 @@ def test_stairway_on_seeded_database(empty_db: DbUrls) -> None:
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_squawk_rejects_destructive_expand(tmp_path: Path) -> None:
     """T-P0-06-12
     A fixture expand revision with `op.drop_column` renders SQL that `squawk` rejects; the

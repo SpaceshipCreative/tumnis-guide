@@ -1,0 +1,18 @@
+# squawk over the SQL each changed expand revision renders (scripts/ci/squawk_migrations.py,
+# P0-06, REL-4). Every default rule applies, the destructive ones included (ban-drop-column,
+# ban-drop-table, renaming-column, renaming-table, changing-column-type,
+# adding-not-nullable-field ...), except the ones below, each with its reason.
+pg_version = "18.0"
+# Alembic runs each upgrade in one transaction (env.py).
+assume_in_transaction = true
+excluded_rules = [
+  # Tables are small while self-hosted; revisit before hosted mode (plan default).
+  "require-concurrent-index-creation",
+  # Alembic emits plain DDL inside one transaction: a failed upgrade rolls back whole, so a
+  # rerun starts clean without IF NOT EXISTS.
+  "prefer-robust-stmts",
+  # Version counters, minutes and other bounded counts are integer by design (A7).
+  "prefer-bigint-over-int",
+  # env.py sets lock_timeout; a statement timeout would cut legitimate backfills short.
+  "require-statement-timeout",
+]

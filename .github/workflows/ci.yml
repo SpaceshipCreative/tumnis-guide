@@ -98,6 +98,8 @@ jobs:
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # squawk diffs the revisions against the base commit
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
@@ -107,6 +109,11 @@ jobs:
         run: |
           uv sync
           uv run pytest -m contract
+      - name: squawk on changed expand revisions (P0-06)
+        working-directory: backend
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: uv run python ../scripts/ci/squawk_migrations.py --changed-since "$BASE_SHA"
       - name: Generated code is committed
         run: make gen && git diff --exit-code # P0-11 fills `make gen`
 
