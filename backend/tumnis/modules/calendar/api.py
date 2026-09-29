@@ -13,8 +13,9 @@ from urllib.parse import urlencode
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import AwareDatetime, BaseModel, Field
-from sqlalchemy import Table, select
+from pydantic import AwareDatetime, BaseModel, Field, SecretStr
+from sqlalchemy import Table, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core.adapters.registry import Health
@@ -25,12 +26,21 @@ from tumnis.core.canonical import (
     upsert_records,
 )
 from tumnis.core.clock import Clock, SystemClock
+from tumnis.core.outbox import emit
 from tumnis.core.schemas import versioned
+from tumnis.core.settings_store import SettingSection, get_setting, register_section
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.core.versioning import NotFound, update_versioned
 from tumnis.modules.calendar.adapters.fake import FakeGoogleCalendar
-from tumnis.modules.calendar.adapters.port import CalendarInfo, GoogleCalendarPort, TokenSet
-from tumnis.modules.calendar.models import Event
+from tumnis.modules.calendar.adapters.port import (
+    CalendarInfo,
+    GoogleCalendarPort,
+    OAuthClient,
+    TokenSet,
+)
+from tumnis.modules.calendar.models import CalendarAccount, Event
+from tumnis.modules.calendar.payloads import CalendarSyncedV1, SyncWindow
 from tumnis.modules.calendar.rules import (
     READONLY_SCOPES,
     AccountStatus,
@@ -152,6 +162,11 @@ class GoogleOAuthClient(BaseModel):
 
     client_id: str = ""
     client_secret: str = ""
+
+
+register_section(
+    SettingSection(OAUTH_SECTION, GoogleOAuthClient, secret_fields=frozenset({"client_secret"}))
+)
 
 
 class CalendarCursor(BaseModel):
@@ -370,10 +385,65 @@ async def events_between(
         return [EventOut.model_validate(row._mapping) for row in rows]
 
 
+_accounts: Table = CalendarAccount.__table__  # type: ignore[assignment]
+
+
+def _account_out(row: Any) -> CalendarAccountOut:
+    return CalendarAccountOut.model_validate(dict(row))
+
+
 async def list_accounts(
     ctx: WorkspaceContext, *, session: AsyncSession | None = None
 ) -> list[CalendarAccountOut]:
-    raise NotImplementedError
+    """Every connected Google account of the workspace, oldest first."""
+    async with session_for(ctx, session) as s:
+        rows = await s.execute(
+            select(_accounts)
+            .where(_accounts.c.deleted_at.is_(None))
+            .order_by(_accounts.c.created_at, _accounts.c.id)
+        )
+        return [_account_out(row) for row in rows.mappings()]
+
+
+async def get_account(
+    ctx: WorkspaceContext, account_id: UUID, *, session: AsyncSession | None = None
+) -> CalendarAccountOut | None:
+    async with session_for(ctx, session) as s:
+        row = (
+            (
+                await s.execute(
+                    select(_accounts).where(
+                        _accounts.c.id == account_id, _accounts.c.deleted_at.is_(None)
+                    )
+                )
+            )
+            .mappings()
+            .first()
+        )
+    return None if row is None else _account_out(row)
+
+
+async def _account_by_connection(s: AsyncSession, connection_id: UUID) -> Any:
+    row = (
+        (await s.execute(select(_accounts).where(_accounts.c.connection_id == connection_id)))
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise NotFound("calendar_accounts", connection_id)
+    return row
+
+
+def _credentials(tokens: TokenSet, previous: Mapping[str, Any] | None) -> dict[str, Any]:
+    """What the connection stores: Google may leave the refresh token out of a refresh
+    answer, so the one already held is kept."""
+    refresh = tokens.refresh_token or (previous or {}).get("refresh_token")
+    return {
+        "access_token": tokens.access_token,
+        "refresh_token": refresh,
+        "expires_at": tokens.expires_at.isoformat(),
+        "scope": tokens.scope,
+    }
 
 
 async def connect_account(
@@ -383,7 +453,87 @@ async def connect_account(
     *,
     session: AsyncSession | None = None,
 ) -> CalendarAccountOut:
-    raise NotImplementedError
+    """A Google account as the OAuth exchange leaves it: its connection (account = the
+    primary calendar's id, the address) with the tokens sealed, and its `calendar_accounts`
+    row `connected`. A first connect selects the primary calendar; a reconnect keeps the
+    selection (within the calendars still listed)."""
+    primary = next((c for c in calendars if c.primary), calendars[0] if calendars else None)
+    if primary is None:
+        raise ValueError("a Google account lists at least its primary calendar")
+    listed = [
+        CalendarOut(id=c.id, summary=c.summary, primary=c.primary, time_zone=c.time_zone)
+        for c in calendars
+    ]
+    async with session_for(ctx, session) as s:
+        connection_id = await integrations.upsert_connection(
+            ctx, kind="calendar", provider=PROVIDER, account=primary.id, status="ok", session=s
+        )
+        previous = await integrations.get_credentials(ctx, connection_id, session=s)
+        await integrations.put_credentials(
+            ctx, connection_id, _credentials(tokens, previous), session=s
+        )
+        insert = pg_insert(_accounts).values(
+            connection_id=connection_id,
+            google_email=primary.id,
+            calendars=[c.model_dump(mode="json") for c in listed],
+            selected_calendar_ids=[primary.id],
+            status="connected",
+        )
+        row = (
+            (
+                await s.execute(
+                    insert.on_conflict_do_update(
+                        index_elements=[_accounts.c.workspace_id, _accounts.c.connection_id],
+                        set_={
+                            "google_email": insert.excluded.google_email,
+                            "calendars": insert.excluded.calendars,
+                            "status": "connected",
+                            "deleted_at": None,
+                        },
+                    ).returning(*_accounts.c)
+                )
+            )
+            .mappings()
+            .one()
+        )
+    return _account_out(row)
+
+
+async def select_calendars(
+    ctx: WorkspaceContext,
+    account_id: UUID,
+    selected: Sequence[str],
+    *,
+    expected_version: int,
+    session: AsyncSession | None = None,
+) -> CalendarAccountOut:
+    """Choose the account's calendars to sync (versioned). Events of a calendar that is no
+    longer chosen are soft-deleted; the next sync reads the new choice. ValueError names a
+    calendar the account does not list."""
+    async with session_for(ctx, session) as s:
+        current = await get_account(ctx, account_id, session=s)
+        if current is None:
+            raise NotFound("calendar_accounts", account_id)
+        known = {c.id for c in current.calendars}
+        unknown = sorted(set(selected) - known)
+        if unknown:
+            raise ValueError(f"not calendars of this account: {', '.join(unknown)}")
+        chosen = [c.id for c in current.calendars if c.id in set(selected)]
+        row = await update_versioned(
+            s, _accounts, account_id, expected_version, {"selected_calendar_ids": chosen}
+        )
+        dropped = sorted(set(current.selected_calendar_ids) - set(chosen))
+        if dropped:
+            await s.execute(
+                update(_events)
+                .where(
+                    _events.c.connection_id == current.connection_id,
+                    _events.c.calendar_id.in_(dropped),
+                    _events.c.deleted_at.is_(None),
+                )
+                .values(deleted_at=func.now())
+            )
+    return _account_out(row)
 
 
 async def build_connector(
@@ -394,7 +544,98 @@ async def build_connector(
     clock: Clock | None = None,
     session: AsyncSession | None = None,
 ) -> GoogleCalendar:
-    raise NotImplementedError
+    """The connection's connector: its selected calendars, access token and status."""
+    async with session_for(ctx, session) as s:
+        account = await _account_by_connection(s, connection_id)
+        credentials = await integrations.get_credentials(ctx, connection_id, session=s) or {}
+    return GoogleCalendar(
+        api=api,
+        access_token=credentials.get("access_token", ""),
+        calendar_ids=list(account["selected_calendar_ids"]),
+        self_email=account["google_email"],
+        clock=clock,
+        status=account["status"],
+    )
+
+
+# --- Sync bookkeeping (the calendar workflows' writes) ----------------------------------------
+
+
+async def oauth_client(ctx: WorkspaceContext) -> OAuthClient | None:
+    """The workspace's Google OAuth client (Settings > Calendar), or None while unset."""
+    found = await get_setting(ctx, OAUTH_SECTION, GoogleOAuthClient)
+    if found is None or not found.value.client_id:
+        return None
+    return OAuthClient(
+        client_id=found.value.client_id, client_secret=SecretStr(found.value.client_secret)
+    )
+
+
+async def account_tokens(
+    ctx: WorkspaceContext, connection_id: UUID, *, session: AsyncSession | None = None
+) -> dict[str, Any]:
+    """The account's stored tokens (`access_token`, `refresh_token`, `expires_at`)."""
+    return await integrations.get_credentials(ctx, connection_id, session=session) or {}
+
+
+async def store_tokens(
+    ctx: WorkspaceContext,
+    connection_id: UUID,
+    tokens: TokenSet,
+    *,
+    session: AsyncSession | None = None,
+) -> None:
+    async with session_for(ctx, session) as s:
+        previous = await integrations.get_credentials(ctx, connection_id, session=s)
+        await integrations.put_credentials(
+            ctx, connection_id, _credentials(tokens, previous), session=s
+        )
+
+
+async def mark_needs_reauth(
+    ctx: WorkspaceContext, connection_id: UUID, *, session: AsyncSession | None = None
+) -> None:
+    """Google refused the refresh token: the account needs a new consent (Settings shows
+    Reconnect); its sync stops until then."""
+    async with session_for(ctx, session) as s:
+        await s.execute(
+            update(_accounts)
+            .where(_accounts.c.connection_id == connection_id)
+            .values(status="needs_reauth")
+        )
+        await integrations.set_connection_status(
+            ctx, connection_id, "needs_reauth", last_error="invalid_grant", session=s
+        )
+        await integrations.save_sync_cursor(ctx, connection_id, None, session=s)
+
+
+async def complete_sync(
+    ctx: WorkspaceContext,
+    connection_id: UUID,
+    *,
+    at: datetime,
+    window: tuple[datetime, datetime],
+    session: AsyncSession | None = None,
+) -> None:
+    """A finished sync: the cursor cleared, `last_sync_at` set and one `calendar.synced`,
+    in one transaction."""
+    async with session_for(ctx, session) as s:
+        await integrations.save_sync_cursor(ctx, connection_id, None, session=s)
+        await s.execute(
+            update(_accounts)
+            .where(_accounts.c.connection_id == connection_id)
+            .values(last_sync_at=at)
+        )
+        await integrations.set_connection_status(
+            ctx, connection_id, "ok", last_sync_at=at, session=s
+        )
+        await emit(
+            s,
+            CalendarSyncedV1(
+                connection_id=connection_id, window=SyncWindow(start=window[0], end=window[1])
+            ),
+            occurred_at=at,
+        )
 
 
 def _real_connector(**deps: Any) -> GoogleCalendar:

@@ -38,7 +38,6 @@ def _text(row: dict[str, Any]) -> bytes:
 
 @pytest.mark.req("Data flow rule 5")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="spec:P1-09")
 async def test_tokens_encrypted_at_rest(
     app_db: DbUrls, workspace: WorkspaceHandle, oauth_client: None
 ) -> None:

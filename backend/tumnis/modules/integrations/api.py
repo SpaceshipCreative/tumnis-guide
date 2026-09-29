@@ -13,6 +13,7 @@ caller's `session` (already in that workspace) when one is passed, so a sync ste
 write records, cursor and events in one transaction (P3-02).
 """
 
+import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -21,7 +22,7 @@ from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field
-from sqlalchemy import Table, or_, select, tuple_
+from sqlalchemy import Table, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +35,7 @@ from tumnis.core.canonical import (
     upsert_records,
 )
 from tumnis.core.schemas import versioned
+from tumnis.core.settings_store import open_for_workspace, seal_for_workspace
 from tumnis.core.tenancy import WorkspaceContext, session_for
 from tumnis.core.versioning import NotFound
 from tumnis.modules.integrations import rules
@@ -45,6 +47,7 @@ from tumnis.modules.integrations.models import (
     Note,
     Person,
     RawPayload,
+    SyncState,
     Thread,
 )
 
@@ -573,11 +576,138 @@ async def _target_taint(s: AsyncSession, target_type: str, target_id: UUID) -> b
     return found
 
 
-# --- Connection credentials (P1-09) ------------------------------------------------------------
+# --- Connections, credentials and sync cursors (P1-09; P3-02 reuses them) --------------------
+
+_sync_state: Table = SyncState.__table__  # type: ignore[assignment]
+ConnectionStatus = Literal["pending_auth", "ok", "needs_reauth", "error"]
+
+
+async def upsert_connection(
+    ctx: WorkspaceContext,
+    *,
+    kind: ConnectorKind,
+    provider: str,
+    account: str,
+    status: ConnectionStatus = "ok",
+    session: AsyncSession | None = None,
+) -> UUID:
+    """The connection for (provider, account), created or brought back (a reconnected
+    account keeps its id, so its records stay attached); returns its id."""
+    async with session_for(ctx, session) as s:
+        insert = pg_insert(_connections).values(
+            kind=kind, provider=provider, account=account, status=status
+        )
+        upsert = insert.on_conflict_do_update(
+            index_elements=["workspace_id", "provider", "account"],
+            set_={"kind": kind, "status": status, "deleted_at": None, "last_error": None},
+        ).returning(_connections.c.id)
+        connection_id: UUID = (await s.execute(upsert)).scalar_one()
+    return connection_id
+
+
+def _credentials_aad(connection_id: UUID) -> bytes:
+    return b"connections:" + str(connection_id).encode()
+
+
+async def put_credentials(
+    ctx: WorkspaceContext,
+    connection_id: UUID,
+    credentials: Mapping[str, Any],
+    *,
+    session: AsyncSession | None = None,
+) -> None:
+    """Seal the connection's credentials (tokens) with the workspace data key into
+    `credentials_enc` (Data flow rule 5): no column holds them in plaintext."""
+    async with session_for(ctx, session) as s:
+        key_version, sealed = await seal_for_workspace(
+            s,
+            ctx.workspace_id,
+            json.dumps(dict(credentials)).encode(),
+            aad=_credentials_aad(connection_id),
+        )
+        written = await s.execute(
+            update(_connections)
+            .where(_connections.c.id == connection_id)
+            .values(credentials_enc=sealed, key_version=key_version)
+            .returning(_connections.c.id)
+        )
+        if written.one_or_none() is None:
+            raise NotFound("connections", connection_id)
 
 
 async def get_credentials(
     ctx: WorkspaceContext, connection_id: UUID, *, session: AsyncSession | None = None
 ) -> dict[str, Any] | None:
     """The connection's credentials, opened with the workspace key; None when unset."""
-    raise NotImplementedError
+    async with session_for(ctx, session) as s:
+        sealed = await s.scalar(
+            select(_connections.c.credentials_enc).where(_connections.c.id == connection_id)
+        )
+        if sealed is None:
+            return None
+        plaintext = await open_for_workspace(
+            s, ctx.workspace_id, bytes(sealed), aad=_credentials_aad(connection_id)
+        )
+    credentials: dict[str, Any] = json.loads(plaintext)
+    return credentials
+
+
+async def set_connection_status(
+    ctx: WorkspaceContext,
+    connection_id: UUID,
+    status: ConnectionStatus,
+    *,
+    last_error: str | None = None,
+    last_sync_at: datetime | None = None,
+    session: AsyncSession | None = None,
+) -> None:
+    values: dict[str, Any] = {"status": status, "last_error": last_error}
+    if last_sync_at is not None:
+        values["last_sync_at"] = last_sync_at
+    async with session_for(ctx, session) as s:
+        await s.execute(
+            update(_connections).where(_connections.c.id == connection_id).values(**values)
+        )
+
+
+async def get_sync_cursor(
+    ctx: WorkspaceContext, connection_id: UUID, *, session: AsyncSession | None = None
+) -> dict[str, Any] | None:
+    """Where the connection's running sync is (None: no sync in progress)."""
+    async with session_for(ctx, session) as s:
+        cursor: dict[str, Any] | None = await s.scalar(
+            select(_sync_state.c.cursor).where(_sync_state.c.connection_id == connection_id)
+        )
+    return cursor
+
+
+async def save_sync_cursor(
+    ctx: WorkspaceContext,
+    connection_id: UUID,
+    cursor: Mapping[str, Any] | None,
+    *,
+    at: datetime | None = None,
+    items: int = 0,
+    session: AsyncSession | None = None,
+) -> None:
+    """Store the cursor (one `sync_state` row per connection) in the caller's transaction,
+    with the page's records, so a crash resumes after the last committed page."""
+    async with session_for(ctx, session) as s:
+        insert = pg_insert(_sync_state).values(
+            connection_id=connection_id,
+            cursor=None if cursor is None else dict(cursor),
+            last_page_at=at,
+            items_seen=items,
+        )
+        await s.execute(
+            insert.on_conflict_do_update(
+                index_elements=[_sync_state.c.workspace_id, _sync_state.c.connection_id],
+                set_={
+                    "cursor": insert.excluded.cursor,
+                    "last_page_at": func.coalesce(
+                        insert.excluded.last_page_at, _sync_state.c.last_page_at
+                    ),
+                    "items_seen": _sync_state.c.items_seen + insert.excluded.items_seen,
+                },
+            )
+        )
