@@ -19,6 +19,18 @@ CASES = [
     ),
     (
         "events",
+        "key.created",
+        1,
+        "backend/tests/contract/fixtures/events/key.created/v1.json",
+    ),
+    (
+        "events",
+        "key.revoked",
+        1,
+        "backend/tests/contract/fixtures/events/key.revoked/v1.json",
+    ),
+    (
+        "events",
         "test.ping",
         1,
         "backend/tests/contract/fixtures/events/test.ping/v1.json",

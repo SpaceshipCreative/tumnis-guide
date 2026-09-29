@@ -103,11 +103,13 @@ def case_ids(app: FastAPI, kind: str) -> list[str]:
 
 
 def find_route(app: FastAPI, method: str, path: str) -> Any:
-    """The route object the router built for (method, path): its `dependant` is the one
-    the request handler calls."""
+    """The route context the request handler runs for (method, path): its `dependant` is
+    the one the request handler calls. For an included router (FastAPI 0.141) that is the
+    effective route context's dependant, not the one of the route the router built (P0-14
+    found a spy on the latter never sees the endpoint run)."""
     for route in _walk(app):
         if route.path == path and method in (route.methods or ()):
-            return getattr(route, "original_route", route)
+            return route
     raise LookupError(f"{method} {path} is not a route of this app")
 
 

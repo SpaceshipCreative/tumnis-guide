@@ -17,8 +17,8 @@ export const LIVE_MAP: Record<
   review_item: { details: [], lists: [] },
   // The workspace settings have no id in their path: any settings message refreshes them.
   settings: { details: [], lists: ["settingsGetWorkspaceSettings"] },
-  // authListKeys (P0-14)
-  api_key: { details: [], lists: [] },
+  // Created, rotated and revoked keys (P0-14): the Settings list refreshes.
+  api_key: { details: [], lists: ["authListKeys"] },
   dead_letter: { details: [], lists: ["deadLettersGetDeadLetters"] },
 };
 
