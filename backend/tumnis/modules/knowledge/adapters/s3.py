@@ -363,8 +363,11 @@ class S3Storage(Adapter):
         return FileStat(path=rel, size=len(body), mtime=self._clock.now(), etag=_etag(r["ETag"]))
 
     async def move(self, src: str, dst: str) -> None:
-        """Copy through a create-only write, then delete the source: the destination is
-        never clobbered, and a crash between the two leaves both copies, not neither."""
+        """Copy through a create-only write, then delete the source; a crash between the
+        two leaves both copies, not neither. With conditional puts the destination is
+        never clobbered. Without them the create is a HEAD check and then a plain PUT, so
+        an object created at the destination in that gap is overwritten (the same narrow
+        race as every write there, which the sync engine's scan catches)."""
         src_rel, dst_rel = safe_rel_path(src), safe_rel_path(dst)
         data = await spool(self.read(src_rel))
         await self.write(dst_rel, _one(data), if_match=None)
