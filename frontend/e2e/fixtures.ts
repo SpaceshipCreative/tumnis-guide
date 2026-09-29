@@ -27,6 +27,7 @@ import {
   type APIRequestContext,
   type Locator,
   type Page,
+  type Request,
 } from "@playwright/test";
 
 export { expect };
@@ -503,4 +504,37 @@ export async function scrollsVertically(page: Page): Promise<boolean> {
       (document.scrollingElement?.scrollHeight ?? Infinity) >
       window.innerHeight,
   );
+}
+
+// --- Project page and board (P0-24) ---------------------------------------------
+
+/** The board cards (not their checklist items) inside a column. */
+export function boardCards(column: Locator): Locator {
+  return column.locator("[data-board-card]");
+}
+
+/**
+ * Signs in (after resetting to the seed set), opens the project called `name` with
+ * `search` (for example `?view=board`) and waits for its header. Answers the project id.
+ */
+export async function openProject(
+  page: Page,
+  name: string,
+  search = "",
+): Promise<string> {
+  await signIn(page.request);
+  const projectId = await projectIdByName(page.request, name);
+  await page.goto(`/projects/${projectId}${search}`);
+  await page.getByRole("heading", { level: 1, name }).waitFor();
+  return projectId;
+}
+
+/** Every write request the page sends from now on whose path matches `pattern`. */
+export function recordWrites(page: Page, pattern: RegExp): Request[] {
+  const writes: Request[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() !== "GET" && pattern.test(path)) writes.push(request);
+  });
+  return writes;
 }
