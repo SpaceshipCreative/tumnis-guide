@@ -14,9 +14,11 @@ writes it to a query file byte for byte and never composes a prompt (R-25).
 from typing import Any, Literal
 from uuid import UUID
 
+from pydantic import Field
+
 from tumnis.core.schemas import VersionedPayload, versioned
 from tumnis.modules.agents.protocol import SchemaRef
-from tumnis.modules.agents.rules import RunKind
+from tumnis.modules.agents.rules import SKILL_RE, RunKind
 
 
 @versioned("packet", "task_packet", 1)
@@ -25,9 +27,9 @@ class TaskPacket(VersionedPayload):
     kind: RunKind  # phase 1 builds enrich and plan
     run_id: UUID
     profile_id: UUID
-    skill: str
+    skill: str = Field(pattern=SKILL_RE)  # the limits of the protocol's `run`
     output_schema: SchemaRef
-    correlation_id: str
-    timeout_s: int
+    correlation_id: str = Field(max_length=128)
+    timeout_s: int = Field(ge=10, le=3600)
     prompt_text: str  # fixed instructions + the body JSON between <packet> markers
     body: dict[str, Any]  # EnrichmentRequest or PlanningRequest (P1-05)

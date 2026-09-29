@@ -51,6 +51,7 @@
       "type": "object"
     },
     "correlation_id": {
+      "maxLength": 128,
       "title": "Correlation Id",
       "type": "string"
     },
@@ -81,10 +82,13 @@
       "type": "integer"
     },
     "skill": {
+      "pattern": "^[a-z][a-z0-9-]{0,40}$",
       "title": "Skill",
       "type": "string"
     },
     "timeout_s": {
+      "maximum": 3600,
+      "minimum": 10,
       "title": "Timeout S",
       "type": "integer"
     }
