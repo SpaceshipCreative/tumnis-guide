@@ -119,7 +119,6 @@ def test_release_attaches_sbom_and_openapi() -> None:
 @pytest.mark.contract
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P0-30")
-@pytest.mark.xfail(strict=True, reason="spec:P0-30")
 def test_rehearsal_runs_before_release_and_on_migration_prs() -> None:
     """T-P0-30-01
     The rollback rehearsal (deploy N, N+1, N) is wired twice: release.yml's rehearsal job
