@@ -63,6 +63,14 @@ export default defineConfig({
   build: {
     manifest: true,
     sourcemap: true,
+    rolldownOptions: {
+      output: {
+        // Run modules in source order across chunks (issue #36). Otherwise a shared chunk
+        // (the generated zod schemas) evaluates before the entry's first import,
+        // lib/zodConfig, and zod probes `new Function` under the strict CSP (P0-16).
+        strictExecutionOrder: true,
+      },
+    },
   },
   server: {
     proxy: {
