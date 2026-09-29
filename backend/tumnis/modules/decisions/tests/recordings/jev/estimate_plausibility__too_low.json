@@ -1,0 +1,102 @@
+{
+  "point": "estimate_plausibility",
+  "inputs": {
+    "title": "Write the Acme proposal",
+    "label": "human",
+    "estimate_minutes": 10,
+    "first_action": "Open last year's proposal and copy the outline",
+    "acceptance_criteria": [
+      "Scope, timeline and price are filled in",
+      "Sent to Dana as a PDF"
+    ],
+    "history": [
+      {
+        "title": "Write the Beta proposal",
+        "estimate": 60,
+        "actual": 95
+      },
+      {
+        "title": "Draft the Gamma statement of work",
+        "estimate": 45,
+        "actual": 70
+      }
+    ]
+  },
+  "request": {
+    "state": {
+      "title": "Write the Acme proposal",
+      "label": "human",
+      "estimate_minutes": 10,
+      "first_action": "Open last year's proposal and copy the outline",
+      "acceptance_criteria": [
+        "Scope, timeline and price are filled in",
+        "Sent to Dana as a PDF"
+      ],
+      "history": [
+        {
+          "title": "Write the Beta proposal",
+          "estimate": 60,
+          "actual": 95
+        },
+        {
+          "title": "Draft the Gamma statement of work",
+          "estimate": 45,
+          "actual": 70
+        }
+      ]
+    },
+    "model": "jev-1.13.0",
+    "questions": {
+      "plausibility": {
+        "type": "score",
+        "instructions": "How plausible is `estimate_minutes` of the user's time for this task, given its first action, acceptance criteria and the user's `history` of estimates and actual minutes?",
+        "criteria": [
+          "Far too low",
+          "Somewhat low",
+          "Plausible",
+          "Somewhat high",
+          "Far too high"
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "x-typesafe-request-id": "req_synthetic_0005"
+    },
+    "body": {
+      "model": "jev-1.13.0",
+      "usage": {
+        "input_tokens": 176,
+        "output_tokens": 1
+      },
+      "answers": {
+        "plausibility": {
+          "type": "score",
+          "score": 0.57,
+          "confidence": 0.58,
+          "legend": {
+            "0": "Far too low",
+            "1": "Somewhat low",
+            "2": "Plausible",
+            "3": "Somewhat high",
+            "4": "Far too high"
+          },
+          "probabilities": {
+            "0": 0.58,
+            "1": 0.3,
+            "2": 0.1,
+            "3": 0.01,
+            "4": 0.01
+          }
+        }
+      }
+    }
+  },
+  "latency_ms": 234,
+  "recorded_at": null,
+  "sdk_version": "0.7.2",
+  "synthetic": true,
+  "notes": "Synthetic: hand-authored in the typesafe-sdk 0.7.2 wire shape (no real Jev call was made); all names, addresses and domains are invented (example.com/example.org). Replace with scripts/record_jev.py output against the real API."
+}

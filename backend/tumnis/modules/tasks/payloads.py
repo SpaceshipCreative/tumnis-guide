@@ -13,9 +13,11 @@ calls `api.py` (no import cycle inside the module).
   P1-13 and P2-05 emit it.
 
 `doc` holds the title, the body (first action, acceptance criteria and comments, capped at
-8 KB, plan default) and whether the task is deleted.
+8 KB, plan default), whether the task is deleted, and (P0-20, additive) the task's project
+and when the change happened: search keeps the newest doc it has seen per task.
 """
 
+from datetime import datetime
 from typing import Annotated, Any, ClassVar, Final, Literal
 from uuid import UUID
 
@@ -33,6 +35,8 @@ class TaskDoc(BaseModel):
     title: str
     body: Annotated[str, StringConstraints(max_length=DOC_BODY_MAX_BYTES)] = ""
     deleted: bool = False
+    project_id: UUID | None = None  # P0-20
+    updated_at: datetime | None = None  # P0-20: the change's time (the event's occurred_at)
 
 
 @event_type("task.created", 1)

@@ -42,6 +42,9 @@ import {
   projectsReorderProject,
   projectsUnarchiveProject,
   projectsUpdateProject,
+  searchSearch,
+  searchTypeaheadProjects,
+  searchTypeaheadTasks,
   settingsGetSection,
   settingsGetWorkspaceSettings,
   settingsListModules,
@@ -156,6 +159,15 @@ import type {
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectError,
   ProjectsUpdateProjectResponse,
+  SearchSearchData,
+  SearchSearchError,
+  SearchSearchResponse,
+  SearchTypeaheadProjectsData,
+  SearchTypeaheadProjectsError,
+  SearchTypeaheadProjectsResponse,
+  SearchTypeaheadTasksData,
+  SearchTypeaheadTasksError,
+  SearchTypeaheadTasksResponse,
   SettingsGetSectionData,
   SettingsGetSectionError,
   SettingsGetSectionResponse,
@@ -1539,6 +1551,88 @@ export const tasksListReviewKindsOptions = (
     queryKey: tasksListReviewKindsQueryKey(options),
   });
 
+export const searchSearchQueryKey = (options?: Options<SearchSearchData>) =>
+  createQueryKey("searchSearch", options);
+
+/**
+ * Search
+ *
+ * Tasks and projects matching `q`, best first: text match, recency, project match.
+ */
+export const searchSearchOptions = (options?: Options<SearchSearchData>) =>
+  queryOptions<
+    SearchSearchResponse,
+    SearchSearchError,
+    SearchSearchResponse,
+    ReturnType<typeof searchSearchQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await searchSearch({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: searchSearchQueryKey(options),
+  });
+
+export const searchSearchInfiniteQueryKey = (
+  options?: Options<SearchSearchData>,
+): QueryKey<Options<SearchSearchData>> =>
+  createQueryKey("searchSearch", options, true);
+
+/**
+ * Search
+ *
+ * Tasks and projects matching `q`, best first: text match, recency, project match.
+ */
+export const searchSearchInfiniteOptions = (
+  options?: Options<SearchSearchData>,
+) => {
+  const opts = infiniteQueryOptions<
+    SearchSearchResponse,
+    SearchSearchError,
+    InfiniteData<SearchSearchResponse>,
+    QueryKey<Options<SearchSearchData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<SearchSearchData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<SearchSearchData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await searchSearch({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: searchSearchInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
 export const settingsListModulesQueryKey = (
   options?: Options<SettingsListModulesData>,
 ) => createQueryKey("settingsListModules", options);
@@ -2195,6 +2289,66 @@ export const tasksUndoTaskMutation = (
   };
   return mutationOptions;
 };
+
+export const searchTypeaheadProjectsQueryKey = (
+  options?: Options<SearchTypeaheadProjectsData>,
+) => createQueryKey("searchTypeaheadProjects", options);
+
+/**
+ * Typeahead Projects
+ *
+ * Live projects matching `q` (archived ones drop out), best first.
+ */
+export const searchTypeaheadProjectsOptions = (
+  options?: Options<SearchTypeaheadProjectsData>,
+) =>
+  queryOptions<
+    SearchTypeaheadProjectsResponse,
+    SearchTypeaheadProjectsError,
+    SearchTypeaheadProjectsResponse,
+    ReturnType<typeof searchTypeaheadProjectsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await searchTypeaheadProjects({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: searchTypeaheadProjectsQueryKey(options),
+  });
+
+export const searchTypeaheadTasksQueryKey = (
+  options?: Options<SearchTypeaheadTasksData>,
+) => createQueryKey("searchTypeaheadTasks", options);
+
+/**
+ * Typeahead Tasks
+ *
+ * Live tasks matching `q`, best first; the given project's tasks lead.
+ */
+export const searchTypeaheadTasksOptions = (
+  options?: Options<SearchTypeaheadTasksData>,
+) =>
+  queryOptions<
+    SearchTypeaheadTasksResponse,
+    SearchTypeaheadTasksError,
+    SearchTypeaheadTasksResponse,
+    ReturnType<typeof searchTypeaheadTasksQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await searchTypeaheadTasks({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: searchTypeaheadTasksQueryKey(options),
+  });
 
 export const usageGetUsageQueryKey = (options: Options<UsageGetUsageData>) =>
   createQueryKey("usageGetUsage", options);

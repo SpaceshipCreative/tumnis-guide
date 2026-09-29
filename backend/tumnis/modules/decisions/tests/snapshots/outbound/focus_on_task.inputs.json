@@ -1,0 +1,7 @@
+{
+  "task_title": "Write the Acme proposal",
+  "first_action": "Open last year's proposal and copy the outline",
+  "repo_path": "clients/acme/proposal",
+  "activity": ["Google Docs: Acme proposal 2026", "Slack: #acme"],
+  "minutes_since_activity": 2
+}

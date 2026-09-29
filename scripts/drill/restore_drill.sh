@@ -124,6 +124,20 @@ docker image inspect "$PG_IMAGE" "$APP_IMAGE" >/dev/null || fail "preflight: rel
 log "1 preflight: repo2 has a full backup and an archive range; image $PG_IMAGE"
 
 # --- 2. Marker --------------------------------------------------------------------------
+# pgBackRest restores from the newest backup whose stop time (whole seconds) is strictly
+# before the target, so a marker taken in the second the first backup stopped has no backup
+# set to restore from (issue #37): wait until the database clock is past that second.
+BACKUP_STOP="$(repo2_info | jq '[.[0].backup[].timestamp.stop] | min')"
+past_backup=""
+for _ in $(seq 10); do
+  now_s="$(src_psql -c 'SELECT floor(extract(epoch FROM clock_timestamp()))::bigint')"
+  if [ "$now_s" -gt "$BACKUP_STOP" ]; then
+    past_backup=yes
+    break
+  fi
+  sleep 1
+done
+[ -n "$past_backup" ] || fail "2 marker: database clock not past repo2's first backup stop ($BACKUP_STOP)"
 MARKER_ID="$(src_psql -c "INSERT INTO ops_drill_markers (id, kind) VALUES (gen_random_uuid(), 'marker') RETURNING id" | head -1)"
 # pgBackRest takes the target as "YYYY-MM-DD HH:MM:SS.ffffff+00"; so does `drill record`.
 IFS='|' read -r T_MARKER MARKER_WAL < <(src_psql -F '|' -c \

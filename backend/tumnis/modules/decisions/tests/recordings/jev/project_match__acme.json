@@ -1,0 +1,150 @@
+{
+  "point": "project_match",
+  "inputs": {
+    "kind": "email",
+    "sender_email": "dana@acme.example.com",
+    "sender_name": "Dana Rivers",
+    "subject": "Homepage hero copy for review",
+    "thread_subject": "Acme redesign: homepage",
+    "participants": [
+      "dana@acme.example.com",
+      "scott@example.org"
+    ],
+    "body_head": "Hi Scott, attached is the new hero copy for the homepage. Could you look it over before Thursday's call?",
+    "projects": [
+      {
+        "name": "Acme site",
+        "client": "Acme",
+        "goal": "Ship the Acme marketing site redesign by June",
+        "domains": [
+          "acme.example.com"
+        ],
+        "people": [
+          "dana@acme.example.com"
+        ],
+        "keywords": [
+          "redesign",
+          "homepage",
+          "hero"
+        ]
+      },
+      {
+        "name": "Beta app",
+        "client": "Beta Labs",
+        "goal": "Launch the Beta mobile app beta to 50 testers",
+        "domains": [
+          "beta.example.org"
+        ],
+        "people": [
+          "lee@beta.example.org"
+        ],
+        "keywords": [
+          "testflight",
+          "onboarding"
+        ]
+      },
+      {
+        "name": "Tumnis",
+        "goal": "Build the Tumnis Guide v1",
+        "keywords": [
+          "planner",
+          "agents"
+        ]
+      }
+    ]
+  },
+  "request": {
+    "state": {
+      "kind": "email",
+      "sender_email": "dana@acme.example.com",
+      "sender_name": "Dana Rivers",
+      "subject": "Homepage hero copy for review",
+      "thread_subject": "Acme redesign: homepage",
+      "participants": [
+        "dana@acme.example.com",
+        "scott@example.org"
+      ],
+      "body_head": "Hi Scott, attached is the new hero copy for the homepage. Could you look it over before Thursday's call?"
+    },
+    "model": "jev-1.13.0",
+    "questions": {
+      "project": {
+        "type": "choice",
+        "instructions": "Which project does this item belong to? Compare the sender, participants, subject and body with each project's name, client, goal, domains, people and keywords. Unknown: no project fits, or the item does not say enough to tell.",
+        "criteria": {
+          "p01": {
+            "name": "Acme site",
+            "client": "Acme",
+            "goal": "Ship the Acme marketing site redesign by June",
+            "domains": [
+              "acme.example.com"
+            ],
+            "people": [
+              "dana@acme.example.com"
+            ],
+            "keywords": [
+              "redesign",
+              "homepage",
+              "hero"
+            ]
+          },
+          "p02": {
+            "name": "Beta app",
+            "client": "Beta Labs",
+            "goal": "Launch the Beta mobile app beta to 50 testers",
+            "domains": [
+              "beta.example.org"
+            ],
+            "people": [
+              "lee@beta.example.org"
+            ],
+            "keywords": [
+              "testflight",
+              "onboarding"
+            ]
+          },
+          "p03": {
+            "name": "Tumnis",
+            "goal": "Build the Tumnis Guide v1",
+            "keywords": [
+              "planner",
+              "agents"
+            ]
+          },
+          "unknown": "No project fits, or the item does not say enough to tell."
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "x-typesafe-request-id": "req_synthetic_0008"
+    },
+    "body": {
+      "model": "jev-1.13.0",
+      "usage": {
+        "input_tokens": 308,
+        "output_tokens": 1
+      },
+      "answers": {
+        "project": {
+          "type": "choice",
+          "choice": "p01",
+          "confidence": 0.87,
+          "probabilities": {
+            "p01": 0.9,
+            "p02": 0.02,
+            "p03": 0.01,
+            "unknown": 0.07
+          }
+        }
+      }
+    }
+  },
+  "latency_ms": 318,
+  "recorded_at": null,
+  "sdk_version": "0.7.2",
+  "synthetic": true,
+  "notes": "Synthetic: hand-authored in the typesafe-sdk 0.7.2 wire shape (no real Jev call was made); all names, addresses and domains are invented (example.com/example.org). Replace with scripts/record_jev.py output against the real API."
+}

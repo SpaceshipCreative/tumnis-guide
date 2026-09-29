@@ -406,7 +406,9 @@ async def create_project(
     )
     await emit(
         s,
-        ProjectCreatedV1(project_id=project_id, name=data.name, brief_md=data.brief_md),
+        ProjectCreatedV1(
+            project_id=project_id, name=data.name, brief_md=data.brief_md, goal=data.goal
+        ),
         occurred_at=_now(now),
     )
     mark_changed(s, LIVE_ENTITY, project_id)
@@ -434,7 +436,13 @@ async def _changed(
 ) -> ProjectOut:
     await emit(
         s,
-        ProjectUpdatedV1(project_id=row.id, changed_fields=sorted(fields)),
+        ProjectUpdatedV1(
+            project_id=row.id,
+            changed_fields=sorted(fields),
+            name=row.name,
+            goal=row.goal,
+            archived=row.archived_at is not None,
+        ),
         occurred_at=_now(now),
     )
     mark_changed(s, LIVE_ENTITY, row.id)

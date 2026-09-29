@@ -1,0 +1,117 @@
+{
+  "point": "quick_add_label",
+  "inputs": {
+    "title": "Send Acme the March invoice",
+    "project_name": "Acme site",
+    "project_goal": "Ship the Acme marketing site redesign by June",
+    "reserved_judgments": [
+      "pricing",
+      "hiring",
+      "client contracts"
+    ]
+  },
+  "request": {
+    "state": {
+      "title": "Send Acme the March invoice",
+      "project_name": "Acme site",
+      "project_goal": "Ship the Acme marketing site redesign by June",
+      "reserved_judgments": [
+        "pricing",
+        "hiring",
+        "client contracts"
+      ]
+    },
+    "model": "jev-1.13.0",
+    "questions": {
+      "label": {
+        "type": "choice",
+        "instructions": "Who should do this task? Human: it needs a decision, a relationship, a signature, physical presence, or judgment the user has reserved (see `reserved_judgments`). AI: it is fully specified, verifiable by tests or an artifact, and within a software agent's competence. Hybrid: part of it is AI work and part needs the human. Unknown: the title does not say enough to tell.",
+        "criteria": {
+          "human": "Needs a decision, a relationship, a signature, physical presence, or a judgment the user reserved.",
+          "ai": "Fully specified, verifiable by tests or an artifact, and within a software agent's competence.",
+          "hybrid": "Part of it is AI work and part needs the human.",
+          "unknown": "The title does not say enough to tell."
+        }
+      },
+      "needs_decision": {
+        "type": "noul",
+        "instructions": "The task needs the user to make a decision."
+      },
+      "needs_relationship": {
+        "type": "noul",
+        "instructions": "The task depends on a personal relationship or conversation."
+      },
+      "needs_signature": {
+        "type": "noul",
+        "instructions": "The task needs the user's signature or legal approval."
+      },
+      "needs_presence": {
+        "type": "noul",
+        "instructions": "The task needs someone physically present."
+      },
+      "reserved_judgment": {
+        "type": "noul",
+        "instructions": "The task touches a judgment listed in `reserved_judgments`."
+      },
+      "specified_verifiable": {
+        "type": "noul",
+        "instructions": "The task is fully specified and its result can be verified by a test or an artifact."
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "x-typesafe-request-id": "req_synthetic_0011"
+    },
+    "body": {
+      "model": "jev-1.13.0",
+      "usage": {
+        "input_tokens": 431,
+        "output_tokens": 7
+      },
+      "answers": {
+        "label": {
+          "type": "choice",
+          "choice": "hybrid",
+          "confidence": 0.93,
+          "probabilities": {
+            "human": 0.04,
+            "ai": 0.02,
+            "hybrid": 0.93,
+            "unknown": 0.01
+          }
+        },
+        "needs_decision": {
+          "type": "noul",
+          "noul": 0.58
+        },
+        "needs_relationship": {
+          "type": "noul",
+          "noul": 0.41
+        },
+        "needs_signature": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "needs_presence": {
+          "type": "noul",
+          "noul": 0.02
+        },
+        "reserved_judgment": {
+          "type": "noul",
+          "noul": 0.06
+        },
+        "specified_verifiable": {
+          "type": "noul",
+          "noul": 0.55
+        }
+      }
+    }
+  },
+  "latency_ms": 250,
+  "recorded_at": null,
+  "sdk_version": "0.7.2",
+  "synthetic": true,
+  "notes": "Synthetic: hand-authored in the typesafe-sdk 0.7.2 wire shape (no real Jev call was made); all names, addresses and domains are invented (example.com/example.org). Replace with scripts/record_jev.py output against the real API."
+}
