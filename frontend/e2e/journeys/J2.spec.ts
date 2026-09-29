@@ -2,6 +2,11 @@
 // Phase 0 acceptance, committed red by P0-05. Turns green with P0-13 (steps 1
 // to 4), P0-17 (5), P0-20 and P0-25 (6 to 8), P0-24 (9 to 11), P0-23 (12); the
 // `test.fail()` comes off when the last of P0-25 and P0-23 merges.
+//
+// A1.1 · Quick-add with AI label and enrichment (journey J2). Phase 1
+// acceptance, committed red on the phase's first day. Turns green with P1-07
+// (label step), P1-03 (placeholder) and P1-08 (estimate and first action); the
+// `test.fail()` comes off when P1-08, the last of them, merges.
 import type { Request } from "@playwright/test";
 
 import {
@@ -9,6 +14,8 @@ import {
   expect,
   listTasks,
   projectCard,
+  projectIdByName,
+  quickAdd,
   quickAddDialog,
   openQuickAdd,
   section,
@@ -17,6 +24,16 @@ import {
   test,
   totp,
 } from "../fixtures";
+import {
+  ACME,
+  ACME_AGENT,
+  estimateChip,
+  firstAction,
+  labelChip,
+  quickAddedRow,
+  runnerScript,
+  taskDrawer,
+} from "../phase1";
 
 const NOW = new Date("2026-03-09T14:00:00Z"); // 10:00 in America/New_York
 const TITLE = "Send logo drafts to Acme";
@@ -192,3 +209,107 @@ test(
     }
   },
 );
+
+test.describe("A1.1 quick-add with AI", () => {
+  const AI_TITLE = "Send Acme the March invoice";
+  const PLACEHOLDER = "Open the invoice template";
+  const AGENT_FIRST_ACTION =
+    "Open last month's invoice in Wave and duplicate it";
+
+  test(
+    "A1.1 label under 1 s, enrichment streams in, one-click override persists",
+    { tag: ["@A1.1", "@J2", "@FR-3.3", "@FR-4.1", "@FR-4.4", "@P1-08"] },
+    async ({ signedInPage: page, fakes }, testInfo) => {
+      test.fail();
+      const phone = testInfo.project.name === "phone";
+      // Jev answers `hybrid` (0.93) at its recorded p50 of 250 ms; Generation
+      // gives the placeholder; the acme-site runner enriches after 1,500 ms.
+      await fakes.script("decisions.jev", {
+        question: "quick_add_label",
+        answer: "hybrid",
+        confidence: 0.93,
+        latency_ms: 250,
+      });
+      await fakes.script("generation", { first_action: PLACEHOLDER });
+      await fakes.runner.script(
+        runnerScript(ACME_AGENT, "enrich", "enrich__hybrid_invoice", 1_500),
+      );
+      const acme = await projectIdByName(page.request, ACME);
+      await page.goto("/");
+
+      // 1 and 2. `/` (the bottom button on a phone), title, typeahead, Enter;
+      // the timer starts at the Enter keypress.
+      await quickAdd(page, phone, AI_TITLE, { typed: "Acme", name: ACME });
+      const enter = Date.now();
+
+      // 3. The label chip reads Hybrid within 1,000 ms of Enter, with a
+      // one-line reason on focus.
+      const row = quickAddedRow(page, AI_TITLE);
+      const chip = labelChip(row);
+      await expect(chip).toHaveText("Hybrid", { timeout: 1_000 });
+      expect(Date.now() - enter).toBeLessThan(1_000);
+      await chip.focus();
+      const describedBy = await chip.getAttribute("aria-describedby");
+      expect(describedBy).toBeTruthy();
+      const reason = page.locator(`[id="${describedBy ?? ""}"]`);
+      await expect(reason).toBeVisible();
+      const reasonText = (await reason.innerText()).trim();
+      expect(reasonText).not.toBe("");
+      expect(reasonText).not.toContain("\n");
+
+      // 4. Placeholder first, then the agent's first action; estimate 20 min;
+      // at least one acceptance criterion.
+      const first = firstAction(row);
+      await expect(first).toHaveAttribute("data-state", "placeholder");
+      await expect(first).toHaveText(PLACEHOLDER);
+      await expect(first).toHaveText(AGENT_FIRST_ACTION, { timeout: 10_000 });
+      await expect(first).not.toHaveAttribute("data-state", "placeholder");
+      await expect(estimateChip(row)).toHaveText("20 min");
+      const [task] = (await listTasks(page.request, acme)).filter(
+        (t) => t.title === AI_TITLE,
+      );
+      expect(task).toBeDefined();
+      const taskId = task?.id ?? "";
+      await row.getByText(AI_TITLE, { exact: true }).click();
+      const drawer = taskDrawer(page, AI_TITLE);
+      await expect(
+        drawer
+          .getByRole("list", { name: "Acceptance criteria" })
+          .getByRole("listitem"),
+      ).not.toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(drawer).toBeHidden();
+
+      // 5. One click on Human: the chip changes at once (optimistic) and the
+      // PATCH carries the version and an Idempotency-Key.
+      const patch = page.waitForRequest(
+        (r) =>
+          r.method() === "PATCH" &&
+          new URL(r.url()).pathname === `/v1/tasks/${taskId}`,
+      );
+      await chip.click();
+      await page.getByRole("option", { name: "Human", exact: true }).click();
+      await expect(chip).toHaveText("Human", { timeout: 100 });
+      const sent: Request = await patch;
+      const body = sent.postDataJSON() as Record<string, unknown>;
+      expect(body.label).toBe("human");
+      expect(typeof body.version).toBe("number");
+      expect((await sent.allHeaders())["idempotency-key"]).toBeTruthy();
+
+      // 6. After a reload the label is still Human and the drawer's history
+      // says it came from you.
+      await page.reload();
+      const reloaded = quickAddedRow(page, AI_TITLE);
+      await expect(labelChip(reloaded)).toHaveText("Human");
+      await reloaded.getByText(AI_TITLE, { exact: true }).click();
+      await expect(labelChip(drawer)).toHaveText("Human");
+      await expect(
+        drawer
+          .getByRole("region", { name: "History" })
+          .getByRole("listitem")
+          .filter({ hasText: "Label" })
+          .first(),
+      ).toContainText("you");
+    },
+  );
+});

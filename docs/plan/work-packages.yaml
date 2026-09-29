@@ -394,7 +394,7 @@ phases:
 
 - id: 1
   name: AI core loop
-  status: planned
+  status: active
   weeks: 5 to 7
   lead: Phase 1 makes the dashboard plan itself. Jev labels, the project agent estimates, the master builds Today, and the knowledge base feeds the packet.
   exit: User plans every day from the dashboard for 2 straight weeks (PRD), counted from plan.published and plan acceptance events.

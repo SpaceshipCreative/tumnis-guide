@@ -3,7 +3,7 @@
 `board_rank` and `sort_key` compare bytewise (`COLLATE "C"`), so Postgres orders the
 fractional keys as Python and TypeScript do (core/rank.py)."""
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any
 from uuid import UUID
 
@@ -59,6 +59,10 @@ class Task(TenantBase, Base):
     actual_minutes: Mapped[int | None]
     tainted: Mapped[bool] = mapped_column(server_default=text("false"))
     source: Mapped[str] = mapped_column(server_default=text("'user'"))
+    # No foreign key: T-P0-18-17 lets the tasks tables reference only workspaces, projects,
+    # tasks, board columns and context items. Rules are only soft-deleted.
+    recurrence_rule_id: Mapped[UUID | None]
+    occurrence_on: Mapped[date | None]  # the local date this instance of its rule stands for
 
 
 class TaskComment(TenantBase, Base):
@@ -88,3 +92,29 @@ class ReviewItem(TenantBase, Base):
     snoozed_until: Mapped[datetime | None]
     decided_at: Mapped[datetime | None]
     decision: Mapped[str | None]
+
+
+class RecurrenceRule(TenantBase, Base):
+    """A recurring task's rule (P0-19, revision tasks_0002)."""
+
+    __tablename__ = "recurrence_rules"
+
+    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"))
+    task_template: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    preset: Mapped[str | None]
+    cron: Mapped[str | None]
+    weekday: Mapped[int | None]
+    month_day: Mapped[int | None]
+    due_time: Mapped[time] = mapped_column(server_default=text("'09:00'"))
+    latest_occurrence_at: Mapped[datetime | None]
+    next_due_at: Mapped[datetime | None]
+
+
+class DayClose(TenantBase, Base):
+    """One closed local day of a workspace (P0-19, revision tasks_0002)."""
+
+    __tablename__ = "day_closes"
+
+    day: Mapped[date]
+    closed_at: Mapped[datetime]
+    rolled_over: Mapped[int] = mapped_column(server_default=text("0"))
