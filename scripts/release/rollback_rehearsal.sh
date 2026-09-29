@@ -45,9 +45,17 @@ fail() {
 [ $# -eq 2 ] || fail "usage: rollback_rehearsal.sh <N: tag, ref or image> <N+1: tag, ref or image>"
 cd "$REPO"
 
+# The rehearsal starts no backup service, so no pgBackRest stanza exists: WAL archiving
+# stays off (a failing async archive-push makes Postgres restart under the api).
+cat >"$WORK/compose.skew.yaml" <<'YAML'
+services:
+  postgres:
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "archive_mode=off"]
+YAML
+
 compose() {
   TUMNIS_IMAGE="$IMAGE" TUMNIS_TEST_PORT="$PORT" \
-    docker compose -p "$PROJECT" -f deploy/compose.test.yaml "$@"
+    docker compose -p "$PROJECT" -f deploy/compose.test.yaml -f "$WORK/compose.skew.yaml" "$@"
 }
 
 cleanup() {
@@ -127,7 +135,7 @@ roll() { # api and worker onto the current image, waiting for the api's readines
 }
 
 revisions() {
-  compose exec -T postgres psql -U postgres -d tumnis -Atc \
+  compose exec -T -u postgres postgres psql -d tumnis -Atc \
     "SELECT string_agg(version_num, ',' ORDER BY version_num) FROM alembic_version"
 }
 
@@ -195,12 +203,12 @@ migrate >&2
 compose run --rm --no-deps --pull never seed >&2 || fail "seed from N failed"
 roll
 smoke "N" >/dev/null
-before="$(revisions)"
+before="$(revisions)" || fail "cannot read alembic_version"
 
 log "2. deploy N+1 (expand migrations only)"
 use "$N1_IMAGE"
 migrate >&2
-after="$(revisions)"
+after="$(revisions)" || fail "cannot read alembic_version"
 roll
 n1_title="$(smoke "N+1")"
 
