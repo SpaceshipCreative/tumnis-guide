@@ -176,3 +176,71 @@ async def test_rejected_code_ends_exchange_and_consumes_grant(  # noqa: PLR0917
     for pending in all_rows(db, "SELECT * FROM oauth_pending"):
         assert pending["deleted_at"] is not None
         assert pending["code_enc"] is None
+
+
+async def _assert_exchange_ended(
+    dbos_client: DBOSClient, google: FakeGoogleCalendar, workspace: WorkspaceHandle, db: DbUrls
+) -> None:
+    """The exchange workflow succeeded once, with one exchange and one calendar list (no
+    retry), no account connected and the grant used up."""
+    from tumnis.modules.calendar.api import list_accounts  # noqa: PLC0415
+
+    (workflow,) = await wait_for_workflows(dbos_client, "calendar_oauth_exchange")
+    assert workflow.status == "SUCCESS"
+    ops = [call[0] for call in google.calls]
+    assert ops.count("exchange_code") == 1
+    assert ops.count("list_calendars") == 1
+    assert await list_accounts(workspace.ctx) == []
+    pending_rows = all_rows(db, "SELECT * FROM oauth_pending")
+    assert pending_rows
+    for pending in pending_rows:
+        assert pending["deleted_at"] is not None
+        assert pending["code_enc"] is None
+
+
+@pytest.mark.req("FR-14.4")
+@pytest.mark.wp("P1-09")
+@pytest.mark.xfail(strict=True, reason="review:P1-09 permanent list_calendars failure")
+async def test_rejected_calendar_list_ends_exchange_and_consumes_grant(  # noqa: PLR0917
+    session_client: SessionClient,
+    dbos_client: DBOSClient,
+    google: FakeGoogleCalendar,
+    oauth_client: None,
+    workspace: WorkspaceHandle,
+    db: DbUrls,
+) -> None:
+    """Google refusing the calendar list (a permanent `AdapterRejected`) is final: the list
+    is not retried, the workflow ends, no account connects and the grant is used up."""
+    from tumnis.core.adapters.errors import AdapterRejected  # noqa: PLC0415
+
+    google.fail_calendar_list(
+        AdapterRejected("calendar.google", "list_calendars", "403 PERMISSION_DENIED"), times=3
+    )
+    await _callback(session_client, "code-a")
+
+    await _assert_exchange_ended(dbos_client, google, workspace, db)
+
+
+@pytest.mark.req("FR-14.4")
+@pytest.mark.wp("P1-09")
+@pytest.mark.xfail(strict=True, reason="review:P1-09 calendar list without a primary")
+async def test_no_primary_calendar_ends_exchange_and_consumes_grant(  # noqa: PLR0917
+    session_client: SessionClient,
+    dbos_client: DBOSClient,
+    google: FakeGoogleCalendar,
+    oauth_client: None,
+    workspace: WorkspaceHandle,
+    db: DbUrls,
+) -> None:
+    """A calendar list with no calendar marked primary is final: the workflow ends
+    without retrying, no account connects and the grant is used up."""
+    from tumnis.modules.calendar.adapters.port import CalendarInfo  # noqa: PLC0415
+
+    shared = CalendarInfo(
+        id="team@group.calendar.google.com", summary="Team", primary=False, time_zone="UTC"
+    )
+    for _ in range(3):
+        google.script_calendar_list([shared])
+    await _callback(session_client, "code-a")
+
+    await _assert_exchange_ended(dbos_client, google, workspace, db)
