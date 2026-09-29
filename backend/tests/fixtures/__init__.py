@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
     from testcontainers.community.postgres import PostgresContainer
 
+    from tumnis.core.tenancy import WorkspaceContext
     from tumnis.seed import SeedResult
     from tumnis.settings import Settings
 
@@ -128,6 +130,156 @@ def db(pg_base: DbUrls, db_template: str) -> Iterator[DbUrls]:
         yield urls
     finally:
         drop(pg_base, name)
+
+
+# --- Workspaces (P0-06) ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WorkspaceHandle:
+    """A workspace made for a test: its id, name and the context to act in it."""
+
+    id: uuid.UUID
+    name: str
+    ctx: WorkspaceContext
+
+
+def make_workspace(db: DbUrls, name: str = "Test", timezone: str = "America/New_York") -> uuid.UUID:
+    """Insert a workspace as the owner role (which bypasses row-level security) and return
+    its id."""
+    import psycopg  # noqa: PLC0415
+
+    from tests._pg import OWNER  # noqa: PLC0415
+
+    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+        row = conn.execute(
+            "INSERT INTO workspaces (name, timezone) VALUES (%s, %s) RETURNING id", (name, timezone)
+        ).fetchone()
+    assert row is not None
+    workspace_id: uuid.UUID = row[0]
+    return workspace_id
+
+
+@pytest.fixture
+def workspace(db: DbUrls) -> Iterator[WorkspaceHandle]:
+    """A workspace (name "Test", America/New_York) made as the owner; the test runs inside
+    its context as the system actor. P0-13 adds a user and a membership."""
+    from tumnis.core.tenancy import WorkspaceContext, use_workspace  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    ws = make_workspace(db)
+    handle = WorkspaceHandle(ws, "Test", WorkspaceContext(ws, SYSTEM_ACTOR))
+    with use_workspace(handle.ctx):
+        yield handle
+
+
+@pytest.fixture
+def two_workspaces(db: DbUrls) -> tuple[WorkspaceHandle, WorkspaceHandle]:
+    """Workspaces A and B, each with at least one row in every fenced table: the seed set
+    once its writers exist (P0-17, P0-18), and `minimal_row` for any table it leaves empty.
+    Enters no context: isolation tests choose theirs."""
+    import psycopg  # noqa: PLC0415
+
+    from tests._pg import OWNER  # noqa: PLC0415
+    from tests.meta._catalog import fenced_tables, tenant_key  # noqa: PLC0415
+    from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
+    from tumnis.core.tests.integration.row_factory import insert_row, minimal_row  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    pair = tuple(
+        WorkspaceHandle(ws, name, WorkspaceContext(ws, SYSTEM_ACTOR))
+        for name in ("A", "B")
+        for ws in [make_workspace(db, name)]
+    )
+    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+        for table in fenced_tables(conn):
+            if tenant_key(conn, table) != "workspace_id":
+                continue  # the root: each workspace is its own row
+            for handle in pair:
+                has_row = conn.execute(
+                    psycopg.sql.SQL("SELECT 1 FROM {} WHERE workspace_id = %s LIMIT 1").format(
+                        psycopg.sql.Identifier(table)
+                    ),
+                    (handle.id,),
+                ).fetchone()
+                if has_row is None:
+                    insert_row(conn, table, minimal_row(conn, table, handle.id))
+    a, b = pair
+    return a, b
+
+
+@dataclass(frozen=True)
+class PgBouncer:
+    """PgBouncer in transaction mode in front of pg_container, one server connection per
+    pool (`default_pool_size = 1`), so consecutive transactions share a backend."""
+
+    host: str
+    port: int
+
+    def libpq(self, role: str, dbname: str) -> str:
+        from tests._pg import PASSWORDS  # noqa: PLC0415
+
+        return f"postgresql://{role}:{PASSWORDS[role]}@{self.host}:{self.port}/{dbname}"
+
+
+# Same image as deploy/compose.yaml.
+PGBOUNCER_IMAGE = (
+    "edoburu/pgbouncer:v1.25.2-p0"
+    "@sha256:7d7a27d9e90985cab5cf42256f5c13a3120baa4b055b69df37beb272b89b2340"
+)
+PGBOUNCER_INI = """\
+[databases]
+* = host=postgres port=5432
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /tmp/userlist.txt
+pool_mode = transaction
+default_pool_size = 1
+max_client_conn = 20
+max_prepared_statements = 200
+ignore_startup_parameters = extra_float_digits
+"""
+
+
+@pytest.fixture(scope="session")
+def pgbouncer(pg_container: PostgresContainer) -> Iterator[PgBouncer]:
+    """A pinned PgBouncer on a Docker network shared with pg_container (alias
+    `postgres`); any database name routes to the test server, so tests connect to their
+    own `db` through it."""
+    from testcontainers.core.container import DockerContainer  # noqa: PLC0415
+    from testcontainers.core.wait_strategies import LogMessageWaitStrategy  # noqa: PLC0415
+
+    from tests._pg import PASSWORDS  # noqa: PLC0415
+
+    docker = pg_container.get_docker_client().client
+    network = docker.networks.create(f"tumnis-pgbouncer-{uuid.uuid4().hex[:8]}")
+    pg_id = pg_container.get_wrapped_container().id
+    network.connect(pg_id, aliases=["postgres"])
+    userlist = f'"{APP}" "{PASSWORDS[APP]}"\n'
+    container = (
+        DockerContainer(PGBOUNCER_IMAGE)
+        .with_kwargs(entrypoint=["/bin/sh", "-c"], network=network.name)
+        .with_env("PGBOUNCER_INI", PGBOUNCER_INI)
+        .with_env("PGBOUNCER_USERS", userlist)
+        .with_command(
+            [
+                'printf "%s" "$PGBOUNCER_INI" > /tmp/pgbouncer.ini'
+                ' && printf "%s" "$PGBOUNCER_USERS" > /tmp/userlist.txt'
+                " && exec pgbouncer /tmp/pgbouncer.ini"
+            ]
+        )
+        .with_exposed_ports(6432)
+        .waiting_for(LogMessageWaitStrategy("process up"))
+    )
+    try:
+        with container as bouncer:
+            yield PgBouncer(bouncer.get_container_host_ip(), int(bouncer.get_exposed_port(6432)))
+    finally:
+        network.disconnect(pg_id)
+        network.remove()
 
 
 async def _session(url: str) -> AsyncIterator[AsyncSession]:

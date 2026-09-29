@@ -16,6 +16,11 @@ Every request and every workflow step opens a transaction and runs `set_config('
 - `workspace_id` is the first column of every composite index and unique key.
 - Every cache key starts with the workspace ID.
 - The isolation suite (`backend/tests/isolation/`) walks every tenant table and every endpoint and MCP tool; the table registry fails when a tenant table lacks a policy.
+- Tests that enforce this decision (P0-06):
+  - `backend/tumnis/core/tests/integration/test_roles.py` (T-P0-06-05, 06): the app role owns nothing, bypasses nothing and cannot truncate, alter or drop policies.
+  - `backend/tests/meta/test_table_registry.py` (T-P0-06-01 to 04): every table in `public` is fenced or on the closed allow-list; `workspace_id` leads every composite index.
+  - `backend/tests/isolation/test_rls_tables.py` (T-P0-06-13, 14): per table, workspace B cannot read, change or insert workspace A's rows, and no context sees nothing.
+  - `backend/tumnis/core/tests/integration/test_tenancy.py` (T-P0-06-15, 16) and `test_pgbouncer_context.py` (T-P0-06-07, 08): the setting reaches every transaction and cannot leak through PgBouncer.
 
 ## Sources
 - [PostgreSQL row security policies](https://www.postgresql.org/docs/18/ddl-rowsecurity.html)

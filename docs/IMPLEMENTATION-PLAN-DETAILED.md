@@ -188,6 +188,7 @@ tumnis-guide/
 ├── scripts/
 │   ├── ci/spec_guard.py  ci/red_proof.py  ci/traceability.py  ci/check_bundle.mjs
 │   ├── ci/_tests_extract.py  ci/ts_tests.mjs  ci/pytest_trace.py  ci/coverage_gates.py  ci/branch_protection.sh
+│   ├── ci/squawk_migrations.py    # squawk over changed expand revisions (P0-06)
 │   ├── readme_test.py
 │   └── drill/restore_drill.sh
 └── docs/
@@ -274,8 +275,9 @@ Integration tests carry `@pytest.mark.enable_socket` through a module-level `pyt
 | `db_template` | session | Database migrated to head, used as `TEMPLATE` |
 | `db` | function | Fresh database `CREATE DATABASE t_<uuid> TEMPLATE db_template`; dropped after |
 | `app_role_session` / `owner_session` | function | SQLAlchemy async sessions as each role |
-| `workspace` | function | A workspace + user + membership; enters the workspace context |
-| `two_workspaces` | function | A and B with seeded rows each, for isolation tests |
+| `workspace` | function | A workspace (`WorkspaceHandle`: `id`, `name`, `ctx`) + user + membership (P0-13); enters the workspace context |
+| `two_workspaces` | function | A and B with seeded rows each (`row_factory.minimal_row` for tables the seed leaves empty), for isolation tests |
+| `pgbouncer` | session | PgBouncer in transaction mode (pool size 1) in front of `pg_container`; `.libpq(role, dbname)` (P0-06) |
 | `clock` | function | `FixedClock` set to 2026-03-09T12:00Z (US DST start week) with `advance()` |
 | `dbos` | function | DBOS destroyed, configured on `db`, system tables reset with truncate, launched |
 | `worker_killer` | function | Runs a workflow in a subprocess worker and kills it at a named step |
@@ -459,6 +461,8 @@ The work packages below add these names. Each WP's **Files** and **Interfaces** 
 | Kind | Addition | Introduced by |
 | --- | --- | --- |
 | Schema and SQL | Schema `app` with helper functions and eight SECURITY DEFINER functions (relay claim, auth lookups, workspace list), fixed by an allow-list test | P0-06, P0-13 |
+| Schema and SQL | `app.deployment_markers()`, the SECURITY DEFINER reader the boot checks call (the app role has no grant on `deployment_marker`); revision `core_0003` | P0-06 |
+| Files | `backend/tests/meta/_catalog.py` (`ALLOW_LIST`, `registry_violations`, `fenced_tables`), `backend/tests/_pg.py` (`create_database`, `prepare_database`, `schema_dump`), `make_workspace` in `backend/tests/fixtures`, harness revision `harness_0002` (`tenant_probe`, `tenant_probe_child`), `.squawk.toml` | P0-06 |
 | Tables | `auth_throttle`, `deployment_marker`, `audit_anchors`, `ops_backup_runs`, `ops_status`, `ops_drill_markers`, `day_closes`, `usage_ledger`, `task_changes` | P0-06 to P0-28 |
 | Tables | `runner_messages`, `plan_issues`, `plan_pins`, `project_folders`, `pending_writes`, `extraction_artifacts`, `calendar_accounts` | P1-04 to P1-17 |
 | Tables | `digest_entries`, `agent_pauses`, `archived_blobs`, `test_clock` (fakes only); daemon-side SQLite outbox | P2-03 to P2-18 |

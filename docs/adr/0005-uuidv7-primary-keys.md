@@ -17,6 +17,9 @@ Every tenant table's `id` is `uuid` with default `uuidv7()`. Python-side IDs, wh
 - IDs sort by creation time, which cursor pagination can use.
 - The creation time is roughly readable from the ID; nothing secret may depend on it being hidden.
 - Tests: the table-registry and uuidv7 tests in P0-06 enforce the default on every tenant table.
+  - `backend/tests/meta/test_table_registry.py::test_every_tenant_table_has_base_columns` (T-P0-06-01): `id uuid DEFAULT uuidv7()` on every tenant table.
+  - `backend/tumnis/core/tests/integration/test_uuidv7.py::test_uuidv7_ids_sort_by_creation_time` (T-P0-06-09): IDs sort in insertion order.
+  - `backend/tumnis/core/tests/unit/test_ids.py`: `tumnis.core.ids.uuid7()` is version 7 and monotonic.
 
 ## Sources
 - [PostgreSQL 18 UUID functions](https://www.postgresql.org/docs/18/functions-uuid.html)
