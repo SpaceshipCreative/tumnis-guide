@@ -1,4 +1,4 @@
-"""Command-line entry point: `tumnis api|worker|migrate|seed|drill|audit` (more later).
+"""Command-line entry point: `tumnis api|worker|migrate|seed|gen|drill|audit` (more later).
 
 The image runs every process through this CLI. `api` and `worker` load the deployment
 settings and run the boot checks first; a configuration error exits 78 (EX_CONFIG), so a
@@ -210,6 +210,41 @@ def seed(
         typer.echo(f"seed: {exc} (the owning module has not landed yet)", err=True)
         raise typer.Exit(1) from exc
     typer.echo(", ".join(f"{n} {kind}" for kind, n in counts.items()))
+
+
+class GenTarget(StrEnum):
+    schemas = "schemas"
+    openapi = "openapi"
+    contract_tests = "contract-tests"
+    all = "all"
+
+
+@app.command()
+def gen(
+    what: Annotated[GenTarget, typer.Argument(help="What to generate")] = GenTarget.all,
+    out: Annotated[
+        Path | None, typer.Option(help="Repository root to write under (default: this repo)")
+    ] = None,
+    check: Annotated[
+        bool, typer.Option("--check", help="Write nothing; exit 1 listing files that differ")
+    ] = False,
+) -> None:
+    """Generate the JSON Schemas, the OpenAPI document and the schema contract tests from
+    the code (P0-11); `make gen` then runs openapi-ts on the OpenAPI document."""
+    from tumnis import gen as generator  # noqa: PLC0415
+
+    root = (out or generator.REPO_ROOT).resolve()
+    if check:
+        differing = generator.check(root, what.value)
+        for rel in differing:
+            typer.echo(f"out of date: {rel}")
+        if differing:
+            typer.echo("run `make gen` and commit the result", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"gen {what.value}: up to date")
+        return
+    written = generator.generate(root, what.value)
+    typer.echo(f"gen {what.value}: wrote {len(written)} files under {root}")
 
 
 class DrillModeOption(StrEnum):

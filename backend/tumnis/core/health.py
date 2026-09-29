@@ -70,7 +70,13 @@ async def live() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/health/ready")
+@router.get(
+    "/health/ready",
+    responses={
+        200: {"description": "Ready (`ok`) or `degraded`: a non-critical check failed"},
+        503: {"description": "Down: a critical check failed"},
+    },
+)
 async def ready() -> JSONResponse:
     status, checks = await readiness()
     return JSONResponse(
