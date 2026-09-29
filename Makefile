@@ -40,5 +40,7 @@ up:
 down:
 	@echo "not yet (P0-04)"
 
+## CI guards locally: spec-guard against origin/main, then the traceability report (P0-03).
 guards:
-	@echo "not yet (P0-03)"
+	$(BACKEND) uv run python ../scripts/ci/spec_guard.py --base origin/main --head HEAD --repo .. --labels ""
+	$(BACKEND) uv run python ../scripts/ci/traceability.py --out ../trace.md

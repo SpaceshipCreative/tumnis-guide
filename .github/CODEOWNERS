@@ -1,0 +1,13 @@
+# Scott reviews everything; the explicit entries below keep locked tests, the plan, CI
+# and fixtures his even if a broader rule is added later (P0-03). A spec PR therefore
+# always needs his review.
+*                    @SpaceshipCreative
+
+backend/tests/**     @SpaceshipCreative
+frontend/e2e/**      @SpaceshipCreative
+**/*.test.ts         @SpaceshipCreative
+**/*.test.tsx        @SpaceshipCreative
+**/conftest.py       @SpaceshipCreative
+docs/plan/**         @SpaceshipCreative
+scripts/ci/**        @SpaceshipCreative
+.github/**           @SpaceshipCreative
