@@ -357,13 +357,14 @@ def _conflict(exc: IntegrityError) -> ProblemError:
 async def register_profile(s: AsyncSession, body: ProfileIn, *, now: datetime) -> AgentProfileOut:
     """Registers a Hermes profile Tumnis may run. 422 `invalid_profile_name` (NAME_RE or
     reserved) and `invalid_profile`; 404 for an unknown runner or project; 409
-    `master_exists`, `project_agent_exists`, `profile_exists`."""
+    `master_exists`, `project_agent_exists`, `profile_exists`. The references are checked
+    first, so a runner or project of another workspace is 404 whatever else the body holds."""
+    await _check_refs(s, runner_id=body.runner_id, project_id=body.project_id)
     try:
         validate_profile_name(body.name)
     except InvalidProfileName as exc:
         raise ProblemError(422, exc.code, str(exc)) from None
     _check_transport(body.transport, body.runner_id, body.endpoint)
-    await _check_refs(s, runner_id=body.runner_id, project_id=body.project_id)
     if body.role == "master":
         master = await s.scalar(
             select(_profiles.c.id).where(_profiles.c.role == "master", _live_profiles())
@@ -401,8 +402,8 @@ async def update_profile(
     values = body.model_dump(exclude_unset=True, exclude={"version"})
     runner_id = values.get("runner_id", row.runner_id)
     endpoint = values.get("endpoint", row.endpoint)
-    _check_transport(row.transport, runner_id, endpoint)
     await _check_refs(s, runner_id=values.get("runner_id"))
+    _check_transport(row.transport, runner_id, endpoint)
     updated = await update_versioned(s, _profiles, profile_id, body.version, values)
     mark_changed(s, LIVE_PROFILE, profile_id)
     return _profile_out(_ProfileRow.model_validate(dict(updated)))
