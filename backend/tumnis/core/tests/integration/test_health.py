@@ -44,7 +44,6 @@ def _app_without_postgres(clock: FixedClock) -> Any:
 
 @pytest.mark.req("REL-5")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 async def test_live_is_200_while_postgres_is_down(clock: FixedClock) -> None:
     """T-P0-04-01
     The app starts with Postgres unreachable, and liveness answers 200 without any I/O.
@@ -57,7 +56,6 @@ async def test_live_is_200_while_postgres_is_down(clock: FixedClock) -> None:
 
 @pytest.mark.req("REL-5")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 async def test_ready_is_503_while_postgres_is_down(clock: FixedClock) -> None:
     """T-P0-04-02
     A critical check failing makes readiness 503 with checks.postgres = "down".
@@ -72,7 +70,6 @@ async def test_ready_is_503_while_postgres_is_down(clock: FixedClock) -> None:
 
 @pytest.mark.req("REL-5")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 async def test_ready_reports_degraded_module_and_stays_200(
     client: httpx.AsyncClient, dbos: object
 ) -> None:
