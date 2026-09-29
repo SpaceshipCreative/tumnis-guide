@@ -80,3 +80,13 @@ def test_specs_that_cannot_fire_or_parse_are_refused() -> None:
             validate_spec(spec)
     with pytest.raises(InvalidRecurrence):
         next_occurrence(RecurrenceSpec(None, "0 9 31 2 *"), START, UTC_ZONE)
+
+
+@pytest.mark.req("FR-3.5")
+@pytest.mark.wp("P0-19")
+def test_cron_numbers_are_ascii_digits_only() -> None:
+    """A cron field whose number uses non-ASCII digits (superscript two, Arabic-Indic
+    three) is `invalid_recurrence`, not a bare ValueError from `int`."""
+    for expr in ["0 ² * * *", "٣ 9 * * *", "0 9 1-² * *"]:
+        with pytest.raises(InvalidRecurrence):
+            validate_spec(RecurrenceSpec(None, expr))

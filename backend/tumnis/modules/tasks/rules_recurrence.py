@@ -86,7 +86,7 @@ _FIELDS: Final = ((0, 59), (0, 23), (1, 31), (1, 12), (0, 7))
 
 
 def _number(text: str, low: int, high: int) -> int:
-    if not text.isdigit() or not low <= int(text) <= high:
+    if not (text.isascii() and text.isdecimal()) or not low <= int(text) <= high:
         raise InvalidRecurrence(f"{text!r} is not a number from {low} to {high}")
     return int(text)
 
