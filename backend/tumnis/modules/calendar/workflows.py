@@ -9,8 +9,9 @@
 - `calendar_oauth_exchange(workspace_id, pending_id)`: the worker's half of the OAuth
   callback (the api makes no outbound call, architecture principle 3). Step one exchanges
   the one-use code (a refused code ends it and uses the grant up); step two lists the
-  calendars, stores the account and consumes the grant in one transaction, so its retry
-  never exchanges the code again.
+  calendars (a refused list or one without a primary calendar ends it and uses the grant
+  up), stores the account and consumes the grant in one transaction, so its retry never
+  exchanges the code again.
 - `calendar_sync_tick`: every 10 minutes (plan default), a sync per connected account of
   every workspace.
 
@@ -177,14 +178,23 @@ async def exchange_code(workspace_id: str, pending_id: str) -> dict[str, Any]:
 @DBOS.step(**STEP_RETRY)
 async def connect_exchanged(workspace_id: str, pending_id: str, sealed: str) -> dict[str, Any]:
     """List the account's calendars with the exchanged tokens, then store the account and
-    consume the grant in one transaction (a rerun reconnects the same account)."""
+    consume the grant in one transaction (a rerun reconnects the same account). Google
+    refusing the list, or a list with no primary calendar, is final: the grant is used up
+    and nothing connects. A transient failure (`AdapterUnavailable`) retries."""
     ctx, pending = _ctx(workspace_id), UUID(pending_id)
     async with tenant_session(ctx) as s:
         opened = await open_for_workspace(
             s, ctx.workspace_id, base64.b64decode(sealed), aad=_tokens_aad(pending_id)
         )
     tokens = TokenSet.model_validate_json(opened)
-    calendars = await _google().list_calendars(tokens.access_token)
+    try:
+        calendars = await _google().list_calendars(tokens.access_token)
+    except AdapterRejected:
+        await integrations.consume_oauth_grant(ctx, pending)
+        return {"status": "rejected"}
+    if not any(calendar.primary for calendar in calendars):
+        await integrations.consume_oauth_grant(ctx, pending)
+        return {"status": "no_primary"}
     async with tenant_session(ctx) as s:
         account = await api.connect_account(ctx, tokens, calendars, session=s)
         await integrations.consume_oauth_grant(ctx, pending, session=s)

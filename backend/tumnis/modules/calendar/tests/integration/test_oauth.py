@@ -200,7 +200,6 @@ async def _assert_exchange_ended(
 
 @pytest.mark.req("FR-14.4")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="review:P1-09 permanent list_calendars failure")
 async def test_rejected_calendar_list_ends_exchange_and_consumes_grant(  # noqa: PLR0917
     session_client: SessionClient,
     dbos_client: DBOSClient,
@@ -223,7 +222,6 @@ async def test_rejected_calendar_list_ends_exchange_and_consumes_grant(  # noqa:
 
 @pytest.mark.req("FR-14.4")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="review:P1-09 calendar list without a primary")
 async def test_no_primary_calendar_ends_exchange_and_consumes_grant(  # noqa: PLR0917
     session_client: SessionClient,
     dbos_client: DBOSClient,
