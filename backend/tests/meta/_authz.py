@@ -164,16 +164,15 @@ async def canary_row(project_id: uuid.UUID) -> uuid.UUID:
     return row_id
 
 
-async def task_row(project_id: uuid.UUID) -> uuid.UUID:
-    """A task in project `project_id` (made with that id when there is none), in the
-    workspace of the newest API key (the one the case sends), written as the owner
-    (P0-18's `lookup:tasks` routes)."""
+async def _workspace_with_project(project_id: uuid.UUID) -> uuid.UUID:
+    """The workspace of the newest API key (the one the case sends), with project
+    `project_id` made there when there is none, written as the owner."""
     from sqlalchemy import text  # noqa: PLC0415
 
     from tumnis.core import db  # noqa: PLC0415
 
     async with db.owner_sessionmaker()() as s, s.begin():
-        workspace_id = await s.scalar(
+        workspace_id: uuid.UUID | None = await s.scalar(
             text("SELECT workspace_id FROM api_keys ORDER BY created_at DESC, id DESC LIMIT 1")
         )
         await s.execute(
@@ -183,6 +182,20 @@ async def task_row(project_id: uuid.UUID) -> uuid.UUID:
             ),
             {"p": project_id, "ws": workspace_id, "name": f"Authz {project_id}"},
         )
+    assert workspace_id is not None
+    return workspace_id
+
+
+async def task_row(project_id: uuid.UUID) -> uuid.UUID:
+    """A task in project `project_id` (made with that id when there is none), in the
+    workspace of the newest API key (the one the case sends), written as the owner
+    (P0-18's `lookup:tasks` routes)."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from tumnis.core import db  # noqa: PLC0415
+
+    workspace_id = await _workspace_with_project(project_id)
+    async with db.owner_sessionmaker()() as s, s.begin():
         task_id: uuid.UUID | None = await s.scalar(
             text(
                 "INSERT INTO tasks (workspace_id, project_id, title, board_rank, created_by)"
@@ -194,9 +207,25 @@ async def task_row(project_id: uuid.UUID) -> uuid.UUID:
     return task_id
 
 
+async def document_row(project_id: uuid.UUID) -> uuid.UUID:
+    """A text entry in project `project_id` (made with that id when there is none), in the
+    newest API key's workspace, written through knowledge's api as the system actor
+    (P0-24's `lookup:knowledge` route)."""
+    from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+
+    workspace_id = await _workspace_with_project(project_id)
+    async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
+        return await knowledge.put_text_document(
+            s, project_id, title="Authz probe", body_md="Probe", role=None
+        )
+
+
 # module -> make a row of that module in the project; returns its id (lookup:<module>).
 LOOKUP_TARGETS: dict[str, Callable[[uuid.UUID], Awaitable[uuid.UUID]]] = {
     "authz_canary": canary_row,
+    "knowledge": document_row,
     "tasks": task_row,
 }
 
