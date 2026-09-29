@@ -66,6 +66,12 @@ forbidden_modules =
     tumnis.worker
     tumnis.cli
     tumnis.wiring
+# Core's own tests drive the app factory and the CLI (P0-04: health, boot guard, commands);
+# core code itself still never imports a composition root.
+ignore_imports =
+    tumnis.core.tests.** -> tumnis.app
+    tumnis.core.tests.** -> tumnis.cli
+unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:module-graph-acyclic]
 name = No cycles between modules

@@ -20,12 +20,15 @@ from tumnis.core.adapters.registry import AdapterMode, registered, resolve
 from tumnis.core.clock import FixedClock
 
 if TYPE_CHECKING:
+    import httpx
     from dbos import DBOS
+    from fastapi import FastAPI
     from sqlalchemy.engine import Engine
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
     from testcontainers.community.postgres import PostgresContainer
 
     from tumnis.seed import SeedResult
+    from tumnis.settings import Settings
 
 BACKEND = Path(__file__).resolve().parents[2]
 SEED_SET = BACKEND / "fixtures" / "seed"
@@ -204,6 +207,50 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
         yield DBOS
     finally:
         DBOS.destroy(destroy_registry=False)
+
+
+# --- The FastAPI app and an HTTP client on it (P0-04) -------------------------------------
+
+
+def settings_for(db: DbUrls, dbos_db: DbUrls | None = None, **overrides: Any) -> Settings:
+    """Deployment settings pointing at the per-test database with fakes (the plan's
+    `test_settings(db)`; renamed so pytest does not collect it as a test)."""
+    from tumnis.settings import Settings  # noqa: PLC0415
+
+    values: dict[str, Any] = {
+        "database_url": db.app,
+        "database_direct_url": db.app,
+        "database_owner_url": db.owner,
+        "dbos_system_database_url": dbos_db.url(APP) if dbos_db else None,
+        "deployment_env": "dev",
+        "tumnis_adapters": "fake",
+        **overrides,
+    }
+    return Settings(**values)
+
+
+@pytest.fixture
+async def app(
+    db: DbUrls, dbos_sys_db: DbUrls, clock: FixedClock, fakes: Fakes
+) -> AsyncIterator[FastAPI]:
+    """create_app on the per-test database with fakes; engines disposed afterwards."""
+    from tumnis.app import create_app  # noqa: PLC0415
+    from tumnis.core import db as core_db  # noqa: PLC0415
+
+    try:
+        yield create_app(settings=settings_for(db, dbos_sys_db), clock=clock)
+    finally:
+        await core_db.dispose()
+
+
+@pytest.fixture
+async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    """httpx client on the app in-process; an HTTPS base so Secure cookies round-trip."""
+    import httpx  # noqa: PLC0415
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="https://test") as http:
+        yield http
 
 
 class QueryCounter:
