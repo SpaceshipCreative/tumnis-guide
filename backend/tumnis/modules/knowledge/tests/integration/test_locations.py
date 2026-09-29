@@ -366,3 +366,33 @@ async def test_location_credentials_encrypted(
     async with tenant_session(ws.ctx) as s:
         checked = await knowledge.check_location(s, created.id, net=SELF_HOSTED)
     assert checked.status == "online"
+
+
+@pytest.mark.req("FR-15.7", "SEC-5")
+@pytest.mark.wp("P1-14")
+@pytest.mark.xfail(strict=True, reason="review:PR52 hosted server path")
+async def test_pr52_hosted_mode_refuses_server_path_locations(
+    db: DbUrls, knowledge_ws: WorkspaceHandle, tmp_location: Path
+) -> None:
+    """Hosted mode offers S3 and SFTP only (FR-15.7): saving a server path is refused (422
+    `invalid_location`, nothing saved, nothing written under the root), and a server path
+    saved in self-hosted mode is not opened when the deployment runs hosted, so no
+    workspace can point a location at another workspace's folder on the hosted server."""
+    from tumnis.core.errors import ProblemError  # noqa: PLC0415
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+
+    ws = knowledge_ws
+    body = knowledge.LocationIn(name="disk", kind="server_path", root=str(tmp_location))
+    with pytest.raises(ProblemError) as e:
+        async with tenant_session(ws.ctx) as s:
+            await knowledge.create_location(s, body, net=HOSTED)
+    assert (e.value.status, e.value.code) == (422, "invalid_location")
+    assert _count(db, "SELECT count(*) FROM storage_locations") == 0
+
+    location_id = await _server_path_location(ws, tmp_location, "disk")
+    with pytest.raises(ProblemError) as e:
+        async with tenant_session(ws.ctx) as s:
+            await knowledge.check_location(s, location_id, net=HOSTED)
+    assert (e.value.status, e.value.code) == (422, "invalid_location")
+    assert _files(tmp_location) == []
