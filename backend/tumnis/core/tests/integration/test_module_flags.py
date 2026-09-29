@@ -34,6 +34,21 @@ async def core_db(db: DbUrls) -> AsyncIterator[None]:
 
 
 @pytest.fixture
+def scratch_subscribers() -> Iterator[None]:
+    """Unregister the subscribers a test in this file registers, after the test. The
+    registry is process-wide: a probe left on `test.ping` would reach every later test on
+    this xdist worker (the kill-and-resume harness would wait for its deliveries).
+    Subscribers other modules register on import stay."""
+    try:
+        yield
+    finally:
+        events = importlib.import_module("tumnis.core.events")
+        registry = events._subscribers
+        for name in [n for n, sub in registry.items() if sub.handler.__module__ == __name__]:
+            del registry[name]
+
+
+@pytest.fixture
 def deployment_flags() -> Iterator[None]:
     """Every create_app sets the deployment kill list; forget it after the test."""
     try:
@@ -120,6 +135,7 @@ async def test_disabled_module_hides_its_routes(
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-08")
+@pytest.mark.usefixtures("scratch_subscribers")
 async def test_disabled_module_subscribers_are_skipped(
     db: DbUrls, dbos: Any, clock: FixedClock
 ) -> None:
