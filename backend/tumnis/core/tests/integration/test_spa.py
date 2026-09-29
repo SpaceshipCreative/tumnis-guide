@@ -33,7 +33,6 @@ def _dist(root: Path) -> Path:
 
 @pytest.mark.req("FR-7.1")
 @pytest.mark.wp("P0-22")
-@pytest.mark.xfail(strict=True, reason="spec:P0-22")
 async def test_api_serves_shell_and_deep_links(  # noqa: PLR0917
     db: DbUrls,
     dbos_sys_db: DbUrls,

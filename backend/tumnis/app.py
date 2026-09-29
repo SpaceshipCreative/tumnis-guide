@@ -49,6 +49,7 @@ SHELL_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 # Paths the single-page app never owns: an unknown one stays a 404, not the shell.
 NOT_SHELL = ("v1", "health", "metrics", "mcp", "ws", "assets")
+IMMUTABLE = "public, max-age=31536000, immutable"
 
 
 class ShellFiles(StaticFiles):
@@ -61,12 +62,17 @@ class ShellFiles(StaticFiles):
         if scope["method"] not in ("GET", "HEAD"):
             raise HTTPException(status_code=404)
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
             first, last = path.partition("/")[0], path.rsplit("/", 1)[-1]
             if exc.status_code != HTTPStatus.NOT_FOUND or first in NOT_SHELL or "." in last:
                 raise
-            return await super().get_response("index.html", scope)
+            response = await super().get_response("index.html", scope)
+        # Hashed assets never change under their name; everything else (index.html, sw.js,
+        # the manifest, icons) is revalidated so a deploy reaches the next open (P0-22).
+        hashed = path.startswith("assets/")
+        response.headers["Cache-Control"] = IMMUTABLE if hashed else "no-cache"
+        return response
 
 
 @asynccontextmanager
