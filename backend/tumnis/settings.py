@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal, Self
 
 from psycopg import errors as pg_errors
-from pydantic import Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
@@ -54,8 +54,26 @@ BOOT_DB_ATTEMPTS = 30
 BOOT_DB_RETRY_S = 2.0
 
 
+class GenerationSettings(BaseModel):
+    """The Generation slot (P1-03, FR-11.8): the local OpenAI-compatible endpoint (vLLM) the
+    worker asks for placeholder first actions and spoken focus messages, and how long a
+    caller waits (R-30: tests shorten it). Unset `base_url` or `model` leaves the slot off:
+    the first action simply stays pending. Env: `GENERATION__BASE_URL` and so on.
+
+    Transport: requests carry task titles and project names in cleartext over `http://`,
+    so an `http://` base URL is for a trusted, isolated LAN only (the homelab vLLM); use
+    `https://` anywhere else."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    base_url: str | None = None  # e.g. http://vllm.lan:8000 (the /v1 API root is appended)
+    model: str | None = None  # the served model name
+    placeholder_timeout_ms: int = Field(default=2000, gt=0)  # plan default
+    spoken_timeout_ms: int = Field(default=2000, gt=0)  # plan default (P2-16's caller)
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="", extra="ignore", env_nested_delimiter="__")
 
     database_url: str
     database_direct_url: str
@@ -78,6 +96,7 @@ class Settings(BaseSettings):
     # Comma-separated CIDR ranges (or addresses) the SSRF guard allows in hosted mode even
     # though they are private (P0-16, SEC-5); self-hosted mode allows the LAN anyway.
     outbound_allowlist: str = ""
+    generation: GenerationSettings = Field(default_factory=GenerationSettings)
 
     @model_validator(mode="after")
     def _preview_guard(self) -> Self:
