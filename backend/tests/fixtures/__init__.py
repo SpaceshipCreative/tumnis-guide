@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
     from testcontainers.community.postgres import PostgresContainer
 
+    from tumnis.core.events import EventEnvelope
     from tumnis.core.tenancy import WorkspaceContext
     from tumnis.seed import SeedResult
     from tumnis.settings import Settings
@@ -394,6 +395,33 @@ def dbos_client(dbos: type[DBOS], dbos_sys_db: DbUrls) -> Iterator[DBOSClient]:
         yield client
     finally:
         client.destroy()
+
+
+# --- Envelopes for subscriber tests (P0-21) -----------------------------------------------
+
+
+def make_envelope(
+    name: str,
+    payload: dict[str, Any],
+    workspace: WorkspaceHandle,
+    event_id: uuid.UUID | None = None,
+    *,
+    occurred_at: datetime = CLOCK_START,
+) -> EventEnvelope:
+    """An envelope as the relay would hand it to a subscriber: version 1, the system actor,
+    a fresh uuid4 event id unless one is given. Any subscriber test can call a handler (or
+    `deliver_event`) with it, without an emitter or the relay."""
+    from tumnis.core.events import EventEnvelope  # noqa: PLC0415
+
+    return EventEnvelope(
+        event_id=event_id or uuid.uuid4(),
+        name=name,
+        schema_version=1,
+        workspace_id=workspace.id,
+        occurred_at=occurred_at,
+        actor="system",
+        payload=payload,
+    )
 
 
 # --- Kill-and-resume: a worker in a subprocess, killed at a named step (P0-07) -------------
