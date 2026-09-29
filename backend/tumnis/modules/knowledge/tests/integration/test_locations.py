@@ -440,3 +440,63 @@ async def test_pr52_hosted_mode_refuses_plain_http_s3_endpoints(
             s, s3_location("lan", "http://minio.lan:9000"), net=SELF_HOSTED, resolver=lan
         )
     assert _count(db, "SELECT count(*) FROM storage_locations") == 2
+
+
+@pytest.mark.req("FR-15.12")
+@pytest.mark.wp("P1-14")
+@pytest.mark.xfail(strict=True, reason="review:PR52 S3 etag")
+async def test_pr52_s3_write_already_landed_counts_as_written(
+    db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, minio: S3Endpoint
+) -> None:
+    """On S3 the etag is the provider's (MD5 for a single put), never the note's sha256, so
+    "the bytes are already there" is decided on the bytes: saving an unchanged note again
+    is written (not 409), and a queued write whose bytes already landed (a crash between
+    the write and the queue delete) drains instead of staying queued."""
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+    from tumnis.modules.knowledge.tests.contract.test_storage_s3 import (  # noqa: PLC0415
+        make_bucket,
+    )
+
+    ws = knowledge_ws
+    bucket = await make_bucket(minio)
+    body = knowledge.LocationIn(
+        name="minio",
+        kind="s3",
+        root=f"{bucket}/tumnis",
+        is_default=True,
+        s3=knowledge.S3ConfigIn(
+            endpoint=_lan_endpoint(minio),
+            region=minio.region,
+            access_key=minio.access_key,
+            secret_key=minio.secret_key,
+        ),
+    )
+    async with tenant_session(ws.ctx) as s:
+        location = await knowledge.create_location(s, body, net=SELF_HOSTED)
+    assert location.status == "online"
+    project_id = await _project(ws, clock)
+    async with tenant_session(ws.ctx) as s:
+        await knowledge.assign_project_folder(s, project_id)
+        note_id = await knowledge.put_text_document(
+            s, project_id, title="Plan", body_md="# Plan\n", role=None
+        )
+    async with tenant_session(ws.ctx) as s:
+        first = await knowledge.save_note(s, note_id, net=SELF_HOSTED)
+    assert first.status == "written"
+
+    async with tenant_session(ws.ctx) as s:
+        again = await knowledge.save_note(s, note_id, net=SELF_HOSTED)
+    assert again.status == "written"
+
+    with psycopg.connect(db.libpq(OWNER)) as conn:
+        conn.execute(
+            "UPDATE storage_locations SET status = 'offline' WHERE id = %s", (location.id,)
+        )
+    async with tenant_session(ws.ctx) as s:
+        queued = await knowledge.save_note(s, note_id, net=SELF_HOSTED)
+    assert queued.status == "queued"
+    async with tenant_session(ws.ctx) as s:
+        checked = await knowledge.check_location(s, location.id, net=SELF_HOSTED)
+    assert checked.status == "online"
+    assert _count(db, "SELECT count(*) FROM pending_writes") == 0
