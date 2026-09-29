@@ -135,7 +135,6 @@ def test_every_tenant_table_has_rows_in_both_workspaces(
 
 @pytest.mark.req("ADR-0009")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_isolation_covers_every_catalog_table(db: DbUrls) -> None:
     """The tables T-P0-06-13 is parametrized with (read from the migrations at collection)
     are exactly the fenced tables in the migrated database's catalog."""

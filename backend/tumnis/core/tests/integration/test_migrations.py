@@ -38,7 +38,6 @@ def empty_db(pg_base: DbUrls) -> Iterator[DbUrls]:
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_upgrade_downgrade_upgrade_empty(pg_container: PostgresContainer, empty_db: DbUrls) -> None:
     """T-P0-06-10
     `upgrade heads`, `downgrade base`, `upgrade heads` on an empty database; the schema dump
