@@ -299,3 +299,33 @@ export async function markStartTime(page: Page, name: string): Promise<number> {
     name,
   );
 }
+
+// --- App shell (P0-22) ----------------------------------------------------------
+
+/**
+ * Opens the app shell at `path` and waits for `main`. Anonymous until P0-13's
+ * `signedInPage` exists; then it signs in first, so the shell specs keep working
+ * once screens load data that needs a session.
+ */
+export async function openShell(page: Page, path = "/"): Promise<void> {
+  await page.goto(path);
+  await page.getByRole("main").waitFor();
+}
+
+/** Links in the shell's visible navigation (the rail or the bottom bar). */
+export function shellNavLinks(page: Page): Locator {
+  return page
+    .getByRole("navigation", { name: "Primary" })
+    .filter({ visible: true })
+    .getByRole("link");
+}
+
+/** Whether the element shows a focus indicator: an outline or a box shadow. */
+export async function focusRing(element: Locator): Promise<boolean> {
+  return element.evaluate((el) => {
+    const style = getComputedStyle(el);
+    const outline =
+      style.outlineStyle !== "none" && parseFloat(style.outlineWidth) >= 1;
+    return outline || style.boxShadow !== "none";
+  });
+}

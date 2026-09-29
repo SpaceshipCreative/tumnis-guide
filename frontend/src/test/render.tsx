@@ -1,11 +1,18 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  createMemoryHistory,
+  RouterProvider,
+  type AnyRouter,
+} from "@tanstack/react-router";
+import {
   render,
   type RenderOptions,
   type RenderResult,
 } from "@testing-library/react";
 import { userEvent, type UserEvent } from "@testing-library/user-event";
-import type { ReactElement, ReactNode } from "react";
+import { act, type ReactElement, type ReactNode } from "react";
+
+import { createAppRouter } from "../router";
 
 export interface RenderWithProvidersOptions extends Omit<
   RenderOptions,
@@ -52,4 +59,32 @@ export function renderWithProviders(
     queryClient,
     user,
   };
+}
+
+export interface RenderRouteResult extends RenderResult {
+  router: AnyRouter;
+  queryClient: QueryClient;
+  user: UserEvent;
+}
+
+/**
+ * The whole app at `url`: the real route tree on a memory history, loaded before the
+ * first render (redirects in `beforeLoad` have run by the time it resolves).
+ */
+export async function renderRoute(
+  url: string,
+  { queryClient = createTestQueryClient() }: { queryClient?: QueryClient } = {},
+): Promise<RenderRouteResult> {
+  const router = createAppRouter({
+    queryClient,
+    history: createMemoryHistory({ initialEntries: [url] }),
+  });
+  await act(() => router.load());
+  const user = userEvent.setup();
+  const result = render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  return { ...result, router, queryClient, user };
 }

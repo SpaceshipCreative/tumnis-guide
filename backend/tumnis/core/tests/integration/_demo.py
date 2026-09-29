@@ -5,12 +5,13 @@ spec-guard locks the test bodies, and this module is the harness they drive.
   fixture time with P0-06's `create_tenant_table`, run through Alembic's operations on the
   per-test database.
 - `build_router(state)`: `POST /v1/demo-items` (idempotent), `PATCH /v1/demo-items/{item_id}`
-  (idempotent, versioned) and `GET /v1/demo-items` (paginated, `sort=id|due_on`), declared
+  (idempotent, versioned), `GET /v1/demo-items/{item_id}` (P0-22's ETag test) and
+  `GET /v1/demo-items` (paginated, `sort=id|due_on`), declared
   through `v1_router` and `route_policy`. `DemoState` counts handler runs and scripts a
   delay or a failure inside the write's transaction.
 - `TestPrincipalMiddleware`: `X-Test-Principal: <workspace>:<principal>` becomes a session
   principal on `request.state.principal`. It stands in for P0-13's authentication
-  middleware and is installed only by `demo_app`.
+  middleware and is installed only by `demo_app` (HTTP requests and WebSocket handshakes).
 - Fixtures: `demo_items` (creates the table), `demo_app` (`create_app(extra_routers=[demo])` plus
   the test principal middleware; yields `Demo(app, state, clock)`), `demo_client` (httpx
   on it; application errors come back as 500 responses instead of raising).
@@ -36,6 +37,7 @@ from fastapi import Depends, Query
 from pydantic import BaseModel, ConfigDict
 
 from tests._pg import OWNER
+from tumnis.core.errors import ProblemError
 from tumnis.core.idempotency import SessionDep
 from tumnis.core.pagination import Page, PageParams, SortKey, page_params, paginate
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
@@ -149,6 +151,15 @@ def build_router(state: DemoState) -> APIRouter:
         row = await update_versioned(session, t, item_id, body.version, values)
         return DemoItem.model_validate(row)
 
+    @router.get("/{item_id}")
+    @route_policy(RoutePolicy(auth="session_or_key"))
+    async def get_demo_item(item_id: uuid.UUID, session: SessionDep) -> DemoItem:
+        stmt = sa.select(t).where(t.c.id == item_id, t.c.deleted_at.is_(None))
+        row = (await session.execute(stmt)).mappings().one_or_none()
+        if row is None:
+            raise ProblemError(404, "not_found", "No such demo item")
+        return DemoItem.model_validate(row)
+
     @router.get("")
     @route_policy(RoutePolicy(auth="session_or_key", paginated=True))
     async def list_demo_items(
@@ -178,7 +189,7 @@ class TestPrincipalMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http":
+        if scope["type"] in ("http", "websocket"):
             from tumnis.core.principal import Principal  # noqa: PLC0415
 
             headers = dict(scope.get("headers", []))

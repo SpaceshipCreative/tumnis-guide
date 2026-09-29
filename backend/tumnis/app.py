@@ -131,6 +131,7 @@ def create_app(
     settings: Settings | None = None,
     clock: Clock | None = None,
     extra_routers: Sequence[APIRouter] = (),
+    shell_dir: Path | None = None,
 ) -> FastAPI:
     settings = settings or Settings()  # values come from the environment
     metrics_token = settings.metrics_token()  # SettingsError: prod needs METRICS_TOKEN_FILE
@@ -188,6 +189,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(metrics.router)  # GET /metrics, bearer (P0-27)
     app.include_router(v1_routes(settings, extra_routers))
-    if SHELL_DIR.is_dir():
-        app.mount("/", ShellFiles(directory=SHELL_DIR, html=True), name="shell")
+    shell = shell_dir or SHELL_DIR
+    if shell.is_dir():
+        app.mount("/", ShellFiles(directory=shell, html=True), name="shell")
     return app
