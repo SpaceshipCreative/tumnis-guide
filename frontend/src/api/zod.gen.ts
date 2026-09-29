@@ -630,11 +630,15 @@ export const zBoardOut = z.object({
 });
 
 /**
- * Page[TaskOut]
+ * TaskPage
+ *
+ * A page of tasks and how many match the filter across every page (P0-23): the Today
+ * panel shows five and says "+N more".
  */
-export const zPageTaskOut = z.object({
+export const zTaskPage = z.object({
   items: z.array(zTaskOut),
   next_cursor: z.string().nullable(),
+  total: z.int(),
 });
 
 /**
@@ -1112,6 +1116,7 @@ export const zAuthSetupTotpResponse = zSignedInOut;
 export const zTasksListTasksQuery = z.object({
   project_id: z.uuid().nullish(),
   status: zStatus.nullish(),
+  order: z.enum(["created", "today"]).optional().default("created"),
   cursor: z.string().max(2048).nullish(),
   limit: z.int().gte(1).lte(200).optional().default(50),
 });
@@ -1119,7 +1124,7 @@ export const zTasksListTasksQuery = z.object({
 /**
  * Successful Response
  */
-export const zTasksListTasksResponse = zPageTaskOut;
+export const zTasksListTasksResponse = zTaskPage;
 
 export const zTasksCreateTaskBody = zTaskCreate;
 

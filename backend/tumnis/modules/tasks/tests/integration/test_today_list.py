@@ -27,7 +27,6 @@ async def _post(client: SessionClient, path: str, body: dict[str, Any]) -> dict[
 
 @pytest.mark.req("FR-1.2")
 @pytest.mark.wp("P0-23")
-@pytest.mark.xfail(strict=True, reason="spec:P0-23")
 async def test_today_order_limit_and_total(session_client: SessionClient) -> None:
     """T-P0-23-09
     Given seven Today tasks (and one Backlog task) with mixed priorities, due dates and

@@ -51,7 +51,6 @@ test(
   "T-P0-23-12 seed projects show their health",
   { tag: ["@P0-23", "@FR-1.1"] },
   async ({ page }) => {
-    test.fail();
     await openShell(page, "/");
     await expect(projectCardNamed(page, "Acme brand refresh")).toContainText(
       "Blocked: waiting on you",

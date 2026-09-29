@@ -673,20 +673,6 @@ export type PageSessionOut = {
 };
 
 /**
- * Page[TaskOut]
- */
-export type PageTaskOut = {
-  /**
-   * Items
-   */
-  items: Array<TaskOut>;
-  /**
-   * Next Cursor
-   */
-  next_cursor: string | null;
-};
-
-/**
  * Problem
  */
 export type Problem = {
@@ -1399,6 +1385,27 @@ export type TaskOut = {
    * Version
    */
   version: number;
+};
+
+/**
+ * TaskPage
+ *
+ * A page of tasks and how many match the filter across every page (P0-23): the Today
+ * panel shows five and says "+N more".
+ */
+export type TaskPage = {
+  /**
+   * Items
+   */
+  items: Array<TaskOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+  /**
+   * Total
+   */
+  total: number;
 };
 
 /**
@@ -4145,6 +4152,10 @@ export type TasksListTasksData = {
      */
     status?: Status | null;
     /**
+     * Order
+     */
+    order?: "created" | "today";
+    /**
      * Cursor
      */
     cursor?: string | null;
@@ -4198,7 +4209,7 @@ export type TasksListTasksResponses = {
   /**
    * Successful Response
    */
-  200: PageTaskOut;
+  200: TaskPage;
 };
 
 export type TasksListTasksResponse =
