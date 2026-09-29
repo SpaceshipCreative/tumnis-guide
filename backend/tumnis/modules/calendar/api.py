@@ -42,6 +42,7 @@ _events: Table = Event.__table__  # type: ignore[assignment]
 class EventRecord(CanonicalRecord):
     schema_version: Literal[1] = 1
     record_type: Literal["event"] = "event"
+    calendar_id: str | None = None
     title: str | None = None
     start_at: AwareDatetime
     end_at: AwareDatetime
@@ -70,6 +71,7 @@ async def upsert_events(
 
 def _columns(rec: EventRecord) -> dict[str, Any]:
     return {
+        "calendar_id": rec.calendar_id,
         "title": rec.title,
         "start_at": rec.start_at,
         "end_at": rec.end_at,

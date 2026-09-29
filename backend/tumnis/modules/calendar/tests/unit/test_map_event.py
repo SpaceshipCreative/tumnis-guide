@@ -21,7 +21,6 @@ CASES = sorted(path.stem for path in RECORDINGS.glob("*.json")) or ["no-recordin
 
 @pytest.mark.req("FR-14.4")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="spec:P1-09")
 @pytest.mark.parametrize("recording", CASES)
 def test_recordings_map_to_expected_events(recording: str) -> None:
     """T-P1-09-02

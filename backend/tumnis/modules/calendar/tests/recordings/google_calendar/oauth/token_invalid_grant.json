@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://oauth2.googleapis.com/token",
+    "form": {
+      "grant_type": "refresh_token",
+      "refresh_token": "fake-refresh-a"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": "invalid_grant",
+    "error_description": "Token has been expired or revoked."
+  },
+  "notes": "Scrubbed: client id, secret and refresh token are invented."
+}
