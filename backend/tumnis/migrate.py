@@ -9,7 +9,8 @@ N's script directory does not know. N+1's migrations are expand-only, so its sch
 N; migrate leaves such a database alone and readiness treats it as ready.
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -53,23 +54,38 @@ class DbPosition(StrEnum):
 
 @dataclass(frozen=True)
 class ReleaseRevisions:
-    """The revisions this release's script directory knows, and its heads."""
+    """The revisions this release's script directory knows, its heads, and what each
+    known revision implies is applied: itself and its ancestors through `down_revision`
+    and `depends_on` alike."""
 
     heads: frozenset[str]
     known: frozenset[str]
+    reaches: Mapping[str, frozenset[str]] = field(compare=False, repr=False)
 
     @classmethod
     def of(cls, script: ScriptDirectory) -> "ReleaseRevisions":
         known = frozenset(rev.revision for rev in script.walk_revisions())
-        return cls(heads=frozenset(script.get_heads()), known=known)
+        # Alembic's own upgrade reckoning (dependencies included): what `upgrade <rev>`
+        # would run on an empty database.
+        reaches = {
+            rev: frozenset(r.revision for r in script.iterate_revisions(rev, "base"))
+            for rev in known
+        }
+        return cls(heads=frozenset(script.get_heads()), known=known, reaches=reaches)
 
     def position(self, current: set[str]) -> DbPosition:
         """AHEAD when any current revision is unknown to this release (a later release
-        ran its migrations: a rollback); AT_HEAD at exactly this release's heads; BEHIND
-        otherwise (an empty database included)."""
+        ran its migrations: a rollback); AT_HEAD when the current revisions reach every
+        head of this release; BEHIND otherwise (an empty database included).
+
+        `alembic_version` holds only the leaves Alembic keeps: after `upgrade heads` a
+        head that other branches depend on (integrations_0001 under calendar_0001 and
+        knowledge_0001) is implied by its dependents, not stored, so the rows are compared
+        by what they reach, never to the script heads as strings."""
         if current - self.known:
             return DbPosition.AHEAD
-        if current == self.heads:
+        reached = frozenset().union(*(self.reaches[rev] for rev in current))
+        if self.heads <= reached:
             return DbPosition.AT_HEAD
         return DbPosition.BEHIND
 
@@ -123,12 +139,15 @@ def upgrade(ini: Path, settings: Settings) -> DbPosition:
 
 
 def verify_at_heads(ini: Path, owner_url: str) -> None:
-    heads = set(ScriptDirectory.from_config(alembic_config(ini, owner_url)).get_heads())
+    """MigrationPendingError unless the database is at this release's heads (behind or
+    ahead raises)."""
+    script = ScriptDirectory.from_config(alembic_config(ini, owner_url))
     engine = create_engine(owner_url, poolclass=NullPool)
     try:
         with engine.connect() as conn:
             current = current_revisions(conn)
     finally:
         engine.dispose()
-    if current != heads:
-        raise MigrationPendingError(f"database at {sorted(current)}, code at {sorted(heads)}")
+    if db_position(current, script) is not DbPosition.AT_HEAD:
+        heads = sorted(script.get_heads())
+        raise MigrationPendingError(f"database at {sorted(current)}, code at {heads}")
