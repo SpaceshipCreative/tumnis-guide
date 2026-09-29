@@ -1,4 +1,4 @@
-# CI: the architecture's eight jobs plus spec-guard, red-proof and traceability (P0-03).
+# CI: the architecture's nine jobs plus spec-guard, red-proof and traceability (P0-03, P1-04).
 #
 # Job ids are the required-check names: .github/required-checks.txt lists them and
 # scripts/ci/branch_protection.sh requires them on main. Every job runs on every PR (no
@@ -132,6 +132,26 @@ jobs:
           make gen
           git add --intent-to-add -- schemas frontend/src/api backend/tests/contract/generated
           git diff --exit-code -- schemas frontend/src/api backend/tests/contract/generated
+
+  # The runner daemon is its own uv project and never imports backend/ (P1-04); its
+  # contract test checks its protocol copies against schemas/runner/v1.
+  daemon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: daemon/uv.lock
+      - name: Daemon lint, types and tests
+        working-directory: daemon
+        run: |
+          uv sync
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy
+          uv run pytest -q
 
   integration:
     runs-on: ubuntu-latest
