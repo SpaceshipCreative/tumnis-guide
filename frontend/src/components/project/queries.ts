@@ -13,6 +13,7 @@ import {
   tasksListCommentsOptions,
   tasksListTasksOptions,
 } from "../../api/@tanstack/react-query.gen";
+import { tasksListTasks } from "../../api/sdk.gen";
 import { apiUrl } from "../../lib/fetch";
 
 export const TASK_PAGE_LIMIT = 200; // the API's largest page
@@ -20,11 +21,36 @@ export const TASK_PAGE_LIMIT = 200; // the API's largest page
 export const projectQuery = (projectId: string) =>
   projectsGetProjectOptions({ path: { project_id: projectId } });
 
-/** Every open task of the project, one page (a project holds far fewer than 200). */
-export const projectTasksQuery = (projectId: string) =>
-  tasksListTasksOptions({
-    query: { project_id: projectId, limit: TASK_PAGE_LIMIT },
+/**
+ * Every task of the project: follows `next_cursor` through every page and answers one
+ * `TaskPage` holding all of them (`next_cursor` null), under the generated op's key, so
+ * LIVE_MAP and the optimistic writes treat it as the list they know.
+ */
+export const projectTasksQuery = (projectId: string) => {
+  const query = { project_id: projectId, limit: TASK_PAGE_LIMIT };
+  return queryOptions({
+    ...tasksListTasksOptions({ query }),
+    queryFn: async ({ signal }) => {
+      const { data: first } = await tasksListTasks({
+        query,
+        signal,
+        throwOnError: true,
+      });
+      const items = [...first.items];
+      let cursor = first.next_cursor;
+      while (cursor) {
+        const { data: page } = await tasksListTasks({
+          query: { ...query, cursor },
+          signal,
+          throwOnError: true,
+        });
+        items.push(...page.items);
+        cursor = page.next_cursor;
+      }
+      return { ...first, items, next_cursor: null };
+    },
   });
+};
 
 export const boardQuery = (projectId: string) =>
   tasksGetBoardOptions({ path: { project_id: projectId } });
