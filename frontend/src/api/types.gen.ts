@@ -568,6 +568,20 @@ export type PageProjectOut = {
 };
 
 /**
+ * Page[RecurrenceOut]
+ */
+export type PageRecurrenceOut = {
+  /**
+   * Items
+   */
+  items: Array<RecurrenceOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
  * Page[SearchHit]
  */
 export type PageSearchHit = {
@@ -594,6 +608,11 @@ export type PageSessionOut = {
    */
   next_cursor: string | null;
 };
+
+/**
+ * Preset
+ */
+export type Preset = "daily" | "weekdays" | "weekly" | "monthly";
 
 /**
  * Problem
@@ -829,6 +848,87 @@ export type ProjectPatch = {
    * Version
    */
   version: number;
+};
+
+/**
+ * RecurrenceIn
+ *
+ * `PUT /v1/tasks/{id}/recurrence`: a preset or a 5-field cron (never both), the
+ * preset's weekday (weekly, 0 = Monday) or month day (monthly), the local due time and the
+ * task's version. The task becomes the rule's first instance.
+ */
+export type RecurrenceIn = {
+  /**
+   * Cron
+   */
+  cron?: string | null;
+  /**
+   * Due Time
+   */
+  due_time?: string;
+  /**
+   * Month Day
+   */
+  month_day?: number | null;
+  preset?: Preset | null;
+  /**
+   * Version
+   */
+  version: number;
+  /**
+   * Weekday
+   */
+  weekday?: number | null;
+};
+
+/**
+ * RecurrenceOut
+ *
+ * A recurrence rule: its spec, the template's title, its latest instance and the next
+ * occurrence after it (UTC).
+ */
+export type RecurrenceOut = {
+  /**
+   * Cron
+   */
+  cron: string | null;
+  /**
+   * Due Time
+   */
+  due_time: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Latest Occurrence On
+   */
+  latest_occurrence_on: string | null;
+  /**
+   * Latest Task Id
+   */
+  latest_task_id: string | null;
+  /**
+   * Month Day
+   */
+  month_day: number | null;
+  /**
+   * Next Due At
+   */
+  next_due_at: string | null;
+  preset: Preset | null;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Title
+   */
+  title: string;
+  /**
+   * Weekday
+   */
+  weekday: number | null;
 };
 
 /**
@@ -1341,6 +1441,63 @@ export type TaskPatch = {
    * Version
    */
   version: number;
+};
+
+/**
+ * TaskRecurrenceOut
+ *
+ * The rule as seen from one of its tasks; `version` is the task's (send it back).
+ */
+export type TaskRecurrenceOut = {
+  /**
+   * Cron
+   */
+  cron: string | null;
+  /**
+   * Due Time
+   */
+  due_time: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Latest Occurrence On
+   */
+  latest_occurrence_on: string | null;
+  /**
+   * Latest Task Id
+   */
+  latest_task_id: string | null;
+  /**
+   * Month Day
+   */
+  month_day: number | null;
+  /**
+   * Next Due At
+   */
+  next_due_at: string | null;
+  preset: Preset | null;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Title
+   */
+  title: string;
+  /**
+   * Version
+   */
+  version: number;
+  /**
+   * Weekday
+   */
+  weekday: number | null;
 };
 
 /**
@@ -3187,6 +3344,74 @@ export type ProjectsUnarchiveProjectResponses = {
 export type ProjectsUnarchiveProjectResponse =
   ProjectsUnarchiveProjectResponses[keyof ProjectsUnarchiveProjectResponses];
 
+export type TasksListRecurrenceData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/recurrence";
+};
+
+export type TasksListRecurrenceErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksListRecurrenceError =
+  TasksListRecurrenceErrors[keyof TasksListRecurrenceErrors];
+
+export type TasksListRecurrenceResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageRecurrenceOut;
+};
+
+export type TasksListRecurrenceResponse =
+  TasksListRecurrenceResponses[keyof TasksListRecurrenceResponses];
+
 export type TasksGetReviewCountData = {
   body?: never;
   path?: never;
@@ -4251,6 +4476,191 @@ export type TasksMoveTaskResponses = {
 
 export type TasksMoveTaskResponse =
   TasksMoveTaskResponses[keyof TasksMoveTaskResponses];
+
+export type TasksDeleteRecurrenceData = {
+  body?: never;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query: {
+    /**
+     * Version
+     */
+    version: number;
+  };
+  url: "/v1/tasks/{task_id}/recurrence";
+};
+
+export type TasksDeleteRecurrenceErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksDeleteRecurrenceError =
+  TasksDeleteRecurrenceErrors[keyof TasksDeleteRecurrenceErrors];
+
+export type TasksDeleteRecurrenceResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type TasksDeleteRecurrenceResponse =
+  TasksDeleteRecurrenceResponses[keyof TasksDeleteRecurrenceResponses];
+
+export type TasksGetRecurrenceData = {
+  body?: never;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/recurrence";
+};
+
+export type TasksGetRecurrenceErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksGetRecurrenceError =
+  TasksGetRecurrenceErrors[keyof TasksGetRecurrenceErrors];
+
+export type TasksGetRecurrenceResponses = {
+  /**
+   * Successful Response
+   */
+  200: TaskRecurrenceOut;
+};
+
+export type TasksGetRecurrenceResponse =
+  TasksGetRecurrenceResponses[keyof TasksGetRecurrenceResponses];
+
+export type TasksPutRecurrenceData = {
+  body: RecurrenceIn;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/recurrence";
+};
+
+export type TasksPutRecurrenceErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksPutRecurrenceError =
+  TasksPutRecurrenceErrors[keyof TasksPutRecurrenceErrors];
+
+export type TasksPutRecurrenceResponses = {
+  /**
+   * Successful Response
+   */
+  200: TaskRecurrenceOut;
+};
+
+export type TasksPutRecurrenceResponse =
+  TasksPutRecurrenceResponses[keyof TasksPutRecurrenceResponses];
 
 export type TasksChangeStatusData = {
   body: StatusIn;
