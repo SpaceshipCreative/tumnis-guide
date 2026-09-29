@@ -18,7 +18,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("ADR-0009")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_app_role_has_no_bypass_and_owns_nothing(db: DbUrls) -> None:
     """T-P0-06-05
     `rolbypassrls`, `rolsuper`, `rolcreatedb`, `rolcreaterole` are false; zero tables,
@@ -65,7 +64,6 @@ def test_app_role_has_no_bypass_and_owns_nothing(db: DbUrls) -> None:
 
 @pytest.mark.req("ADR-0009")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 @pytest.mark.parametrize(
     "statement",
     [

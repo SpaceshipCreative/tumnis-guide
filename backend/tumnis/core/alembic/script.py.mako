@@ -14,6 +14,9 @@ revision: str = ${repr(up_revision)}
 down_revision: str | Sequence[str] | None = ${repr(down_revision)}
 branch_labels: str | Sequence[str] | None = ${repr(branch_labels)}
 depends_on: str | Sequence[str] | None = ${repr(depends_on)}
+# expand: additive, safe while the previous release runs (squawk checks it); contract:
+# removes what the previous release needed, shipped only after it is gone.
+phase = "expand"
 
 
 def upgrade() -> None:

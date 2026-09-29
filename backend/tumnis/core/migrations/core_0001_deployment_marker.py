@@ -11,6 +11,7 @@ revision = "core_0001"
 down_revision = None
 branch_labels = ("core",)
 depends_on = None
+phase = "expand"
 
 
 def upgrade() -> None:

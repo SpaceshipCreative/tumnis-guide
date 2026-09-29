@@ -20,7 +20,6 @@ ROWS = 1_000
 
 @pytest.mark.req("ADR-0005")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_uuidv7_ids_sort_by_creation_time(db: DbUrls) -> None:
     """T-P0-06-09
     1,000 sequential inserts from one connection: `ORDER BY id` equals insertion order and
