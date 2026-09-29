@@ -3,25 +3,11 @@
 // and read what was sent from a `Recorder`.
 import { http, HttpResponse, type RequestHandler } from "msw";
 
+import type { CalendarAccountOut } from "../../api/types.gen";
+
 import type { Recorder } from "./settings";
 
-export interface CalendarInfo {
-  id: string;
-  summary: string;
-  primary: boolean;
-  time_zone: string | null;
-}
-
-export interface CalendarAccount {
-  id: string;
-  connection_id: string;
-  google_email: string;
-  status: "connected" | "needs_reauth";
-  calendars: CalendarInfo[];
-  selected_calendar_ids: string[];
-  last_sync_at: string | null;
-  version: number;
-}
+export type CalendarAccount = CalendarAccountOut;
 
 export const CONSENT_URL =
   "https://accounts.google.com/o/oauth2/v2/auth?client_id=client-123&state=abc";
