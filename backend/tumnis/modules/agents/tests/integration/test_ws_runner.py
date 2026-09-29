@@ -113,7 +113,6 @@ def _register(protocol_versions: list[int], name: str = "homelab-hermes") -> dic
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 def test_missing_token_rejected(app: FastAPI, workspace: WorkspaceHandle, db: DbUrls) -> None:
     """T-P1-04-06
     A handshake without `Authorization`, or with a header that is no bearer device token,
@@ -137,7 +136,6 @@ def test_missing_token_rejected(app: FastAPI, workspace: WorkspaceHandle, db: Db
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 def test_wrong_or_revoked_token_rejected(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls
 ) -> None:
@@ -171,7 +169,6 @@ def test_wrong_or_revoked_token_rejected(
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 def test_register_first_or_closed(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
