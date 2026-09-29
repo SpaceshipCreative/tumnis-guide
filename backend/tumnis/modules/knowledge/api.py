@@ -51,7 +51,7 @@ from tumnis.modules.knowledge.models import (
     ProjectFolder,
     StorageLocation,
 )
-from tumnis.modules.knowledge.rules import etag_equal, is_network_fs, safe_rel_path
+from tumnis.modules.knowledge.rules import is_network_fs, safe_rel_path
 from tumnis.modules.knowledge.storage import (
     FileStat,
     Health,
@@ -62,6 +62,7 @@ from tumnis.modules.knowledge.storage import (
     StorageError,
     TooLarge,
     safe_prefix,
+    spool,
 )
 from tumnis.modules.knowledge.storage import NotFound as FileMissing
 from tumnis.seed import DocumentSeed, register_seed_writer
@@ -670,13 +671,25 @@ async def _drain(s: AsyncSession, location_id: UUID, backend: StorageBackend) ->
         try:
             await backend.write(item["path"], _one_chunk(body), item["if_match"])
         except PreconditionFailed as exc:
-            if exc.current is None or not etag_equal(exc.current.etag, item["content_hash"].hex()):
+            if not await _holds(backend, item["path"], body, exc.current):
                 await _note_attempt(s, item["id"], "precondition_failed")
                 continue
         except (StorageError, AdapterError) as exc:
             await _note_attempt(s, item["id"], type(exc).__name__)
             return
         await s.execute(delete(_pending).where(_pending.c.id == item["id"]))
+
+
+async def _holds(backend: StorageBackend, path: str, body: bytes, current: FileStat | None) -> bool:
+    """The file at `path` holds exactly `body`. Decided on the bytes: etags differ per
+    backend (sha256 on a server path, the provider's ETag, an MD5 for a single put, on
+    S3). Notes are small, and a read failure is no match."""
+    if current is None or current.size != len(body):
+        return False
+    try:
+        return await spool(backend.read(path), limit=len(body)) == body
+    except (StorageError, AdapterError):
+        return False
 
 
 async def _note_attempt(s: AsyncSession, pending_id: UUID, error: str) -> None:
@@ -861,7 +874,7 @@ async def save_note(
             try:
                 await backend.write(path, _one_chunk(body), if_match)
             except PreconditionFailed as exc:
-                if exc.current is None or not etag_equal(exc.current.etag, digest.hexdigest()):
+                if not await _holds(backend, path, body, exc.current):
                     raise _storage_problem(exc) from exc
             except (LocationOffline, AdapterUnavailable) as exc:
                 await _set_status(s, location["id"], Health.degraded(type(exc).__name__))

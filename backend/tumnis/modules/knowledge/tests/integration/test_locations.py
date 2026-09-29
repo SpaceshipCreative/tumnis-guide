@@ -444,7 +444,6 @@ async def test_pr52_hosted_mode_refuses_plain_http_s3_endpoints(
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 S3 etag")
 async def test_pr52_s3_write_already_landed_counts_as_written(
     db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, minio: S3Endpoint
 ) -> None:
