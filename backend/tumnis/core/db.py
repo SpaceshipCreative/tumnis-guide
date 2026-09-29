@@ -28,7 +28,13 @@ class _State:
 _state = _State()
 
 
-def configure(app_url: str, direct_url: str | None = None, *, pooled: bool = True) -> None:
+def configure(
+    app_url: str,
+    direct_url: str | None = None,
+    *,
+    owner_url: str | None = None,
+    pooled: bool = True,
+) -> None:
     """Point the engines at new URLs. `pooled=False` (tests) keeps no idle connections, so a
     per-test database can be dropped as soon as its sessions close."""
     _state.app_url = app_url
@@ -60,6 +66,10 @@ def direct_engine() -> AsyncEngine:
 
 def app_sessions() -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(app_engine(), expire_on_commit=False)
+
+
+def app_sessionmaker() -> async_sessionmaker[AsyncSession]:
+    raise NotImplementedError("P0-06")
 
 
 async def dispose() -> None:

@@ -105,3 +105,13 @@ def drop(base: DbUrls, name: str) -> None:
         conn.execute(
             sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name))
         )
+
+
+def create_database(base: DbUrls, name: str) -> DbUrls:
+    """An empty database owned by tumnis_owner, prepared like `tumnis` (P0-06 spec stub)."""
+    raise NotImplementedError("P0-06")
+
+
+def schema_dump(container: object, name: str) -> str:
+    """`pg_dump --schema-only` of `name`, run inside the container (P0-06 spec stub)."""
+    raise NotImplementedError("P0-06")

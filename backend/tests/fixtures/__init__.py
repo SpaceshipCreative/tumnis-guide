@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
     from testcontainers.community.postgres import PostgresContainer
 
+    from tumnis.core.tenancy import WorkspaceContext
     from tumnis.seed import SeedResult
     from tumnis.settings import Settings
 
@@ -119,6 +121,34 @@ def db(pg_base: DbUrls, db_template: str) -> Iterator[DbUrls]:
         yield urls
     finally:
         drop(pg_base, name)
+
+
+# --- Workspaces (P0-06) ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WorkspaceHandle:
+    """A workspace made for a test: its id, name and the context to act in it."""
+
+    id: uuid.UUID
+    name: str
+    ctx: WorkspaceContext
+
+
+def make_workspace(db: DbUrls, name: str = "Test", timezone: str = "America/New_York") -> uuid.UUID:
+    """Insert a workspace as the owner role and return its id (P0-06 spec stub)."""
+    raise NotImplementedError("P0-06")
+
+
+@dataclass(frozen=True)
+class PgBouncer:
+    """A PgBouncer in transaction mode in front of pg_container (P0-06 spec stub)."""
+
+    host: str
+    port: int
+
+    def libpq(self, role: str, dbname: str) -> str:
+        raise NotImplementedError("P0-06")
 
 
 async def _session(url: str) -> AsyncIterator[AsyncSession]:
