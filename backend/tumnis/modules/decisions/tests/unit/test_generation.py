@@ -3,12 +3,16 @@ one-line cleanup, its timeout and the two fields it sends."""
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Iterator
 from uuid import UUID
 
 import pytest
+from structlog.testing import capture_logs
 
+from tumnis.core.adapters.errors import AdapterUnavailable
+from tumnis.core.adapters.registry import Health
 from tumnis.modules.decisions import generation_config
 from tumnis.modules.decisions.adapters.fake import FakeGeneration
 from tumnis.modules.decisions.api import configure_generation
@@ -56,7 +60,6 @@ async def test_placeholder_comes_from_fake() -> None:
 
 @pytest.mark.req("FR-11.8")
 @pytest.mark.wp("P1-03")
-@pytest.mark.xfail(strict=True, reason="spec:P1-03")
 async def test_timeout_returns_none() -> None:
     """T-P1-03-02
     With the timeout set to 50 ms for the test (`generation.placeholder_timeout_ms`, 2,000 ms
@@ -118,3 +121,59 @@ async def test_multiline_or_empty_output_rejected(text: str) -> None:
     first = await placeholder_first_action(title=TITLE, project_name=PROJECT, project_id=PROJECT_ID)
     assert first is None
     assert len(fake.calls) == 1
+
+
+class _Hanging:
+    """A provider that ignores its timeout: only the caller's own bound stops it."""
+
+    async def complete(self, *, system: str, user: str, max_tokens: int, timeout_ms: int) -> str:
+        await asyncio.sleep(5)
+        return "too late"
+
+    async def health(self) -> Health:
+        return "ok"
+
+
+@pytest.mark.req("FR-11.8")
+@pytest.mark.wp("P1-03")
+async def test_a_provider_that_hangs_is_cut_off_at_the_timeout() -> None:
+    """The slot bounds the call itself: a provider that never honors `timeout_ms` still
+    yields None at the configured timeout, and the log line names the purpose and the
+    project, never the prompt."""
+    configure_generation(GenerationSettings(placeholder_timeout_ms=50), provider=_Hanging())
+
+    started = time.monotonic()
+    with capture_logs() as logs:
+        first = await placeholder_first_action(
+            title=TITLE, project_name=PROJECT, project_id=PROJECT_ID
+        )
+    assert first is None
+    assert time.monotonic() - started < 1.0
+    (line,) = [log for log in logs if log["event"] == "decisions.generation_skipped"]
+    assert line["purpose"] == "placeholder"
+    assert line["project_id"] == str(PROJECT_ID)
+    assert line["error"] == "TimeoutError"
+    assert TITLE not in repr(line)
+    assert PROJECT not in repr(line)
+
+
+@pytest.mark.req("FR-11.8")
+@pytest.mark.wp("P1-03")
+async def test_a_failing_provider_or_no_endpoint_yields_none() -> None:
+    """An adapter error gives None, not an exception; a slot with no provider (no local
+    endpoint configured) gives None without a call."""
+    fake = FakeGeneration(
+        fail=AdapterUnavailable("decisions.vllm_generation", "chat_completion", "down")
+    )
+    use(fake)
+    assert (
+        await placeholder_first_action(title=TITLE, project_name=PROJECT, project_id=PROJECT_ID)
+        is None
+    )
+    assert len(fake.calls) == 1
+
+    configure_generation(GenerationSettings())
+    assert (
+        await placeholder_first_action(title=TITLE, project_name=PROJECT, project_id=PROJECT_ID)
+        is None
+    )
