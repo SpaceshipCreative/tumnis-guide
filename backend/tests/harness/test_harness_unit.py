@@ -12,10 +12,9 @@ from zoneinfo import ZoneInfo
 import pytest
 
 if TYPE_CHECKING:
+    from tests.fixtures import Fakes
     from tumnis.core.clock import FixedClock
     from tumnis.seed import InMemorySink
-
-    from tests.fixtures import Fakes
 
 BACKEND = Path(__file__).resolve().parents[2]
 SEED_DIR = BACKEND / "fixtures" / "seed"
@@ -104,7 +103,6 @@ def test_unit_test_cannot_open_network_socket() -> None:
 
 @pytest.mark.req("REL-6")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 def test_fixed_clock_advances_and_rejects_naive(clock: FixedClock) -> None:
     """T-P0-02-12
     FixedClock starts at 2026-03-09T12:00Z, advance(minutes=5) works, naive input raises.
@@ -330,6 +328,7 @@ def test_load_generator_is_deterministic() -> None:
     the committed load.yaml is that output.
     """
     import yaml  # noqa: PLC0415
+
     from fixtures.load.generate import generate  # noqa: PLC0415
 
     first = generate(projects=10, tasks=2000, seed=42)

@@ -160,11 +160,11 @@ def test_tumnis_seed_loads_into_postgres(
     `tumnis seed` against db gives 3 projects, 30 tasks and one day of events; a second
     database gives identical rows apart from IDs.
     """
-    from tumnis import cli  # noqa: PLC0415
-    from tumnis.core.clock import FixedClock  # noqa: PLC0415
     from typer.testing import CliRunner  # noqa: PLC0415
 
     from tests._pg import OWNER  # noqa: PLC0415
+    from tumnis import cli  # noqa: PLC0415
+    from tumnis.core.clock import FixedClock  # noqa: PLC0415
 
     monkeypatch.setattr(cli, "make_clock", lambda: FixedClock(datetime(2026, 3, 9, 12, tzinfo=UTC)))
     snapshots = []

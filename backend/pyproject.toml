@@ -75,6 +75,9 @@ src = ["tumnis", "tests"]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S", "DTZ", "TID", "PT", "N", "C4", "RET", "PL"]
 ignore = ["PLR0913"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["tumnis", "tests", "fixtures"]
+
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
@@ -96,6 +99,7 @@ ban-relative-imports = "all"
 "!tumnis/modules/*/rules*.py" = ["TID251"]
 "tests/**" = ["S101", "PLR2004", "S105", "S106"]
 "tumnis/modules/*/tests/**" = ["S101", "PLR2004", "S105", "S106"]
+"tumnis/core/tests/**" = ["S101", "PLR2004", "S105", "S106"]
 "tumnis/modules/*/migrations/**" = ["N999"]
 
 [tool.mypy]
