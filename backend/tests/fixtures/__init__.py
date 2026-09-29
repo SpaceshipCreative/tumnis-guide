@@ -890,6 +890,7 @@ def app_with_fakes(  # noqa: PLR0917
     clock: FixedClock,
     fakes: Fakes,
     master_key_file: MasterKeyFile,
+    pepper_file: PepperFile,
     workspace: WorkspaceHandle,
 ) -> Iterator[AppWithFakes]:
     """create_app on `db` with TUMNIS_ADAPTERS=fake, the seed set loaded once its writers
@@ -909,7 +910,8 @@ def app_with_fakes(  # noqa: PLR0917
 
     if writers_registered():
         asyncio.run(_load_set(SEED_SET, db, clock))
-    app = create_app(settings=settings_for(db, dbos_sys_db), clock=clock)
+    settings = settings_for(db, dbos_sys_db, api_key_pepper_file=str(pepper_file.path))
+    app = create_app(settings=settings, clock=clock)
     app.add_middleware(TestPrincipalMiddleware)
     app.state.rate_limiter = None
     app.state.auth_lockouts = False  # the same for sign-in lockouts (P0-13)
