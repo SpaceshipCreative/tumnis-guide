@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Tumnis Guide backend: modular monolith (ADR-0001)"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+  "alembic==1.20.0",
+  "dbos==3.1.0",
+  "psycopg[binary]==3.3.6",
   "pydantic==2.13.5",
+  "pyyaml==6.0.3",
+  "sqlalchemy[asyncio]==2.1.1",
   "typer==0.27.2",
 ]
 
@@ -13,10 +18,22 @@ tumnis = "tumnis.cli:app"
 
 [dependency-groups]
 dev = [
+  "aioboto3==15.5.0",
+  "asyncssh==2.24.0",
+  "cryptography==50.0.1",
+  "httpx==0.28.1",
+  "hypothesis==6.168.3",
   "import-linter==2.15",
   "mypy==2.3.1",
+  "polyfactory==3.3.0",
   "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "pytest-randomly==5.0.0",
+  "pytest-socket==0.8.1",
+  "pytest-xdist==3.8.0",
   "ruff==0.16.9",
+  "testcontainers[minio,postgres]==4.15.0",
+  "types-pyyaml==6.0.12.20260906",
 ]
 
 [build-system]
@@ -35,6 +52,10 @@ xfail_strict = true
 markers = [
   "req(*ids): PRD requirement IDs this test proves",
   "wp(id): work package that introduced the test",
+  "integration: needs Postgres or containers (sockets allowed)",
+  "contract: adapter, connector or schema contract",
+  "slow: over 5 seconds",
+  "drill: restore drill only, never on PRs",
 ]
 
 [tool.ruff]
