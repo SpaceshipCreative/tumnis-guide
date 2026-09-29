@@ -287,6 +287,11 @@ def route_label(scope: Scope) -> str:
     if isinstance(route, Mount):
         return "<static>"
     path = getattr(route, "path", None)
+    # A route behind include_router (every /v1 route, P0-10) carries its own path only;
+    # FastAPI 0.141 keeps the full template on the effective route context.
+    context = scope.get("fastapi", {}).get("effective_route_context")
+    if context is not None and getattr(context, "original_route", None) is route:
+        path = getattr(context, "path", path)
     return path if isinstance(path, str) and path else "<unmatched>"
 
 

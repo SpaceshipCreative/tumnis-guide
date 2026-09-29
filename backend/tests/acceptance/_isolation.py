@@ -2,7 +2,8 @@
 
 No assertions live here: spec-guard locks the test body in test_a0_3_tenant_isolation.py,
 and this module is where the work packages that turn A0.3 green plug in their shapes:
-P0-10 (route walker and `RoutePolicy` on each route), P0-06 (`two_workspaces`), P0-13
+P0-10 (route walker `tumnis.core.routing.walk_routes`, which unpacks nested included
+routers, and `RoutePolicy` on each route), P0-06 (`two_workspaces`), P0-13
 (`session_client`) and P0-14 (`key_client`). Until they land, the sweep cannot be built
 and the test fails, as a spec test should.
 
@@ -70,9 +71,15 @@ def _module_of(route: Any) -> str:
     return parts[2] if parts[:2] == ["tumnis", "modules"] and len(parts) > 2 else "core"
 
 
+def _policy(route: Any) -> Any:
+    """The route's P0-10 `RoutePolicy` (None for a route declared without one)."""
+    from tumnis.core.routing import policy_of  # noqa: PLC0415
+
+    return policy_of(route)
+
+
 def _auth(route: Any) -> str | None:
-    policy = getattr(route, "policy", None) or getattr(route.endpoint, "policy", None)
-    return getattr(policy, "auth", None)
+    return getattr(_policy(route), "auth", None)
 
 
 def accepts(route: Any, caller: str) -> bool:
@@ -82,13 +89,17 @@ def accepts(route: Any, caller: str) -> bool:
 
 
 def route_inventory(app: Any) -> list[RouteCase]:
-    """Every /v1 route of the app, one case per method, test routes excluded."""
+    """Every /v1 route of the app, one case per method, test routes excluded. Walks nested
+    included routers with P0-10's route-registry walker (`walk_routes`): each case's
+    `route` carries the full path, `endpoint`, `dependant` and `body_field`."""
     from fastapi.routing import APIRoute  # noqa: PLC0415
+
+    from tumnis.core.routing import walk_routes  # noqa: PLC0415
 
     cases = [
         RouteCase(method, route.path, _module_of(route), route)
-        for route in app.routes
-        if isinstance(route, APIRoute)
+        for route in walk_routes(app)
+        if isinstance(route.original_route, APIRoute)
         and route.path.startswith("/v1/")
         and not route.path.startswith(EXCLUDED_PREFIXES)
         and _auth(route) != "none"
@@ -320,7 +331,7 @@ def every_scope(app: Any) -> list[str]:
     """Every scope any route asks for (P0-10 `RoutePolicy.scopes`), for B's key."""
     scopes: set[str] = set()
     for case in route_inventory(app):
-        policy = getattr(case.route, "policy", None) or getattr(case.route.endpoint, "policy", None)
+        policy = _policy(case.route)
         scopes.update(getattr(policy, "scopes", ()) or ())
     return sorted(scopes)
 
