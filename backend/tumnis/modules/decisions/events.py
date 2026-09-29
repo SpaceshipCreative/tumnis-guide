@@ -17,13 +17,14 @@ from tumnis.modules.decisions.payloads import DecisionMadeV1, DecisionUnavailabl
 __all__ = ["DecisionMadeV1", "DecisionUnavailablePayload", "record_outcome"]
 
 ACCEPTED = frozenset({"accept", "approve"})  # the human kept what the decision proposed
+DEFERRED = frozenset({"snooze"})  # the item comes back later: not an outcome yet
 
 
 @subscribe("human.decided", name="decisions.record_outcome")
 async def record_outcome(envelope: EventEnvelope) -> None:
     """Idempotent: a second delivery writes the same values again."""
     decision_id = envelope.payload.get("decision_id")
-    if decision_id is None:
+    if decision_id is None or envelope.payload.get("decision") in DEFERRED:
         return
     payload = envelope.payload.get("payload") or {}
     ctx = WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
