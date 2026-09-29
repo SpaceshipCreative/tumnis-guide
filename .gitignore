@@ -13,3 +13,4 @@ dist/
 coverage.json
 trace.md
 traceability.json
+.hypothesis/

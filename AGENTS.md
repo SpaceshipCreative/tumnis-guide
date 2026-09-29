@@ -110,7 +110,41 @@ def test_agent_cannot_move_backlog_to_done() -> None:
 
 ## Adapters and fakes
 
-Placeholder: the adapter template (base class, timeout, circuit breaker, retry, fake and contract suite layout) is added in P0-09. Until then: every outside dependency sits behind an adapter in `<module>/adapters/` with a `fake.py` beside it, and `TUMNIS_ADAPTERS=fake` selects the fakes.
+Every outside dependency sits behind an adapter with a fake beside it; `TUMNIS_ADAPTERS=fake` selects the fakes. A new adapter ships as these six pieces, in this order:
+
+1. **Port**: a `Protocol` in `modules/<m>/adapters/port.py`. Callers depend on the port only.
+2. **Real adapter**: `adapters/<provider>.py`, subclassing `tumnis.core.adapters.base.Adapter` with `name = "<m>.<provider>"` (its registry name). Every outside call goes through `await self.call(op, fn, idempotent=...)`, which applies the timeout, the circuit breaker and bounded jittered retries from its `CallPolicy(timeout_s, retry=RetryPolicy(...), breaker=BreakerConfig(...))`. Inside `fn`, translate the library's exceptions into the four adapter errors:
+
+   | Error | When | Retried | Counts against the breaker |
+   | --- | --- | --- | --- |
+   | `AdapterTimeout` | raised for you when `timeout_s` runs out | yes | yes |
+   | `AdapterUnavailable` | connection refused, 5xx, 429 (pass `retry_after_s` from `Retry-After`) | yes | yes |
+   | `AdapterRejected` | 4xx, validation: the provider answered no | no | no |
+   | `CircuitOpen` | raised for you while the breaker is open; nothing is sent | no | no |
+
+   Only `idempotent=True` calls are retried. Adapters used inside DBOS workflow steps set `RetryPolicy(max_attempts=1)` and let the workflow retry; plain worker loops keep the default. Build one instance per (adapter, workspace connection) where credentials differ, so one workspace's broken token does not open the circuit for another. Take the time from the injected `Clock`; tests inject `sleep` and `rand`.
+3. **Fake**: `adapters/fake.py`, implementing the port directly (it does not subclass `Adapter`), with scripting hooks (`fake.script(...)`) and a record of calls (`fake.calls`). A fake that defines `health_state()` shows up in `fakes.adapter_health()`.
+4. **Registration**: `register_adapter("<m>.<provider>", port=..., real=..., fake=...)` in `adapters/__init__.py`; `tumnis.wiring` imports it.
+5. **Contract suite**: `tests/contract/test_<provider>_contract.py`. One base class per port, without a `Test` prefix, subclassing `tumnis.core.adapters.contract.AdapterContract[Port]` and holding the cases; then one `Test*` class per implementation, marked `@pytest.mark.contract`, setting `impl` (`"fake"`, `"real"` or `"recorded"`) and overriding the `subject` fixture. Every registered adapter needs a `fake` class and a `real` or `recorded` class (a unit meta-test enforces it). `contract.py` imports pytest, so only tests may import it (import-linter `contract-base-test-only`).
+6. **Recordings**: when the real side is recorded, scrubbed payloads go under `tests/recordings/<provider>/` and the `recordings("<provider>")` fixture loads them.
+
+```python
+class JevContract(AdapterContract[DecisionsPort]):
+    port, adapter_name = DecisionsPort, "decisions.jev"
+
+    async def test_choice_answer_has_probabilities(self, subject: DecisionsPort) -> None: ...
+
+
+@pytest.mark.contract
+class TestJevFake(JevContract):
+    impl = "fake"
+
+    @pytest.fixture
+    def subject(self, fakes: Fakes) -> DecisionsPort:
+        return fakes["decisions.jev"]
+```
+
+An adapter whose breaker is not closed reports `health_state() == "degraded"`; `tumnis.wiring.register_adapter_health` registers each adapter as the non-critical readiness check `adapter:<name>`.
 
 ## Time
 

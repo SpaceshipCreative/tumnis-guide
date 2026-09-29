@@ -117,7 +117,7 @@ tumnis-guide/
 │   │   │   ├── crypto.py          # envelope encryption, master key loader
 │   │   │   ├── settings_store.py  # per-workspace encrypted settings
 │   │   │   ├── modules.py         # module registry + deployment/workspace flags
-│   │   │   ├── adapters/          # base.py, breaker.py, retry.py, registry.py, contract.py
+│   │   │   ├── adapters/          # base.py, errors.py, breaker.py, retry.py, registry.py, contract.py
 │   │   │   ├── net.py             # SSRF-guarded HTTP client with pinned IP
 │   │   │   ├── idempotency.py     # middleware + table
 │   │   │   ├── versioning.py      # optimistic concurrency helpers (409)
