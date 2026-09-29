@@ -121,7 +121,9 @@ def compare_typescript(path: str, base_src: str, head_src: str) -> list[Violatio
         elif (h["skip"] and not b["skip"]) or (h["fails"] and not b["fails"]):
             out.append(Violation(path, key, "added_skip_or_xfail", f"line {h['line']}"))
         elif h["text"] != b["text"]:
-            out.append(Violation(path, key, "edited_test", unified_diff(b["text"], h["text"])))
+            out.append(
+                Violation(path, key, "edited_test", unified_diff(str(b["text"]), str(h["text"])))
+            )
     return out
 
 
