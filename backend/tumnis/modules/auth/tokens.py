@@ -91,6 +91,7 @@ async def revoke_task_tokens_for_run(ctx: WorkspaceContext, run_id: UUID, *, now
         result = await s.execute(
             update(TASK_TOKENS)
             .where(
+                # nosemgrep: tumnis-secret-eq  # a filter on run_id, not a secret
                 TASK_TOKENS.c.run_id == run_id,
                 TASK_TOKENS.c.revoked_at.is_(None),
                 TASK_TOKENS.c.deleted_at.is_(None),
@@ -113,6 +114,7 @@ async def issue_device_token(
         result = await s.execute(
             update(DEVICE_TOKENS)
             .where(
+                # nosemgrep: tumnis-secret-eq  # a filter on runner_id, not a secret
                 DEVICE_TOKENS.c.runner_id == runner_id,
                 DEVICE_TOKENS.c.revoked_at.is_(None),
                 DEVICE_TOKENS.c.deleted_at.is_(None),
