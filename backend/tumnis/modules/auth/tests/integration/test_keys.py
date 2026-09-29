@@ -54,7 +54,6 @@ def _parts(key: str) -> tuple[str, str]:
 
 @pytest.mark.req("SEC-2", "FR-9.3")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_key_is_shown_once_and_stored_as_prefix_and_hmac(
     app: FastAPI, session_client: SessionClient, db: DbUrls, pepper_file: PepperFile
 ) -> None:
@@ -114,7 +113,6 @@ async def test_key_is_shown_once_and_stored_as_prefix_and_hmac(
 
 @pytest.mark.req("SEC-2")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_expired_key_is_refused(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -141,7 +139,6 @@ async def test_expired_key_is_refused(
 
 @pytest.mark.req("SEC-2")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_rotation_replaces_the_secret(
     app: FastAPI, session_client: SessionClient, clock: FixedClock
 ) -> None:
@@ -189,7 +186,6 @@ async def test_rotation_replaces_the_secret(
 
 @pytest.mark.req("SEC-2")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_last_use_is_tracked_at_most_once_a_minute(
     key_client: KeyClientFactory, db: DbUrls, clock: FixedClock
 ) -> None:
@@ -218,7 +214,6 @@ async def test_last_use_is_tracked_at_most_once_a_minute(
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_unknown_scope_is_rejected(session_client: SessionClient, db: DbUrls) -> None:
     """T-P0-14-08
     `scopes: ["tasks:admin"]` is 422 `unknown_scope` and stores nothing.
@@ -233,7 +228,6 @@ async def test_unknown_scope_is_rejected(session_client: SessionClient, db: DbUr
 
 @pytest.mark.req("SEC-2")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_key_events_are_emitted(
     session_client: SessionClient, db: DbUrls, workspace: WorkspaceHandle
 ) -> None:

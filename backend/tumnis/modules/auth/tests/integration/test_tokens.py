@@ -34,7 +34,6 @@ def app(  # noqa: PLR0917
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_task_token_lives_until_its_run_ends(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -96,7 +95,6 @@ async def test_task_token_lives_until_its_run_ends(
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_device_token_rotates_on_reissue(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:

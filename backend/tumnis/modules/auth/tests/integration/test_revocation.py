@@ -76,7 +76,6 @@ async def key_probe(db: DbUrls, pepper: str, key: str) -> AsyncIterator[asyncio.
 @pytest.mark.req("SEC-2", "Caching")
 @pytest.mark.wp("P0-14")
 @pytest.mark.usefixtures("core_db", "master_key_file")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_revoked_key_fails_in_every_process_within_one_second(
     db: DbUrls,
     workspace: WorkspaceHandle,

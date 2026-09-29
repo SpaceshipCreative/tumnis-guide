@@ -102,7 +102,6 @@ def _prepare(
 @pytest.mark.enable_socket
 @pytest.mark.req("SEC-2")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_no_auth_is_401(
     no_auth_case: str, app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -126,7 +125,6 @@ async def test_no_auth_is_401(
 @pytest.mark.enable_socket
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_wrong_scope_is_403(
     wrong_scope_case: str,
     app: FastAPI,
@@ -154,7 +152,6 @@ async def test_wrong_scope_is_403(
 @pytest.mark.enable_socket
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_project_limited_key_outside_project_is_404(
     project_case: str,
     app: FastAPI,
@@ -187,7 +184,6 @@ async def test_project_limited_key_outside_project_is_404(
 @pytest.mark.enable_socket
 @pytest.mark.req("SEC-2", "FR-9.3")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 async def test_api_key_on_session_only_route_is_403(
     session_only_case: str,
     app: FastAPI,
@@ -212,7 +208,6 @@ async def test_api_key_on_session_only_route_is_403(
 
 @pytest.mark.req("SEC-2")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 def test_matrix_extends_to_new_routes() -> None:
     """T-P0-14-13
     Adding a synthetic router to a test app adds its routes to the generated cases: a

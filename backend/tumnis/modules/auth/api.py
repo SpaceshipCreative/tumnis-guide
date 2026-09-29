@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import zoneinfo
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
@@ -10,7 +11,7 @@ from typing import Any, Final, Literal, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import Table, select, text, update
+from sqlalchemy import Table, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
@@ -20,16 +21,16 @@ from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.ids import uuid7
 from tumnis.core.outbox import emit
-from tumnis.core.pagination import Page
-from tumnis.core.principal import AuthFailure, Principal, register_resolver
+from tumnis.core.pagination import Page, paginate
+from tumnis.core.principal import AuthFailure, Principal, PrincipalKind, register_resolver
 from tumnis.core.settings_store import SETTINGS_CACHE, seal_for_workspace, settings_cache_key
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
-from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.core.types import SYSTEM_ACTOR, ActorRef
 from tumnis.core.versioning import StaleVersion, Version, update_versioned
-from tumnis.modules.auth import sessions, throttle
+from tumnis.modules.auth import keys, scopes, sessions, throttle, tokens
 from tumnis.modules.auth.csrf import SESSION_COOKIE, sign, unsign
-from tumnis.modules.auth.events import AuthFailedV1
-from tumnis.modules.auth.models import Membership, User, Workspace
+from tumnis.modules.auth.events import AuthFailedV1, KeyCreatedV1, KeyRevokedV1
+from tumnis.modules.auth.models import ApiKey, Membership, User, Workspace
 from tumnis.modules.auth.passwords import hash_password
 from tumnis.modules.auth.providers import (
     LOCAL_PASSWORD,
@@ -760,15 +761,42 @@ async def reset_totp(email: str, *, now: datetime) -> str:
     return provisioning_uri(secret, email.strip())
 
 
-# --- API keys (P0-14, SEC-2, FR-9.3, FR-14.10): spec skeleton -------------------------------
+# --- API keys (P0-14, SEC-2, FR-9.3, FR-14.10, ADR-0010) ---------------------------------
+#
+# A key is shown once (`tmn_<prefix>_<secret>`) and stored as its prefix and
+# HMAC-SHA256(pepper, secret) (tumnis.modules.auth.keys). The bearer resolver runs ahead of
+# the session cookie: it authenticates `Authorization: Bearer tmn_...` (and task and device
+# tokens), refusing unknown, revoked (401 `unauthenticated`) and expired ones (detail
+# `key_expired`). Key management is `auth="session"` only; creating, rotating and revoking
+# are audited (`key.created`, `key.rotated`, `key.revoked`) and emit `key.created` and
+# `key.revoked`.
+
+API_KEYS = cast("Table", ApiKey.__table__)
+GRACE_MINUTES_MAX: Final = 1_440  # plan: a rotation keeps the old secret 0 to 1,440 minutes
+LAST_USE_EVERY: Final = timedelta(minutes=1)  # plan: last_used_at at most once a minute
+_LAST_USE_MEMO_MAX: Final = 10_000
+_last_use: dict[UUID, datetime] = {}
+
+
+class KeyInvalid(ValueError):  # noqa: N818  # carries the problem code
+    """A key request the api refuses; `code` is the problem code (422)."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
 
 
 class KeyIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=200)
     scopes: list[str] = Field(max_length=32)
-    project_ids: list[UUID] | None = Field(default=None, max_length=200)
+    project_ids: list[UUID] | None = Field(default=None, max_length=200)  # None = all projects
     expires_at: datetime | None = None
+
+
+class RotateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    grace_minutes: int = Field(default=0, ge=0, le=GRACE_MINUTES_MAX)
 
 
 class KeyOut(BaseModel):
@@ -784,20 +812,339 @@ class KeyOut(BaseModel):
 
 
 class KeyCreated(KeyOut):
-    key: str  # shown once; never stored for an idempotent replay
+    key: str  # shown once; an idempotent replay answers without it (redact_on_replay)
+
+
+KeyPage = Page[KeyOut]
+_KEY_COLUMNS: Final = (
+    API_KEYS.c.id,
+    API_KEYS.c.name,
+    API_KEYS.c.prefix,
+    API_KEYS.c.scopes,
+    API_KEYS.c.project_ids,
+    API_KEYS.c.created_at,
+    API_KEYS.c.expires_at,
+    API_KEYS.c.last_used_at,
+    API_KEYS.c.revoked_at,
+)
+
+
+def _key_out(row: Any) -> KeyOut:
+    return KeyOut.model_validate({column.name: row[column.name] for column in _KEY_COLUMNS})
+
+
+def _validate_key(body: KeyIn, now: datetime) -> list[str]:
+    unknown = scopes.unknown_scopes(body.scopes)
+    if unknown:
+        raise KeyInvalid("unknown_scope", f"Unknown scopes: {', '.join(unknown)}")
+    if body.expires_at is not None and body.expires_at <= now:
+        raise KeyInvalid("validation_error", "expires_at must be in the future")
+    return sorted(set(body.scopes))
+
+
+async def _in_session[T](
+    ctx: WorkspaceContext,
+    session: AsyncSession | None,
+    work: Callable[[AsyncSession], Awaitable[T]],
+) -> T:
+    if session is not None:
+        return await work(session)
+    async with tenant_session(ctx) as own:
+        return await work(own)
 
 
 async def create_key(
     ctx: WorkspaceContext, body: KeyIn, *, now: datetime, session: AsyncSession | None = None
 ) -> KeyCreated:
-    raise NotImplementedError("P0-14")
+    """A new key in the workspace; the response carries the key once. 422 `unknown_scope`
+    for a scope outside SCOPES. Audited (`key.created`) and emitted in the same
+    transaction (the request's idempotent one when `session` is given)."""
+    chosen = _validate_key(body, now)
+    new = keys.generate("tmn", crypto.peppers())
+    project_ids = None if body.project_ids is None else sorted(set(body.project_ids), key=str)
+
+    async def work(s: AsyncSession) -> KeyCreated:
+        key_id = uuid7()
+        row = (
+            (
+                await s.execute(
+                    API_KEYS.insert()
+                    .values(
+                        id=key_id,
+                        name=body.name,
+                        prefix=new.prefix,
+                        secret_hmac=new.secret_hmac,
+                        pepper_version=new.pepper_version,
+                        scopes=chosen,
+                        project_ids=project_ids,
+                        expires_at=body.expires_at,
+                    )
+                    .returning(*_KEY_COLUMNS)
+                )
+            )
+            .mappings()
+            .one()
+        )
+        await audit.record(
+            s,
+            "key.created",
+            target=("api_key", key_id),
+            details={
+                "name": body.name,
+                "prefix": new.prefix,
+                "scopes": chosen,
+                "project_ids": None if project_ids is None else [str(p) for p in project_ids],
+            },
+            occurred_at=now,
+        )
+        event = KeyCreatedV1(
+            key_id=key_id,
+            prefix=new.prefix,
+            scopes=chosen,
+            project_ids=project_ids,
+            expires_at=body.expires_at,
+            source_ip=_address(),
+        )
+        await emit(s, event, occurred_at=now)
+        await keys.invalidate(s, "tmn", new.prefix)  # a cached "no such prefix"
+        return KeyCreated(**_key_out(row).model_dump(), key=new.display)
+
+    return await _in_session(ctx, session, work)
+
+
+async def list_keys(s: AsyncSession, *, cursor: str | None, limit: int) -> KeyPage:
+    """Every key of the caller's workspace (revoked ones too), oldest first; never the
+    secret or its HMAC."""
+    statement = select(*_KEY_COLUMNS).where(API_KEYS.c.deleted_at.is_(None))
+    return await paginate(
+        s, statement, keys=[], id_col=API_KEYS.c.id, cursor=cursor, limit=limit, model=KeyOut
+    )
+
+
+async def _locked_key(s: AsyncSession, key_id: UUID) -> Any:
+    row = (
+        (
+            await s.execute(
+                select(API_KEYS)
+                .where(API_KEYS.c.id == key_id, API_KEYS.c.deleted_at.is_(None))
+                .with_for_update()
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise ProblemError(404, "not_found", "No such key")
+    return row
+
+
+async def rotate_key(
+    ctx: WorkspaceContext,
+    key_id: UUID,
+    *,
+    grace_minutes: int = 0,
+    now: datetime,
+    session: AsyncSession | None = None,
+) -> KeyCreated:
+    """A new secret (and prefix) on the same key record, shown once. The old secret stops
+    at once, or keeps working for `grace_minutes` (0 to 1,440). 404 for no such key, 409
+    `key_revoked` for a revoked one. Audited as `key.rotated`."""
+    if not 0 <= grace_minutes <= GRACE_MINUTES_MAX:
+        raise KeyInvalid("validation_error", f"grace_minutes must be 0 to {GRACE_MINUTES_MAX}")
+    new = keys.generate("tmn", crypto.peppers())
+
+    async def work(s: AsyncSession) -> KeyCreated:
+        old = await _locked_key(s, key_id)
+        if old["revoked_at"] is not None:
+            raise ProblemError(409, "key_revoked", "This key is revoked; create a new one")
+        previous: dict[str, Any] = {
+            "previous_prefix": None,
+            "previous_secret_hmac": None,
+            "previous_pepper_version": None,
+            "previous_valid_until": None,
+        }
+        if grace_minutes:
+            previous = {
+                "previous_prefix": old["prefix"],
+                "previous_secret_hmac": old["secret_hmac"],
+                "previous_pepper_version": old["pepper_version"],
+                "previous_valid_until": now + timedelta(minutes=grace_minutes),
+            }
+        row = (
+            (
+                await s.execute(
+                    update(API_KEYS)
+                    .where(API_KEYS.c.id == key_id)
+                    .values(
+                        prefix=new.prefix,
+                        secret_hmac=new.secret_hmac,
+                        pepper_version=new.pepper_version,
+                        **previous,
+                    )
+                    .returning(*_KEY_COLUMNS)
+                )
+            )
+            .mappings()
+            .one()
+        )
+        await audit.record(
+            s,
+            "key.rotated",
+            target=("api_key", key_id),
+            details={
+                "prefix": new.prefix,
+                "previous_prefix": old["prefix"],
+                "grace_minutes": grace_minutes,
+            },
+            occurred_at=now,
+        )
+        await keys.invalidate(s, "tmn", old["prefix"], old["previous_prefix"], new.prefix)
+        return KeyCreated(**_key_out(row).model_dump(), key=new.display)
+
+    return await _in_session(ctx, session, work)
 
 
 async def revoke_key(
     ctx: WorkspaceContext, key_id: UUID, *, now: datetime, session: AsyncSession | None = None
 ) -> KeyOut:
-    raise NotImplementedError("P0-14")
+    """Sets `revoked_at`; every process drops the key on commit, so it is refused within a
+    second (T-P0-14-04). Audited (`key.revoked`) and emitted once; revoking a revoked key
+    changes nothing. 404 for no such key."""
+
+    async def work(s: AsyncSession) -> KeyOut:
+        old = await _locked_key(s, key_id)
+        if old["revoked_at"] is not None:
+            return _key_out(old)
+        row = (
+            (
+                await s.execute(
+                    update(API_KEYS)
+                    .where(API_KEYS.c.id == key_id)
+                    .values(revoked_at=now)
+                    .returning(*_KEY_COLUMNS)
+                )
+            )
+            .mappings()
+            .one()
+        )
+        await audit.record(
+            s,
+            "key.revoked",
+            target=("api_key", key_id),
+            details={"prefix": old["prefix"]},
+            occurred_at=now,
+        )
+        await emit(
+            s,
+            KeyRevokedV1(key_id=key_id, prefix=old["prefix"], source_ip=_address()),
+            occurred_at=now,
+        )
+        await keys.invalidate(s, "tmn", old["prefix"], old["previous_prefix"])
+        return _key_out(row)
+
+    return await _in_session(ctx, session, work)
+
+
+async def _touch_last_use(row: keys.KeyRow, now: datetime) -> None:
+    """`last_used_at` at most once a minute per key: this process remembers its last write,
+    and the update's own condition covers the other processes."""
+    last = _last_use.get(row.key_id)
+    if last is not None and timedelta(0) <= now - last < LAST_USE_EVERY:
+        return
+    if len(_last_use) >= _LAST_USE_MEMO_MAX:
+        _last_use.clear()
+    _last_use[row.key_id] = now
+    actor = ActorRef(f"api_key:{row.key_id}")
+    async with tenant_session(WorkspaceContext(row.workspace_id, actor)) as s:
+        await s.execute(
+            update(API_KEYS)
+            .where(
+                API_KEYS.c.id == row.key_id,
+                or_(
+                    API_KEYS.c.last_used_at.is_(None),
+                    API_KEYS.c.last_used_at <= now - LAST_USE_EVERY,
+                    API_KEYS.c.last_used_at > now,  # a clock set back (tests, NTP)
+                ),
+            )
+            .values(last_used_at=now)
+        )
+
+
+_PRINCIPAL_KIND: Final[dict[str, PrincipalKind]] = {
+    "tmn": "api_key",
+    "tmt": "task_token",
+    "tmd": "device",
+}
+_EXPIRED_DETAIL: Final[dict[str, str]] = {"tmn": "key_expired", "tmt": "token_expired"}
 
 
 async def authenticate_bearer(token: str, *, now: datetime) -> Principal | AuthFailure | None:
-    raise NotImplementedError("P0-14")
+    """The principal for a bearer secret: None when it is not one of ours (`tmn_`, `tmt_`,
+    `tmd_`), AuthFailure `unauthenticated` for an unknown or revoked one (detail
+    `key_expired` or `token_expired` once past `expires_at`)."""
+    parsed = keys.parse(token)
+    if parsed is None:
+        return None
+    rows = await keys.lookup(parsed.kind, parsed.prefix)
+    found = keys.verify(parsed.secret, rows, crypto.peppers())
+    if found is None or found.revoked_at is not None:
+        return AuthFailure("unauthenticated")
+    if found.expires_at is not None and now >= found.expires_at:
+        return AuthFailure("unauthenticated", _EXPIRED_DETAIL.get(parsed.kind))
+    if parsed.kind == "tmn":
+        await _touch_last_use(found, now)
+    subject = found.subject_id if parsed.kind == "tmd" else found.key_id
+    return Principal(
+        kind=_PRINCIPAL_KIND[parsed.kind],
+        workspace_id=found.workspace_id,
+        subject_id=subject,
+        scopes=found.scopes,
+        project_ids=found.project_ids,
+    )
+
+
+async def resolve_bearer(request: Request) -> Principal | AuthFailure | None:
+    """The authentication middleware's bearer resolver (ahead of the session cookie):
+    `Authorization: Bearer tmn_...` (or `tmt_`, `tmd_`); anything else is not ours."""
+    header = request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, value = header.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    return await authenticate_bearer(value.strip(), now=request.app.state.clock.now())
+
+
+register_resolver("bearer", resolve_bearer, before="session")
+
+
+# --- Task and device tokens (R-27): the entry points other modules call -------------------
+
+ScopeEscalation = tokens.ScopeEscalation
+
+
+async def issue_task_token(
+    ctx: WorkspaceContext,
+    *,
+    run_id: UUID,
+    project_id: UUID,
+    api_key_id: UUID,
+    scopes: frozenset[str],
+    now: datetime,
+) -> str:
+    """A `tmt_` token for the run (shown once); see tumnis.modules.auth.tokens."""
+    new = await tokens.issue_task_token(
+        ctx, run_id=run_id, project_id=project_id, api_key_id=api_key_id, scopes=scopes, now=now
+    )
+    return new.display
+
+
+async def revoke_task_tokens_for_run(ctx: WorkspaceContext, run_id: UUID, *, now: datetime) -> int:
+    """Ends every token of the run (called when the run ends, whatever the outcome)."""
+    return await tokens.revoke_task_tokens_for_run(ctx, run_id, now=now)
+
+
+async def issue_device_token(ctx: WorkspaceContext, *, runner_id: UUID, now: datetime) -> str:
+    """A `tmd_` token for the runner (shown once); the previous one stops."""
+    new = await tokens.issue_device_token(ctx, runner_id=runner_id, now=now)
+    return new.display

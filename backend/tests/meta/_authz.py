@@ -141,12 +141,15 @@ def find_case(app: FastAPI, kind: str, case_id: str) -> Case:
 
 
 def find_route(app: FastAPI, method: str, path: str) -> Any:
-    """The route object the router built for (method, path)."""
+    """The route context the request handler runs for (method, path). For an included
+    router (FastAPI 0.141) that is the effective route context, not the route the router
+    built: its `dependant` (shared by every walk) is the one whose `call` runs, so a spy on
+    it sees the endpoint run."""
     from tumnis.core.routing import walk_routes  # noqa: PLC0415
 
     for route in walk_routes(app):
         if route.path == path and method in (route.methods or ()):
-            return getattr(route, "original_route", route)
+            return route
     raise LookupError(f"{method} {path} is not a route of this app")
 
 

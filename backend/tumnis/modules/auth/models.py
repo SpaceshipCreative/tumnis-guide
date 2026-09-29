@@ -3,8 +3,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import BigInteger, ForeignKey, LargeBinary, text
-from sqlalchemy.dialects.postgresql import CITEXT, INET
+from sqlalchemy import BigInteger, ForeignKey, LargeBinary, Text, Uuid, text
+from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, INET
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tumnis.core.base import Base, TenantBase
@@ -70,4 +70,55 @@ class AuthSession(TenantBase, Base):
     second_factor: Mapped[str | None]
     last_seen_at: Mapped[datetime]
     expires_at: Mapped[datetime]
+    revoked_at: Mapped[datetime | None]
+
+
+class ApiKey(TenantBase, Base):
+    """A named, scoped API key (P0-14, SEC-2): the prefix in clear for the lookup, the
+    secret only as HMAC-SHA256(pepper, secret). `previous_*` keep the secret a rotation
+    replaced working until `previous_valid_until` (the grace window)."""
+
+    __tablename__ = "api_keys"
+
+    name: Mapped[str]
+    prefix: Mapped[str]
+    secret_hmac: Mapped[bytes] = mapped_column(LargeBinary)
+    pepper_version: Mapped[int]
+    scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'"))
+    project_ids: Mapped[list[UUID] | None] = mapped_column(ARRAY(Uuid))
+    expires_at: Mapped[datetime | None]
+    last_used_at: Mapped[datetime | None]
+    revoked_at: Mapped[datetime | None]
+    previous_prefix: Mapped[str | None]
+    previous_secret_hmac: Mapped[bytes | None] = mapped_column(LargeBinary)
+    previous_pepper_version: Mapped[int | None]
+    previous_valid_until: Mapped[datetime | None]
+
+
+class TaskToken(TenantBase, Base):
+    """A `tmt_` token bound to one run and one project (R-27); lives until the run ends."""
+
+    __tablename__ = "task_tokens"
+
+    run_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    api_key_id: Mapped[UUID] = mapped_column(ForeignKey("api_keys.id"))
+    scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'"))
+    prefix: Mapped[str]
+    token_hmac: Mapped[bytes] = mapped_column(LargeBinary)
+    pepper_version: Mapped[int]
+    expires_at: Mapped[datetime]
+    revoked_at: Mapped[datetime | None]
+
+
+class DeviceToken(TenantBase, Base):
+    """A runner's `tmd_` token; reissuing revokes the previous one."""
+
+    __tablename__ = "device_tokens"
+
+    runner_id: Mapped[UUID]
+    prefix: Mapped[str]
+    token_hmac: Mapped[bytes] = mapped_column(LargeBinary)
+    pepper_version: Mapped[int]
+    rotated_at: Mapped[datetime | None]
     revoked_at: Mapped[datetime | None]
