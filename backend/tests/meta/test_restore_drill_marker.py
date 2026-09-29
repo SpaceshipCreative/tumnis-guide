@@ -53,6 +53,7 @@ if args[:1] == ["exec"] and "psql" in args:
     now = clock(0.05)
     if "INSERT INTO ops_drill_markers" in sql:
         if "'fence'" in sql:
+            open(os.path.join(state, "fence_attempted"), "w").write(sql)
             sys.exit(3)  # the test ends the drill here
         print(uuid.uuid4())
     elif "to_char(clock_timestamp()" in sql:
@@ -133,4 +134,6 @@ def test_issue_37_marker_is_taken_after_a_completed_backup_stopped(tmp_path: Pat
     assert int(target.timestamp()) > BACKUP_STOP, (
         f"target {marker.group(1)} is in the second the backup stopped ({BACKUP_STOP})"
     )
-    assert "3 fence" not in run.stderr  # the fake refused the fence; nothing ran past it
+    # The drill reached its fence insert (so it didn't exit early), and nothing ran past it.
+    assert (state / "fence_attempted").exists(), run.stderr
+    assert "3 fence" not in run.stderr
