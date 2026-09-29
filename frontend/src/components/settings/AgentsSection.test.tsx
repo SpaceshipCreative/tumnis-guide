@@ -1,6 +1,7 @@
 // Settings > Agents (P1-04, FR-5.9): runners online and offline, profile health chips, and
 // a new runner's device token shown once, at phone and laptop widths.
 import { screen, waitFor, within } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { expect, test } from "vitest";
 
 import { server } from "../../test/msw/server";
@@ -76,4 +77,55 @@ test("[P1-04][FR-5.9] T-P1-04-19 shows runner and profile health", async () => {
     }
     unmount();
   }
+});
+
+test("[P1-04][FR-5.9] a health check refreshes the profile list", async () => {
+  // The check answers 202 and the result lands on the profile later; the list is read
+  // again when the check settles, so the chip moves on even without the live socket.
+  const recorder = new Recorder();
+  const [, beta] = PROFILES;
+  if (!beta) throw new Error("fixtures");
+  let checked = false;
+  server.use(...agentsHandlers(recorder));
+  server.use(
+    // later `use` calls win: only beta, and healthy once checked
+    http.get("*/v1/agents/profiles", () =>
+      HttpResponse.json({
+        items: checked
+          ? [
+              {
+                ...beta,
+                health: {
+                  ...beta.health,
+                  reachable: true,
+                  error: null,
+                  status: "ok",
+                },
+              },
+            ]
+          : [beta],
+        next_cursor: null,
+      }),
+    ),
+    http.post("*/v1/agents/profiles/:id/health-check", async ({ request }) => {
+      await recorder.record(request);
+      checked = true;
+      return HttpResponse.json(
+        {
+          request_id: "01950000-0000-7000-8000-000000000702",
+          profile_id: beta.id,
+        },
+        { status: 202 },
+      );
+    }),
+  );
+  const { user } = renderWithProviders(<AgentsSection />, {
+    viewport: "laptop",
+  });
+
+  const profiles = await screen.findByRole("list", { name: "Agent profiles" });
+  const item = within(profiles).getByRole("listitem", { name: beta.name });
+  expect(within(item).getByText("Unreachable")).toBeInTheDocument();
+  await user.click(within(item).getByRole("button", { name: "Check health" }));
+  expect(await within(profiles).findByText("Healthy")).toBeInTheDocument();
 });
