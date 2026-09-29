@@ -11,7 +11,6 @@ import pytest
 
 @pytest.mark.req("FR-3.1")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 def test_today_order() -> None:
     """T-P0-18-19
     Priority, due, created: an urgent task beats a high one due earlier; among equal

@@ -8,7 +8,6 @@ import pytest
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 def test_agent_human_or_hybrid_without_estimate_is_rejected() -> None:
     """T-P0-18-06
     `normalize_estimate(HUMAN or HYBRID, None, AGENT)` raises EstimateRequired
@@ -34,7 +33,6 @@ def test_agent_human_or_hybrid_without_estimate_is_rejected() -> None:
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 @pytest.mark.parametrize("estimate", [None, 1, 30, 960])
 def test_ai_only_estimate_is_forced_empty(estimate: int | None) -> None:
     """T-P0-18-07

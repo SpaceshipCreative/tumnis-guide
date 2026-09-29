@@ -20,7 +20,6 @@ CELLS = list(itertools.product(STATUSES, STATUSES, ACTORS, LABELS))
 
 @pytest.mark.req("FR-3.2")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 @pytest.mark.parametrize(("frm", "to", "actor", "label"), CELLS)
 def test_every_pair_is_allowed_or_rejected(
     frm: str, to: str, actor: str, label: str | None
@@ -49,7 +48,6 @@ def test_every_pair_is_allowed_or_rejected(
 
 @pytest.mark.req("FR-3.2")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 def test_agent_edges_are_a_subset_of_the_diagram() -> None:
     """T-P0-18-02
     The edges an agent may take are backlog -> today (plan), backlog or today ->

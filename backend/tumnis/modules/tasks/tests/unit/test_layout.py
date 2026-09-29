@@ -11,7 +11,6 @@ from hypothesis import strategies as st
 
 @pytest.mark.req("FR-3.4")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 def test_placement_at_29_30_31_minutes() -> None:
     """T-P0-18-09
     Threshold 30: Human 29 nests, Human 30 is a card, Hybrid 31 is a card, an unestimated
@@ -29,7 +28,6 @@ def test_placement_at_29_30_31_minutes() -> None:
 
 @pytest.mark.req("FR-3.4")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 @given(
     estimate=st.one_of(st.none(), st.integers(min_value=1, max_value=960)),
     threshold=st.integers(min_value=1, max_value=960),

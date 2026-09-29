@@ -102,7 +102,6 @@ TaskLifecycle.TestCase.settings = settings(max_examples=300, stateful_step_count
 
 @pytest.mark.req("FR-3.2")
 @pytest.mark.wp("P0-18")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 class TestTaskLifecycle(TaskLifecycle.TestCase):  # type: ignore[misc,valid-type]
     """T-P0-18-04
     Invariants over random actions: create, transition by any actor to any status, day
