@@ -36,7 +36,7 @@ def deadletter(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
 
 @pytest.mark.req("REL-3")
 @pytest.mark.wp("P0-07")
-def test_use_client_destroys_the_client_it_replaces(deadletter: Any) -> None:
+def test_issue_32_use_client_destroys_the_client_it_replaces(deadletter: Any) -> None:
     owned = deadletter._dbos_client()
     handed_in = FakeClient()
 
