@@ -27,6 +27,7 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("ops_backup_runs", "repo"): 1,
     ("ops_backup_runs", "type"): "full",
     ("ops_drill_markers", "kind"): "marker",
+    ("audit_log", "actor_type"): "system",
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)

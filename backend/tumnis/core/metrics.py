@@ -3,6 +3,8 @@
 P0-28 adds the backup and operations gauges. They are refreshed from the database at
 scrape time (one query per source), so the api reports what the worker and the backup
 service recorded: `ops_status`, `ops_backup_runs` and `pg_stat_archiver`.
+
+P0-15 adds the audit chain gauges (tumnis.core.audit_workflows).
 """
 
 from prometheus_client import CollectorRegistry, Gauge
