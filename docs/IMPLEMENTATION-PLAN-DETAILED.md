@@ -1917,7 +1917,7 @@ jobs:
 - CODEOWNERS: `* @<scott>`; `backend/tests/**`, `frontend/e2e/**`, `**/*.test.ts*` and `docs/plan/**` also `@<scott>`, so a spec PR always needs his review.
 - Coverage groups in `coverage_gates.py`: `rules_and_mcp` (every `tumnis/modules/*/rules*.py` and `*/mcp.py`, 80%); `full` (`tasks/rules.py`, `planning/rules.py`, `focus/rules.py`, `decisions/rules.py`, 100% lines). It reads `coverage json` output, so a group whose files have no statements yet passes instead of erroring.
 - Spec-guard compares ASTs, so reformatting (Ruff format) never counts as an edit, while any change to a constant, comparison or call does.
-- Do not let an agent's PR edit `scripts/ci/**` or `.github/**` without the `spec-change` label: spec-guard treats those paths as locked files too (any modification is a violation unless waived).
+- spec-guard locks existing test files only (Scott's decision, 2026-09-29): changes to `scripts/ci/**`, `.github/**` and other non-test files are not violations; CODEOWNERS review covers them.
 
 **Fixtures, fakes and data**
 
