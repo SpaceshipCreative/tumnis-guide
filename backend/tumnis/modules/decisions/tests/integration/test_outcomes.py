@@ -26,7 +26,6 @@ pytestmark = [
 
 @pytest.mark.req("FR-11.5")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_human_override_recorded_on_log(
     workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
 ) -> None:

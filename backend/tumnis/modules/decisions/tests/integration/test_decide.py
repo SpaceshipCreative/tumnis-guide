@@ -83,7 +83,6 @@ def _down(fake: Any, point: str) -> None:
 
 @pytest.mark.req("FR-11.3")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_jev_down_uses_vllm_marked_fallback(
     workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
 ) -> None:
@@ -120,7 +119,6 @@ async def test_jev_down_uses_vllm_marked_fallback(
 
 @pytest.mark.req("FR-11.3")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_both_down_creates_review_item(
     workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
 ) -> None:
@@ -188,7 +186,6 @@ def _script_mixed(jev: Any) -> dict[str, str]:
 
 @pytest.mark.req("FR-11.5")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_every_decision_logged(
     workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
 ) -> None:
@@ -239,7 +236,6 @@ def _with_canary(value: Any) -> Any:
 
 @pytest.mark.req("Data flow rule 6")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_log_never_holds_input_text(
     workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
 ) -> None:
@@ -279,7 +275,6 @@ async def test_log_never_holds_input_text(
 
 @pytest.mark.req("Caching NFR")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_cache_hit_within_24h(
     workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
 ) -> None:
@@ -303,7 +298,6 @@ async def test_cache_hit_within_24h(
 
 @pytest.mark.req("Caching NFR")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_cache_expires_after_24h(
     workspace: WorkspaceHandle, providers: Any, clock: FixedClock
 ) -> None:
@@ -320,7 +314,6 @@ async def test_cache_expires_after_24h(
 
 @pytest.mark.req("Caching NFR")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_threshold_change_clears_cache(
     workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
 ) -> None:
@@ -346,7 +339,6 @@ async def test_threshold_change_clears_cache(
 
 @pytest.mark.req("FR-11.5")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_model_version_change_clears_cache_and_flags_recheck(
     workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
 ) -> None:
@@ -401,7 +393,6 @@ async def test_model_version_change_clears_cache_and_flags_recheck(
 
 @pytest.mark.req("Data flow rule 6")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_local_only_project_never_calls_jev(
     workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
 ) -> None:
@@ -444,7 +435,6 @@ async def test_local_only_project_never_calls_jev(
 
 @pytest.mark.req("FR-11.9")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 @pytest.mark.usefixtures("master_key_file")
 async def test_jev_limit_keyed_on_credential(
     db: DbUrls, workspace: WorkspaceHandle, providers: Any, clock: FixedClock
