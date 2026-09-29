@@ -42,7 +42,6 @@ def _task_payload() -> dict[str, Any]:
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-21")
-@pytest.mark.xfail(strict=True, reason="spec:P0-21")
 async def test_counter_rises_once_when_event_delivered_twice(
     db: DbUrls, dbos: type[DBOS], workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -86,7 +85,6 @@ async def test_counter_rises_once_when_event_delivered_twice(
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-21")
-@pytest.mark.xfail(strict=True, reason="spec:P0-21")
 async def test_concurrent_duplicate_deliveries_count_once(
     db: DbUrls, workspace: WorkspaceHandle
 ) -> None:
@@ -117,7 +115,6 @@ async def test_concurrent_duplicate_deliveries_count_once(
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-21")
-@pytest.mark.xfail(strict=True, reason="spec:P0-21")
 async def test_counters_are_per_workspace(
     db: DbUrls, two_workspaces: tuple[WorkspaceHandle, WorkspaceHandle]
 ) -> None:
