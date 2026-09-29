@@ -21,7 +21,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("SEC-9")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 def test_non_tls_connection_is_refused(pg_tls_container: TlsPostgres) -> None:  # noqa: F811
     """T-P0-16-14
     With the repository's pg_hba.conf and postgresql.conf, `sslmode=disable` fails with a
@@ -40,7 +39,7 @@ def test_non_tls_connection_is_refused(pg_tls_container: TlsPostgres) -> None:  
         ).fetchone() or (None, None)
         assert ssl is True
         assert version in {"TLSv1.2", "TLSv1.3"}
-        assert conn.execute("SHOW ssl_min_protocol_version").fetchone() == ("TLSv1.2",)
+    assert pg.show("ssl_min_protocol_version") == "TLSv1.2"
 
     verified = pg.conninfo(sslmode="verify-full", sslrootcert=str(pg.root_cert))
     with psycopg.connect(verified.replace(f"host={pg.host}", "host=localhost")) as conn:

@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime as dt
 import ipaddress
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -40,6 +41,9 @@ class TlsPostgres:
     host: str
     port: int
     root_cert: Path
+    # `show(name)`: a setting's value, read as the superuser over the local socket (peer):
+    # the app roles may not read TLS settings, and the superuser has no network login.
+    show: Callable[[str], str]
 
     def conninfo(self, role: str = APP, dbname: str = "tumnis", **params: str) -> str:
         extra = " ".join(f"{key}={value}" for key, value in params.items())
@@ -139,8 +143,17 @@ def pg_tls_container(tmp_path: Path) -> Iterator[TlsPostgres]:
         .with_exposed_ports(5432)
     )
     with container as running:
+
+        def show(name: str) -> str:
+            wrapped = running.get_wrapped_container()
+            code, output = wrapped.exec_run(
+                ["psql", "-U", "postgres", "-tAc", f"SHOW {name}"], user="postgres"
+            )
+            assert code == 0, output
+            return str(output.decode()).strip()
+
         pg = TlsPostgres(
-            running.get_container_host_ip(), int(running.get_exposed_port(5432)), cert_path
+            running.get_container_host_ip(), int(running.get_exposed_port(5432)), cert_path, show
         )
         _wait_until_ready(pg)
         yield pg

@@ -36,6 +36,13 @@ class SettingsError(RuntimeError):
 EXIT_CONFIG = 78  # EX_CONFIG from sysexits.h; the CLI exits with it on SettingsError
 DBOS_DATABASE = "tumnis_dbos"
 DeploymentEnv = Literal["dev", "preview", "prod"]
+# Every database URL Settings holds; prod requires verify-full on each (P0-16).
+DATABASE_URL_FIELDS = (
+    "database_url",
+    "database_direct_url",
+    "database_owner_url",
+    "dbos_system_database_url",
+)
 # The boot checks wait for Postgres (a restart can race the database): 30 tries, 2 s apart.
 BOOT_DB_ATTEMPTS = 30
 BOOT_DB_RETRY_S = 2.0
@@ -91,8 +98,23 @@ class Settings(BaseSettings):
         )
 
     def check_database_tls(self) -> None:
-        """Prod connects to Postgres and PgBouncer only with verify-full (P0-16, SEC-9)."""
-        raise NotImplementedError
+        """Prod reaches Postgres and PgBouncer only over TLS that verifies the server
+        (P0-16, SEC-9): every database URL set must say `sslmode=verify-full` (with
+        `sslrootcert`), or startup fails with `database_tls_required`. Dev and preview
+        accept `require` (and the test databases run without TLS). The api, the worker and
+        migrate call this at startup, after the /metrics token check."""
+        if self.deployment_env != "prod":
+            return
+        for field in DATABASE_URL_FIELDS:
+            url = getattr(self, field)
+            if url is None:
+                continue
+            mode = make_url(url).query.get("sslmode")
+            if mode != "verify-full":
+                raise SettingsError(
+                    "database_tls_required",
+                    f"{field.upper()} must use sslmode=verify-full in prod (has {mode or 'none'})",
+                )
 
     @cached_property
     def master_keys(self) -> MasterKeys:

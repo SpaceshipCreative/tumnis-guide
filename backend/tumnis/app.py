@@ -114,6 +114,7 @@ def create_app(
 ) -> FastAPI:
     settings = settings or Settings()  # values come from the environment
     metrics_token = settings.metrics_token()  # SettingsError: prod needs METRICS_TOKEN_FILE
+    settings.check_database_tls()  # SettingsError: prod needs sslmode=verify-full (P0-16)
     master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
     db.configure(settings.database_url, settings.database_direct_url)
     modules.configure(settings)  # the deployment's module kill list

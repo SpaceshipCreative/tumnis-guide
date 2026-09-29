@@ -90,7 +90,6 @@ DATABASE_URL_FIELDS = (
 
 @pytest.mark.req("SEC-9")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 def test_prod_requires_verify_full_dsn(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """T-P0-16-15
     DEPLOYMENT_ENV=prod with `sslmode=require` (or disable, verify-ca, or none) on any
