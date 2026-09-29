@@ -1,9 +1,11 @@
-# Self-hosted stack (ADR-0006): migrate, api, worker, Postgres 18 (pgvector, pgBackRest)
-# and PgBouncer. No service publishes a host port: Coolify's proxy reaches the api on the
+# Self-hosted stack (ADR-0006): migrate, api, worker, Postgres 18 (pgvector, pgBackRest),
+# the backup scheduler and PgBouncer. No service publishes a host port: Coolify's proxy reaches the api on the
 # Docker network, and Coolify itself is reachable only over the VPN or Tailscale (FR-9.1).
 #
 # Coolify (or the shell) provides APP_DB_PASSWORD, OWNER_DB_PASSWORD, POSTGRES_PASSWORD and
 # TUMNIS_VERSION. Passwords go into connection URLs, so keep them URL-safe (hex).
+# Backups (P0-28) need /etc/pgbackrest/conf.d/secrets.conf on the host (repo2-s3-key,
+# repo2-s3-key-secret, repo2-cipher-pass; root:999, mode 0640), see deploy/README.md.
 # Overrides: compose.preview.yaml (PR previews), compose.test.yaml (CI e2e stack).
 name: tumnis
 
@@ -58,7 +60,11 @@ services:
       migrate: { condition: service_completed_successfully }
 
   postgres:
-    build: ./postgres
+    build: &postgres-build
+      context: ./postgres
+      # pgbackrest.conf, the crontab and the backup scripts are baked in (P0-28).
+      additional_contexts:
+        pgbackrest: ./pgbackrest
     image: tumnis-postgres:18
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -68,6 +74,11 @@ services:
       # Postgres 18 images keep data in /var/lib/postgresql/18/docker; mount the parent.
       - pgdata:/var/lib/postgresql
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+      # archive_command pushes WAL to both pgBackRest repositories (P0-28).
+      - pgsocket:/var/run/postgresql
+      - pgbackrest_repo1:/var/lib/pgbackrest
+      - pgbackrest_spool:/var/spool/pgbackrest
+      - /etc/pgbackrest/conf.d:/etc/pgbackrest/conf.d:ro
     shm_size: 256mb
     healthcheck:
       # Over TCP: the init-time server listens on the socket only, so this passes only
@@ -78,6 +89,24 @@ services:
       retries: 12
       start_period: 30s
       start_interval: 1s
+    restart: unless-stopped
+
+  # pgBackRest beside the database (P0-28): stanza setup and a first full backup per
+  # repository, then the schedules in deploy/pgbackrest/crontab under supercronic. Shares
+  # PGDATA, the socket and repo1 with postgres; runs as the postgres user.
+  backup:
+    build: *postgres-build
+    image: tumnis-postgres:18
+    user: postgres
+    entrypoint: ["/bin/sh", "-c", "init-stanza.sh && exec supercronic /etc/pgbackrest/crontab"]
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - pgsocket:/var/run/postgresql
+      - pgbackrest_repo1:/var/lib/pgbackrest
+      - /etc/pgbackrest/conf.d:/etc/pgbackrest/conf.d:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
     restart: unless-stopped
 
   pgbouncer:
@@ -100,3 +129,7 @@ services:
 
 volumes:
   pgdata: {}
+  pgsocket: {}
+  # Repository 1 (local). On the homelab, point it at a second disk (driver_opts bind).
+  pgbackrest_repo1: {}
+  pgbackrest_spool: {}

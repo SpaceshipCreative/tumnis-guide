@@ -26,3 +26,80 @@ services:
     <<: *image
     ports:
       - "127.0.0.1:${TUMNIS_TEST_PORT:-8080}:8080"
+
+  # Backups on the test stack (P0-28): archiving back on, repo1 on a volume, repo2 on the
+  # stack's MinIO over TLS. The rehearsal drill (scripts/drill/restore_drill.sh --mode
+  # rehearsal) restores from it. Throwaway credentials, like test.env.
+  postgres:
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    env_file: pgbackrest/rehearsal.env
+    volumes:
+      - ./pgbackrest/test-conf.d:/etc/pgbackrest/conf.d:ro
+      - minio_certs:/etc/pgbackrest/minio:ro
+    depends_on:
+      minio-bucket: { condition: service_completed_successfully }
+  backup:
+    entrypoint: ["/bin/sh", "-c", "init-stanza.sh && exec supercronic /etc/pgbackrest/crontab"]
+    restart: unless-stopped
+    env_file: pgbackrest/rehearsal.env
+    volumes:
+      - ./pgbackrest/test-conf.d:/etc/pgbackrest/conf.d:ro
+      - minio_certs:/etc/pgbackrest/minio:ro
+
+  # A self-signed certificate for MinIO (pgBackRest speaks only TLS to S3).
+  minio-certs:
+    build:
+      context: ./postgres
+      additional_contexts:
+        pgbackrest: ./pgbackrest
+    image: tumnis-postgres:18
+    user: root
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        if [ ! -s /certs/public.crt ]; then
+          openssl req -new -x509 -days 3650 -nodes -subj /CN=minio \
+            -addext subjectAltName=DNS:minio \
+            -keyout /certs/private.key -out /certs/public.crt 2>/dev/null
+        fi
+        chmod 0644 /certs/public.crt /certs/private.key
+    volumes:
+      - minio_certs:/certs
+    restart: "no"
+  minio:
+    # Same image and digest as the MinIO test fixture (backend/tests/_services.py).
+    image: chainguard/minio@sha256:71674988a1c7ddd5724928633199152b11e4ddefd6c6ce2d60772ff4a8f22ca9
+    user: "0"
+    command: ["server", "/data", "--certs-dir", "/certs"]
+    environment:
+      MINIO_ROOT_USER: tumnis-test
+      MINIO_ROOT_PASSWORD: minio-test-not-a-secret
+    volumes:
+      - minio_certs:/certs:ro
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      minio-certs: { condition: service_completed_successfully }
+  minio-bucket:
+    image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+    command: ["mkdir", "m:tumnis-backups", "--ca-cert", "/certs/public.crt"]
+    environment:
+      RCLONE_CONFIG_M_TYPE: s3
+      RCLONE_CONFIG_M_PROVIDER: Minio
+      RCLONE_CONFIG_M_ENDPOINT: https://minio:9000
+      RCLONE_CONFIG_M_ACCESS_KEY_ID: tumnis-test
+      RCLONE_CONFIG_M_SECRET_ACCESS_KEY: minio-test-not-a-secret
+    volumes:
+      - minio_certs:/certs:ro
+    depends_on:
+      minio: { condition: service_healthy }
+    restart: "no"
+
+volumes:
+  minio_certs: {}
+  minio_data: {}

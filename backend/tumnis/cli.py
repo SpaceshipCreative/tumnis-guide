@@ -1,4 +1,4 @@
-"""Command-line entry point: `tumnis api|worker|migrate|seed` (more commands in later WPs).
+"""Command-line entry point: `tumnis api|worker|migrate|seed|drill` (more in later WPs).
 
 The image runs every process through this CLI. `api` and `worker` load the deployment
 settings and run the boot checks first; a configuration error exits 78 (EX_CONFIG), so a
@@ -8,6 +8,7 @@ misconfigured preview never serves a request.
 import asyncio
 import os
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
 
@@ -19,6 +20,8 @@ from tumnis.seed import SEED_PATHS, SeedSet
 from tumnis.settings import EXIT_CONFIG, Settings, SettingsError
 
 app = typer.Typer(name="tumnis", help="Tumnis Guide backend.", no_args_is_help=True)
+drill_app = typer.Typer(help="Restore drill results (P0-28).", no_args_is_help=True)
+app.add_typer(drill_app, name="drill")
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -151,3 +154,48 @@ def seed(
         typer.echo(f"seed: {exc} (the owning module has not landed yet)", err=True)
         raise typer.Exit(1) from exc
     typer.echo(", ".join(f"{n} {kind}" for kind, n in counts.items()))
+
+
+class DrillModeOption(StrEnum):
+    prod = "prod"
+    rehearsal = "rehearsal"
+
+
+def _aware_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        raise typer.BadParameter("needs a UTC offset, for example 2026-03-09T11:58:00+00:00")
+    return parsed
+
+
+@drill_app.command("record")
+def drill_record(
+    mode: Annotated[DrillModeOption, typer.Option(help="prod (quarterly, B2) or rehearsal")],
+    rpo_seconds: Annotated[int, typer.Option(help="Archive time minus the marker time")],
+    rto_seconds: Annotated[int, typer.Option(help="Restore start to checks passed")],
+    target: Annotated[
+        datetime, typer.Option(parser=_aware_datetime, help="The recovery target time (T_MARKER)")
+    ],
+) -> None:
+    """Record a restore drill in ops_status (and, from P0-15, the audit log); exit 1 when
+    the RPO (15 min) or the RTO (1 h) was missed."""
+    from tumnis.core import db  # noqa: PLC0415
+    from tumnis.core.drill import DrillResult, record_drill  # noqa: PLC0415
+
+    settings = load_settings()
+    db.configure(settings.database_direct_url, settings.database_direct_url, pooled=False)
+    result = DrillResult(mode.value, rpo_seconds, rto_seconds, target)
+
+    async def run() -> None:
+        try:
+            await record_drill(db.direct_engine(), result, now=make_clock().now())
+        finally:
+            await db.dispose()
+
+    asyncio.run(run())
+    typer.echo(
+        f"drill {mode.value}: rpo {rpo_seconds}s, rto {rto_seconds}s, "
+        f"{'ok' if result.ok else 'MISSED'}"
+    )
+    if not result.ok:
+        raise typer.Exit(1)

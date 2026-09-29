@@ -8,6 +8,7 @@ import signal
 import threading
 from typing import TYPE_CHECKING
 
+from tumnis.core import workflows_ops
 from tumnis.settings import Settings
 
 if TYPE_CHECKING:
@@ -15,8 +16,30 @@ if TYPE_CHECKING:
 
 
 def register_queues() -> None:
-    """Register every DBOS queue (A9). Empty until P0-07 adds `events`; the test harness
-    calls it before DBOS.launch() exactly as the worker will."""
+    """Register every DBOS queue (A9). DBOS 3.1 persists queues in the system database, so
+    this runs right after DBOS.launch(), in the worker and in the test harness alike.
+    P0-07 adds `events`."""
+    from dbos import DBOS  # noqa: PLC0415
+
+    DBOS.register_queue(workflows_ops.MAINTENANCE_QUEUE, worker_concurrency=1)
+
+
+def register_schedules(settings: Settings) -> None:
+    """Static schedules (A9), applied after DBOS.launch(). The backup freshness check runs
+    only in production: previews and dev stacks keep no backups to check."""
+    from dbos import DBOS  # noqa: PLC0415
+
+    if settings.deployment_env == "prod":
+        DBOS.apply_schedules(
+            [
+                {
+                    "schedule_name": "backup-freshness",
+                    "workflow_fn": workflows_ops.backup_freshness_check,
+                    "schedule": workflows_ops.BACKUP_FRESHNESS_SCHEDULE,
+                    "queue_name": workflows_ops.MAINTENANCE_QUEUE,
+                }
+            ]
+        )
 
 
 def dbos_config(settings: Settings) -> "DBOSConfig":
@@ -35,8 +58,9 @@ def main(settings: Settings) -> None:
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda *_: stop.set())
     DBOS(config=dbos_config(settings))
-    register_queues()
     DBOS.launch()
+    register_queues()
+    register_schedules(settings)
     try:
         stop.wait()
     finally:

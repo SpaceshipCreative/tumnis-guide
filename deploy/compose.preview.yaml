@@ -10,6 +10,17 @@ x-secrets: &secrets
     - preview_secrets:/run/secrets:ro
 
 services:
+  # A preview never archives or backs up: its WAL must never reach the production stanza,
+  # and it gets no pgBackRest secrets (P0-28).
+  postgres:
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "archive_mode=off"]
+    volumes:
+      - preview_pgbackrest:/etc/pgbackrest/conf.d:ro
+  backup:
+    entrypoint: ["true"]
+    restart: "no"
+    volumes:
+      - preview_pgbackrest:/etc/pgbackrest/conf.d:ro
   migrate:
     <<: *secrets
     environment: *preview
@@ -37,3 +48,4 @@ services:
 
 volumes:
   preview_secrets: {}
+  preview_pgbackrest: {}

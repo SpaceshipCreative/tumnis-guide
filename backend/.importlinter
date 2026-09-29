@@ -66,12 +66,14 @@ forbidden_modules =
     tumnis.worker
     tumnis.cli
     tumnis.wiring
-# Core's own tests drive the app factory and the CLI (P0-04: health, boot guard, commands);
-# core code itself still never imports a composition root.
+# Core's own tests drive the app factory, the CLI and the worker's schedules (P0-04: health,
+# boot guard, commands; P0-28: backup schedule); core code itself still never imports a
+# composition root.
 ignore_imports =
     tumnis.core.tests.** -> tumnis.app
     tumnis.core.tests.** -> tumnis.cli
     tumnis.core.tests.** -> tumnis.wiring
+    tumnis.core.tests.** -> tumnis.worker
 # T-P0-08-12 lives with core's tests (plan) but checks auth's pure is_iana_zone rule.
     tumnis.core.tests.unit.test_iana -> tumnis.modules.auth.rules
 unmatched_ignore_imports_alerting = none

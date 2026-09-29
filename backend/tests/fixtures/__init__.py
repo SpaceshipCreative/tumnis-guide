@@ -11,6 +11,7 @@ import json
 import secrets
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -368,8 +369,12 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
     }
     DBOS(config=config)
     DBOS.reset_system_database(truncate=True)
-    register_queues()
     DBOS.launch()
+    # DBOS 3.1 persists queues in the system database, so they register after launch, and
+    # it refuses the sync call inside a running event loop (a test that requests this
+    # fixture mid-test): register from a thread of its own.
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(register_queues).result()
     try:
         yield DBOS
     finally:
