@@ -43,7 +43,6 @@ def _app(
 
 @pytest.mark.req("FR-12.2")
 @pytest.mark.wp("P2-14")
-@pytest.mark.xfail(strict=True, reason="spec:P2-14")
 def test_latest_and_previews() -> None:
     """T-P2-14-04
     latest_deployment: the newest deployment that is not a preview (pull_request_id 0),

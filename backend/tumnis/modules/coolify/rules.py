@@ -8,7 +8,9 @@ put into the preview URL template (`{{pr_id}}.{{domain}}` by default), scheme an
 kept, port dropped.
 """
 
+import re
 from collections.abc import Sequence
+from typing import Final
 
 from pydantic import AwareDatetime, BaseModel
 
@@ -47,13 +49,53 @@ class PreviewLink(BaseModel):
     finished_at: AwareDatetime | None = None
 
 
+_URL: Final = re.compile(
+    r"^(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*)://(?P<host>[^/:?#]+)(?::\d+)?(?P<path>/[^?#]*)?"
+)
+
+
+def _newest(deps: Sequence[DeploymentView]) -> DeploymentView | None:
+    # Coolify lists newest first; on equal times the first listed wins.
+    return max(deps, key=lambda dep: dep.created_at, default=None)
+
+
 def latest_deployment(deps: Sequence[DeploymentView]) -> DeploymentView | None:
     """The newest deployment that is not a preview, whatever its status."""
-    raise NotImplementedError
+    return _newest([dep for dep in deps if dep.pull_request_id == 0])
+
+
+def preview_url(app: ApplicationView, pull_request_id: int) -> str | None:
+    """The preview URL of a PR, or None when Coolify's cannot be known: no domain, no
+    template, or a `{{random}}` part (Coolify draws it once and stores it)."""
+    template = app.preview_url_template
+    if not app.fqdn or not template or "{{random}}" in template:
+        return None
+    match = _URL.match(app.fqdn.split(",")[0].strip())
+    if match is None:
+        return None
+    host = template.replace("{{domain}}", match["host"]).replace("{{pr_id}}", str(pull_request_id))
+    path = match["path"] or ""
+    return f"{match['scheme']}://{host}{'' if path == '/' else path}"
 
 
 def preview_urls(
     app: ApplicationView, deps: Sequence[DeploymentView], open_prs: set[int]
 ) -> list[PreviewLink]:
-    """One link per open PR with a preview deployment, in PR number order."""
-    raise NotImplementedError
+    """One link per open PR with a preview deployment, from its newest one, in PR number
+    order; closed PRs' previews are hidden."""
+    links: list[PreviewLink] = []
+    for pr in sorted(pr for pr in open_prs if pr > 0):  # 0 is no pull request
+        newest = _newest([dep for dep in deps if dep.pull_request_id == pr])
+        url = preview_url(app, pr) if newest is not None else None
+        if newest is None or url is None:
+            continue
+        links.append(
+            PreviewLink(
+                pull_request_id=pr,
+                url=url,
+                status=newest.status,
+                commit=newest.commit,
+                finished_at=newest.finished_at,
+            )
+        )
+    return links
