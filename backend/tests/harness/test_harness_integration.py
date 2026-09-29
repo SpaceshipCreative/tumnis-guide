@@ -167,7 +167,6 @@ def second_db(pg_base: DbUrls, db_template: str) -> Iterator[DbUrls]:
 
 @pytest.mark.req("Quality rule 5")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-18")
 def test_tumnis_seed_loads_into_postgres(
     db: DbUrls, second_db: DbUrls, monkeypatch: pytest.MonkeyPatch
 ) -> None:

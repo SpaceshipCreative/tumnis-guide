@@ -87,6 +87,7 @@ class EventSeed(_Record):
     start_at: datetime
     end_at: datetime
     busy: bool = True
+    fetched_at: datetime | None = None  # the load's clock, so a load is deterministic
 
 
 class DocumentSeed(_Record):
@@ -382,6 +383,7 @@ async def load_seed(
                 start_at=local_to_utc(on, _time(event.start), tz),
                 end_at=local_to_utc(on, _time(event.end), tz),
                 busy=event.busy,
+                fetched_at=clock.now(),
             )
             remember("event", event.key, await sink.event(ws, event_rec))
 

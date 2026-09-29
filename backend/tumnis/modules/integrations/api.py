@@ -259,6 +259,27 @@ async def connection_source(session: AsyncSession, connection_id: UUID) -> str:
     return f"{row.kind}:{row.provider}"
 
 
+async def seed_connection(
+    session: AsyncSession, kind: ConnectorKind, provider: str, account: str
+) -> UUID:
+    """The connection seed records hang off (P0-02's seed sets load events through it):
+    one per (workspace, provider, account), created on first use with status `ok`. A dev
+    and test tool, not a connector; it holds no credentials."""
+    await session.execute(
+        pg_insert(_connections)
+        .values(kind=kind, provider=provider, account=account, status="ok")
+        .on_conflict_do_nothing(index_elements=["workspace_id", "provider", "account"])
+    )
+    connection_id: UUID = (
+        await session.execute(
+            select(_connections.c.id).where(
+                _connections.c.provider == provider, _connections.c.account == account
+            )
+        )
+    ).scalar_one()
+    return connection_id
+
+
 async def store_raw_payloads(
     ctx: WorkspaceContext,
     connection_id: UUID,
