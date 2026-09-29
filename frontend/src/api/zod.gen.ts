@@ -125,6 +125,16 @@ export const zKeyOut = z.object({
 export const zLabel = z.enum(["human", "ai", "hybrid"]);
 
 /**
+ * LastDeployOut
+ */
+export const zLastDeployOut = z.object({
+  commit: z.string().nullable(),
+  created_at: z.iso.datetime(),
+  finished_at: z.iso.datetime().nullable(),
+  status: z.string(),
+});
+
+/**
  * LoginIn
  *
  * `provider` picks the sign-in provider; the other string fields are its credentials
@@ -210,6 +220,29 @@ export const zPageKeyOut = z.object({
 export const zPreset = z.enum(["daily", "weekdays", "weekly", "monthly"]);
 
 /**
+ * PreviewOut
+ */
+export const zPreviewOut = z.object({
+  commit: z.string().nullish(),
+  finished_at: z.iso.datetime().nullish(),
+  pull_request_id: z.int(),
+  status: z.string(),
+  url: z.string(),
+});
+
+/**
+ * AppDeployStatus
+ */
+export const zAppDeployStatus = z.object({
+  app_uuid: z.string(),
+  checked_at: z.iso.datetime().nullable(),
+  error: z.enum(["unavailable", "rejected"]).nullable(),
+  last: zLastDeployOut.nullable(),
+  name: z.string().nullable(),
+  previews: z.array(zPreviewOut),
+});
+
+/**
  * Problem
  */
 export const zProblem = z.object({
@@ -220,6 +253,14 @@ export const zProblem = z.object({
   status: z.int(),
   title: z.string(),
   type: z.string(),
+});
+
+/**
+ * ProjectDeployStatus
+ */
+export const zProjectDeployStatus = z.object({
+  apps: z.array(zAppDeployStatus),
+  project_id: z.uuid(),
 });
 
 /**
@@ -849,6 +890,17 @@ export const zAuthConfirmTotpEnrolmentBody = zTotpEnrolConfirmIn;
  * Successful Response
  */
 export const zAuthConfirmTotpEnrolmentResponse = z.void();
+
+export const zCoolifyListDeployStatusQuery = z.object({
+  project_id: z.uuid().nullish(),
+});
+
+/**
+ * Response Coolify List Deploy Status
+ *
+ * Successful Response
+ */
+export const zCoolifyListDeployStatusResponse = z.array(zProjectDeployStatus);
 
 export const zDeadLettersGetDeadLettersQuery = z.object({
   status: z

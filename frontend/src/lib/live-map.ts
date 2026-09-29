@@ -24,9 +24,16 @@ export const LIVE_MAP: Record<
   },
   // A project's board and columns carry its id in their path: column edits and a new card
   // threshold (FR-3.8) refresh them; any project change refreshes search results (P0-20).
+  // The Coolify poll announces a linked project when its deploy status changes, and a link
+  // edit changes which apps a project shows (P2-14).
   project: {
     details: ["projectsGetProject", "tasksGetBoard", "tasksGetColumns"],
-    lists: ["projectsListProjects", "searchSearch", "searchTypeaheadProjects"],
+    lists: [
+      "projectsListProjects",
+      "searchSearch",
+      "searchTypeaheadProjects",
+      "coolifyListDeployStatus",
+    ],
   },
   // The review badge (P0-18); the review queue joins with P1-13.
   review_item: { details: [], lists: ["tasksGetReviewCount"] },

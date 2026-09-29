@@ -66,6 +66,21 @@ def register_audit_schedule() -> None:
     )
 
 
+def register_module_schedules() -> None:
+    """Module schedules (A9), applied after DBOS.launch(): a module's `workflows.schedules()`
+    lists its own (P1-09: the calendar sync tick every 10 minutes on the sync queue)."""
+    from dbos import DBOS  # noqa: PLC0415
+
+    found = []
+    for module in modules.MODULES:
+        workflows = importlib.import_module(f"tumnis.modules.{module}.workflows")
+        declared = getattr(workflows, "schedules", None)
+        if declared is not None:
+            found += declared()
+    if found:
+        DBOS.apply_schedules(found)
+
+
 def register_task_schedules() -> None:
     """The day-close tick (every 5 minutes, also the recurrence tick) and hourly
     housekeeping on the maintenance queue (P0-19), in every deployment, applied after
@@ -122,6 +137,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     register_queues()
     register_schedules(settings)
     register_audit_schedule()
+    register_module_schedules()
     register_task_schedules()
     try:
         asyncio.run(_serve(settings))

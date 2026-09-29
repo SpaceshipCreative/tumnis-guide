@@ -27,6 +27,7 @@ import {
   authSignOutOtherDevices,
   authStartTotpEnrolment,
   authTotp,
+  coolifyListDeployStatus,
   deadLettersGetDeadLetters,
   deadLettersPostDiscard,
   deadLettersPostRetry,
@@ -119,6 +120,9 @@ import type {
   AuthTotpData,
   AuthTotpError,
   AuthTotpResponse,
+  CoolifyListDeployStatusData,
+  CoolifyListDeployStatusError,
+  CoolifyListDeployStatusResponse,
   DeadLettersGetDeadLettersData,
   DeadLettersGetDeadLettersError,
   DeadLettersGetDeadLettersResponse,
@@ -787,6 +791,36 @@ export const authConfirmTotpEnrolmentMutation = (
   };
   return mutationOptions;
 };
+
+export const coolifyListDeployStatusQueryKey = (
+  options?: Options<CoolifyListDeployStatusData>,
+) => createQueryKey("coolifyListDeployStatus", options);
+
+/**
+ * List Deploy Status
+ *
+ * Deploy status per project in board order; projects without apps are left out.
+ */
+export const coolifyListDeployStatusOptions = (
+  options?: Options<CoolifyListDeployStatusData>,
+) =>
+  queryOptions<
+    CoolifyListDeployStatusResponse,
+    CoolifyListDeployStatusError,
+    CoolifyListDeployStatusResponse,
+    ReturnType<typeof coolifyListDeployStatusQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await coolifyListDeployStatus({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: coolifyListDeployStatusQueryKey(options),
+  });
 
 export const deadLettersGetDeadLettersQueryKey = (
   options?: Options<DeadLettersGetDeadLettersData>,

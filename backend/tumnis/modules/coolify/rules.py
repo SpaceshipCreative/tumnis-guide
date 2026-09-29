@@ -64,6 +64,12 @@ def latest_deployment(deps: Sequence[DeploymentView]) -> DeploymentView | None:
     return _newest([dep for dep in deps if dep.pull_request_id == 0])
 
 
+def preview_prs(deps: Sequence[DeploymentView]) -> set[int]:
+    """Every PR with a preview deployment in `deps`: the open PRs to assume when GitHub
+    cannot say which are open (P2-14 plan note)."""
+    return {dep.pull_request_id for dep in deps if dep.pull_request_id > 0}
+
+
 def preview_url(app: ApplicationView, pull_request_id: int) -> str | None:
     """The preview URL of a PR, or None when Coolify's cannot be known: no domain, no
     template, or a `{{random}}` part (Coolify draws it once and stores it)."""
