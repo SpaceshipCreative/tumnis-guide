@@ -22,7 +22,6 @@ pytestmark = [pytest.mark.integration]
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 async def test_stream_json_result_becomes_result_message(
     cfg: DaemonConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
