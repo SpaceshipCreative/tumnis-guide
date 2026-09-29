@@ -14,9 +14,9 @@ from sqlalchemy import Table, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
-from tumnis.core import audit, request_meta
+from tumnis.core import audit, crypto, request_meta
 from tumnis.core.cache import invalidate_on_commit
-from tumnis.core.clock import Clock
+from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.ids import uuid7
 from tumnis.core.outbox import emit
@@ -24,6 +24,7 @@ from tumnis.core.pagination import Page
 from tumnis.core.principal import AuthFailure, Principal, register_resolver
 from tumnis.core.settings_store import SETTINGS_CACHE, seal_for_workspace, settings_cache_key
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
+from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.core.versioning import StaleVersion, update_versioned
 from tumnis.modules.auth import sessions, throttle
 from tumnis.modules.auth.csrf import SESSION_COOKIE, sign, unsign
@@ -46,6 +47,12 @@ from tumnis.modules.auth.providers import (
 )
 from tumnis.modules.auth.rules import is_iana_zone
 from tumnis.modules.auth.sessions import user_context
+from tumnis.seed import (
+    SeedWriterUnavailableError,
+    UserSeed,
+    WorkspaceSeed,
+    register_seed_writer,
+)
 
 SUBTASK_THRESHOLD_RANGE: Final = (5, 480)  # minutes (plan default bounds; FR-3.8 default 30)
 WORKSPACES = cast("Table", Workspace.__table__)
@@ -667,3 +674,37 @@ async def enroll_totp(
                 totp_last_step=0,
             )
         )
+
+
+# --- Seed writers (P0-04's seed sets; P0-13 stores the workspace and its user) ------------
+
+
+async def seed_workspace(rec: WorkspaceSeed) -> UUID:
+    """The seed set's workspace, made as the system actor."""
+    workspace_id = uuid7()
+    async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
+        await s.execute(
+            WORKSPACES.insert().values(id=workspace_id, name=rec.name, timezone=rec.timezone)
+        )
+    return workspace_id
+
+
+async def seed_user(workspace_id: UUID, rec: UserSeed) -> UUID:
+    """A seed user who can sign in at once: its password and its confirmed TOTP secret
+    come from the seed file (test-only credentials). Without a master key the secret
+    cannot be sealed, and the user is skipped (SeedWriterUnavailableError)."""
+    try:
+        crypto.master_keys()
+    except crypto.MasterKeyError as exc:
+        raise SeedWriterUnavailableError(f"seed user not stored: {exc}") from exc
+    return await create_user(
+        workspace_id,
+        email=rec.email,
+        password=rec.password,
+        totp_secret=rec.totp_secret,
+        now=SystemClock().now(),
+    )
+
+
+register_seed_writer("workspace", seed_workspace)
+register_seed_writer("user", seed_user)

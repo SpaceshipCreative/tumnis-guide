@@ -153,6 +153,18 @@ def migrate(
         raise typer.Exit(1) from exc
 
 
+def _use_master_key_file() -> None:
+    """MASTER_KEY_FILE (or the default path) for the seed writers; a missing file only
+    skips what needs it."""
+    from tumnis.core import crypto  # noqa: PLC0415
+
+    path = os.environ.get("MASTER_KEY_FILE") or str(
+        Settings.model_fields["master_key_file"].default
+    )
+    strict = os.environ.get("DEPLOYMENT_ENV") == "prod"
+    crypto.configure_master_keys(lambda: crypto.load_master_keys(path, strict_owner=strict))
+
+
 @app.command()
 def seed(
     set_name: Annotated[
@@ -182,12 +194,15 @@ def seed(
         typer.echo("DATABASE_URL is not set", err=True)
         raise typer.Exit(2)
     db.configure(database_url, os.environ.get("DATABASE_DIRECT_URL"))
+    _use_master_key_file()  # the seed user's TOTP secret is sealed (P0-13)
+
+    sink = DatabaseSink(skip_missing=True)
 
     async def run() -> dict[str, int]:
         try:
             result = await load_seed(
                 SEED_PATHS[set_name],
-                DatabaseSink(),
+                sink,
                 anchor=anchor.date() if anchor else None,
                 clock=make_clock(),
             )
@@ -200,7 +215,10 @@ def seed(
     except SeedWriterMissingError as exc:
         typer.echo(f"seed: {exc} (the owning module has not landed yet)", err=True)
         raise typer.Exit(1) from exc
-    typer.echo(", ".join(f"{n} {kind}" for kind, n in counts.items()))
+    typer.echo(", ".join(f"{n} {kind}" for kind, n in counts.items() if kind not in sink.skipped))
+    if sink.skipped:
+        skipped = ", ".join(sorted(sink.skipped))
+        typer.echo(f"seed: skipped {skipped} (the owning module has not landed yet)", err=True)
 
 
 class DrillModeOption(StrEnum):

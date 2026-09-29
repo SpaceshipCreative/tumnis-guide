@@ -73,7 +73,11 @@ async def reset(
         raise HTTPException(status_code=500, detail="reset needs DATABASE_OWNER_URL")
     await truncate_tables(settings.database_owner_url)
     if writers_registered():  # from P0-17 on; before that the seed has nowhere to go
-        await load_seed(SEED_PATHS[seed_set], DatabaseSink(), clock=request.app.state.clock)
+        await load_seed(
+            SEED_PATHS[seed_set],
+            DatabaseSink(skip_missing=True),
+            clock=request.app.state.clock,
+        )
     return Response(status_code=204)
 
 
