@@ -141,7 +141,9 @@ def clone(base: DbUrls, template: str, name: str) -> DbUrls:
 
 
 def drop(base: DbUrls, name: str) -> None:
-    with psycopg.connect(base.libpq(OWNER), autocommit=True) as conn:
+    """As the superuser: FORCE must end every session, including app-role server
+    connections PgBouncer still holds (the owner may not terminate those)."""
+    with psycopg.connect(base.libpq(SUPERUSER), autocommit=True) as conn:
         conn.execute(
             sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name))
         )

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import psycopg
 import pytest
+from sqlalchemy import text
 
 from tests._pg import APP
 
@@ -47,7 +48,6 @@ def _two_clients(
 
 @pytest.mark.req("ADR-0009", "PERF-1")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_local_setting_does_not_leak_across_pooled_transactions(
     pgbouncer: PgBouncer, db: DbUrls
 ) -> None:
@@ -66,7 +66,6 @@ def test_local_setting_does_not_leak_across_pooled_transactions(
 
 @pytest.mark.req("ADR-0009", "PERF-1")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_session_setting_would_leak_control(pgbouncer: PgBouncer, db: DbUrls) -> None:
     """T-P0-06-08
     Negative control: with `is_local = false` the second client does see the value,
@@ -79,3 +78,29 @@ def test_session_setting_would_leak_control(pgbouncer: PgBouncer, db: DbUrls) ->
     assert pid1 == pid2
     assert workspace == ws
     assert count == 1
+
+
+@pytest.mark.req("PERF-1", "ADR-0009")
+@pytest.mark.wp("P0-06")
+async def test_pooled_engine_through_pgbouncer_keeps_each_transaction_in_its_workspace(
+    pgbouncer: PgBouncer, db: DbUrls
+) -> None:
+    """The production engine settings (pooled, psycopg defaults, so statements are
+    prepared after five runs) work through PgBouncer: twelve alternating tenant
+    transactions each see only their own workspace."""
+    from tests.fixtures import make_workspace  # noqa: PLC0415
+    from tumnis.core import db as core_db  # noqa: PLC0415
+    from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    ws_a, ws_b = make_workspace(db, "A"), make_workspace(db, "B")
+    url = pgbouncer.libpq(APP, db.name).replace("postgresql://", "postgresql+psycopg://", 1)
+    core_db.configure(app_url=url, pooled=True)
+    probe = text("SELECT app.current_workspace_id(), array_agg(id) FROM workspaces")
+    try:
+        for n in range(12):
+            ws = ws_a if n % 2 == 0 else ws_b
+            async with tenant_session(WorkspaceContext(ws, SYSTEM_ACTOR)) as s:
+                assert tuple((await s.execute(probe)).one()) == (ws, [ws])
+    finally:
+        await core_db.dispose()

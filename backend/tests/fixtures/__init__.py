@@ -201,13 +201,76 @@ def two_workspaces(db: DbUrls) -> tuple[WorkspaceHandle, WorkspaceHandle]:
 
 @dataclass(frozen=True)
 class PgBouncer:
-    """A PgBouncer in transaction mode in front of pg_container (P0-06 spec stub)."""
+    """PgBouncer in transaction mode in front of pg_container, one server connection per
+    pool (`default_pool_size = 1`), so consecutive transactions share a backend."""
 
     host: str
     port: int
 
     def libpq(self, role: str, dbname: str) -> str:
-        raise NotImplementedError("P0-06")
+        from tests._pg import PASSWORDS  # noqa: PLC0415
+
+        return f"postgresql://{role}:{PASSWORDS[role]}@{self.host}:{self.port}/{dbname}"
+
+
+# Same image as deploy/compose.yaml.
+PGBOUNCER_IMAGE = (
+    "edoburu/pgbouncer:v1.25.2-p0"
+    "@sha256:7d7a27d9e90985cab5cf42256f5c13a3120baa4b055b69df37beb272b89b2340"
+)
+PGBOUNCER_INI = """\
+[databases]
+* = host=postgres port=5432
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /tmp/userlist.txt
+pool_mode = transaction
+default_pool_size = 1
+max_client_conn = 20
+max_prepared_statements = 200
+ignore_startup_parameters = extra_float_digits
+"""
+
+
+@pytest.fixture(scope="session")
+def pgbouncer(pg_container: PostgresContainer) -> Iterator[PgBouncer]:
+    """A pinned PgBouncer on a Docker network shared with pg_container (alias
+    `postgres`); any database name routes to the test server, so tests connect to their
+    own `db` through it."""
+    from testcontainers.core.container import DockerContainer  # noqa: PLC0415
+    from testcontainers.core.wait_strategies import LogMessageWaitStrategy  # noqa: PLC0415
+
+    from tests._pg import PASSWORDS  # noqa: PLC0415
+
+    docker = pg_container.get_docker_client().client
+    network = docker.networks.create(f"tumnis-pgbouncer-{uuid.uuid4().hex[:8]}")
+    pg_id = pg_container.get_wrapped_container().id
+    network.connect(pg_id, aliases=["postgres"])
+    userlist = f'"{APP}" "{PASSWORDS[APP]}"\n'
+    container = (
+        DockerContainer(PGBOUNCER_IMAGE)
+        .with_kwargs(entrypoint=["/bin/sh", "-c"], network=network.name)
+        .with_env("PGBOUNCER_INI", PGBOUNCER_INI)
+        .with_env("PGBOUNCER_USERS", userlist)
+        .with_command(
+            [
+                'printf "%s" "$PGBOUNCER_INI" > /tmp/pgbouncer.ini'
+                ' && printf "%s" "$PGBOUNCER_USERS" > /tmp/userlist.txt'
+                " && exec pgbouncer /tmp/pgbouncer.ini"
+            ]
+        )
+        .with_exposed_ports(6432)
+        .waiting_for(LogMessageWaitStrategy("process up"))
+    )
+    try:
+        with container as bouncer:
+            yield PgBouncer(bouncer.get_container_host_ip(), int(bouncer.get_exposed_port(6432)))
+    finally:
+        network.disconnect(pg_id)
+        network.remove()
 
 
 async def _session(url: str) -> AsyncIterator[AsyncSession]:
