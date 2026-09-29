@@ -132,16 +132,32 @@ def new_data_key() -> bytes:
     return os.urandom(KEY_BYTES)
 
 
+def _wrap_aad(workspace_id: UUID, key_version: int) -> bytes:
+    """Binds a wrapped data key to its workspace and version."""
+    return f"tumnis:data-key:v1:{workspace_id}:{key_version}".encode()
+
+
 def wrap(
     master: MasterKeys, data_key: bytes, *, workspace_id: UUID, key_version: int
 ) -> tuple[int, bytes]:
-    raise NotImplementedError
+    """Wraps a data key with the active master key: (master version, nonce + ciphertext)."""
+    nonce = os.urandom(NONCE_BYTES)
+    aad = _wrap_aad(workspace_id, key_version)
+    return master.active, nonce + AESGCM(master.keys[master.active]).encrypt(nonce, data_key, aad)
 
 
 def unwrap(
     master: MasterKeys, wrapped: bytes, *, master_version: int, workspace_id: UUID, key_version: int
 ) -> bytes:
-    raise NotImplementedError
+    """The data key, unwrapped with the master key version it was wrapped under."""
+    master_key = master.keys.get(master_version)
+    if master_key is None:
+        raise MasterKeyError(f"master key version {master_version} is not loaded")
+    nonce, ciphertext = wrapped[:NONCE_BYTES], wrapped[NONCE_BYTES:]
+    try:
+        return AESGCM(master_key).decrypt(nonce, ciphertext, _wrap_aad(workspace_id, key_version))
+    except (InvalidTag, ValueError):
+        raise DecryptionError("wrapped data key failed to authenticate") from None
 
 
 def seal(data_key: bytes, key_version: int, plaintext: bytes, *, aad: bytes) -> bytes:

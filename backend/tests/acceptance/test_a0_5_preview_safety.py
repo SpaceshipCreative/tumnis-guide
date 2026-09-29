@@ -85,7 +85,6 @@ CASES = [
     _case(
         "jev_key_setting",
         PreviewCase(PREVIEW, jev_setting=True, refusal="preview_has_production_secret"),
-        SPEC,  # the workspace_settings check arrives with P0-08
     ),
     _case(
         "prod_master_key",

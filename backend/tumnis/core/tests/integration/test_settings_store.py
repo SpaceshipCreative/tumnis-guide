@@ -49,7 +49,6 @@ def _owner_rows(db: DbUrls, query: str) -> list[tuple[Any, ...]]:
 
 @pytest.mark.req("SEC-6")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.usefixtures("core_db")
 async def test_raw_table_shows_no_plaintext(
     db: DbUrls, workspace: WorkspaceHandle, master_key_file: MasterKeyFile
@@ -85,7 +84,6 @@ async def test_raw_table_shows_no_plaintext(
 
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.usefixtures("core_db")
 async def test_put_setting_rejects_stale_version(
     workspace: WorkspaceHandle, master_key_file: MasterKeyFile

@@ -170,6 +170,28 @@ async def read_markers(url: str) -> list[Marker]:
     raise AssertionError("unreachable")  # pragma: no cover
 
 
+# workspace_settings keys that hold a real provider credential; a preview refuses to boot on
+# a database holding any of them (A0.5). Provider slots join as their WPs land (P1-01).
+PROVIDER_SECRET_KEYS: tuple[str, ...] = ("decisions.jev",)
+
+
+async def read_provider_settings(url: str, keys: Sequence[str] = PROVIDER_SECRET_KEYS) -> list[str]:
+    """Which of `keys` any workspace holds in workspace_settings, read as the app role
+    through the SECURITY DEFINER function app.provider_setting_keys() (names only)."""
+    engine = create_async_engine(url, poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text("SELECT k FROM app.provider_setting_keys(:keys) AS k"), {"keys": list(keys)}
+            )
+            return sorted(key for (key,) in rows)
+    except ProgrammingError as exc:
+        detail = f"cannot read workspace_settings: {exc.orig}"
+        raise SettingsError("migration_pending", detail) from exc
+    finally:
+        await engine.dispose()
+
+
 async def boot_checks(settings: Settings) -> None:
     """Runs before the api or worker serves anything. Reads deployment_marker as the
     owner-free app role: preview refuses a database whose marker env is 'prod', or whose
@@ -177,3 +199,9 @@ async def boot_checks(settings: Settings) -> None:
     from DEPLOYMENT_ENV; preview refuses any workspace_settings row for a real provider
     slot (checked from P0-08 on)."""
     check_markers(settings, await read_markers(settings.database_direct_url))
+    if settings.deployment_env == "preview":
+        held = await read_provider_settings(settings.database_direct_url)
+        if held:
+            raise SettingsError(
+                "preview_has_production_secret", f"workspace_settings holds {', '.join(held)}"
+            )
