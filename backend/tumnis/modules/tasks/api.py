@@ -1322,7 +1322,7 @@ async def create_due_successors(s: AsyncSession, now: datetime) -> int:
 
 class DayCloseFacts(BaseModel):
     """What the day-close tick needs from a workspace: its zone and the anchor (the later of
-    the last close and the settings row's change, REL-6)."""
+    the last close and the last timezone change, REL-6)."""
 
     timezone: str
     anchor: datetime

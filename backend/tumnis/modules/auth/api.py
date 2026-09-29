@@ -11,7 +11,7 @@ from typing import Annotated, Any, Final, Literal, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
-from sqlalchemy import Table, or_, select, text, update
+from sqlalchemy import Table, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
@@ -181,6 +181,8 @@ async def _put_workspace_settings(
             .with_for_update(key_share=True)
         )
     ).scalar_one()
+    if changes.get("timezone", before) != before:
+        values["timezone_changed_at"] = now  # the day-close anchor (P0-19)
     try:
         row = await update_versioned(session, WORKSPACES, ctx.workspace_id, body.version, values)
     except StaleVersion as stale:
@@ -208,17 +210,18 @@ async def _put_workspace_settings(
 
 class WorkspaceTimezone(BaseModel):
     timezone: str  # IANA name
-    changed_at: datetime  # the settings row's last write: its creation or the last PUT
+    changed_at: datetime  # when the zone last changed; the workspace's creation if never
 
 
 async def workspace_timezone(session: AsyncSession, workspace_id: UUID) -> WorkspaceTimezone:
-    """The workspace's timezone and when its settings row last changed, read in the
-    caller's transaction (not through the cache). P0-19's day close anchors on the change,
-    so a timezone change never rolls Today over mid-day (REL-6)."""
+    """The workspace's timezone and when it last changed, read in the caller's transaction
+    (not through the cache). P0-19's day close anchors on the change, so a timezone change
+    never rolls Today over mid-day (REL-6); other settings writes leave the anchor."""
+    changed_at = func.coalesce(WORKSPACES.c.timezone_changed_at, WORKSPACES.c.created_at)
     row = (
         (
             await session.execute(
-                select(WORKSPACES.c.timezone, WORKSPACES.c.updated_at).where(
+                select(WORKSPACES.c.timezone, changed_at.label("changed_at")).where(
                     WORKSPACES.c.id == workspace_id
                 )
             )
@@ -226,7 +229,7 @@ async def workspace_timezone(session: AsyncSession, workspace_id: UUID) -> Works
         .mappings()
         .one()
     )
-    return WorkspaceTimezone(timezone=row["timezone"], changed_at=row["updated_at"])
+    return WorkspaceTimezone(timezone=row["timezone"], changed_at=row["changed_at"])
 
 
 # --- Identity, sign-in and sessions (P0-13, SEC-1, FR-9.1, FR-9.2) -------------------------

@@ -298,10 +298,11 @@ async def test_settings_write_keeping_timezone_keeps_day_close(  # noqa: PLR0917
     clock.set(_at("2026-03-09T03:50Z"))
     [task] = await _today_tasks(make_task, set_status, 1)
 
-    for at, change in [
+    changes: list[tuple[str, dict[str, Any]]] = [
         ("2026-03-09T04:01Z", {"subtask_threshold_min": 45}),
         ("2026-03-09T04:02Z", {"timezone": "America/New_York"}),
-    ]:
+    ]
+    for at, change in changes:
         clock.set(_at(at))
         current = (await session_client.get("/v1/settings/workspace")).json()
         put = await session_client.put(
