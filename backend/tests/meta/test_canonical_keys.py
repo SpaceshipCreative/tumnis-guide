@@ -99,7 +99,6 @@ def _violations(conn: psycopg.Connection[Any], table: str) -> list[str]:
 
 @pytest.mark.req("FR-14.1", "FR-14.3")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 def test_every_canonical_table_has_ws_connection_external_unique_key(db: DbUrls) -> None:
     """T-P0-12-12
     Tables with `external_id` carry the unique key (workspace_id, connection_id,
