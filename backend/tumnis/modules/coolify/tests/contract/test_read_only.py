@@ -26,7 +26,6 @@ def _public_methods(cls: type[Any]) -> set[str]:
 
 @pytest.mark.req("FR-12.2")
 @pytest.mark.wp("P2-14")
-@pytest.mark.xfail(strict=True, reason="spec:P2-14")
 def test_adapter_has_no_write_methods() -> None:
     """T-P2-14-02
     The `CoolifyStatus` protocol is exactly get_application, list_deployments and health;
@@ -49,7 +48,6 @@ def test_adapter_has_no_write_methods() -> None:
 
 @pytest.mark.req("FR-12.2")
 @pytest.mark.wp("P2-14")
-@pytest.mark.xfail(strict=True, reason="spec:P2-14")
 async def test_http_wrapper_refuses_non_get() -> None:
     """T-P2-14-03
     `ReadOnlyHttp.request` raises `ReadOnlyViolation` for POST, PUT, PATCH and DELETE (in

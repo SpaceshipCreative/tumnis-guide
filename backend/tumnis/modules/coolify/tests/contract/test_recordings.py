@@ -6,14 +6,20 @@ from __future__ import annotations
 
 import pytest
 
-from tumnis.modules.coolify.tests.replay import BASE_URL, TOKEN, Replay, load, recording_names
+from tumnis.modules.coolify.tests.replay import (
+    BASE_URL,
+    COOLIFY_ADDRESS,
+    TOKEN,
+    Replay,
+    load,
+    recording_names,
+)
 
 pytestmark = pytest.mark.contract
 
 
 @pytest.mark.req("FR-12.2")
 @pytest.mark.wp("P2-14")
-@pytest.mark.xfail(strict=True, reason="spec:P2-14")
 @pytest.mark.parametrize("recording", recording_names())
 async def test_last_deployment_and_preview_urls(recording: str) -> None:
     """T-P2-14-01
@@ -42,7 +48,9 @@ async def test_last_deployment_and_preview_urls(recording: str) -> None:
         ("GET", f"/api/v1/deployments/applications/{rec['app_uuid']}", {"take": "10"}),
     ]
     for request in replay.requests:
-        assert str(request.url).startswith(BASE_URL)
+        # The SSRF guard pins the checked address and keeps the name in Host (core.net).
+        assert f"{request.url.scheme}://{request.headers['host']}" == BASE_URL
+        assert request.url.host == COOLIFY_ADDRESS
         assert request.headers["authorization"] == f"Bearer {TOKEN}"
 
     latest = latest_deployment(deployments)

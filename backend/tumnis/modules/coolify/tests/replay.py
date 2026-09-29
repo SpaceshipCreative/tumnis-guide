@@ -3,7 +3,8 @@ runs against them in the contract layer, with no socket opened.
 
 `Replay(recording)` is an `httpx.MockTransport` handler answering, by path:
 - `GET /api/v1/applications/<uuid>`: the recorded application;
-- `GET /api/v1/deployments/applications/<uuid>`: the recorded `{count, deployments}`;
+- `GET /api/v1/deployments/applications/<uuid>`: the recorded `{count, deployments}`,
+  the list cut to `take` (recorded newest first, as Coolify answers);
 - anything else: Coolify's 404 `{"message": "Application not found"}`.
 Every request is kept in `requests` for assertions.
 """
@@ -56,8 +57,17 @@ class Replay:
             if path.startswith(prefix):
                 responses = self._apps.get(path.removeprefix(prefix))
                 if responses is not None:
-                    return httpx.Response(200, json=responses[part])
+                    return httpx.Response(200, json=_answer(responses, part, request))
         return httpx.Response(404, json={"message": "Application not found"})
+
+
+def _answer(responses: dict[str, Any], part: str, request: httpx.Request) -> Any:
+    """The recorded answer; a deployments list is cut to `take` as Coolify does."""
+    body = responses[part]
+    if part != "deployments":
+        return body
+    take = int(request.url.params.get("take", "10"))
+    return {**body, "deployments": body["deployments"][:take]}
 
 
 async def _coolify_address(host: str, port: int) -> list[str]:
