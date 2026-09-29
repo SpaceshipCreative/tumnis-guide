@@ -60,7 +60,6 @@ def _is_cyclonedx_sbom(step: dict[str, Any]) -> bool:
 @pytest.mark.contract
 @pytest.mark.req("SAAS-1", "SEC-7")
 @pytest.mark.wp("P0-30")
-@pytest.mark.xfail(strict=True, reason="spec:P0-30")
 def test_release_attaches_sbom_and_openapi() -> None:
     """T-P0-30-05
     release.yml runs on `v*.*.*` tags; the release job needs the rehearsal, checks the
