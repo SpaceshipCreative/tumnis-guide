@@ -97,7 +97,6 @@ class TestVllmFake(DecisionsProviderContract):
 
 @pytest.mark.req("FR-11.3")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 class TestVllmOnRecordings(DecisionsProviderContract):
     """T-P1-02-15"""
 
@@ -113,7 +112,6 @@ class TestVllmOnRecordings(DecisionsProviderContract):
 
 @pytest.mark.req("FR-11.3")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 async def test_request_bodies_use_structured_outputs() -> None:
     """T-P1-02-15
     Every recorded case sends one chat completion per question, sampled `n = 5` times at

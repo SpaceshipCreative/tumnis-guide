@@ -153,11 +153,11 @@ ignore_imports =
 unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:api-never-calls-out]
-name = The api process never imports the Jev adapter or its SDK
+name = The api process never imports the Jev or vLLM adapter or the Jev SDK
 type = forbidden
 # The composition roots (tumnis.app, worker, cli, wiring) and every module's api, router
 # and mcp, as single modules: none reaches the adapter through static imports. The worker
-# builds JevDecisions lazily through the adapter registry.
+# builds JevDecisions and VllmDecisions lazily through the adapter registry.
 as_packages = False
 source_modules =
     tumnis.*
@@ -166,4 +166,5 @@ source_modules =
     tumnis.modules.*.mcp
 forbidden_modules =
     tumnis.modules.decisions.adapters.jev
+    tumnis.modules.decisions.adapters.vllm
     typesafe_sdk

@@ -1,0 +1,180 @@
+{
+  "point": "duplicate",
+  "inputs": {
+    "proposal_title": "Update the Acme homepage hero copy",
+    "proposal_first_action": "Open the hero section in the CMS and paste Dana's copy",
+    "candidates": [
+      {
+        "title": "Replace the homepage hero text",
+        "acceptance_criteria": "The hero shows Dana's approved copy on production"
+      },
+      {
+        "title": "Fix the footer links",
+        "acceptance_criteria": "Every footer link resolves"
+      }
+    ]
+  },
+  "exchanges": [
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: Candidate 1 in `candidates` describes the same work as the proposal (`proposal_title`, `proposal_first_action`).\nAllowed answers:\n- yes: Same work: doing one would complete the other.\n- no: Different work.\nState (JSON): {\"candidates\":[{\"acceptance_criteria\":\"The hero shows Dana's approved copy on production\",\"title\":\"Replace the homepage hero text\"},{\"acceptance_criteria\":\"Every footer link resolves\",\"title\":\"Fix the footer links\"}],\"proposal_first_action\":\"Open the hero section in the CMS and paste Dana's copy\",\"proposal_title\":\"Update the Acme homepage hero copy\"}\nAllowed answers, exactly one of: yes, no"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: Candidate 2 in `candidates` describes the same work as the proposal (`proposal_title`, `proposal_first_action`).\nAllowed answers:\n- yes: Same work: doing one would complete the other.\n- no: Different work.\nState (JSON): {\"candidates\":[{\"acceptance_criteria\":\"The hero shows Dana's approved copy on production\",\"title\":\"Replace the homepage hero text\"},{\"acceptance_criteria\":\"Every footer link resolves\",\"title\":\"Fix the footer links\"}],\"proposal_first_action\":\"Open the hero section in the CMS and paste Dana's copy\",\"proposal_title\":\"Update the Acme homepage hero copy\"}\nAllowed answers, exactly one of: yes, no"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    }
+  ],
+  "recorded_at": null,
+  "synthetic": true,
+  "notes": "Synthetic, not from the homelab vLLM: chat completions hand-authored in the OpenAI-compatible wire shape, with five votes per question consistent with the matching Jev recording's answer. Scott to re-record against the homelab vLLM."
+}
