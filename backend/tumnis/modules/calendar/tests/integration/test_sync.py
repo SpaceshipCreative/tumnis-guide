@@ -97,7 +97,6 @@ DELIVERIES = st.lists(st.sampled_from(range(PAGE_COUNT)), max_size=4).flatmap(
 
 @pytest.mark.req("FR-14.3")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="spec:P1-09")
 @settings(
     max_examples=25,
     deadline=None,
