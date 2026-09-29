@@ -27,7 +27,6 @@ class SpySession:
 
 @pytest.mark.req("ADR-0011")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 async def test_emit_rejects_payload_that_fails_its_schema() -> None:
     """T-P0-07-13
     An unknown event name, or a payload whose field fails its model, raises
@@ -58,7 +57,6 @@ async def test_emit_rejects_payload_that_fails_its_schema() -> None:
 
 @pytest.mark.req("ADR-0011")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 def test_duplicate_event_type_registration_fails() -> None:
     """T-P0-07-14
     Registering ("x.y", 1) twice raises.
