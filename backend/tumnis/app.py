@@ -150,8 +150,8 @@ def create_app(
     # source address and user agent for the audit log (P0-15); the body limit outside it
     # (P0-10); outermost the request histogram, timing everything below it (P0-27).
     # Authentication (P0-13) goes inside the correlation ID; the security headers (P0-16)
-    # sit outside all of it (installed above). Rate limits and CSRF run in TumnisRoute, where the route's
-    # policy is known.
+    # sit outside all of it (installed above). Rate limits and CSRF run in TumnisRoute,
+    # where the route's policy is known.
     app.add_middleware(RequestMetaMiddleware)
     app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(metrics.RequestMetricsMiddleware)
