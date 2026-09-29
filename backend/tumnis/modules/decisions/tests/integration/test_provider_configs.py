@@ -34,7 +34,6 @@ async def core_db(db: DbUrls) -> AsyncIterator[None]:
 
 @pytest.mark.req("FR-11.1", "SEC-6")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 @pytest.mark.usefixtures("core_db", "master_key_file")
 async def test_credentials_encrypted_at_rest(
     workspace: WorkspaceHandle, owner_session: AsyncSession
