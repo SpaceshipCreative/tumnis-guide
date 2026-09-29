@@ -33,9 +33,11 @@ from tumnis.core.net import NetPolicy
 from tumnis.core.outbox import emit
 from tumnis.core.settings_store import get_setting, open_for_workspace, seal_for_workspace
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
+from tumnis.modules.decisions import generation_config
 from tumnis.modules.decisions.adapters.port import (
     ChoiceAnswer,
     DecisionsProvider,
+    GenerationProvider,
     NoulAnswer,
     ProviderName,
     ProviderResponse,
@@ -67,6 +69,7 @@ from tumnis.modules.decisions.rules import (
 )
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
+from tumnis.settings import GenerationSettings
 
 __all__ = [
     "ChoiceAnswer",
@@ -87,6 +90,7 @@ __all__ = [
     "TypedAnswer",
     "VllmSettings",
     "ask_raw",
+    "configure_generation",
     "configure_net_policy",
     "decide",
     "get_provider_config",
@@ -220,6 +224,18 @@ async def ask_raw(
     req = build_request(point, inputs)
     timeout = CATALOGUE[point].timeout_ms if timeout_ms is None else timeout_ms
     return await provider.ask(req, model=model, timeout_ms=timeout)
+
+
+def configure_generation(
+    settings: GenerationSettings,
+    *,
+    net_policy: NetPolicy | None = None,
+    provider: GenerationProvider | None = None,
+) -> None:
+    """Set the Generation slot's endpoint and timeouts for this process (P1-03): the worker
+    calls it once at start; tests pass a `provider` (a fake). Only `generation_api` asks
+    the slot; nothing here generates text."""
+    generation_config.configure(settings, net_policy=net_policy, provider=provider)
 
 
 # --- decide (P1-02) ------------------------------------------------------------------------

@@ -289,3 +289,27 @@ def vote_answer(q: QuestionLike, samples: Sequence[str]) -> TypedAnswer:
         return ScoreAnswer(score=score, probabilities=shares, confidence=confidence)
     winner = next(option for option in allowed if shares[option] == p_max)  # ties: criteria order
     return ChoiceAnswer(choice=winner, probabilities=shares, confidence=confidence)
+
+
+# --- Generation slot output (P1-03, FR-11.8): one short line or nothing -----------------
+
+_LIST_MARKER: Final = re.compile(r"^(?:[-*\u2022>#]+|\d+[.)])\s+")
+# Straight, curly and back quotes and markdown emphasis around the whole line.
+_WRAPPERS: Final = "\"'`*_\u201c\u201d\u2018\u2019"
+_SENTENCE_END: Final = re.compile(r"(?<=[.!?])\s+")
+_TRAILING_CUT: Final = " ,;:-\u2013\u2014"  # dangling punctuation after a cut, dashes too
+
+
+def one_line(text: str, max_chars: int) -> str | None:
+    """The first line of `text` that holds a letter or digit, without a list marker or
+    wrapping quotes, cut to its first sentence and to `max_chars` at a word boundary.
+    None when nothing is left: empty output, or output that is only punctuation."""
+    line = next((ln for ln in text.splitlines() if any(ch.isalnum() for ch in ln)), None)
+    if line is None:
+        return None
+    line = _LIST_MARKER.sub("", line.strip()).strip(_WRAPPERS).strip()
+    line = _SENTENCE_END.split(line, maxsplit=1)[0]
+    if len(line) > max_chars:
+        cut = line[:max_chars]
+        line = (cut.rsplit(" ", 1)[0] if " " in cut else cut).rstrip(_TRAILING_CUT)
+    return line if any(ch.isalnum() for ch in line) else None

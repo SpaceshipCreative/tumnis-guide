@@ -70,6 +70,14 @@ def register_audit_schedule() -> None:
     )
 
 
+def configure_generation(settings: Settings) -> None:
+    """The Generation slot's endpoint and timeouts (P1-03): only the worker asks it. The
+    vLLM decisions fallback (P1-02) gets the same SSRF policy."""
+    decisions = importlib.import_module("tumnis.modules.decisions.api")
+    decisions.configure_generation(settings.generation, net_policy=settings.net_policy())
+    decisions.configure_net_policy(settings.net_policy())
+
+
 def register_module_schedules() -> None:
     """Module schedules (A9), applied after DBOS.launch(): a module's `workflows.schedules()`
     lists its own (P1-09: the calendar sync tick every 10 minutes on the sync queue)."""
@@ -130,6 +138,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     db.configure(settings.database_direct_url, settings.database_direct_url)
     install_master_keys(settings)
     modules.configure(settings)
+    configure_generation(settings)
     cache.configure_backend(
         cache.InProcessCache(SystemClock(), publish=cache.pg_publisher(db.direct_engine))
     )

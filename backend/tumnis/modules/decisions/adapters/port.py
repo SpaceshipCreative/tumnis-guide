@@ -1,8 +1,10 @@
 """The decisions provider port (P1-01): the protocol every decision provider implements
 (Jev, the vLLM fallback of P1-02, the fake), and the typed answers it returns (defined in
-the pure `rules.py`, re-exported here).
+the pure `rules.py`, re-exported here). Also the Generation slot's port (P1-03): one
+short completion from an OpenAI-compatible endpoint.
 
-Callers depend on this port only. `api.py` re-exports the answer types for other modules.
+Callers depend on these ports only. `api.py` re-exports the answer types for other
+modules; `generation_api.py` re-exports `GenerationProvider`.
 """
 
 from __future__ import annotations
@@ -48,5 +50,17 @@ class DecisionsProvider(Protocol):
     async def ask(
         self, req: OutboundRequest, *, model: str, timeout_ms: int
     ) -> ProviderResponse: ...
+
+    async def health(self) -> Health: ...
+
+
+class GenerationProvider(Protocol):
+    """The Generation slot (FR-11.8): a short free-text completion for the placeholder first
+    action and the spoken form of a focus message, never planning or reasoning. Raises the
+    adapter errors (AdapterTimeout past `timeout_ms`)."""
+
+    async def complete(
+        self, *, system: str, user: str, max_tokens: int, timeout_ms: int
+    ) -> str: ...
 
     async def health(self) -> Health: ...
