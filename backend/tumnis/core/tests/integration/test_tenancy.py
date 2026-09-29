@@ -29,7 +29,6 @@ async def core_db(db: DbUrls) -> AsyncIterator[None]:
 
 @pytest.mark.req("ADR-0009")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 @pytest.mark.usefixtures("core_db")
 async def test_every_transaction_applies_the_context(db: DbUrls) -> None:
     """T-P0-06-15
@@ -58,7 +57,6 @@ async def test_every_transaction_applies_the_context(db: DbUrls) -> None:
 
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 @pytest.mark.usefixtures("core_db")
 async def test_update_bumps_version_and_keeps_tenant(db: DbUrls) -> None:
     """T-P0-06-16

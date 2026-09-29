@@ -136,8 +136,19 @@ class WorkspaceHandle:
 
 
 def make_workspace(db: DbUrls, name: str = "Test", timezone: str = "America/New_York") -> uuid.UUID:
-    """Insert a workspace as the owner role and return its id (P0-06 spec stub)."""
-    raise NotImplementedError("P0-06")
+    """Insert a workspace as the owner role (which bypasses row-level security) and return
+    its id."""
+    import psycopg  # noqa: PLC0415
+
+    from tests._pg import OWNER  # noqa: PLC0415
+
+    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+        row = conn.execute(
+            "INSERT INTO workspaces (name, timezone) VALUES (%s, %s) RETURNING id", (name, timezone)
+        ).fetchone()
+    assert row is not None
+    workspace_id: uuid.UUID = row[0]
+    return workspace_id
 
 
 @dataclass(frozen=True)
