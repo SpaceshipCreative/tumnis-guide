@@ -187,6 +187,7 @@ tumnis-guide/
 │   └── prometheus/alerts.yml  prometheus/alerts.test.yml
 ├── scripts/
 │   ├── ci/spec_guard.py  ci/red_proof.py  ci/traceability.py  ci/check_bundle.mjs
+│   ├── ci/_tests_extract.py  ci/ts_tests.mjs  ci/pytest_trace.py  ci/coverage_gates.py  ci/branch_protection.sh
 │   ├── readme_test.py
 │   └── drill/restore_drill.sh
 └── docs/
@@ -439,6 +440,9 @@ Static schedules register in `worker.py` after `DBOS.launch()` with `DBOS.apply_
 | `SENTRY_DSN` | GlitchTip DSN | unset | Coolify |
 | `EMBEDDING_DIMS` | Vector size for the default embedding model | 1024 (plan default) | Coolify |
 | `SCRUB_KEY` | Key for scrubbing recordings | unset | developer machine |
+| `SPEC_CHANGE_ACTORS` | Logins whose `spec-change` label waives spec-guard (P0-03) | Scott's login | GitHub repo variable |
+| `HOMELAB_RUNNER` | `true` moves the Skills and Performance jobs to `[self-hosted, homelab]` | unset (GitHub-hosted stubs) | GitHub repo variable |
+| `GH_API_STUB` | Test-only JSON file standing in for `gh api` in spec-guard | unset | tests |
 
 Everything per workspace (connector credentials, provider keys, thresholds, working hours, focus levels, timezone) lives in `workspace_settings`, encrypted (P0-08).
 
