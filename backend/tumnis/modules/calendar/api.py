@@ -9,6 +9,7 @@ shared canonical upsert on this module's table; raw payloads go through
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlencode
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field
@@ -23,7 +24,7 @@ from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.calendar.adapters.port import CalendarInfo, GoogleCalendarPort, TokenSet
 from tumnis.modules.calendar.models import Event
-from tumnis.modules.calendar.rules import AccountStatus
+from tumnis.modules.calendar.rules import READONLY_SCOPES, AccountStatus
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.integrations.api import (
     Capability,
@@ -176,9 +177,25 @@ class CalendarAccountOut(BaseModel):
     version: int
 
 
+CONSENT_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
+
+
 def consent_url(*, client_id: str, redirect_uri: str, state: str, code_challenge: str) -> str:
     """Google's consent URL: the read-only scopes, offline access, forced consent, PKCE."""
-    raise NotImplementedError
+    query = urlencode(
+        {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": " ".join(sorted(READONLY_SCOPES)),
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+        }
+    )
+    return f"{CONSENT_ENDPOINT}?{query}"
 
 
 class GoogleCalendar:

@@ -9,7 +9,6 @@ import pytest
 
 @pytest.mark.req("Data flow rule 1")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="spec:P1-09")
 def test_only_readonly_scopes_requested() -> None:
     """T-P1-09-07
     The consent URL asks for exactly READONLY_SCOPES, each ending in `.readonly`, with
