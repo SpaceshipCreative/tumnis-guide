@@ -16,9 +16,11 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 from tumnis import wiring
-from tumnis.core import cache, db, health, modules, ops_status, testing_routes
+from tumnis.core import audit_router, cache, db, health, modules, ops_status, testing_routes
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import install_problem_handlers
+from tumnis.core.request_meta import RequestMetaMiddleware
+from tumnis.modules.auth import router as auth_router
 from tumnis.settings import Settings, install_master_keys
 
 # The built frontend (P0-22 replaces the placeholder shell); present in the image.
@@ -78,10 +80,14 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
         redoc_url=None,
     )
     install_problem_handlers(app)
+    # Correlation ID, source address and user agent for the audit log (P0-15).
+    app.add_middleware(RequestMetaMiddleware)
     app.state.settings = settings
     app.state.master_keys = master_keys
     app.state.clock = clock
     app.include_router(health.router)
+    app.include_router(audit_router.router)
+    app.include_router(auth_router.settings_router)  # R-14; P0-10 moves it onto v1_router
     if settings.tumnis_adapters == "fake":
         app.include_router(testing_routes.router)
     if SHELL_DIR.is_dir():

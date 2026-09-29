@@ -8,6 +8,7 @@ from typing import Any, Final, cast
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Table, select
 
+from tumnis.core import audit
 from tumnis.core.cache import invalidate_on_commit
 from tumnis.core.settings_store import SETTINGS_CACHE, settings_cache_key
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
@@ -95,21 +96,42 @@ async def put_workspace_settings(
     current resource, 409). Validates the zone (`invalid_timezone`) and the threshold range
     (`validation_error`), both WorkspaceSettingsInvalid (422), and invalidates the settings
     cache on commit. Later keys that live in workspace_settings join this resource and bump
-    the same row version. Audit rows (settings.changed, workspace.timezone_changed) arrive
-    with P0-15."""
+    the same row version. Audited in the same transaction (SEC-3): `settings.changed` with
+    the changed fields, and `workspace.timezone_changed` with both zones when the zone
+    moves."""
     _validate(body)
-    values: dict[str, Any] = {"version": WORKSPACES.c.version + 1, "updated_at": now}
-    if body.timezone is not None:
-        values["timezone"] = body.timezone
-    if body.subtask_threshold_min is not None:
-        values["subtask_threshold_min"] = body.subtask_threshold_min
+    changes = body.model_dump(exclude={"version"}, exclude_none=True)
+    values: dict[str, Any] = {**changes, "version": WORKSPACES.c.version + 1, "updated_at": now}
+    target = ("workspace", ctx.workspace_id)
     async with tenant_session(ctx) as session:
+        before: str = (
+            await session.execute(
+                select(WORKSPACES.c.timezone)
+                .where(WORKSPACES.c.id == ctx.workspace_id)
+                .with_for_update()
+            )
+        ).scalar_one()
         try:
             row = await update_versioned(
                 session, WORKSPACES, ctx.workspace_id, body.version, values
             )
         except StaleVersion as stale:
             raise StaleVersion(current=_out(stale.current).model_dump()) from None
+        await audit.record(
+            session,
+            "settings.changed",
+            target=target,
+            details={"fields": sorted(changes)},
+            occurred_at=now,
+        )
+        if row["timezone"] != before:
+            await audit.record(
+                session,
+                "workspace.timezone_changed",
+                target=target,
+                details={"from": before, "to": row["timezone"]},
+                occurred_at=now,
+            )
         await invalidate_on_commit(
             session, settings_cache_key(ctx.workspace_id, WORKSPACE_SETTINGS_KEY)
         )

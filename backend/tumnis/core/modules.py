@@ -14,8 +14,9 @@ from uuid import UUID
 
 from sqlalchemy import text
 
-from tumnis.core import tenancy
+from tumnis.core import audit, tenancy
 from tumnis.core.cache import CacheKey, CacheSpec, invalidate_on_commit, register_cache
+from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
@@ -127,15 +128,24 @@ async def enabled(module: str, workspace_id: UUID) -> bool:
     return cached == _ON
 
 
-async def set_module_enabled(ctx: WorkspaceContext, module: str, on: bool) -> None:
+async def set_module_enabled(
+    ctx: WorkspaceContext, module: str, on: bool, *, clock: Clock | None = None
+) -> None:
     """Switch a module on or off for the workspace in `ctx` (ModuleRequired for a required
-    module); every process drops its cached flag on commit."""
+    module), audited as `module.toggled` (SEC-3); every process drops its cached flag on
+    commit."""
     if module not in MODULES:
         raise ValueError(f"unknown module {module!r}")
     if not on and module in REQUIRED_MODULES:
         raise ModuleRequired(module)
     async with tenant_session(ctx) as session:
         await session.execute(_WRITE_FLAG, {"m": module, "on": on})
+        await audit.record(
+            session,
+            "module.toggled",
+            details={"module": module, "enabled": on},
+            occurred_at=(clock or SystemClock()).now(),
+        )
         await invalidate_on_commit(session, _flag_key(ctx.workspace_id, module))
 
 
