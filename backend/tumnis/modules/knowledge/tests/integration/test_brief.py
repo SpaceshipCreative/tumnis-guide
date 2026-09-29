@@ -26,7 +26,6 @@ BRIEF_SUBSCRIBER = "knowledge.create_brief"
 
 @pytest.mark.req("FR-2.3")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 async def test_brief_created_once_per_project(
     db: DbUrls, dbos: type[DBOS], workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
