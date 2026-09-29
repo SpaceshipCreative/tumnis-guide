@@ -15,17 +15,27 @@ Imports pytest, so only tests may import this module (import-linter:
 sanctioned exception to module independence).
 """
 
+# ruff: noqa: S101  # a test suite (only tests import it): its cases assert
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, get_args
 
 import pytest
 
 from tumnis.core.adapters.contract import AdapterContract
-from tumnis.modules.integrations.api import Connector, RawItem, connector_adapter_name
+from tumnis.modules.integrations.api import (
+    Capability,
+    Connector,
+    ConnectorKind,
+    RawItem,
+    connector_adapter_name,
+)
 
 __all__ = ["ConnectorContract", "Recording", "load_recordings"]
+
+MAX_PAGES = 1000  # a sync that has not finished by then never will
 
 
 @dataclass(frozen=True)
@@ -64,16 +74,35 @@ class ConnectorContract(AdapterContract[Connector]):
             metafunc.parametrize("case", cases, ids=[case.name for case in cases])
 
     def test_has_recordings(self) -> None:
-        raise NotImplementedError
+        """A connector's contract needs at least one recording."""
+        assert load_recordings(self.recordings_dir), f"no recordings in {self.recordings_dir}"
 
     def test_map_matches_expected(self, subject: Connector, case: Recording) -> None:
-        raise NotImplementedError
+        """The recorded payload maps to exactly the expected canonical records."""
+        got = [r.model_dump(mode="json") for r in subject.map(case.raw)]
+        assert got == case.expected
 
     def test_map_is_pure(self, subject: Connector, case: Recording) -> None:
-        raise NotImplementedError
+        """Same input, same output, input untouched; with sockets disabled, no I/O."""
+        raw = case.raw.model_copy(deep=True)
+        runs = [subject.map(case.raw.model_copy(deep=True)) for _ in range(3)]
+        assert all(run == runs[0] for run in runs)
+        assert subject.map(raw) == runs[0]
+        assert raw == case.raw
 
     def test_declares_kind_and_capabilities(self, subject: Connector) -> None:
-        raise NotImplementedError
+        """The kind and capabilities come from the closed vocabularies; the provider matches."""
+        assert subject.provider == self.provider
+        assert subject.kind in get_args(ConnectorKind)
+        assert subject.capabilities, "a connector declares at least one capability"
+        assert subject.capabilities <= set(get_args(Capability))
 
     async def test_sync_pages_terminate(self, subject: Connector) -> None:
-        raise NotImplementedError
+        """Following next_cursor, has_more eventually turns False."""
+        cursor: dict[str, Any] | None = None
+        for _ in range(MAX_PAGES):
+            page = await subject.sync(cursor)
+            if not page.has_more:
+                return
+            cursor = page.next_cursor
+        pytest.fail(f"sync still has more after {MAX_PAGES} pages")

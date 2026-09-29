@@ -117,6 +117,7 @@ def contracts(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> Any
     from tumnis.core.adapters import registry  # noqa: PLC0415
 
     monkeypatch.setattr(registry, "_CONTRACTS", {})
+    monkeypatch.setenv("COLUMNS", "400")  # summary lines keep the whole error name
     pytester.makefile(".toml", pyproject=(BACKEND / "pyproject.toml").read_text())
     return registry
 
@@ -128,7 +129,6 @@ def _outcomes(pytester: pytest.Pytester, path: Path) -> tuple[pytest.RunResult, 
 
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 def test_new_recording_file_adds_a_case(pytester: pytest.Pytester, contracts: Any) -> None:
     """T-P0-12-07
     With pytester, dropping one more JSON into the folder adds one parametrized case (to
@@ -167,7 +167,6 @@ def test_new_recording_file_adds_a_case(pytester: pytest.Pytester, contracts: An
 
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 def test_impure_map_fails_contract(pytester: pytest.Pytester, contracts: Any) -> None:
     """T-P0-12-08
     A demo connector whose map reads datetime.now() fails test_map_is_pure; one whose map

@@ -21,7 +21,6 @@ RECORDINGS = Path(__file__).resolve().parents[1] / "recordings" / "scripted"
 @pytest.mark.contract
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 class TestScriptedConnector(ConnectorContract):
     """T-P0-12-06
     The fake connector passes the shared connector contract over its recordings folder.
@@ -40,7 +39,6 @@ class TestScriptedConnector(ConnectorContract):
 @pytest.mark.contract
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 class TestScriptedConnectorRecorded(ConnectorContract):
     """The registered real side of the scripted connector (a demo with no outside
     dependency, so it is the same class) on the same recordings."""
