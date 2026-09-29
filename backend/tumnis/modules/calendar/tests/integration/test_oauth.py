@@ -66,7 +66,6 @@ async def test_tokens_encrypted_at_rest(
 
 @pytest.mark.req("Data flow rule 5")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="review:P1-09 soft-deleted connections keep tokens")
 async def test_soft_deleted_connection_hides_its_credentials(
     app_db: DbUrls, workspace: WorkspaceHandle, oauth_client: None
 ) -> None:

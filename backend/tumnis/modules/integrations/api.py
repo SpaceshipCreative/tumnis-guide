@@ -25,7 +25,7 @@ from typing import Any, Final, Literal, Protocol
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field
-from sqlalchemy import Table, func, or_, select, tuple_, update
+from sqlalchemy import ColumnElement, Table, and_, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -609,6 +609,12 @@ async def upsert_connection(
     return connection_id
 
 
+def _live_connection(connection_id: UUID) -> ColumnElement[bool]:
+    """The connection, unless soft-deleted: its tokens are neither opened nor rewritten
+    (a reconnect brings the row back through `upsert_connection` first)."""
+    return and_(_connections.c.id == connection_id, _connections.c.deleted_at.is_(None))
+
+
 def _credentials_aad(connection_id: UUID) -> bytes:
     return b"connections:" + str(connection_id).encode()
 
@@ -631,7 +637,7 @@ async def put_credentials(
         )
         written = await s.execute(
             update(_connections)
-            .where(_connections.c.id == connection_id)
+            .where(_live_connection(connection_id))
             .values(credentials_enc=sealed, key_version=key_version)
             .returning(_connections.c.id)
         )
@@ -645,7 +651,7 @@ async def get_credentials(
     """The connection's credentials, opened with the workspace key; None when unset."""
     async with session_for(ctx, session) as s:
         sealed = await s.scalar(
-            select(_connections.c.credentials_enc).where(_connections.c.id == connection_id)
+            select(_connections.c.credentials_enc).where(_live_connection(connection_id))
         )
         if sealed is None:
             return None
@@ -670,7 +676,7 @@ async def set_connection_status(
         values["last_sync_at"] = last_sync_at
     async with session_for(ctx, session) as s:
         await s.execute(
-            update(_connections).where(_connections.c.id == connection_id).values(**values)
+            update(_connections).where(_live_connection(connection_id)).values(**values)
         )
 
 
