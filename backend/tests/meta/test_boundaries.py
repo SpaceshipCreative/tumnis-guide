@@ -42,7 +42,6 @@ RULES_ALLOWED = {
 
 @pytest.mark.req("ADR-0001")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_import_linter_rejects_cross_module_internal_import(tmp_path: Path) -> None:
     """T-P0-01-04
     The real .importlinter fails on a module importing another module's models.
@@ -58,7 +57,6 @@ def test_import_linter_rejects_cross_module_internal_import(tmp_path: Path) -> N
 
 @pytest.mark.req("ADR-0001")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_import_linter_accepts_api_import(tmp_path: Path) -> None:
     """T-P0-01-05
     The same fixture importing only the other module's api passes.
@@ -73,7 +71,6 @@ def test_import_linter_accepts_api_import(tmp_path: Path) -> None:
 
 @pytest.mark.req("ADR-0001")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_import_linter_rejects_io_in_rules(tmp_path: Path) -> None:
     """T-P0-01-06
     A rules.py importing sqlalchemy breaks the rules-are-pure contract.
@@ -93,7 +90,6 @@ def test_import_linter_rejects_io_in_rules(tmp_path: Path) -> None:
 
 @pytest.mark.req("ADR-0001")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_import_linter_rejects_module_cycle(tmp_path: Path) -> None:
     """T-P0-01-07
     a.api -> b.api -> a.api breaks the module-graph-acyclic contract.

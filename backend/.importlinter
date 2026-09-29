@@ -1,0 +1,95 @@
+[importlinter]
+root_package = tumnis
+include_external_packages = True
+
+[importlinter:contract:modules-api-only]
+name = Modules reach each other only through api.py
+type = independence
+modules =
+    tumnis.modules.auth
+    tumnis.modules.projects
+    tumnis.modules.tasks
+    tumnis.modules.planning
+    tumnis.modules.agents
+    tumnis.modules.focus
+    tumnis.modules.decisions
+    tumnis.modules.search
+    tumnis.modules.knowledge
+    tumnis.modules.integrations
+    tumnis.modules.calendar
+    tumnis.modules.github
+    tumnis.modules.coolify
+    tumnis.modules.notifications
+    tumnis.modules.usage
+ignore_imports =
+    tumnis.modules.** -> tumnis.modules.*.api
+# Until modules call each other, the api ignore matches nothing; that is not an error.
+unmatched_ignore_imports_alerting = none
+
+[importlinter:contract:rules-are-pure]
+name = rules.py imports nothing that does I/O
+type = forbidden
+source_modules =
+    tumnis.modules.*.rules
+forbidden_modules =
+    tumnis.core.db
+    tumnis.core.tenancy
+    tumnis.core.outbox
+    tumnis.core.events
+    tumnis.core.cache
+    tumnis.core.net
+    tumnis.core.adapters
+    tumnis.core.audit
+    tumnis.modules.*.models
+    tumnis.modules.*.workflows
+    tumnis.modules.*.adapters
+    tumnis.modules.*.router
+    tumnis.modules.*.mcp
+    sqlalchemy
+    psycopg
+    dbos
+    fastapi
+    httpx
+    aioboto3
+    asyncssh
+    redis
+    structlog
+
+[importlinter:contract:core-below-modules]
+name = core never imports a module or a composition root
+type = forbidden
+source_modules =
+    tumnis.core
+forbidden_modules =
+    tumnis.modules
+    tumnis.app
+    tumnis.worker
+    tumnis.cli
+    tumnis.wiring
+
+[importlinter:contract:module-graph-acyclic]
+name = No cycles between modules
+type = acyclic_siblings
+ancestors =
+    tumnis.modules
+
+[importlinter:contract:search-usage-subscribe-only]
+name = search and usage call no other module
+type = forbidden
+source_modules =
+    tumnis.modules.search
+    tumnis.modules.usage
+forbidden_modules =
+    tumnis.modules.auth
+    tumnis.modules.projects
+    tumnis.modules.tasks
+    tumnis.modules.planning
+    tumnis.modules.agents
+    tumnis.modules.focus
+    tumnis.modules.decisions
+    tumnis.modules.knowledge
+    tumnis.modules.integrations
+    tumnis.modules.calendar
+    tumnis.modules.github
+    tumnis.modules.coolify
+    tumnis.modules.notifications

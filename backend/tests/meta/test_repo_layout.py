@@ -112,7 +112,6 @@ def test_every_module_has_standard_shape(module: str) -> None:
 
 @pytest.mark.req("ADR-0001")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_module_registry_matches_folders_and_contract() -> None:
     """T-P0-01-03
     MODULES equals the module folder set and the independence contract's module list.
