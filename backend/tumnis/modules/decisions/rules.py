@@ -69,9 +69,10 @@ def option_key(position: int) -> str:
 def option_position(key: str) -> int | None:
     """The 1-based position an option key names; None for `unknown` or anything else."""
     match = _OPTION_KEY.match(key)
-    if match is None or option_key(int(match.group(1))) != key:
+    position = 0 if match is None else int(match.group(1))
+    if position < 1 or option_key(position) != key:
         return None
-    return int(match.group(1))
+    return position
 
 
 # --- Model pinning (FR-11.2): always a versioned id, never an alias ---------------------
