@@ -1,0 +1,95 @@
+[project]
+name = "tumnis"
+version = "0.1.0"
+description = "Tumnis Guide backend: modular monolith (ADR-0001)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "pydantic==2.13.5",
+  "typer==0.27.2",
+]
+
+[project.scripts]
+tumnis = "tumnis.cli:app"
+
+[dependency-groups]
+dev = [
+  "import-linter==2.15",
+  "mypy==2.3.1",
+  "pytest==9.1.1",
+  "ruff==0.16.9",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "tumnis"
+module-root = ""
+
+# Minimal test config so the P0-01 meta-tests run; P0-02 owns the full harness.
+[tool.pytest.ini_options]
+testpaths = ["tests", "tumnis"]
+addopts = "--strict-markers"
+xfail_strict = true
+markers = [
+  "req(*ids): PRD requirement IDs this test proves",
+  "wp(id): work package that introduced the test",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["tumnis", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S", "DTZ", "TID", "PT", "N", "C4", "RET", "PL"]
+ignore = ["PLR0913"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"datetime.datetime.now".msg = "rules.py takes `now` as an argument (AGENTS.md, Time)."
+"datetime.datetime.utcnow".msg = "rules.py takes `now` as an argument."
+"datetime.datetime.today".msg = "rules.py takes `now` as an argument."
+"datetime.date.today".msg = "rules.py takes `today` as an argument."
+"time.time".msg = "rules.py takes `now` as an argument."
+"time.monotonic".msg = "rules.py takes `now` as an argument."
+"random".msg = "rules.py is deterministic; pass the value in."
+"uuid.uuid4".msg = "rules.py is deterministic; pass the id in."
+"os".msg = "rules.py reads no environment and no files."
+"subprocess".msg = "rules.py does no I/O."
+"socket".msg = "rules.py does no I/O."
+
+[tool.ruff.lint.per-file-ignores]
+# The banned-api list applies only to rules files: ignore TID251 everywhere else.
+"!tumnis/modules/*/rules*.py" = ["TID251"]
+"tests/**" = ["S101", "PLR2004", "S105", "S106"]
+"tumnis/modules/*/tests/**" = ["S101", "PLR2004", "S105", "S106"]
+"tumnis/modules/*/migrations/**" = ["N999"]
+
+[tool.mypy]
+python_version = "3.13"
+plugins = ["pydantic.mypy"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+exclude = ["tumnis/modules/.*/migrations/"]
+
+# mypy patterns take `*` only as a whole component, so the plan's "tumnis.modules.*.rules_*"
+# is rejected; a later rules_<x>.py gets its own entry here.
+[[tool.mypy.overrides]]
+module = ["tumnis.core.*", "tumnis.modules.*.rules", "tumnis.modules.*.api"]
+strict = true
+
+[tool.coverage.run]
+source = ["tumnis"]
+branch = true
+omit = ["tumnis/modules/*/migrations/*", "tumnis/modules/*/tests/*", "tumnis/core/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]

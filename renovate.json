@@ -1,0 +1,39 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":pinAllExceptPeerDependencies"],
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "Everything else: patch releases automerge once the full pipeline passes.",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "ignoreTests": false
+    },
+    {
+      "description": "Tiptap's Markdown extension is beta (ADR-0008); the round-trip suite guards upgrades.",
+      "matchPackageNames": ["@tiptap/**"],
+      "groupName": "tiptap",
+      "automerge": false,
+      "labels": ["needs-suite"]
+    },
+    {
+      "description": "DBOS upgrades are guarded by the kill-and-resume suites (ADR-0002).",
+      "matchPackageNames": ["dbos"],
+      "groupName": "dbos",
+      "automerge": false,
+      "labels": ["needs-suite"]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Hermes, skills and MCP servers pinned by version in profiles/*/VERSION (SEC-7). Annotate each pin with a preceding '# renovate: datasource=<ds> depName=<name>' line.",
+      "managerFilePatterns": ["/(^|/)profiles/[^/]+/VERSION$/"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n[^\\n]*?(?<currentValue>\\d+\\.\\d+\\.\\d+[^\\s\"']*)"
+      ]
+    }
+  ]
+}
