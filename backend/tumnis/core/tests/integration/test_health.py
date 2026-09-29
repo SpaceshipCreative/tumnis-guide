@@ -95,7 +95,6 @@ async def test_ready_reports_degraded_module_and_stays_200(
 
 @pytest.mark.req("REL-5")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 async def test_ready_checks_dbos_system_tables(
     db: DbUrls, pg_base: DbUrls, pg_container: PostgresContainer, clock: FixedClock
 ) -> None:
