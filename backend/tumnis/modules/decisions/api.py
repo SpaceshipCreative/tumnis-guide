@@ -86,6 +86,7 @@ _UPSERT: Final = text(
     DO UPDATE SET "primary" = EXCLUDED."primary", fallback = EXCLUDED.fallback,
                   model_version = EXCLUDED.model_version,
                   credentials_enc = EXCLUDED.credentials_enc,
+                  deleted_at = NULL,
                   version = provider_configs.version + 1
     RETURNING version
     """
