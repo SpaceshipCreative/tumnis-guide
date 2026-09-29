@@ -7,7 +7,6 @@ test(
   "A0.5 preview shows the app shell and the sign-in form at 375 px",
   { tag: ["@A0.5", "@REL-7", "@smoke", "@P0-05"] },
   async ({ page }) => {
-    test.fail();
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(process.env.PREVIEW_URL ?? "/");
     await expect(page.getByRole("main")).toBeVisible({ timeout: 3_000 });

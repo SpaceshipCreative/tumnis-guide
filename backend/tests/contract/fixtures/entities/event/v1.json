@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "fetched_at": "2026-03-09T12:00:00Z",
+  "record_type": "event",
+  "external_id": "evt-009",
+  "provider_url": null,
+  "title": "Kickoff",
+  "start_at": "2026-03-09T14:00:00Z",
+  "end_at": "2026-03-09T14:30:00Z",
+  "all_day": false,
+  "attendees": [
+    "client@example.com"
+  ],
+  "busy": true
+}

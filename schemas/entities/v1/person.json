@@ -1,0 +1,80 @@
+{
+  "$id": "https://tumnis.dev/schemas/entities/v1/person.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A person, upserted on workspace + primary email (lower-cased by the connector).",
+  "properties": {
+    "display_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Display Name"
+    },
+    "domains": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Domains",
+      "type": "array"
+    },
+    "emails": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Emails",
+      "type": "array"
+    },
+    "external_id": {
+      "minLength": 1,
+      "title": "External Id",
+      "type": "string"
+    },
+    "fetched_at": {
+      "format": "date-time",
+      "title": "Fetched At",
+      "type": "string"
+    },
+    "primary_email": {
+      "title": "Primary Email",
+      "type": "string"
+    },
+    "provider_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provider Url"
+    },
+    "record_type": {
+      "const": "person",
+      "default": "person",
+      "title": "Record Type",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "external_id",
+    "fetched_at",
+    "primary_email"
+  ],
+  "title": "PersonRecord",
+  "type": "object"
+}

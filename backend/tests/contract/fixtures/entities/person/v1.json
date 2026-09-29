@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "fetched_at": "2026-03-09T12:00:00Z",
+  "record_type": "person",
+  "external_id": "client@example.com",
+  "provider_url": null,
+  "display_name": "Casey Client",
+  "primary_email": "client@example.com",
+  "emails": [
+    "casey@client.example",
+    "client@example.com"
+  ],
+  "domains": [
+    "client.example",
+    "example.com"
+  ]
+}

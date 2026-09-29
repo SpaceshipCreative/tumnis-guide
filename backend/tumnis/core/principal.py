@@ -16,10 +16,10 @@ its session resolver when its api is imported (tumnis.wiring).
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Final, Literal
+from typing import Final, Literal, cast
 from uuid import UUID
 
-from starlette.requests import Request
+from starlette.requests import HTTPConnection, Request
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from tumnis.core.errors import ProblemError
@@ -141,7 +141,8 @@ def registered_resolvers() -> tuple[str, ...]:
 
 
 class AuthenticationMiddleware:
-    """Sets `request.state.principal` (and `auth_failure`) for every HTTP request from the
+    """Sets `request.state.principal` (and `auth_failure`) for every HTTP request and
+    WebSocket handshake from the
     first resolver that recognises its credentials. Pure ASGI, so the state reaches the
     route and a streamed body alike."""
 
@@ -149,8 +150,14 @@ class AuthenticationMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and _resolvers:
-            request = Request(scope)
+        if scope["type"] in ("http", "websocket") and _resolvers:
+            # A WebSocket handshake (/ws, P0-22) carries the same cookies; resolvers read
+            # only what the two share (headers, cookies, app state).
+            request = (
+                Request(scope)
+                if scope["type"] == "http"
+                else cast("Request", HTTPConnection(scope))
+            )
             for resolver in list(_resolvers.values()):
                 found = await resolver(request)
                 if isinstance(found, Principal):

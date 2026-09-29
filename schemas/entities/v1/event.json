@@ -1,0 +1,89 @@
+{
+  "$id": "https://tumnis.dev/schemas/entities/v1/event.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "all_day": {
+      "default": false,
+      "title": "All Day",
+      "type": "boolean"
+    },
+    "attendees": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Attendees",
+      "type": "array"
+    },
+    "busy": {
+      "default": true,
+      "title": "Busy",
+      "type": "boolean"
+    },
+    "end_at": {
+      "format": "date-time",
+      "title": "End At",
+      "type": "string"
+    },
+    "external_id": {
+      "minLength": 1,
+      "title": "External Id",
+      "type": "string"
+    },
+    "fetched_at": {
+      "format": "date-time",
+      "title": "Fetched At",
+      "type": "string"
+    },
+    "provider_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provider Url"
+    },
+    "record_type": {
+      "const": "event",
+      "default": "event",
+      "title": "Record Type",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "start_at": {
+      "format": "date-time",
+      "title": "Start At",
+      "type": "string"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    }
+  },
+  "required": [
+    "schema_version",
+    "external_id",
+    "fetched_at",
+    "start_at",
+    "end_at"
+  ],
+  "title": "EventRecord",
+  "type": "object"
+}

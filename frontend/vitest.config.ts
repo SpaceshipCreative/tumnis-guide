@@ -1,17 +1,23 @@
-// Standalone until P0-22 adds vite.config.ts; then this becomes
-// `mergeConfig(viteConfig, defineConfig({ test: ... }))` as in the plan.
-import { defineConfig } from "vitest/config";
+// Vitest on top of the Vite config (P0-22): the same plugins, so route files are
+// generated and transformed as in the build.
+import { defineConfig, mergeConfig } from "vitest/config";
 
-export default defineConfig({
-  test: {
-    environment: "jsdom",
-    setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
-    restoreMocks: true,
-    coverage: {
-      provider: "v8",
-      include: ["src/**"],
-      exclude: ["src/api/**", "src/test/**"],
+import viteConfig from "./vite.config.ts";
+
+export default mergeConfig(
+  viteConfig,
+  defineConfig({
+    test: {
+      environment: "jsdom",
+      setupFiles: ["./src/test/setup.ts"],
+      include: ["src/**/*.test.{ts,tsx}"],
+      restoreMocks: true,
+      unstubGlobals: true,
+      coverage: {
+        provider: "v8",
+        include: ["src/**"],
+        exclude: ["src/api/**", "src/test/**", "src/routeTree.gen.ts"],
+      },
     },
-  },
-});
+  }),
+);

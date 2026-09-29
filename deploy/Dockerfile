@@ -42,6 +42,10 @@ COPY --from=frontend /src/frontend/dist /app/frontend/dist
 # findings to the Trivy scan (P0-16).
 RUN /usr/local/bin/python -m pip uninstall --yes --quiet pip \
     && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin tumnis
+# The release this image is (a tag, or sha-<commit> for main): tumnis.__version__ and the
+# Tumnis-Version header on /health/live (P0-30). Last, so a new version reuses every layer.
+ARG VERSION=0.0.0+dev
+ENV TUMNIS_BUILD_VERSION=${VERSION}
 USER tumnis
 EXPOSE 8080
 CMD ["tumnis", "api"]

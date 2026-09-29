@@ -86,3 +86,18 @@ async def tenant_session(ctx: WorkspaceContext) -> AsyncIterator[AsyncSession]:
     with use_workspace(ctx):
         async with db.app_sessionmaker()() as session, session.begin():
             yield session
+
+
+@asynccontextmanager
+async def session_for(
+    ctx: WorkspaceContext, session: AsyncSession | None
+) -> AsyncIterator[AsyncSession]:
+    """`session` when the caller passes its own (already in `ctx`'s workspace: the caller
+    owns the transaction), else a new `tenant_session(ctx)`. Lets an api function run
+    alone or inside a larger transaction (a sync step writing records, cursor and events
+    together)."""
+    if session is not None:
+        yield session
+        return
+    async with tenant_session(ctx) as own:
+        yield own

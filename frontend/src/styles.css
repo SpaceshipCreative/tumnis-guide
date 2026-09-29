@@ -1,0 +1,79 @@
+/* Styling system (P0-22): Tailwind CSS v4 with design tokens as CSS variables, so dark
+   mode and the Tauri client share them. Every transition respects reduced motion. */
+@import "tailwindcss";
+
+:root {
+  --tg-bg: #f8fafc;
+  --tg-surface: #ffffff;
+  --tg-surface-muted: #f1f5f9;
+  --tg-border: #cbd5e1;
+  --tg-text: #0f172a;
+  --tg-text-muted: #475569;
+  --tg-accent: #1d4ed8;
+  --tg-accent-contrast: #ffffff;
+  --tg-danger: #b91c1c;
+  --tg-focus: #2563eb;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tg-bg: #0f172a;
+    --tg-surface: #111827;
+    --tg-surface-muted: #1e293b;
+    --tg-border: #334155;
+    --tg-text: #f1f5f9;
+    --tg-text-muted: #94a3b8;
+    --tg-accent: #93c5fd;
+    --tg-accent-contrast: #0f172a;
+    --tg-danger: #fca5a5;
+    --tg-focus: #93c5fd;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--tg-bg);
+  --color-surface: var(--tg-surface);
+  --color-surface-muted: var(--tg-surface-muted);
+  --color-border: var(--tg-border);
+  --color-text: var(--tg-text);
+  --color-muted: var(--tg-text-muted);
+  --color-accent: var(--tg-accent);
+  --color-accent-contrast: var(--tg-accent-contrast);
+  --color-danger: var(--tg-danger);
+  --color-focus: var(--tg-focus);
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--tg-bg);
+    color: var(--tg-text);
+  }
+  body {
+    font-family:
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
+  }
+  /* One visible focus ring for every keyboard focus (UX 11). */
+  :focus-visible {
+    outline: 2px solid var(--tg-focus);
+    outline-offset: 2px;
+  }
+  main:focus {
+    outline: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

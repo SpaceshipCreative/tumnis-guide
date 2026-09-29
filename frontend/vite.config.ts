@@ -1,0 +1,73 @@
+// Vite build (P0-22, ADR-0003): React, TanStack Router file routes with one chunk
+// per route (the entry stays small, PERF-2), Tailwind CSS v4 and the service worker.
+// `build.manifest` writes dist/.vite/manifest.json, which scripts/ci/check_bundle.mjs
+// walks to measure the initial JavaScript.
+import tailwindcss from "@tailwindcss/vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+import { VitePWA } from "vite-plugin-pwa";
+
+// Paths the service worker never answers with the shell: the api, the live socket, the
+// MCP endpoint and the probes (the backend's SPA fallback excludes the same prefixes).
+const NOT_THE_SHELL = [/^\/v1\//, /^\/ws/, /^\/mcp/, /^\/health/, /^\/metrics/];
+
+export default defineConfig({
+  plugins: [
+    // Before the React plugin: it rewrites route files into lazy chunks.
+    tanstackRouter({
+      target: "react",
+      autoCodeSplitting: true,
+      routesDirectory: "./src/routes",
+      generatedRouteTree: "./src/routeTree.gen.ts",
+      routeFileIgnorePattern: "\\.test\\.",
+      quoteStyle: "double",
+      semicolons: true,
+    }),
+    react(),
+    tailwindcss(),
+    VitePWA({
+      strategies: "generateSW",
+      registerType: "autoUpdate",
+      // main.tsx registers /sw.js itself: no injected inline script (CSP, P0-16).
+      injectRegister: false,
+      manifest: {
+        name: "Tumnis Guide",
+        short_name: "Tumnis",
+        description: "Projects, tasks and the agents that help with them.",
+        start_url: "/",
+        scope: "/",
+        display: "standalone",
+        background_color: "#0f172a",
+        theme_color: "#0f172a",
+        icons: [
+          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          {
+            src: "/icons/icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
+      },
+      workbox: {
+        // Precache the shell and its assets; nothing under /v1 is cached at run time.
+        globPatterns: ["**/*.{js,css,html,png,svg,webmanifest}"],
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: NOT_THE_SHELL,
+        cleanupOutdatedCaches: true,
+      },
+    }),
+  ],
+  build: {
+    manifest: true,
+    sourcemap: true,
+  },
+  server: {
+    proxy: {
+      "/v1": "http://localhost:8080",
+      "/ws": { target: "ws://localhost:8080", ws: true },
+    },
+  },
+});

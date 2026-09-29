@@ -301,3 +301,59 @@ export async function markStartTime(
     [name, timeoutMs] as const,
   );
 }
+
+// --- App shell (P0-22) ----------------------------------------------------------
+
+/**
+ * Resets the stack to the seed set and signs the seed user in through the API (the
+ * page's cookies carry the session). Throws instead of asserting.
+ */
+export async function signIn(request: APIRequestContext): Promise<void> {
+  const reset = await request.post("/v1/test/reset");
+  if (reset.status() !== 204) {
+    throw new Error(`POST /v1/test/reset -> ${String(reset.status())}`);
+  }
+  const user = seedUser();
+  const login = await request.post("/v1/auth/login", {
+    data: { email: user.email, password: user.password },
+  });
+  if (!login.ok()) {
+    throw new Error(`POST /v1/auth/login -> ${String(login.status())}`);
+  }
+  const { preauth } = (await login.json()) as { preauth: string };
+  const code = await request.post("/v1/auth/totp", {
+    data: { preauth, code: totp(user.totpSecret, new Date()) },
+  });
+  if (!code.ok()) {
+    throw new Error(`POST /v1/auth/totp -> ${String(code.status())}`);
+  }
+}
+
+/** Signs in, opens the app shell at `path` and waits for `main` and the navigation. */
+export async function openShell(page: Page, path = "/"): Promise<void> {
+  await signIn(page.request);
+  await page.goto(path);
+  await page.getByRole("main").waitFor();
+  await page
+    .getByRole("navigation", { name: "Primary" })
+    .filter({ visible: true })
+    .waitFor();
+}
+
+/** Links in the shell's visible navigation (the rail or the bottom bar). */
+export function shellNavLinks(page: Page): Locator {
+  return page
+    .getByRole("navigation", { name: "Primary" })
+    .filter({ visible: true })
+    .getByRole("link");
+}
+
+/** Whether the element shows a focus indicator: an outline or a box shadow. */
+export async function focusRing(element: Locator): Promise<boolean> {
+  return element.evaluate((el) => {
+    const style = getComputedStyle(el);
+    const outline =
+      style.outlineStyle !== "none" && parseFloat(style.outlineWidth) >= 1;
+    return outline || style.boxShadow !== "none";
+  });
+}
