@@ -15,12 +15,16 @@ if TYPE_CHECKING:
 
     from tests._pg import DbUrls
 
-pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.enable_socket,
+    # Starlette's TestClient (the WebSocket client) still runs on httpx and says so.
+    pytest.mark.filterwarnings("ignore:Using `httpx` with `starlette.testclient`"),
+]
 
 
 @pytest.mark.req("ADR-0004")
 @pytest.mark.wp("P0-22")
-@pytest.mark.xfail(strict=True, reason="spec:P0-22")
 def test_changes_reach_only_their_workspace(db: DbUrls, live_app: FastAPI) -> None:
     """T-P0-22-13
     Sockets open for workspaces A and B; a task created in A reaches A within 1 s as
@@ -62,7 +66,6 @@ def test_changes_reach_only_their_workspace(db: DbUrls, live_app: FastAPI) -> No
 
 @pytest.mark.req("ADR-0004", "SEC-1")
 @pytest.mark.wp("P0-22")
-@pytest.mark.xfail(strict=True, reason="spec:P0-22")
 def test_socket_rejects_bad_origin_and_no_session(db: DbUrls, live_app: FastAPI) -> None:
     """T-P0-22-14
     A handshake from another origin, without an Origin, or without a session is closed

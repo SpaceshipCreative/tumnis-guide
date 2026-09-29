@@ -26,6 +26,7 @@ from tumnis.core import (
     db,
     deadletter,
     health,
+    live,
     metrics,
     modules,
     ops_status,
@@ -79,18 +80,20 @@ class ShellFiles(StaticFiles):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """The cache invalidation listener runs beside the server (P0-08); it reconnects on its
-    own, so a database that is down at start does not stop the api."""
+    """The cache invalidation listener (P0-08) and the live hub (P0-22) run beside the
+    server; they reconnect on their own, so a database that is down at start does not stop
+    the api."""
     settings: Settings = app.state.settings
     stop = asyncio.Event()
     listener = cache.CacheInvalidationListener(settings.database_direct_url)
     task = asyncio.create_task(listener.run(stop))
+    hub_task = asyncio.create_task(app.state.live_hub.run(stop))  # /ws fan-out (P0-22)
     try:
         yield
     finally:
         stop.set()
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(task, cache.POLL_S * 5)
+            await asyncio.wait_for(asyncio.gather(task, hub_task), cache.POLL_S * 5)
         deadletter.close()
         await metrics.dispose()
         await db.dispose()
@@ -221,6 +224,8 @@ def create_app(
     app.include_router(health.router)
     app.include_router(metrics.router)  # GET /metrics, bearer (P0-27)
     app.include_router(v1_routes(settings, extra_routers))
+    app.state.live_hub = live.LiveHub(settings.database_direct_url)
+    app.include_router(live.router)  # WS /ws (P0-22)
     shell = shell_dir or SHELL_DIR
     if shell.is_dir():
         app.mount("/", ShellFiles(directory=shell, html=True), name="shell")
