@@ -6,6 +6,9 @@ import { arrangeCloseTheDay, closeDayPanel } from "../phase1";
 // Monday 2026-03-09 17:40 in America/New_York.
 const EVENING = new Date("2026-03-09T21:40:00Z");
 const WRITES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+// The PWA's app-start ping (P1-18); the reload below is an app start, not a
+// dismissal, so it is not one of the writes the panel must not send.
+const APP_OPEN = "/v1/metrics/open";
 
 test(
   "A1.6 close the day",
@@ -54,18 +57,22 @@ test(
     }
 
     // Nothing is required: Done closes the panel without further input, and
-    // dismissing the panel sends no write.
+    // dismissing the panel sends no write, whether by Done or by Escape.
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      if (
+        WRITES.has(request.method()) &&
+        path.startsWith("/v1/") &&
+        path !== APP_OPEN
+      ) {
+        writes.push(`${request.method()} ${path}`);
+      }
+    });
     await panel.getByRole("button", { name: "Done" }).click();
     await expect(panel).toBeHidden();
     await page.getByRole("button", { name: "Close the day" }).click();
     await expect(panel).toBeVisible();
-    const writes: string[] = [];
-    page.on("request", (request) => {
-      const path = new URL(request.url()).pathname;
-      if (WRITES.has(request.method()) && path.startsWith("/v1/")) {
-        writes.push(`${request.method()} ${path}`);
-      }
-    });
     await page.keyboard.press("Escape");
     await expect(panel).toBeHidden();
     await page.goto("/");
