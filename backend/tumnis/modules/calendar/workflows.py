@@ -196,7 +196,8 @@ def schedules() -> list[Any]:
 async def sync_tick(scheduled_at: datetime, context: Any) -> None:
     """Scheduled `*/10 * * * *` on the sync queue: one sync per connected account, with a
     workflow id per (connection, tick) so a replayed tick starts none twice."""
-    accounts = await connected_accounts()
-    for workspace_id, connection_id in accounts:
+    for workspace_id, connection_id in await connected_accounts():
         with SetWorkflowID(f"calendar-sync:{connection_id}:{scheduled_at.isoformat()}"):
-            await DBOS.start_workflow_async(connector_sync, workspace_id, connection_id)
+            await DBOS.enqueue_workflow_async(
+                SYNC_QUEUE, connector_sync, workspace_id, connection_id
+            )
