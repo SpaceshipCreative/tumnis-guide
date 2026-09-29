@@ -399,7 +399,6 @@ async def test_pr52_hosted_mode_refuses_server_path_locations(
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 hosted https")
 async def test_pr52_hosted_mode_refuses_plain_http_s3_endpoints(
     db: DbUrls, knowledge_ws: WorkspaceHandle, fakes: Fakes
 ) -> None:

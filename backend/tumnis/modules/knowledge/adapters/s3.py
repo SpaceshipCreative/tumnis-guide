@@ -86,6 +86,12 @@ def endpoint_host_port(url: str) -> tuple[str, int]:
     return parts.hostname, parts.port or (443 if parts.scheme == "https" else 80)
 
 
+def endpoint_needs_https(policy: NetPolicy, url: str) -> bool:
+    """Hosted mode talks https only: keys, signed requests and file bodies cross the
+    internet. Self-hosted mode keeps http for a LAN MinIO."""
+    return policy.mode == "hosted" and urlsplit(url).scheme != "https"
+
+
 def endpoint_policy(policy: NetPolicy, url: str) -> NetPolicy:
     """The ports an S3 endpoint may use: the web ports, MinIO's 9000, and in self-hosted
     mode whatever port the endpoint names (a homelab MinIO on its own port)."""
@@ -178,6 +184,8 @@ class S3Storage(Adapter):
                 url = self.config.endpoint_url()
                 connector: dict[str, Any] = {}
                 if self._net is not None:
+                    if endpoint_needs_https(self._net, url):
+                        raise AdapterRejected(self.name, "connect", "hosted mode needs https")
                     policy = endpoint_policy(self._net, url)
                     host, port = endpoint_host_port(url)
                     await resolve_and_check(host, port, policy, self._resolver)

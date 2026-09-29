@@ -40,6 +40,7 @@ from tumnis.modules.knowledge.adapters.s3 import (
     S3Config,
     S3Storage,
     endpoint_host_port,
+    endpoint_needs_https,
     endpoint_policy,
 )
 from tumnis.modules.knowledge.adapters.server_path import ServerPathStorage
@@ -583,6 +584,8 @@ async def _check_endpoint(config: S3Config, net: NetPolicy, resolver: Resolver) 
     try:
         host, port = endpoint_host_port(url)
         await resolve_and_check(host, port, endpoint_policy(net, url), resolver)
+        if endpoint_needs_https(net, url):  # after the guard, so a private host says so
+            raise ProblemError(422, "invalid_location", "Hosted Tumnis needs an https endpoint.")
     except ValueError as exc:
         raise ProblemError(422, "invalid_location", "The endpoint is not an http(s) URL.") from exc
     except SsrfBlocked as exc:

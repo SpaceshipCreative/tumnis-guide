@@ -23,7 +23,6 @@ def _storage(endpoint: str, mode: str) -> S3Storage:
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 hosted https")
 async def test_pr52_s3_adapter_refuses_plain_http_in_hosted_mode() -> None:
     storage = _storage("http://s3.example.com", "hosted")
     try:
