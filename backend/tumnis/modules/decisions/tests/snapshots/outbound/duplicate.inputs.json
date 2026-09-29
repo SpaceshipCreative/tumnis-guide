@@ -1,0 +1,8 @@
+{
+  "proposal_title": "Update the Acme homepage hero copy",
+  "proposal_first_action": "Open the hero section in the CMS and paste Dana's copy",
+  "candidates": [
+    {"title": "Replace the homepage hero text", "acceptance_criteria": "The hero shows Dana's approved copy on production"},
+    {"title": "Fix the footer links", "acceptance_criteria": "Every footer link resolves"}
+  ]
+}

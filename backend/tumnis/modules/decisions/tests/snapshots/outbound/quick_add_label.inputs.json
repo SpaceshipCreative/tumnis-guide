@@ -1,0 +1,6 @@
+{
+  "title": "Send Acme the March invoice",
+  "project_name": "Acme site",
+  "project_goal": "Ship the Acme marketing site redesign by June",
+  "reserved_judgments": ["pricing", "hiring", "client contracts"]
+}

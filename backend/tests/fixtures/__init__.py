@@ -450,10 +450,12 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
         pool.submit(register_queues).result()
         queues = [queue.name for queue in pool.submit(DBOS.list_queues).result()]
     _wait_for_queue_workers(queues, earlier)
+    closing = _close_late_checkins()
     try:
         yield DBOS
     finally:
         _stop_queue_workers(earlier)
+        closing.set()
         DBOS.destroy(destroy_registry=False)
 
 
@@ -496,6 +498,27 @@ def _stop_queue_workers(earlier: set[threading.Thread], timeout_s: float = 10) -
     deadline = time.monotonic() + timeout_s
     while instance._active_workflows_set.activeList() and time.monotonic() < deadline:
         time.sleep(0.01)
+
+
+def _close_late_checkins() -> threading.Event:
+    """Once the returned event is set, a system-database connection checked back in is
+    closed rather than pooled (issue #35). DBOS 3.1.0 drops a workflow from its active set
+    before it writes the outcome, so when teardown destroys DBOS an executor thread may still
+    hold a pooled connection: dispose() cannot close it, and it goes back to the disposed pool
+    open, where the garbage collector reports it ("psycopg.Connection ... deleted while still
+    open") in whatever test runs next. The listener sits on the engine, so it also covers
+    the pool dispose() puts in place of the old one."""
+    from dbos._dbos import _get_dbos_instance  # noqa: PLC0415  # dbos 3.1.0: no public hook
+    from sqlalchemy import event  # noqa: PLC0415
+
+    closing = threading.Event()
+
+    def close_after_teardown(_dbapi_connection: object, record: Any) -> None:
+        if closing.is_set():
+            record.invalidate()  # closes the DBAPI connection; a later checkout reconnects
+
+    event.listen(_get_dbos_instance()._sys_db.engine, "checkin", close_after_teardown)
+    return closing
 
 
 @pytest.fixture
@@ -730,11 +753,7 @@ class WorkerKiller:
 
     def _deliveries(self) -> tuple[dict[str, Any], int]:
         """(workflow_id -> output of each succeeded delivery, number not yet succeeded)."""
-        from dbos import DBOSClient  # noqa: PLC0415
-
-        if self._client is None:
-            self._client = DBOSClient(system_database_url=self.sys_db.url(APP))
-        workflows = self._client.list_workflows(name="deliver_event")
+        workflows = self._dbos().list_workflows(name="deliver_event")
         done = {w.workflow_id: w.output for w in workflows if w.status == "SUCCESS"}
         return done, len(workflows) - len(done)
 

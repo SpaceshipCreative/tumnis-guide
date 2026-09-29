@@ -1,0 +1,32 @@
+{
+  "kind": "email",
+  "sender_email": "dana@acme.example.com",
+  "sender_name": "Dana Rivers",
+  "subject": "Homepage hero copy for review",
+  "thread_subject": "Acme redesign: homepage",
+  "participants": ["dana@acme.example.com", "scott@example.org"],
+  "body_head": "Hi Scott, attached is the new hero copy for the homepage. Could you look it over before Thursday's call?",
+  "projects": [
+    {
+      "name": "Acme site",
+      "client": "Acme",
+      "goal": "Ship the Acme marketing site redesign by June",
+      "domains": ["acme.example.com"],
+      "people": ["dana@acme.example.com"],
+      "keywords": ["redesign", "homepage", "hero"]
+    },
+    {
+      "name": "Beta app",
+      "client": "Beta Labs",
+      "goal": "Launch the Beta mobile app beta to 50 testers",
+      "domains": ["beta.example.org"],
+      "people": ["lee@beta.example.org"],
+      "keywords": ["testflight", "onboarding"]
+    },
+    {
+      "name": "Tumnis",
+      "goal": "Build the Tumnis Guide v1",
+      "keywords": ["planner", "agents"]
+    }
+  ]
+}

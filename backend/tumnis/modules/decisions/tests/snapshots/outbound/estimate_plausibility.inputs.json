@@ -1,0 +1,11 @@
+{
+  "title": "Write the Acme proposal",
+  "label": "human",
+  "estimate_minutes": 10,
+  "first_action": "Open last year's proposal and copy the outline",
+  "acceptance_criteria": ["Scope, timeline and price are filled in", "Sent to Dana as a PDF"],
+  "history": [
+    {"title": "Write the Beta proposal", "estimate": 60, "actual": 95},
+    {"title": "Draft the Gamma statement of work", "estimate": 45, "actual": 70}
+  ]
+}
