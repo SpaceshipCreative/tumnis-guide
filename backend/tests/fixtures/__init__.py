@@ -14,7 +14,7 @@ import json
 import secrets
 import threading
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -575,7 +575,15 @@ class WorkerKiller:
     and waits until every outbox row is sent and every delivery workflow succeeded."""
 
     def __init__(
-        self, killpoint: str, *, db: DbUrls, sys_db: DbUrls, events: int, event: str, logs: Path
+        self,
+        killpoint: str,
+        *,
+        db: DbUrls,
+        sys_db: DbUrls,
+        events: int,
+        event: str,
+        logs: Path,
+        imports: Sequence[str] = (),
     ) -> None:
         self.killpoint = killpoint
         self.db = db
@@ -583,6 +591,7 @@ class WorkerKiller:
         self.events = events
         self.event = event
         self.logs = logs
+        self.imports = (*KILLER_IMPORTS, *imports)
         self.event_ids: list[uuid.UUID] = []
         self._procs: list[asyncio.subprocess.Process] = []
         self._client: DBOSClient | None = None
@@ -626,7 +635,7 @@ class WorkerKiller:
         if killpoint is not None:
             env["TUMNIS_KILLPOINT"] = killpoint
         args = [sys.executable, "-m", "tumnis.testing.run_worker"]
-        for name in KILLER_IMPORTS:
+        for name in self.imports:
             args += ["--import", name]
         args += ["--app-version", KILLER_APP_VERSION]
         log = (self.logs / f"worker-{len(self._procs)}.log").open("wb")
@@ -673,6 +682,78 @@ class WorkerKiller:
                 f"worker not killed at {self.killpoint} in {timeout_s} s\n{self.log_tail()}"
             )
 
+    async def _migrated(self, proc: asyncio.subprocess.Process, timeout_s: float) -> None:
+        """Wait until the worker has created DBOS's system tables (a client never does)."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        while True:
+            try:
+                await asyncio.to_thread(self.dbos_client().list_workflows, limit=1)
+            except Exception:  # tables not there yet
+                self.close_client()
+            else:
+                return
+            if proc.returncode is not None or loop.time() > deadline:
+                pytest.fail(f"worker never migrated DBOS's tables\n{self.log_tail()}")
+            await asyncio.sleep(0.1)
+
+    async def enqueue_until_killed(
+        self,
+        *,
+        queue_name: str,
+        workflow_name: str,
+        workflow_id: str,
+        args: Sequence[Any] = (),
+        timeout_s: float = 60,
+    ) -> int:
+        """Start a worker with the kill point armed, enqueue one workflow on it once DBOS is
+        up, and return the worker's exit code (137 when it died at the kill point)."""
+        proc = await self._start(self.killpoint)
+        await self._migrated(proc, timeout_s)
+        options: dict[str, Any] = {
+            "queue_name": queue_name,
+            "workflow_name": workflow_name,
+            "workflow_id": workflow_id,
+            "app_version": KILLER_APP_VERSION,
+        }
+        await self.dbos_client().enqueue_async(options, *args)  # type: ignore[arg-type]
+        try:
+            return await asyncio.wait_for(proc.wait(), timeout_s)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            pytest.fail(
+                f"worker not killed at {self.killpoint} in {timeout_s} s\n{self.log_tail()}"
+            )
+
+    async def restart_until_done(self, workflow_id: str, timeout_s: float = 60) -> str:
+        """Start a worker without the kill point, wait until the workflow has left the
+        pending and enqueued states (DBOS recovers it), stop the worker; its status."""
+        proc = await self._start(None)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        try:
+            while True:
+                if proc.returncode is not None:
+                    pytest.fail(f"worker exited with {proc.returncode}\n{self.log_tail()}")
+                status = (
+                    await asyncio.to_thread(
+                        self.dbos_client().retrieve_workflow(workflow_id).get_status
+                    )
+                ).status
+                if status not in {"PENDING", "ENQUEUED"}:
+                    return str(status)
+                if loop.time() > deadline:
+                    pytest.fail(f"{workflow_id} still {status} after {timeout_s} s")
+                await asyncio.sleep(0.1)
+        finally:
+            await self._stop(proc)
+
+    def close_client(self) -> None:
+        if self._client is not None:
+            self._client.destroy()
+            self._client = None
+
     def _unsent(self) -> int:
         import psycopg  # noqa: PLC0415
 
@@ -683,11 +764,7 @@ class WorkerKiller:
 
     def _deliveries(self) -> tuple[dict[str, Any], int]:
         """(workflow_id -> output of each succeeded delivery, number not yet succeeded)."""
-        from dbos import DBOSClient  # noqa: PLC0415
-
-        if self._client is None:
-            self._client = DBOSClient(system_database_url=self.sys_db.url(APP))
-        workflows = self._client.list_workflows(name="deliver_event")
+        workflows = self.dbos_client().list_workflows(name="deliver_event")
         done = {w.workflow_id: w.output for w in workflows if w.status == "SUCCESS"}
         return done, len(workflows) - len(done)
 
@@ -733,14 +810,17 @@ class WorkerKiller:
     async def close(self) -> None:
         for proc in self._procs:
             await self._stop(proc)
-        if self._client is not None:
-            self._client.destroy()
-            self._client = None
+        self.close_client()
 
 
 class WorkerKillerFactory(Protocol):
     def __call__(
-        self, killpoint: str, *, events: int = 5, event: str = "test.ping"
+        self,
+        killpoint: str,
+        *,
+        events: int = 5,
+        event: str = "test.ping",
+        imports: Sequence[str] = (),
     ) -> WorkerKiller: ...
 
 
@@ -748,9 +828,10 @@ class WorkerKillerFactory(Protocol):
 async def worker_killer(
     db: DbUrls, pg_container: PostgresContainer, pg_base: DbUrls, tmp_path: Path
 ) -> AsyncIterator[WorkerKillerFactory]:
-    """`worker_killer(killpoint, *, events=5, event="test.ping")` -> a WorkerKiller on `db`
-    and a fresh DBOS system database (dropped afterwards), so no earlier test's workflows
-    are recovered by the subprocess."""
+    """`worker_killer(killpoint, *, events=5, event="test.ping", imports=())` -> a
+    WorkerKiller on `db` and a fresh DBOS system database (dropped afterwards), so no
+    earlier test's workflows are recovered by the subprocess. `imports` are more modules
+    the worker subprocesses import first (a WP's workflows and test probes)."""
     import psycopg  # noqa: PLC0415
     from psycopg import sql  # noqa: PLC0415
 
@@ -764,9 +845,17 @@ async def worker_killer(
     sys_db = DbUrls(pg_base.host, pg_base.port, name)
     made: list[WorkerKiller] = []
 
-    def factory(killpoint: str, *, events: int = 5, event: str = "test.ping") -> WorkerKiller:
+    def factory(
+        killpoint: str, *, events: int = 5, event: str = "test.ping", imports: Sequence[str] = ()
+    ) -> WorkerKiller:
         killer = WorkerKiller(
-            killpoint, db=db, sys_db=sys_db, events=events, event=event, logs=tmp_path
+            killpoint,
+            db=db,
+            sys_db=sys_db,
+            events=events,
+            event=event,
+            logs=tmp_path,
+            imports=imports,
         )
         made.append(killer)
         return killer

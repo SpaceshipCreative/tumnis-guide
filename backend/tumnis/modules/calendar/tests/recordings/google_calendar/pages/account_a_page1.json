@@ -1,0 +1,141 @@
+{
+  "calendar_id": "avery@example.com",
+  "self_email": "avery@example.com",
+  "request": {
+    "pageToken": null,
+    "timeMin": "2026-03-08T05:00:00Z",
+    "timeMax": "2026-03-24T04:00:00Z"
+  },
+  "response": {
+    "kind": "calendar#events",
+    "etag": "\"p33example\"",
+    "summary": "avery@example.com",
+    "description": "",
+    "updated": "2026-03-02T15:04:05.000Z",
+    "timeZone": "America/New_York",
+    "accessRole": "owner",
+    "defaultReminders": [
+      {
+        "method": "popup",
+        "minutes": 10
+      }
+    ],
+    "items": [
+      {
+        "kind": "calendar#event",
+        "etag": "\"3299108254371162\"",
+        "id": "a-kickoff",
+        "status": "confirmed",
+        "htmlLink": "https://calendar.example.com/event?eid=YS1raWNrb2Zm",
+        "created": "2026-02-20T10:00:00.000Z",
+        "updated": "2026-03-02T15:04:05.000Z",
+        "summary": "Acme kickoff",
+        "creator": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "organizer": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "start": {
+          "dateTime": "2026-03-09T09:00:00-04:00",
+          "timeZone": "America/New_York"
+        },
+        "end": {
+          "dateTime": "2026-03-09T10:00:00-04:00",
+          "timeZone": "America/New_York"
+        },
+        "iCalUID": "kickoff-shared@example.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": true
+        },
+        "eventType": "default",
+        "attendees": [
+          {
+            "email": "avery@example.com",
+            "self": true,
+            "organizer": true,
+            "responseStatus": "accepted"
+          },
+          {
+            "email": "blake@example.org",
+            "responseStatus": "accepted"
+          }
+        ],
+        "location": "Room 4, 100 Example Street"
+      },
+      {
+        "kind": "calendar#event",
+        "etag": "\"3035014870380190\"",
+        "id": "a-weekly_20260310T150000Z",
+        "status": "confirmed",
+        "htmlLink": "https://calendar.example.com/event?eid=YS13ZWVrbHlfMjAyNjAzMTBUMTUwMDAwWg",
+        "created": "2026-02-20T10:00:00.000Z",
+        "updated": "2026-03-02T15:04:05.000Z",
+        "summary": "Weekly sync",
+        "creator": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "organizer": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "start": {
+          "dateTime": "2026-03-10T11:00:00-04:00",
+          "timeZone": "America/New_York"
+        },
+        "end": {
+          "dateTime": "2026-03-10T11:30:00-04:00",
+          "timeZone": "America/New_York"
+        },
+        "iCalUID": "a-weekly@example.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": true
+        },
+        "eventType": "default",
+        "recurringEventId": "a-weekly",
+        "originalStartTime": {
+          "dateTime": "2026-03-10T11:00:00-04:00",
+          "timeZone": "America/New_York"
+        }
+      },
+      {
+        "kind": "calendar#event",
+        "etag": "\"3713498395830713\"",
+        "id": "a-holiday",
+        "status": "confirmed",
+        "htmlLink": "https://calendar.example.com/event?eid=YS1ob2xpZGF5",
+        "created": "2026-02-20T10:00:00.000Z",
+        "updated": "2026-03-02T15:04:05.000Z",
+        "summary": "Company holiday",
+        "creator": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "organizer": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "start": {
+          "date": "2026-03-11"
+        },
+        "end": {
+          "date": "2026-03-12"
+        },
+        "iCalUID": "a-holiday@example.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": true
+        },
+        "eventType": "default",
+        "transparency": "transparent"
+      }
+    ],
+    "nextPageToken": "a-p2"
+  },
+  "notes": "Scrubbed: people, addresses, calendar ids, event ids, iCalUIDs, etags and links are invented (example.com/example.org); times are the fixture week of 2026-03-09 in America/New_York."
+}

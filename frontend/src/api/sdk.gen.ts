@@ -60,6 +60,20 @@ import type {
   AuthTotpData,
   AuthTotpErrors,
   AuthTotpResponses,
+  CalendarListAccountsData,
+  CalendarListAccountsErrors,
+  CalendarListAccountsResponses,
+  CalendarOauthCallbackData,
+  CalendarOauthCallbackErrors,
+  CalendarOauthStartData,
+  CalendarOauthStartErrors,
+  CalendarOauthStartResponses,
+  CalendarSelectCalendarsData,
+  CalendarSelectCalendarsErrors,
+  CalendarSelectCalendarsResponses,
+  CalendarSyncNowData,
+  CalendarSyncNowErrors,
+  CalendarSyncNowResponses,
   DeadLettersGetDeadLettersData,
   DeadLettersGetDeadLettersErrors,
   DeadLettersGetDeadLettersResponses,
@@ -194,6 +208,10 @@ import {
   zAuthSignOutOtherDevicesResponse,
   zAuthStartTotpEnrolmentResponse,
   zAuthTotpResponse,
+  zCalendarListAccountsResponse,
+  zCalendarOauthStartResponse,
+  zCalendarSelectCalendarsResponse,
+  zCalendarSyncNowResponse,
   zDeadLettersGetDeadLettersResponse,
   zDeadLettersPostDiscardResponse,
   zDeadLettersPostRetryResponse,
@@ -520,6 +538,106 @@ export const authConfirmTotpEnrolment = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * List Accounts
+ */
+export const calendarListAccounts = <ThrowOnError extends boolean = false>(
+  options?: Options<CalendarListAccountsData, ThrowOnError>,
+): RequestResult<
+  CalendarListAccountsResponses,
+  CalendarListAccountsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    CalendarListAccountsResponses,
+    CalendarListAccountsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zCalendarListAccountsResponse.parseAsync(data),
+    url: "/v1/calendar/accounts",
+    ...options,
+  });
+
+/**
+ * Select Calendars
+ */
+export const calendarSelectCalendars = <ThrowOnError extends boolean = false>(
+  options: Options<CalendarSelectCalendarsData, ThrowOnError>,
+): RequestResult<
+  CalendarSelectCalendarsResponses,
+  CalendarSelectCalendarsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    CalendarSelectCalendarsResponses,
+    CalendarSelectCalendarsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zCalendarSelectCalendarsResponse.parseAsync(data),
+    url: "/v1/calendar/accounts/{calendar_account_id}/calendars",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Sync Now
+ */
+export const calendarSyncNow = <ThrowOnError extends boolean = false>(
+  options: Options<CalendarSyncNowData, ThrowOnError>,
+): RequestResult<
+  CalendarSyncNowResponses,
+  CalendarSyncNowErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CalendarSyncNowResponses,
+    CalendarSyncNowErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zCalendarSyncNowResponse.parseAsync(data),
+    url: "/v1/calendar/accounts/{calendar_account_id}/sync",
+    ...options,
+  });
+
+/**
+ * Oauth Callback
+ */
+export const calendarOauthCallback = <ThrowOnError extends boolean = false>(
+  options: Options<CalendarOauthCallbackData, ThrowOnError>,
+): RequestResult<unknown, CalendarOauthCallbackErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    unknown,
+    CalendarOauthCallbackErrors,
+    ThrowOnError
+  >({ url: "/v1/calendar/oauth/callback", ...options });
+
+/**
+ * Oauth Start
+ */
+export const calendarOauthStart = <ThrowOnError extends boolean = false>(
+  options?: Options<CalendarOauthStartData, ThrowOnError>,
+): RequestResult<
+  CalendarOauthStartResponses,
+  CalendarOauthStartErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    CalendarOauthStartResponses,
+    CalendarOauthStartErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zCalendarOauthStartResponse.parseAsync(data),
+    url: "/v1/calendar/oauth/start",
+    ...options,
   });
 
 /**

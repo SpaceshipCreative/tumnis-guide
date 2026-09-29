@@ -32,6 +32,38 @@ export const zAuditEntry = z.object({
 });
 
 /**
+ * CalendarOut
+ */
+export const zCalendarOut = z.object({
+  id: z.string(),
+  primary: z.boolean().optional().default(false),
+  summary: z.string(),
+  time_zone: z.string().nullish(),
+});
+
+/**
+ * CalendarAccountOut
+ */
+export const zCalendarAccountOut = z.object({
+  calendars: z.array(zCalendarOut),
+  connection_id: z.uuid(),
+  google_email: z.string(),
+  id: z.uuid(),
+  last_sync_at: z.iso.datetime().nullable(),
+  selected_calendar_ids: z.array(z.string()),
+  status: z.enum(["connected", "needs_reauth"]),
+  version: z.int(),
+});
+
+/**
+ * CalendarsIn
+ */
+export const zCalendarsIn = z.object({
+  selected_calendar_ids: z.array(z.string()).max(200),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
  * CommentIn
  */
 export const zCommentIn = z.object({
@@ -178,6 +210,13 @@ export const zMoveIn = z.object({
   board_rank: z.string().min(1).max(48),
   column_id: z.uuid(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * OAuthStartOut
+ */
+export const zOAuthStartOut = z.object({
+  url: z.string(),
 });
 
 /**
@@ -849,6 +888,44 @@ export const zAuthConfirmTotpEnrolmentBody = zTotpEnrolConfirmIn;
  * Successful Response
  */
 export const zAuthConfirmTotpEnrolmentResponse = z.void();
+
+/**
+ * Response Calendar List Accounts
+ *
+ * Successful Response
+ */
+export const zCalendarListAccountsResponse = z.array(zCalendarAccountOut);
+
+export const zCalendarSelectCalendarsBody = zCalendarsIn;
+
+export const zCalendarSelectCalendarsPath = z.object({
+  calendar_account_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zCalendarSelectCalendarsResponse = zCalendarAccountOut;
+
+export const zCalendarSyncNowPath = z.object({
+  calendar_account_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zCalendarSyncNowResponse = zCalendarAccountOut;
+
+export const zCalendarOauthCallbackQuery = z.object({
+  state: z.string().max(256),
+  code: z.string().max(2048).nullish(),
+  error: z.string().max(256).nullish(),
+});
+
+/**
+ * Successful Response
+ */
+export const zCalendarOauthStartResponse = zOAuthStartOut;
 
 export const zDeadLettersGetDeadLettersQuery = z.object({
   status: z

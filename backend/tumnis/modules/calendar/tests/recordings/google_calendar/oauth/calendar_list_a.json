@@ -1,0 +1,45 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList"
+  },
+  "status": 200,
+  "response": {
+    "kind": "calendar#calendarList",
+    "etag": "\"p32example\"",
+    "nextSyncToken": "sync-a",
+    "items": [
+      {
+        "kind": "calendar#calendarListEntry",
+        "etag": "\"1700000000000000\"",
+        "id": "avery@example.com",
+        "summary": "avery@example.com",
+        "timeZone": "America/New_York",
+        "colorId": "14",
+        "backgroundColor": "#9fe1e7",
+        "foregroundColor": "#000000",
+        "selected": true,
+        "accessRole": "owner",
+        "defaultReminders": [
+          {
+            "method": "popup",
+            "minutes": 10
+          }
+        ],
+        "primary": true
+      },
+      {
+        "kind": "calendar#calendarListEntry",
+        "etag": "\"1700000000000001\"",
+        "id": "en.usa#holiday@group.v.calendar.example.com",
+        "summary": "Holidays in United States",
+        "timeZone": "America/New_York",
+        "colorId": "8",
+        "selected": true,
+        "accessRole": "reader",
+        "defaultReminders": []
+      }
+    ]
+  },
+  "notes": "Scrubbed: calendar ids are invented."
+}
