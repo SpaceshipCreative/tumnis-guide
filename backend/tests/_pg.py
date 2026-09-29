@@ -7,6 +7,7 @@ why the template is closed to connections once migrated.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,21 +59,29 @@ def alembic_config(url: str) -> Config:
     cfg = Config(str(ALEMBIC_INI))
     cfg.set_main_option("sqlalchemy.url", url)
     configured = cfg.get_main_option("version_locations")
-    locations = [*(configured.split() if configured else []), *map(str, TEST_VERSION_LOCATIONS)]
-    cfg.set_main_option("version_locations", " ".join(locations))
+    # alembic.ini sets path_separator = os, so locations join with os.pathsep, not spaces.
+    locations = [
+        *(configured.split(os.pathsep) if configured else []),
+        *map(str, TEST_VERSION_LOCATIONS),
+    ]
+    cfg.set_main_option("version_locations", os.pathsep.join(locations))
     return cfg
 
 
 def build_template(base: DbUrls, template: str) -> None:
-    """CREATE DATABASE <template> OWNER tumnis_owner; alembic upgrade heads as owner;
-    ALTER DATABASE <template> WITH ALLOW_CONNECTIONS false IS_TEMPLATE true."""
+    """CREATE DATABASE <template> OWNER tumnis_owner; alembic upgrade heads as owner; mark it
+    a `dev` deployment (P0-04); ALTER DATABASE <template> WITH ALLOW_CONNECTIONS false
+    IS_TEMPLATE true."""
     with psycopg.connect(base.libpq(OWNER), autocommit=True) as conn:
         conn.execute(
             sql.SQL("CREATE DATABASE {} OWNER {}").format(
                 sql.Identifier(template), sql.Identifier(OWNER)
             )
         )
-    command.upgrade(alembic_config(DbUrls(base.host, base.port, template).owner), "heads")
+    template_urls = DbUrls(base.host, base.port, template)
+    command.upgrade(alembic_config(template_urls.owner), "heads")
+    with psycopg.connect(template_urls.libpq(OWNER), autocommit=True) as conn:
+        conn.execute("INSERT INTO deployment_marker (env) VALUES ('dev')")
     with psycopg.connect(base.libpq(OWNER), autocommit=True) as conn:
         conn.execute(
             sql.SQL("ALTER DATABASE {} WITH ALLOW_CONNECTIONS false IS_TEMPLATE true").format(

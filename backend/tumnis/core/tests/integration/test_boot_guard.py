@@ -53,7 +53,6 @@ def _run_api(db: DbUrls, tmp_path: Path, **env: str) -> subprocess.CompletedProc
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 def test_preview_refuses_production_database(db: DbUrls, tmp_path: Path) -> None:
     """T-P0-04-07
     Given a marker env='prod' in the target database, when `tumnis api` starts in preview
@@ -67,7 +66,6 @@ def test_preview_refuses_production_database(db: DbUrls, tmp_path: Path) -> None
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 def test_env_must_match_database_marker(db: DbUrls, tmp_path: Path) -> None:
     """T-P0-04-08
     Given a marker env='preview', when `tumnis api` starts with DEPLOYMENT_ENV=dev, then it

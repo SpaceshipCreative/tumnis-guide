@@ -5,15 +5,21 @@ a deployment needs to start. Secrets never sit in the environment: the only secr
 variables are file paths (AGENTS.md, Never).
 """
 
+import asyncio
 import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Self
 
+from psycopg import errors as pg_errors
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
 
 
 class SettingsError(RuntimeError):
@@ -25,6 +31,9 @@ class SettingsError(RuntimeError):
 EXIT_CONFIG = 78  # EX_CONFIG from sysexits.h; the CLI exits with it on SettingsError
 DBOS_DATABASE = "tumnis_dbos"
 DeploymentEnv = Literal["dev", "preview", "prod"]
+# The boot checks wait for Postgres (a restart can race the database): 30 tries, 2 s apart.
+BOOT_DB_ATTEMPTS = 30
+BOOT_DB_RETRY_S = 2.0
 
 
 class Settings(BaseSettings):
@@ -107,6 +116,36 @@ def check_markers(settings: Settings, markers: Sequence[Marker]) -> None:
         )
 
 
+async def read_markers(url: str) -> list[Marker]:
+    """The marker rows, read as the (owner-free) app role on the direct URL."""
+    engine = create_async_engine(url, poolclass=NullPool)
+    try:
+        for attempt in range(1, BOOT_DB_ATTEMPTS + 1):
+            try:
+                async with engine.connect() as conn:
+                    rows = await conn.execute(
+                        text("SELECT env, master_key_fingerprint FROM deployment_marker")
+                    )
+                    return [Marker(env, fingerprint) for env, fingerprint in rows]
+            except ProgrammingError as exc:
+                if isinstance(exc.orig, pg_errors.UndefinedTable):
+                    raise SettingsError(
+                        "deployment_marker_missing", "no deployment_marker table; run migrate"
+                    ) from exc
+                raise SettingsError("deployment_marker_unreadable", str(exc.orig)) from exc
+            except OperationalError:
+                if attempt == BOOT_DB_ATTEMPTS:
+                    raise
+                await asyncio.sleep(BOOT_DB_RETRY_S)
+    finally:
+        await engine.dispose()
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 async def boot_checks(settings: Settings) -> None:
-    """Runs before the api or worker serves anything (P0-04)."""
-    raise NotImplementedError
+    """Runs before the api or worker serves anything. Reads deployment_marker as the
+    owner-free app role: preview refuses a database whose marker env is 'prod', or whose
+    master key fingerprint matches prod's; every env refuses a marker whose env differs
+    from DEPLOYMENT_ENV; preview refuses any workspace_settings row for a real provider
+    slot (checked from P0-08 on)."""
+    check_markers(settings, await read_markers(settings.database_direct_url))
