@@ -1,0 +1,40 @@
+{
+  "fields_sent": [
+    "candidates",
+    "proposal_first_action",
+    "proposal_title"
+  ],
+  "point": "duplicate",
+  "questions": {
+    "dup_1": {
+      "criteria": {
+        "false": "Different work.",
+        "true": "Same work: doing one would complete the other."
+      },
+      "instructions": "Candidate 1 in `candidates` describes the same work as the proposal (`proposal_title`, `proposal_first_action`).",
+      "type": "noul"
+    },
+    "dup_2": {
+      "criteria": {
+        "false": "Different work.",
+        "true": "Same work: doing one would complete the other."
+      },
+      "instructions": "Candidate 2 in `candidates` describes the same work as the proposal (`proposal_title`, `proposal_first_action`).",
+      "type": "noul"
+    }
+  },
+  "state": {
+    "candidates": [
+      {
+        "acceptance_criteria": "The hero shows Dana's approved copy on production",
+        "title": "Replace the homepage hero text"
+      },
+      {
+        "acceptance_criteria": "Every footer link resolves",
+        "title": "Fix the footer links"
+      }
+    ],
+    "proposal_first_action": "Open the hero section in the CMS and paste Dana's copy",
+    "proposal_title": "Update the Acme homepage hero copy"
+  }
+}

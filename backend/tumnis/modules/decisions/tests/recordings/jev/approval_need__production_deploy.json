@@ -1,0 +1,68 @@
+{
+  "point": "approval_need",
+  "inputs": {
+    "action_class": "deploy.production",
+    "action_summary": "Deploy the Acme site main branch to production",
+    "target": "acme-site on Coolify",
+    "policy_gated": [
+      "deploy.production",
+      "email.send",
+      "payment"
+    ],
+    "policy_allowed": [
+      "deploy.preview",
+      "git.push_branch"
+    ]
+  },
+  "request": {
+    "state": {
+      "action_class": "deploy.production",
+      "action_summary": "Deploy the Acme site main branch to production",
+      "target": "acme-site on Coolify",
+      "policy_gated": [
+        "deploy.production",
+        "email.send",
+        "payment"
+      ],
+      "policy_allowed": [
+        "deploy.preview",
+        "git.push_branch"
+      ]
+    },
+    "model": "jev-1.13.0",
+    "questions": {
+      "gated": {
+        "type": "noul",
+        "instructions": "The action `action_class`, described by `action_summary` on `target`, is one of the actions in `policy_gated`, or equivalent in effect to one of them.",
+        "criteria": {
+          "true": "The action is gated by the policy, or has the same effect as a gated action.",
+          "false": "The action is none of the gated actions and has none of their effects."
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "x-typesafe-request-id": "req_synthetic_0002"
+    },
+    "body": {
+      "model": "jev-1.13.0",
+      "usage": {
+        "input_tokens": 161,
+        "output_tokens": 1
+      },
+      "answers": {
+        "gated": {
+          "type": "noul",
+          "noul": 0.97
+        }
+      }
+    }
+  },
+  "latency_ms": 176,
+  "recorded_at": null,
+  "sdk_version": "0.7.2",
+  "synthetic": true,
+  "notes": "Synthetic: hand-authored in the typesafe-sdk 0.7.2 wire shape (no real Jev call was made); all names, addresses and domains are invented (example.com/example.org). Replace with scripts/record_jev.py output against the real API."
+}

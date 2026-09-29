@@ -299,9 +299,9 @@ async def _versioned(
         raise _stale(exc.current) from None
 
 
-async def _doc(s: AsyncSession, row: Mapping[Any, Any]) -> TaskDoc:
+async def _doc(s: AsyncSession, row: Mapping[Any, Any], *, at: datetime | None = None) -> TaskDoc:
     """The search document: title, then first action, acceptance criteria and comments
-    capped at 8 KB (plan default)."""
+    capped at 8 KB (plan default); its project, and `at`, the change's time (P0-20)."""
     comments: Sequence[str] = (
         await s.scalars(
             select(_comments.c.body_md)
@@ -312,7 +312,13 @@ async def _doc(s: AsyncSession, row: Mapping[Any, Any]) -> TaskDoc:
     parts = [row["first_action"], row["acceptance_criteria"], *comments]
     body = "\n\n".join(part for part in parts if part)
     capped = body.encode()[:DOC_BODY_MAX_BYTES].decode(errors="ignore")
-    return TaskDoc(title=row["title"], body=capped, deleted=row["deleted_at"] is not None)
+    return TaskDoc(
+        title=row["title"],
+        body=capped,
+        deleted=row["deleted_at"] is not None,
+        project_id=row["project_id"],
+        updated_at=at,
+    )
 
 
 async def project_of(ctx: WorkspaceContext, task_id: UUID) -> UUID | None:
@@ -557,6 +563,7 @@ async def _insert(
         .mappings()
         .one()
     )
+    at = _now(now)
     await emit(
         s,
         TaskCreatedV1(
@@ -565,9 +572,9 @@ async def _insert(
             label=_label(created["label"]),
             source=created["source"],
             tainted=created["tainted"],
-            doc=await _doc(s, created),
+            doc=await _doc(s, created, at=at),
         ),
-        occurred_at=_now(now),
+        occurred_at=at,
     )
     mark_changed(s, LIVE_ENTITY, created["id"])
     return _out(created)
@@ -600,10 +607,13 @@ async def create_task(
 async def _changed(
     s: AsyncSession, row: Mapping[Any, Any], fields: Sequence[str], now: datetime | None
 ) -> None:
+    at = _now(now)
     await emit(
         s,
-        TaskUpdatedV1(task_id=row["id"], changed_fields=sorted(fields), doc=await _doc(s, row)),
-        occurred_at=_now(now),
+        TaskUpdatedV1(
+            task_id=row["id"], changed_fields=sorted(fields), doc=await _doc(s, row, at=at)
+        ),
+        occurred_at=at,
     )
     mark_changed(s, LIVE_ENTITY, row["id"])
 

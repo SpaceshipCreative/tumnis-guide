@@ -1,0 +1,8 @@
+{
+  "level": "medium",
+  "event_kind": "no_activity",
+  "minutes_into_block": 25,
+  "task_status": "in_progress",
+  "recent_responses": ["on_it", "snooze"],
+  "minutes_since_last_nudge": 20
+}

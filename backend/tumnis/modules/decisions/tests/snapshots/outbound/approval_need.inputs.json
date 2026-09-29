@@ -1,0 +1,7 @@
+{
+  "action_class": "deploy.production",
+  "action_summary": "Deploy the Acme site main branch to production",
+  "target": "acme-site on Coolify",
+  "policy_gated": ["deploy.production", "email.send", "payment"],
+  "policy_allowed": ["deploy.preview", "git.push_branch"]
+}

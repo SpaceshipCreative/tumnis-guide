@@ -1,0 +1,62 @@
+{
+  "point": "nudge_warranted",
+  "inputs": {
+    "level": "medium",
+    "event_kind": "no_activity",
+    "minutes_into_block": 25,
+    "task_status": "in_progress",
+    "recent_responses": [
+      "on_it",
+      "snooze"
+    ],
+    "minutes_since_last_nudge": 20
+  },
+  "request": {
+    "state": {
+      "level": "medium",
+      "event_kind": "no_activity",
+      "minutes_into_block": 25,
+      "task_status": "in_progress",
+      "recent_responses": [
+        "on_it",
+        "snooze"
+      ],
+      "minutes_since_last_nudge": 20
+    },
+    "model": "jev-1.13.0",
+    "questions": {
+      "nudge": {
+        "type": "noul",
+        "instructions": "A nudge now helps the user more than it interrupts them.",
+        "criteria": {
+          "true": "A nudge now helps more than it interrupts.",
+          "false": "A nudge now interrupts more than it helps."
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "x-typesafe-request-id": "req_synthetic_0007"
+    },
+    "body": {
+      "model": "jev-1.13.0",
+      "usage": {
+        "input_tokens": 102,
+        "output_tokens": 1
+      },
+      "answers": {
+        "nudge": {
+          "type": "noul",
+          "noul": 0.64
+        }
+      }
+    }
+  },
+  "latency_ms": 172,
+  "recorded_at": null,
+  "sdk_version": "0.7.2",
+  "synthetic": true,
+  "notes": "Synthetic: hand-authored in the typesafe-sdk 0.7.2 wire shape (no real Jev call was made); all names, addresses and domains are invented (example.com/example.org). Replace with scripts/record_jev.py output against the real API."
+}

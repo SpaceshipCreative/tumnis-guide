@@ -1,0 +1,8 @@
+{
+  "item_kind": "question",
+  "item_summary": "The agent asks which payment provider to use for the Beta app checkout",
+  "project_name": "Beta app",
+  "downstream_task_count": 3,
+  "downstream_human_minutes": 90,
+  "nearest_due_in_days": 4
+}
