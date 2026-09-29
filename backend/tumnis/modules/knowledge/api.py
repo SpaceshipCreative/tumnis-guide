@@ -337,6 +337,15 @@ def _s3_root(root: str) -> tuple[str, str]:
     return bucket, prefix
 
 
+def _refuse_hosted_server_path(kind: str, net: NetPolicy) -> None:
+    """Hosted mode offers S3 and SFTP only (FR-15.7): a server path there would let one
+    workspace reach another's folders on the shared server."""
+    if kind == "server_path" and net.mode == "hosted":
+        raise ProblemError(
+            422, "invalid_location", "Hosted Tumnis stores files in S3 or SFTP, not server folders."
+        )
+
+
 def _server_root(root: str) -> str:
     path = PurePosixPath(root)
     if not path.is_absolute() or ".." in path.parts:
@@ -393,6 +402,7 @@ def _backend(
     net: NetPolicy,
     resolver: Resolver,
 ) -> StorageBackend:
+    _refuse_hosted_server_path(row["kind"], net)
     if current_mode() == "fake":
         return _FAKES.setdefault(row["id"], FakeStorage())
     caps = row["capabilities"] or {}
@@ -523,6 +533,7 @@ async def create_location(
     if taken is not None:
         raise ProblemError(409, "name_taken", "A location with that name exists.")
     config: S3Config | None = None
+    _refuse_hosted_server_path(body.kind, net)
     if body.kind == "server_path":
         root = _server_root(body.root)
         fstype = _fstype(root)

@@ -370,7 +370,6 @@ async def test_location_credentials_encrypted(
 
 @pytest.mark.req("FR-15.7", "SEC-5")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 hosted server path")
 async def test_pr52_hosted_mode_refuses_server_path_locations(
     db: DbUrls, knowledge_ws: WorkspaceHandle, tmp_location: Path
 ) -> None:
