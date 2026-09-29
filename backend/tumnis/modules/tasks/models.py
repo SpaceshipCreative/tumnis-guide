@@ -90,6 +90,7 @@ class TaskChange(TenantBase, Base):
     actor: Mapped[str]
     before: Mapped[dict[str, Any]] = mapped_column(JSONB)
     after: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    task_version: Mapped[int]  # the task's version this write left; an undo must name it
     undone_at: Mapped[datetime | None]
 
 

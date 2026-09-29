@@ -576,8 +576,9 @@ async def record_change(
     after: Mapping[str, Any],
 ) -> UUID:
     """One `task_changes` row for a task write, in the caller's transaction: the undoable
-    fields it changed (`rules.UNDO_FIELDS`, JSON values) before and after. Answers the
-    change id the write returns as `TaskOut.change_id`."""
+    fields it changed (`rules.UNDO_FIELDS`, JSON values) before and after, and the task's
+    version the write left (read from the row, which the caller has already written).
+    Answers the change id the write returns as `TaskOut.change_id`."""
     change_id = uuid7()
     await s.execute(
         pg_insert(_changes).values(
@@ -586,6 +587,7 @@ async def record_change(
             actor=str(actor),
             before=dict(before),
             after=dict(after),
+            task_version=select(_tasks.c.version).where(_tasks.c.id == task_id).scalar_subquery(),
             created_by=actor,
         )
     )
@@ -922,7 +924,8 @@ async def undo_task(
     """Puts back what change `change_id` of this task changed (R-09, UX 9). A person only
     (403 `session_required` for an agent); the change must belong to the task (404) and
     not be undone yet (409 `already_undone`); `version` must be the task's current one
-    (409 `stale_version`: it changed since). Applies the change's `before` without the
+    and the one this change left (409 `stale_version`: it changed since, so an older
+    change never overwrites a newer write). Applies the change's `before` without the
     transition table, recomputes `completed_at` for the restored status, never touches the
     history fields, marks the change undone and records the undo as a change of its own.
     Emits `task.updated` and, when the status comes back, `task.status_changed` with
@@ -945,7 +948,7 @@ async def undo_task(
         raise NotFound("task_changes", change_id)
     if change["undone_at"] is not None:
         raise ProblemError(409, "already_undone", "This change was already undone")
-    if row["version"] != version:
+    if row["version"] != version or change["task_version"] != version:
         raise _stale(row)
     at = _now(now)
     values = rules.restore_values(change["before"], row["completed_at"], at)
