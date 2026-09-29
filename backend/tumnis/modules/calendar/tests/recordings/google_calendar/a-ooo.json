@@ -1,0 +1,60 @@
+{
+  "raw": {
+    "external_id": "avery@example.com:a-ooo",
+    "record_type": "event",
+    "payload": {
+      "calendar_id": "avery@example.com",
+      "self_email": "avery@example.com",
+      "time_zone": "America/New_York",
+      "event": {
+        "kind": "calendar#event",
+        "etag": "\"3140254764840818\"",
+        "id": "a-ooo",
+        "status": "confirmed",
+        "htmlLink": "https://calendar.example.com/event?eid=YS1vb28",
+        "created": "2026-02-20T10:00:00.000Z",
+        "updated": "2026-03-02T15:04:05.000Z",
+        "summary": "Out of office",
+        "creator": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "organizer": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "start": {
+          "date": "2026-03-13"
+        },
+        "end": {
+          "date": "2026-03-14"
+        },
+        "iCalUID": "a-ooo@example.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": true
+        },
+        "eventType": "default",
+        "transparency": "opaque"
+      }
+    },
+    "fetched_at": "2026-03-09T12:00:00Z"
+  },
+  "expected": [
+    {
+      "schema_version": 1,
+      "record_type": "event",
+      "external_id": "avery@example.com:a-ooo",
+      "provider_url": "https://calendar.example.com/event?eid=YS1vb28",
+      "fetched_at": "2026-03-09T12:00:00Z",
+      "calendar_id": "avery@example.com",
+      "title": "Out of office",
+      "start_at": "2026-03-13T04:00:00Z",
+      "end_at": "2026-03-14T04:00:00Z",
+      "all_day": true,
+      "attendees": [],
+      "busy": true
+    }
+  ],
+  "notes": "Scrubbed: people, addresses, calendar ids, event ids, iCalUIDs, etags and links are invented (example.com/example.org); times are the fixture week of 2026-03-09 in America/New_York."
+}

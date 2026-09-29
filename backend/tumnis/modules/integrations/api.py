@@ -13,15 +13,19 @@ caller's `session` (already in that workspace) when one is passed, so a sync ste
 write records, cursor and events in one transaction (P3-02).
 """
 
+import base64
+import hashlib
+import json
+import secrets
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import partial
-from typing import Any, Literal, Protocol
+from typing import Any, Final, Literal, Protocol
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field
-from sqlalchemy import Table, or_, select, tuple_
+from sqlalchemy import ColumnElement, Table, and_, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +38,7 @@ from tumnis.core.canonical import (
     upsert_records,
 )
 from tumnis.core.schemas import versioned
+from tumnis.core.settings_store import open_for_workspace, seal_for_workspace
 from tumnis.core.tenancy import WorkspaceContext, session_for
 from tumnis.core.versioning import NotFound
 from tumnis.modules.integrations import rules
@@ -43,8 +48,10 @@ from tumnis.modules.integrations.models import (
     ContextItem,
     Message,
     Note,
+    OAuthPending,
     Person,
     RawPayload,
+    SyncState,
     Thread,
 )
 
@@ -571,3 +578,317 @@ async def _target_taint(s: AsyncSession, target_type: str, target_id: UUID) -> b
     if found is None:
         raise NotFound(target_type, target_id)
     return found
+
+
+# --- Connections, credentials and sync cursors (P1-09; P3-02 reuses them) --------------------
+
+_sync_state: Table = SyncState.__table__  # type: ignore[assignment]
+ConnectionStatus = Literal["pending_auth", "ok", "needs_reauth", "error"]
+
+
+async def upsert_connection(
+    ctx: WorkspaceContext,
+    *,
+    kind: ConnectorKind,
+    provider: str,
+    account: str,
+    status: ConnectionStatus = "ok",
+    session: AsyncSession | None = None,
+) -> UUID:
+    """The connection for (provider, account), created or brought back (a reconnected
+    account keeps its id, so its records stay attached); returns its id."""
+    async with session_for(ctx, session) as s:
+        insert = pg_insert(_connections).values(
+            kind=kind, provider=provider, account=account, status=status
+        )
+        upsert = insert.on_conflict_do_update(
+            index_elements=["workspace_id", "provider", "account"],
+            set_={"kind": kind, "status": status, "deleted_at": None, "last_error": None},
+        ).returning(_connections.c.id)
+        connection_id: UUID = (await s.execute(upsert)).scalar_one()
+    return connection_id
+
+
+def _live_connection(connection_id: UUID) -> ColumnElement[bool]:
+    """The connection, unless soft-deleted: its tokens are neither opened nor rewritten
+    (a reconnect brings the row back through `upsert_connection` first)."""
+    return and_(_connections.c.id == connection_id, _connections.c.deleted_at.is_(None))
+
+
+def _credentials_aad(connection_id: UUID) -> bytes:
+    return b"connections:" + str(connection_id).encode()
+
+
+async def put_credentials(
+    ctx: WorkspaceContext,
+    connection_id: UUID,
+    credentials: Mapping[str, Any],
+    *,
+    session: AsyncSession | None = None,
+) -> None:
+    """Seal the connection's credentials (tokens) with the workspace data key into
+    `credentials_enc` (Data flow rule 5): no column holds them in plaintext."""
+    async with session_for(ctx, session) as s:
+        key_version, sealed = await seal_for_workspace(
+            s,
+            ctx.workspace_id,
+            json.dumps(dict(credentials)).encode(),
+            aad=_credentials_aad(connection_id),
+        )
+        written = await s.execute(
+            update(_connections)
+            .where(_live_connection(connection_id))
+            .values(credentials_enc=sealed, key_version=key_version)
+            .returning(_connections.c.id)
+        )
+        if written.one_or_none() is None:
+            raise NotFound("connections", connection_id)
+
+
+async def get_credentials(
+    ctx: WorkspaceContext, connection_id: UUID, *, session: AsyncSession | None = None
+) -> dict[str, Any] | None:
+    """The connection's credentials, opened with the workspace key; None when unset."""
+    async with session_for(ctx, session) as s:
+        sealed = await s.scalar(
+            select(_connections.c.credentials_enc).where(_live_connection(connection_id))
+        )
+        if sealed is None:
+            return None
+        plaintext = await open_for_workspace(
+            s, ctx.workspace_id, bytes(sealed), aad=_credentials_aad(connection_id)
+        )
+    credentials: dict[str, Any] = json.loads(plaintext)
+    return credentials
+
+
+async def set_connection_status(
+    ctx: WorkspaceContext,
+    connection_id: UUID,
+    status: ConnectionStatus,
+    *,
+    last_error: str | None = None,
+    last_sync_at: datetime | None = None,
+    session: AsyncSession | None = None,
+) -> None:
+    values: dict[str, Any] = {"status": status, "last_error": last_error}
+    if last_sync_at is not None:
+        values["last_sync_at"] = last_sync_at
+    async with session_for(ctx, session) as s:
+        await s.execute(
+            update(_connections).where(_live_connection(connection_id)).values(**values)
+        )
+
+
+async def get_sync_cursor(
+    ctx: WorkspaceContext, connection_id: UUID, *, session: AsyncSession | None = None
+) -> dict[str, Any] | None:
+    """Where the connection's running sync is (None: no sync in progress)."""
+    async with session_for(ctx, session) as s:
+        cursor: dict[str, Any] | None = await s.scalar(
+            select(_sync_state.c.cursor).where(_sync_state.c.connection_id == connection_id)
+        )
+    return cursor
+
+
+async def save_sync_cursor(
+    ctx: WorkspaceContext,
+    connection_id: UUID,
+    cursor: Mapping[str, Any] | None,
+    *,
+    at: datetime | None = None,
+    items: int = 0,
+    session: AsyncSession | None = None,
+) -> None:
+    """Store the cursor (one `sync_state` row per connection) in the caller's transaction,
+    with the page's records, so a crash resumes after the last committed page."""
+    async with session_for(ctx, session) as s:
+        insert = pg_insert(_sync_state).values(
+            connection_id=connection_id,
+            cursor=None if cursor is None else dict(cursor),
+            last_page_at=at,
+            items_seen=items,
+        )
+        await s.execute(
+            insert.on_conflict_do_update(
+                index_elements=[_sync_state.c.workspace_id, _sync_state.c.connection_id],
+                set_={
+                    "cursor": insert.excluded.cursor,
+                    "last_page_at": func.coalesce(
+                        insert.excluded.last_page_at, _sync_state.c.last_page_at
+                    ),
+                    "items_seen": _sync_state.c.items_seen + insert.excluded.items_seen,
+                },
+            )
+        )
+
+
+# --- OAuth grants in flight (P1-09; Google Docs reuses them in P3-02) ---------------------------
+
+OAUTH_PENDING_TTL: Final = timedelta(minutes=10)  # plan default
+_pending: Table = OAuthPending.__table__  # type: ignore[assignment]
+
+
+class OAuthStart(BaseModel):
+    pending_id: UUID
+    state: str
+    code_challenge: str  # S256 of the verifier, base64url without padding
+
+
+class OAuthGrant(BaseModel):
+    """What the worker exchanges: the code, the PKCE verifier and the redirect URI."""
+
+    provider: str
+    code: str
+    code_verifier: str
+    redirect_uri: str
+
+
+def _state_hash(state: str) -> bytes:
+    return hashlib.sha256(state.encode()).digest()
+
+
+def _pending_aad(pending_id: UUID, field: str) -> bytes:
+    return f"oauth_pending:{pending_id}:{field}".encode()
+
+
+async def begin_oauth(
+    ctx: WorkspaceContext,
+    provider: str,
+    *,
+    redirect_uri: str,
+    now: datetime,
+    session: AsyncSession | None = None,
+) -> OAuthStart:
+    """A consent in flight: a random `state` (only its hash is kept) and a PKCE verifier
+    (sealed); valid for OAUTH_PENDING_TTL."""
+    state = secrets.token_urlsafe(32)
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+    async with session_for(ctx, session) as s:
+        pending_id: UUID = (
+            await s.execute(
+                pg_insert(_pending)
+                .values(
+                    provider=provider,
+                    state_hash=_state_hash(state),
+                    key_version=0,
+                    redirect_uri=redirect_uri,
+                    expires_at=now + OAUTH_PENDING_TTL,
+                )
+                .returning(_pending.c.id)
+            )
+        ).scalar_one()
+        key_version, sealed = await seal_for_workspace(
+            s, ctx.workspace_id, verifier.encode(), aad=_pending_aad(pending_id, "verifier")
+        )
+        await s.execute(
+            update(_pending)
+            .where(_pending.c.id == pending_id)
+            .values(verifier_enc=sealed, key_version=key_version)
+        )
+    return OAuthStart(
+        pending_id=pending_id, state=state, code_challenge=challenge.decode().rstrip("=")
+    )
+
+
+class OAuthAccepted(BaseModel):
+    """What the callback found: `accepted` (code stored), `declined` (the user or Google
+    sent no code; the state is used up), `invalid` (used or expired) or `unknown` (no such
+    consent in this workspace)."""
+
+    outcome: Literal["accepted", "declined", "invalid", "unknown"]
+    pending_id: UUID | None = None
+
+
+async def accept_oauth_code(
+    ctx: WorkspaceContext,
+    provider: str,
+    *,
+    state: str,
+    code: str | None,
+    now: datetime,
+    session: AsyncSession | None = None,
+) -> OAuthAccepted:
+    """The callback's half: the pending consent `state` names, if it is this provider's,
+    unexpired and unused, is used up and its code stored sealed."""
+    async with session_for(ctx, session) as s:
+        row = (
+            (
+                await s.execute(
+                    select(
+                        _pending.c.id,
+                        _pending.c.used_at,
+                        _pending.c.expires_at,
+                        _pending.c.deleted_at,
+                    )
+                    .where(
+                        _pending.c.state_hash == _state_hash(state),
+                        _pending.c.provider == provider,
+                    )
+                    .with_for_update()
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            return OAuthAccepted(outcome="unknown")
+        pending_id: UUID = row["id"]
+        if row["used_at"] is not None or row["deleted_at"] is not None or row["expires_at"] <= now:
+            return OAuthAccepted(outcome="invalid", pending_id=pending_id)
+        values: dict[str, Any] = {"used_at": now}
+        if code is not None:
+            key_version, sealed = await seal_for_workspace(
+                s, ctx.workspace_id, code.encode(), aad=_pending_aad(pending_id, "code")
+            )
+            values |= {"code_enc": sealed, "key_version": key_version}
+        await s.execute(update(_pending).where(_pending.c.id == pending_id).values(**values))
+    return OAuthAccepted(outcome="declined" if code is None else "accepted", pending_id=pending_id)
+
+
+async def read_oauth_grant(
+    ctx: WorkspaceContext, pending_id: UUID, *, session: AsyncSession | None = None
+) -> OAuthGrant | None:
+    """The accepted grant, opened; None once consumed (or before a code arrived)."""
+    async with session_for(ctx, session) as s:
+        row = (
+            (
+                await s.execute(
+                    select(_pending).where(
+                        _pending.c.id == pending_id, _pending.c.deleted_at.is_(None)
+                    )
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None or row["code_enc"] is None or row["verifier_enc"] is None:
+            return None
+        code = await open_for_workspace(
+            s, ctx.workspace_id, bytes(row["code_enc"]), aad=_pending_aad(pending_id, "code")
+        )
+        verifier = await open_for_workspace(
+            s,
+            ctx.workspace_id,
+            bytes(row["verifier_enc"]),
+            aad=_pending_aad(pending_id, "verifier"),
+        )
+    return OAuthGrant(
+        provider=row["provider"],
+        code=code.decode(),
+        code_verifier=verifier.decode(),
+        redirect_uri=row["redirect_uri"],
+    )
+
+
+async def consume_oauth_grant(
+    ctx: WorkspaceContext, pending_id: UUID, *, session: AsyncSession | None = None
+) -> None:
+    """The grant was exchanged: code and verifier dropped, the row soft-deleted."""
+    async with session_for(ctx, session) as s:
+        await s.execute(
+            update(_pending)
+            .where(_pending.c.id == pending_id)
+            .values(code_enc=None, verifier_enc=None, deleted_at=func.now())
+        )

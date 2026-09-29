@@ -19,6 +19,12 @@ CASES = [
     ),
     (
         "events",
+        "calendar.synced",
+        1,
+        "backend/tests/contract/fixtures/events/calendar.synced/v1.json",
+    ),
+    (
+        "events",
         "decision.made",
         1,
         "backend/tests/contract/fixtures/events/decision.made/v1.json",
