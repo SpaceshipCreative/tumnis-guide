@@ -1228,34 +1228,6 @@
         "title": "Page[SessionOut]",
         "type": "object"
       },
-      "Page_TaskOut_": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/TaskOut"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          }
-        },
-        "required": [
-          "items",
-          "next_cursor"
-        ],
-        "title": "Page[TaskOut]",
-        "type": "object"
-      },
       "Problem": {
         "additionalProperties": false,
         "properties": {
@@ -3029,6 +3001,40 @@
           "updated_at"
         ],
         "title": "TaskOut",
+        "type": "object"
+      },
+      "TaskPage": {
+        "description": "A page of tasks and how many match the filter across every page (P0-23): the Today\npanel shows five and says \"+N more\".",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "total"
+        ],
+        "title": "TaskPage",
         "type": "object"
       },
       "TaskPatch": {
@@ -8735,7 +8741,7 @@
     },
     "/v1/tasks": {
       "get": {
-        "description": "Tasks in creation order, optionally of one project and one status.",
+        "description": "Tasks, optionally of one project and one status, and how many match (`total`).\n`order=created` (default) is creation order; `order=today` is the Today order\n(priority, then due date, then created time; P0-23).",
         "operationId": "tasks_list_tasks",
         "parameters": [
           {
@@ -8773,6 +8779,20 @@
           },
           {
             "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "created",
+              "enum": [
+                "created",
+                "today"
+              ],
+              "title": "Order",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "cursor",
             "required": false,
             "schema": {
@@ -8806,7 +8826,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_TaskOut_"
+                  "$ref": "#/components/schemas/TaskPage"
                 }
               }
             },

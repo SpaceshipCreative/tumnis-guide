@@ -68,7 +68,7 @@ export function DashboardPage() {
             {formatToday(new Date(), timeZone)}
           </p>
         </div>
-        <ReviewBadge count={reviewCount.data ?? 0} />
+        <ReviewBadge count={reviewCount.data?.count ?? 0} />
       </header>
       <div className="flex flex-col gap-6 md:grid md:min-h-0 md:flex-1 md:grid-cols-12">
         <div className="flex min-h-0 flex-col gap-4 md:col-span-5">
