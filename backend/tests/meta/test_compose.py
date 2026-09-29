@@ -75,7 +75,6 @@ def _depends_on(service: dict[str, Any]) -> dict[str, str]:
 
 @pytest.mark.req("FR-9.1")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 def test_self_hosted_compose_publishes_no_public_port() -> None:
     """T-P0-04-09
     No service in compose.yaml or compose.preview.yaml publishes a port on 0.0.0.0, :: or an
@@ -92,7 +91,6 @@ def test_self_hosted_compose_publishes_no_public_port() -> None:
 
 @pytest.mark.req("FR-12.4", "ADR-0006")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 def test_compose_order_and_pooling() -> None:
     """T-P0-04-10
     api and worker wait for migrate to complete; api reaches Postgres through PgBouncer;
