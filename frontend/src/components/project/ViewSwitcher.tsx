@@ -65,7 +65,7 @@ export function ViewSwitcher({
       {VIEWS.map((v) => (
         <label
           key={v}
-          className={`flex min-h-11 cursor-pointer items-center justify-center rounded text-sm font-medium has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
+          className={`relative flex min-h-11 cursor-pointer items-center justify-center rounded text-sm font-medium has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
             v === view ? "bg-surface text-text shadow-sm" : "text-muted"
           }`}
         >
@@ -77,7 +77,9 @@ export function ViewSwitcher({
             onChange={() => {
               onChange(v);
             }}
-            className="sr-only"
+            // A transparent input over the whole segment: a tap or click lands on the
+            // radio itself.
+            className="absolute inset-0 m-0 cursor-pointer appearance-none opacity-0"
           />
           {VIEW_LABELS[v]}
         </label>

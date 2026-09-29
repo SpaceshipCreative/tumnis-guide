@@ -4,11 +4,11 @@
 //
 // A pointer drop is placed where the pointer is (tracked here while dragging), not at
 // dnd-kit's last `over`, which one fast pointer move can leave behind; a keyboard drop
-// goes where the keyboard put it (`over`).
+// goes where the keyboard put it (`over`), which SettledKeyboardSensor lets settle after
+// each key.
 import {
   closestCorners,
   DndContext,
-  KeyboardSensor,
   MouseSensor,
   TouchSensor,
   useSensor,
@@ -26,6 +26,7 @@ import { useMoveTask } from "../project/mutations";
 import { boardQuery } from "../project/queries";
 import type { Board } from "../project/types";
 import { BoardColumn, COLUMN_PREFIX } from "./BoardColumn";
+import { SettledKeyboardSensor } from "./keyboard";
 import { planMove } from "./move";
 
 interface Drop {
@@ -127,8 +128,11 @@ export function BoardView({
     useSensor(TouchSensor, {
       activationConstraint: { delay: 250, tolerance: 5 },
     }),
-    useSensor(KeyboardSensor, {
+    useSensor(SettledKeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
+      // On a phone an arrow key scrolls the board to the next column instead of moving
+      // the card; an instant scroll lets that land before the next key is handled.
+      scrollBehavior: "auto",
     }),
   );
 
@@ -220,7 +224,7 @@ export function BoardView({
     >
       <div
         ref={root}
-        className="-mx-4 flex snap-x snap-mandatory items-stretch gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:snap-none md:px-0"
+        className="relative -mx-4 flex snap-x snap-mandatory items-stretch gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:snap-none md:px-0"
       >
         {data.columns.map((column) => (
           <BoardColumn
