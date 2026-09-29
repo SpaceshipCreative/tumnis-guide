@@ -507,6 +507,14 @@ async def _acquire_jev(ctx: WorkspaceContext, config: ProviderConfig | None, clo
     await limiter_for(credential_fingerprint(credential), rpm=rpm, clock=clock).acquire()
 
 
+class _CacheEntry(BaseModel):
+    """A cached answer and the provider that gave it: the key is the plan's (point and input
+    hash), so the entry itself says whose answer it is."""
+
+    slot: str
+    response: ProviderResponse
+
+
 @dataclass(frozen=True)
 class _Asked:
     response: ProviderResponse | None
@@ -530,7 +538,9 @@ async def _ask(  # noqa: PLR0917  # the pieces of one decision, spelled out
     )
     hit = await DECISIONS_CACHE.get(key)
     if hit is not None:
-        return _Asked(ProviderResponse.model_validate_json(hit), first, cached=True)
+        entry = _CacheEntry.model_validate_json(hit)
+        if entry.slot == first.name:  # another provider's answer is a miss (Data flow rule 6)
+            return _Asked(entry.response, first, cached=True)
     token = DECISIONS_CACHE.token()  # an invalidation during the call skips the fill
     for slot in chain:
         if slot.provider is None:
@@ -550,7 +560,7 @@ async def _ask(  # noqa: PLR0917  # the pieces of one decision, spelled out
         if slot is first:
             await DECISIONS_CACHE.fill(
                 key,
-                response.model_dump_json().encode(),
+                _CacheEntry(slot=first.name, response=response).model_dump_json().encode(),
                 since=token,
                 tags=(_tag(ctx.workspace_id, spec.point.value),),
             )
@@ -595,9 +605,9 @@ async def decide(  # the plan's signature plus the injected providers and clock
         answer: TypedAnswer | None = None
         if asked.response is None or asked.slot is None:
             # Nobody answered: judged as strictly as the last provider tried would be.
-            fallback = local_only
-            reason: FallbackReason | None = "local_only" if local_only else None
-            eff = effective_threshold(threshold, fallback=any(x.fallback_reason for x in chain))
+            reason: FallbackReason | None = chain[-1].fallback_reason
+            fallback = any(x.fallback_reason for x in chain)
+            eff = effective_threshold(threshold, fallback=fallback)
             outcome, value = low_route(spec), None
             provider: DecisionProvider = "none"
             answers: dict[str, TypedAnswer] = {}
