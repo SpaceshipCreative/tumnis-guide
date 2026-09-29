@@ -119,7 +119,7 @@ jobs:
         working-directory: backend
         run: |
           uv sync
-          uv run pytest -m contract --durations=30  # TEMP: diagnose the contract budget (P1-04)
+          uv run pytest -m contract -v --durations=30  # TEMP: diagnose the contract budget (P1-04)
       - name: squawk on changed expand revisions (P0-06)
         working-directory: backend
         env:
