@@ -34,7 +34,6 @@ class Ping(Protocol):
 
 @pytest.mark.req("PRD Testability NFR")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 def test_every_adapter_has_fake_and_real_contract_classes(monkeypatch: pytest.MonkeyPatch) -> None:
     """T-P0-09-13
     For every registered adapter, contract_impls()[name] contains "fake" and one of "real" or
@@ -73,7 +72,6 @@ def test_every_adapter_has_fake_and_real_contract_classes(monkeypatch: pytest.Mo
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 async def test_open_breaker_reports_degraded_health(
     clock: FixedClock, fakes: Fakes, monkeypatch: pytest.MonkeyPatch
 ) -> None:

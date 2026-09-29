@@ -5,6 +5,7 @@ import importlib
 from collections.abc import Awaitable, Callable
 from typing import Protocol
 
+from tumnis.core.adapters.registry import health_states, registered
 from tumnis.core.modules import MODULES
 
 
@@ -22,7 +23,20 @@ def load_adapters() -> None:
 
 
 def register_adapter_health(register: RegisterHealth) -> None:
-    raise NotImplementedError
+    """Register `adapter:<name>` as a non-critical readiness check for every adapter.
+
+    Called with `tumnis.core.health.register_health` once that exists (P0-04): an open
+    breaker degrades readiness, it never takes the service down.
+    """
+    for spec in registered():
+        register(f"adapter:{spec.name}", _adapter_check(spec.name), critical=False)
+
+
+def _adapter_check(name: str) -> Callable[[], Awaitable[str]]:
+    async def check() -> str:
+        return health_states().get(name, "ok")
+
+    return check
 
 
 load_adapters()

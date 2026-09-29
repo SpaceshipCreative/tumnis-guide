@@ -4,7 +4,7 @@ import asyncio
 import random
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import ClassVar, Literal, TypeVar
+from typing import ClassVar, TypeVar
 
 from tumnis.core.adapters.breaker import BreakerConfig, CircuitBreaker
 from tumnis.core.adapters.errors import (
@@ -14,6 +14,7 @@ from tumnis.core.adapters.errors import (
     AdapterUnavailable,
     CircuitOpen,
 )
+from tumnis.core.adapters.registry import Health, track
 from tumnis.core.adapters.retry import RetryPolicy, delay_for
 from tumnis.core.clock import Clock
 
@@ -29,7 +30,6 @@ __all__ = [
 ]
 
 T = TypeVar("T")
-Health = Literal["ok", "degraded"]
 
 
 @dataclass(frozen=True)
@@ -60,6 +60,7 @@ class Adapter:
         self._sleep = sleep
         self._rand = rand
         self._breaker = CircuitBreaker(policy.breaker, clock, name=self.name)
+        track(self.name, self)
 
     async def call(self, op: str, fn: Callable[[], Awaitable[T]], *, idempotent: bool) -> T:
         """Run `fn` under the timeout and the breaker, retrying retryable errors.
