@@ -32,7 +32,6 @@ def _tree(root: Path) -> dict[str, bytes]:
 @pytest.mark.contract
 @pytest.mark.req("FR-14.7")
 @pytest.mark.wp("P0-11")
-@pytest.mark.xfail(strict=True, reason="spec:P0-11")
 def test_generation_is_deterministic(tmp_path: Path) -> None:
     """T-P0-11-01
     Two generation runs into temp dirs give byte-identical trees: the JSON Schemas, the
@@ -54,7 +53,6 @@ def test_generation_is_deterministic(tmp_path: Path) -> None:
 @pytest.mark.contract
 @pytest.mark.req("FR-14.7", "ADR-0003")
 @pytest.mark.wp("P0-11")
-@pytest.mark.xfail(strict=True, reason="spec:P0-11")
 def test_committed_schemas_match_code(repo_root: Path, tmp_path: Path) -> None:
     """T-P0-11-02
     `tumnis gen all --check` exits 0 on the committed tree, and exits 1 listing the
@@ -90,7 +88,6 @@ class DemoV1WithField(DemoV1):
 @pytest.mark.contract
 @pytest.mark.req("FR-14.7")
 @pytest.mark.wp("P0-11")
-@pytest.mark.xfail(strict=True, reason="spec:P0-11")
 def test_field_change_without_regeneration_is_detected(tmp_path: Path) -> None:
     """T-P0-11-03
     Given a registered demo model `Demo v1` written to a tree, when the model gains a field
