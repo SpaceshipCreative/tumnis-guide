@@ -90,3 +90,31 @@ async def test_hermes_stderr_goes_to_devnull(
     result = await execute(make_run(), cfg)
     assert result.status == "succeeded", result.error
     assert where.read_text() == "/dev/null"
+
+
+@pytest.mark.req("FR-5.11")
+@pytest.mark.wp("P1-04")
+async def test_run_that_cannot_start_sends_a_failed_result(cfg: DaemonConfig) -> None:
+    """A run whose Hermes cannot start (a missing binary, a packet without its prompt) still
+    ends with a kept `failed` Result naming the error kind, so the server finishes the run
+    at once instead of waiting out its timeout; the prompt never reaches the error."""
+    from dataclasses import replace  # noqa: PLC0415
+
+    from tumnis_daemon.runner import run_skill  # noqa: PLC0415
+    from tumnis_daemon.state import StateStore  # noqa: PLC0415
+
+    missing = replace(cfg, hermes_bin=str(cfg.state_dir / "no-such-hermes"))
+    no_prompt = make_run()
+    no_prompt.packet.pop("prompt_text")
+    for run, config, kind in (
+        (make_run(prompt="secret prompt\n"), missing, "FileNotFoundError"),
+        (no_prompt, cfg, "KeyError"),
+    ):
+        state = StateStore(config.state_dir)
+        await run_skill(run, state, config)
+        kept = [json.loads(frame) for frame in state.unacked()]
+        (result,) = [f for f in kept if f["run_id"] == str(run.run_id)]
+        assert result["type"] == "result"
+        assert result["status"] == "failed"
+        assert result["error"] == f"daemon_error:{kind}"
+        assert run.run_id not in state.running
