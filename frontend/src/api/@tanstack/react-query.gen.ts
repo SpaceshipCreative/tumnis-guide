@@ -1856,7 +1856,9 @@ export const tasksListTasksQueryKey = (options?: Options<TasksListTasksData>) =>
 /**
  * List Tasks
  *
- * Tasks in creation order, optionally of one project and one status.
+ * Tasks, optionally of one project and one status, and how many match (`total`).
+ * `order=created` (default) is creation order; `order=today` is the Today order
+ * (priority, then due date, then created time; P0-23).
  */
 export const tasksListTasksOptions = (options?: Options<TasksListTasksData>) =>
   queryOptions<
@@ -1885,7 +1887,9 @@ export const tasksListTasksInfiniteQueryKey = (
 /**
  * List Tasks
  *
- * Tasks in creation order, optionally of one project and one status.
+ * Tasks, optionally of one project and one status, and how many match (`total`).
+ * `order=created` (default) is creation order; `order=today` is the Today order
+ * (priority, then due date, then created time; P0-23).
  */
 export const tasksListTasksInfiniteOptions = (
   options?: Options<TasksListTasksData>,
