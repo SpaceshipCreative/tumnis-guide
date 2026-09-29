@@ -193,3 +193,63 @@ async def test_recurrence_api_round_trip(  # noqa: PLR0915
     assert gone.status_code == 404, gone.text
     empty = await session_client.get("/v1/recurrence", params={"project_id": str(task.project_id)})
     assert empty.json()["items"] == []
+
+
+@pytest.mark.req("FR-3.5")
+@pytest.mark.wp("P0-19")
+@pytest.mark.xfail(strict=True, reason="spec:P0-19")
+async def test_tick_waits_for_an_open_completion_on_the_rule(  # noqa: PLR0917
+    dbos: type[DBOS],
+    workspace: WorkspaceHandle,
+    actors: Actors,
+    make_task: MakeTask,
+    set_status: SetStatus,
+    db: DbUrls,
+) -> None:
+    """Completion and the recurrence tick serialize before either reads the rule. A weekly
+    Monday 09:00 rule's latest instance (Mon 2026-03-02) is open. Completion at
+    2026-03-09T14:00Z (after the 09:00 EDT occurrence) makes the 2026-03-16 instance but has
+    not committed when a tick with the earlier `now` 12:00Z starts (which, on the old state,
+    would make 2026-03-09). The tick waits, then finds the 03-16 instance not yet due and
+    makes nothing: the instances are 03-02 (done) and 03-16, and the rule points at 03-16.
+    """
+    from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+    from tumnis.modules.tasks import api  # noqa: PLC0415
+
+    task = await make_task(title="Weekly report", label="human", estimate_minutes=30)
+    ctx = WorkspaceContext(workspace.id, actors.human)
+    async with tenant_session(ctx) as s:
+        rec = await api.put_recurrence(
+            s,
+            actors.human,
+            task.id,
+            api.RecurrenceIn(preset="weekly", weekday=0, version=task.version),
+            now=datetime(2026, 3, 1, 12, tzinfo=UTC),
+        )
+    started = await set_status(await _task(ctx, task.id), "in_progress")
+
+    async def tick() -> int:
+        async with tenant_session(WorkspaceContext(workspace.id, SYSTEM_ACTOR)) as s:
+            return await api.create_due_successors(s, datetime(2026, 3, 9, 12, tzinfo=UTC))
+
+    async with tenant_session(ctx) as s:
+        await api.change_status(
+            s,
+            actors.human,
+            task.id,
+            api.Status.DONE,
+            started.version,
+            now=datetime(2026, 3, 9, 14, tzinfo=UTC),
+        )
+        ticking = asyncio.create_task(tick())
+        await asyncio.sleep(0.5)  # the tick runs up to the lock while completion is open
+    assert await ticking == 0
+
+    assert [(row[0], row[2]) for row in _instances(db, rec.id)] == [
+        (date(2026, 3, 2), "done"),
+        (date(2026, 3, 16), "backlog"),
+    ]
+    async with tenant_session(ctx) as s:
+        rule = await api.get_recurrence(s, task.id)
+    assert rule.latest_occurrence_on == date(2026, 3, 16)
