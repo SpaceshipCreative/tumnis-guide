@@ -43,7 +43,6 @@ def _event() -> dict[str, Any]:
 
 @pytest.mark.req("REL-5", "SEC-6")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 def test_before_send_strips_bodies_and_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
     """T-P0-27-10
     `before_send` drops the request body and cookies, removes the Authorization, Cookie and
