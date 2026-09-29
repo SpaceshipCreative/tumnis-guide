@@ -68,6 +68,7 @@ class ProjectSeed(_Record):
     client: str | None = None
     goal: str | None = None
     deadline: date | None = None
+    sort_key: str | None = None  # board order (core/rank.py keys, P0-17)
 
 
 class TaskSeed(_Record):
@@ -120,6 +121,7 @@ class _ProjectYaml(_Yaml):
     client: str | None = None
     goal: str | None = None
     deadline: DayOffset | None = None
+    sort_key: str | None = None
     tasks: list[_TaskYaml] = []
 
 
@@ -288,8 +290,12 @@ class SeedResult:
 
 
 def read_seed(path: Path) -> list[_SeedDocument]:
-    """Parse and validate a seed file, or every *.yaml in a folder (sorted by name)."""
-    files = sorted(path.glob("*.yaml")) if path.is_dir() else [path]
+    """Parse and validate a seed file, or every *.yaml in a folder (sorted by name) but
+    the `expected_*.yaml` answer files beside them (P0-17's expected health)."""
+    if path.is_dir():
+        files = sorted(p for p in path.glob("*.yaml") if not p.name.startswith("expected_"))
+    else:
+        files = [path]
     if not files:
         raise FileNotFoundError(f"no seed files in {path}")
     return [
@@ -360,6 +366,7 @@ async def load_seed(
                 client=project.client,
                 goal=project.goal,
                 deadline=_day(day0, project.deadline),
+                sort_key=project.sort_key,
             )
             project_id = await sink.project(ws, project_rec)
             remember("project", project.key, project_id)

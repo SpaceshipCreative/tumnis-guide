@@ -1,8 +1,11 @@
-// A project (P0-22 route; the views arrive with P0-24).
+// A project (P0-22 route; the header shows its name from P0-17; the views arrive with
+// P0-24).
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
 import * as z from "zod";
 
+import { projectsGetProjectOptions } from "../api/@tanstack/react-query.gen";
 import { Placeholder } from "../components/pages/Placeholder";
 import { projectViews } from "../lib/views";
 import { uiStore } from "../stores/uiStore";
@@ -31,8 +34,11 @@ function ProjectPage() {
   const { projectId } = Route.useParams();
   const { view } = Route.useSearch();
   const lastView = useSelector(uiStore, (s) => s.context.lastView[projectId]);
+  const project = useQuery(
+    projectsGetProjectOptions({ path: { project_id: projectId } }),
+  );
   return (
-    <Placeholder title="Project">
+    <Placeholder title={project.data?.name ?? "Project"}>
       <p className="text-muted">View: {view ?? lastView ?? "tasks"}</p>
     </Placeholder>
   );

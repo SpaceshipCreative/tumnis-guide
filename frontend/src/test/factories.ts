@@ -4,12 +4,11 @@
 // result is parsed by the schema itself. Add `makeX = factoryFor(zX)` for each
 // response model a test needs.
 //
-// makeTask and makeProject stay hand-written until the TaskOut and ProjectOut
-// schemas exist (P0-17, P0-18); then they become
-// `factoryFor(zTaskOut)` and `factoryFor(zProjectOut)`.
+// makeProject is generated from ProjectOut (P0-17); makeTask stays hand-written
+// until the TaskOut schema exists (P0-18), then becomes `factoryFor(zTaskOut)`.
 import * as z from "zod";
 
-import { zProblem } from "../api/zod.gen";
+import { zProblem, zProjectOut } from "../api/zod.gen";
 
 // The backend's FixedClock start (A5): factories are deterministic but for ids.
 const SAMPLE_DATETIME = "2026-03-09T12:00:00Z";
@@ -86,6 +85,7 @@ export function factoryFor<S extends z.ZodObject>(schema: S): Factory<S> {
 }
 
 export const makeProblem = factoryFor(zProblem);
+export const makeProject = factoryFor(zProjectOut);
 
 export type TaskLabel = "human" | "ai" | "hybrid";
 export type TaskStatus =
@@ -109,35 +109,6 @@ export interface TaskStub {
   first_action: string | null;
   layout: "card" | "checklist" | "nested_ai" | null;
   tainted: boolean;
-}
-
-export interface ProjectStub {
-  schema_version: 1;
-  id: string;
-  version: number;
-  name: string;
-  client: string | null;
-  goal: string | null;
-  deadline: string | null;
-  status: "active" | "on_hold" | "completed";
-  brief_md: string;
-  archived_at: string | null;
-}
-
-export function makeProject(overrides: Partial<ProjectStub> = {}): ProjectStub {
-  return {
-    schema_version: 1,
-    id: crypto.randomUUID(),
-    version: 1,
-    name: "Test project",
-    client: null,
-    goal: null,
-    deadline: null,
-    status: "active",
-    brief_md: "",
-    archived_at: null,
-    ...overrides,
-  };
 }
 
 export function makeTask(overrides: Partial<TaskStub> = {}): TaskStub {

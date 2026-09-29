@@ -1,0 +1,19 @@
+[
+  {"a": null, "b": null, "out": "a0"},
+  {"a": null, "b": "a0", "out": "Zz"},
+  {"a": "a0", "b": null, "out": "a1"},
+  {"a": "a0", "b": "a1", "out": "a0V"},
+  {"a": "a0V", "b": "a1", "out": "a0l"},
+  {"a": "Zz", "b": "a0", "out": "ZzV"},
+  {"a": "Zz", "b": "a1", "out": "a0"},
+  {"a": null, "b": "Y00", "out": "Xzzz"},
+  {"a": "bzz", "b": null, "out": "c000"},
+  {"a": "a0", "b": "a0V", "out": "a0G"},
+  {"a": "a0", "b": "a0G", "out": "a08"},
+  {"a": "b125", "b": "b129", "out": "b127"},
+  {"a": "a0", "b": "a1V", "out": "a1"},
+  {"a": null, "b": "b999", "out": "b99"},
+  {"a": "a00", "b": null, "error": true},
+  {"a": "0", "b": "1", "error": true},
+  {"a": "a1", "b": "a0", "error": true}
+]

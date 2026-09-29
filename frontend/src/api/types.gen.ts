@@ -133,6 +133,11 @@ export type DeadLetterOut = {
 };
 
 /**
+ * Health
+ */
+export type Health = "blocked" | "at_risk" | "on_track";
+
+/**
  * KeyCreated
  */
 export type KeyCreated = {
@@ -363,6 +368,20 @@ export type PageKeyOut = {
 };
 
 /**
+ * Page[ProjectOut]
+ */
+export type PageProjectOut = {
+  /**
+   * Items
+   */
+  items: Array<ProjectOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
  * Page[SessionOut]
  */
 export type PageSessionOut = {
@@ -410,6 +429,216 @@ export type Problem = {
    * Type
    */
   type: string;
+};
+
+/**
+ * ProjectCreate
+ */
+export type ProjectCreate = {
+  /**
+   * Brief Md
+   */
+  brief_md?: string;
+  /**
+   * Client
+   */
+  client?: string | null;
+  /**
+   * Code Path
+   */
+  code_path?: string | null;
+  /**
+   * Deadline
+   */
+  deadline?: string | null;
+  /**
+   * Goal
+   */
+  goal?: string | null;
+  /**
+   * Links
+   */
+  links?: Array<ProjectLinkIn>;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Profile Name
+   */
+  profile_name?: string | null;
+  /**
+   * Repo Url
+   */
+  repo_url?: string | null;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Status
+   */
+  status?: "active" | "on_hold" | "completed";
+};
+
+/**
+ * ProjectLinkIn
+ */
+export type ProjectLinkIn = {
+  /**
+   * Kind
+   */
+  kind: "person" | "domain" | "repo" | "coolify_app";
+  /**
+   * Value
+   */
+  value: string;
+};
+
+/**
+ * ProjectOut
+ */
+export type ProjectOut = {
+  /**
+   * Archived At
+   */
+  archived_at: string | null;
+  /**
+   * Brief Md
+   */
+  brief_md?: string;
+  /**
+   * Client
+   */
+  client?: string | null;
+  /**
+   * Code Path
+   */
+  code_path?: string | null;
+  /**
+   * Deadline
+   */
+  deadline?: string | null;
+  /**
+   * Goal
+   */
+  goal?: string | null;
+  health: Health;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Last Agent Activity At
+   */
+  last_agent_activity_at?: string | null;
+  /**
+   * Links
+   */
+  links?: Array<ProjectLinkIn>;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Next Milestone
+   */
+  next_milestone: string | null;
+  /**
+   * Open Count
+   */
+  open_count: number;
+  /**
+   * Profile Name
+   */
+  profile_name?: string | null;
+  /**
+   * Repo Url
+   */
+  repo_url?: string | null;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Sort Key
+   */
+  sort_key: string;
+  /**
+   * Status
+   */
+  status?: "active" | "on_hold" | "completed";
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * ProjectPatch
+ *
+ * Fields to change (absent: unchanged; null clears a nullable one) and the version
+ * read.
+ */
+export type ProjectPatch = {
+  /**
+   * Client
+   */
+  client?: string | null;
+  /**
+   * Code Path
+   */
+  code_path?: string | null;
+  /**
+   * Deadline
+   */
+  deadline?: string | null;
+  /**
+   * Goal
+   */
+  goal?: string | null;
+  /**
+   * Links
+   */
+  links?: Array<ProjectLinkIn> | null;
+  /**
+   * Name
+   */
+  name?: string | null;
+  /**
+   * Profile Name
+   */
+  profile_name?: string | null;
+  /**
+   * Repo Url
+   */
+  repo_url?: string | null;
+  /**
+   * Status
+   */
+  status?: "active" | "on_hold" | "completed" | null;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * ReorderIn
+ */
+export type ReorderIn = {
+  /**
+   * After Id
+   */
+  after_id?: string | null;
+  /**
+   * Before Id
+   */
+  before_id?: string | null;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -635,16 +864,6 @@ export type UsageRow = {
 };
 
 /**
- * VersionIn
- */
-export type VersionIn = {
-  /**
-   * Version
-   */
-  version: number;
-};
-
-/**
  * WorkspaceSettingsIn
  */
 export type WorkspaceSettingsIn = {
@@ -674,6 +893,26 @@ export type WorkspaceSettingsOut = {
    * Timezone
    */
   timezone: string;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * VersionIn
+ */
+export type TumnisCoreDeadletterVersionIn = {
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * VersionIn
+ */
+export type TumnisModulesProjectsRouterVersionIn = {
   /**
    * Version
    */
@@ -1442,7 +1681,7 @@ export type DeadLettersGetDeadLettersResponse =
   DeadLettersGetDeadLettersResponses[keyof DeadLettersGetDeadLettersResponses];
 
 export type DeadLettersPostDiscardData = {
-  body: VersionIn;
+  body: TumnisCoreDeadletterVersionIn;
   path: {
     /**
      * Dead Letter Id
@@ -1502,7 +1741,7 @@ export type DeadLettersPostDiscardResponse =
   DeadLettersPostDiscardResponses[keyof DeadLettersPostDiscardResponses];
 
 export type DeadLettersPostRetryData = {
-  body: VersionIn;
+  body: TumnisCoreDeadletterVersionIn;
   path: {
     /**
      * Dead Letter Id
@@ -1795,6 +2034,429 @@ export type AuthRotateKeyResponses = {
 
 export type AuthRotateKeyResponse =
   AuthRotateKeyResponses[keyof AuthRotateKeyResponses];
+
+export type ProjectsListProjectsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Include Archived
+     */
+    include_archived?: boolean;
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/projects";
+};
+
+export type ProjectsListProjectsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsListProjectsError =
+  ProjectsListProjectsErrors[keyof ProjectsListProjectsErrors];
+
+export type ProjectsListProjectsResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageProjectOut;
+};
+
+export type ProjectsListProjectsResponse =
+  ProjectsListProjectsResponses[keyof ProjectsListProjectsResponses];
+
+export type ProjectsCreateProjectData = {
+  body: ProjectCreate;
+  path?: never;
+  query?: never;
+  url: "/v1/projects";
+};
+
+export type ProjectsCreateProjectErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsCreateProjectError =
+  ProjectsCreateProjectErrors[keyof ProjectsCreateProjectErrors];
+
+export type ProjectsCreateProjectResponses = {
+  /**
+   * Successful Response
+   */
+  201: ProjectOut;
+};
+
+export type ProjectsCreateProjectResponse =
+  ProjectsCreateProjectResponses[keyof ProjectsCreateProjectResponses];
+
+export type ProjectsGetProjectData = {
+  body?: never;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}";
+};
+
+export type ProjectsGetProjectErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsGetProjectError =
+  ProjectsGetProjectErrors[keyof ProjectsGetProjectErrors];
+
+export type ProjectsGetProjectResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProjectOut;
+};
+
+export type ProjectsGetProjectResponse =
+  ProjectsGetProjectResponses[keyof ProjectsGetProjectResponses];
+
+export type ProjectsUpdateProjectData = {
+  body: ProjectPatch;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}";
+};
+
+export type ProjectsUpdateProjectErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsUpdateProjectError =
+  ProjectsUpdateProjectErrors[keyof ProjectsUpdateProjectErrors];
+
+export type ProjectsUpdateProjectResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProjectOut;
+};
+
+export type ProjectsUpdateProjectResponse =
+  ProjectsUpdateProjectResponses[keyof ProjectsUpdateProjectResponses];
+
+export type ProjectsArchiveProjectData = {
+  body: TumnisModulesProjectsRouterVersionIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/archive";
+};
+
+export type ProjectsArchiveProjectErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsArchiveProjectError =
+  ProjectsArchiveProjectErrors[keyof ProjectsArchiveProjectErrors];
+
+export type ProjectsArchiveProjectResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProjectOut;
+};
+
+export type ProjectsArchiveProjectResponse =
+  ProjectsArchiveProjectResponses[keyof ProjectsArchiveProjectResponses];
+
+export type ProjectsReorderProjectData = {
+  body: ReorderIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/reorder";
+};
+
+export type ProjectsReorderProjectErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsReorderProjectError =
+  ProjectsReorderProjectErrors[keyof ProjectsReorderProjectErrors];
+
+export type ProjectsReorderProjectResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProjectOut;
+};
+
+export type ProjectsReorderProjectResponse =
+  ProjectsReorderProjectResponses[keyof ProjectsReorderProjectResponses];
+
+export type ProjectsUnarchiveProjectData = {
+  body: TumnisModulesProjectsRouterVersionIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/unarchive";
+};
+
+export type ProjectsUnarchiveProjectErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsUnarchiveProjectError =
+  ProjectsUnarchiveProjectErrors[keyof ProjectsUnarchiveProjectErrors];
+
+export type ProjectsUnarchiveProjectResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProjectOut;
+};
+
+export type ProjectsUnarchiveProjectResponse =
+  ProjectsUnarchiveProjectResponses[keyof ProjectsUnarchiveProjectResponses];
 
 export type SettingsListModulesData = {
   body?: never;

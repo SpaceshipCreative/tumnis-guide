@@ -1,4 +1,5 @@
-"""knowledge SQLAlchemy tables owned by this module (mirrors of revision knowledge_0001)."""
+"""knowledge SQLAlchemy tables owned by this module (mirrors of revisions knowledge_0001
+and knowledge_0002)."""
 
 from datetime import datetime
 from uuid import UUID
@@ -17,7 +18,7 @@ class Document(CanonicalColumns, TenantBase, Base):
 
     __tablename__ = "documents"
 
-    project_id: Mapped[UUID | None]
+    project_id: Mapped[UUID | None] = mapped_column(ForeignKey("projects.id"))
     title: Mapped[str]
     kind: Mapped[str]
     trust: Mapped[str] = mapped_column(server_default=text("'untrusted'"))
@@ -29,3 +30,5 @@ class Document(CanonicalColumns, TenantBase, Base):
     connection_id: Mapped[UUID | None] = mapped_column(ForeignKey("connections.id"))  # type: ignore[assignment]
     external_id: Mapped[str | None]  # type: ignore[assignment]
     fetched_at: Mapped[datetime | None]  # type: ignore[assignment]
+    role: Mapped[str | None]  # knowledge_0002: "brief" marks the project's pinned brief
+    body_md: Mapped[str | None]  # knowledge_0002: a text entry's Markdown body

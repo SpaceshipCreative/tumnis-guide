@@ -1,0 +1,6 @@
+# Health each seed project shows at the anchor day (P0-17, T-P0-17-20): one per state.
+# p_acme has a task waiting on the human; p_authenticity has an overdue open task and none
+# waiting; p_dogfood has neither. Checked once tasks exist (P0-18).
+p_acme: blocked
+p_authenticity: at_risk
+p_dogfood: on_track

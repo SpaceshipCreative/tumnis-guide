@@ -33,6 +33,13 @@ import {
   healthLive,
   healthReady,
   type Options,
+  projectsArchiveProject,
+  projectsCreateProject,
+  projectsGetProject,
+  projectsListProjects,
+  projectsReorderProject,
+  projectsUnarchiveProject,
+  projectsUpdateProject,
   settingsGetSection,
   settingsGetWorkspaceSettings,
   settingsListModules,
@@ -104,6 +111,27 @@ import type {
   HealthLiveData,
   HealthLiveResponse,
   HealthReadyData,
+  ProjectsArchiveProjectData,
+  ProjectsArchiveProjectError,
+  ProjectsArchiveProjectResponse,
+  ProjectsCreateProjectData,
+  ProjectsCreateProjectError,
+  ProjectsCreateProjectResponse,
+  ProjectsGetProjectData,
+  ProjectsGetProjectError,
+  ProjectsGetProjectResponse,
+  ProjectsListProjectsData,
+  ProjectsListProjectsError,
+  ProjectsListProjectsResponse,
+  ProjectsReorderProjectData,
+  ProjectsReorderProjectError,
+  ProjectsReorderProjectResponse,
+  ProjectsUnarchiveProjectData,
+  ProjectsUnarchiveProjectError,
+  ProjectsUnarchiveProjectResponse,
+  ProjectsUpdateProjectData,
+  ProjectsUpdateProjectError,
+  ProjectsUpdateProjectResponse,
   SettingsGetSectionData,
   SettingsGetSectionError,
   SettingsGetSectionResponse,
@@ -977,6 +1005,256 @@ export const authRotateKeyMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await authRotateKey({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const projectsListProjectsQueryKey = (
+  options?: Options<ProjectsListProjectsData>,
+) => createQueryKey("projectsListProjects", options);
+
+/**
+ * List Projects
+ *
+ * Projects in board order; archived ones with `include_archived=true`.
+ */
+export const projectsListProjectsOptions = (
+  options?: Options<ProjectsListProjectsData>,
+) =>
+  queryOptions<
+    ProjectsListProjectsResponse,
+    ProjectsListProjectsError,
+    ProjectsListProjectsResponse,
+    ReturnType<typeof projectsListProjectsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await projectsListProjects({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: projectsListProjectsQueryKey(options),
+  });
+
+export const projectsListProjectsInfiniteQueryKey = (
+  options?: Options<ProjectsListProjectsData>,
+): QueryKey<Options<ProjectsListProjectsData>> =>
+  createQueryKey("projectsListProjects", options, true);
+
+/**
+ * List Projects
+ *
+ * Projects in board order; archived ones with `include_archived=true`.
+ */
+export const projectsListProjectsInfiniteOptions = (
+  options?: Options<ProjectsListProjectsData>,
+) => {
+  const opts = infiniteQueryOptions<
+    ProjectsListProjectsResponse,
+    ProjectsListProjectsError,
+    InfiniteData<ProjectsListProjectsResponse>,
+    QueryKey<Options<ProjectsListProjectsData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<ProjectsListProjectsData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<ProjectsListProjectsData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await projectsListProjects({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: projectsListProjectsInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Create Project
+ */
+export const projectsCreateProjectMutation = (
+  options?: Partial<Options<ProjectsCreateProjectData>>,
+): UseMutationOptions<
+  ProjectsCreateProjectResponse,
+  ProjectsCreateProjectError,
+  Options<ProjectsCreateProjectData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ProjectsCreateProjectResponse,
+    ProjectsCreateProjectError,
+    Options<ProjectsCreateProjectData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await projectsCreateProject({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const projectsGetProjectQueryKey = (
+  options: Options<ProjectsGetProjectData>,
+) => createQueryKey("projectsGetProject", options);
+
+/**
+ * Get Project
+ */
+export const projectsGetProjectOptions = (
+  options: Options<ProjectsGetProjectData>,
+) =>
+  queryOptions<
+    ProjectsGetProjectResponse,
+    ProjectsGetProjectError,
+    ProjectsGetProjectResponse,
+    ReturnType<typeof projectsGetProjectQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await projectsGetProject({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: projectsGetProjectQueryKey(options),
+  });
+
+/**
+ * Update Project
+ */
+export const projectsUpdateProjectMutation = (
+  options?: Partial<Options<ProjectsUpdateProjectData>>,
+): UseMutationOptions<
+  ProjectsUpdateProjectResponse,
+  ProjectsUpdateProjectError,
+  Options<ProjectsUpdateProjectData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ProjectsUpdateProjectResponse,
+    ProjectsUpdateProjectError,
+    Options<ProjectsUpdateProjectData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await projectsUpdateProject({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Archive Project
+ */
+export const projectsArchiveProjectMutation = (
+  options?: Partial<Options<ProjectsArchiveProjectData>>,
+): UseMutationOptions<
+  ProjectsArchiveProjectResponse,
+  ProjectsArchiveProjectError,
+  Options<ProjectsArchiveProjectData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ProjectsArchiveProjectResponse,
+    ProjectsArchiveProjectError,
+    Options<ProjectsArchiveProjectData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await projectsArchiveProject({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Reorder Project
+ *
+ * Moves the project between two neighbours (either may be null: an open end).
+ */
+export const projectsReorderProjectMutation = (
+  options?: Partial<Options<ProjectsReorderProjectData>>,
+): UseMutationOptions<
+  ProjectsReorderProjectResponse,
+  ProjectsReorderProjectError,
+  Options<ProjectsReorderProjectData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ProjectsReorderProjectResponse,
+    ProjectsReorderProjectError,
+    Options<ProjectsReorderProjectData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await projectsReorderProject({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Unarchive Project
+ */
+export const projectsUnarchiveProjectMutation = (
+  options?: Partial<Options<ProjectsUnarchiveProjectData>>,
+): UseMutationOptions<
+  ProjectsUnarchiveProjectResponse,
+  ProjectsUnarchiveProjectError,
+  Options<ProjectsUnarchiveProjectData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ProjectsUnarchiveProjectResponse,
+    ProjectsUnarchiveProjectError,
+    Options<ProjectsUnarchiveProjectData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await projectsUnarchiveProject({
         ...options,
         ...fnOptions,
         throwOnError: true,

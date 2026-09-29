@@ -74,6 +74,27 @@ import type {
   HealthReadyData,
   HealthReadyErrors,
   HealthReadyResponses,
+  ProjectsArchiveProjectData,
+  ProjectsArchiveProjectErrors,
+  ProjectsArchiveProjectResponses,
+  ProjectsCreateProjectData,
+  ProjectsCreateProjectErrors,
+  ProjectsCreateProjectResponses,
+  ProjectsGetProjectData,
+  ProjectsGetProjectErrors,
+  ProjectsGetProjectResponses,
+  ProjectsListProjectsData,
+  ProjectsListProjectsErrors,
+  ProjectsListProjectsResponses,
+  ProjectsReorderProjectData,
+  ProjectsReorderProjectErrors,
+  ProjectsReorderProjectResponses,
+  ProjectsUnarchiveProjectData,
+  ProjectsUnarchiveProjectErrors,
+  ProjectsUnarchiveProjectResponses,
+  ProjectsUpdateProjectData,
+  ProjectsUpdateProjectErrors,
+  ProjectsUpdateProjectResponses,
   SettingsGetSectionData,
   SettingsGetSectionErrors,
   SettingsGetSectionResponses,
@@ -117,6 +138,13 @@ import {
   zDeadLettersPostDiscardResponse,
   zDeadLettersPostRetryResponse,
   zHealthLiveResponse,
+  zProjectsArchiveProjectResponse,
+  zProjectsCreateProjectResponse,
+  zProjectsGetProjectResponse,
+  zProjectsListProjectsResponse,
+  zProjectsReorderProjectResponse,
+  zProjectsUnarchiveProjectResponse,
+  zProjectsUpdateProjectResponse,
   zSettingsGetSectionResponse,
   zSettingsGetWorkspaceSettingsResponse,
   zSettingsListModulesResponse,
@@ -564,6 +592,177 @@ export const authRotateKey = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zAuthRotateKeyResponse.parseAsync(data),
     url: "/v1/keys/{id}/rotate",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List Projects
+ *
+ * Projects in board order; archived ones with `include_archived=true`.
+ */
+export const projectsListProjects = <ThrowOnError extends boolean = false>(
+  options?: Options<ProjectsListProjectsData, ThrowOnError>,
+): RequestResult<
+  ProjectsListProjectsResponses,
+  ProjectsListProjectsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ProjectsListProjectsResponses,
+    ProjectsListProjectsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsListProjectsResponse.parseAsync(data),
+    url: "/v1/projects",
+    ...options,
+  });
+
+/**
+ * Create Project
+ */
+export const projectsCreateProject = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsCreateProjectData, ThrowOnError>,
+): RequestResult<
+  ProjectsCreateProjectResponses,
+  ProjectsCreateProjectErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ProjectsCreateProjectResponses,
+    ProjectsCreateProjectErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsCreateProjectResponse.parseAsync(data),
+    url: "/v1/projects",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Project
+ */
+export const projectsGetProject = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsGetProjectData, ThrowOnError>,
+): RequestResult<
+  ProjectsGetProjectResponses,
+  ProjectsGetProjectErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ProjectsGetProjectResponses,
+    ProjectsGetProjectErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsGetProjectResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}",
+    ...options,
+  });
+
+/**
+ * Update Project
+ */
+export const projectsUpdateProject = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsUpdateProjectData, ThrowOnError>,
+): RequestResult<
+  ProjectsUpdateProjectResponses,
+  ProjectsUpdateProjectErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    ProjectsUpdateProjectResponses,
+    ProjectsUpdateProjectErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsUpdateProjectResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Archive Project
+ */
+export const projectsArchiveProject = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsArchiveProjectData, ThrowOnError>,
+): RequestResult<
+  ProjectsArchiveProjectResponses,
+  ProjectsArchiveProjectErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ProjectsArchiveProjectResponses,
+    ProjectsArchiveProjectErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsArchiveProjectResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/archive",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Reorder Project
+ *
+ * Moves the project between two neighbours (either may be null: an open end).
+ */
+export const projectsReorderProject = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsReorderProjectData, ThrowOnError>,
+): RequestResult<
+  ProjectsReorderProjectResponses,
+  ProjectsReorderProjectErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ProjectsReorderProjectResponses,
+    ProjectsReorderProjectErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsReorderProjectResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/reorder",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Unarchive Project
+ */
+export const projectsUnarchiveProject = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsUnarchiveProjectData, ThrowOnError>,
+): RequestResult<
+  ProjectsUnarchiveProjectResponses,
+  ProjectsUnarchiveProjectErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ProjectsUnarchiveProjectResponses,
+    ProjectsUnarchiveProjectErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsUnarchiveProjectResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/unarchive",
     ...options,
     headers: {
       "Content-Type": "application/json",

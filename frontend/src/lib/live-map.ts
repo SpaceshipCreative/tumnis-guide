@@ -11,8 +11,11 @@ export const LIVE_MAP: Record<
 > = {
   // tasksGetTask; tasksListTasks, tasksGetBoard, searchSearch, searchTypeaheadTasks (P0-18, P0-20)
   task: { details: [], lists: [] },
-  // projectsGetProject; projectsListProjects, searchTypeaheadProjects (P0-17, P0-20)
-  project: { details: [], lists: [] },
+  // searchTypeaheadProjects joins the lists with P0-20.
+  project: {
+    details: ["projectsGetProject"],
+    lists: ["projectsListProjects"],
+  },
   // tasksGetReviewCount (P0-18)
   review_item: { details: [], lists: [] },
   // The workspace settings have no id in their path: any settings message refreshes them,
