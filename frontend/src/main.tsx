@@ -1,63 +1,40 @@
-// Placeholder shell (P0-04), now behind sign-in (P0-13): `/login` and `/setup` are the
-// minimal forms; every other path checks the session and sends a signed-out visitor to
-// `/login`. P0-22 replaces this with the real shell and router.
-import { StrictMode, useEffect, useState } from "react";
+// The app (P0-22): the generated client configured once, one QueryClient, the router,
+// the live socket and the service worker.
+import "./lib/zodConfig";
+import "./styles.css";
+
+import { QueryClientProvider } from "@tanstack/react-query";
+import { RouterProvider } from "@tanstack/react-router";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { apiFetch } from "./lib/fetch";
-import { LoginPage } from "./routes/login";
-import { SetupPage } from "./routes/setup";
+import { configureClient } from "./lib/client";
+import { setUnauthorizedHandler } from "./lib/fetch";
+import { registerServiceWorker } from "./lib/serviceWorker";
+import { sessionProbeOptions } from "./lib/session";
+import { connectLive } from "./lib/ws";
+import { createQueryClient } from "./queryClient";
+import { createAppRouter } from "./router";
 
-function goHome() {
-  window.location.assign("/");
-}
-
-function Shell() {
-  const [signedIn, setSignedIn] = useState(false);
-
-  useEffect(() => {
-    void apiFetch("/v1/auth/sessions?limit=1").then((response) => {
-      if (response.status === 401) {
-        window.location.replace("/login");
-      } else {
-        setSignedIn(true);
-      }
-    });
-  }, []);
-
-  async function signOut() {
-    await apiFetch("/v1/auth/logout", { method: "POST" });
-    window.location.replace("/login");
+configureClient();
+const queryClient = createQueryClient();
+const router = createAppRouter({ queryClient });
+setUnauthorizedHandler(() => {
+  queryClient.removeQueries({ queryKey: sessionProbeOptions().queryKey });
+  if (router.state.location.pathname !== "/login") {
+    void router.navigate({ to: "/login", replace: true });
   }
-
-  return (
-    <main>
-      <h1>Tumnis Guide</h1>
-      {signedIn && (
-        <button type="button" onClick={() => void signOut()}>
-          Sign out
-        </button>
-      )}
-    </main>
-  );
-}
-
-function App() {
-  switch (window.location.pathname) {
-    case "/login":
-      return <LoginPage onSignedIn={goHome} />;
-    case "/setup":
-      return <SetupPage onDone={goHome} />;
-    default:
-      return <Shell />;
-  }
-}
+});
+connectLive(queryClient);
+registerServiceWorker();
 
 const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     <StrictMode>
-      <App />
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
     </StrictMode>,
   );
 }

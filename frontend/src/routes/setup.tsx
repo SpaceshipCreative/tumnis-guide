@@ -1,128 +1,23 @@
-// First-run setup (P0-13): the owner's email and password, then the authenticator
-// secret shown once and its first code. A minimal form; P0-22 restyles it.
-import { useState, type SyntheticEvent } from "react";
+// /setup (P0-13's first-run form, routed by P0-22).
+import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import { apiFetch, problemDetail } from "../lib/fetch";
+import { SetupPage } from "../components/auth/SetupPage";
+import { sessionProbeOptions } from "../lib/session";
 
-interface Started {
-  otpauth_uri: string;
-  setup_token: string;
-}
+export const Route = createFileRoute("/setup")({
+  component: SetupRoute,
+});
 
-function secretOf(uri: string): string {
-  return new URL(uri).searchParams.get("secret") ?? "";
-}
-
-export function SetupPage({ onDone }: { onDone: () => void }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [started, setStarted] = useState<Started | null>(null);
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function start(event: SyntheticEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const response = await apiFetch("/v1/setup", {
-      method: "POST",
-      body: JSON.stringify({ email, password, timezone }),
-    });
-    setBusy(false);
-    if (!response.ok) {
-      setError(await problemDetail(response));
-      return;
-    }
-    setPassword("");
-    setStarted((await response.json()) as Started);
-  }
-
-  async function confirm(event: SyntheticEvent) {
-    event.preventDefault();
-    if (started === null) return;
-    setBusy(true);
-    setError(null);
-    const response = await apiFetch("/v1/setup/totp", {
-      method: "POST",
-      body: JSON.stringify({
-        setup_token: started.setup_token,
-        code: code.trim(),
-      }),
-    });
-    setBusy(false);
-    if (!response.ok) {
-      setError(await problemDetail(response));
-      return;
-    }
-    onDone();
-  }
-
+function SetupRoute() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   return (
-    <main>
-      <h1>Set up Tumnis</h1>
-      {started === null ? (
-        <form onSubmit={(e) => void start(e)}>
-          <label>
-            Email
-            <input
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-              }}
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              autoComplete="new-password"
-              minLength={12}
-              required
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-              }}
-            />
-          </label>
-          <button type="submit" disabled={busy}>
-            Continue
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={(e) => void confirm(e)}>
-          <p>
-            Add this account to your authenticator app. It is shown only once.
-          </p>
-          <p>
-            <a href={started.otpauth_uri}>Open in authenticator</a>
-          </p>
-          <p>
-            Secret: <code>{secretOf(started.otpauth_uri)}</code>
-          </p>
-          <label>
-            Authentication code
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="[0-9]{6}"
-              required
-              value={code}
-              onChange={(e) => {
-                setCode(e.target.value);
-              }}
-            />
-          </label>
-          <button type="submit" disabled={busy}>
-            Verify
-          </button>
-        </form>
-      )}
-      {error !== null && <p role="alert">{error}</p>}
-    </main>
+    <SetupPage
+      onDone={() => {
+        queryClient.removeQueries({ queryKey: sessionProbeOptions().queryKey });
+        void navigate({ to: "/", replace: true });
+      }}
+    />
   );
 }

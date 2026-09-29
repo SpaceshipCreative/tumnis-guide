@@ -26,6 +26,7 @@ from tumnis.core import (
     db,
     deadletter,
     health,
+    live,
     metrics,
     modules,
     ops_status,
@@ -36,6 +37,7 @@ from tumnis.core import (
 from tumnis.core.bodylimit import BodyLimitMiddleware
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import document_problem_media_type, install_problem_handlers
+from tumnis.core.etag import ETagMiddleware
 from tumnis.core.principal import AuthenticationMiddleware
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.request_meta import RequestMetaMiddleware
@@ -50,6 +52,7 @@ SHELL_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 # Paths the single-page app never owns: an unknown one stays a 404, not the shell.
 NOT_SHELL = ("v1", "health", "metrics", "mcp", "ws", "assets")
+IMMUTABLE = "public, max-age=31536000, immutable"
 
 
 class ShellFiles(StaticFiles):
@@ -62,28 +65,35 @@ class ShellFiles(StaticFiles):
         if scope["method"] not in ("GET", "HEAD"):
             raise HTTPException(status_code=404)
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
             first, last = path.partition("/")[0], path.rsplit("/", 1)[-1]
             if exc.status_code != HTTPStatus.NOT_FOUND or first in NOT_SHELL or "." in last:
                 raise
-            return await super().get_response("index.html", scope)
+            response = await super().get_response("index.html", scope)
+        # Hashed assets never change under their name; everything else (index.html, sw.js,
+        # the manifest, icons) is revalidated so a deploy reaches the next open (P0-22).
+        hashed = path.startswith("assets/")
+        response.headers["Cache-Control"] = IMMUTABLE if hashed else "no-cache"
+        return response
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """The cache invalidation listener runs beside the server (P0-08); it reconnects on its
-    own, so a database that is down at start does not stop the api."""
+    """The cache invalidation listener (P0-08) and the live hub (P0-22) run beside the
+    server; they reconnect on their own, so a database that is down at start does not stop
+    the api."""
     settings: Settings = app.state.settings
     stop = asyncio.Event()
     listener = cache.CacheInvalidationListener(settings.database_direct_url)
     task = asyncio.create_task(listener.run(stop))
+    hub_task = asyncio.create_task(app.state.live_hub.run(stop))  # /ws fan-out (P0-22)
     try:
         yield
     finally:
         stop.set()
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(task, cache.POLL_S * 5)
+            await asyncio.wait_for(asyncio.gather(task, hub_task), cache.POLL_S * 5)
         deadletter.close()
         await metrics.dispose()
         await db.dispose()
@@ -147,6 +157,7 @@ def create_app(
     settings: Settings | None = None,
     clock: Clock | None = None,
     extra_routers: Sequence[APIRouter] = (),
+    shell_dir: Path | None = None,
 ) -> FastAPI:
     settings = settings or Settings()  # values come from the environment
     metrics_token = settings.metrics_token()  # SettingsError: prod needs METRICS_TOKEN_FILE
@@ -194,10 +205,11 @@ def create_app(
     # Middleware, innermost first (add_middleware wraps what is there): correlation ID,
     # source address and user agent for the audit log (P0-15); the body limit outside it
     # (P0-10); outermost the request histogram, timing everything below it (P0-27).
-    # Authentication (P0-13, innermost: the principal from the session cookie) goes inside
-    # the correlation ID; the security headers (P0-16) sit outside all of it (installed
-    # above). Rate limits, the Origin check and CSRF run in TumnisRoute, where the route's
-    # policy is known.
+    # ETags (P0-22) are innermost; authentication (P0-13: the principal from the session
+    # cookie) next, inside the correlation ID; the security headers (P0-16) sit outside
+    # all of it (installed above). Rate limits, the Origin check and CSRF run in
+    # TumnisRoute, where the route's policy is known.
+    app.add_middleware(ETagMiddleware)  # innermost: tags the body the route built (P0-22)
     app.add_middleware(AuthenticationMiddleware)
     app.add_middleware(RequestMetaMiddleware)
     app.add_middleware(BodyLimitMiddleware)
@@ -212,6 +224,11 @@ def create_app(
     app.include_router(health.router)
     app.include_router(metrics.router)  # GET /metrics, bearer (P0-27)
     app.include_router(v1_routes(settings, extra_routers))
-    if SHELL_DIR.is_dir():
-        app.mount("/", ShellFiles(directory=SHELL_DIR, html=True), name="shell")
+    app.state.live_hub = live.LiveHub(settings.database_direct_url)
+    # WS /ws (P0-22). Added on the app itself: FastAPI's walker loses the path of a
+    # WebSocket route inside an included router, and the route sweeps read it.
+    app.add_api_websocket_route("/ws", live.live_socket, name="live_socket")
+    shell = shell_dir or SHELL_DIR
+    if shell.is_dir():
+        app.mount("/", ShellFiles(directory=shell, html=True), name="shell")
     return app

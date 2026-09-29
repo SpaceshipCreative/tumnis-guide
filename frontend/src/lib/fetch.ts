@@ -1,6 +1,18 @@
-// The one fetch wrapper (R-18): every write carries the session's CSRF token, read
-// from the `__Host-tumnis_csrf` cookie, as `X-CSRF-Token`, and an `Idempotency-Key`
-// (REL-2). P0-22 builds the generated client on top of it.
+// The one write path (P0-13 R-18, P0-22 REL-2). Reads use the generated Query options
+// (src/api); every write goes through `apiWrite`, which always sends an
+// `Idempotency-Key`, the session's CSRF token (read from `__Host-tumnis_csrf`) as
+// `X-CSRF-Token`, and, for updates, the `version` it read: an update cannot compile
+// without one. `src/lib/write-imports.test.ts` keeps generated write functions out of
+// everything but this file and tests.
+import {
+  useMutation,
+  type UseMutationOptions,
+  type UseMutationResult,
+} from "@tanstack/react-query";
+import type * as z from "zod";
+
+import type { Problem } from "../api/types.gen";
+
 export const CSRF_COOKIE = "__Host-tumnis_csrf";
 const WRITES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -47,4 +59,133 @@ export async function problemDetail(response: Response): Promise<string> {
     // not JSON
   }
   return `Request failed (${String(response.status)})`;
+}
+
+// --- 401 -----------------------------------------------------------------------------
+
+function goToLogin(): void {
+  if (window.location.pathname !== "/login") window.location.assign("/login");
+}
+
+let unauthorizedHandler: () => void = goToLogin;
+
+/** What a 401 does: main.tsx hands in the router's navigation to /login. */
+export function setUnauthorizedHandler(handler: () => void): void {
+  unauthorizedHandler = handler;
+}
+
+export function onUnauthorized(): void {
+  unauthorizedHandler();
+}
+
+// --- apiWrite --------------------------------------------------------------------------
+
+/** An absolute URL for a /v1 path, on this origin. */
+export function apiUrl(path: string): string {
+  return new URL(`/v1${path}`, window.location.origin).href;
+}
+
+interface Base<TOut> {
+  method: "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  body?: Record<string, unknown>;
+  idempotencyKey: string;
+  schema?: z.ZodType<TOut>;
+}
+
+export type WriteRequest<TOut> =
+  | (Base<TOut> & { kind: "create" })
+  | (Base<TOut> & { kind: "update"; version: number });
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly problem: Problem,
+  ) {
+    super(problem.title);
+    this.name = "ApiError";
+  }
+}
+
+/** 409: the row changed since it was read; `current` is the server's row (REL-2). */
+export class ConflictError extends ApiError {
+  get current(): unknown {
+    return this.problem.current;
+  }
+}
+
+async function readProblem(response: Response): Promise<Problem> {
+  const fallback: Problem = {
+    type: "about:blank",
+    title: response.statusText || `Request failed (${String(response.status)})`,
+    status: response.status,
+    code: "unknown",
+  };
+  try {
+    const body = (await response.json()) as Partial<Problem> | null;
+    if (body && typeof body.code === "string") return { ...fallback, ...body };
+  } catch {
+    // not JSON
+  }
+  return fallback;
+}
+
+export async function apiWrite<TOut>(req: WriteRequest<TOut>): Promise<TOut> {
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  });
+  headers.set("Idempotency-Key", req.idempotencyKey);
+  const csrf = readCookie(CSRF_COOKIE);
+  if (csrf) headers.set("X-CSRF-Token", csrf);
+  const body =
+    req.kind === "update" ? { ...req.body, version: req.version } : req.body;
+  const response = await fetch(apiUrl(req.path), {
+    method: req.method,
+    headers,
+    credentials: "same-origin",
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (response.status === 409) {
+    throw new ConflictError(409, await readProblem(response));
+  }
+  if (response.status === 401) {
+    onUnauthorized();
+    throw new ApiError(401, await readProblem(response));
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, await readProblem(response));
+  }
+  const json: unknown =
+    response.status === 204 ? undefined : await response.json();
+  return req.schema ? req.schema.parse(json) : (json as TOut);
+}
+
+type Keyed<TVars> = TVars & { idempotencyKey: string };
+
+/**
+ * `useMutation` for writes: one idempotency key per logical write, stamped before
+ * `mutate`, so a Query retry (and a replay after a lost response) reuses it.
+ */
+export function useWrite<
+  TVars extends { idempotencyKey?: string },
+  TOut,
+  TSnap = unknown,
+>(
+  opts: UseMutationOptions<TOut, Error, Keyed<TVars>, TSnap>,
+): Omit<UseMutationResult<TOut, Error, Keyed<TVars>, TSnap>, "mutate"> & {
+  mutate: (
+    v: Omit<TVars, "idempotencyKey"> & { idempotencyKey?: string },
+  ) => void;
+} {
+  const mutation = useMutation(opts);
+  return {
+    ...mutation,
+    mutate: (v) => {
+      mutation.mutate({
+        ...v,
+        idempotencyKey: v.idempotencyKey ?? crypto.randomUUID(),
+      } as Keyed<TVars>);
+    },
+  };
 }
