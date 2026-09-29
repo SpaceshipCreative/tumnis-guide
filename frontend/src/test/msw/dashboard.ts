@@ -1,11 +1,11 @@
 // MSW handlers for the dashboard's reads (P0-23): the project list, the Today query
-// (`GET /v1/tasks?status=today&order=today&limit=5` with `total`), the review badge count
-// and the workspace settings (for the timezone). The task and count shapes follow the
-// planned P0-18 routes; once those are generated they follow `TaskOut` here, not in the
-// tests.
+// (`GET /v1/tasks?status=today&order=today&limit=5`, a `TaskPage` with `total`), the review
+// badge count (`ReviewCountOut`) and the workspace settings (for the timezone). Bodies are
+// typed with the generated response types.
 import { http, HttpResponse, type RequestHandler } from "msw";
 
-import type { makeProject, TaskStub } from "../factories";
+import type { ReviewCountOut, TaskOut, TaskPage } from "../../api/types.gen";
+import type { makeProject } from "../factories";
 import { workspaceSettings } from "./settings";
 
 /** `GET /v1/projects` answering these projects on one page. */
@@ -22,19 +22,21 @@ export function projectsList(
  * number of items); `onRequest` sees each request's query string.
  */
 export function todayTasks(
-  items: readonly TaskStub[],
+  items: readonly TaskOut[],
   total: number = items.length,
   onRequest?: (query: URLSearchParams) => void,
 ): RequestHandler {
   return http.get("/v1/tasks", ({ request }) => {
     onRequest?.(new URL(request.url).searchParams);
-    return HttpResponse.json({ items, next_cursor: null, total });
+    const page: TaskPage = { items: [...items], next_cursor: null, total };
+    return HttpResponse.json(page);
   });
 }
 
 /** `GET /v1/review/count`: the review badge count (P0-18). */
 export function reviewCount(count: number): RequestHandler {
-  return http.get("/v1/review/count", () => HttpResponse.json({ count }));
+  const body: ReviewCountOut = { count };
+  return http.get("/v1/review/count", () => HttpResponse.json(body));
 }
 
 /** `GET /v1/settings/workspace` in this timezone. */

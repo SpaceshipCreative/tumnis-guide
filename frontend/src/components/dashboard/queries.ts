@@ -1,19 +1,15 @@
 // The dashboard's reads (P0-23), shared by the route loader and the components so the
-// prefetch fills exactly the queries the page then reads.
-//
-// Seam until P0-18's routes are in the generated client: the Today query and the review
-// count are fetched here under the query keys the generated ops will have
-// (`[{ _id: "tasksListTasks", query }]`, `[{ _id: "tasksGetReviewCount" }]`), so the live
-// socket refreshes them once LIVE_MAP lists those ops (P0-18), and swapping in
-// `tasksListTasksOptions({ query: TODAY_QUERY })` and `tasksGetReviewCountOptions()`
-// changes nothing else.
+// prefetch fills exactly the queries the page then reads. All are generated ops (their
+// responses validated by the generated zod schemas) listed in LIVE_MAP, so the live socket
+// refreshes them.
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import * as z from "zod";
 
-import { projectsListProjectsOptions } from "../../api/@tanstack/react-query.gen";
-import { apiUrl, onUnauthorized } from "../../lib/fetch";
+import {
+  projectsListProjectsOptions,
+  tasksGetReviewCountOptions,
+  tasksListTasksOptions,
+} from "../../api/@tanstack/react-query.gen";
 import { workspaceQuery } from "../settings/queries";
-import type { TodayTask } from "./types";
 
 export { workspaceQuery };
 
@@ -28,117 +24,27 @@ export const TODAY_QUERY = {
   limit: 5,
 } as const;
 
-const TASK_STATUSES = [
-  "backlog",
-  "today",
-  "in_progress",
-  "waiting_on_human",
-  "in_review",
-  "done",
-] as const;
-
-// Built on first use, not at import: an object schema probes `new Function` when it is
-// constructed unless zod is already jitless (lib/zodConfig), and this module sits in a
-// chunk that evaluates before the entry's own code sets that (the CSP reports the probe).
-let schemas: ReturnType<typeof buildSchemas> | undefined;
-
-function buildSchemas() {
-  const zTodayTask = z.object({
-    id: z.string(),
-    project_id: z.string(),
-    title: z.string(),
-    label: z
-      .enum(["human", "ai", "hybrid"])
-      .nullish()
-      .transform((v) => v ?? null),
-    status: z.enum(TASK_STATUSES),
-    version: z.number().int(),
-    estimate_minutes: z
-      .number()
-      .int()
-      .nullish()
-      .transform((v) => v ?? null),
-    first_action: z
-      .string()
-      .nullish()
-      .transform((v) => v ?? null),
-  });
-  return {
-    todayPage: z.object({
-      items: z.array(zTodayTask),
-      total: z.number().int().optional(),
-    }),
-    // The count as a bare number or `{count}`: whichever P0-18's route answers.
-    count: z.union([
-      z.number().int(),
-      z.object({ count: z.number().int() }).transform((body) => body.count),
-    ]),
-  };
+// One retry for network and server errors; a problem+json 4xx will not change on a retry.
+function retryOnce(failureCount: number, error: unknown): boolean {
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? error.status
+      : undefined;
+  return failureCount < 1 && !(typeof status === "number" && status < 500);
 }
 
-function zod() {
-  schemas ??= buildSchemas();
-  return schemas;
-}
-
-export interface TodayPage {
-  readonly items: readonly TodayTask[];
-  /** Every Today task, not only the five shown ("+N more"). */
-  readonly total: number;
-}
-
-/** A read the server answered with an error status. */
-class ReadError extends Error {
-  constructor(
-    readonly path: string,
-    readonly status: number,
-  ) {
-    super(`GET /v1${path} failed (${String(status)})`);
-    this.name = "ReadError";
-  }
-}
-
-// One retry for network and server errors; a 4xx answer will not change on a retry.
-function retryOnce(failureCount: number, error: Error): boolean {
-  return (
-    failureCount < 1 && !(error instanceof ReadError && error.status < 500)
-  );
-}
-
-async function getJson(path: string, signal: AbortSignal): Promise<unknown> {
-  const response = await fetch(apiUrl(path), {
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
-    signal,
-  });
-  if (response.status === 401) onUnauthorized();
-  if (!response.ok) throw new ReadError(path, response.status);
-  return response.json();
-}
-
+/** The Today page: at most five tasks in today order and `total` ("+N more"). */
 export function todayQuery() {
   return queryOptions({
-    queryKey: [{ _id: "tasksListTasks", query: TODAY_QUERY }] as const,
-    queryFn: async ({ signal }): Promise<TodayPage> => {
-      const search = new URLSearchParams({
-        status: TODAY_QUERY.status,
-        order: TODAY_QUERY.order,
-        limit: String(TODAY_QUERY.limit),
-      });
-      const page = zod().todayPage.parse(
-        await getJson(`/tasks?${search}`, signal),
-      );
-      return { items: page.items, total: page.total ?? page.items.length };
-    },
+    ...tasksListTasksOptions({ query: TODAY_QUERY }),
     retry: retryOnce,
   });
 }
 
+/** The review badge: `{count}` of items waiting now. */
 export function reviewCountQuery() {
   return queryOptions({
-    queryKey: [{ _id: "tasksGetReviewCount" }] as const,
-    queryFn: async ({ signal }): Promise<number> =>
-      zod().count.parse(await getJson("/review/count", signal)),
+    ...tasksGetReviewCountOptions(),
     retry: retryOnce,
   });
 }
