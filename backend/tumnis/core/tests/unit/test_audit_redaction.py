@@ -72,7 +72,6 @@ def _secrets_only_under_sensitive_keys(tree: dict[str, Any]) -> dict[str, Any]:
 
 @pytest.mark.req("SEC-3", "SEC-6")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 @given(details=_tree(), credential=credentials, secret=secrets_, key=sensitive_keys)
 def test_details_never_hold_tokens_or_bodies(
     details: dict[str, Any], credential: str, secret: str, key: str
