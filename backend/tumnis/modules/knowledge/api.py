@@ -8,7 +8,7 @@ canonical unique key is partial.
 """
 
 import hashlib
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, Final, Literal
 from uuid import UUID
 
@@ -19,12 +19,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import tenancy
 from tumnis.core.canonical import CanonicalRecord, UpsertStats, upsert_records
+from tumnis.core.net import NetPolicy, Resolver, system_resolver
 from tumnis.core.schemas import versioned
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.core.versioning import NotFound
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.knowledge.models import Document
+from tumnis.modules.knowledge.storage import FileStat
 from tumnis.seed import DocumentSeed, register_seed_writer
 
 _documents: Table = Document.__table__  # type: ignore[assignment]
@@ -196,3 +198,115 @@ async def seed_document(workspace_id: UUID, project_id: UUID | None, rec: Docume
 
 
 register_seed_writer("document", seed_document)
+
+
+# --- Storage locations and project folders (P1-14, FR-15.7, FR-15.12, SEC-5) -------------
+
+LocationKind = Literal["server_path", "s3"]
+
+
+class S3ConfigIn(BaseModel):
+    endpoint: str  # http(s)://host[:port]; checked by the SSRF guard at save and each use
+    region: str = "us-east-1"
+    access_key: str
+    secret_key: str  # write-only: sealed into config_enc, never answered
+    path_style: bool = True
+    sse: Literal["AES256"] | None = None
+
+
+class LocationIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    kind: LocationKind
+    root: str = Field(min_length=1, max_length=1024)  # absolute path, or bucket/prefix
+    s3: S3ConfigIn | None = None
+    is_default: bool = False
+
+
+class LocationOut(BaseModel):
+    id: UUID
+    name: str
+    kind: str
+    root: str
+    endpoint: str | None  # S3 only; the keys are never answered
+    status: Literal["online", "offline"]
+    status_reason: str | None
+    is_default: bool
+    capabilities: dict[str, bool]
+    version: int
+
+
+class ProjectFolderOut(BaseModel):
+    project_id: UUID
+    location_id: UUID
+    root_path: str
+    mode: Literal["tumnis_made", "existing"]
+    version: int
+
+
+class NoteWrite(BaseModel):
+    status: Literal["written", "queued"]
+    location_id: UUID
+    path: str  # relative to the location's root
+
+
+async def create_location(
+    s: AsyncSession, body: LocationIn, *, net: NetPolicy, resolver: Resolver = system_resolver
+) -> LocationOut:
+    raise NotImplementedError
+
+
+async def list_locations(s: AsyncSession) -> list[LocationOut]:
+    raise NotImplementedError
+
+
+async def check_location(
+    s: AsyncSession, location_id: UUID, *, net: NetPolicy, resolver: Resolver = system_resolver
+) -> LocationOut:
+    raise NotImplementedError
+
+
+async def set_default_location(s: AsyncSession, location_id: UUID, version: int) -> LocationOut:
+    raise NotImplementedError
+
+
+async def assign_project_folder(s: AsyncSession, project_id: UUID) -> ProjectFolderOut | None:
+    raise NotImplementedError
+
+
+async def get_project_folder(s: AsyncSession, project_id: UUID) -> ProjectFolderOut:
+    raise NotImplementedError
+
+
+async def set_project_location(
+    s: AsyncSession,
+    project_id: UUID,
+    location_id: UUID,
+    *,
+    net: NetPolicy,
+    resolver: Resolver = system_resolver,
+) -> ProjectFolderOut:
+    raise NotImplementedError
+
+
+async def write_project_file(
+    s: AsyncSession,
+    project_id: UUID,
+    path: str,
+    data: AsyncIterator[bytes],
+    *,
+    if_match: str | None = None,
+    net: NetPolicy,
+    resolver: Resolver = system_resolver,
+) -> FileStat:
+    raise NotImplementedError
+
+
+async def save_note(
+    s: AsyncSession,
+    document_id: UUID,
+    *,
+    if_match: str | None = None,
+    net: NetPolicy,
+    resolver: Resolver = system_resolver,
+) -> NoteWrite:
+    raise NotImplementedError
