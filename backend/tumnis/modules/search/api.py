@@ -52,6 +52,28 @@ _SNIPPET: Final = (
 )
 
 
+_RANKING: Final = """
+WITH q AS (SELECT {query} AS query),
+ranked AS (
+  SELECT si.entity_type, si.entity_id, si.project_id, si.title, si.body,
+         CAST(ts_rank_cd(si.tsv, q.query) AS float8)
+           * CASE WHEN si.project_id = CAST(:project_id AS uuid)
+                  THEN CAST(:boost AS float8) ELSE 1.0 END
+           / (1.0 + GREATEST(0.0, CAST(extract(epoch FROM
+                    (CAST(:now AS timestamptz) - si.source_updated_at)) AS float8))
+                    / 86400.0 / CAST(:recency_days AS float8)) AS score
+  FROM search_index si, q
+  WHERE si.tsv @@ q.query AND si.deleted_at IS NULL
+    AND si.entity_type = ANY(CAST(:entity_types AS text[])) {limited}
+)
+SELECT r.entity_type, r.entity_id, r.project_id, r.title, r.score, {snippet} AS snippet
+FROM ranked r, q
+{keyset}
+ORDER BY r.score DESC, r.entity_id
+LIMIT :limit
+"""
+
+
 class SearchHit(BaseModel):
     entity_type: EntityType
     entity_id: UUID
@@ -76,35 +98,22 @@ def _statement(
         calls.append(_PART_SQL[fn].format(name=f"part{i}"))
     limited = "AND si.project_id = ANY(CAST(:project_ids AS uuid[]))" if project_ids else ""
     keyset = (
-        "WHERE r.score < CAST(:after_score AS float8)"
-        " OR (r.score = CAST(:after_score AS float8) AND r.entity_id > CAST(:after_id AS uuid))"
+        "WHERE r.score < CAST(:after_score AS float8) OR"
+        " (r.score = CAST(:after_score AS float8) AND r.entity_id > CAST(:after_id AS uuid))"
         if after
         else ""
     )
-    sql = f"""
-WITH q AS (SELECT {" && ".join(calls)} AS query),
-ranked AS (
-  SELECT si.entity_type, si.entity_id, si.project_id, si.title, si.body,
-         CAST(ts_rank_cd(si.tsv, q.query) AS float8)
-           * CASE WHEN si.project_id = CAST(:project_id AS uuid) THEN CAST(:boost AS float8) ELSE 1.0 END
-           / (1.0 + GREATEST(0.0, CAST(extract(epoch FROM (CAST(:now AS timestamptz) - si.source_updated_at))
-                                       AS float8))
-                    / 86400.0 / CAST(:recency_days AS float8)) AS score
-  FROM search_index si, q
-  WHERE si.tsv @@ q.query AND si.deleted_at IS NULL
-    AND si.entity_type = ANY(CAST(:entity_types AS text[])) {limited}
-)
-SELECT r.entity_type, r.entity_id, r.project_id, r.title, r.score,
-       {_SNIPPET if snippets else "''"} AS snippet
-FROM ranked r, q
-{keyset}
-ORDER BY r.score DESC, r.entity_id
-LIMIT :limit
-"""
+    # Only fixed fragments are formatted in; every user value is a bound parameter.
+    sql = _RANKING.format(
+        query=" && ".join(calls),
+        limited=limited,
+        snippet=_SNIPPET if snippets else "''",
+        keyset=keyset,
+    )
     return sql, params
 
 
-async def _ranked(  # noqa: PLR0913
+async def _ranked(
     s: AsyncSession,
     q: str,
     *,
@@ -138,7 +147,7 @@ async def _ranked(  # noqa: PLR0913
     return [SearchHit.model_validate(dict(row)) for row in rows]
 
 
-async def search(  # noqa: PLR0913
+async def search(
     s: AsyncSession,
     q: str,
     *,
@@ -195,7 +204,7 @@ async def typeahead_projects(
     )
 
 
-async def typeahead_tasks(  # noqa: PLR0913
+async def typeahead_tasks(
     s: AsyncSession,
     q: str,
     project_id: UUID | None,
