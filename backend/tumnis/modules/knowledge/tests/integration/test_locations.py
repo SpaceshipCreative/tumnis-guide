@@ -540,7 +540,6 @@ async def test_pr52_two_offline_saves_of_one_note_both_drain_and_the_newest_land
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="review:PR52 folderless project")
 async def test_pr52_project_made_before_any_location_gets_its_folder_when_placed(
     db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, tmp_location: Path
 ) -> None:

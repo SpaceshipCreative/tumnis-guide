@@ -65,6 +65,7 @@ from tumnis.modules.knowledge.storage import (
     spool,
 )
 from tumnis.modules.knowledge.storage import NotFound as FileMissing
+from tumnis.modules.projects import api as projects
 from tumnis.seed import DocumentSeed, register_seed_writer
 
 _documents: Table = Document.__table__  # type: ignore[assignment]
@@ -775,9 +776,20 @@ async def set_project_location(
 ) -> ProjectFolderOut:
     """Move the project's folder to another location while it holds no file (409
     `folder_not_empty` once it does; moving files is P3-14). The old location must answer
-    (409 `location_offline`), so an unreachable folder is never assumed empty."""
-    folder = await _folder_row(s, project_id)
+    (409 `location_offline`), so an unreachable folder is never assumed empty. A project
+    made before the workspace had a location has no folder yet: it is made on the target."""
     target = await _location_row(s, location_id)
+    try:
+        folder = await _folder_row(s, project_id)
+    except NotFound:
+        if not await projects.project_exists(s, project_id):
+            raise
+        await s.execute(
+            pg_insert(_folders)
+            .values(project_id=project_id, location_id=target["id"], root_path=str(project_id))
+            .on_conflict_do_nothing(index_elements=[_folders.c.workspace_id, _folders.c.project_id])
+        )
+        return await get_project_folder(s, project_id)
     if folder["location_id"] == target["id"]:
         return _folder_out(folder)
     old = await _location_row(s, folder["location_id"])
