@@ -37,7 +37,6 @@ async def _grants(offsets: list[float]) -> list[datetime]:
 
 @pytest.mark.req("FR-11.9")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 @settings(max_examples=40, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(st.lists(st.floats(0, 600), max_size=5_000).map(sorted))
 @example([0.0] * 3_000)
@@ -61,3 +60,27 @@ def test_never_more_than_1200_in_any_60s_window(offsets: list[float]) -> None:
         assert end - start <= LIMIT, (t, end - start)
     if len(offsets) > LIMIT and offsets[LIMIT] - offsets[0] < 1:
         assert grants[LIMIT - 1] - grants[0] < WINDOW  # the first 1,200 go without waiting
+
+
+@pytest.mark.req("FR-11.9", "R-32")
+@pytest.mark.wp("P1-01")
+def test_one_limiter_per_credential_and_the_key_is_never_the_key() -> None:
+    """limiter_for keys limiters on a credential fingerprint: the same key shares one, a
+    different key gets its own; the fingerprint does not contain the key."""
+    from tumnis.core.clock import FixedClock  # noqa: PLC0415
+    from tumnis.modules.decisions.limiter import (  # noqa: PLC0415
+        credential_fingerprint,
+        limiter_for,
+    )
+
+    clock = FixedClock(START)
+    key_a, key_b = "ts_live_aaaaaaaaaaaaaaaaaaaaaaaa", "ts_live_bbbbbbbbbbbbbbbbbbbbbbbb"
+    fp_a = credential_fingerprint(key_a)
+    assert key_a not in fp_a
+    assert fp_a == credential_fingerprint(key_a)
+    assert fp_a != credential_fingerprint(key_b)
+    assert limiter_for(fp_a, clock=clock) is limiter_for(fp_a, clock=clock)
+    assert limiter_for(fp_a, clock=clock) is not limiter_for(
+        credential_fingerprint(key_b), clock=clock
+    )
+    assert limiter_for(fp_a, clock=clock).limit == LIMIT
