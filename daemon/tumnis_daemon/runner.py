@@ -205,14 +205,12 @@ async def execute(msg: Run, cfg: DaemonConfig, *, timeout_s: float | None = None
         cwd=run_dir,
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,  # never read: a pipe would only fill memory
         env=clean_env(cfg),
         start_new_session=True,
         limit=LINE_LIMIT,
     )
     assert proc.stdout is not None  # noqa: S101  # PIPE above
-    assert proc.stderr is not None  # noqa: S101
-    stderr_task = asyncio.create_task(proc.stderr.read())
     events: list[dict[str, Any]] = []
     timed_out = False
     try:
@@ -229,7 +227,6 @@ async def execute(msg: Run, cfg: DaemonConfig, *, timeout_s: float | None = None
         if proc.returncode is None:  # cancelled: never leave Hermes running
             _kill_group(proc.pid)
             await proc.wait()
-        stderr_task.cancel()
     duration_ms = int((loop.time() - started) * 1000)
     return build_result(
         msg,
