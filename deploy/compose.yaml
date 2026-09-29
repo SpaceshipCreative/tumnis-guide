@@ -5,7 +5,7 @@
 # Coolify (or the shell) provides APP_DB_PASSWORD, OWNER_DB_PASSWORD, POSTGRES_PASSWORD and
 # TUMNIS_VERSION. Passwords go into connection URLs, so keep them URL-safe (hex).
 # Backups (P0-28) need /etc/pgbackrest/conf.d/secrets.conf on the host (repo2-s3-key,
-# repo2-s3-key-secret, repo2-cipher-pass; root:999, mode 0640), see docs/OPERATIONS.md.
+# repo2-s3-key-secret, repo2-cipher-pass; root:999, mode 0640), see deploy/README.md.
 # Overrides: compose.preview.yaml (PR previews), compose.test.yaml (CI e2e stack).
 name: tumnis
 

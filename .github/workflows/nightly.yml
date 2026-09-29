@@ -1,0 +1,29 @@
+# Nightly checks that are too slow or too stateful for a PR (A1). P0-28: the restore drill
+# in rehearsal mode (T-P0-28-02): the compose.test stack with repo2 on MinIO, its Postgres
+# container and volume destroyed, a point-in-time restore from repo2, the same checks and
+# limits as the quarterly prod drill. Later WPs add e2e against the real agent server,
+# mutmut and the audit-chain verify.
+#
+# Actions are pinned by commit SHA; Renovate bumps the SHA and the version comment.
+name: nightly
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * *" # 04:17 UTC, after the 03:07/03:27 backups
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  restore-drill-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Restore drill, rehearsal (T-P0-28-02)
+        run: scripts/drill/restore_drill.sh --mode rehearsal
