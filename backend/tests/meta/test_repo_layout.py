@@ -155,7 +155,7 @@ def test_adr_files_and_agent_rules_present() -> None:
         assert lines[0].startswith(f"# ADR-{number:04d}: "), matches[0].name
         assert re.search(r"^Status: ", text, re.MULTILINE), f"{matches[0].name}: no Status line"
         if number in {10, 11}:
-            assert re.search(r"^Status: Proposed", text, re.MULTILINE), matches[0].name
+            assert re.search(r"^Status: Accepted", text, re.MULTILINE), matches[0].name
         for heading in ADR_HEADINGS:
             assert heading in lines, f"{matches[0].name}: missing {heading!r}"
 
