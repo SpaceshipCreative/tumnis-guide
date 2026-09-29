@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 @pytest.mark.contract
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 class TestFakeStorage(StorageContract):
     """T-P1-14-01
     The shared storage suite passes for `FakeStorage`.

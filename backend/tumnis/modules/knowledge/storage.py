@@ -22,7 +22,7 @@ from typing import Final, Literal, Protocol, Self, runtime_checkable
 from pydantic import BaseModel
 
 from tumnis.core.adapters.base import Adapter
-from tumnis.modules.knowledge.rules import PathRejected, StorageError
+from tumnis.modules.knowledge.rules import PathRejected, StorageError, safe_rel_path
 
 __all__ = [
     "LIST_PAGE_SIZE",
@@ -38,6 +38,8 @@ __all__ = [
     "StorageError",
     "TooLarge",
     "call_storage",
+    "safe_prefix",
+    "spool",
 ]
 
 MAX_FILE_BYTES: Final = 50 * 1024 * 1024  # SEC-10's 50 MB, read as MiB (plan note)
@@ -126,3 +128,25 @@ async def call_storage[T](
     if error is not None:
         raise error
     return result  # type: ignore[return-value]  # set whenever error is None
+
+
+def safe_prefix(prefix: str) -> str:
+    """A `list` prefix: empty (the whole location), a folder ending in one '/', or the
+    start of a path; each passes `safe_rel_path` like any other path."""
+    if not prefix:
+        return ""
+    if prefix.endswith("/"):
+        return safe_rel_path(prefix[:-1]) + "/"
+    return safe_rel_path(prefix)
+
+
+async def spool(data: AsyncIterator[bytes], *, limit: int = MAX_FILE_BYTES) -> bytes:
+    """The whole stream in memory, refused past `limit` (files are at most 50 MiB)."""
+    parts: list[bytes] = []
+    size = 0
+    async for chunk in data:
+        size += len(chunk)
+        if size > limit:
+            raise TooLarge(f"over {limit} bytes")
+        parts.append(chunk)
+    return b"".join(parts)
