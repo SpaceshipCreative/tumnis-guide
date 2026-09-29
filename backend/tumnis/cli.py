@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import Annotated, Literal, NoReturn
 from uuid import UUID
 
 import typer
@@ -56,6 +56,29 @@ def load_settings() -> Settings:
         _config_error(f"invalid_settings: {exc}")
 
 
+def check_metrics_token(settings: Settings) -> None:
+    """The api refuses to start in prod without a readable METRICS_TOKEN_FILE (P0-27)."""
+    try:
+        settings.metrics_token()
+    except SettingsError as exc:
+        _config_error(exc)
+
+
+def start_observability(settings: Settings, service: Literal["api", "worker"]) -> None:
+    """JSON logs on stdout, the tracer provider (OTLP when OTEL_EXPORTER_OTLP_ENDPOINT is
+    set) and GlitchTip (when SENTRY_DSN is set), before anything else logs (P0-27)."""
+    from tumnis.core import errors_sentry, telemetry  # noqa: PLC0415
+    from tumnis.core.logging import configure_logging  # noqa: PLC0415
+
+    configure_logging()
+    telemetry.setup_tracing(service)
+    errors_sentry.init_sentry(
+        settings.sentry_dsn,
+        environment=settings.deployment_env,
+        release=os.environ.get("TUMNIS_VERSION"),
+    )
+
+
 def run_boot_checks(settings: Settings) -> None:
     """The module kill list, the database checks, then the master key file (P0-08): each
     configuration error exits 78 before the api or the worker starts."""
@@ -77,16 +100,27 @@ def api(
     port: Annotated[int, typer.Option(help="Port to listen on")] = 8080,
 ) -> None:
     """Serve the HTTP API (and the built frontend) with uvicorn."""
-    run_boot_checks(load_settings())
+    settings = load_settings()
+    check_metrics_token(settings)
+    start_observability(settings, "api")
+    run_boot_checks(settings)
     import uvicorn  # noqa: PLC0415
 
-    uvicorn.run("tumnis.app:create_app", factory=True, host=host, port=port, proxy_headers=True)
+    uvicorn.run(
+        "tumnis.app:create_app",
+        factory=True,
+        host=host,
+        port=port,
+        proxy_headers=True,
+        log_config=None,  # uvicorn's loggers propagate to the JSON handler (P0-27)
+    )
 
 
 @app.command()
 def worker() -> None:
     """Launch DBOS: queues, workflows and schedules."""
     settings = load_settings()
+    start_observability(settings, "worker")
     run_boot_checks(settings)
     from tumnis.worker import main as worker_main  # noqa: PLC0415
 

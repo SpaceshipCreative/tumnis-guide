@@ -75,7 +75,6 @@ async def _scrape(client: httpx.AsyncClient) -> dict[str, Metric]:
 
 @pytest.mark.req("FR-12.3")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 async def test_metrics_requires_bearer_token(metrics_client: httpx.AsyncClient) -> None:
     """T-P0-27-03
     No Authorization header: 401. A wrong bearer token: 401. The token from
@@ -91,7 +90,6 @@ async def test_metrics_requires_bearer_token(metrics_client: httpx.AsyncClient) 
 
 @pytest.mark.req("FR-12.3")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 async def test_metrics_expose_required_families(
     metrics_client: httpx.AsyncClient, db: DbUrls
 ) -> None:
@@ -120,7 +118,6 @@ async def test_metrics_expose_required_families(
 
 @pytest.mark.req("FR-12.3", "REL-5")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 async def test_queue_depth_counts_enqueued_workflows(
     metrics_client: httpx.AsyncClient, dbos: type[DBOS], dbos_client: DBOSClient
 ) -> None:

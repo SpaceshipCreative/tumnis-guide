@@ -81,8 +81,25 @@ class Settings(BaseSettings):
         return load_master_keys(self.master_key_file, strict_owner=self.deployment_env == "prod")
 
     def metrics_token(self) -> str | None:
-        """The /metrics bearer token from METRICS_TOKEN_FILE (P0-27)."""
-        raise NotImplementedError
+        """The /metrics bearer token from METRICS_TOKEN_FILE, stripped (P0-27, FR-12.3).
+        Prod refuses to start without one; elsewhere no file means no token, and /metrics
+        answers 401 to everyone. A configured file that is missing or empty is an error."""
+        if self.metrics_token_file is None:
+            if self.deployment_env == "prod":
+                raise SettingsError(
+                    "metrics_token_file_required",
+                    "prod serves /metrics only behind a bearer token: set METRICS_TOKEN_FILE",
+                )
+            return None
+        try:
+            token = Path(self.metrics_token_file).read_text().strip()
+        except OSError as exc:
+            raise SettingsError(
+                "metrics_token_unreadable", f"{self.metrics_token_file}: {exc.strerror}"
+            ) from exc
+        if not token:
+            raise SettingsError("metrics_token_unreadable", f"{self.metrics_token_file} is empty")
+        return token
 
     @property
     def dbos_system_url(self) -> str:

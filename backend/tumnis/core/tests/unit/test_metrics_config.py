@@ -17,7 +17,6 @@ URLS: dict[str, Any] = {
 
 @pytest.mark.req("FR-12.3")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 def test_prod_requires_metrics_token_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """T-P0-27-11
     In prod, a missing METRICS_TOKEN_FILE refuses startup (`metrics_token_file_required`),

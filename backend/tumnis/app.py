@@ -22,6 +22,7 @@ from tumnis.core import (
     db,
     deadletter,
     health,
+    metrics,
     modules,
     ops_status,
     telemetry,
@@ -63,17 +64,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(task, cache.POLL_S * 5)
         deadletter.close()
+        await metrics.dispose()
         await db.dispose()
 
 
 def create_app(settings: Settings | None = None, clock: Clock | None = None) -> FastAPI:
     settings = settings or Settings()  # values come from the environment
+    metrics_token = settings.metrics_token()  # SettingsError: prod needs METRICS_TOKEN_FILE
     master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
     db.configure(settings.database_url, settings.database_direct_url)
     modules.configure(settings)  # the deployment's module kill list
     clock = clock or SystemClock()
     cache.configure_backend(cache.InProcessCache(clock, publish=cache.pg_publisher(db.app_engine)))
     deadletter.configure(settings.dbos_system_url)  # the api enqueues through a DBOSClient
+    metrics.configure(settings.dbos_system_url)  # queue depth and workflows at scrape time
+    wiring.register_module_metrics()
 
     health.clear_health()
     health.register_health("postgres", health.sql_check(db.app_engine, "SELECT 1"), critical=True)
@@ -96,10 +101,14 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     telemetry.instrument_app(app)  # a SERVER span per request (P0-27)
     # Correlation ID, source address and user agent for the audit log (P0-15).
     app.add_middleware(RequestMetaMiddleware)
+    # Outermost: the request histogram times everything below it (P0-27).
+    app.add_middleware(metrics.RequestMetricsMiddleware)
     app.state.settings = settings
     app.state.master_keys = master_keys
+    app.state.metrics_token = metrics_token
     app.state.clock = clock
     app.include_router(health.router)
+    app.include_router(metrics.router)  # GET /metrics, bearer (P0-27)
     app.include_router(deadletter.router)
     app.include_router(audit_router.router)
     app.include_router(auth_router.settings_router)  # R-14; P0-10 moves it onto v1_router
