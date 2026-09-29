@@ -34,7 +34,6 @@ def _use_project_config(pytester: pytest.Pytester) -> None:
 
 @pytest.mark.req("Quality rule 5")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 def test_xpass_under_strict_xfail_fails_the_run(pytester: pytest.Pytester) -> None:
     """T-P0-02-08
     A pytester run of a passing xfail test reports a failure, both with an explicit
@@ -62,7 +61,6 @@ def test_xpass_under_strict_xfail_fails_the_run(pytester: pytest.Pytester) -> No
 
 @pytest.mark.req("Quality rule 5")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 def test_unregistered_marker_fails_collection(pytester: pytest.Pytester) -> None:
     """T-P0-02-09
     A pytester run with @pytest.mark.bogus errors (strict markers).

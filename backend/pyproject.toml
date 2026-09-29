@@ -44,11 +44,14 @@ build-backend = "uv_build"
 module-name = "tumnis"
 module-root = ""
 
-# Minimal test config so the P0-01 meta-tests run; P0-02 owns the full harness.
 [tool.pytest.ini_options]
+minversion = "8.3"
 testpaths = ["tests", "tumnis"]
-addopts = "--strict-markers"
+addopts = "--strict-markers --strict-config -p randomly --disable-socket --allow-unix-socket -ra"
 xfail_strict = true
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error", "ignore::DeprecationWarning:testcontainers.*"]
 markers = [
   "req(*ids): PRD requirement IDs this test proves",
   "wp(id): work package that introduced the test",
