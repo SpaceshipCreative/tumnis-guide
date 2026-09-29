@@ -918,21 +918,37 @@ async def enroll_workspace_user(workspace: WorkspaceHandle, clock: FixedClock) -
 
 
 @pytest.fixture
-def session_client(app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock) -> SessionClient:
+def session_client(
+    app: FastAPI, clock: FixedClock, db: DbUrls, request: pytest.FixtureRequest
+) -> SessionClient:
     """An httpx client signed in (password and TOTP at the clock's time) as the
-    `workspace` fixture's user; it sends `X-CSRF-Token` (`session_client.csrf`) and an
-    `Idempotency-Key` on every write that lacks them. The clock moves one TOTP step on
-    afterwards, so another sign-in in the test gets a fresh code.
+    `workspace` fixture's user, or as a new owner of workspace B when the test uses
+    `two_workspaces` (A0.3: B plays the caller's own workspace). It sends `X-CSRF-Token`
+    (`session_client.csrf`) and an `Idempotency-Key` on every write that lacks them. The
+    clock moves one TOTP step on afterwards, so another sign-in in the test gets a fresh
+    code.
 
     A plain fixture (async tests may ask for it with `request.getfixturevalue`): the
     sign-in runs on an event loop of its own in a helper thread; the in-process app and
     its NullPool engines serve it there as they serve the test later."""
-    from tests._auth import TOTP_STEP, run_async, session_client_for, sign_in  # noqa: PLC0415
+    from tests._auth import (  # noqa: PLC0415
+        TEST_PASSWORD,
+        TOTP_STEP,
+        run_async,
+        session_client_for,
+        sign_in,
+    )
 
+    if "two_workspaces" in request.fixturenames:
+        b: WorkspaceHandle = request.getfixturevalue("two_workspaces")[1]
+        user_id, email = make_user(db, b.id)
+        handle = WorkspaceHandle(b.id, b.name, b.ctx, user_id, email, TEST_PASSWORD)
+    else:
+        handle = request.getfixturevalue("workspace")
     http = session_client_for(app)
 
     async def start() -> Account:
-        account = await enroll_workspace_user(workspace, clock)
+        account = await enroll_workspace_user(handle, clock)
         await sign_in(http, account, clock)
         return account
 
