@@ -41,6 +41,16 @@ ALLOW_LIST: dict[str, Allowed] = {
         "deployment-level marker (P0-04), read through app.deployment_markers(), no workspace",
     ),
     "workspaces": Allowed("root", "tenant root: its policy is on id instead of workspace_id"),
+    "users": Allowed(
+        "global",
+        "global identity across workspaces (P0-13): self_only policy on app.user_id,"
+        " pre-auth lookups through app.auth_login_lookup()",
+    ),
+    "auth_throttle": Allowed(
+        "global",
+        "sign-in failure counters keyed on hashes, before any workspace is known (P0-13);"
+        " no app role grant, reached through app.auth_throttle_lock()/_put()",
+    ),
     "harness_probe": Allowed(
         "global", "harness self-test scratch table (P0-02), test templates only"
     ),

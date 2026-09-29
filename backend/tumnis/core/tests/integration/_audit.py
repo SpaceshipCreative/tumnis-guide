@@ -7,13 +7,13 @@ the test bodies, and this module is where later work packages plug in their shap
 - `tamper(db, sql, params)`: an owner statement with the immutability trigger disabled,
   the way someone with the owner password could edit the table.
 - `insert_raw(conn, workspace_id)`: one row as the owner, without the writer.
-- `signed_in(app, workspace_id, user_id)`: an httpx client whose requests count as a
-  signed-in session of `user:<user_id>` in the workspace. Until P0-13's `session_client`
-  exists it overrides the audit routes' session dependency; P0-13 swaps the body for a
-  real login, and the tests keep calling it.
+- `signed_in(app, workspace_id, user_id)`: an httpx client signed in as `user:<user_id>`
+  in the workspace with a real session (P0-13): the user is made when missing, the session
+  row is created through the auth module (no sign-in route runs, so nothing is audited),
+  and the client sends the CSRF token and an Idempotency-Key on writes.
 - `audit_ctx(app, db, clock)`: the `Ctx` the cases in backend/tests/audit_cases.py drive.
 - `sign_in`, `create_key`, `change_secret_setting`: the real actions T-P0-15-10 checks;
-  P0-13, P0-14 and P0-08 fill them in.
+  P0-13 (sign-in, filled), P0-14 and P0-08 fill them in.
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import psycopg
-from fastapi import Request  # at runtime: FastAPI reads the override's annotations
 
 from tests._pg import OWNER
 
@@ -39,7 +38,6 @@ if TYPE_CHECKING:
 
 # What ASGITransport reports as the peer address.
 TEST_SOURCE_IP = "127.0.0.1"
-SESSION_HEADER = "X-Test-Session"
 TRIGGER = "audit_log_immutable"
 
 
@@ -96,17 +94,30 @@ def owner_rows(db: DbUrls, query: str, params: tuple[Any, ...] = ()) -> list[tup
         return conn.execute(query.encode(), params).fetchall()
 
 
-def _test_session(request: Request) -> WorkspaceContext:
-    from fastapi import HTTPException  # noqa: PLC0415
+def _owner_dsn(app: FastAPI) -> str:
+    url: str = app.state.settings.database_owner_url
+    return url.replace("postgresql+psycopg://", "postgresql://", 1)
 
-    from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
-    from tumnis.core.types import ActorRef  # noqa: PLC0415
 
-    value = request.headers.get(SESSION_HEADER)
-    if value is None:
-        raise HTTPException(status_code=401, detail="unauthenticated")
-    workspace_id, user_id = value.split(":")
-    return WorkspaceContext(uuid.UUID(workspace_id), ActorRef(f"user:{user_id}"))
+def ensure_user(app: FastAPI, workspace_id: uuid.UUID, user_id: uuid.UUID) -> str:
+    """The user `user_id` (an owner of the workspace, password TEST_PASSWORD, no TOTP yet),
+    made as the owner role when missing; returns its email."""
+    from tests.fixtures import _test_password_hash  # noqa: PLC0415
+
+    email = f"user-{user_id.hex[-12:]}@example.test"
+    with psycopg.connect(_owner_dsn(app), autocommit=True) as conn:
+        made = conn.execute(
+            "INSERT INTO users (id, email, password_hash, home_workspace_id)"
+            " VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING RETURNING id",
+            (user_id, email, _test_password_hash(), workspace_id),
+        ).fetchone()
+        if made is not None:
+            conn.execute(
+                "INSERT INTO memberships (workspace_id, user_id, role, created_by)"
+                " VALUES (%s, %s, 'owner', 'system')",
+                (workspace_id, user_id),
+            )
+    return email
 
 
 @asynccontextmanager
@@ -115,13 +126,21 @@ async def signed_in(
 ) -> AsyncIterator[httpx.AsyncClient]:
     import httpx  # noqa: PLC0415
 
-    from tumnis.core.audit_router import require_session  # noqa: PLC0415
+    from tests._auth import (  # noqa: PLC0415
+        BASE_URL,
+        CSRF_COOKIE,
+        SESSION_COOKIE,
+        SessionClient,
+        open_session,
+    )
 
-    app.dependency_overrides[require_session] = _test_session
-    transport = httpx.ASGITransport(app=app)
-    default = {SESSION_HEADER: f"{workspace_id}:{user_id}", **headers}
-    async with httpx.AsyncClient(
-        transport=transport, base_url="https://test", headers=default
+    ensure_user(app, workspace_id, user_id)
+    token, csrf = await open_session(app, workspace_id, user_id)
+    async with SessionClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url=BASE_URL,
+        headers=headers,
+        cookies={SESSION_COOKIE: token, CSRF_COOKIE: csrf},
     ) as client:
         yield client
 
@@ -139,6 +158,9 @@ class Ctx:
     request_id: str
     source_ip: str = TEST_SOURCE_IP
     key_id: uuid.UUID | None = None  # P0-14: the key `key_client` signs with
+    email: str | None = None  # P0-13: the user's sign-in credentials
+    password: str | None = None
+    totp_secret: str | None = None
 
     def actor_id(self, actor_type: str) -> uuid.UUID | None:
         return {"user": self.user_id, "api_key": self.key_id}.get(actor_type)
@@ -147,18 +169,40 @@ class Ctx:
 @asynccontextmanager
 async def audit_ctx(app: FastAPI, db: DbUrls, clock: FixedClock) -> AsyncIterator[Ctx]:
     """A workspace, its user and a signed-in client that sends a fixed X-Request-ID."""
+    from tests._auth import TEST_PASSWORD, enroll_totp  # noqa: PLC0415
     from tests.fixtures import make_workspace  # noqa: PLC0415
 
     workspace_id = make_workspace(db)
     user_id = uuid.uuid4()
     request_id = f"req-{uuid.uuid4().hex}"
+    email = ensure_user(app, workspace_id, user_id)
+    secret = await enroll_totp(user_id, workspace_id, clock.now())
     async with signed_in(app, workspace_id, user_id, **{"X-Request-ID": request_id}) as client:
-        yield Ctx(app, db, clock, workspace_id, user_id, client, request_id)
+        yield Ctx(
+            app,
+            db,
+            clock,
+            workspace_id,
+            user_id,
+            client,
+            request_id,
+            email=email,
+            password=TEST_PASSWORD,
+            totp_secret=secret,
+        )
 
 
 async def sign_in(ctx: Ctx) -> str:
-    """Sign in with the password (and TOTP); returns the password used. P0-13."""
-    raise NotImplementedError("P0-13: login routes and session_client")
+    """Sign in with the password and the TOTP code at the clock's time through the routes
+    (`auth.login`); returns the password used. P0-13."""
+    from tests._auth import Account  # noqa: PLC0415
+    from tests._auth import sign_in as sign_in_routes  # noqa: PLC0415
+
+    if not (ctx.email and ctx.password and ctx.totp_secret):
+        raise RuntimeError("audit_ctx made this Ctx without sign-in credentials")
+    account = Account(ctx.email, ctx.password, ctx.totp_secret, ctx.user_id, ctx.workspace_id)
+    await sign_in_routes(ctx.session_client, account, ctx.clock)
+    return ctx.password
 
 
 async def create_key(ctx: Ctx) -> str:

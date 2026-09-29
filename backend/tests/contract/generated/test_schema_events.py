@@ -13,6 +13,12 @@ from tumnis.core.schemas import parse_versioned
 CASES = [
     (
         "events",
+        "auth.failed",
+        1,
+        "backend/tests/contract/fixtures/events/auth.failed/v1.json",
+    ),
+    (
+        "events",
         "test.ping",
         1,
         "backend/tests/contract/fixtures/events/test.ping/v1.json",

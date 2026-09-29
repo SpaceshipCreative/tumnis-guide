@@ -114,7 +114,6 @@ async def test_put_updates_bumps_version_and_rejects_stale_or_invalid(
 
 @pytest.mark.req("REL-6", "REL-2")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_settings_routes_over_http(
     request: pytest.FixtureRequest, master_key_file: MasterKeyFile
 ) -> None:
