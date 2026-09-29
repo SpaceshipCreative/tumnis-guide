@@ -7,7 +7,6 @@ import pytest
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 def test_argon2id_verify_and_rehash_flag() -> None:
     """T-P0-13-01
     A new hash is `$argon2id$`; the right password verifies with no new hash, a wrong one

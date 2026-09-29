@@ -13,7 +13,6 @@ M = timedelta(minutes=1)
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 def test_lockout_and_idle_rules() -> None:
     """T-P0-13-21
     `lockout_state(failures, window_start, now)` and `session_expired(last_seen, now)` at
@@ -76,7 +75,6 @@ def test_lockout_and_idle_rules() -> None:
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 def test_device_label_names_browser_and_system() -> None:
     """T-P0-13-22
     The session's device label is "<browser> on <system>" from the user agent, and
