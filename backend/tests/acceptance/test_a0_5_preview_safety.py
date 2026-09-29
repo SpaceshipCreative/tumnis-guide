@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 
 from tests._pg import APP, OWNER, DbUrls
+from tests.fixtures import write_master_key_file
 
 pytestmark = [
     pytest.mark.integration,
@@ -84,7 +85,6 @@ CASES = [
     _case(
         "jev_key_setting",
         PreviewCase(PREVIEW, jev_setting=True, refusal="preview_has_production_secret"),
-        SPEC,  # the workspace_settings check arrives with P0-08
     ),
     _case(
         "prod_master_key",
@@ -127,8 +127,8 @@ def prepare(
 ) -> dict[str, str]:
     """Marks the database, writes the key file, sets the case's environment through
     monkeypatch and returns it (the CLI runs as a child process with it)."""
-    key_file = tmp_path / "master.key"
-    key_file.write_bytes(secrets.token_bytes(32))
+    # A valid key file, owner-only (P0-08: create_app refuses any other mode).
+    key_file = write_master_key_file(tmp_path / "master.key", {1: secrets.token_bytes(32)}, 1)
     markers = [
         (env, _fingerprint(key_file) if fingerprint == PROD_KEY else fingerprint)
         for env, fingerprint in case.markers
