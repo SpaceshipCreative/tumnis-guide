@@ -124,6 +124,80 @@ export type BoardOut = {
 };
 
 /**
+ * CalendarAccountOut
+ */
+export type CalendarAccountOut = {
+  /**
+   * Calendars
+   */
+  calendars: Array<CalendarOut>;
+  /**
+   * Connection Id
+   */
+  connection_id: string;
+  /**
+   * Google Email
+   */
+  google_email: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Last Sync At
+   */
+  last_sync_at: string | null;
+  /**
+   * Selected Calendar Ids
+   */
+  selected_calendar_ids: Array<string>;
+  /**
+   * Status
+   */
+  status: "connected" | "needs_reauth";
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * CalendarOut
+ */
+export type CalendarOut = {
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Primary
+   */
+  primary?: boolean;
+  /**
+   * Summary
+   */
+  summary: string;
+  /**
+   * Time Zone
+   */
+  time_zone?: string | null;
+};
+
+/**
+ * CalendarsIn
+ */
+export type CalendarsIn = {
+  /**
+   * Selected Calendar Ids
+   */
+  selected_calendar_ids: Array<string>;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
  * CardOut
  */
 export type CardOut = {
@@ -509,6 +583,16 @@ export type MoveIn = {
    * Version
    */
   version: number;
+};
+
+/**
+ * OAuthStartOut
+ */
+export type OAuthStartOut = {
+  /**
+   * Url
+   */
+  url: string;
 };
 
 /**
@@ -2318,6 +2402,296 @@ export type AuthConfirmTotpEnrolmentResponses = {
 
 export type AuthConfirmTotpEnrolmentResponse =
   AuthConfirmTotpEnrolmentResponses[keyof AuthConfirmTotpEnrolmentResponses];
+
+export type CalendarListAccountsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/calendar/accounts";
+};
+
+export type CalendarListAccountsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type CalendarListAccountsError =
+  CalendarListAccountsErrors[keyof CalendarListAccountsErrors];
+
+export type CalendarListAccountsResponses = {
+  /**
+   * Response Calendar List Accounts
+   *
+   * Successful Response
+   */
+  200: Array<CalendarAccountOut>;
+};
+
+export type CalendarListAccountsResponse =
+  CalendarListAccountsResponses[keyof CalendarListAccountsResponses];
+
+export type CalendarSelectCalendarsData = {
+  body: CalendarsIn;
+  path: {
+    /**
+     * Calendar Account Id
+     */
+    calendar_account_id: string;
+  };
+  query?: never;
+  url: "/v1/calendar/accounts/{calendar_account_id}/calendars";
+};
+
+export type CalendarSelectCalendarsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type CalendarSelectCalendarsError =
+  CalendarSelectCalendarsErrors[keyof CalendarSelectCalendarsErrors];
+
+export type CalendarSelectCalendarsResponses = {
+  /**
+   * Successful Response
+   */
+  200: CalendarAccountOut;
+};
+
+export type CalendarSelectCalendarsResponse =
+  CalendarSelectCalendarsResponses[keyof CalendarSelectCalendarsResponses];
+
+export type CalendarSyncNowData = {
+  body?: never;
+  path: {
+    /**
+     * Calendar Account Id
+     */
+    calendar_account_id: string;
+  };
+  query?: never;
+  url: "/v1/calendar/accounts/{calendar_account_id}/sync";
+};
+
+export type CalendarSyncNowErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type CalendarSyncNowError =
+  CalendarSyncNowErrors[keyof CalendarSyncNowErrors];
+
+export type CalendarSyncNowResponses = {
+  /**
+   * Successful Response
+   */
+  202: CalendarAccountOut;
+};
+
+export type CalendarSyncNowResponse =
+  CalendarSyncNowResponses[keyof CalendarSyncNowResponses];
+
+export type CalendarOauthCallbackData = {
+  body?: never;
+  path?: never;
+  query: {
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Code
+     */
+    code?: string | null;
+    /**
+     * Error
+     */
+    error?: string | null;
+  };
+  url: "/v1/calendar/oauth/callback";
+};
+
+export type CalendarOauthCallbackErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type CalendarOauthCallbackError =
+  CalendarOauthCallbackErrors[keyof CalendarOauthCallbackErrors];
+
+export type CalendarOauthStartData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/calendar/oauth/start";
+};
+
+export type CalendarOauthStartErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type CalendarOauthStartError =
+  CalendarOauthStartErrors[keyof CalendarOauthStartErrors];
+
+export type CalendarOauthStartResponses = {
+  /**
+   * Successful Response
+   */
+  200: OAuthStartOut;
+};
+
+export type CalendarOauthStartResponse =
+  CalendarOauthStartResponses[keyof CalendarOauthStartResponses];
 
 export type DeadLettersGetDeadLettersData = {
   body?: never;

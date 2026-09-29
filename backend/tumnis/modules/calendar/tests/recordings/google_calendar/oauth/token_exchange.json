@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://oauth2.googleapis.com/token",
+    "form": {
+      "grant_type": "authorization_code",
+      "code": "code-a",
+      "code_verifier": "<verifier>",
+      "redirect_uri": "https://tumnis.example.com/v1/calendar/oauth/callback"
+    }
+  },
+  "status": 200,
+  "response": {
+    "access_token": "fake-access-a",
+    "expires_in": 3599,
+    "refresh_token": "fake-refresh-a",
+    "scope": "https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.events.readonly",
+    "token_type": "Bearer"
+  },
+  "notes": "Scrubbed: client id, secret, code and tokens are invented."
+}
