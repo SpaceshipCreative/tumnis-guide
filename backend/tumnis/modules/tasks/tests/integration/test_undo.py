@@ -36,7 +36,6 @@ def _change(db: DbUrls, change_id: str) -> tuple[dict[str, Any], dict[str, Any]]
 
 @pytest.mark.req("UX 9")
 @pytest.mark.wp("P0-24")
-@pytest.mark.xfail(strict=True, reason="spec:P0-24")
 async def test_undo_restores_and_guards(  # noqa: PLR0917  # the fixtures it needs
     app: FastAPI,
     db: DbUrls,
