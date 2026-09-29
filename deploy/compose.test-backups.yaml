@@ -1,0 +1,26 @@
+# Backups on the test stack (P0-28), opt-in (issue #21): layered on compose.test.yaml for the
+# tests that need WAL archiving and a pgBackRest stanza, today the rehearsal drill
+# (scripts/drill/restore_drill.sh --mode rehearsal). Archiving back on, repo1 on a volume,
+# repo2 on the stack's MinIO over TLS. Throwaway credentials, like test.env.
+#
+#   docker compose -f deploy/compose.test.yaml -f deploy/compose.test-backups.yaml up -d --wait
+services:
+  postgres:
+    # Without compose.preview.yaml's archive_mode=off, conf.d/archive.conf applies.
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    env_file: pgbackrest/rehearsal.env
+    volumes:
+      - ./pgbackrest/test-conf.d:/etc/pgbackrest/conf.d:ro
+      - minio_certs:/etc/pgbackrest/minio:ro
+    depends_on:
+      minio-bucket: { condition: service_completed_successfully }
+  backup:
+    profiles: !reset []
+    entrypoint: ["/bin/sh", "-c", "init-stanza.sh && exec supercronic /etc/pgbackrest/crontab"]
+    restart: unless-stopped
+    env_file: pgbackrest/rehearsal.env
+    volumes:
+      - ./pgbackrest/test-conf.d:/etc/pgbackrest/conf.d:ro
+      - minio_certs:/etc/pgbackrest/minio:ro
+  minio-bucket:
+    profiles: !reset []
