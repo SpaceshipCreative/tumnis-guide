@@ -63,7 +63,6 @@ async def _keys(minio: S3Endpoint, bucket: str, prefix: str) -> list[str]:
 
 @pytest.mark.req("REL-1")
 @pytest.mark.wp("P0-28")
-@pytest.mark.xfail(strict=True, reason="spec:P0-28")
 async def test_rclone_copy_keeps_files_removed_at_source(minio: S3Endpoint) -> None:
     """T-P0-28-04
     rclone configured through RCLONE_CONFIG_MINIO_* only. scripts/drill/rclone_copy_check.sh
