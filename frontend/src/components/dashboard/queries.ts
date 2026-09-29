@@ -37,31 +37,49 @@ const TASK_STATUSES = [
   "done",
 ] as const;
 
-const zTodayTask = z.object({
-  id: z.string(),
-  project_id: z.string(),
-  title: z.string(),
-  label: z
-    .enum(["human", "ai", "hybrid"])
-    .nullish()
-    .transform((v) => v ?? null),
-  status: z.enum(TASK_STATUSES),
-  version: z.number().int(),
-  estimate_minutes: z
-    .number()
-    .int()
-    .nullish()
-    .transform((v) => v ?? null),
-  first_action: z
-    .string()
-    .nullish()
-    .transform((v) => v ?? null),
-});
+// Built on first use, not at import: an object schema probes `new Function` when it is
+// constructed unless zod is already jitless (lib/zodConfig), and this module sits in a
+// chunk that evaluates before the entry's own code sets that (the CSP reports the probe).
+let schemas: ReturnType<typeof buildSchemas> | undefined;
 
-const zTodayPage = z.object({
-  items: z.array(zTodayTask),
-  total: z.number().int().optional(),
-});
+function buildSchemas() {
+  const zTodayTask = z.object({
+    id: z.string(),
+    project_id: z.string(),
+    title: z.string(),
+    label: z
+      .enum(["human", "ai", "hybrid"])
+      .nullish()
+      .transform((v) => v ?? null),
+    status: z.enum(TASK_STATUSES),
+    version: z.number().int(),
+    estimate_minutes: z
+      .number()
+      .int()
+      .nullish()
+      .transform((v) => v ?? null),
+    first_action: z
+      .string()
+      .nullish()
+      .transform((v) => v ?? null),
+  });
+  return {
+    todayPage: z.object({
+      items: z.array(zTodayTask),
+      total: z.number().int().optional(),
+    }),
+    // The count as a bare number or `{count}`: whichever P0-18's route answers.
+    count: z.union([
+      z.number().int(),
+      z.object({ count: z.number().int() }).transform((body) => body.count),
+    ]),
+  };
+}
+
+function zod() {
+  schemas ??= buildSchemas();
+  return schemas;
+}
 
 export interface TodayPage {
   readonly items: readonly TodayTask[];
@@ -107,24 +125,20 @@ export function todayQuery() {
         order: TODAY_QUERY.order,
         limit: String(TODAY_QUERY.limit),
       });
-      const page = zTodayPage.parse(await getJson(`/tasks?${search}`, signal));
+      const page = zod().todayPage.parse(
+        await getJson(`/tasks?${search}`, signal),
+      );
       return { items: page.items, total: page.total ?? page.items.length };
     },
     retry: retryOnce,
   });
 }
 
-// The count as a bare number or `{count}`: whichever P0-18's route answers.
-const zCount = z.union([
-  z.number().int(),
-  z.object({ count: z.number().int() }).transform((body) => body.count),
-]);
-
 export function reviewCountQuery() {
   return queryOptions({
     queryKey: [{ _id: "tasksGetReviewCount" }] as const,
     queryFn: async ({ signal }): Promise<number> =>
-      zCount.parse(await getJson("/review/count", signal)),
+      zod().count.parse(await getJson("/review/count", signal)),
     retry: retryOnce,
   });
 }

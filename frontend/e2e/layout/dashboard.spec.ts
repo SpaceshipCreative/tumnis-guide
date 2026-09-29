@@ -18,7 +18,6 @@ test(
   { tag: ["@P0-23", "@UX-1"] },
   async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "laptop", "a laptop-only layout rule");
-    test.fail();
     await openShell(page, "/");
     await expect(projectCards(page)).toHaveCount(3);
     await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
@@ -37,7 +36,6 @@ test(
   { tag: ["@P0-23", "@UX-11"] },
   async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "phone", "a phone-only control");
-    test.fail();
     await openShell(page, "/");
     const button = page.getByRole("button", { name: "Quick add" });
     await expect(button).toBeVisible();
