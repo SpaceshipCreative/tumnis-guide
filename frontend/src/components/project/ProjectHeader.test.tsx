@@ -7,7 +7,7 @@ import { makeProject, makeTask } from "../../test/factories";
 import { renderWithProviders } from "../../test/render";
 import { ProjectHeader } from "./ProjectHeader";
 
-test.fails(
+test(
   "[P0-24][FR-2.4] T-P0-24-13 header shows name, goal, health, milestone, today's tasks and agent status",
   () => {
     const project = makeProject({
