@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           image="${IMAGE,,}"
           echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker build -f deploy/Dockerfile -t "$image:pr-$PR-$SHA" .
+          docker build -f deploy/Dockerfile --build-arg "VERSION=pr-$PR-$SHA" -t "$image:pr-$PR-$SHA" .
           docker push "$image:pr-$PR-$SHA"
       - name: Deploy the preview and wait
         run: |
