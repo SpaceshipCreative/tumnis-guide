@@ -28,11 +28,17 @@ from _tests_extract import (
     dump,
     is_python_test,
     is_spec_xfail,
+    is_test_file,
     is_weakening_decorator,
     locked_blocks,
+    matches_any,
     show,
 )
 
+EXEMPT_GLOBS = ("backend/tests/contract/generated/**", "frontend/src/api/**")
+GENERATED_HEADER = ("# @generated", "// @generated")
+# Guard and CI definitions are locked files: an agent's PR may not loosen its own checks.
+LOCKED_GLOBS = ("scripts/ci/**", ".github/**")
 PYTESTMARK = "<pytestmark>"
 
 
@@ -101,44 +107,87 @@ def compare_python(path: str, base_src: str, head_src: str) -> list[Violation]:
     return out
 
 
+def is_exempt(path: str, base_src: str) -> bool:
+    """Generated tests: under an exempt path, or generated on the base commit."""
+    first = base_src.split("\n", 1)[0].strip()
+    return matches_any(path, EXEMPT_GLOBS) or first.startswith(GENERATED_HEADER)
+
+
+def _compare_text(path: str, base_src: str, head_src: str) -> list[Violation]:
+    """Skill test cases and other data-only tests: any change but whitespace is an edit."""
+    before = [line.rstrip() for line in base_src.strip().splitlines()]
+    after = [line.rstrip() for line in head_src.strip().splitlines()]
+    if before == after:
+        return []
+    return [Violation(path, "*", "edited_test", unified_diff(base_src, head_src))]
+
+
 def _compare(repo: Path, base: str, head: str, change: Change) -> list[Violation]:
     assert change.old is not None  # noqa: S101 (only called for M, D and R)
     base_src = show(repo, base, change.old)
-    if base_src is None:
+    if base_src is None or is_exempt(change.old, base_src):
         return []
     if change.status == "D":
         return [Violation(change.old, "*", "deleted_file", "test file deleted")]
     assert change.new is not None  # noqa: S101
+    if not is_test_file(change.new):
+        return [Violation(change.old, "*", "deleted_file", f"renamed to {change.new}")]
     head_src = show(repo, head, change.new) or ""
     if is_python_test(change.old):
-        return compare_python(change.new, base_src, head_src)
-    return []
+        try:
+            return compare_python(change.new, base_src, head_src)
+        except SyntaxError as error:
+            return [Violation(change.new, "*", "edited_test", f"head does not parse: {error}")]
+    return _compare_text(change.new, base_src, head_src)
 
 
 def collect(repo: Path, base: str, head: str) -> list[Violation]:
-    """Every violation between base and head, from `git diff --name-status -M base...head`."""
+    """Every violation between base and head, from `git diff --name-status -M base...head`.
+
+    A (added) is never a violation; D (deleted) is deleted_file; R (renamed) compares the
+    old path's blocks with the new path's; M compares blocks. Exempt paths and generated
+    files are skipped. Any change to an existing file under LOCKED_GLOBS is a violation.
+    """
     out: list[Violation] = []
     for change in changes(repo, base, head):
-        if change.status == "A" or change.old is None or not is_python_test(change.old):
+        if change.status == "A" or change.old is None:
             continue
-        out.extend(_compare(repo, base, head, change))
+        if matches_any(change.old, LOCKED_GLOBS):
+            detail = "CI and guard files change only with the spec-change label"
+            out.append(Violation(change.old, "*", "edited_locked_file", detail))
+        elif is_test_file(change.old):
+            out.extend(_compare(repo, base, head, change))
     return out
 
 
-def report(violations: list[Violation], *, waived: bool) -> str:
-    if not violations:
-        return "## spec-guard\n\nNo locked test was weakened.\n"
-    heading = "waived by the `spec-change` label" if waived else "blocking"
-    lines = [f"## spec-guard: {len(violations)} violation(s), {heading}", ""]
+def warnings(repo: Path, base: str, head: str) -> list[str]:
+    """Non-blocking: changed fixtures could weaken a test without touching it."""
+    return sorted(
+        change.old
+        for change in changes(repo, base, head)
+        if change.old and change.status != "A" and change.old.endswith("conftest.py")
+    )
+
+
+def report(violations: list[Violation], *, waived: bool, changed_fixtures: list[str]) -> str:
+    if violations:
+        state = "waived by the `spec-change` label" if waived else "blocking"
+        lines = [f"## spec-guard: {len(violations)} violation(s), {state}", ""]
+    else:
+        lines = ["## spec-guard", "", "No locked test was weakened."]
     for v in violations:
-        lines += [f"- `{v.path}` :: `{v.test}`: **{v.kind}**"]
-        if v.detail:
-            lines += ["", "  ```diff", *(f"  {line}" for line in v.detail.splitlines()), "  ```"]
+        if "\n" not in v.detail:
+            lines += [f"- `{v.path}` :: `{v.test}`: **{v.kind}** ({v.detail})"]
+            continue
+        lines += [f"- `{v.path}` :: `{v.test}`: **{v.kind}**", "", "  ```diff"]
+        lines += [*(f"  {line}" for line in v.detail.splitlines()), "  ```"]
+    if changed_fixtures:
+        lines += ["", "Warning (not blocking): changed fixtures; check they do not weaken tests:"]
+        lines += [f"- `{path}`" for path in changed_fixtures]
     return "\n".join(lines) + "\n"
 
 
-def print_report(violations: list[Violation], *, waived: bool) -> None:
-    text = report(violations, waived=waived)
+def print_report(text: str) -> None:
     print(text)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
@@ -158,8 +207,10 @@ def parse(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str]) -> int:
     args = parse(argv)
-    violations = collect(Path(args.repo), args.base, args.head)
-    print_report(violations, waived=False)
+    repo = Path(args.repo)
+    violations = collect(repo, args.base, args.head)
+    fixtures = warnings(repo, args.base, args.head)
+    print_report(report(violations, waived=False, changed_fixtures=fixtures))
     return 1 if violations else 0
 
 

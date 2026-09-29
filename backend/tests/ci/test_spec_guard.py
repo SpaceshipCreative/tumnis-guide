@@ -157,7 +157,6 @@ def test_flags_added_skip_or_plain_xfail(tmp_path: Path) -> None:
 
 @pytest.mark.req("Quality rule 1")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_skips_generated_contract_tests(tmp_path: Path) -> None:
     """T-P0-03-06
     Edits under backend/tests/contract/generated/ and in files with `# @generated` pass.
