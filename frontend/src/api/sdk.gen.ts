@@ -736,7 +736,7 @@ export const knowledgeSetDefaultLocation = <
   >({
     responseValidator: async (data) =>
       await zKnowledgeSetDefaultLocationResponse.parseAsync(data),
-    url: "/v1/knowledge/locations/{location_id}/default",
+    url: "/v1/knowledge/locations/{storage_location_id}/default",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -761,7 +761,7 @@ export const knowledgeTestLocation = <ThrowOnError extends boolean = false>(
   >({
     responseValidator: async (data) =>
       await zKnowledgeTestLocationResponse.parseAsync(data),
-    url: "/v1/knowledge/locations/{location_id}/test",
+    url: "/v1/knowledge/locations/{storage_location_id}/test",
     ...options,
   });
 

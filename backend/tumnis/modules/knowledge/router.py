@@ -2,8 +2,9 @@
 
 Storage locations (P1-14, FR-15.7), all `auth="session"` (the Settings screen):
 `GET /locations` (every location; a workspace has a handful, so a bare list),
-`POST /locations` (201), `POST /locations/{location_id}/test` (test the connection now;
-drains queued writes when healthy), `POST /locations/{location_id}/default` (versioned),
+`POST /locations` (201), `POST /locations/{storage_location_id}/test` (test the
+connection now; drains queued writes when healthy), `POST
+/locations/{storage_location_id}/default` (versioned),
 and `PUT /projects/{project_id}/folder` (move an empty project folder to another
 location). Each handler finds its row (404) before any rule about the body. Storage calls
 take the deployment's SSRF policy from the settings.
@@ -61,7 +62,7 @@ async def create_location(
     return await api.create_location(session, body, net=_net(request))
 
 
-@router.post("/locations/{location_id}/test")
+@router.post("/locations/{storage_location_id}/test")
 @route_policy(
     RoutePolicy(
         auth="session",
@@ -69,17 +70,19 @@ async def create_location(
         not_idempotent_reason="a connection test must reach the location again, never replay",
     )
 )
-async def test_location(location_id: UUID, request: Request, ctx: Session) -> api.LocationOut:
+async def test_location(
+    storage_location_id: UUID, request: Request, ctx: Session
+) -> api.LocationOut:
     async with tenant_session(ctx) as s:
-        return await api.check_location(s, location_id, net=_net(request))
+        return await api.check_location(s, storage_location_id, net=_net(request))
 
 
-@router.post("/locations/{location_id}/default")
+@router.post("/locations/{storage_location_id}/default")
 @route_policy(RoutePolicy(auth="session", idempotent=True))
 async def set_default_location(
-    location_id: UUID, body: DefaultIn, _ctx: Session, session: SessionDep
+    storage_location_id: UUID, body: DefaultIn, _ctx: Session, session: SessionDep
 ) -> api.LocationOut:
-    return await api.set_default_location(session, location_id, body.version)
+    return await api.set_default_location(session, storage_location_id, body.version)
 
 
 @router.put("/projects/{project_id}/folder")

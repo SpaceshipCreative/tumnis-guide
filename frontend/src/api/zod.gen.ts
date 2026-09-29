@@ -915,7 +915,7 @@ export const zKnowledgeCreateLocationResponse = zLocationOut;
 export const zKnowledgeSetDefaultLocationBody = zDefaultIn;
 
 export const zKnowledgeSetDefaultLocationPath = z.object({
-  location_id: z.uuid(),
+  storage_location_id: z.uuid(),
 });
 
 /**
@@ -924,7 +924,7 @@ export const zKnowledgeSetDefaultLocationPath = z.object({
 export const zKnowledgeSetDefaultLocationResponse = zLocationOut;
 
 export const zKnowledgeTestLocationPath = z.object({
-  location_id: z.uuid(),
+  storage_location_id: z.uuid(),
 });
 
 /**

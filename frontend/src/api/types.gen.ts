@@ -2804,12 +2804,12 @@ export type KnowledgeSetDefaultLocationData = {
   body: DefaultIn;
   path: {
     /**
-     * Location Id
+     * Storage Location Id
      */
-    location_id: string;
+    storage_location_id: string;
   };
   query?: never;
-  url: "/v1/knowledge/locations/{location_id}/default";
+  url: "/v1/knowledge/locations/{storage_location_id}/default";
 };
 
 export type KnowledgeSetDefaultLocationErrors = {
@@ -2864,12 +2864,12 @@ export type KnowledgeTestLocationData = {
   body?: never;
   path: {
     /**
-     * Location Id
+     * Storage Location Id
      */
-    location_id: string;
+    storage_location_id: string;
   };
   query?: never;
-  url: "/v1/knowledge/locations/{location_id}/test";
+  url: "/v1/knowledge/locations/{storage_location_id}/test";
 };
 
 export type KnowledgeTestLocationErrors = {

@@ -5413,17 +5413,17 @@
         ]
       }
     },
-    "/v1/knowledge/locations/{location_id}/default": {
+    "/v1/knowledge/locations/{storage_location_id}/default": {
       "post": {
         "operationId": "knowledge_set_default_location",
         "parameters": [
           {
             "in": "path",
-            "name": "location_id",
+            "name": "storage_location_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Location Id",
+              "title": "Storage Location Id",
               "type": "string"
             }
           }
@@ -5536,17 +5536,17 @@
         ]
       }
     },
-    "/v1/knowledge/locations/{location_id}/test": {
+    "/v1/knowledge/locations/{storage_location_id}/test": {
       "post": {
         "operationId": "knowledge_test_location",
         "parameters": [
           {
             "in": "path",
-            "name": "location_id",
+            "name": "storage_location_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Location Id",
+              "title": "Storage Location Id",
               "type": "string"
             }
           }
