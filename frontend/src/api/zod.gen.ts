@@ -90,6 +90,17 @@ export const zContextItemIn = z.object({
 });
 
 /**
+ * DayEventOut
+ */
+export const zDayEventOut = z.object({
+  account: z.string(),
+  busy: z.boolean(),
+  end: z.iso.datetime(),
+  start: z.iso.datetime(),
+  title: z.string().nullable(),
+});
+
+/**
  * DeadLetterOut
  */
 export const zDeadLetterOut = z.object({
@@ -103,6 +114,15 @@ export const zDeadLetterOut = z.object({
   status: z.string(),
   subscriber: z.string(),
   version: z.int(),
+});
+
+/**
+ * FreeBlockOut
+ */
+export const zFreeBlockOut = z.object({
+  end: z.iso.datetime(),
+  minutes: z.int(),
+  start: z.iso.datetime(),
 });
 
 /**
@@ -764,6 +784,49 @@ export const zUsageRow = z.object({
 });
 
 /**
+ * WindowOut
+ */
+export const zWindowOut = z.object({
+  end: z.iso.datetime(),
+  start: z.iso.datetime(),
+});
+
+/**
+ * DayCalendarOut
+ */
+export const zDayCalendarOut = z.object({
+  events: z.array(zDayEventOut),
+  free_blocks: z.array(zFreeBlockOut),
+  timezone: z.string(),
+  window: zWindowOut.nullable(),
+});
+
+/**
+ * WorkingDay
+ */
+export const zWorkingDay = z.object({
+  end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  weekday: z.int().gte(0).lte(6),
+});
+
+/**
+ * WorkingHoursIn
+ */
+export const zWorkingHoursIn = z.object({
+  days: z.array(zWorkingDay).min(1).max(7),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * WorkingHoursOut
+ */
+export const zWorkingHoursOut = z.object({
+  days: z.array(zWorkingDay),
+  version: z.int(),
+});
+
+/**
  * WorkspaceSettingsIn
  */
 export const zWorkspaceSettingsIn = z.object({
@@ -1001,6 +1064,15 @@ export const zAuthRotateKeyPath = z.object({
  */
 export const zAuthRotateKeyResponse = zKeyCreated;
 
+export const zPlanningGetDayCalendarPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetDayCalendarResponse = zDayCalendarOut;
+
 export const zProjectsListProjectsQuery = z.object({
   include_archived: z.boolean().optional().default(false),
   cursor: z.string().max(2048).nullish(),
@@ -1148,6 +1220,18 @@ export const zSettingsSetModuleBody = zModuleFlagIn;
  * Successful Response
  */
 export const zSettingsSetModuleResponse = zModuleFlagOut;
+
+/**
+ * Successful Response
+ */
+export const zSettingsGetWorkingHoursResponse = zWorkingHoursOut;
+
+export const zSettingsPutWorkingHoursBody = zWorkingHoursIn;
+
+/**
+ * Successful Response
+ */
+export const zSettingsPutWorkingHoursResponse = zWorkingHoursOut;
 
 /**
  * Successful Response

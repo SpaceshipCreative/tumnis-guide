@@ -5,14 +5,18 @@
   cancelled one (P1-09, FR-14.4).
 - `sync_window`: the bounded time window each sync reads (plan default: yesterday through
   today + 14 days, in the workspace timezone).
+- `free_blocks`: a working window minus the busy events of every account (P1-10, FR-1.3);
+  `Interval` is `tumnis.core.types.Interval`, so the planning rules share it.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any, Final, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import AwareDatetime, BaseModel
+
+from tumnis.core.types import Interval as SharedInterval
 
 READONLY_SCOPES: Final = frozenset(
     {
@@ -106,3 +110,18 @@ def sync_window(today: date, tz: ZoneInfo) -> tuple[datetime, datetime]:
 def needs_refresh(expires_at: datetime, now: datetime) -> bool:
     """True when the access token expires within REFRESH_SKEW_S of `now`."""
     return expires_at - now <= timedelta(seconds=REFRESH_SKEW_S)
+
+
+# --- Free blocks (P1-10, FR-1.3) ---------------------------------------------------------------
+
+Interval = SharedInterval  # shared with the planning rules (tumnis.core.types)
+MIN_BLOCK_MINUTES: Final = 15  # plan default
+
+
+def free_blocks(
+    window: Interval | None, busy: Iterable[Interval], *, min_minutes: int = MIN_BLOCK_MINUTES
+) -> list[Interval]:
+    """The window minus the union of the busy intervals, clipped to the window; gaps
+    shorter than `min_minutes` are dropped. The result is sorted, pairwise disjoint and
+    never touching (adjacent gaps are merged). No window (a day off) has no blocks."""
+    raise NotImplementedError

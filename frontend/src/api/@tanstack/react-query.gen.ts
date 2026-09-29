@@ -38,6 +38,7 @@ import {
   healthLive,
   healthReady,
   type Options,
+  planningGetDayCalendar,
   projectsArchiveProject,
   projectsCreateProject,
   projectsGetProject,
@@ -49,9 +50,11 @@ import {
   searchTypeaheadProjects,
   searchTypeaheadTasks,
   settingsGetSection,
+  settingsGetWorkingHours,
   settingsGetWorkspaceSettings,
   settingsListModules,
   settingsPutSection,
+  settingsPutWorkingHours,
   settingsPutWorkspaceSettings,
   settingsSetModule,
   tasksAddComment,
@@ -150,6 +153,9 @@ import type {
   HealthLiveData,
   HealthLiveResponse,
   HealthReadyData,
+  PlanningGetDayCalendarData,
+  PlanningGetDayCalendarError,
+  PlanningGetDayCalendarResponse,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectError,
   ProjectsArchiveProjectResponse,
@@ -183,6 +189,9 @@ import type {
   SettingsGetSectionData,
   SettingsGetSectionError,
   SettingsGetSectionResponse,
+  SettingsGetWorkingHoursData,
+  SettingsGetWorkingHoursError,
+  SettingsGetWorkingHoursResponse,
   SettingsGetWorkspaceSettingsData,
   SettingsGetWorkspaceSettingsError,
   SettingsGetWorkspaceSettingsResponse,
@@ -192,6 +201,9 @@ import type {
   SettingsPutSectionData,
   SettingsPutSectionError,
   SettingsPutSectionResponse,
+  SettingsPutWorkingHoursData,
+  SettingsPutWorkingHoursError,
+  SettingsPutWorkingHoursResponse,
   SettingsPutWorkspaceSettingsData,
   SettingsPutWorkspaceSettingsError,
   SettingsPutWorkspaceSettingsResponse,
@@ -1252,6 +1264,34 @@ export const authRotateKeyMutation = (
   return mutationOptions;
 };
 
+export const planningGetDayCalendarQueryKey = (
+  options: Options<PlanningGetDayCalendarData>,
+) => createQueryKey("planningGetDayCalendar", options);
+
+/**
+ * Get Day Calendar
+ */
+export const planningGetDayCalendarOptions = (
+  options: Options<PlanningGetDayCalendarData>,
+) =>
+  queryOptions<
+    PlanningGetDayCalendarResponse,
+    PlanningGetDayCalendarError,
+    PlanningGetDayCalendarResponse,
+    ReturnType<typeof planningGetDayCalendarQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await planningGetDayCalendar({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: planningGetDayCalendarQueryKey(options),
+  });
+
 export const projectsListProjectsQueryKey = (
   options?: Options<ProjectsListProjectsData>,
 ) => createQueryKey("projectsListProjects", options);
@@ -1861,6 +1901,61 @@ export const settingsSetModuleMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await settingsSetModule({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const settingsGetWorkingHoursQueryKey = (
+  options?: Options<SettingsGetWorkingHoursData>,
+) => createQueryKey("settingsGetWorkingHours", options);
+
+/**
+ * Get Working Hours
+ */
+export const settingsGetWorkingHoursOptions = (
+  options?: Options<SettingsGetWorkingHoursData>,
+) =>
+  queryOptions<
+    SettingsGetWorkingHoursResponse,
+    SettingsGetWorkingHoursError,
+    SettingsGetWorkingHoursResponse,
+    ReturnType<typeof settingsGetWorkingHoursQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await settingsGetWorkingHours({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: settingsGetWorkingHoursQueryKey(options),
+  });
+
+/**
+ * Put Working Hours
+ */
+export const settingsPutWorkingHoursMutation = (
+  options?: Partial<Options<SettingsPutWorkingHoursData>>,
+): UseMutationOptions<
+  SettingsPutWorkingHoursResponse,
+  SettingsPutWorkingHoursError,
+  Options<SettingsPutWorkingHoursData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    SettingsPutWorkingHoursResponse,
+    SettingsPutWorkingHoursError,
+    Options<SettingsPutWorkingHoursData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await settingsPutWorkingHours({
         ...options,
         ...fnOptions,
         throwOnError: true,

@@ -1,0 +1,20 @@
+# Daylight-saving days in the two zones the DST suites use (P1-10; shared with P0-19 and
+# P1-11): the local date of the change, its direction and the UTC instant it happens.
+# `forward`: the local clock jumps an hour ahead (a 23-hour day); `back`: it repeats an
+# hour (a 25-hour day).
+- zone: America/New_York
+  date: 2026-03-08
+  direction: forward
+  transition: "2026-03-08T07:00:00Z"
+- zone: America/New_York
+  date: 2026-11-01
+  direction: back
+  transition: "2026-11-01T06:00:00Z"
+- zone: Australia/Sydney
+  date: 2026-10-04
+  direction: forward
+  transition: "2026-10-03T16:00:00Z"
+- zone: Australia/Sydney
+  date: 2026-04-05
+  direction: back
+  transition: "2026-04-04T16:00:00Z"
