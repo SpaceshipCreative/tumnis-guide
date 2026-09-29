@@ -406,8 +406,10 @@ async def _load_set(path: Path, db: DbUrls, clock: FixedClock) -> SeedResult:
         sink = DatabaseSink(skip_missing=True)  # kinds whose module has not landed are skipped
         return await load_seed(path, sink, anchor=clock.now().date(), clock=clock)
     finally:
-        await core_db.dispose()
-        core_db.configure(app_url=db.app, direct_url=db.app, pooled=False)
+        try:
+            await core_db.dispose()
+        finally:
+            core_db.configure(app_url=db.app, direct_url=db.app, pooled=False)
 
 
 @pytest.fixture
@@ -467,9 +469,9 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
         pool.submit(register_queues).result()
         queues = [queue.name for queue in pool.submit(DBOS.list_queues).result()]
     _wait_for_queue_workers(queues, earlier)
-    _save_queue_rows(dbos_sys_db)
     closing = _close_late_checkins()
     try:
+        _save_queue_rows(dbos_sys_db)
         yield DBOS
     finally:
         _stop_queue_workers(earlier)
