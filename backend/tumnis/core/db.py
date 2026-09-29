@@ -14,6 +14,7 @@
 
 from dataclasses import dataclass
 
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -89,6 +90,14 @@ def app_sessionmaker() -> async_sessionmaker[AsyncSession]:
 
 def direct_sessionmaker() -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(direct_engine(), expire_on_commit=False)
+
+
+def direct_dsn() -> str:
+    """The direct URL as a libpq DSN, for a plain psycopg connection (the relay's LISTEN)."""
+    if _state.direct_url is None:
+        raise RuntimeError("tumnis.core.db has no direct URL; call configure() first")
+    url = make_url(_state.direct_url).set(drivername="postgresql")
+    return url.render_as_string(hide_password=False)
 
 
 def owner_sessionmaker() -> async_sessionmaker[AsyncSession]:

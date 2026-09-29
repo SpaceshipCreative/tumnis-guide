@@ -1,8 +1,8 @@
 # Nightly checks that are too slow or too stateful for a PR (A1). P0-28: the restore drill
 # in rehearsal mode (T-P0-28-02): the compose.test stack with repo2 on MinIO, its Postgres
 # container and volume destroyed, a point-in-time restore from repo2, the same checks and
-# limits as the quarterly prod drill. Later WPs add e2e against the real agent server,
-# mutmut and the audit-chain verify.
+# limits as the quarterly prod drill. P0-07: the kill-and-resume relay tests, 20 runs in a
+# row. Later WPs add e2e against the real agent server, mutmut and the audit-chain verify.
 #
 # Actions are pinned by commit SHA; Renovate bumps the SHA and the version comment.
 name: nightly
@@ -27,3 +27,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Restore drill, rehearsal (T-P0-28-02)
         run: scripts/drill/restore_drill.sh --mode rehearsal
+
+  kill-and-resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Kill the worker mid-relay and mid-delivery, 20 runs in a row (P0-07)
+        working-directory: backend
+        run: |
+          uv sync
+          for i in $(seq 20); do
+            uv run pytest -q -p no:randomly -m integration \
+              "tumnis/core/tests/integration/test_relay.py::test_worker_killed_between_enqueue_and_mark_sent_delivers_once" \
+              "tumnis/core/tests/integration/test_relay.py::test_worker_killed_after_handler_step_does_not_rerun_it" \
+              || exit 1
+          done

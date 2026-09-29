@@ -14,7 +14,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 from tumnis import wiring
-from tumnis.core import audit_router, db, health, ops_status, testing_routes
+from tumnis.core import audit_router, db, deadletter, health, ops_status, testing_routes
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.request_meta import RequestMetaMiddleware
 from tumnis.settings import Settings
@@ -36,12 +36,14 @@ class ShellFiles(StaticFiles):
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
+    deadletter.close()
     await db.dispose()
 
 
 def create_app(settings: Settings | None = None, clock: Clock | None = None) -> FastAPI:
     settings = settings or Settings()  # values come from the environment
     db.configure(settings.database_url, settings.database_direct_url)
+    deadletter.configure(settings.dbos_system_url)  # the api enqueues through a DBOSClient
 
     health.clear_health()
     health.register_health("postgres", health.sql_check(db.app_engine, "SELECT 1"), critical=True)
@@ -65,6 +67,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     app.state.settings = settings
     app.state.clock = clock or SystemClock()
     app.include_router(health.router)
+    app.include_router(deadletter.router)
     app.include_router(audit_router.router)
     if settings.tumnis_adapters == "fake":
         app.include_router(testing_routes.router)

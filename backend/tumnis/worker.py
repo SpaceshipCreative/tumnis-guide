@@ -4,11 +4,12 @@ The worker and DBOS use the direct database URL, never PgBouncer (LISTEN/NOTIFY 
 session-level state do not survive transaction pooling).
 """
 
+import asyncio
+import contextlib
 import signal
-import threading
 from typing import TYPE_CHECKING
 
-from tumnis.core import audit_workflows, workflows_ops
+from tumnis.core import audit_workflows, events, faults, workflows_ops
 from tumnis.settings import Settings
 
 if TYPE_CHECKING:
@@ -17,10 +18,14 @@ if TYPE_CHECKING:
 
 def register_queues() -> None:
     """Register every DBOS queue (A9). DBOS 3.1 persists queues in the system database, so
-    this runs right after DBOS.launch(), in the worker and in the test harness alike.
-    P0-07 adds `events`."""
+    this runs right after DBOS.launch(), in the worker and in the test harness alike."""
     from dbos import DBOS  # noqa: PLC0415
 
+    DBOS.register_queue(
+        events.EVENTS_QUEUE,
+        worker_concurrency=events.EVENTS_WORKER_CONCURRENCY,
+        polling_interval_sec=events.EVENTS_QUEUE_POLL_S,
+    )
     DBOS.register_queue(workflows_ops.MAINTENANCE_QUEUE, worker_concurrency=1)
 
 
@@ -63,23 +68,42 @@ def dbos_config(settings: Settings) -> "DBOSConfig":
     return {"name": "tumnis", "system_database_url": settings.dbos_system_url}
 
 
-def main(settings: Settings) -> None:
-    """Launch DBOS and block until SIGTERM or SIGINT."""
+def main(settings: Settings, *, app_version: str | None = None) -> None:
+    """Launch DBOS, register queues and schedules, run the outbox relay beside it, and block
+    until SIGTERM or SIGINT. A kill point (TUMNIS_KILLPOINT, tests only) is armed first, and
+    refused in production before anything connects. `app_version` pins DBOS's application
+    version (the kill-and-resume harness runs two workers that must share it)."""
+    faults.arm(settings.deployment_env)
+
     from dbos import DBOS  # noqa: PLC0415
 
     import tumnis.wiring  # noqa: F401, PLC0415  # registers adapters (later: workflows)
     from tumnis.core import db  # noqa: PLC0415
 
     db.configure(settings.database_direct_url, settings.database_direct_url)
-    stop = threading.Event()
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(signum, lambda *_: stop.set())
-    DBOS(config=dbos_config(settings))
+    config = dbos_config(settings)
+    if app_version is not None:
+        config["application_version"] = app_version
+    DBOS(config=config)
     DBOS.launch()
     register_queues()
     register_schedules(settings)
     register_audit_schedule()
     try:
-        stop.wait()
+        asyncio.run(_serve())
     finally:
         DBOS.destroy()
+
+
+async def _serve() -> None:
+    """The relay on this thread's event loop (DBOS runs workflows on its own) until a
+    signal; then the relay is cancelled, not waited for (it may sit in a LISTEN wait)."""
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(signum, stop.set)
+    relay = asyncio.create_task(events.relay_forever(stop), name="outbox-relay")
+    await stop.wait()
+    relay.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await relay
