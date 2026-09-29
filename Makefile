@@ -34,11 +34,12 @@ gen:
 seed:
 	$(BACKEND) uv run tumnis seed --set $(or $(SET),seed) $(if $(ANCHOR),--anchor $(ANCHOR))
 
+## The compose.test stack (fakes, seed, api on 127.0.0.1:8080; TUMNIS_TEST_PORT moves it).
 up:
-	@echo "not yet (P0-04)"
+	docker compose -f deploy/compose.test.yaml up -d --wait --build
 
 down:
-	@echo "not yet (P0-04)"
+	docker compose -f deploy/compose.test.yaml down -v
 
 guards:
 	@echo "not yet (P0-03)"

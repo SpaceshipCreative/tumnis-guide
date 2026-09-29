@@ -1,0 +1,15 @@
+# Build context for deploy/Dockerfile (the repository root): source only.
+.git
+**/.venv
+**/node_modules
+**/__pycache__
+**/.mypy_cache
+**/.ruff_cache
+**/.pytest_cache
+**/.import_linter_cache
+**/.hypothesis
+frontend/dist
+frontend/test-results
+frontend/playwright-report
+frontend/blob-report
+docs

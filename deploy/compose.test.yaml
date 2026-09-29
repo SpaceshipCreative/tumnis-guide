@@ -1,0 +1,28 @@
+# CI end-to-end stack: compose.yaml plus the preview overrides (fakes, fresh database,
+# seed), the image built from this checkout, throwaway passwords from test.env, and the
+# api published on loopback only (127.0.0.1:8080; TUMNIS_TEST_PORT moves it when 8080 is
+# taken, and TUMNIS_IMAGE swaps the image). Postgres keeps TLS on with its self-signed
+# certificate, as in production.
+#
+#   docker compose -f deploy/compose.test.yaml up -d --wait     # Playwright's webServer too
+#   docker compose -f deploy/compose.test.yaml down -v
+name: tumnis-test
+
+include:
+  - path: [compose.yaml, compose.preview.yaml]
+    env_file: test.env
+
+x-image: &image
+  image: ${TUMNIS_IMAGE:-tumnis:test}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+
+services:
+  migrate: *image
+  worker: *image
+  seed: *image
+  api:
+    <<: *image
+    ports:
+      - "127.0.0.1:${TUMNIS_TEST_PORT:-8080}:8080"

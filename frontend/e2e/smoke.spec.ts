@@ -6,7 +6,6 @@ test(
   "T-P0-04-13 app shell loads",
   { tag: ["@smoke", "@P0-04", "@REL-7", "@FR-12.4"] },
   async ({ page }) => {
-    test.fail();
     await page.goto("/");
     await expect(page.getByRole("main")).toBeVisible({ timeout: 3_000 });
   },
