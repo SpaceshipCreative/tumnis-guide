@@ -153,8 +153,14 @@ def migrate(
         bool, typer.Option("--check", help="Exit 1 unless the database is at every head")
     ] = False,
 ) -> None:
-    """Upgrade the database to every Alembic head as the owner role (DATABASE_OWNER_URL)."""
-    from tumnis.migrate import MigrationPendingError, upgrade, verify_at_heads  # noqa: PLC0415
+    """Upgrade the database to every Alembic head as the owner role (DATABASE_OWNER_URL).
+    A database ahead of this release (a rollback, REL-4) is left alone and exits 0."""
+    from tumnis.migrate import (  # noqa: PLC0415
+        DbPosition,
+        MigrationPendingError,
+        upgrade,
+        verify_at_heads,
+    )
 
     settings = load_settings()
     check_database_tls(settings)
@@ -163,13 +169,19 @@ def migrate(
     try:
         if check:
             verify_at_heads(ALEMBIC_INI, settings.database_owner_url)
-        else:
-            upgrade(ALEMBIC_INI, settings)
+            return
+        position = upgrade(ALEMBIC_INI, settings)
     except SettingsError as exc:
         _config_error(exc)
     except MigrationPendingError as exc:
         typer.echo(f"tumnis: {exc}", err=True)
         raise typer.Exit(1) from exc
+    messages = {
+        DbPosition.BEHIND: "upgraded to this release's heads",
+        DbPosition.AT_HEAD: "database already at this release's heads",
+        DbPosition.AHEAD: "database is ahead of this release (rollback); nothing to do",
+    }
+    typer.echo(f"migrate: {messages[position]}", err=True)
 
 
 def _use_master_key_file() -> None:

@@ -1,0 +1,56 @@
+# Version skew (P0-30, REL-4, T-P0-30-01): a PR that touches **/migrations/** is rehearsed
+# before merge: deploy the latest main image (N), this PR's commit (N+1), then N again on
+# one database (scripts/release/rollback_rehearsal.sh). Every PR runs the job (no `paths:`
+# filter: a required check that never reports blocks a merge forever); without a migration
+# change it exits green.
+#
+# Its own workflow, not a ci.yml job: T-P0-03-16 locks ci.yml's jobs to
+# .github/required-checks.txt and its per-job budgets. Requiring this check on main means
+# adding it there too, which needs Scott's spec-change label.
+#
+# Actions are pinned by commit SHA; Renovate bumps the SHA and the version comment.
+name: version-skew
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  packages: read # pull the main image
+
+concurrency:
+  group: version-skew-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version-skew:
+    # Never run code from a fork on the homelab runner.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ${{ vars.HOMELAB_RUNNER == 'true' && fromJSON('["self-hosted", "homelab"]') || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the diff against the base, and git archive of this commit
+      - name: Did this PR change a migration?
+        id: changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --name-only "$BASE_SHA" "$GITHUB_SHA" | grep -Eq '(^|/)migrations/'; then
+            echo "migrations=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no change under **/migrations/**: nothing to rehearse"
+          fi
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: steps.changed.outputs.migrations == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rollback rehearsal (main image, this commit, main image)
+        if: steps.changed.outputs.migrations == 'true'
+        run: >-
+          scripts/release/rollback_rehearsal.sh
+          "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tumnis:main" "$GITHUB_SHA"

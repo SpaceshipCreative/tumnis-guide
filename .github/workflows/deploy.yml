@@ -42,7 +42,7 @@ jobs:
           set -euo pipefail
           image="${IMAGE,,}"
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker build -f deploy/Dockerfile -t "$image:sha-$SHA" -t "$image:main" .
+          docker build -f deploy/Dockerfile --build-arg "VERSION=sha-$SHA" -t "$image:sha-$SHA" -t "$image:main" .
           docker push "$image:sha-$SHA"
           docker push "$image:main"
       - name: Point Coolify at this commit's image

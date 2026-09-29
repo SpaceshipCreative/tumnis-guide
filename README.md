@@ -34,7 +34,7 @@ The runner daemon installs separately on the agent server; see [daemon/README.md
 
 ## Operate
 
-Health is at `/health/live` (no I/O) and `/health/ready` (503 when Postgres or DBOS is down, 200 `degraded` when only a module check fails); metrics at `/metrics` (P0-27). Backups use pgBackRest with a quarterly restore drill (`scripts/drill/restore_drill.sh`, TBD).
+Health is at `/health/live` (no I/O; the `Tumnis-Version` header names the running build) and `/health/ready` (503 when Postgres or DBOS is down or the database is behind this release's migrations, 200 `degraded` when only a module check fails); metrics at `/metrics` (P0-27). Backups use pgBackRest with a quarterly restore drill (`scripts/drill/restore_drill.sh`, TBD).
 
 **Master key.** Per-workspace settings and secrets are sealed in Postgres with each workspace's data key, which is wrapped by the master key in `MASTER_KEY_FILE`: JSON `{"active": 1, "keys": {"1": "<base64 of 32 random bytes>"}}`. The api and worker refuse to start (exit 78) when the file is readable by group or others or, in prod, owned by anyone but root or the service user (uid 10001): keep `/etc/tumnis/secrets/` root-owned 0o700 and the file `chown 10001:root`, mode 0o400, bind-mounted read-only. Back the key file up with the API key pepper file, off the database host: losing either makes every secret unreadable (ADR-0010).
 
@@ -44,6 +44,15 @@ Rotate the master key without downtime:
 2. Restart the api and the worker: new data keys are wrapped under the new version, and both versions stay loaded.
 3. Run `tumnis keys rotate-master --to <new version>` with `DATABASE_OWNER_URL` set: it re-wraps every data key; the sealed values do not change.
 4. Remove the old version from the file and restart again.
+
+**Releases and rollback.** Versions follow [SemVer](https://semver.org) (`v0.1.0` at the phase 0 gate) and every release has a dated section in [CHANGELOG.md](CHANGELOG.md) ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)). Each PR with a user-visible change adds a line under `## [Unreleased]`. To release:
+
+1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add an empty `## [Unreleased]` above it, and merge that PR.
+2. Check the tag locally: `python scripts/release/check_changelog.py vX.Y.Z`.
+3. Tag `main` and push the tag: `git tag -s vX.Y.Z -m "..." && git push origin vX.Y.Z`.
+4. `.github/workflows/release.yml` rehearses the rollback from the previous tag on the homelab runner, then pushes `ghcr.io/spaceshipcreative/tumnis:vX.Y.Z` and creates the GitHub release with the changelog section as notes, the CycloneDX SBOM (`sbom.cdx.json`) and the OpenAPI spec (`openapi-vX.Y.Z.json`) attached.
+
+Rollback is "redeploy the previous image": point `TUMNIS_VERSION` back at the previous tag (or `sha-<commit>`) in Coolify and deploy. Migrations are expand-only (squawk checks them, and the rehearsal proves them), so the previous release runs on the newer schema: its `tumnis migrate` exits 0 with "database is ahead of this release (rollback)", and readiness treats a database ahead of the release as ready. Never roll the database back. DBOS resumes a workflow only on the application version that started it: when rolling back with work in flight, keep one worker on the newer image running until its queues drain. Rehearse any release locally with `scripts/release/rollback_rehearsal.sh <previous tag> HEAD` (Docker; the stack is `deploy/compose.test.yaml` as project `tumnis-skew` on 127.0.0.1:18080). Every PR that changes a migration runs the same rehearsal from the latest `main` image (`.github/workflows/version-skew.yml`).
 
 ## Develop
 
