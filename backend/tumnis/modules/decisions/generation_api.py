@@ -40,6 +40,12 @@ MAX_PLACEHOLDER_CHARS: Final = 120  # plan default
 PLACEHOLDER_MAX_TOKENS: Final = 48  # plan default: one short sentence
 TITLE_CHARS: Final = 300  # the two fields that leave the server, and their caps
 PROJECT_NAME_CHARS: Final = 120
+SPOKEN_SYSTEM_PROMPT: Final = (
+    "Rewrite this message as one short sentence to be read aloud. No preamble."
+)
+SPOKEN_TEXT_CHARS: Final = 500  # plan defaults
+MAX_SPOKEN_CHARS: Final = 200
+SPOKEN_MAX_TOKENS: Final = 96
 
 
 def placeholder_prompt(title: str, project_name: str) -> str:
@@ -65,8 +71,18 @@ async def placeholder_first_action(
 
 
 async def spoken_focus_message(*, text: str, project_id: UUID) -> str | None:
-    """The spoken form of a focus message (P2-16's caller), or None."""
-    raise NotImplementedError
+    """The spoken form of a focus message the master did not supply (P2-16's caller): one
+    sentence of at most 200 characters, or None on timeout or error (the caller speaks the
+    in-app text, FR-10.8). Sends the message text only (500). Worker-only."""
+    spoken = await _complete(
+        "spoken",
+        project_id,
+        system=SPOKEN_SYSTEM_PROMPT,
+        user=text[:SPOKEN_TEXT_CHARS],
+        max_tokens=SPOKEN_MAX_TOKENS,
+        timeout_ms=generation_config.settings().spoken_timeout_ms,
+    )
+    return None if spoken is None else one_line(spoken, MAX_SPOKEN_CHARS)
 
 
 async def _complete(

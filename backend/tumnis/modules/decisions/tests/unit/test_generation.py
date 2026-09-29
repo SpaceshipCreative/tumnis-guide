@@ -18,8 +18,10 @@ from tumnis.modules.decisions.adapters.fake import FakeGeneration
 from tumnis.modules.decisions.api import configure_generation
 from tumnis.modules.decisions.generation_api import (
     MAX_PLACEHOLDER_CHARS,
+    SPOKEN_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
     placeholder_first_action,
+    spoken_focus_message,
 )
 from tumnis.settings import GenerationSettings
 
@@ -176,3 +178,25 @@ async def test_a_failing_provider_or_no_endpoint_yields_none() -> None:
         await placeholder_first_action(title=TITLE, project_name=PROJECT, project_id=PROJECT_ID)
         is None
     )
+
+
+@pytest.mark.req("FR-11.8")
+@pytest.mark.wp("P1-03")
+async def test_spoken_focus_message_sends_only_the_text_and_keeps_one_sentence() -> None:
+    """The spoken form (P2-16's caller) sends the fixed spoken prompt and the message text
+    (capped at 500), and keeps one sentence of at most 200 characters; past
+    `generation.spoken_timeout_ms` it is None."""
+    message = "Focus: Review the Acme agreement (45 min) before the 2 pm call."
+    fake = FakeGeneration(text="Review the Acme agreement before your two o'clock call.\nGo.")
+    use(fake)
+    spoken = await spoken_focus_message(text=message, project_id=PROJECT_ID)
+    assert spoken == "Review the Acme agreement before your two o'clock call."
+    (call,) = fake.calls
+    assert (call.system, call.user) == (SPOKEN_SYSTEM_PROMPT, message)
+
+    fake.calls.clear()
+    await spoken_focus_message(text="m" * 600, project_id=PROJECT_ID)
+    assert fake.calls[0].user == "m" * 500
+
+    use(FakeGeneration(text="Too slow.", delay_ms=200), spoken_timeout_ms=50)
+    assert await spoken_focus_message(text=message, project_id=PROJECT_ID) is None
