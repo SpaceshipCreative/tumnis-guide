@@ -31,33 +31,27 @@ function openHarnessDb(): Promise<IDBDatabase> {
   return requestResult(request);
 }
 
-test.fails(
-  "[P0-02][Quality-rule-5] T-P0-02-15 msw rejects unhandled requests",
-  async () => {
-    const error = await rejectionOf(fetch(UNHANDLED_URL));
+test("[P0-02][Quality-rule-5] T-P0-02-15 msw rejects unhandled requests", async () => {
+  const error = await rejectionOf(fetch(UNHANDLED_URL));
 
-    expect(error).toBeInstanceOf(TypeError);
-    expect(String((error as TypeError).cause)).toMatch(
-      /\[MSW\] Cannot bypass a request when using the "error" strategy/,
-    );
-  },
-);
+  expect(error).toBeInstanceOf(TypeError);
+  expect(String((error as TypeError).cause)).toMatch(
+    /\[MSW\] Cannot bypass a request when using the "error" strategy/,
+  );
+});
 
-test.fails(
-  "[P0-02][Quality-rule-5] T-P0-02-15 fake-indexeddb persists across open",
-  async () => {
-    const first = await openHarnessDb();
-    await requestResult(
-      first.transaction("kv", "readwrite").objectStore("kv").put("kept", "k"),
-    );
-    first.close();
+test("[P0-02][Quality-rule-5] T-P0-02-15 fake-indexeddb persists across open", async () => {
+  const first = await openHarnessDb();
+  await requestResult(
+    first.transaction("kv", "readwrite").objectStore("kv").put("kept", "k"),
+  );
+  first.close();
 
-    const second = await openHarnessDb();
-    const value = await requestResult<unknown>(
-      second.transaction("kv", "readonly").objectStore("kv").get("k"),
-    );
-    second.close();
+  const second = await openHarnessDb();
+  const value = await requestResult<unknown>(
+    second.transaction("kv", "readonly").objectStore("kv").get("k"),
+  );
+  second.close();
 
-    expect(value).toBe("kept");
-  },
-);
+  expect(value).toBe("kept");
+});
