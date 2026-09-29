@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Tumnis Guide backend: modular monolith (ADR-0001)"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+  "alembic==1.20.0",
+  "dbos==3.1.0",
+  "psycopg[binary]==3.3.6",
   "pydantic==2.13.5",
+  "pyyaml==6.0.3",
+  "sqlalchemy[asyncio]==2.1.1",
   "typer==0.27.2",
 ]
 
@@ -13,10 +18,22 @@ tumnis = "tumnis.cli:app"
 
 [dependency-groups]
 dev = [
+  "aioboto3==15.5.0",
+  "asyncssh==2.24.0",
+  "cryptography==50.0.1",
+  "httpx==0.28.1",
+  "hypothesis==6.168.3",
   "import-linter==2.15",
   "mypy==2.3.1",
+  "polyfactory==3.3.0",
   "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "pytest-randomly==5.0.0",
+  "pytest-socket==0.8.1",
+  "pytest-xdist==3.8.0",
   "ruff==0.16.9",
+  "testcontainers[minio,postgres]==4.15.0",
+  "types-pyyaml==6.0.12.20260906",
 ]
 
 [build-system]
@@ -27,14 +44,26 @@ build-backend = "uv_build"
 module-name = "tumnis"
 module-root = ""
 
-# Minimal test config so the P0-01 meta-tests run; P0-02 owns the full harness.
 [tool.pytest.ini_options]
+minversion = "8.3"
 testpaths = ["tests", "tumnis"]
-addopts = "--strict-markers"
+addopts = "--strict-markers --strict-config -p randomly --disable-socket --allow-unix-socket -ra"
 xfail_strict = true
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+  "error",
+  "ignore::DeprecationWarning:testcontainers.*",
+  # SocketBlockedError warns as it is raised; the error itself is what tests see.
+  "ignore:A test tried to use socket:UserWarning:pytest_socket",
+]
 markers = [
   "req(*ids): PRD requirement IDs this test proves",
   "wp(id): work package that introduced the test",
+  "integration: needs Postgres or containers (sockets allowed)",
+  "contract: adapter, connector or schema contract",
+  "slow: over 5 seconds",
+  "drill: restore drill only, never on PRs",
 ]
 
 [tool.ruff]
@@ -45,6 +74,9 @@ src = ["tumnis", "tests"]
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S", "DTZ", "TID", "PT", "N", "C4", "RET", "PL"]
 ignore = ["PLR0913"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tumnis", "tests", "fixtures"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -67,6 +99,7 @@ ban-relative-imports = "all"
 "!tumnis/modules/*/rules*.py" = ["TID251"]
 "tests/**" = ["S101", "PLR2004", "S105", "S106"]
 "tumnis/modules/*/tests/**" = ["S101", "PLR2004", "S105", "S106"]
+"tumnis/core/tests/**" = ["S101", "PLR2004", "S105", "S106"]
 "tumnis/modules/*/migrations/**" = ["N999"]
 
 [tool.mypy]

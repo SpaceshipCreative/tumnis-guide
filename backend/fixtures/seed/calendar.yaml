@@ -1,0 +1,11 @@
+# One working day of six events (wall-clock times in the workspace timezone), leaving
+# free blocks of 90 (10:00-11:30), 30 (12:30-13:00) and 120 minutes (14:00-16:00).
+schema_version: 1
+day: +0d
+events:
+  - {key: e_planning, title: Daily planning, start: "09:00", end: "09:30", busy: true}
+  - {key: e_standup, title: Client call with Acme, start: "09:30", end: "10:00", busy: true}
+  - {key: e_lunch, title: Lunch, start: "11:30", end: "12:30", busy: true}
+  - {key: e_workshop, title: Authenticity workshop prep, start: "13:00", end: "14:00", busy: true}
+  - {key: e_pickup, title: School pickup, start: "16:00", end: "16:30", busy: true}
+  - {key: e_review, title: Weekly review, start: "16:30", end: "17:30", busy: true}

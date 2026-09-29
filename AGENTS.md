@@ -106,6 +106,8 @@ def test_agent_cannot_move_backlog_to_done() -> None:
 
 **Layers:** unit (`-m "not integration and not contract"`, sockets disabled), contract (`-m contract`), integration (`-m integration -n auto`), frontend (Vitest), end to end (Playwright against the seeded app with fakes), skills (homelab runner).
 
+**Backend fixtures** (in `backend/tests/fixtures/` and `backend/tests/_services.py`, loaded for every test folder by `backend/conftest.py`; never redefine them): `clock` (`FixedClock` at 2026-03-09T12:00Z, `advance()`, `set()`), `fakes` (`TUMNIS_ADAPTERS=fake`, `fakes["<adapter>"]`), `recordings(provider)` (`(raw, expected)` pairs from `tests/recordings/<provider>/*.json`); integration only: `pg_container`, `pg_base`, `db_template`, `db` (a fresh clone of the migrated template per test, `DbUrls` with `.owner`, `.app`, `.libpq(role)`), `owner_session`, `app_role_session`, `query_counter`, `dbos_sys_db`, `dbos` (launched on the test Postgres, system tables emptied per test), `seed` and `load_fixture` (through each module's api, once the writers exist), and the session services `minio`, `sftp_server`, `clamd`. Unit tests cannot open network sockets; the `integration` marker opens them.
+
 ## Adapters and fakes
 
 Placeholder: the adapter template (base class, timeout, circuit breaker, retry, fake and contract suite layout) is added in P0-09. Until then: every outside dependency sits behind an adapter in `<module>/adapters/` with a `fake.py` beside it, and `TUMNIS_ADAPTERS=fake` selects the fakes.

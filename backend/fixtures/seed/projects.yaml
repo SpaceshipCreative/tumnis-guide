@@ -1,0 +1,82 @@
+# Three projects, ten tasks each (subtasks count). Every status and label appears,
+# including a pending label (null); p_acme holds a hybrid parent with a 45-minute and a
+# 20-minute human subtask, and p_dogfood subtasks sit at 29, 30 and 31 minutes.
+schema_version: 1
+projects:
+  - key: p_acme
+    name: Acme rebrand
+    client: Acme
+    goal: Ship the new logo and brand guide
+    deadline: +21d
+    tasks:
+      - {key: t_acme_1, title: Collect logo references, label: human, status: done, estimate_minutes: 30}
+      - {key: t_acme_2, title: Send logo drafts to Acme, label: hybrid, status: today,
+         estimate_minutes: 45, due: +1d, first_action: Export the three drafts as PDF}
+      - {key: t_acme_3, title: Draft the brand guide outline, label: ai, status: in_progress}
+      - {key: t_acme_4, title: Review the colour palette with Acme, label: human,
+         status: waiting_on_human, estimate_minutes: 30, due: +2d}
+      - {key: t_acme_5, title: Generate icon set variations, label: ai, status: in_review}
+      - key: t_acme_6
+        title: Write logo usage rules
+        label: hybrid
+        status: backlog
+        estimate_minutes: 90
+        subtasks:
+          - {key: t_acme_6a, title: Pick clear-space rules, label: human, status: backlog,
+             estimate_minutes: 45}
+          - {key: t_acme_6b, title: List banned logo treatments, label: human, status: backlog,
+             estimate_minutes: 20}
+      - {key: t_acme_7, title: Invoice Acme for phase one, label: human, status: backlog,
+         estimate_minutes: 15, due: -3d, first_action: Open last month's invoice template}
+      - {key: t_acme_8, title: Tidy the shared Acme drive, status: backlog}
+
+  - key: p_authenticity
+    name: Authenticity course
+    client: Authenticity Collective
+    goal: Launch the six-lesson course
+    deadline: +45d
+    tasks:
+      - {key: t_auth_1, title: Outline lesson one, label: human, status: today,
+         estimate_minutes: 60, due: +0d, first_action: List the three lesson goals}
+      - {key: t_auth_2, title: Record lesson one, label: human, status: backlog,
+         estimate_minutes: 120, due: +5d}
+      - {key: t_auth_3, title: Transcribe the interview recordings, label: ai, status: done}
+      - {key: t_auth_4, title: Edit the intro video, label: hybrid, status: in_progress,
+         estimate_minutes: 90}
+      - {key: t_auth_5, title: Approve the course pricing, label: human, status: waiting_on_human,
+         estimate_minutes: 15}
+      - {key: t_auth_6, title: Draft the launch email sequence, label: ai, status: backlog}
+      - {key: t_auth_7, title: Set up the course platform, label: hybrid, status: backlog,
+         estimate_minutes: 60, due: -1d}
+      - {key: t_auth_8, title: Collect student testimonials, label: human, status: in_review,
+         estimate_minutes: 30}
+      - {key: t_auth_9, title: Book a guest for lesson three, label: human, status: backlog,
+         estimate_minutes: 20}
+      - {key: t_auth_10, title: Research competing courses, status: backlog}
+
+  - key: p_dogfood
+    name: Tumnis dogfood
+    goal: Run my own week on Tumnis
+    tasks:
+      - {key: t_dog_1, title: Import this week's tasks, label: human, status: done, estimate_minutes: 20}
+      - {key: t_dog_2, title: Try quick-add on the phone, label: human, status: today,
+         estimate_minutes: 15, due: +0d}
+      - key: t_dog_3
+        title: Split the onboarding checklist
+        label: hybrid
+        status: backlog
+        estimate_minutes: 90
+        subtasks:
+          - {key: t_dog_3a, title: Write the welcome note, label: human, status: backlog,
+             estimate_minutes: 29}
+          - {key: t_dog_3b, title: Record a setup walkthrough, label: human, status: backlog,
+             estimate_minutes: 30}
+          - {key: t_dog_3c, title: Check the backup restore steps, label: human, status: backlog,
+             estimate_minutes: 31}
+      - {key: t_dog_4, title: Summarise last week's notes, label: ai, status: in_progress}
+      - {key: t_dog_5, title: Decide the focus-mode defaults, label: human, status: waiting_on_human,
+         estimate_minutes: 30}
+      - {key: t_dog_6, title: Review the agent run results, label: human, status: in_review,
+         estimate_minutes: 20}
+      - {key: t_dog_7, title: File expense receipts, label: human, status: backlog,
+         estimate_minutes: 25, due: -2d}
