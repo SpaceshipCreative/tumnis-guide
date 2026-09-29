@@ -22,7 +22,6 @@ MARGIN_S = 0.05  # plan default
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 @settings(max_examples=25, deadline=None)
 @given(timeout_s=st.floats(min_value=0.02, max_value=0.2))
 def test_timeout_fires_inside_budget(timeout_s: float) -> None:
@@ -60,7 +59,6 @@ def test_timeout_fires_inside_budget(timeout_s: float) -> None:
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 async def test_fast_call_is_not_cut(clock: FixedClock) -> None:
     """T-P0-09-02
     A call finishing well inside the budget returns its value.

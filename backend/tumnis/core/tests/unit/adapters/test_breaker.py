@@ -137,7 +137,6 @@ class TestBreakerMachine(BreakerMachine.TestCase):  # type: ignore[misc,valid-ty
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 async def test_opens_after_n_failures_and_fails_fast(clock: FixedClock) -> None:
     """T-P0-09-04
     After failure_threshold failures fn is not called and CircuitOpen is raised.

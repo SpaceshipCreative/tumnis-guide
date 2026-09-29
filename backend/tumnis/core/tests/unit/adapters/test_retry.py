@@ -48,7 +48,6 @@ def test_backoff_is_exponential_with_jitter_and_cap(
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 @pytest.mark.parametrize("max_attempts", [1, 2, 3, 5])
 async def test_attempts_never_exceed_max(clock: FixedClock, max_attempts: int) -> None:
     """T-P0-09-08
@@ -84,7 +83,6 @@ async def test_attempts_never_exceed_max(clock: FixedClock, max_attempts: int) -
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 async def test_non_idempotent_and_rejected_calls_are_not_retried(clock: FixedClock) -> None:
     """T-P0-09-09
     idempotent=False or AdapterRejected gives one attempt.
@@ -126,7 +124,6 @@ async def test_non_idempotent_and_rejected_calls_are_not_retried(clock: FixedClo
 
 @pytest.mark.req("Architecture principle 5")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 async def test_retry_after_is_honored_and_capped(clock: FixedClock) -> None:
     """T-P0-09-10
     retry_after_s=2 gives a 2 s delay; retry_after_s=600 gives retry_after_cap_s; Adapter.call
