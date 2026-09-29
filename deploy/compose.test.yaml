@@ -19,6 +19,7 @@ x-image: &image
     dockerfile: deploy/Dockerfile
 
 services:
+  secrets: *image
   migrate: *image
   worker: *image
   seed: *image

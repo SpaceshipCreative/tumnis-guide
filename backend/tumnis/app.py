@@ -9,9 +9,11 @@ import contextlib
 import importlib
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
+from http import HTTPStatus
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, HTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
@@ -43,14 +45,26 @@ from tumnis.settings import Settings, install_master_keys, install_peppers
 SHELL_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
+# Paths the single-page app never owns: an unknown one stays a 404, not the shell.
+NOT_SHELL = ("v1", "health", "metrics", "mcp", "ws", "assets")
+
+
 class ShellFiles(StaticFiles):
     """The built frontend. Anything but GET/HEAD is 404, not 405, so unknown API routes
-    (for example the test routes with real adapters) are not found rather than refused."""
+    (for example the test routes with real adapters) are not found rather than refused.
+    An unknown page path (`/login`, `/setup`, P0-13) gets the shell's index.html, so the
+    app's own router takes it."""
 
     async def get_response(self, path: str, scope: Scope) -> Response:
         if scope["method"] not in ("GET", "HEAD"):
             raise HTTPException(status_code=404)
-        return await super().get_response(path, scope)
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            first, last = path.partition("/")[0], path.rsplit("/", 1)[-1]
+            if exc.status_code != HTTPStatus.NOT_FOUND or first in NOT_SHELL or "." in last:
+                raise
+            return await super().get_response("index.html", scope)
 
 
 @asynccontextmanager

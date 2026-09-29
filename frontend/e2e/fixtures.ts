@@ -2,11 +2,10 @@
 // from @playwright/test directly, so every spec can ask for these fixtures.
 //
 // `seededApp` resets the compose.test stack before each test (P0-04).
-// `signedInPage` is a stub until P0-13. The stub does not throw during fixture
-// setup: it hands the test a value that throws on first use, so the failure
-// happens inside the test body, after `test.fail()` has marked an acceptance
-// spec as an expected failure (P0-05). Fixtures are lazy, so specs that do not
-// request them are unaffected.
+// `signedInPage` (P0-13) resets the stack too, then signs in as the seed user
+// through the API (password, then the TOTP code of the seed secret at the real
+// time: the stack's clock is real), so the page carries the session and CSRF
+// cookies. Fixtures are lazy, so specs that do not request them are unaffected.
 //
 // Below the fixtures are helpers the acceptance specs share. Helpers hold no
 // assertions: they locate things and read the API, so the work packages that
@@ -39,23 +38,6 @@ interface E2EFixtures {
   signedInPage: Page;
 }
 
-/** A value that throws "<fixture> is a stub until <wp>" the moment it is used. */
-function pending(fixture: string, wp: string, detail: string): object {
-  const fail = (): never => {
-    throw new Error(`${fixture} is a stub until ${wp} (${detail})`);
-  };
-  return new Proxy(
-    {},
-    {
-      // `then` stays undefined so the stub is not mistaken for a promise.
-      get: (_target, key) => (key === "then" ? undefined : fail()),
-      set: fail,
-      has: fail,
-      apply: fail,
-    },
-  );
-}
-
 export const test = base.extend<E2EFixtures>({
   seededApp: async ({ baseURL, request }, use) => {
     // Mounted only with fake adapters (compose.test and previews).
@@ -68,10 +50,19 @@ export const test = base.extend<E2EFixtures>({
     await reset();
     await use({ baseURL: baseURL ?? "", reset });
   },
-  signedInPage: async ({ page }, use) => {
-    await use(
-      pending("signedInPage", "P0-13", `sign-in from ${page.url()}`) as Page,
-    );
+  signedInPage: async ({ page, seededApp }, use) => {
+    expect(seededApp.baseURL).toBeTruthy(); // the seed user exists, no code used yet
+    const user = seedUser();
+    const login = await page.request.post("/v1/auth/login", {
+      data: { email: user.email, password: user.password },
+    });
+    expect(login.status(), "POST /v1/auth/login").toBe(200);
+    const { preauth } = (await login.json()) as { preauth: string };
+    const signedIn = await page.request.post("/v1/auth/totp", {
+      data: { preauth, code: totp(user.totpSecret, new Date()) },
+    });
+    expect(signedIn.status(), "POST /v1/auth/totp").toBe(200);
+    await use(page);
   },
 });
 

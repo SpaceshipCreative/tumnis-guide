@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.seed import SEED_PATHS, DatabaseSink, SeedSet, load_seed, writers_registered
 
@@ -72,6 +73,10 @@ async def reset(
     if settings.database_owner_url is None:
         raise HTTPException(status_code=500, detail="reset needs DATABASE_OWNER_URL")
     await truncate_tables(settings.database_owner_url)
+    # A fresh stack: rate-limit buckets start full again (P0-13: every e2e test signs in
+    # from the same address, which the `login` bucket would otherwise throttle).
+    if isinstance(getattr(request.app.state, "rate_limiter", None), RateLimiter):
+        request.app.state.rate_limiter = RateLimiter(request.app.state.clock)
     if writers_registered():  # from P0-17 on; before that the seed has nowhere to go
         await load_seed(
             SEED_PATHS[seed_set],
