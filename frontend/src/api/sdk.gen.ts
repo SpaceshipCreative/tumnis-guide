@@ -95,6 +95,15 @@ import type {
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectErrors,
   ProjectsUpdateProjectResponses,
+  SearchSearchData,
+  SearchSearchErrors,
+  SearchSearchResponses,
+  SearchTypeaheadProjectsData,
+  SearchTypeaheadProjectsErrors,
+  SearchTypeaheadProjectsResponses,
+  SearchTypeaheadTasksData,
+  SearchTypeaheadTasksErrors,
+  SearchTypeaheadTasksResponses,
   SettingsGetSectionData,
   SettingsGetSectionErrors,
   SettingsGetSectionResponses,
@@ -184,6 +193,9 @@ import {
   zProjectsReorderProjectResponse,
   zProjectsUnarchiveProjectResponse,
   zProjectsUpdateProjectResponse,
+  zSearchSearchResponse,
+  zSearchTypeaheadProjectsResponse,
+  zSearchTypeaheadTasksResponse,
   zSettingsGetSectionResponse,
   zSettingsGetWorkspaceSettingsResponse,
   zSettingsListModulesResponse,
@@ -937,6 +949,25 @@ export const tasksListReviewKinds = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Search
+ *
+ * Tasks and projects matching `q`, best first: text match, recency, project match.
+ */
+export const searchSearch = <ThrowOnError extends boolean = false>(
+  options?: Options<SearchSearchData, ThrowOnError>,
+): RequestResult<SearchSearchResponses, SearchSearchErrors, ThrowOnError> =>
+  (options?.client ?? client).get<
+    SearchSearchResponses,
+    SearchSearchErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSearchSearchResponse.parseAsync(data),
+    url: "/v1/search",
+    ...options,
+  });
+
+/**
  * List Modules
  *
  * Every module, whether it is on for this workspace, and whether it can be off.
@@ -1322,6 +1353,52 @@ export const tasksChangeStatus = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Typeahead Projects
+ *
+ * Live projects matching `q` (archived ones drop out), best first.
+ */
+export const searchTypeaheadProjects = <ThrowOnError extends boolean = false>(
+  options?: Options<SearchTypeaheadProjectsData, ThrowOnError>,
+): RequestResult<
+  SearchTypeaheadProjectsResponses,
+  SearchTypeaheadProjectsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    SearchTypeaheadProjectsResponses,
+    SearchTypeaheadProjectsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSearchTypeaheadProjectsResponse.parseAsync(data),
+    url: "/v1/typeahead/projects",
+    ...options,
+  });
+
+/**
+ * Typeahead Tasks
+ *
+ * Live tasks matching `q`, best first; the given project's tasks lead.
+ */
+export const searchTypeaheadTasks = <ThrowOnError extends boolean = false>(
+  options?: Options<SearchTypeaheadTasksData, ThrowOnError>,
+): RequestResult<
+  SearchTypeaheadTasksResponses,
+  SearchTypeaheadTasksErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    SearchTypeaheadTasksResponses,
+    SearchTypeaheadTasksErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSearchTypeaheadTasksResponse.parseAsync(data),
+    url: "/v1/typeahead/tasks",
+    ...options,
   });
 
 /**

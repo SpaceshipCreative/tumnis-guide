@@ -18,7 +18,7 @@ context: row-level security keeps each workspace's rows to itself. `project_ids`
 project-limited key, R-28) keeps only rows of those projects.
 """
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import Any, Final, Literal
 from uuid import UUID
@@ -86,7 +86,7 @@ class SearchHit(BaseModel):
 def _statement(
     parts: Sequence[tuple[str, str]],
     *,
-    project_ids: Sequence[UUID] | None,
+    project_ids: Collection[UUID] | None,
     after: bool,
     snippets: bool,
 ) -> tuple[str, dict[str, Any]]:
@@ -119,7 +119,7 @@ async def _ranked(
     *,
     entity_types: tuple[str, ...],
     project_id: UUID | None,
-    project_ids: Sequence[UUID] | None,
+    project_ids: Collection[UUID] | None,
     now: datetime,
     limit: int,
     after: Cursor | None = None,
@@ -156,7 +156,7 @@ async def search(
     cursor: str | None = None,
     limit: int = 20,
     now: datetime,
-    project_ids: Sequence[UUID] | None = None,
+    project_ids: Collection[UUID] | None = None,
 ) -> Page[SearchHit]:
     """Tasks and projects matching `q`, best first; rows of `project_id` are boosted. An
     empty query is an empty page. A cursor carries the first page's `now`; a malformed one
@@ -189,7 +189,7 @@ async def typeahead_projects(
     limit: int = TYPEAHEAD_LIMIT,
     *,
     now: datetime,
-    project_ids: Sequence[UUID] | None = None,
+    project_ids: Collection[UUID] | None = None,
 ) -> list[SearchHit]:
     """Live projects matching `q` (archived ones leave the index), best first."""
     return await _ranked(
@@ -211,7 +211,7 @@ async def typeahead_tasks(
     limit: int = TYPEAHEAD_LIMIT,
     *,
     now: datetime,
-    project_ids: Sequence[UUID] | None = None,
+    project_ids: Collection[UUID] | None = None,
 ) -> list[SearchHit]:
     """Live tasks matching `q`, best first; tasks of `project_id` are boosted."""
     return await _ranked(
@@ -226,5 +226,113 @@ async def typeahead_tasks(
     )
 
 
+# --- Indexing (the subscribers in events.py) ----------------------------------------------
+
+BODY_MAX_BYTES: Final = 8_192  # plan default: 8 KB of body per row
+
+
+class _TaskDoc(BaseModel):
+    """What task events carry for search (tasks' TaskDoc, read without importing tasks)."""
+
+    title: str
+    body: str = ""
+    deleted: bool = False
+    project_id: UUID | None = None
+    updated_at: datetime | None = None
+
+
+class _Change(BaseModel):
+    """One row's new state; None leaves a column as it is."""
+
+    entity_type: EntityType
+    entity_id: UUID
+    project_id: UUID | None = None
+    title: str | None = None
+    body: str | None = None
+    deleted: bool | None = None
+    at: datetime
+
+
+def _cap(body: str) -> str:
+    return body.encode()[:BODY_MAX_BYTES].decode(errors="ignore")
+
+
+def _task_change(payload: dict[str, Any], at: datetime) -> _Change:
+    doc = _TaskDoc.model_validate(payload["doc"])
+    return _Change(
+        entity_type="task",
+        entity_id=payload["task_id"],
+        project_id=doc.project_id or payload.get("project_id"),
+        title=doc.title,
+        body=_cap(doc.body),
+        deleted=doc.deleted,
+        at=doc.updated_at or at,
+    )
+
+
+def _project_change(payload: dict[str, Any], at: datetime) -> _Change:
+    name = payload.get("name")
+    archived = payload.get("archived")
+    return _Change(
+        entity_type="project",
+        entity_id=payload["project_id"],
+        project_id=payload["project_id"],
+        title=name,
+        body=None if name is None else _cap(payload.get("goal") or ""),
+        deleted=archived,
+        at=at,
+    )
+
+
+def change_for(envelope: EventEnvelope) -> _Change | None:
+    """The index change an event makes; None for an event search does not index."""
+    payload, at = envelope.payload, envelope.occurred_at
+    match envelope.name:
+        case "task.created" | "task.updated":
+            return _task_change(payload, at)
+        case "project.created":
+            return _project_change({**payload, "archived": False}, at)
+        case "project.updated":
+            return _project_change(payload, at)
+        case "project.archived":
+            return _project_change({"project_id": payload["project_id"], "archived": True}, at)
+    return None
+
+
+# Newest source wins: a late (older) event changes nothing. A row first made by an event
+# without text (an archive seen before its create) holds an empty title until text comes.
+_UPSERT: Final = text(
+    """
+    INSERT INTO search_index AS si (workspace_id, entity_type, entity_id, project_id, title,
+                                    body, source_updated_at, deleted_at)
+    VALUES (:ws, :entity_type, :entity_id, CAST(:project_id AS uuid),
+            COALESCE(CAST(:title AS text), ''), COALESCE(CAST(:body AS text), ''), :at,
+            CASE WHEN CAST(:deleted AS boolean) THEN CAST(:at AS timestamptz) END)
+    ON CONFLICT (workspace_id, entity_type, entity_id) DO UPDATE SET
+      project_id = COALESCE(EXCLUDED.project_id, si.project_id),
+      title = CASE WHEN CAST(:title AS text) IS NULL THEN si.title ELSE EXCLUDED.title END,
+      body = CASE WHEN CAST(:body AS text) IS NULL THEN si.body ELSE EXCLUDED.body END,
+      deleted_at = CASE WHEN CAST(:deleted AS boolean) IS NULL THEN si.deleted_at
+                        WHEN CAST(:deleted AS boolean)
+                        THEN COALESCE(si.deleted_at, EXCLUDED.source_updated_at) END,
+      source_updated_at = EXCLUDED.source_updated_at,
+      version = si.version + 1
+    WHERE si.source_updated_at <= EXCLUDED.source_updated_at
+    RETURNING 1
+    """
+)
+
+
 async def index_event(s: AsyncSession, envelope: EventEnvelope) -> int:
-    raise NotImplementedError
+    """Applies a task or project event to the index in the caller's transaction (in the
+    event's workspace context). Idempotent: the same event again writes the same row.
+    Returns 1 when the row changed, 0 for a stale or unindexed event."""
+    change = change_for(envelope)
+    if change is None:
+        return 0
+    params = change.model_dump(exclude={"entity_type", "entity_id"}) | {
+        "ws": envelope.workspace_id,
+        "entity_type": change.entity_type,
+        "entity_id": change.entity_id,
+    }
+    return len((await s.execute(_UPSERT, params)).all())

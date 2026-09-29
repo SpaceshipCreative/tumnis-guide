@@ -35,7 +35,6 @@ async def _hits(client: SessionClient, q: str) -> list[dict[str, Any]]:
 
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_task_changes_reach_index_through_events(
     db: DbUrls,
     dbos: type[DBOS],
@@ -81,7 +80,6 @@ async def test_task_changes_reach_index_through_events(
 
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_out_of_order_event_does_not_overwrite_newer(
     search_db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
