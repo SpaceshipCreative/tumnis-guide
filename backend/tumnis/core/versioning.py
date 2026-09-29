@@ -1,10 +1,14 @@
 """Optimistic concurrency: a write names the version it read (REL-2).
 
-P0-08 lands `StaleVersion` and `update_versioned` for the settings writers; P0-10 adds the
-409 problem handler, `soft_delete_versioned` and the rest of the write conventions here.
+`update_versioned` and `soft_delete_versioned` match `version = expected` on a live row. A
+stale version raises `StaleVersion` carrying the current row, which the problem handlers
+(tumnis.core.errors) answer as 409 `stale_version` with `current`; a missing or deleted row
+raises `NotFound` (404 `not_found`). Writers that shape their resource differently raise
+`StaleVersion(current=<resource>)` themselves.
 """
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -15,12 +19,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class StaleVersion(Exception):  # noqa: N818  # the plan's name (A13, P0-10)
     """The row moved on since the caller read it; `current` is what it holds now."""
 
+    status = 409
+    code = "stale_version"
+
     def __init__(self, current: Mapping[str, Any]) -> None:
         super().__init__("stale version")
         self.current = current
 
 
 class NotFound(LookupError):  # noqa: N818  # the plan's name (P0-10)
+    status = 404
+    code = "not_found"
+
     def __init__(self, table: str, row_id: UUID) -> None:
         super().__init__(f"{table} {row_id} not found")
         self.table = table
@@ -55,3 +65,18 @@ async def update_versioned(
     if current is None or current["deleted_at"] is not None:
         raise NotFound(table.name, row_id)
     raise StaleVersion(current=dict(current))
+
+
+async def soft_delete_versioned(
+    session: AsyncSession,
+    table: Table,
+    row_id: UUID,
+    expected_version: int,
+    *,
+    deleted_at: datetime,
+) -> RowMapping:
+    """Set `deleted_at` at `expected_version` (the touch trigger bumps the version); the
+    same StaleVersion and NotFound rules as update_versioned."""
+    return await update_versioned(
+        session, table, row_id, expected_version, {"deleted_at": deleted_at}
+    )
