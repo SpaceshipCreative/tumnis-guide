@@ -33,7 +33,7 @@ from uuid import UUID, uuid4, uuid5
 
 import psycopg
 from fastapi import WebSocket
-from sqlalchemy import Table, select, text, update
+from sqlalchemy import Table, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
@@ -496,14 +496,21 @@ class _RunnerSocket:
         """The result as a run event (once per message id), then handed to the run's
         workflow; acked only once the workflow has it. A result counts only from the runner
         the run was dispatched to (its `run` message, uuid5(run_id, "run")); from any other
-        runner it is acked and dropped."""
+        runner it is acked and dropped. The result also acks that `run` message: the runner
+        got it even if its ack was lost, and a resent run would execute the skill again."""
         async with tenant_session(self.ctx) as s:
             dispatched_here = await s.scalar(
-                select(_messages.c.id).where(
+                update(_messages)
+                .where(
                     _messages.c.message_id == uuid5(message.run_id, "run"),
                     _messages.c.direction == "out",
                     _messages.c.runner_id == self.runner_id,
                 )
+                .values(
+                    status="acked",
+                    acked_at=func.coalesce(_messages.c.acked_at, self.now()),
+                )
+                .returning(_messages.c.id)
             )
             if dispatched_here is None:
                 _log.warning(
