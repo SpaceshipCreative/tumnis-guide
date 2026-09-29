@@ -7,24 +7,37 @@ shared canonical upsert on this module's table; raw payloads go through
 """
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any, Literal
 from urllib.parse import urlencode
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import AwareDatetime, BaseModel, Field
 from sqlalchemy import Table, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core.adapters.registry import Health
-from tumnis.core.canonical import CanonicalRecord, UpsertStats, upsert_records
-from tumnis.core.clock import Clock
+from tumnis.core.canonical import (
+    CanonicalRecord,
+    UpsertStats,
+    soft_delete_records,
+    upsert_records,
+)
+from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.schemas import versioned
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.modules.calendar.adapters.fake import FakeGoogleCalendar
 from tumnis.modules.calendar.adapters.port import CalendarInfo, GoogleCalendarPort, TokenSet
 from tumnis.modules.calendar.models import Event
-from tumnis.modules.calendar.rules import READONLY_SCOPES, AccountStatus
+from tumnis.modules.calendar.rules import (
+    READONLY_SCOPES,
+    AccountStatus,
+    Tombstone,
+    map_event,
+    sync_window,
+)
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.integrations.api import (
     Capability,
@@ -201,7 +214,10 @@ def consent_url(*, client_id: str, redirect_uri: str, state: str, code_challenge
 
 
 class GoogleCalendar:
-    """The Google Calendar connector (P0-12 protocol)."""
+    """The Google Calendar connector (P0-12 protocol): pages through events.list of each
+    selected calendar over a fixed window (a `CalendarCursor` says where it is), hands out
+    one `RawItem` per event and the cancelled ones as `deleted`; `map` is `rules.map_event`.
+    """
 
     kind: ConnectorKind = "calendar"
     provider: str = PROVIDER
@@ -219,15 +235,97 @@ class GoogleCalendar:
         status: AccountStatus = "connected",
     ) -> None:
         self._api = api
+        self._access_token = access_token
+        self._calendar_ids = list(calendar_ids)
+        self._self_email = self_email
+        self._clock = clock or SystemClock()
+        self._window = window
+        self.status = status
+
+    def first_cursor(self) -> CalendarCursor:
+        """Where a sync with no stored cursor starts: the first calendar, the window."""
+        start, end = self._window or sync_window(self._clock.now().date(), ZoneInfo("UTC"))
+        return CalendarCursor(calendar_index=0, window_start=start, window_end=end)
 
     async def sync(self, cursor: dict[str, Any] | None) -> SyncPage:
-        raise NotImplementedError
+        at = CalendarCursor.model_validate(cursor) if cursor else self.first_cursor()
+        if self._api is None or at.calendar_index >= len(self._calendar_ids):
+            return SyncPage(items=[], next_cursor=None, has_more=False)
+        calendar_id = self._calendar_ids[at.calendar_index]
+        response = await self._api.list_events(
+            self._access_token,
+            calendar_id,
+            time_min=at.window_start,
+            time_max=at.window_end,
+            page_token=at.page_token,
+        )
+        fetched_at = self._clock.now()
+        time_zone = response.get("timeZone") or "UTC"
+        items: list[RawItem] = []
+        deleted: list[str] = []
+        for event in response.get("items", []):
+            external_id = f"{calendar_id}:{event['id']}"
+            if event.get("status") == "cancelled":
+                deleted.append(external_id)
+                continue
+            payload = {
+                "calendar_id": calendar_id,
+                "self_email": self._self_email,
+                "time_zone": time_zone,
+                "event": event,
+            }
+            items.append(
+                RawItem(
+                    external_id=external_id,
+                    record_type="event",
+                    payload=payload,
+                    fetched_at=fetched_at,
+                )
+            )
+        next_at = _next_cursor(at, response.get("nextPageToken"), len(self._calendar_ids))
+        return SyncPage(
+            items=items,
+            deleted=deleted,
+            next_cursor=None if next_at is None else next_at.model_dump(mode="json"),
+            has_more=next_at is not None,
+        )
 
     def map(self, raw: RawItem) -> list[CanonicalRecord]:
-        raise NotImplementedError
+        payload = raw.payload
+        mapped = map_event(
+            payload["event"],
+            calendar_id=payload["calendar_id"],
+            self_email=payload.get("self_email", ""),
+            calendar_tz=_zone(payload.get("time_zone")),
+        )
+        if isinstance(mapped, Tombstone):
+            return []
+        return [EventRecord(**mapped.model_dump(), fetched_at=raw.fetched_at)]
 
     async def health(self) -> Health:
-        raise NotImplementedError
+        if self.status == "needs_reauth":
+            return "degraded"
+        state = getattr(self._api, "health_state", None)
+        health: Health = state() if callable(state) else "ok"
+        return health
+
+
+def _next_cursor(
+    at: CalendarCursor, page_token: str | None, calendars: int
+) -> CalendarCursor | None:
+    """The same calendar's next page, else the next calendar's first, else None (done)."""
+    if page_token:
+        return at.model_copy(update={"page_token": page_token})
+    if at.calendar_index + 1 < calendars:
+        return at.model_copy(update={"calendar_index": at.calendar_index + 1, "page_token": None})
+    return None
+
+
+def _zone(name: str | None) -> tzinfo:
+    try:
+        return ZoneInfo(name or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        return UTC
 
 
 async def ingest_events_page(
@@ -238,13 +336,38 @@ async def ingest_events_page(
     *,
     session: AsyncSession | None = None,
 ) -> UpsertStats:
-    raise NotImplementedError
+    """One sync page into `events`: raw payloads stored, items mapped and upserted, the
+    cancelled ones soft-deleted. Idempotent: a page delivered again changes nothing."""
+    async with session_for(ctx, session) as s:
+        raw_ids = await integrations.store_raw_payloads(ctx, connection_id, page.items, session=s)
+        records: list[EventRecord] = []
+        record_raw: dict[str, UUID] = {}
+        for item in page.items:
+            for rec in connector.map(item):
+                if isinstance(rec, EventRecord):
+                    records.append(rec)
+                    record_raw[rec.external_id] = raw_ids[(item.record_type, item.external_id)]
+        stats = await upsert_events(ctx, connection_id, records, raw_ids=record_raw, session=s)
+        await soft_delete_records(s, _events, connection_id, page.deleted)
+    return stats
 
 
 async def events_between(
     ctx: WorkspaceContext, start: datetime, end: datetime, *, session: AsyncSession | None = None
 ) -> list[EventOut]:
-    raise NotImplementedError
+    """The workspace's live events overlapping [start, end) from every connection (every
+    Google account and the seed calendar), by start time; each carries its busy flag."""
+    async with session_for(ctx, session) as s:
+        rows = await s.execute(
+            select(_events)
+            .where(
+                _events.c.deleted_at.is_(None),
+                _events.c.start_at < end,
+                _events.c.end_at > start,
+            )
+            .order_by(_events.c.start_at, _events.c.id)
+        )
+        return [EventOut.model_validate(row._mapping) for row in rows]
 
 
 async def list_accounts(
@@ -278,7 +401,17 @@ def _real_connector(**deps: Any) -> GoogleCalendar:
     return GoogleCalendar(**deps)
 
 
+# The fake connector replays account a of the recordings over the recorded window.
+_FAKE_ACCOUNT = "avery@example.com"
+_FAKE_WINDOW = (datetime(2026, 3, 8, 5, 0, tzinfo=UTC), datetime(2026, 3, 24, 4, 0, tzinfo=UTC))
+
+
 def _fake_connector(**deps: Any) -> GoogleCalendar:
+    deps.setdefault("api", FakeGoogleCalendar())
+    deps.setdefault("access_token", "fake-access-a")
+    deps.setdefault("calendar_ids", [_FAKE_ACCOUNT])
+    deps.setdefault("self_email", _FAKE_ACCOUNT)
+    deps.setdefault("window", _FAKE_WINDOW)
     return GoogleCalendar(**deps)
 
 

@@ -24,7 +24,6 @@ RECORDINGS = Path(__file__).resolve().parents[1] / "recordings" / "google_calend
 @pytest.mark.contract
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="spec:P1-09")
 class TestGoogleCalendarOnRecordings(ConnectorContract):
     """T-P1-09-01
     The real connector (real Google client over recorded HTTP responses) passes the P0-12
@@ -45,7 +44,6 @@ class TestGoogleCalendarOnRecordings(ConnectorContract):
 @pytest.mark.contract
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="spec:P1-09")
 class TestGoogleCalendarFake(ConnectorContract):
     """The registered fake connector (recording replay) passes the same contract."""
 
