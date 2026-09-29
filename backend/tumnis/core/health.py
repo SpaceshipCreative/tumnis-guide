@@ -98,6 +98,23 @@ def sql_check(engine: Callable[[], AsyncEngine], statement: str) -> HealthCheck:
     return check
 
 
+def schema_check(
+    engine: Callable[[], AsyncEngine], position: Callable[[set[str]], str]
+) -> HealthCheck:
+    """ok while the database is at this release's Alembic heads or ahead of them; down
+    while it is behind (migrate has not run). Ahead is a rollback: the later release's
+    migrations are expand-only, so its schema serves this one (P0-30, REL-4). `position`
+    is `tumnis.migrate.release_revisions().position`, given by the composition root."""
+
+    async def check() -> Status:
+        async with engine().connect() as conn:
+            rows = await conn.execute(text("SELECT version_num FROM alembic_version"))
+            current = {version for (version,) in rows}
+        return "down" if position(current) == "behind" else "ok"
+
+    return check
+
+
 def dbos_check(system_database_url: str) -> HealthCheck:
     """ok when the DBOS system tables answer (table name checked against DBOS 3.1.0).
     NullPool: every probe opens a fresh connection, so a dropped database shows at once."""

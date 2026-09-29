@@ -77,7 +77,6 @@ def test_migrate_exits_zero_when_database_is_ahead(
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P0-30")
-@pytest.mark.xfail(strict=True, reason="spec:P0-30")
 async def test_readiness_is_ready_when_database_is_ahead(
     db: DbUrls, client: httpx.AsyncClient, dbos: object
 ) -> None:
@@ -89,3 +88,25 @@ async def test_readiness_is_ready_when_database_is_ahead(
     response = await client.get("/health/ready")
     assert response.status_code == 200, response.text
     assert response.json()["checks"]["schema"] == "ok"
+
+
+@pytest.mark.req("REL-4", "REL-5")
+@pytest.mark.wp("P0-30")
+async def test_readiness_is_down_when_database_is_behind(
+    db: DbUrls, client: httpx.AsyncClient, dbos: object
+) -> None:
+    """A database missing one of this release's heads (migrate has not run) makes the
+    critical `schema` check down: readiness 503."""
+    from tumnis.migrate import release_revisions  # noqa: PLC0415
+
+    some_head = sorted(release_revisions().heads)[0]
+    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+        # Only this release's revisions stay (the harness's test-only ones are unknown to
+        # it and would read as ahead), minus one head.
+        conn.execute(
+            "DELETE FROM alembic_version WHERE version_num LIKE 'harness_%%' OR version_num = %s",
+            (some_head,),
+        )
+    response = await client.get("/health/ready")
+    assert response.status_code == 503, response.text
+    assert response.json()["checks"]["schema"] == "down"
