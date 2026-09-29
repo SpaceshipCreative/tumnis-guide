@@ -680,6 +680,14 @@ class WorkerKiller:
         finally:
             await self._stop(proc)
 
+    async def start(self, killpoint: str | None = None) -> asyncio.subprocess.Process:
+        """A worker on this killer's databases, armed at `killpoint` when one is given, for
+        tests that drive their own workflows (P1-04); end it with `stop`."""
+        return await self._start(killpoint)
+
+    async def stop(self, proc: asyncio.subprocess.Process) -> None:
+        await self._stop(proc)
+
     @staticmethod
     async def _stop(proc: asyncio.subprocess.Process) -> None:
         if proc.returncode is not None:

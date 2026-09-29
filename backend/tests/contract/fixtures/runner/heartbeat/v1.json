@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "message_id": "01950000-0000-7000-8000-000000001003",
+  "correlation_id": "runner:homelab-hermes",
+  "sent_at": "2026-03-09T12:00:00Z",
+  "type": "heartbeat",
+  "seq": 4,
+  "running_run_ids": [
+    "01950000-0000-7000-8000-000000000101"
+  ]
+}
