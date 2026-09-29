@@ -83,7 +83,7 @@ def bootstrap_roles(superuser_dsn: str) -> None:
             conn.execute(statement.encode())
 
 
-def _first_connect(dsn: str, timeout_s: float = 30) -> psycopg.Connection[Any]:
+def _first_connect(dsn: str, timeout_s: float = 120) -> psycopg.Connection[Any]:
     """The first connection to a new container, retried: testcontainers waits for psql
     inside the container, but Docker Desktop's published port can still close the first
     host connections ("server closed the connection unexpectedly") for a moment after."""
