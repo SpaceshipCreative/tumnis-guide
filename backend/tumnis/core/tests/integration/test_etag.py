@@ -20,7 +20,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("PERF-2")
 @pytest.mark.wp("P0-22")
-@pytest.mark.xfail(strict=True, reason="spec:P0-22")
 async def test_unchanged_get_returns_304(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:

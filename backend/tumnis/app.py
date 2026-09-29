@@ -36,6 +36,7 @@ from tumnis.core import (
 from tumnis.core.bodylimit import BodyLimitMiddleware
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import document_problem_media_type, install_problem_handlers
+from tumnis.core.etag import ETagMiddleware
 from tumnis.core.principal import AuthenticationMiddleware
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.request_meta import RequestMetaMiddleware
@@ -196,10 +197,11 @@ def create_app(
     # Middleware, innermost first (add_middleware wraps what is there): correlation ID,
     # source address and user agent for the audit log (P0-15); the body limit outside it
     # (P0-10); outermost the request histogram, timing everything below it (P0-27).
-    # Authentication (P0-13, innermost: the principal from the session cookie) goes inside
-    # the correlation ID; the security headers (P0-16) sit outside all of it (installed
-    # above). Rate limits, the Origin check and CSRF run in TumnisRoute, where the route's
-    # policy is known.
+    # ETags (P0-22) are innermost; authentication (P0-13: the principal from the session
+    # cookie) next, inside the correlation ID; the security headers (P0-16) sit outside
+    # all of it (installed above). Rate limits, the Origin check and CSRF run in
+    # TumnisRoute, where the route's policy is known.
+    app.add_middleware(ETagMiddleware)  # innermost: tags the body the route built (P0-22)
     app.add_middleware(AuthenticationMiddleware)
     app.add_middleware(RequestMetaMiddleware)
     app.add_middleware(BodyLimitMiddleware)
