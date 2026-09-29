@@ -169,7 +169,6 @@ def test_operation_ids_are_unique_and_stable() -> None:
 @pytest.mark.contract
 @pytest.mark.req("FR-14.7")
 @pytest.mark.wp("P0-11")
-@pytest.mark.xfail(strict=True, reason="spec:P0-11")
 def test_generated_contract_tests_cover_every_schema(repo_root: Path) -> None:
     """T-P0-11-11
     Each registered schema appears in a generated test's CASES, and each generated file
