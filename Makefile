@@ -24,8 +24,10 @@ test:
 test-int:
 	$(BACKEND) uv run pytest -q -n auto -m integration
 
+## Playwright journeys and acceptance, phone and laptop (the stack starts from compose.test
+## once P0-04 lands; E2E_BASE_URL points at a running app instead).
 e2e:
-	@echo "not yet (P0-05)"
+	cd frontend && npx playwright test
 
 gen:
 	@echo "not yet (P0-11)"
