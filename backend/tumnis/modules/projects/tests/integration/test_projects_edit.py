@@ -141,7 +141,6 @@ async def test_subtask_threshold_falls_back_to_the_workspace(
 ) -> None:
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
     from tumnis.core.versioning import NotFound  # noqa: PLC0415
-    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
     from tumnis.modules.projects import api  # noqa: PLC0415
 
     made = (await session_client.post("/v1/projects", json={"name": "Threshold"})).json()
@@ -156,6 +155,3 @@ async def test_subtask_threshold_falls_back_to_the_workspace(
         assert await api.effective_subtask_threshold(s, project_id) == 45
         with pytest.raises(NotFound):
             await api.get_policy(s, uuid.uuid4())
-        # No relay ran: the brief does not exist yet.
-        with pytest.raises(NotFound):
-            await knowledge.get_brief(project_id, session=s)

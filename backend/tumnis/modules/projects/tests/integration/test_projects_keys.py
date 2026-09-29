@@ -16,6 +16,20 @@ if TYPE_CHECKING:
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
+# Every scope a key can hold (FR-14.10); spelled out, since module tests reach auth only
+# through its api.
+EVERY_SCOPE = frozenset(
+    {
+        "tasks:read",
+        "tasks:write",
+        "context:read",
+        "knowledge:write",
+        "drafts:write",
+        "delegate",
+        "ingest",
+    }
+)
+
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P0-17")
@@ -50,10 +64,8 @@ async def test_keys_cannot_write_projects(
     app: FastAPI, key_client: KeyClientFactory, make_project: MakeProject
 ) -> None:
     """Every project write answers 403 `session_required` to a full-scope key."""
-    from tumnis.modules.auth.scopes import SCOPES  # noqa: PLC0415
-
     project = await make_project(name="Keyless")
-    client = await key_client(SCOPES)
+    client = await key_client(EVERY_SCOPE)
     body = {"version": project.version}
     async with client:
         answers = [

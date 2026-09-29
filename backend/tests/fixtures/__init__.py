@@ -860,13 +860,13 @@ def app_with_fakes(  # noqa: PLR0917
     never refill under the fuzzer's hundreds of requests (P0-10's tests cover the limits).
     A sync fixture: the caller drives the app through its own event loop (Schemathesis
     runs each request in a TestClient, whose lifespan disposes the engines)."""
+    import tumnis.wiring  # noqa: F401, PLC0415  # modules register their seed writers
     from tumnis.app import create_app  # noqa: PLC0415
     from tumnis.core import db as core_db  # noqa: PLC0415
     from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
     from tumnis.core.types import ActorRef  # noqa: PLC0415
     from tumnis.modules.auth import api as auth_api  # noqa: PLC0415
     from tumnis.modules.auth.scopes import SCOPES  # noqa: PLC0415
-    import tumnis.wiring  # noqa: F401, PLC0415  # modules register their seed writers
     from tumnis.seed import writers_registered  # noqa: PLC0415
 
     if writers_registered():
