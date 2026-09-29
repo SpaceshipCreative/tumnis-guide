@@ -1,31 +1,18 @@
-// The review kind registry (P0-18's `GET /v1/review/kinds`). Seam until the route is in
-// the generated client (`tasksListReviewKindsOptions`): the kinds as a list of names, or
-// null when the registry cannot be read (then no kind is dropped).
+// The review kind registry (P0-18's `GET /v1/review/kinds`, the generated
+// `tasksListReviewKinds`): the kinds as a list of names, or null when the registry cannot
+// be read (then no kind is dropped).
 import { queryOptions } from "@tanstack/react-query";
 
-import { apiUrl } from "./fetch";
-
-function kindsOf(body: unknown): string[] | null {
-  const rows: unknown = Array.isArray(body)
-    ? body
-    : (body as { items?: unknown } | null)?.items;
-  if (!Array.isArray(rows)) return null;
-  return rows.flatMap((row: unknown) => {
-    if (typeof row === "string") return [row];
-    const kind = (row as { kind?: unknown } | null)?.kind;
-    return typeof kind === "string" ? [kind] : [];
-  });
-}
+import { tasksListReviewKindsQueryKey } from "../api/@tanstack/react-query.gen";
+import { tasksListReviewKinds } from "../api/sdk.gen";
 
 export function reviewKindsOptions() {
   return queryOptions({
-    queryKey: ["review-kinds"],
+    queryKey: tasksListReviewKindsQueryKey(),
     queryFn: async (): Promise<string[] | null> => {
       try {
-        const response = await fetch(apiUrl("/review/kinds"), {
-          credentials: "same-origin",
-        });
-        return response.ok ? kindsOf(await response.json()) : null;
+        const { data } = await tasksListReviewKinds();
+        return data ? data.items.map((row) => row.kind) : null;
       } catch {
         return null;
       }

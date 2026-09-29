@@ -17,7 +17,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import structlog
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import Table, delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tumnis.core import rank, tenancy
 from tumnis.core.clock import SystemClock
 from tumnis.core.errors import ProblemError
+from tumnis.core.limits import MAX_ESTIMATE_MINUTES
 from tumnis.core.live import mark_changed
 from tumnis.core.outbox import emit
 from tumnis.core.pagination import Page, SortKey, paginate
@@ -67,6 +68,8 @@ ProjectStatus = Literal["active", "on_hold", "completed"]
 Name = Annotated[str, StringConstraints(min_length=1, max_length=120, strip_whitespace=True)]
 Goal = Annotated[str, StringConstraints(max_length=280)]
 Brief = Annotated[str, StringConstraints(max_length=BRIEF_MAX_CHARS)]
+# The subtask card threshold (FR-3.8), minutes; None: the workspace's (P0-18 lays out on it).
+Threshold = Annotated[int, Field(ge=1, le=MAX_ESTIMATE_MINUTES)]
 
 
 class ProjectLinkIn(BaseModel):
@@ -97,6 +100,7 @@ class ProjectOut(ProjectCreate):
     open_count: int
     next_milestone: date | None
     last_agent_activity_at: datetime | None = None  # always None until P2-04
+    subtask_threshold_min: int | None = None  # None: the workspace's threshold (FR-3.8)
 
 
 class ProjectPatch(BaseModel):
@@ -112,6 +116,7 @@ class ProjectPatch(BaseModel):
     repo_url: str | None = None
     links: list[ProjectLinkIn] | None = None
     profile_name: str | None = None
+    subtask_threshold_min: Threshold | None = None
     version: Version
 
 
@@ -230,7 +235,7 @@ async def _outs(s: AsyncSession, rows: Sequence[_Row], now: datetime | None) -> 
         st = stats.get(row.id, ZERO_STATS)
         out.append(
             ProjectOut(
-                **row.model_dump(exclude={"subtask_threshold_min"}),
+                **row.model_dump(),
                 links=links[row.id],
                 health=project_health(st.health_facts),
                 open_count=st.open_count,

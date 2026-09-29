@@ -164,9 +164,40 @@ async def canary_row(project_id: uuid.UUID) -> uuid.UUID:
     return row_id
 
 
+async def task_row(project_id: uuid.UUID) -> uuid.UUID:
+    """A task in project `project_id` (made with that id when there is none), in the
+    workspace of the newest API key (the one the case sends), written as the owner
+    (P0-18's `lookup:tasks` routes)."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from tumnis.core import db  # noqa: PLC0415
+
+    async with db.owner_sessionmaker()() as s, s.begin():
+        workspace_id = await s.scalar(
+            text("SELECT workspace_id FROM api_keys ORDER BY created_at DESC, id DESC LIMIT 1")
+        )
+        await s.execute(
+            text(
+                "INSERT INTO projects (id, workspace_id, name, sort_key, created_by)"
+                " VALUES (:p, :ws, :name, 'a0', 'system') ON CONFLICT (id) DO NOTHING"
+            ),
+            {"p": project_id, "ws": workspace_id, "name": f"Authz {project_id}"},
+        )
+        task_id: uuid.UUID | None = await s.scalar(
+            text(
+                "INSERT INTO tasks (workspace_id, project_id, title, board_rank, created_by)"
+                " VALUES (:ws, :p, 'Authz probe', 'a0', 'system') RETURNING id"
+            ),
+            {"p": project_id, "ws": workspace_id},
+        )
+    assert task_id is not None
+    return task_id
+
+
 # module -> make a row of that module in the project; returns its id (lookup:<module>).
 LOOKUP_TARGETS: dict[str, Callable[[uuid.UUID], Awaitable[uuid.UUID]]] = {
     "authz_canary": canary_row,
+    "tasks": task_row,
 }
 
 

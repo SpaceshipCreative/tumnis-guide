@@ -259,6 +259,27 @@ async def connection_source(session: AsyncSession, connection_id: UUID) -> str:
     return f"{row.kind}:{row.provider}"
 
 
+async def seed_connection(
+    session: AsyncSession, kind: ConnectorKind, provider: str, account: str
+) -> UUID:
+    """The connection seed records hang off (P0-02's seed sets load events through it):
+    one per (workspace, provider, account), created on first use with status `ok`. A dev
+    and test tool, not a connector; it holds no credentials."""
+    await session.execute(
+        pg_insert(_connections)
+        .values(kind=kind, provider=provider, account=account, status="ok")
+        .on_conflict_do_nothing(index_elements=["workspace_id", "provider", "account"])
+    )
+    connection_id: UUID = (
+        await session.execute(
+            select(_connections.c.id).where(
+                _connections.c.provider == provider, _connections.c.account == account
+            )
+        )
+    ).scalar_one()
+    return connection_id
+
+
 async def store_raw_payloads(
     ctx: WorkspaceContext,
     connection_id: UUID,
@@ -520,6 +541,22 @@ async def link_context(
             )
         ).one()
     return ContextItemOut.model_validate(row._mapping)
+
+
+async def get_context_item_ref(
+    ctx: WorkspaceContext, context_item_id: UUID, *, session: AsyncSession | None = None
+) -> ContextItemOut | None:
+    """A live context item of the caller's workspace, or None: how another module checks
+    an id it is asked to link (tasks, P0-18, FR-14.2)."""
+    async with session_for(ctx, session) as s:
+        row = (
+            await s.execute(
+                select(_context).where(
+                    _context.c.id == context_item_id, _context.c.deleted_at.is_(None)
+                )
+            )
+        ).first()
+    return None if row is None else ContextItemOut.model_validate(row._mapping)
 
 
 async def _target_taint(s: AsyncSession, target_type: str, target_id: UUID) -> bool:
