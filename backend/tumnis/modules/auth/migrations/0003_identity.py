@@ -154,12 +154,15 @@ def upgrade() -> None:
     for statement in FUNCTIONS:
         op.execute(statement)
     for signature in SIGNATURES:
+        # nosemgrep: tumnis-sql-fstring  # SIGNATURES and APP_ROLE are module constants
         op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC")
+        # nosemgrep: tumnis-sql-fstring  # SIGNATURES and APP_ROLE are module constants
         op.execute(f"GRANT EXECUTE ON FUNCTION {signature} TO {APP_ROLE}")
 
 
 def downgrade() -> None:
     for signature in reversed(SIGNATURES):
+        # nosemgrep: tumnis-sql-fstring  # SIGNATURES is a module constant
         op.execute(f"DROP FUNCTION {signature}")
     op.drop_table("auth_throttle")
     op.drop_index("ix_sessions_token_hmac", table_name="sessions")
