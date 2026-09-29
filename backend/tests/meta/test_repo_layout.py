@@ -86,7 +86,6 @@ def test_top_level_folders_exist() -> None:
 
 @pytest.mark.req("ADR-0001")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 @pytest.mark.parametrize("module", sorted(set(A1_MODULES) | _module_folders()))
 def test_every_module_has_standard_shape(module: str) -> None:
     """T-P0-01-02
