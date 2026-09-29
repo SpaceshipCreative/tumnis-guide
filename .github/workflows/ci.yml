@@ -115,11 +115,15 @@ jobs:
         run: npm ci --no-audit --no-fund
       # Schemas, generation, versions and the Schemathesis fuzzer (P0-11; it needs Docker
       # for Postgres, and runs here only: the integration job skips contract tests).
+      # Spread over the runner's cores, like the unit and integration jobs: the fuzzer
+      # alone takes about 40 s, and run one after another the layer no longer fits the
+      # 2-minute budget once the storage suites (a MinIO container, 1050-file listings)
+      # joined it. worksteal lets the idle worker take the rest while one runs the fuzzer.
       - name: Contract tests
         working-directory: backend
         run: |
           uv sync
-          uv run pytest -m contract
+          uv run pytest -m contract -n auto --dist worksteal --durations=10
       - name: squawk on changed expand revisions (P0-06)
         working-directory: backend
         env:
@@ -176,7 +180,14 @@ jobs:
           npx playwright test
       - name: Stack logs on failure
         if: failure() && hashFiles('deploy/compose.test.yaml') != ''
-        run: docker compose -f deploy/compose.test.yaml logs --no-color --tail=200
+        run: |
+          docker compose -f deploy/compose.test.yaml logs --no-color --tail=200
+          # The tail above often starts after the failing request; the errors of the whole
+          # run, from the api and Postgres, say why it failed.
+          echo "::group::api and postgres errors over the whole run"
+          docker compose -f deploy/compose.test.yaml logs --no-color api postgres \
+            | grep -E 'ERROR|FATAL|Traceback|deadlock|" 5[0-9][0-9]' | grep -v 'violates foreign key' | tail -n 300 || true
+          echo "::endgroup::"
 
   # Skills and Performance need the homelab self-hosted runner (P1-05, P0-29). Until the
   # repo variable HOMELAB_RUNNER is "true" they run as stubs on a GitHub-hosted runner, so

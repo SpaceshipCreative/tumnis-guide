@@ -35,6 +35,7 @@ RULES_ALLOWED = {
     "uuid",
     "bisect",
     "heapq",
+    "unicodedata",  # pure normalization tables; storage paths are NFC (P1-14)
     "pydantic",
     "tumnis.core.types",
 }

@@ -6,6 +6,7 @@ import {
   authListSessionsOptions,
   calendarListAccountsOptions,
   deadLettersGetDeadLettersOptions,
+  knowledgeListLocationsOptions,
   settingsGetSectionOptions,
   settingsGetWorkspaceSettingsOptions,
 } from "../../api/@tanstack/react-query.gen";
@@ -29,3 +30,4 @@ export const workspaceQuery = () => settingsGetWorkspaceSettingsOptions();
 export const calendarAccountsQuery = () => calendarListAccountsOptions();
 export const calendarOAuthClientQuery = () =>
   settingsGetSectionOptions({ path: { section: "calendar.google" } });
+export const storageQuery = () => knowledgeListLocationsOptions();
