@@ -373,7 +373,7 @@ Queues are registered in `tumnis/worker.py` with the DBOS queue API (`DBOS.regis
 | `decisions` | limiter 1,200 per 60 s | triage_item, label (P1-07, P3-06) |
 | `extract` | worker 1 to 2, listened to only by `worker-extract` | extract_document (P1-16) |
 | `focus` | none | focus_session (P2-15) |
-| `maintenance` | worker 1 | housekeeping (P0-19), backups check (P0-28) |
+| `maintenance` | worker 1 | housekeeping (P0-19), backups check (P0-28), audit verify (P0-15) |
 
 Static schedules register in `worker.py` after `DBOS.launch()` with `DBOS.apply_schedules([...])`, per the [DBOS scheduled workflows guide](https://docs.dbos.dev/python/tutorials/scheduled-workflows); the older `@DBOS.scheduled` decorator is not used. `DBOS.recv` is only called in a workflow body (R-30).
 
@@ -383,6 +383,7 @@ Static schedules register in `worker.py` after `DBOS.launch()` with `DBOS.apply_
 | day-close tick | `*/5 * * * *` | `day_close_tick` checks each workspace's local day end (P0-19) |
 | housekeeping | `17 * * * *` | trash purge, idempotency expiry, archive compression (P0-19) |
 | backup freshness | `*/15 * * * *` | WAL and base-backup age check (P0-28) |
+| audit verify | `23 3 * * *` | `audit_verify` checks and anchors every workspace's audit chain (P0-15) |
 | connector syncs | per connection | `connector_sync` (P1-09, P3-02) |
 | folder scans | `*/15 * * * *` | `folder_sync` for shares, S3, SFTP (P1-15) |
 | runner sweep | `* * * * *` | marks runners offline after 3 missed heartbeats (P1-04) |
@@ -462,6 +463,8 @@ The work packages below add these names. Each WP's **Files** and **Interfaces** 
 | --- | --- | --- |
 | Schema and SQL | Schema `app` with helper functions and eight SECURITY DEFINER functions (relay claim, auth lookups, workspace list), fixed by an allow-list test | P0-06, P0-13 |
 | Schema and SQL | `app.deployment_markers()`, the SECURITY DEFINER reader the boot checks call (the app role has no grant on `deployment_marker`); revision `core_0003` | P0-06 |
+| Schema and SQL | `audit_log` and `audit_anchors` (policies split by command, no change grant), the `app.audit_immutable()` trigger function, the SECURITY DEFINER `app.list_workspace_ids()`; revision `core_0006_audit`; table-registry kind `append_only` | P0-15 |
+| Files and names | `core/{audit,audit_router,audit_workflows,request_meta}.py` (`record`, `verify_chain`, `anchor`, `verify_workspaces`, `RequestMeta`, `require_session`), `tumnis audit verify [--workspace ID]`, `backend/tests/audit_cases.py` (`AUDIT_CASES`, `PENDING`), `tumnis/core/tests/integration/_audit.py` (`signed_in`, `audit_ctx`, `tamper`); metrics `tumnis_audit_chain_ok{workspace}`, `tumnis_audit_anchored_seq{workspace}`; ops_status check `audit_chain`; schedule `audit-verify` | P0-15 |
 | Files | `backend/tests/meta/_catalog.py` (`ALLOW_LIST`, `registry_violations`, `fenced_tables`), `backend/tests/_pg.py` (`create_database`, `prepare_database`, `schema_dump`), `make_workspace` in `backend/tests/fixtures`, harness revision `harness_0002` (`tenant_probe`, `tenant_probe_child`), `.squawk.toml` | P0-06 |
 | Tables | `auth_throttle`, `deployment_marker`, `audit_anchors`, `ops_backup_runs`, `ops_status`, `ops_drill_markers`, `day_closes`, `usage_ledger`, `task_changes` | P0-06 to P0-28 |
 | Tables | `runner_messages`, `plan_issues`, `plan_pins`, `project_folders`, `pending_writes`, `extraction_artifacts`, `calendar_accounts` | P1-04 to P1-17 |

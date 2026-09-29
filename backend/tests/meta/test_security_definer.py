@@ -21,6 +21,7 @@ ALLOWED: dict[str, str] = {
     "app.deployment_markers": "P0-06: boot checks read deployment_marker with no table grant",
     "app.outbox_claim": "P0-07: the relay claims unsent outbox rows of every workspace",
     "app.outbox_mark_sent": "P0-07: the relay marks the rows it claimed as sent",
+    "app.list_workspace_ids": "P0-15: the audit chain verify walks every workspace",
 }
 
 _DEFINERS = """

@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from tumnis.core.migration_helpers import create_tenant_table, drop_tenant_table
 
 revision = "core_0004_outbox"
-down_revision = "core_p028_ops"
+down_revision = "core_0006_audit"
 branch_labels = None
 depends_on = "auth_0001"  # outbox.workspace_id and dead_letters.workspace_id -> workspaces
 phase = "expand"

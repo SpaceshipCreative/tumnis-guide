@@ -1,4 +1,4 @@
-"""Command-line entry point: `tumnis api|worker|migrate|seed|drill` (more in later WPs).
+"""Command-line entry point: `tumnis api|worker|migrate|seed|drill|audit` (more later).
 
 The image runs every process through this CLI. `api` and `worker` load the deployment
 settings and run the boot checks first; a configuration error exits 78 (EX_CONFIG), so a
@@ -11,6 +11,7 @@ from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
+from uuid import UUID
 
 import typer
 from pydantic import ValidationError
@@ -22,6 +23,8 @@ from tumnis.settings import EXIT_CONFIG, Settings, SettingsError
 app = typer.Typer(name="tumnis", help="Tumnis Guide backend.", no_args_is_help=True)
 drill_app = typer.Typer(help="Restore drill results (P0-28).", no_args_is_help=True)
 app.add_typer(drill_app, name="drill")
+audit_app = typer.Typer(help="Audit log (P0-15).", no_args_is_help=True)
+app.add_typer(audit_app, name="audit")
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -198,4 +201,34 @@ def drill_record(
         f"{'ok' if result.ok else 'MISSED'}"
     )
     if not result.ok:
+        raise typer.Exit(1)
+
+
+@audit_app.command("verify")
+def audit_verify(
+    workspace: Annotated[
+        UUID | None, typer.Option(help="Verify only this workspace (default: every one)")
+    ] = None,
+) -> None:
+    """Verify every workspace's audit hash chain and anchors (SEC-3); exit 1 and name the
+    workspace, seq and kind of every break when one is broken."""
+    from tumnis.core import db  # noqa: PLC0415
+    from tumnis.core.audit import ChainBreak, verify_workspaces  # noqa: PLC0415
+
+    settings = load_settings()
+    db.configure(settings.database_direct_url, settings.database_direct_url, pooled=False)
+
+    async def run() -> dict[UUID, list[ChainBreak]]:
+        try:
+            return await verify_workspaces([workspace] if workspace else None)
+        finally:
+            await db.dispose()
+
+    results = asyncio.run(run())
+    broken = [b for breaks in results.values() for b in breaks]
+    for b in broken:
+        typer.echo(f"audit chain broken: workspace {b.workspace_id} seq {b.seq} {b.kind}")
+    bad = len({b.workspace_id for b in broken})
+    typer.echo(f"audit verify: {len(results)} workspaces checked, {bad} broken")
+    if broken:
         raise typer.Exit(1)

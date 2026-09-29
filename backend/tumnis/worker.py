@@ -9,7 +9,7 @@ import contextlib
 import signal
 from typing import TYPE_CHECKING
 
-from tumnis.core import events, faults, workflows_ops
+from tumnis.core import audit_workflows, events, faults, workflows_ops
 from tumnis.settings import Settings
 
 if TYPE_CHECKING:
@@ -47,6 +47,23 @@ def register_schedules(settings: Settings) -> None:
         )
 
 
+def register_audit_schedule() -> None:
+    """The nightly audit chain verify (P0-15), in every deployment: 03:23 UTC on the
+    maintenance queue, applied after DBOS.launch()."""
+    from dbos import DBOS  # noqa: PLC0415
+
+    DBOS.apply_schedules(
+        [
+            {
+                "schedule_name": audit_workflows.SCHEDULE_NAME,
+                "workflow_fn": audit_workflows.audit_verify,
+                "schedule": audit_workflows.AUDIT_VERIFY_SCHEDULE,
+                "queue_name": workflows_ops.MAINTENANCE_QUEUE,
+            }
+        ]
+    )
+
+
 def dbos_config(settings: Settings) -> "DBOSConfig":
     return {"name": "tumnis", "system_database_url": settings.dbos_system_url}
 
@@ -71,6 +88,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     DBOS.launch()
     register_queues()
     register_schedules(settings)
+    register_audit_schedule()
     try:
         asyncio.run(_serve())
     finally:

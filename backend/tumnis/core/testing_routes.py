@@ -15,6 +15,12 @@ router = APIRouter(prefix="/v1/test", tags=["test"])
 
 # Deployment-level tables a reset keeps: the marker says which deployment this database is.
 KEEP_TABLES = frozenset({"deployment_marker"})
+# The statement-level guards of the append-only tables (pg_trigger.tgtype bit 32).
+_TRUNCATE_GUARDS = text(
+    "SELECT c.relname, t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid"
+    " JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_proc p ON p.oid = t.tgfoid"
+    " WHERE n.nspname = 'public' AND p.proname = 'audit_immutable' AND t.tgtype & 32 <> 0"
+)
 
 
 async def truncate_tables(owner_url: str) -> list[str]:
@@ -32,7 +38,19 @@ async def truncate_tables(owner_url: str) -> list[str]:
             if names:
                 quote = conn.dialect.identifier_preparer.quote
                 listed = ", ".join(quote(name) for name in sorted(names))
+                # The append-only tables (P0-15) refuse TRUNCATE by trigger, the owner's
+                # included; a reset empties their chains with everything else, the guards
+                # off only inside this transaction.
+                guards = (await conn.execute(_TRUNCATE_GUARDS)).all()
+                for table, trigger in guards:
+                    await conn.execute(
+                        text(f"ALTER TABLE {quote(table)} DISABLE TRIGGER {quote(trigger)}")
+                    )
                 await conn.execute(text(f"TRUNCATE {listed} RESTART IDENTITY CASCADE"))
+                for table, trigger in guards:
+                    await conn.execute(
+                        text(f"ALTER TABLE {quote(table)} ENABLE TRIGGER {quote(trigger)}")
+                    )
     finally:
         await engine.dispose()
     return names

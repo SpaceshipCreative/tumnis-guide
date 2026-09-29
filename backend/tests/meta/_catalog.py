@@ -15,13 +15,18 @@ from typing import Literal
 
 import psycopg
 
-Kind = Literal["global", "root", "own_columns"]
+Kind = Literal["global", "root", "own_columns", "append_only"]
 
 
 @dataclass(frozen=True)
 class Allowed:
     """global: no workspace at all, no checks. root: the tenant root, fenced on `id`.
     own_columns: fenced on `workspace_id` with RLS, but not every base column.
+    append_only: own columns, fenced on `workspace_id` by policies split by command (a
+    SELECT and an INSERT policy for the app role, no UPDATE, DELETE or TRUNCATE grant) and
+    the `app.audit_immutable()` trigger (P0-15). The isolation suite's update and delete
+    probes need grants these tables deliberately lack, so `_append_only_violations` and
+    their own isolation test (test_audit_immutability.py) check them instead.
     `arrives_with` names the work package that creates a table not yet in the schema; the
     stale-entry check skips it until then."""
 
@@ -43,7 +48,10 @@ ALLOW_LIST: dict[str, Allowed] = {
     "idempotency_keys": Allowed(
         "own_columns", "workspace-scoped, no version or deleted_at", arrives_with="P0-10"
     ),
-    "audit_log": Allowed("own_columns", "append-only, own columns", arrives_with="P0-15"),
+    "audit_log": Allowed("append_only", "append-only, own columns, policies split by command"),
+    "audit_anchors": Allowed(
+        "append_only", "append-only chain anchors, own columns, policies split by command"
+    ),
     "ops_backup_runs": Allowed("global", "deployment-level operations data, no workspace"),
     "ops_status": Allowed("global", "deployment-level operations data, no workspace"),
     "ops_drill_markers": Allowed("global", "deployment-level operations data, no workspace"),
@@ -66,7 +74,8 @@ def _fenced(tables: set[str]) -> list[str]:
     fenced = {
         t
         for t in tables
-        if not _is_bookkeeping(t) and (t not in ALLOW_LIST or ALLOW_LIST[t].kind != "global")
+        if not _is_bookkeeping(t)
+        and (t not in ALLOW_LIST or ALLOW_LIST[t].kind not in ("global", "append_only"))
     }
     fenced |= {name for name, entry in ALLOW_LIST.items() if entry.kind == "root"}
     return sorted(fenced)
@@ -116,6 +125,16 @@ def fenced_tables(conn: psycopg.Connection) -> list[str]:
     """Tables row-level security must fence: tenant tables, own-column tables and the root."""
     existing = set(public_tables(conn))
     return [t for t in _fenced(existing) if t in existing]
+
+
+def append_only_tables(conn: psycopg.Connection) -> list[str]:
+    """The allow-listed append-only tables that exist (P0-15)."""
+    existing = set(public_tables(conn))
+    return sorted(
+        name
+        for name, entry in ALLOW_LIST.items()
+        if entry.kind == "append_only" and name in existing
+    )
 
 
 def tenant_tables(conn: psycopg.Connection) -> list[str]:
@@ -236,6 +255,53 @@ def _rls_violations(conn: psycopg.Connection, table: str, key: str) -> list[str]
     return out
 
 
+# pg_trigger.tgtype bits: 8 DELETE, 16 UPDATE, 32 TRUNCATE.
+_ROW_CHANGES, _TRUNCATE = 8 | 16, 32
+
+
+def _append_only_violations(conn: psycopg.Connection, table: str) -> list[str]:
+    """RLS on; exactly a SELECT and an INSERT policy for the app role, each fenced on
+    workspace_id; no UPDATE, DELETE or TRUNCATE grant; the enabled immutability triggers."""
+    out = []
+    row = conn.execute(
+        "SELECT relrowsecurity FROM pg_class WHERE oid = format('public.%%I', %s::text)::regclass",
+        (table,),
+    ).fetchone()
+    if row is None or not row[0]:
+        out.append(f"rls: {table}: row-level security is off")
+    expected = "(workspace_id = app.current_workspace_id())"
+    policies = sorted(
+        (cmd, list(roles), qual, with_check)
+        for cmd, roles, qual, with_check in conn.execute(
+            "SELECT cmd, roles, qual, with_check FROM pg_policies "
+            "WHERE schemaname = 'public' AND tablename = %s",
+            (table,),
+        )
+    )
+    wanted = [("INSERT", [APP_ROLE], None, expected), ("SELECT", [APP_ROLE], expected, None)]
+    if policies != wanted:
+        out.append(f"rls: {table}: policies are {policies}, expected {wanted}")
+    for privilege in ("UPDATE", "DELETE", "TRUNCATE"):
+        granted = conn.execute(
+            "SELECT has_table_privilege(%s, format('public.%%I', %s::text), %s)",
+            (APP_ROLE, table, privilege),
+        ).fetchone()
+        if granted is not None and granted[0]:
+            out.append(f"rls: {table}: {APP_ROLE} holds {privilege}")
+    covered = 0
+    for (tgtype,) in conn.execute(
+        "SELECT t.tgtype FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid "
+        "JOIN pg_namespace n ON n.oid = p.pronamespace "
+        "WHERE t.tgrelid = format('public.%%I', %s::text)::regclass "
+        "AND n.nspname = 'app' AND p.proname = 'audit_immutable' AND t.tgenabled <> 'D'",
+        (table,),
+    ):
+        covered |= tgtype & (_ROW_CHANGES | _TRUNCATE)
+    if covered != _ROW_CHANGES | _TRUNCATE:
+        out.append(f"rls: {table}: app.audit_immutable() does not guard every change")
+    return out
+
+
 def registry_violations(
     conn: psycopg.Connection, kinds: tuple[str, ...] = ("columns", "indexes", "rls")
 ) -> list[str]:
@@ -244,17 +310,20 @@ def registry_violations(
     full = [t for t in tables if not _is_bookkeeping(t) and t not in ALLOW_LIST]
     own = [t for t in tables if t in ALLOW_LIST and ALLOW_LIST[t].kind == "own_columns"]
     root = [t for t in tables if t in ALLOW_LIST and ALLOW_LIST[t].kind == "root"]
+    append_only = [t for t in tables if t in ALLOW_LIST and ALLOW_LIST[t].kind == "append_only"]
     out: list[str] = []
     if "columns" in kinds:
         for table in full:
             out += _column_violations(conn, table, base=True)
-        for table in own:
+        for table in [*own, *append_only]:
             out += _column_violations(conn, table, base=False)
     if "indexes" in kinds:
-        out += _index_violations(conn, {*full, *own})
+        out += _index_violations(conn, {*full, *own, *append_only})
     if "rls" in kinds:
         for table in [*full, *own, *root]:
             out += _rls_violations(conn, table, tenant_key(conn, table))
+        for table in append_only:
+            out += _append_only_violations(conn, table)
     return out
 
 
