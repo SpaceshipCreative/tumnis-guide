@@ -1,0 +1,50 @@
+# Ranking corpus for T-P0-20-08 (P0-20, FR-3.9): 12 index rows and 5 queries with their
+# expected orders, computed with the constants in tumnis/modules/search/rules.py:
+#   score = ts_rank_cd(tsv, query) * (PROJECT_BOOST if project matches else 1.0)
+#           / (1 + age_days / RECENCY_DAYS)          PROJECT_BOOST = 2.0, RECENCY_DAYS = 14
+# ts_rank_cd's default weights are A 1.0 (english title), B 0.4 (simple title),
+# C 0.2 (english body), D 0.1 (simple body). Changing a constant is a spec-change PR that
+# updates these expectations.
+#
+# `project` names a key of `projects`; a project row's entity id is that project's id.
+# `age_days` is how long before the test clock the row's source changed.
+projects:
+  acme: 0199b0a0-0000-7000-8000-00000000ac3e
+  beta: 0199b0a0-0000-7000-8000-00000000be7a
+
+documents:
+- {key: inv_acme_1d, type: task, project: acme, title: Invoice, age_days: 1}
+- {key: inv_acme_60d, type: task, project: acme, title: Invoice, age_days: 60}
+- {key: inv_beta_1d, type: task, project: beta, title: Invoice, age_days: 1}
+- {key: inv_beta_60d, type: task, project: beta, title: Invoice, age_days: 60}
+- {key: quote_send, type: task, project: acme, title: Send the quote to Acme, age_days: 3}
+- {key: quote_review, type: task, project: beta, title: Quote review, age_days: 10}
+- {key: report, type: task, project: acme, title: Write the quarterly report,
+   body: Numbers for the quote, age_days: 2}
+- {key: p_acme, type: project, project: acme, title: Acme brand refresh,
+   body: Ship the new logo, age_days: 5}
+- {key: p_beta, type: project, project: beta, title: Beta launch, age_days: 1}
+- {key: launch_party, type: task, project: beta, title: Plan the launch party, age_days: 20}
+- {key: launch_list, type: task, project: acme, title: Launch checklist,
+   body: Launch day tasks, age_days: 30}
+- {key: tests_run, type: task, project: beta, title: Running the tests, age_days: 1}
+
+queries:
+# Same title everywhere: 2.0 / (1 + 60/14) = 0.38 is below 1.0 / (1 + 1/14) = 0.93.
+- q: invoice
+  project: acme
+  expected: [inv_acme_1d, inv_beta_1d, inv_acme_60d, inv_beta_60d]
+# Two title (A) matches, newest first (0.82, 0.58), then a body (C) match (0.2 / 1.14).
+- q: 'quote '
+  expected: [quote_send, quote_review, report]
+# Boosted: the project row (2.0 / 1.07) and its 20-day task (2.0 / 2.43); the other
+# project's task matches title and body (1.2) but is 30 days old (1.2 / 3.14).
+- q: 'launch '
+  project: beta
+  expected: [p_beta, launch_party, launch_list]
+# A prefix against the simple (unstemmed) lexemes: `runn:*` finds "running".
+- q: runn
+  expected: [tests_run]
+# The prefix matches both title B lexemes equally; the newer row leads (3 days, 5 days).
+- q: acme
+  expected: [quote_send, p_acme]

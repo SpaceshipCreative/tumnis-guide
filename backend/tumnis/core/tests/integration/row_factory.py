@@ -33,11 +33,13 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("context_items", "target_url"): "https://example.com/context",
     ("project_links", "kind"): "person",
     ("projects", "sort_key"): "a0",  # a valid rank key (core/rank.py); "x" breaks create
+    ("provider_configs", "slot"): "decisions",
     ("board_columns", "sort_key"): "a0",
     ("board_columns", "status_map"): "backlog",  # a task_status enum value
     ("tasks", "board_rank"): "a0",
     ("review_items", "kind"): "row_factory",  # ck_review_items_kind
     ("storage_locations", "kind"): "server_path",  # ck_storage_locations_kind
+    ("search_index", "entity_type"): "task",  # ck_search_index_entity_type
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)

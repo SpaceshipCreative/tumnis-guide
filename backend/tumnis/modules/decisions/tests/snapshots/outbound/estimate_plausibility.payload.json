@@ -1,0 +1,46 @@
+{
+  "fields_sent": [
+    "acceptance_criteria",
+    "estimate_minutes",
+    "first_action",
+    "history",
+    "label",
+    "title"
+  ],
+  "point": "estimate_plausibility",
+  "questions": {
+    "plausibility": {
+      "criteria": [
+        "Far too low",
+        "Somewhat low",
+        "Plausible",
+        "Somewhat high",
+        "Far too high"
+      ],
+      "instructions": "How plausible is `estimate_minutes` of the user's time for this task, given its first action, acceptance criteria and the user's `history` of estimates and actual minutes?",
+      "type": "score"
+    }
+  },
+  "state": {
+    "acceptance_criteria": [
+      "Scope, timeline and price are filled in",
+      "Sent to Dana as a PDF"
+    ],
+    "estimate_minutes": 10,
+    "first_action": "Open last year's proposal and copy the outline",
+    "history": [
+      {
+        "actual": 95,
+        "estimate": 60,
+        "title": "Write the Beta proposal"
+      },
+      {
+        "actual": 70,
+        "estimate": 45,
+        "title": "Draft the Gamma statement of work"
+      }
+    ],
+    "label": "human",
+    "title": "Write the Acme proposal"
+  }
+}

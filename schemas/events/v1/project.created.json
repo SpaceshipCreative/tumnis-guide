@@ -9,6 +9,18 @@
       "title": "Brief Md",
       "type": "string"
     },
+    "goal": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Goal"
+    },
     "name": {
       "title": "Name",
       "type": "string"

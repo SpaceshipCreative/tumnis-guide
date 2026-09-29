@@ -11,7 +11,9 @@ check:
 	$(BACKEND) uv run lint-imports
 	$(BACKEND) uv run pytest -q -n auto -m "not integration and not contract"
 	@if [ -d frontend/node_modules ]; then \
-		npm --prefix frontend run lint && npm --prefix frontend run test --if-present -- --run \
+		npm --prefix frontend run typecheck & typecheck=$$!; \
+		npm --prefix frontend run lint && wait $$typecheck \
+			&& npm --prefix frontend run test --if-present -- --run \
 			&& node --test scripts/ci/check_bundle.test.mjs; \
 	else \
 		echo "skip frontend: frontend/node_modules absent (run npm ci in frontend/)"; \
