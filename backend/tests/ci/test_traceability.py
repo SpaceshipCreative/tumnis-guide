@@ -61,7 +61,6 @@ PASSING = [
 
 @pytest.mark.req("Quality rule 4")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_fails_when_done_phase_requirement_has_no_passing_test(tmp_path: Path) -> None:
     """T-P0-03-13
     Phase 0 done and SEC-2 tagged only on a spec-xfail test: exit 1, SEC-2 under Missing.
@@ -78,7 +77,6 @@ def test_fails_when_done_phase_requirement_has_no_passing_test(tmp_path: Path) -
 
 @pytest.mark.req("Quality rule 4")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_active_phase_gaps_are_reported_not_failed(tmp_path: Path) -> None:
     """T-P0-03-14
     A requirement with no passing test in an active phase is in the report; exit 0.
@@ -94,7 +92,6 @@ def test_active_phase_gaps_are_reported_not_failed(tmp_path: Path) -> None:
 
 @pytest.mark.req("Quality rule 4")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_unknown_requirement_id_fails(tmp_path: Path) -> None:
     """T-P0-03-15
     A tag FR-3.33 (not in the PRD) fails as unknown, even with no phase done.
