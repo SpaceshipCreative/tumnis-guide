@@ -8,6 +8,7 @@ LANG and `HERMES_*` only, so the device token never reaches it.
 import asyncio
 import contextlib
 import json
+import logging
 import os
 import re
 import signal
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
 
 ENV_KEEP: Final = frozenset({"PATH", "HOME", "LANG"})
 LINE_LIMIT: Final = 8 * 1024 * 1024  # one stream-json record
+log = logging.getLogger(__name__)
+
 HEALTH_TIMEOUT_S: Final = 30.0  # each health subcommand (plan default)
 _FENCE: Final = re.compile(r"```(?:json)?[ \t]*\n(.*)\n[ \t]*```", re.DOTALL)
 _VERSION: Final = re.compile(r"\d+(?:\.\d+)+[0-9A-Za-z.+-]*")
@@ -252,6 +255,14 @@ async def run_skill(msg: Run, state: "StateStore", cfg: DaemonConfig) -> None:
         except InvalidProfile as exc:
             result = build_result(msg, [], None, exit_code=None, timed_out=False, duration_ms=0)
             result = result.model_copy(update={"error": str(exc)})
+        except (OSError, KeyError, ValueError) as exc:
+            # Hermes missing or not executable, no prompt, an overlong stream-json line: a
+            # failed Result now, not a silent wait for the server's run timeout. Only the
+            # error kind is kept, never its message (it can quote the prompt).
+            kind = type(exc).__name__
+            log.warning("run_failed", extra={"run_id": str(msg.run_id), "kind": kind})
+            result = build_result(msg, [], None, exit_code=None, timed_out=False, duration_ms=0)
+            result = result.model_copy(update={"error": f"daemon_error:{kind}"})
         await state.send_reliably(result)
     finally:
         state.running.discard(msg.run_id)
