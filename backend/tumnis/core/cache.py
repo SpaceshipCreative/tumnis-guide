@@ -109,7 +109,7 @@ class InProcessCache:
         self._entries: OrderedDict[str, _Entry] = OrderedDict()
         self._tags: dict[str, set[str]] = {}
         self._generation = 0
-        self._lock = threading.Lock()  # the worker's listener runs on its own thread
+        self._lock = threading.Lock()  # DBOS runs workflow steps on other threads
 
     async def get(self, key: CacheKey) -> bytes | None:
         with self._lock:
@@ -361,7 +361,8 @@ def libpq_url(url: str) -> str:
 
 class CacheInvalidationListener:
     """LISTEN cache_invalidate on a direct connection (never PgBouncer) and drop the named
-    keys or tags from the local backend. Runs in the api (lifespan) and the worker. After
+    keys or tags from the local backend. Runs in the api (lifespan) and the worker (beside
+    the outbox relay). After
     every (re)connect it clears the whole local cache: a notification sent while it was not
     listening is lost, so anything cached may be stale (safe, just colder)."""
 
@@ -393,25 +394,6 @@ class CacheInvalidationListener:
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), delay)
                 delay = min(delay * 2, RETRY_MAX_S)
-
-    def start_thread(self) -> Callable[[], None]:
-        """Run on a thread with its own event loop (the worker, whose main thread blocks);
-        returns the function that stops it."""
-        loop = asyncio.new_event_loop()
-        stop = asyncio.Event()
-
-        def target() -> None:
-            loop.run_until_complete(self.run(stop))
-            loop.close()
-
-        thread = threading.Thread(target=target, name="cache-invalidation", daemon=True)
-        thread.start()
-
-        def halt() -> None:
-            loop.call_soon_threadsafe(stop.set)
-            thread.join(timeout=POLL_S * 5)
-
-        return halt
 
 
 def pg_publisher(engine: Callable[[], AsyncEngine]) -> Publisher:

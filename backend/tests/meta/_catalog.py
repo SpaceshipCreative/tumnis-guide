@@ -44,7 +44,7 @@ ALLOW_LIST: dict[str, Allowed] = {
     "harness_probe": Allowed(
         "global", "harness self-test scratch table (P0-02), test templates only"
     ),
-    "outbox": Allowed("own_columns", "workspace-scoped, no version", arrives_with="P0-07"),
+    "outbox": Allowed("own_columns", "workspace-scoped, no version (P0-07)"),
     "idempotency_keys": Allowed(
         "own_columns", "workspace-scoped, no version or deleted_at", arrives_with="P0-10"
     ),

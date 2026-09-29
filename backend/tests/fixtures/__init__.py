@@ -6,6 +6,7 @@ shared fixtures live in this plugin rather than in backend/tests/conftest.py.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import secrets
@@ -15,17 +16,18 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 import pytest
 
 from tests._pg import APP, DbUrls, bootstrap_roles, build_template, clone, drop
+from tests._pg import OWNER as OWNER_ROLE
 from tumnis.core.adapters.registry import AdapterMode, health_states, registered, resolve
 from tumnis.core.clock import FixedClock
 
 if TYPE_CHECKING:
     import httpx
-    from dbos import DBOS
+    from dbos import DBOS, DBOSClient
     from fastapi import FastAPI
     from sqlalchemy.engine import Engine
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -379,6 +381,219 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
         yield DBOS
     finally:
         DBOS.destroy(destroy_registry=False)
+
+
+@pytest.fixture
+def dbos_client(dbos: type[DBOS], dbos_sys_db: DbUrls) -> Iterator[DBOSClient]:
+    """A DBOSClient on the worker's system database, as the api process uses one to enqueue
+    (P0-07); `dbos` is the executor that runs what it enqueues."""
+    from dbos import DBOSClient  # noqa: PLC0415
+
+    client = DBOSClient(system_database_url=dbos_sys_db.url(APP))
+    try:
+        yield client
+    finally:
+        client.destroy()
+
+
+# --- Kill-and-resume: a worker in a subprocess, killed at a named step (P0-07) -------------
+
+KILLED_EXIT = 137  # tumnis.core.faults.killpoint exits with this code
+KILLER_IMPORTS = ("tumnis.core.tests.integration._deliveries",)
+KILLER_APP_VERSION = "worker-killer"  # both processes share it, so the second recovers
+
+
+class WorkerKiller:
+    """Runs `python -m tumnis.testing.run_worker` against the per-test database and its own
+    fresh DBOS system database. `run_until_killed()` emits the events, starts a worker with
+    TUMNIS_KILLPOINT set and waits for it to die; `restart_and_drain()` starts a clean worker
+    and waits until every outbox row is sent and every delivery workflow succeeded."""
+
+    def __init__(
+        self, killpoint: str, *, db: DbUrls, sys_db: DbUrls, events: int, event: str, logs: Path
+    ) -> None:
+        self.killpoint = killpoint
+        self.db = db
+        self.sys_db = sys_db
+        self.events = events
+        self.event = event
+        self.logs = logs
+        self.event_ids: list[uuid.UUID] = []
+        self._procs: list[asyncio.subprocess.Process] = []
+        self._client: DBOSClient | None = None
+
+    async def _emit(self) -> None:
+        import importlib  # noqa: PLC0415
+
+        from tumnis.core import db as core_db  # noqa: PLC0415
+        from tumnis.core.events import registry  # noqa: PLC0415
+        from tumnis.core.outbox import emit  # noqa: PLC0415
+        from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+        from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+        deliveries = importlib.import_module(KILLER_IMPORTS[0])
+        deliveries.create_table(self.db.libpq(OWNER_ROLE))
+        core_db.configure(app_url=self.db.app, direct_url=self.db.app, pooled=False)
+        model = registry.model(self.event, 1)
+        ctx = WorkspaceContext(make_workspace(self.db, "Killer"), SYSTEM_ACTOR)
+        at = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
+        async with tenant_session(ctx) as session:
+            for i in range(self.events):
+                payload = model.model_validate({"note": f"kill-{i}"})
+                self.event_ids.append(await emit(session, payload, occurred_at=at))
+
+    async def _start(self, killpoint: str | None) -> asyncio.subprocess.Process:
+        import os  # noqa: PLC0415
+        import sys  # noqa: PLC0415
+
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in {"DATABASE_OWNER_URL", "TUMNIS_KILLPOINT"}
+        }
+        env |= {
+            "DATABASE_URL": self.db.app,
+            "DATABASE_DIRECT_URL": self.db.app,
+            "DBOS_SYSTEM_DATABASE_URL": self.sys_db.url(APP),
+            "DEPLOYMENT_ENV": "dev",
+            "TUMNIS_ADAPTERS": "fake",
+        }
+        if killpoint is not None:
+            env["TUMNIS_KILLPOINT"] = killpoint
+        args = [sys.executable, "-m", "tumnis.testing.run_worker"]
+        for name in KILLER_IMPORTS:
+            args += ["--import", name]
+        args += ["--app-version", KILLER_APP_VERSION]
+        log = (self.logs / f"worker-{len(self._procs)}.log").open("wb")
+        proc = await asyncio.create_subprocess_exec(
+            *args, cwd=BACKEND, env=env, stdout=log, stderr=asyncio.subprocess.STDOUT
+        )
+        log.close()
+        self._procs.append(proc)
+        return proc
+
+    def log_tail(self, lines: int = 60) -> str:
+        out = []
+        for path in sorted(self.logs.glob("worker-*.log")):
+            out.append(f"--- {path.name}")
+            out += path.read_text(errors="replace").splitlines()[-lines:]
+        return "\n".join(out)
+
+    async def run_until_killed(self, timeout_s: float = 30) -> int:
+        """Emit the events, run a worker with the kill point armed, return its exit code."""
+        await self._emit()
+        proc = await self._start(self.killpoint)
+        try:
+            return await asyncio.wait_for(proc.wait(), timeout_s)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            pytest.fail(
+                f"worker not killed at {self.killpoint} in {timeout_s} s\n{self.log_tail()}"
+            )
+
+    def _unsent(self) -> int:
+        import psycopg  # noqa: PLC0415
+
+        with psycopg.connect(self.db.libpq(OWNER_ROLE)) as conn:
+            row = conn.execute("SELECT count(*) FROM outbox WHERE sent_at IS NULL").fetchone()
+        assert row is not None
+        return int(row[0])
+
+    def _succeeded(self) -> dict[str, Any]:
+        from dbos import DBOSClient  # noqa: PLC0415
+
+        if self._client is None:
+            self._client = DBOSClient(system_database_url=self.sys_db.url(APP))
+        done = self._client.list_workflows(status="SUCCESS", name="deliver_event")
+        return {w.workflow_id: w.output for w in done}
+
+    async def restart_and_drain(self, timeout_s: float = 30) -> dict[str, Any]:
+        """Start a worker without the kill point; wait until every outbox row is sent and
+        every (event, subscriber) workflow succeeded; stop it. Returns workflow_id -> output."""
+        from tumnis.core.events import subscribers_for  # noqa: PLC0415
+
+        expected = self.events * len(subscribers_for(self.event))
+        proc = await self._start(None)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        done: dict[str, Any] = {}
+        try:
+            while True:
+                if proc.returncode is not None:
+                    pytest.fail(f"worker exited with {proc.returncode}\n{self.log_tail()}")
+                unsent = await asyncio.to_thread(self._unsent)
+                done = await asyncio.to_thread(self._succeeded)
+                if unsent == 0 and len(done) >= expected:
+                    return done
+                if loop.time() > deadline:
+                    pytest.fail(
+                        f"not drained in {timeout_s} s: {unsent} unsent, {len(done)} of "
+                        f"{expected} workflows succeeded\n{self.log_tail()}"
+                    )
+                await asyncio.sleep(0.1)
+        finally:
+            await self._stop(proc)
+
+    @staticmethod
+    async def _stop(proc: asyncio.subprocess.Process) -> None:
+        if proc.returncode is not None:
+            return
+        proc.terminate()
+        try:
+            await asyncio.wait_for(proc.wait(), 15)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+
+    async def close(self) -> None:
+        for proc in self._procs:
+            await self._stop(proc)
+        if self._client is not None:
+            self._client.destroy()
+            self._client = None
+
+
+class WorkerKillerFactory(Protocol):
+    def __call__(
+        self, killpoint: str, *, events: int = 5, event: str = "test.ping"
+    ) -> WorkerKiller: ...
+
+
+@pytest.fixture
+async def worker_killer(
+    db: DbUrls, pg_container: PostgresContainer, pg_base: DbUrls, tmp_path: Path
+) -> AsyncIterator[WorkerKillerFactory]:
+    """`worker_killer(killpoint, *, events=5, event="test.ping")` -> a WorkerKiller on `db`
+    and a fresh DBOS system database (dropped afterwards), so no earlier test's workflows
+    are recovered by the subprocess."""
+    import psycopg  # noqa: PLC0415
+    from psycopg import sql  # noqa: PLC0415
+
+    from tumnis.core import db as core_db  # noqa: PLC0415
+
+    name = f"t_dbos_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(pg_container.get_connection_url(), autocommit=True) as conn:
+        conn.execute(
+            sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(name), sql.Identifier(APP))
+        )
+    sys_db = DbUrls(pg_base.host, pg_base.port, name)
+    made: list[WorkerKiller] = []
+
+    def factory(killpoint: str, *, events: int = 5, event: str = "test.ping") -> WorkerKiller:
+        killer = WorkerKiller(
+            killpoint, db=db, sys_db=sys_db, events=events, event=event, logs=tmp_path
+        )
+        made.append(killer)
+        return killer
+
+    try:
+        yield factory
+    finally:
+        for killer in made:
+            await killer.close()
+        await core_db.dispose()
+        drop(pg_base, name)
 
 
 # --- The FastAPI app and an HTTP client on it (P0-04) -------------------------------------

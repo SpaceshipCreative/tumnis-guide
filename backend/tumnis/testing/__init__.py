@@ -1,1 +1,1 @@
-"""Entry points the tests start as separate processes."""
+"""Entry points the test harness runs in subprocesses; never imported by the app."""

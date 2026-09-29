@@ -16,7 +16,7 @@ from alembic import op
 from tumnis.core.migration_helpers import create_tenant_table, drop_tenant_table
 
 revision = "core_0005_settings"
-down_revision = "core_0006_audit"
+down_revision = "core_0004_outbox"
 branch_labels = None
 depends_on = "auth_0001"
 phase = "expand"
