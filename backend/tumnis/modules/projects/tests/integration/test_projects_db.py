@@ -24,7 +24,6 @@ INSERT = (
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 def test_check_constraint_rejects_both(db: DbUrls, workspace: WorkspaceHandle) -> None:
     """T-P0-17-14
     Inserting a project with both `code_path` and `repo_url` (as the owner, past every
