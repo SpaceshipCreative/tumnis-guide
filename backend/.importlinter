@@ -91,6 +91,7 @@ ancestors =
 ignore_imports =
     tumnis.modules.integrations.tests.** -> tumnis.modules.calendar.api
     tumnis.modules.integrations.tests.** -> tumnis.modules.knowledge.api
+unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:search-usage-subscribe-only]
 name = search and usage call no other module
