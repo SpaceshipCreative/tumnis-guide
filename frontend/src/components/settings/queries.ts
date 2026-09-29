@@ -5,6 +5,7 @@ import {
   authListKeysOptions,
   authListSessionsOptions,
   deadLettersGetDeadLettersOptions,
+  knowledgeListLocationsOptions,
   settingsGetWorkspaceSettingsOptions,
 } from "../../api/@tanstack/react-query.gen";
 
@@ -24,3 +25,4 @@ export const keysQuery = () => authListKeysOptions({ query: { limit: 200 } });
 export const deadLettersQuery = (status: DeadLetterStatus = "open") =>
   deadLettersGetDeadLettersOptions({ query: { status, limit: 50 } });
 export const workspaceQuery = () => settingsGetWorkspaceSettingsOptions();
+export const storageQuery = () => knowledgeListLocationsOptions();

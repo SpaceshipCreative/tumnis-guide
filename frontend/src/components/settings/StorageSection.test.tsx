@@ -15,7 +15,7 @@ async function item(name: string): Promise<HTMLElement> {
 }
 
 describe("StorageSection", () => {
-  test.fails("[P1-14][FR-15.7] T-P1-14-15 locations and default", async () => {
+  test("[P1-14][FR-15.7] T-P1-14-15 locations and default", async () => {
     const recorder = new Recorder();
     server.use(...storageHandlers(recorder));
     const { user } = renderWithProviders(<StorageSection />);

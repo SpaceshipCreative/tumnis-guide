@@ -3,20 +3,10 @@
 // online, a tested one comes back online, a new default moves the flag.
 import { http, HttpResponse, type RequestHandler } from "msw";
 
+import type { LocationOut } from "../../api/types.gen";
 import type { Recorder } from "./settings";
 
-export interface LocationRow {
-  id: string;
-  name: string;
-  kind: "server_path" | "s3" | "sftp";
-  root: string;
-  endpoint: string | null;
-  status: "online" | "offline";
-  status_reason: string | null;
-  is_default: boolean;
-  capabilities: Record<string, boolean>;
-  version: number;
-}
+export type LocationRow = LocationOut;
 
 export const DISK_ID = "01890000-0000-7000-8000-0000000000f1";
 export const SHARE_ID = "01890000-0000-7000-8000-0000000000f2";
