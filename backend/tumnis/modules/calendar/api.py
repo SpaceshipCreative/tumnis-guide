@@ -466,10 +466,11 @@ async def connect_account(
     """A Google account as the OAuth exchange leaves it: its connection (account = the
     primary calendar's id, the address) with the tokens sealed, and its `calendar_accounts`
     row `connected`. A first connect selects the primary calendar; a reconnect keeps the
-    selection (within the calendars still listed)."""
-    primary = next((c for c in calendars if c.primary), calendars[0] if calendars else None)
+    selection (within the calendars still listed). A list with no calendar marked primary
+    is refused (ValueError): the address never comes from a shared or holiday calendar."""
+    primary = next((c for c in calendars if c.primary), None)
     if primary is None:
-        raise ValueError("a Google account lists at least its primary calendar")
+        raise ValueError("a Google account lists its primary calendar")
     listed = [
         CalendarOut(id=c.id, summary=c.summary, primary=c.primary, time_zone=c.time_zone)
         for c in calendars
