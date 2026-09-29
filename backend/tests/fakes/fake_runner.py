@@ -393,14 +393,21 @@ def register_profile(
     from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
     from tumnis.core.types import ActorRef  # noqa: PLC0415
     from tumnis.modules.agents import api  # noqa: PLC0415
+    from tumnis.modules.projects import api as projects  # noqa: PLC0415
 
     ctx = WorkspaceContext(workspace.id, ActorRef(f"user:{workspace.user_id}"))
-    body = api.ProfileIn(
-        name=name, role=role, transport="daemon", runner_id=runner_id, project_id=project_id
-    )
 
     async def register() -> uuid.UUID:
         async with tenant_session(ctx) as s:
+            project = project_id
+            if role == "project" and project is None:  # a project profile names its project
+                made = await projects.create_project(
+                    s, ctx.actor, projects.ProjectCreate(name=f"{name} project"), now=clock.now()
+                )
+                project = made.id
+            body = api.ProfileIn(
+                name=name, role=role, transport="daemon", runner_id=runner_id, project_id=project
+            )
             profile = await api.register_profile(s, body, now=clock.now())
         return profile.id
 

@@ -243,11 +243,17 @@ async def create_runner(
     )
     if taken is not None:
         raise ProblemError(409, "runner_exists", "Another runner has this name")
-    created = (
-        (await s.execute(insert(_runners).values(name=body.name).returning(*_runners.c)))
-        .mappings()
-        .one()
-    )
+    try:  # a racing insert, or a soft-deleted runner's name (the index spans deleted rows)
+        async with s.begin_nested():
+            created = (
+                (await s.execute(insert(_runners).values(name=body.name).returning(*_runners.c)))
+                .mappings()
+                .one()
+            )
+    except IntegrityError as exc:
+        if "ux_runners_ws_name" in str(exc.orig):
+            raise ProblemError(409, "runner_exists", "Another runner has this name") from None
+        raise
     row = _RunnerRow.model_validate(dict(created))
     await audit.record(
         s, "runner.created", target=("runner", row.id), details={"name": row.name}, occurred_at=now
@@ -334,6 +340,13 @@ async def _check_refs(
         raise NotFound("projects", project_id)
 
 
+def _check_role(role: str, project_id: UUID | None) -> None:
+    if role == "project" and project_id is None:
+        raise ProblemError(422, "invalid_profile", "A project profile names its project")
+    if role == "master" and project_id is not None:
+        raise ProblemError(422, "invalid_profile", "A master profile names no project")
+
+
 def _check_transport(transport: str, runner_id: UUID | None, endpoint: str | None) -> None:
     if transport == "daemon" and endpoint is not None:
         raise ProblemError(422, "invalid_profile", "A daemon profile has no endpoint")
@@ -356,15 +369,17 @@ def _conflict(exc: IntegrityError) -> ProblemError:
 
 async def register_profile(s: AsyncSession, body: ProfileIn, *, now: datetime) -> AgentProfileOut:
     """Registers a Hermes profile Tumnis may run. 422 `invalid_profile_name` (NAME_RE or
-    reserved) and `invalid_profile`; 404 for an unknown runner or project; 409
-    `master_exists`, `project_agent_exists`, `profile_exists`. The references are checked
-    first, so a runner or project of another workspace is 404 whatever else the body holds."""
+    reserved) and `invalid_profile` (transport, or role and project_id, disagree); 404 for
+    an unknown runner or project; 409 `master_exists`, `project_agent_exists`,
+    `profile_exists`. The references are checked first, so a runner or project of another
+    workspace is 404 whatever else the body holds."""
     await _check_refs(s, runner_id=body.runner_id, project_id=body.project_id)
     try:
         validate_profile_name(body.name)
     except InvalidProfileName as exc:
         raise ProblemError(422, exc.code, str(exc)) from None
     _check_transport(body.transport, body.runner_id, body.endpoint)
+    _check_role(body.role, body.project_id)
     if body.role == "master":
         master = await s.scalar(
             select(_profiles.c.id).where(_profiles.c.role == "master", _live_profiles())
