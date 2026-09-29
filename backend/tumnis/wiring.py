@@ -1,6 +1,6 @@
-"""Composition root: imports every module's adapters so they register, and registers each
-module's optional `api.health()` as a non-critical readiness check (later: routers,
-subscribers). Driven by the module registry, so a new module is wired automatically."""
+"""Composition root: imports every module's adapters and api so they register, and
+registers each module's optional `api.health()` as a non-critical readiness check (later:
+routers, subscribers). Driven by the module registry, so a new module is wired automatically."""
 
 import importlib
 
@@ -13,14 +13,20 @@ def load_adapters() -> None:
         importlib.import_module(f"tumnis.modules.{module}.adapters")
 
 
+def load_apis() -> None:
+    """Import every module's api, so seed writers (and later subscribers) register."""
+    for module in MODULES:
+        importlib.import_module(f"tumnis.modules.{module}.api")
+
+
 def register_module_health() -> None:
     """A module that defines `async def health() -> Status` in its api degrades readiness
     when it fails, never takes it down."""
     for module in MODULES:
-        api = importlib.import_module(f"tumnis.modules.{module}.api")
-        check = getattr(api, "health", None)
+        check = getattr(importlib.import_module(f"tumnis.modules.{module}.api"), "health", None)
         if check is not None:
             register_health(f"module:{module}", check, critical=False)
 
 
 load_adapters()
+load_apis()

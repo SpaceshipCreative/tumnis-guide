@@ -19,7 +19,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:P0-04")
 async def test_reset_route_exists_only_with_fakes(db: DbUrls, clock: FixedClock) -> None:
     """T-P0-04-12
     POST /v1/test/reset is 404 with real adapters and 204 with fakes; the reset keeps the

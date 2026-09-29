@@ -8,7 +8,6 @@ misconfigured preview never serves a request.
 import asyncio
 import os
 from datetime import datetime
-from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
 
@@ -16,22 +15,12 @@ import typer
 from pydantic import ValidationError
 
 from tumnis.core.clock import Clock, SystemClock
+from tumnis.seed import SEED_PATHS, SeedSet
 from tumnis.settings import EXIT_CONFIG, Settings, SettingsError
 
 app = typer.Typer(name="tumnis", help="Tumnis Guide backend.", no_args_is_help=True)
 
-# The seed and load sets live beside the package in the source tree (backend/fixtures).
-BACKEND = Path(__file__).resolve().parents[1]
-FIXTURES = BACKEND / "fixtures"
-ALEMBIC_INI = BACKEND / "alembic.ini"
-
-
-class SeedSet(StrEnum):
-    seed = "seed"
-    load = "load"
-
-
-SEED_PATHS = {SeedSet.seed: FIXTURES / "seed", SeedSet.load: FIXTURES / "load" / "load.yaml"}
+ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
 
 def make_clock() -> Clock:
@@ -125,9 +114,19 @@ def seed(
     ] = None,
 ) -> None:
     """Load a seed set into the database at DATABASE_URL through each module's api."""
+    import tumnis.wiring  # noqa: F401, PLC0415  # modules register their seed writers
     from tumnis.core import db  # noqa: PLC0415
-    from tumnis.seed import DatabaseSink, SeedWriterMissingError, load_seed  # noqa: PLC0415
+    from tumnis.seed import (  # noqa: PLC0415
+        DatabaseSink,
+        SeedWriterMissingError,
+        load_seed,
+        writers_registered,
+    )
 
+    if not writers_registered():
+        # Until P0-17 there is nothing to write to; previews still boot on an empty set.
+        typer.echo("seed: no module registers seed writers yet; nothing loaded", err=True)
+        return
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         typer.echo("DATABASE_URL is not set", err=True)
