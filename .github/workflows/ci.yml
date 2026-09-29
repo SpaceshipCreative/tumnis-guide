@@ -142,16 +142,26 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
+      - name: Pull images (temporary timing)
+        run: |
+          nproc; free -g; df -h /
+          for i in pgvector/pgvector:pg18 edoburu/pgbouncer:v1.25.2-p0 \
+            chainguard/minio@sha256:71674988a1c7ddd5724928633199152b11e4ddefd6c6ce2d60772ff4a8f22ca9 \
+            atmoz/sftp@sha256:a81ea210713555be76075b4b2788a4addfaa54d137cd881f3a99ac539f0be2c5 \
+            clamav/clamav-debian@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578; do
+            ( s=$(date +%s); docker pull -q "$i" >/dev/null; echo "$(( $(date +%s) - s ))s $i" ) &
+          done
+          wait
       - name: Integration tests (Postgres 18, DBOS, MinIO, SFTP, clamd)
         working-directory: backend
         run: |
           uv sync
-          uv run pytest -m "integration and not contract" -n auto --dist worksteal --durations=0 --durations-min=0.05
+          timeout -s INT 420 uv run pytest -m "integration and not contract" -n auto --dist worksteal --durations=0 --durations-min=0.05
         env:
           TUMNIS_FIXTURE_TIMING: /tmp/fixture-timing
       - name: Fixture timing (temporary)
         if: always()
-        run: for f in /tmp/fixture-timing/*.json; do echo "== $f"; head -60 "$f"; done
+        run: for f in /tmp/fixture-timing/*.json; do echo "== $f"; cat "$f"; done
 
   e2e:
     runs-on: ubuntu-latest
