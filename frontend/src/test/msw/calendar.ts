@@ -87,9 +87,16 @@ export function calendarHandlers(recorder: Recorder): RequestHandler[] {
         });
       },
     ),
-    http.post("*/v1/calendar/accounts/:accountId/sync", async ({ request }) => {
-      await recorder.record(request);
-      return HttpResponse.json({ queued: true }, { status: 202 });
-    }),
+    http.post(
+      "*/v1/calendar/accounts/:accountId/sync",
+      async ({ request, params }) => {
+        await recorder.record(request);
+        const account = CALENDAR_ACCOUNTS.find(
+          (a) => a.id === params.accountId,
+        );
+        if (!account) return new HttpResponse(null, { status: 404 });
+        return HttpResponse.json(account, { status: 202 });
+      },
+    ),
   ];
 }
