@@ -25,7 +25,11 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
     from testcontainers.community.postgres import PostgresContainer
 
+    from tumnis.seed import SeedResult
+
 BACKEND = Path(__file__).resolve().parents[2]
+SEED_SET = BACKEND / "fixtures" / "seed"
+LOAD_SET = BACKEND / "fixtures" / "load" / "load.yaml"
 PG_IMAGE = "pgvector/pgvector:pg18"
 # Where recordings(provider) looks for a <provider>/ folder. The harness folder holds the
 # demo set its own contract test reads.
@@ -132,6 +136,31 @@ async def owner_session(db: DbUrls) -> AsyncIterator[AsyncSession]:
 async def app_role_session(db: DbUrls) -> AsyncIterator[AsyncSession]:
     async for session in _session(db.app):
         yield session
+
+
+# --- Seed and load sets in the per-test database -----------------------------------------
+
+
+async def _load_set(path: Path, db: DbUrls, clock: FixedClock) -> SeedResult:
+    """Through DatabaseSink, i.e. each module's api; works once the entity writers exist
+    (projects P0-17, tasks P0-18, events P0-12, documents P0-17)."""
+    from tumnis.core import db as core_db  # noqa: PLC0415
+    from tumnis.seed import DatabaseSink, load_seed  # noqa: PLC0415
+
+    core_db.configure(app_url=db.app, direct_url=db.app, pooled=False)
+    return await load_seed(path, DatabaseSink(), anchor=clock.now().date(), clock=clock)
+
+
+@pytest.fixture
+async def seed(db: DbUrls, clock: FixedClock) -> SeedResult:
+    """The seed set (3 projects, 30 tasks, one calendar day) in `db`, anchored on the clock."""
+    return await _load_set(SEED_SET, db, clock)
+
+
+@pytest.fixture
+async def load_fixture(db: DbUrls, clock: FixedClock) -> SeedResult:
+    """The 2,000-task load set in `db`."""
+    return await _load_set(LOAD_SET, db, clock)
 
 
 # --- DBOS: system database per xdist worker, reset per test -------------------------------
