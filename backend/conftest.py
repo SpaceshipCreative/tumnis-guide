@@ -11,4 +11,4 @@ import os
 # text; this is Typer's own switch for its test suite, read when typer.rich_utils loads.
 os.environ["_TYPER_FORCE_DISABLE_TERMINAL"] = "1"
 
-pytest_plugins = ["pytester", "tests.fixtures", "tests._services"]
+pytest_plugins = ["pytester", "tests.fixtures", "tests._services", "tests._fixture_timing"]

@@ -147,6 +147,11 @@ jobs:
         run: |
           uv sync
           uv run pytest -m "integration and not contract" -n auto --dist worksteal --durations=0 --durations-min=0.05
+        env:
+          TUMNIS_FIXTURE_TIMING: /tmp/fixture-timing
+      - name: Fixture timing (temporary)
+        if: always()
+        run: for f in /tmp/fixture-timing/*.json; do echo "== $f"; head -60 "$f"; done
 
   e2e:
     runs-on: ubuntu-latest
