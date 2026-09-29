@@ -78,6 +78,8 @@ Every module has the same shape:
 
 **Audit.** A SEC-3 action calls `tumnis.core.audit.record(session, action, ...)` in the action's own transaction (never from an event subscriber), and a new SEC-3 action adds a case to `backend/tests/audit_cases.py`.
 
+**Caches and settings.** Every cache registers a `CacheSpec(name, scope, ttl_s, invalidated_by)` with `tumnis.core.cache.register_cache` (a spec without an invalidation rule is refused) and gets the shared write-visible test in `backend/tumnis/core/tests/unit/test_cache.py` for free. Keys are `CacheKey.for_workspace(workspace_id, "<name>", ...)`; `CacheKey.system` only for namespaces registered with `scope="system"`. Writers call `invalidate_on_commit(session, key)` inside their transaction, so every process drops the entry after the commit (LISTEN/NOTIFY) and a rollback drops nothing. Per-workspace settings and secrets go through `tumnis.core.settings_store.get_setting`/`put_setting` (sealed with the workspace data key, versioned writes); a module's routes and subscribers are switched off through `tumnis.core.modules` flags, never by hand.
+
 Elsewhere: core's own tests in `backend/tumnis/core/tests/{unit,integration}`; cross-module suites (meta, isolation, acceptance) in `backend/tests/`; shared fixtures in `backend/tests/conftest.py`; seed and test data in `backend/fixtures/`; frontend code in `frontend/src/` with Playwright specs in `frontend/e2e/`; the runner daemon in `daemon/`; Hermes profiles and skill tests in `profiles/`; generated JSON Schemas in `schemas/`; compose and container config in `deploy/`; CI and drill scripts in `scripts/`; ADRs in `docs/adr/`.
 
 ## Tests and markers
