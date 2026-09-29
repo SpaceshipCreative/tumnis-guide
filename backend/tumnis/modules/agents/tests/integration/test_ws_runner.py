@@ -264,3 +264,53 @@ async def test_protocol_negotiation_and_per_message_ack(
     while mailbox_status() != "acked":
         assert time.monotonic() < deadline, "the mailbox row never turned acked"
         await asyncio.sleep(0.05)
+
+
+@pytest.mark.req("FR-5.11")
+@pytest.mark.wp("P1-04")
+async def test_result_for_a_run_on_another_runner_is_dropped(
+    workspace: WorkspaceHandle,
+    clock: FixedClock,
+    db: DbUrls,
+    fake_runner: FakeRunnerFactory,
+) -> None:
+    """A runner's `result` counts only for a run dispatched to that runner: a second runner
+    in the workspace that sends a result for it is acked, and nothing is recorded or handed
+    to the run's workflow."""
+    from tumnis.modules.agents.adapters.hermes import (  # noqa: PLC0415
+        DaemonTransport,
+        HermesAgent,
+    )
+    from tumnis.modules.agents.protocol import Result  # noqa: PLC0415
+    from tumnis.modules.agents.tests.contract.base import make_packet  # noqa: PLC0415
+
+    owner = fake_runner(profiles=["acme-site"], name="homelab-hermes")
+    intruder = fake_runner(profiles=["other-site"], name="other-hermes")
+    profile_id = fake_runner.register_profile("acme-site", runner=owner)
+    packet = make_packet(profile_id)
+    await HermesAgent(profile_id, DaemonTransport(workspace.ctx, clock)).dispatch(packet)
+    owner.wait_for(lambda r: any(run.run_id == packet.run_id for run in r.runs()))
+
+    forged = Result(
+        message_id=uuid.uuid4(),
+        correlation_id=packet.correlation_id,
+        sent_at=clock.now(),
+        run_id=packet.run_id,
+        status="succeeded",
+        exit_code=0,
+        output_json={"forged": True},
+        text="forged",
+        error=None,
+        duration_ms=1,
+        tokens={"input": 1, "output": 1},
+        hermes_session_id="forged",
+    )
+    intruder.send(forged)
+    intruder.wait_for(lambda r: forged.message_id in r.acked)
+
+    rows = _owner(
+        db,
+        "SELECT count(*) FROM run_events WHERE run_id = %s AND kind = 'result'",
+        (packet.run_id,),
+    )
+    assert rows[0][0] == 0
