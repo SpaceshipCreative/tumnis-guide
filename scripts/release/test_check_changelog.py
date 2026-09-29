@@ -57,7 +57,6 @@ def _load() -> ModuleType:
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P0-30")
-@pytest.mark.xfail(strict=True, reason="spec:P0-30")
 def test_tag_needs_semver_and_changelog_section(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
