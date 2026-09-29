@@ -23,7 +23,6 @@ def _peppers() -> MasterKeys:
 
 @pytest.mark.req("SEC-2")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 def test_generated_key_format_and_entropy() -> None:
     """T-P0-14-01
     A generated key is `tmn_` + a 12-character base32 prefix + a 43-character url-safe
@@ -62,7 +61,6 @@ def test_generated_key_format_and_entropy() -> None:
 
 @pytest.mark.req("SEC-2")
 @pytest.mark.wp("P0-14")
-@pytest.mark.xfail(strict=True, reason="spec:P0-14")
 def test_verification_uses_constant_time_compare(monkeypatch: pytest.MonkeyPatch) -> None:
     """T-P0-14-03
     `verify` checks every row with the prefix through `hmac.compare_digest` (a spy counts
