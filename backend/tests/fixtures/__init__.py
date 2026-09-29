@@ -13,11 +13,12 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from tests._pg import DbUrls, bootstrap_roles, build_template, clone, drop
+from tests._pg import APP, DbUrls, bootstrap_roles, build_template, clone, drop
 from tumnis.core.adapters.registry import AdapterMode, registered, resolve
 from tumnis.core.clock import FixedClock
 
 if TYPE_CHECKING:
+    from dbos import DBOS
     from sqlalchemy.engine import Engine
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
     from testcontainers.community.postgres import PostgresContainer
@@ -125,6 +126,49 @@ async def owner_session(db: DbUrls) -> AsyncIterator[AsyncSession]:
 async def app_role_session(db: DbUrls) -> AsyncIterator[AsyncSession]:
     async for session in _session(db.app):
         yield session
+
+
+# --- DBOS: system database per xdist worker, reset per test -------------------------------
+
+
+@pytest.fixture(scope="session")
+def dbos_sys_db(pg_container: PostgresContainer, pg_base: DbUrls, worker_id: str) -> DbUrls:
+    """One DBOS system database per xdist worker, owned by the app role."""
+    import psycopg  # noqa: PLC0415
+    from psycopg import sql  # noqa: PLC0415
+
+    name = f"tumnis_dbos_{worker_id}"
+    with psycopg.connect(pg_container.get_connection_url(), autocommit=True) as conn:
+        conn.execute(
+            sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(name), sql.Identifier(APP))
+        )
+    return DbUrls(pg_base.host, pg_base.port, name)
+
+
+@pytest.fixture
+def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
+    """DBOS configured on the worker's system database, emptied, launched; steps reach the
+    per-test database through tumnis.core.db."""
+    from dbos import DBOS, DBOSConfig  # noqa: PLC0415
+
+    from tumnis.core import db as core_db  # noqa: PLC0415
+    from tumnis.worker import register_queues  # noqa: PLC0415
+
+    core_db.configure(app_url=db.app, direct_url=db.app, pooled=False)
+    DBOS.destroy(destroy_registry=False)
+    config: DBOSConfig = {
+        "name": "tumnis-test",
+        "application_version": "test",
+        "system_database_url": dbos_sys_db.url(APP, driver="psycopg"),
+    }
+    DBOS(config=config)
+    DBOS.reset_system_database(truncate=True)
+    register_queues()
+    DBOS.launch()
+    try:
+        yield DBOS
+    finally:
+        DBOS.destroy(destroy_registry=False)
 
 
 class QueryCounter:

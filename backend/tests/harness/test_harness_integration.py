@@ -104,7 +104,6 @@ def harness_toy_workflow(value: int) -> int:
 
 @pytest.mark.req("Quality rule 5")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 @pytest.mark.parametrize("run", ["first", "second"])
 def test_dbos_fixture_runs_a_workflow_on_postgres(run: str, dbos: type[DBOS]) -> None:
     """T-P0-02-11
