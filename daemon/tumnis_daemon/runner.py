@@ -6,13 +6,14 @@ LANG and `HERMES_*` only, so the device token never reaches it.
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import re
 import signal
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 from tumnis_daemon.config import DaemonConfig
 from tumnis_daemon.protocol import (
@@ -125,6 +126,7 @@ def _final(events: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 def _tokens(final: dict[str, Any]) -> dict[str, int] | None:
     usage = final.get("usage")
+    tokens: Any
     if isinstance(usage, dict):
         tokens = {
             "input": usage.get("input_tokens"),
@@ -160,6 +162,7 @@ def build_result(
         if isinstance(final.get("duration_ms"), int) and final["duration_ms"] >= 0:
             duration_ms = final["duration_ms"]
 
+    status: Literal["succeeded", "failed", "timed_out"]
     error: str | None
     if timed_out:
         status, error = "timed_out", "timed_out"
@@ -239,10 +242,8 @@ async def execute(msg: Run, cfg: DaemonConfig, *, timeout_s: float | None = None
 
 
 def _kill_group(pid: int) -> None:
-    try:
+    with contextlib.suppress(ProcessLookupError):
         os.killpg(pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
 
 
 async def run_skill(msg: Run, state: "StateStore", cfg: DaemonConfig) -> None:

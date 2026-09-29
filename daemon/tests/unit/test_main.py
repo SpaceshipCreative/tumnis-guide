@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 async def test_refuses_to_run_as_root(cfg: DaemonConfig, monkeypatch: pytest.MonkeyPatch) -> None:
     """T-P1-04-17
     With geteuid patched to 0, `main` exits 78 before it reads the token or connects.
