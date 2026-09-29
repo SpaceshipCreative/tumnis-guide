@@ -466,18 +466,27 @@ def _wait_for_queue_workers(
         time.sleep(0.01)
 
 
-def _stop_queue_workers(earlier: set[threading.Thread]) -> None:
-    """Stop DBOS dequeuing before DBOS.destroy stops its event loop. destroy (dbos 3.1.0)
-    signals its threads and stops the loop at once: a queue worker that had just dequeued
-    a workflow a test left queued then hands it to the stopped loop, and the coroutine it
-    made is never awaited (an unraisable-exception error at teardown)."""
+def _stop_queue_workers(earlier: set[threading.Thread], timeout_s: float = 10) -> None:
+    """Quiesce DBOS before DBOS.destroy stops its event loop and disposes its engine (dbos
+    3.1.0 does both at once): stop dequeuing, then wait for the workflows a test left
+    running. A queue worker that had just dequeued a workflow would hand it to the stopped
+    loop (a coroutine never awaited: an unraisable-exception error at teardown), and a
+    workflow still running holds pooled system-database connections that dispose() cannot
+    close; the garbage collector finds them open later, in another test ("psycopg.Connection
+    ... was deleted while still open")."""
+    import time  # noqa: PLC0415
+
     from dbos._dbos import _get_dbos_instance  # noqa: PLC0415  # dbos 3.1.0: no public hook
 
-    for event in _get_dbos_instance().background_thread_stop_events:
+    instance = _get_dbos_instance()
+    for event in instance.background_thread_stop_events:
         event.set()
     for thread in threading.enumerate():
         if thread not in earlier and thread.name.startswith("queue-worker-"):
-            thread.join(timeout=10)
+            thread.join(timeout=timeout_s)
+    deadline = time.monotonic() + timeout_s
+    while instance._active_workflows_set.activeList() and time.monotonic() < deadline:
+        time.sleep(0.01)
 
 
 @pytest.fixture
