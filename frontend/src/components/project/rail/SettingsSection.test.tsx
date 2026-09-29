@@ -50,17 +50,11 @@ async function togglesWithOnePatch(viewport: Viewport): Promise<void> {
 }
 
 describe("SettingsSection", () => {
-  test.fails(
-    "[P1-02][Data flow rule 6] T-P1-02-16 local decisions toggle sends one PATCH at 375 px",
-    async () => {
-      await togglesWithOnePatch("phone");
-    },
-  );
+  test("[P1-02][Data flow rule 6] T-P1-02-16 local decisions toggle sends one PATCH at 375 px", async () => {
+    await togglesWithOnePatch("phone");
+  });
 
-  test.fails(
-    "[P1-02][Data flow rule 6] T-P1-02-16 local decisions toggle sends one PATCH at 1280 px",
-    async () => {
-      await togglesWithOnePatch("laptop");
-    },
-  );
+  test("[P1-02][Data flow rule 6] T-P1-02-16 local decisions toggle sends one PATCH at 1280 px", async () => {
+    await togglesWithOnePatch("laptop");
+  });
 });

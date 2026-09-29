@@ -1,5 +1,5 @@
 // A project (P0-22 route; the header shows its name from P0-17; the views arrive with
-// P0-24).
+// P0-24). The rail's Settings section (P1-02) shows below until the rail lands.
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
@@ -7,6 +7,7 @@ import * as z from "zod";
 
 import { projectsGetProjectOptions } from "../api/@tanstack/react-query.gen";
 import { Placeholder } from "../components/pages/Placeholder";
+import { SettingsSection } from "../components/project/rail/SettingsSection";
 import { projectViews } from "../lib/views";
 import { uiStore } from "../stores/uiStore";
 
@@ -40,6 +41,9 @@ function ProjectPage() {
   return (
     <Placeholder title={project.data?.name ?? "Project"}>
       <p className="text-muted">View: {view ?? lastView ?? "tasks"}</p>
+      {project.data ? (
+        <SettingsSection key={project.data.id} project={project.data} />
+      ) : null}
     </Placeholder>
   );
 }
