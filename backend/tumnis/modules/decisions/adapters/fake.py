@@ -145,15 +145,55 @@ class GenerationCall:
 
 
 class FakeGeneration:
-    """The Generation slot's fake (P1-03): answers `text` after `delay_ms`."""
+    """The Generation slot's fake (P1-03): answers `text` after `delay_ms`, or raises `fail`.
 
-    def __init__(self, *, text: str = "", delay_ms: int = 0) -> None:
+    A delay over the call's `timeout_ms` sleeps the timeout and raises AdapterTimeout, like
+    the real adapter. `script(...)` changes the answer; `calls` records every prompt.
+    """
+
+    DEFAULT_TEXT = "Open the task and write down the first concrete step."
+
+    def __init__(
+        self,
+        *,
+        text: str = DEFAULT_TEXT,
+        delay_ms: int = 0,
+        fail: AdapterError | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
         self.text = text
         self.delay_ms = delay_ms
+        self.fail = fail
+        self._sleep = sleep
+        self._health: Health = "ok"
         self.calls: list[GenerationCall] = []
 
+    def script(
+        self, text: str = DEFAULT_TEXT, *, delay_ms: int = 0, fail: AdapterError | None = None
+    ) -> None:
+        self.text, self.delay_ms, self.fail = text, delay_ms, fail
+
+    def set_health(self, state: Health) -> None:
+        self._health = state
+
+    def reset(self) -> None:
+        self.script()
+        self.calls.clear()
+        self._health = "ok"
+
     async def complete(self, *, system: str, user: str, max_tokens: int, timeout_ms: int) -> str:
-        raise NotImplementedError
+        self.calls.append(GenerationCall(system, user, max_tokens, timeout_ms))
+        if self.delay_ms > timeout_ms:
+            await self._sleep(timeout_ms / 1000)
+            raise AdapterTimeout("decisions.vllm_generation", "chat_completion")
+        if self.delay_ms:
+            await self._sleep(self.delay_ms / 1000)
+        if self.fail is not None:
+            raise self.fail
+        return self.text
+
+    def health_state(self) -> Health:
+        return self._health
 
     async def health(self) -> Health:
-        raise NotImplementedError
+        return self._health

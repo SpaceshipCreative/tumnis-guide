@@ -37,7 +37,6 @@ def use(fake: FakeGeneration, **settings: int) -> None:
 
 @pytest.mark.req("FR-11.8")
 @pytest.mark.wp("P1-03")
-@pytest.mark.xfail(strict=True, reason="spec:P1-03")
 async def test_placeholder_comes_from_fake() -> None:
     """T-P1-03-01
     Scripted fake text is returned trimmed to one line and at most 120 characters.
@@ -109,7 +108,6 @@ async def test_only_title_and_project_name_sent() -> None:
 
 @pytest.mark.req("FR-11.8")
 @pytest.mark.wp("P1-03")
-@pytest.mark.xfail(strict=True, reason="spec:P1-03")
 @pytest.mark.parametrize("text", ["", "   ", "\n\n", "...", "?!", " - \n...\n** **"])
 async def test_multiline_or_empty_output_rejected(text: str) -> None:
     """T-P1-03-06
