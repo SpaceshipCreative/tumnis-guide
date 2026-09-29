@@ -10,3 +10,6 @@ node_modules/
 coverage/
 dist/
 .env
+coverage.json
+trace.md
+traceability.json

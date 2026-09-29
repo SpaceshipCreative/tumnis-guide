@@ -33,7 +33,6 @@ BUDGETS = {
 
 @pytest.mark.req("Quality rule 1", "Quality rule 2", "Quality rule 4")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_every_ci_job_is_required_and_budgeted() -> None:
     """T-P0-03-16
     Job names in ci.yml equal required-checks.txt; each job has timeout-minutes at its
@@ -51,6 +50,11 @@ def test_every_ci_job_is_required_and_budgeted() -> None:
     for name, job in jobs.items():
         assert "name" not in job, f"{name}: a display name would change the check name"
         assert job.get("timeout-minutes") == BUDGETS[name], name
+
+
+@pytest.fixture(autouse=True)
+def _no_ci_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
 
 
 def _gate(tmp_path: Path, files: dict[str, tuple[int, int]]) -> int:
@@ -77,7 +81,6 @@ def _gate(tmp_path: Path, files: dict[str, tuple[int, int]]) -> int:
 
 @pytest.mark.req("Quality rule 4")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_coverage_gates_groups(tmp_path: Path) -> None:
     """T-P0-03-17
     coverage_gates fails at 79% on the rules group and at 99% on tasks/rules.py; empty
