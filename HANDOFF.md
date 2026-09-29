@@ -1,9 +1,9 @@
-# P0-24 handoff 2: Project page with Tasks and Board views
+# P0-24 handoff 3: Project page with Tasks and Board views
 
-Worktree `/Users/sjordan/Projects/Tumnis-Guide-wt/p0-24`, branch `wp/P0-24`. Read the
-coordinator's footer rules, AGENTS.md, CLAUDE.md and the plan section `#### P0-24`
-(docs/IMPLEMENTATION-PLAN-DETAILED.md, line ~6503; use offset/limit) first. Do not redo
-committed work; trust `git log --oneline main..HEAD`.
+Worktree `/Users/sjordan/Projects/Tumnis-Guide-wt/p0-24`, branch `wp/P0-24` (pushed to
+origin). Read the coordinator's footer rules, AGENTS.md, CLAUDE.md and the plan section
+`#### P0-24` (docs/IMPLEMENTATION-PLAN-DETAILED.md, line ~6503; use offset/limit) first. Do
+not redo committed work; trust `git log --oneline main..HEAD`.
 
 ## Done (commits)
 
@@ -19,170 +19,169 @@ First agent:
   `POST /v1/tasks/{id}/undo`, `GET /v1/tasks/{id}/comments`.
 - `0cd577e` merge of main 881a28e.
 
-Second agent (this one):
-- `7bcaa72` `make gen`; also restored the `Page` import the merge dropped from
-  `tasks/router.py`.
-- `739f05b` T-P0-24-12 green (xfail removed; `test_undo.py` passes).
-- `2190474` `task.status_changed` leaves `via` out unless an undo set it
-  (`Field(exclude_if=...)`); the locked P0-18 test `test_task_events.py` pins the payload
-  without `via`.
-- `5811d3c` knowledge routes for the Brief rail, appended as a separate block:
-  `GET /v1/projects/{project_id}/brief` (op `knowledge_get_brief`, `context:read`,
-  `path:project_id`) and `PATCH /v1/knowledge/documents/{document_id}` `{body_md, version}`
-  (op `knowledge_update_document`, `knowledge:write`, idempotent, `lookup:knowledge`; only
-  `kind == "text"`, else 409 `not_text`; stale is 409 `stale_version` with the current
-  DocumentDTO). `knowledge/api.py` got `project_of`, `register_project_lookup("knowledge")`,
-  `update_text_document` in a block at the end of the file; `knowledge/router.py` had only
-  a docstring on main and now holds `router = v1_router("knowledge", tags=["knowledge"])`
-  (no prefix) plus the two routes. New integration test
-  `knowledge/tests/integration/test_text_documents.py` (green). LIVE_MAP: `knowledgeGetBrief`
-  in `project.details`, `tasksListComments` in `task.details`.
+Second agent:
+- `7bcaa72` `make gen`; restored the `Page` import the merge dropped from `tasks/router.py`.
+- `739f05b` T-P0-24-12 green.
+- `2190474` `task.status_changed` leaves `via` out unless an undo set it.
+- `5811d3c` knowledge routes for the Brief rail (`GET /v1/projects/{id}/brief`,
+  `PATCH /v1/knowledge/documents/{id}`), `knowledge/api.py` additions, integration test
+  `knowledge/tests/integration/test_text_documents.py`.
 - `f09ec83` ProjectHeader (T-13 green).
-- `5707f3f` `TaskOut` gets `ConfigDict(json_schema_serialization_defaults_required=True)` so
-  `change_id` and `schema_version` are required in the generated types; without it the
-  zod `.nullish()` output and the TS `change_id?: string | null` disagreed under
-  `exactOptionalPropertyTypes` and broke the typecheck of the existing
-  `lib/optimistic.test.tsx`. `make gen` output committed.
-- `706cb34` `vitest.config.ts` `testTimeout: 20_000` (T-11 renders the page eight times
-  and passes ~4.8 s alone, over 5 s in the full suite).
-- `2f7bd46` the frontend: ProjectPage, Composer, ViewSwitcher, TasksView/TaskGroup/TaskRow,
-  BoardView/BoardColumn/BoardCard/Checklist, rail (RailSection, RailSections, RightRail,
-  ContextSheet, Brief/Connections/Schedule/Settings sections), drawer (TaskDrawer,
-  RecurrencePicker, CommentList), `components/project/{queries,mutations}.ts`,
-  `lib/{undo,task-cache,media}.ts`, `components/common/{UndoToast,NoticeToast}.tsx`
-  (mounted in AppShell), routes `projects.$projectId.tsx` (loader + page) and `tasks.tsx`
-  (all pages, sorted by `sortByDue`), `uiStore` (`notice`, `showNotice`, `clearNotice`,
-  `setContextSheet`; lastView persistence now merges the changed entries into what storage
-  holds instead of writing the whole in-memory map, which T-08 needs), `useUpdateTask`
-  pushes an undo entry and refreshes every task view, ProjectFake aligned with P0-19
-  (below) and answers `total`. Markers removed: T-06, 07, 08, 09, 10, 11, 14, 15, 16.
+- `5707f3f` `TaskOut` `json_schema_serialization_defaults_required=True`; `make gen`.
+- `706cb34` Vitest `testTimeout: 20_000`.
+- `2f7bd46` the frontend (ProjectPage, views, board, rail, drawer, undo, toasts, routes).
+  Markers removed: T-06, 07, 08, 09, 10, 11, 14, 15, 16.
+
+Third agent (this one):
+- `fd16624` `fix(core)`: issue #51 (below). `truncate_tables` locks `outbox` first;
+  regression test `backend/tumnis/core/tests/integration/test_issue_51_reset_relay_deadlock.py`
+  (red on the old code: "reset and relay deadlocked"; green with the fix, together with
+  `test_testing_routes.py`: 5 passed).
 
 ## Spec tests
 
-Green: T-P0-24-01 to 03, 06 to 16 (Vitest 63/63; pytest T-12).
-Still marked (`test.fail()`): T-P0-24-04, 05 (`e2e/board.spec.ts`) and T-P0-24-17
-(`e2e/layout/project.spec.ts`). They have NOT been seen green yet: see "E2E blocker".
+Green: T-P0-24-01 to 03, 06 to 16 (Vitest; pytest T-12).
+Still marked `test.fail()`: T-P0-24-04, 05 (`frontend/e2e/board.spec.ts`), T-P0-24-17
+(`frontend/e2e/layout/project.spec.ts`).
 
-## Verified green at 2f7bd46
+## Reset hang: root cause and fix (issue #51, done)
 
-- Vitest: 36 files, 63 tests.
-- `npm --prefix frontend run typecheck`: clean. `npm --prefix frontend run lint` (ESLint +
-  prettier --check): clean.
-- Backend unit 853 passed; contract 83 passed.
-- Backend integration: 619 passed / 1 failed before `2190474`; that failure
-  (`test_task_events.py`) is fixed and re-run green. The FULL integration layer was not
-  re-run after `5707f3f` and `5811d3c`: re-run it.
-- `make check`: not yet run as a whole (its parts above are green).
+- Reproduced on main (881a28e): built main's image as `tumnis:p024-main` from `git archive
+  main` and ran it as compose project `tumnis-p024main` on port 18425 (now torn down). Two
+  reset loops running side by side wedged it. `pg_stat_activity`: the relay's
+  `SELECT * FROM app.outbox_claim($1)` sat idle in transaction; the reset's `TRUNCATE` was
+  blocked by it; the relay's own `SELECT enabled FROM module_flags` (second connection) was
+  blocked by the TRUNCATE.
+- Cause: `relay_once` (core/events.py) keeps its claim transaction open while
+  `modules.enabled` reads `module_flags` on another connection. That read is a cache miss
+  for every new workspace, and every reset seeds a new workspace id, for example
+  `knowledge.create_brief` on `project.created`. `truncate_tables` TRUNCATEs every table in
+  sorted order, so it took `module_flags` before `outbox`. That makes a deadlock across two
+  connections, which Postgres cannot detect.
+- Fix (`fd16624`): `truncate_tables` runs `LOCK TABLE outbox IN ACCESS EXCLUSIVE MODE`
+  before anything else. The plan's reset contract says nothing about restarting services,
+  so nothing is restarted.
+- After the fix, the P0-24 stack reset cleanly and the P0-24 specs ran. Two reset loops
+  running side by side still get 500s (one reset's seed collides with the other's truncate:
+  FK or deadlock-detected errors), but nothing hangs. Main does the same, and Playwright
+  runs with `workers: 1`, so resets never overlap.
+- Not changed: the relay still waits on another connection while it holds its claim. The
+  reset was the only thing that locked `module_flags` against it. It is noted in #51.
 
-## E2E blocker (next step)
+## T-P0-24-05 (keyboard drag): diagnosis so far, not fixed
 
-Stack: `TUMNIS_IMAGE=tumnis:p024 TUMNIS_TEST_PORT=18424 docker compose -p tumnis-p024 -f
-deploy/compose.test.yaml up -d --wait --build`, then
-`E2E_BASE_URL=http://localhost:18424 npx playwright test e2e/board.spec.ts
-e2e/layout/project.spec.ts e2e/journeys/J2.spec.ts` from `frontend/`. Tear down with the
-same env and `down -v`. The stack is down now.
+With the stack healthy, T-05 fails at both widths: the card stays in Backlog, and the live
+region says "was dropped in Backlog". Instrumented runs (a throwaway spec, since deleted):
+- Space picks the card up ("Picked up", "is over Backlog"). dnd-kit's KeyboardSensor adds
+  its document keydown listener about 1 ms later, before the ArrowRight arrives.
+- ArrowRight reaches the sensor (the default is prevented; no scroll event; the board root
+  at laptop is 672 px wide from x=256, so the scroll-clamp path is not taken). But the
+  "is over Today" update lands about 4 ms after the key. Playwright's next Space arrives
+  sooner (about 3 to 4 ms), so `onDragEnd` sees the stale `over` (Backlog). One run in six
+  passed, when the over update won the race.
+- With 500 ms waits between keys the same sequence moves the card to Today (move 200,
+  announcement "was dropped in Today").
+- The spec is locked: do not add waits to it. Fix it in the app, for example:
+  1. Keep the drop target the keyboard chose: in `BoardView`, track it from `onDragMove`
+     or `onDragOver`. On a keyboard `onDragEnd`, compute the drop from the dragged rect
+     moved by the sensor's last coordinates (for example `dropAtPoint` at the centre of
+     `active.rect.current.initial` plus the final delta), not from `over`. Check whether
+     the `DragEndEvent` delta is also stale; if it is, keep the last coordinates yourself.
+  2. Or wrap KeyboardSensor (its members are `private` in the .d.ts) so that an end key
+     waits until the previous move has rendered, for example one key per animation frame.
+  Then run T-05 at both widths with `--repeat-each=5` on a loaded machine.
+- T-04 (pointer drag, laptop only) and T-17 (layout) have NOT been run since the fix.
+  Remove their markers one at a time and run them.
 
-With the markers still on, the first run gave "5 passed (as expected failures), 1 skipped"
-for the P0-24 specs, and J2 failed in its fixture: `POST /v1/test/reset` timed out (10 s).
-After removing the markers every test failed the same way. `pg_stat_activity` showed a
-session `idle in transaction` on `SELECT * FROM app.outbox_claim($1)` (the outbox relay)
-holding locks for minutes, the reset's `TRUNCATE` queued behind it, and every other query
-(board reads, dead_letters inserts, later resets' `ALTER TABLE audit_log DISABLE TRIGGER`)
-queued behind the TRUNCATE. The api log also showed one
-`DeadlockDetected` between the TRUNCATE and a `board_columns` read. So a reset while the
-relay holds its claim transaction wedges the stack. Next steps:
-1. Check whether this happens on main too (build main's image, run `e2e/layout/dashboard.spec.ts`
-   a few times): if so, it is a pre-existing stack bug, not P0-24's; report it and restart
-   the api and worker between runs (`docker compose ... restart api worker`) to get a
-   clean run.
-2. If it is P0-24's: suspect the extra events (every task write now records a change;
-   `task.status_changed` via undo; the brief PATCH) or the page's many parallel reads
-   right as the reset lands. Look at `tumnis/core/outbox.py` relay claim transaction and
-   whether a subscriber blocks inside it.
-3. Once the stack resets cleanly, remove `test.fail()` from T-04, T-05 (board.spec.ts)
-   and T-17 (layout/project.spec.ts), run them at both widths, and fix what fails. J2's
-   board steps (10, 11) must pass; its `test.fail()` stays until P0-25.
-   Board facts for T-04: Acme's Today column has one seed card, so a drop at the bottom of
-   Today lands at index 1. Pointer drops use the pointer position tracked on window
-   `pointermove`/`mousemove`/`touchmove` (`dropAtPoint` in BoardView), keyboard drops use
-   `over` (`dropAtOver`). The DndContext announces `"<title> was dropped in <column>"`.
+## Remaining steps
 
-## Remaining steps after the e2e specs
-
-1. `git merge main`, then the Alembic check (coordinator): if main contains `tasks_0002`
-   (P0-19), set `down_revision = "tasks_0002"` in
-   `backend/tumnis/modules/tasks/migrations/0003_task_changes.py`; otherwise leave it on
-   `tasks_0001` and say so. `cd backend && uv run alembic heads` must show one head per
-   branch. After the merge run `make gen` and commit.
-2. Recurrence seam (coordinator): P0-19 builds `GET/PUT/DELETE /v1/tasks/{id}/recurrence`
-   and `GET /v1/recurrence?project_id=`. The frontend reads them with hand queries in
-   `components/project/queries.ts` (`projectRecurrenceQuery`, `taskRecurrenceQuery`, keys
-   `[{_id: "tasksListRecurrence"|"tasksGetRecurrence", ...}]`, 404 read as "none") and
-   writes through `apiWrite` in `drawer/RecurrencePicker.tsx`. The shape matches P0-19's
-   T-P0-19-19 (read from the p0-19 worktree's test): rule `{id, task_id, project_id,
-   preset, cron, weekday, month_day, due_time "HH:MM:SS", title, latest_task_id,
-   latest_occurrence_on, next_due_at, version}`, list `{items}`; PUT takes the task's
-   version for a new rule (the rule's version equals the task's after), DELETE takes
-   `?version=`. If P0-19 is on main after the merge, switch those reads to the generated
-   options and add the ops to LIVE_MAP (T-P0-22-11 fails on generated ops missing there).
-3. Update Part A (A12) of the plan with the P0-24 names (components, `lib/undo.ts`
+1. Fix T-05 as above, remove its marker (exact Edit of `test.fail();`), run it; then T-04,
+   then T-17 (`frontend/e2e/layout/project.spec.ts`). Also run `e2e/journeys/J2.spec.ts`:
+   its board steps (10, 11) must pass, and its `test.fail()` stays until P0-25. Stack:
+   `TUMNIS_IMAGE=tumnis:p024 TUMNIS_TEST_PORT=18424 docker compose -p tumnis-p024 -f
+   deploy/compose.test.yaml up -d --wait --build`, then from `frontend/`
+   `E2E_BASE_URL=http://localhost:18424 npx playwright test e2e/board.spec.ts
+   e2e/layout/project.spec.ts e2e/journeys/J2.spec.ts`. Tear down with the same env and
+   `down -v`.
+2. `git merge main`. As of 2026-09-29, origin/main is still 881a28e (already merged), with
+   no P0-19 (`tasks_0002`) and no P0-20. If main has `tasks_0002` after a merge, set
+   `down_revision = "tasks_0002"` in
+   `backend/tumnis/modules/tasks/migrations/0003_task_changes.py`, and check that
+   `cd backend && uv run alembic heads` shows one head per branch. After the merge run
+   `make gen` and commit.
+3. Recurrence seam: P0-19 builds `GET/PUT/DELETE /v1/tasks/{id}/recurrence` and
+   `GET /v1/recurrence?project_id=`. The frontend reads them with hand queries in
+   `components/project/queries.ts` (`projectRecurrenceQuery`, `taskRecurrenceQuery`; 404 is
+   read as "none") and writes through `apiWrite` in `drawer/RecurrencePicker.tsx`. The shape
+   matches P0-19's T-P0-19-19. Once P0-19 is on main, switch to the generated options and
+   add the ops to LIVE_MAP (T-P0-22-11 fails on generated ops missing there).
+4. Search (P0-20) used a test-helper trash seam. Once both have landed, it should use this
+   WP's real `DELETE /v1/tasks/{id}` (trash). Say so in the report.
+5. Update Part A (A12) of the plan with the P0-24 names (components, `lib/undo.ts`
    `remember`/`undo`, `lib/task-cache.ts`, knowledge routes, `uiStore` additions).
-4. Finish: `make gen`, `make check`, `npm --prefix frontend run typecheck`, backend unit,
-   contract and integration layers (move `frontend/dist` aside first if it exists), Vitest,
-   the P0-24 Playwright specs on the own stack, tear down.
+6. Finish green: `make check` (includes the typecheck); backend unit
+   (`uv run pytest -m "not integration and not contract" -n auto`), contract (`-m contract`)
+   and integration (`-m integration -n auto`), with `frontend/dist` moved aside first
+   (issue #48); Vitest. The full integration layer has NOT been re-run since `5707f3f`,
+   `5811d3c` and `fd16624`. The machine is loaded, so rerun timing failures on their own.
+   Known flakes: relay timing (#49), readiness under load, `optimistic.test.tsx`.
+7. Delete HANDOFF.md in a `chore:` commit.
 
 ## Decisions and deviations (report these)
 
 - dnd-kit: `@dnd-kit/react` 0.5.0 injects a `<style>` element during drags, which the
-  strict CSP blocks; switched to the plan's fallback `@dnd-kit/core` + `@dnd-kit/sortable`.
-  Cards override useSortable's role to `listitem` with roledescription "draggable task".
+  strict CSP blocks, so this WP uses the plan's fallback `@dnd-kit/core` +
+  `@dnd-kit/sortable`. Cards override useSortable's role to `listitem`, with
+  roledescription "draggable task".
 - No backend `order=due` on `GET /v1/tasks`: `/tasks` follows every cursor and sorts with
-  `sortByDue` on the client. Its query key is the generated op's key plus `pages: "all"`
-  (array data, so it never collides with a `TaskPage` cache entry).
+  `sortByDue` on the client (query key: the generated op's key plus `pages: "all"`).
 - Extra backend routes not in the plan: `DELETE /v1/tasks/{id}` (trash),
   `GET /v1/tasks/{id}/comments`, `GET /v1/projects/{id}/brief`,
-  `PATCH /v1/knowledge/documents/{id}` (the plan's BriefSection names it; no WP built it).
-- Undo of a create trashes the task (change `{deleted: true} -> {deleted: false}`).
-- T-06 and T-11 move cards through the card's Move menu (same `planMove`, same one move
-  request as a drag); jsdom cannot drag.
+  `PATCH /v1/knowledge/documents/{id}`.
+- Undo of a create trashes the task.
+- T-06 and T-11 move cards through the card's Move menu (same `planMove`, same single
+  request); jsdom cannot drag.
 - `TaskOut` schema marks defaults required (`5707f3f`); `via` excluded when None
   (`2190474`).
 - Vitest `testTimeout` 20 s (`706cb34`).
-- Refused-move copy is keyed by the from-status (P0-18's human edges), e.g. "In review
-  tasks can go back to In progress or to Done"; same-status gets its own line.
-- Board cards also carry an "Open" button (opens the drawer); the Tasks view has `j`/`k`,
-  Enter, `s`, `d`.
-- Connections edits people and domains (one per line) and the code path through
-  `PATCH /v1/projects/{id}`; repo and Coolify links are kept as they are.
-- Recurrence PUT sends the task's version for a new rule (P0-19's test confirms).
+- Refused-move copy is keyed by the from-status; same-status has its own line.
+- Board cards carry an "Open" button; the Tasks view has `j`/`k`, Enter, `s`, `d`.
+- Connections edits people, domains and the code path; repo and Coolify links are kept.
+- Recurrence PUT sends the task's version for a new rule.
+- New (this agent): issue #51, a bug fix to main's code (`truncate_tables`), in its own
+  commit on this branch.
 
 ## Shared-file edits (report these)
 
-- `frontend/package.json`: the three `@dnd-kit` pins (first agent).
-- `frontend/e2e/fixtures.ts`: `boardCards`, `openProject`, `recordWrites` (first agent).
-- `frontend/src/test/factories.ts`: `makeBoard` (first agent).
-- `frontend/vitest.config.ts`: `testTimeout` (this agent).
+- `frontend/package.json`: the three `@dnd-kit` pins.
+- `frontend/e2e/fixtures.ts`: `boardCards`, `openProject`, `recordWrites`.
+- `frontend/src/test/factories.ts`: `makeBoard`.
+- `frontend/vitest.config.ts`: `testTimeout`.
 - `frontend/src/stores/uiStore.ts`, `lib/optimistic.ts`, `components/common/AppShell.tsx`,
   `ConflictToast.tsx` (`brief` entity), `lib/live-map.ts`.
+- New (this agent): `backend/tumnis/core/testing_routes.py` (core, issue #51). No edits to
+  `pyproject.toml`, `uv.lock`, `Makefile`, `AGENTS.md` or `.importlinter`.
 
 ## Gotchas
 
 - rtk filters output: use `rtk proxy uv run pytest ...` to see pytest output.
-- Removing a `spec:` marker with `sed -i '<n>d'` was refused by the auto-mode classifier
-  as test removal; read the lines first, then use the Edit tool on the exact marker.
-- Prettier reformats a test once its `.fails` goes (line length); the diff is whitespace,
-  trailing commas and the marker only (checked token by token). `npm run lint` runs
-  `prettier --check .`, so format them.
-- A label wrapping a `<select>` makes the select's accessible name include the chosen
-  option ("Day Monday"); use `htmlFor`/`id` (RecurrencePicker, Settings).
-- The unhandled-request strategy is "error": the page must only call endpoints the
+- Remove a `spec:` marker with the Edit tool on the exact line; `sed -i` was refused. If a
+  permission is denied, stop and report it; do not route around it.
+- A heredoc or `rm -rf` in Bash trips a "Fact-Forcing Gate" hook: state the facts, or
+  write files with the Write tool.
+- Prettier reformats a test once its marker goes; `npm run lint` runs `prettier --check .`.
+- A label wrapping a `<select>` puts the chosen option into the select's accessible name;
+  use `htmlFor`/`id`.
+- The MSW unhandled-request strategy is "error": the page must call only endpoints the
   ProjectFake serves.
+- Leftover local image `tumnis:p024-main` (main's image used for the repro) can be removed
+  with `docker rmi tumnis:p024-main`.
 
 ## Verify
 
 ```bash
 cd frontend && npx vitest run && npm run typecheck && npm run lint
-cd ../backend && rtk proxy uv run pytest tumnis/modules/tasks/tests/integration/test_undo.py tumnis/modules/knowledge/tests/integration/test_text_documents.py -m integration
+cd ../backend && rtk proxy uv run pytest tumnis/core/tests/integration/test_issue_51_reset_relay_deadlock.py tumnis/core/tests/integration/test_testing_routes.py tumnis/modules/tasks/tests/integration/test_undo.py -m integration
 uv run pytest -m "not integration and not contract" -n auto; uv run pytest -m contract; uv run pytest -m integration -n auto
 cd .. && make check
 ```
