@@ -4,6 +4,8 @@
 boot checks run in the CLI before uvicorn starts, not in the ASGI lifespan).
 """
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,7 +16,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 from tumnis import wiring
-from tumnis.core import db, health, ops_status, testing_routes
+from tumnis.core import cache, db, health, ops_status, testing_routes
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.settings import Settings, install_master_keys
 
@@ -33,15 +35,28 @@ class ShellFiles(StaticFiles):
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    yield
-    await db.dispose()
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """The cache invalidation listener runs beside the server (P0-08); it reconnects on its
+    own, so a database that is down at start does not stop the api."""
+    settings: Settings = app.state.settings
+    stop = asyncio.Event()
+    listener = cache.CacheInvalidationListener(settings.database_direct_url)
+    task = asyncio.create_task(listener.run(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(task, cache.POLL_S * 5)
+        await db.dispose()
 
 
 def create_app(settings: Settings | None = None, clock: Clock | None = None) -> FastAPI:
     settings = settings or Settings()  # values come from the environment
     master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
     db.configure(settings.database_url, settings.database_direct_url)
+    clock = clock or SystemClock()
+    cache.configure_backend(cache.InProcessCache(clock, publish=cache.pg_publisher(db.app_engine)))
 
     health.clear_health()
     health.register_health("postgres", health.sql_check(db.app_engine, "SELECT 1"), critical=True)
@@ -62,7 +77,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     )
     app.state.settings = settings
     app.state.master_keys = master_keys
-    app.state.clock = clock or SystemClock()
+    app.state.clock = clock
     app.include_router(health.router)
     if settings.tumnis_adapters == "fake":
         app.include_router(testing_routes.router)

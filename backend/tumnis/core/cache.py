@@ -11,7 +11,10 @@ write-visible test for free (tumnis/core/tests/unit/test_cache.py). Hit and miss
 are exported per cache name (tumnis.core.metrics).
 """
 
+import asyncio
+import contextlib
 import json
+import logging
 import re
 import threading
 from collections import OrderedDict
@@ -22,8 +25,10 @@ from datetime import datetime, timedelta
 from typing import Literal, Protocol, Self
 from uuid import UUID
 
+import psycopg
 from sqlalchemy import event, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import Session
 
 from tumnis.core.clock import Clock, SystemClock
@@ -340,3 +345,80 @@ def _drop_after_commit(session: Session) -> None:
 @event.listens_for(Session, "after_rollback")
 def _forget_after_rollback(session: Session) -> None:
     session.info.pop(_PENDING, None)
+
+
+# --- The listener in every process ---------------------------------------------------------
+
+POLL_S = 1.0  # how often the listener looks at its stop flag while idle
+RETRY_S, RETRY_MAX_S = 0.5, 30.0  # reconnect backoff (plan defaults)
+_log = logging.getLogger(__name__)
+
+
+def libpq_url(url: str) -> str:
+    """A SQLAlchemy URL (postgresql+psycopg://...) as a libpq one for psycopg."""
+    return make_url(url).set(drivername="postgresql").render_as_string(hide_password=False)
+
+
+class CacheInvalidationListener:
+    """LISTEN cache_invalidate on a direct connection (never PgBouncer) and drop the named
+    keys or tags from the local backend. Runs in the api (lifespan) and the worker. After
+    every (re)connect it clears the whole local cache: a notification sent while it was not
+    listening is lost, so anything cached may be stale (safe, just colder)."""
+
+    def __init__(self, url: str, cache: InProcessCache | None = None) -> None:
+        self._dsn = libpq_url(url)
+        self._cache = cache
+        self.ready = asyncio.Event()
+
+    def _local(self) -> InProcessCache:
+        return self._cache if self._cache is not None else backend()
+
+    async def run(self, stop: asyncio.Event) -> None:
+        delay = RETRY_S
+        while not stop.is_set():
+            try:
+                async with await psycopg.AsyncConnection.connect(
+                    self._dsn, autocommit=True
+                ) as conn:
+                    await conn.execute(f"LISTEN {CHANNEL}")
+                    self._local().clear()
+                    self.ready.set()
+                    delay = RETRY_S
+                    while not stop.is_set():
+                        async for notify in conn.notifies(timeout=POLL_S):
+                            apply_payload(self._local(), notify.payload)
+            except (psycopg.OperationalError, OSError):
+                self.ready.clear()
+                _log.warning("cache invalidation listener lost its connection; retrying")
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(stop.wait(), delay)
+                delay = min(delay * 2, RETRY_MAX_S)
+
+    def start_thread(self) -> Callable[[], None]:
+        """Run on a thread with its own event loop (the worker, whose main thread blocks);
+        returns the function that stops it."""
+        loop = asyncio.new_event_loop()
+        stop = asyncio.Event()
+
+        def target() -> None:
+            loop.run_until_complete(self.run(stop))
+            loop.close()
+
+        thread = threading.Thread(target=target, name="cache-invalidation", daemon=True)
+        thread.start()
+
+        def halt() -> None:
+            loop.call_soon_threadsafe(stop.set)
+            thread.join(timeout=POLL_S * 5)
+
+        return halt
+
+
+def pg_publisher(engine: Callable[[], AsyncEngine]) -> Publisher:
+    """Publishes an invalidation outside any writer's transaction (Cache.invalidate)."""
+
+    async def publish(payload: str) -> None:
+        async with engine().begin() as conn:
+            await conn.execute(_NOTIFY, {"channel": CHANNEL, "payload": payload})
+
+    return publish

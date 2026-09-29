@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     master_key_file: str = "/run/secrets/tumnis_master_key"
     api_key_pepper_file: str = "/run/secrets/tumnis_pepper"
     typesafe_api_key: SecretStr | None = Field(default=None, alias="TYPESAFE_API_KEY")
+    cache_backend: Literal["memory", "redis"] = "memory"
+    redis_url: str | None = None
+    tumnis_disabled_modules: str = ""  # comma-separated deployment kill list (P0-08)
 
     @model_validator(mode="after")
     def _preview_guard(self) -> Self:
@@ -63,6 +66,10 @@ class Settings(BaseSettings):
                 )
             if self.typesafe_api_key is not None:
                 raise SettingsError("preview_has_production_secret", "a Jev key is set in preview")
+        if self.cache_backend == "redis":
+            raise SettingsError(
+                "cache_backend_unavailable", "the redis cache backend arrives with hosted mode"
+            )
         return self
 
     @cached_property

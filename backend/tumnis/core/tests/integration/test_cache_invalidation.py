@@ -47,7 +47,6 @@ async def core_db(db: DbUrls) -> AsyncIterator[None]:
 
 @pytest.mark.req("Caching")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.usefixtures("core_db")
 async def test_invalidation_reaches_second_process_within_one_second(
     db: DbUrls, workspace: WorkspaceHandle
@@ -75,7 +74,6 @@ async def test_invalidation_reaches_second_process_within_one_second(
 
 @pytest.mark.req("Caching")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.usefixtures("core_db")
 async def test_rolled_back_write_does_not_invalidate(
     db: DbUrls, workspace: WorkspaceHandle

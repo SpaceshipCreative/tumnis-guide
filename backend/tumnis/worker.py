@@ -8,7 +8,8 @@ import signal
 import threading
 from typing import TYPE_CHECKING
 
-from tumnis.core import workflows_ops
+from tumnis.core import cache, workflows_ops
+from tumnis.core.clock import SystemClock
 from tumnis.settings import Settings, install_master_keys
 
 if TYPE_CHECKING:
@@ -55,6 +56,10 @@ def main(settings: Settings) -> None:
 
     db.configure(settings.database_direct_url, settings.database_direct_url)
     install_master_keys(settings)
+    cache.configure_backend(
+        cache.InProcessCache(SystemClock(), publish=cache.pg_publisher(db.direct_engine))
+    )
+    stop_listener = cache.CacheInvalidationListener(settings.database_direct_url).start_thread()
     stop = threading.Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda *_: stop.set())
@@ -65,4 +70,5 @@ def main(settings: Settings) -> None:
     try:
         stop.wait()
     finally:
+        stop_listener()
         DBOS.destroy()
