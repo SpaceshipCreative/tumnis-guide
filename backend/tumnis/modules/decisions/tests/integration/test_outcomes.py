@@ -90,3 +90,50 @@ async def test_human_override_recorded_on_log(
     assert mine.outcome_at == envelope.occurred_at
     untouched = rows[other.decision_id]
     assert (untouched.overridden, untouched.final_value, untouched.outcome_at) == (None, None, None)
+
+
+@pytest.mark.req("FR-11.5")
+@pytest.mark.wp("P1-02")
+async def test_snooze_is_not_an_outcome(
+    workspace: WorkspaceHandle, providers: Any, clock: FixedClock, owner_session: AsyncSession
+) -> None:
+    """A `human.decided` snooze only defers the review item: the decision's log row keeps
+    `overridden`, `final_value` and `outcome_at` null."""
+    from tests.fixtures import make_envelope  # noqa: PLC0415
+    from tumnis.core.events import run_subscriber  # noqa: PLC0415
+    from tumnis.modules.decisions import events as _events  # noqa: F401, PLC0415
+    from tumnis.modules.decisions.api import SubjectRef, decide  # noqa: PLC0415
+    from tumnis.modules.decisions.catalog import DecisionPoint  # noqa: PLC0415
+
+    task_id = uuid.uuid4()
+    decision = await decide(
+        DecisionPoint.QUICK_ADD_LABEL,
+        stored_inputs("quick_add_label"),
+        subject=SubjectRef(type="task", id=task_id),
+        project_id=None,
+        providers=providers,
+        clock=clock,
+    )
+    envelope = make_envelope(
+        "human.decided",
+        {
+            "item_kind": "task_label",
+            "item_id": str(task_id),
+            "target_type": "task",
+            "target_id": str(task_id),
+            "decision": "snooze",
+            "payload": {"until": "2026-03-10T09:00:00Z"},
+            "decision_id": str(decision.decision_id),
+        },
+        workspace,
+    )
+    await run_subscriber(envelope, "decisions.record_outcome")
+
+    await owner_session.commit()
+    row = (
+        await owner_session.execute(
+            text("SELECT overridden, final_value, outcome_at FROM decision_log WHERE id = :id"),
+            {"id": decision.decision_id},
+        )
+    ).one()
+    assert (row.overridden, row.final_value, row.outcome_at) == (None, None, None)
