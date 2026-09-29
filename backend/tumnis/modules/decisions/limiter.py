@@ -71,9 +71,15 @@ _LIMITERS: dict[str, SlidingWindowLimiter] = {}
 def limiter_for(
     fingerprint: str, *, rpm: int = JEV_RPM_DEFAULT, clock: Clock | None = None
 ) -> SlidingWindowLimiter:
-    """The one limiter for this credential in this process; a changed `rpm` replaces it."""
+    """The one limiter for this credential in this process. A changed `rpm` updates its
+    limit in place, keeping the grants already in the window, so lowering it cannot open a
+    burst over the new limit."""
     limiter = _LIMITERS.get(fingerprint)
-    if limiter is None or limiter.limit != rpm:
+    if limiter is None:
         limiter = SlidingWindowLimiter(limit=rpm, clock=clock or SystemClock())
         _LIMITERS[fingerprint] = limiter
+    elif limiter.limit != rpm:
+        if rpm < 1:
+            raise ValueError("limit must be at least 1")
+        limiter.limit = rpm
     return limiter

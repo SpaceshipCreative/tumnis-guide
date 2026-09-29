@@ -86,7 +86,6 @@ def test_one_limiter_per_credential_and_the_key_is_never_the_key() -> None:
     assert limiter_for(fp_a, clock=clock).limit == LIMIT
 
 
-
 @pytest.mark.req("FR-11.9")
 @pytest.mark.wp("P1-01")
 def test_lowering_rpm_keeps_the_window_history() -> None:
