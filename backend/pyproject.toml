@@ -36,3 +36,35 @@ markers = [
   "req(*ids): PRD requirement IDs this test proves",
   "wp(id): work package that introduced the test",
 ]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["tumnis", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S", "DTZ", "TID", "PT", "N", "C4", "RET", "PL"]
+ignore = ["PLR0913"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"datetime.datetime.now".msg = "rules.py takes `now` as an argument (AGENTS.md, Time)."
+"datetime.datetime.utcnow".msg = "rules.py takes `now` as an argument."
+"datetime.datetime.today".msg = "rules.py takes `now` as an argument."
+"datetime.date.today".msg = "rules.py takes `today` as an argument."
+"time.time".msg = "rules.py takes `now` as an argument."
+"time.monotonic".msg = "rules.py takes `now` as an argument."
+"random".msg = "rules.py is deterministic; pass the value in."
+"uuid.uuid4".msg = "rules.py is deterministic; pass the id in."
+"os".msg = "rules.py reads no environment and no files."
+"subprocess".msg = "rules.py does no I/O."
+"socket".msg = "rules.py does no I/O."
+
+[tool.ruff.lint.per-file-ignores]
+# The banned-api list applies only to rules files: ignore TID251 everywhere else.
+"!tumnis/modules/*/rules*.py" = ["TID251"]
+"tests/**" = ["S101", "PLR2004", "S105", "S106"]
+"tumnis/modules/*/tests/**" = ["S101", "PLR2004", "S105", "S106"]
+"tumnis/modules/*/migrations/**" = ["N999"]

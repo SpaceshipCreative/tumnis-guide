@@ -120,7 +120,6 @@ def _ruff_on_stdin(filename: str, source: str) -> str:
 
 @pytest.mark.req("ADR-0001")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_ruff_bans_clock_calls_in_rules_only() -> None:
     """T-P0-01-08
     datetime.now() is TID251 in rules.py and allowed in api.py.

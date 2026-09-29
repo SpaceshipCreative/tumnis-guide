@@ -45,7 +45,13 @@ TOP_LEVEL_FOLDERS = (
     "scripts",
     "docs",
 )
-ADR_HEADINGS = ("## Context", "## Options considered", "## Decision", "## Consequences", "## Sources")
+ADR_HEADINGS = (
+    "## Context",
+    "## Options considered",
+    "## Decision",
+    "## Consequences",
+    "## Sources",
+)
 AGENTS_HEADINGS = (
     "## TDD rules",
     "## Module boundaries",

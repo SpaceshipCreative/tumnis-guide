@@ -26,7 +26,6 @@ def _run(*argv: str) -> subprocess.CompletedProcess[str]:
 
 @pytest.mark.req("SEC-7")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_ruff_format_and_mypy_clean() -> None:
     """T-P0-01-10
     Ruff check, Ruff format check and mypy exit 0 on the tree.
