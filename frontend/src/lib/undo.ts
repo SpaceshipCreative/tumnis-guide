@@ -6,7 +6,7 @@ import { createStore } from "@xstate/store";
 import type * as z from "zod";
 
 import { zTaskOut } from "../api/zod.gen";
-import { apiWrite } from "./fetch";
+import { ApiError, apiWrite, ConflictError } from "./fetch";
 
 export interface UndoEntry {
   changeId: string;
@@ -49,14 +49,18 @@ export function remember(
 
 /**
  * `POST /v1/tasks/{taskId}/undo {change_id, version: afterVersion}`; answers the restored
- * task. The entry is dropped either way: a refused undo (409 `already_undone`, or
- * `stale_version` when the task changed since) cannot succeed later.
+ * task. The entry is dropped once undone, or when the server refuses it for good (409
+ * `already_undone`, or `stale_version` when the task changed since; 404 when the task is
+ * gone); any other failure keeps it, so the Undo button or Mod+Z can try again.
  */
 export async function undo(
   entry: UndoEntry,
 ): Promise<z.output<typeof zTaskOut>> {
+  const drop = () => {
+    undoStore.trigger.drop({ changeId: entry.changeId });
+  };
   try {
-    return await apiWrite({
+    const restored = await apiWrite({
       kind: "update",
       method: "POST",
       path: `/tasks/${entry.taskId}/undo`,
@@ -65,7 +69,15 @@ export async function undo(
       idempotencyKey: crypto.randomUUID(),
       schema: zTaskOut,
     });
-  } finally {
-    undoStore.trigger.drop({ changeId: entry.changeId });
+    drop();
+    return restored;
+  } catch (error) {
+    if (
+      error instanceof ConflictError ||
+      (error instanceof ApiError && error.status === 404)
+    ) {
+      drop();
+    }
+    throw error;
   }
 }
