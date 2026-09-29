@@ -12,6 +12,14 @@ import { client } from "../client.gen";
 import {
   auditExportAuditCsv,
   auditListAudit,
+  authListSessions,
+  authLogin,
+  authLogout,
+  authRevokeSession,
+  authSetup,
+  authSetupTotp,
+  authSignOutOtherDevices,
+  authTotp,
   deadLettersGetDeadLetters,
   deadLettersPostDiscard,
   deadLettersPostRetry,
@@ -28,6 +36,30 @@ import type {
   AuditListAuditData,
   AuditListAuditError,
   AuditListAuditResponse,
+  AuthListSessionsData,
+  AuthListSessionsError,
+  AuthListSessionsResponse,
+  AuthLoginData,
+  AuthLoginError,
+  AuthLoginResponse,
+  AuthLogoutData,
+  AuthLogoutError,
+  AuthLogoutResponse,
+  AuthRevokeSessionData,
+  AuthRevokeSessionError,
+  AuthRevokeSessionResponse,
+  AuthSetupData,
+  AuthSetupError,
+  AuthSetupResponse,
+  AuthSetupTotpData,
+  AuthSetupTotpError,
+  AuthSetupTotpResponse,
+  AuthSignOutOtherDevicesData,
+  AuthSignOutOtherDevicesError,
+  AuthSignOutOtherDevicesResponse,
+  AuthTotpData,
+  AuthTotpError,
+  AuthTotpResponse,
   DeadLettersGetDeadLettersData,
   DeadLettersGetDeadLettersError,
   DeadLettersGetDeadLettersResponse,
@@ -287,6 +319,236 @@ export const auditExportAuditCsvOptions = (
     queryKey: auditExportAuditCsvQueryKey(options),
   });
 
+/**
+ * Login
+ *
+ * The password step: answers `{"step": "totp", "preauth": ...}` and sets no cookie.
+ */
+export const authLoginMutation = (
+  options?: Partial<Options<AuthLoginData>>,
+): UseMutationOptions<
+  AuthLoginResponse,
+  AuthLoginError,
+  Options<AuthLoginData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthLoginResponse,
+    AuthLoginError,
+    Options<AuthLoginData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authLogin({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Logout
+ *
+ * Ends this session and clears its cookies.
+ */
+export const authLogoutMutation = (
+  options?: Partial<Options<AuthLogoutData>>,
+): UseMutationOptions<
+  AuthLogoutResponse,
+  AuthLogoutError,
+  Options<AuthLogoutData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthLogoutResponse,
+    AuthLogoutError,
+    Options<AuthLogoutData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authLogout({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Sign Out Other Devices
+ *
+ * Revokes every session of this user but the calling one (R-21).
+ */
+export const authSignOutOtherDevicesMutation = (
+  options?: Partial<Options<AuthSignOutOtherDevicesData>>,
+): UseMutationOptions<
+  AuthSignOutOtherDevicesResponse,
+  AuthSignOutOtherDevicesError,
+  Options<AuthSignOutOtherDevicesData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthSignOutOtherDevicesResponse,
+    AuthSignOutOtherDevicesError,
+    Options<AuthSignOutOtherDevicesData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authSignOutOtherDevices({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const authListSessionsQueryKey = (
+  options?: Options<AuthListSessionsData>,
+) => createQueryKey("authListSessions", options);
+
+/**
+ * List Sessions
+ *
+ * This user's signed-in devices, newest first, the calling one `current`.
+ */
+export const authListSessionsOptions = (
+  options?: Options<AuthListSessionsData>,
+) =>
+  queryOptions<
+    AuthListSessionsResponse,
+    AuthListSessionsError,
+    AuthListSessionsResponse,
+    ReturnType<typeof authListSessionsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await authListSessions({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: authListSessionsQueryKey(options),
+  });
+
+export const authListSessionsInfiniteQueryKey = (
+  options?: Options<AuthListSessionsData>,
+): QueryKey<Options<AuthListSessionsData>> =>
+  createQueryKey("authListSessions", options, true);
+
+/**
+ * List Sessions
+ *
+ * This user's signed-in devices, newest first, the calling one `current`.
+ */
+export const authListSessionsInfiniteOptions = (
+  options?: Options<AuthListSessionsData>,
+) => {
+  const opts = infiniteQueryOptions<
+    AuthListSessionsResponse,
+    AuthListSessionsError,
+    InfiniteData<AuthListSessionsResponse>,
+    QueryKey<Options<AuthListSessionsData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<AuthListSessionsData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<AuthListSessionsData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await authListSessions({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: authListSessionsInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Revoke Session
+ *
+ * Revokes one of this user's sessions.
+ */
+export const authRevokeSessionMutation = (
+  options?: Partial<Options<AuthRevokeSessionData>>,
+): UseMutationOptions<
+  AuthRevokeSessionResponse,
+  AuthRevokeSessionError,
+  Options<AuthRevokeSessionData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthRevokeSessionResponse,
+    AuthRevokeSessionError,
+    Options<AuthRevokeSessionData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authRevokeSession({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Totp
+ *
+ * The TOTP step: sets the session and CSRF cookies.
+ */
+export const authTotpMutation = (
+  options?: Partial<Options<AuthTotpData>>,
+): UseMutationOptions<
+  AuthTotpResponse,
+  AuthTotpError,
+  Options<AuthTotpData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthTotpResponse,
+    AuthTotpError,
+    Options<AuthTotpData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authTotp({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const deadLettersGetDeadLettersQueryKey = (
   options?: Options<DeadLettersGetDeadLettersData>,
 ) => createQueryKey("deadLettersGetDeadLetters", options);
@@ -467,6 +729,65 @@ export const settingsPutWorkspaceSettingsMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await settingsPutWorkspaceSettings({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Setup
+ *
+ * First run: creates the workspace and its owner and shows the TOTP secret once.
+ * 409 `already_set_up`; 403 `signup_disabled` in hosted mode.
+ */
+export const authSetupMutation = (
+  options?: Partial<Options<AuthSetupData>>,
+): UseMutationOptions<
+  AuthSetupResponse,
+  AuthSetupError,
+  Options<AuthSetupData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthSetupResponse,
+    AuthSetupError,
+    Options<AuthSetupData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authSetup({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Setup Totp
+ *
+ * Confirms the first code; completes setup and signs the owner in.
+ */
+export const authSetupTotpMutation = (
+  options?: Partial<Options<AuthSetupTotpData>>,
+): UseMutationOptions<
+  AuthSetupTotpResponse,
+  AuthSetupTotpError,
+  Options<AuthSetupTotpData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AuthSetupTotpResponse,
+    AuthSetupTotpError,
+    Options<AuthSetupTotpData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await authSetupTotp({
         ...options,
         ...fnOptions,
         throwOnError: true,

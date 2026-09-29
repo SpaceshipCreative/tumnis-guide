@@ -38,6 +38,26 @@ export const zDeadLetterOut = z.object({
 });
 
 /**
+ * LoginIn
+ *
+ * `provider` picks the sign-in provider; the other string fields are its credentials
+ * (`email` and `password` for `local_password`).
+ */
+export const zLoginIn = z.object({
+  email: z.string().max(254).nullish(),
+  password: z.string().max(1024).nullish(),
+  provider: z.string().optional().default("local_password"),
+});
+
+/**
+ * LoginOut
+ */
+export const zLoginOut = z.object({
+  preauth: z.string(),
+  step: z.literal("totp").optional().default("totp"),
+});
+
+/**
  * Page[AuditEntry]
  */
 export const zPageAuditEntry = z.object({
@@ -64,6 +84,70 @@ export const zProblem = z.object({
   status: z.int(),
   title: z.string(),
   type: z.string(),
+});
+
+/**
+ * SessionOut
+ */
+export const zSessionOut = z.object({
+  created_at: z.iso.datetime(),
+  current: z.boolean(),
+  device_label: z.string().nullable(),
+  expires_at: z.iso.datetime(),
+  id: z.uuid(),
+  last_seen_at: z.iso.datetime(),
+  source_ip: z.string().nullable(),
+  user_agent: z.string().nullable(),
+});
+
+/**
+ * Page[SessionOut]
+ */
+export const zPageSessionOut = z.object({
+  items: z.array(zSessionOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * SetupIn
+ */
+export const zSetupIn = z.object({
+  email: z.string().min(3).max(254),
+  password: z.string().max(1024),
+  timezone: z.string().optional().default("UTC"),
+  workspace_name: z.string().min(1).max(200).optional().default("My workspace"),
+});
+
+/**
+ * SetupOut
+ */
+export const zSetupOut = z.object({
+  otpauth_uri: z.string(),
+  setup_token: z.string(),
+});
+
+/**
+ * SetupTotpIn
+ */
+export const zSetupTotpIn = z.object({
+  code: z.string().max(16),
+  setup_token: z.string().max(2048),
+});
+
+/**
+ * SignedInOut
+ */
+export const zSignedInOut = z.object({
+  user_id: z.uuid(),
+  workspace_id: z.uuid(),
+});
+
+/**
+ * TotpIn
+ */
+export const zTotpIn = z.object({
+  code: z.string().max(16),
+  preauth: z.string().max(2048),
 });
 
 /**
@@ -132,6 +216,49 @@ export const zAuditExportAuditCsvQuery = z.object({
   to: z.iso.datetime().nullish(),
 });
 
+export const zAuthLoginBody = zLoginIn;
+
+/**
+ * Successful Response
+ */
+export const zAuthLoginResponse = zLoginOut;
+
+/**
+ * Successful Response
+ */
+export const zAuthLogoutResponse = z.void();
+
+/**
+ * Successful Response
+ */
+export const zAuthSignOutOtherDevicesResponse = z.void();
+
+export const zAuthListSessionsQuery = z.object({
+  cursor: z.string().nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zAuthListSessionsResponse = zPageSessionOut;
+
+export const zAuthRevokeSessionPath = z.object({
+  session_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAuthRevokeSessionResponse = z.void();
+
+export const zAuthTotpBody = zTotpIn;
+
+/**
+ * Successful Response
+ */
+export const zAuthTotpResponse = zSignedInOut;
+
 export const zDeadLettersGetDeadLettersQuery = z.object({
   status: z
     .string()
@@ -180,6 +307,20 @@ export const zSettingsPutWorkspaceSettingsBody = zWorkspaceSettingsIn;
  * Successful Response
  */
 export const zSettingsPutWorkspaceSettingsResponse = zWorkspaceSettingsOut;
+
+export const zAuthSetupBody = zSetupIn;
+
+/**
+ * Successful Response
+ */
+export const zAuthSetupResponse = zSetupOut;
+
+export const zAuthSetupTotpBody = zSetupTotpIn;
+
+/**
+ * Successful Response
+ */
+export const zAuthSetupTotpResponse = zSignedInOut;
 
 export const zUsageGetUsageQuery = z.object({
   from: z.iso.date(),

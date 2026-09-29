@@ -111,6 +111,42 @@ export type DeadLetterOut = {
 };
 
 /**
+ * LoginIn
+ *
+ * `provider` picks the sign-in provider; the other string fields are its credentials
+ * (`email` and `password` for `local_password`).
+ */
+export type LoginIn = {
+  /**
+   * Email
+   */
+  email?: string | null;
+  /**
+   * Password
+   */
+  password?: string | null;
+  /**
+   * Provider
+   */
+  provider?: string;
+  [key: string]: unknown;
+};
+
+/**
+ * LoginOut
+ */
+export type LoginOut = {
+  /**
+   * Preauth
+   */
+  preauth: string;
+  /**
+   * Step
+   */
+  step?: "totp";
+};
+
+/**
  * Page[AuditEntry]
  */
 export type PageAuditEntry = {
@@ -132,6 +168,20 @@ export type PageDeadLetterOut = {
    * Items
    */
   items: Array<DeadLetterOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
+ * Page[SessionOut]
+ */
+export type PageSessionOut = {
+  /**
+   * Items
+   */
+  items: Array<SessionOut>;
   /**
    * Next Cursor
    */
@@ -172,6 +222,122 @@ export type Problem = {
    * Type
    */
   type: string;
+};
+
+/**
+ * SessionOut
+ */
+export type SessionOut = {
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Current
+   */
+  current: boolean;
+  /**
+   * Device Label
+   */
+  device_label: string | null;
+  /**
+   * Expires At
+   */
+  expires_at: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Last Seen At
+   */
+  last_seen_at: string;
+  /**
+   * Source Ip
+   */
+  source_ip: string | null;
+  /**
+   * User Agent
+   */
+  user_agent: string | null;
+};
+
+/**
+ * SetupIn
+ */
+export type SetupIn = {
+  /**
+   * Email
+   */
+  email: string;
+  /**
+   * Password
+   */
+  password: string;
+  /**
+   * Timezone
+   */
+  timezone?: string;
+  /**
+   * Workspace Name
+   */
+  workspace_name?: string;
+};
+
+/**
+ * SetupOut
+ */
+export type SetupOut = {
+  /**
+   * Otpauth Uri
+   */
+  otpauth_uri: string;
+  /**
+   * Setup Token
+   */
+  setup_token: string;
+};
+
+/**
+ * SetupTotpIn
+ */
+export type SetupTotpIn = {
+  /**
+   * Code
+   */
+  code: string;
+  /**
+   * Setup Token
+   */
+  setup_token: string;
+};
+
+/**
+ * SignedInOut
+ */
+export type SignedInOut = {
+  /**
+   * User Id
+   */
+  user_id: string;
+  /**
+   * Workspace Id
+   */
+  workspace_id: string;
+};
+
+/**
+ * TotpIn
+ */
+export type TotpIn = {
+  /**
+   * Code
+   */
+  code: string;
+  /**
+   * Preauth
+   */
+  preauth: string;
 };
 
 /**
@@ -317,9 +483,13 @@ export type AuditListAuditErrors = {
    */
   400: Problem;
   /**
-   * Unauthenticated
+   * Unauthenticated (`unauthenticated`, `session_expired`)
    */
   401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
   /**
    * Not found
    */
@@ -385,9 +555,13 @@ export type AuditExportAuditCsvErrors = {
    */
   400: Problem;
   /**
-   * Unauthenticated
+   * Unauthenticated (`unauthenticated`, `session_expired`)
    */
   401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
   /**
    * Not found
    */
@@ -420,6 +594,344 @@ export type AuditExportAuditCsvResponses = {
   200: unknown;
 };
 
+export type AuthLoginData = {
+  body: LoginIn;
+  path?: never;
+  query?: never;
+  url: "/v1/auth/login";
+};
+
+export type AuthLoginErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthLoginError = AuthLoginErrors[keyof AuthLoginErrors];
+
+export type AuthLoginResponses = {
+  /**
+   * Successful Response
+   */
+  200: LoginOut;
+};
+
+export type AuthLoginResponse = AuthLoginResponses[keyof AuthLoginResponses];
+
+export type AuthLogoutData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/auth/logout";
+};
+
+export type AuthLogoutErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthLogoutError = AuthLogoutErrors[keyof AuthLogoutErrors];
+
+export type AuthLogoutResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type AuthLogoutResponse = AuthLogoutResponses[keyof AuthLogoutResponses];
+
+export type AuthSignOutOtherDevicesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/auth/sessions";
+};
+
+export type AuthSignOutOtherDevicesErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthSignOutOtherDevicesError =
+  AuthSignOutOtherDevicesErrors[keyof AuthSignOutOtherDevicesErrors];
+
+export type AuthSignOutOtherDevicesResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type AuthSignOutOtherDevicesResponse =
+  AuthSignOutOtherDevicesResponses[keyof AuthSignOutOtherDevicesResponses];
+
+export type AuthListSessionsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/auth/sessions";
+};
+
+export type AuthListSessionsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthListSessionsError =
+  AuthListSessionsErrors[keyof AuthListSessionsErrors];
+
+export type AuthListSessionsResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageSessionOut;
+};
+
+export type AuthListSessionsResponse =
+  AuthListSessionsResponses[keyof AuthListSessionsResponses];
+
+export type AuthRevokeSessionData = {
+  body?: never;
+  path: {
+    /**
+     * Session Id
+     */
+    session_id: string;
+  };
+  query?: never;
+  url: "/v1/auth/sessions/{session_id}";
+};
+
+export type AuthRevokeSessionErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthRevokeSessionError =
+  AuthRevokeSessionErrors[keyof AuthRevokeSessionErrors];
+
+export type AuthRevokeSessionResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type AuthRevokeSessionResponse =
+  AuthRevokeSessionResponses[keyof AuthRevokeSessionResponses];
+
+export type AuthTotpData = {
+  body: TotpIn;
+  path?: never;
+  query?: never;
+  url: "/v1/auth/totp";
+};
+
+export type AuthTotpErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthTotpError = AuthTotpErrors[keyof AuthTotpErrors];
+
+export type AuthTotpResponses = {
+  /**
+   * Successful Response
+   */
+  200: SignedInOut;
+};
+
+export type AuthTotpResponse = AuthTotpResponses[keyof AuthTotpResponses];
+
 export type DeadLettersGetDeadLettersData = {
   body?: never;
   path?: never;
@@ -446,9 +958,13 @@ export type DeadLettersGetDeadLettersErrors = {
    */
   400: Problem;
   /**
-   * Unauthenticated
+   * Unauthenticated (`unauthenticated`, `session_expired`)
    */
   401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
   /**
    * Not found
    */
@@ -502,9 +1018,13 @@ export type DeadLettersPostDiscardErrors = {
    */
   400: Problem;
   /**
-   * Unauthenticated
+   * Unauthenticated (`unauthenticated`, `session_expired`)
    */
   401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
   /**
    * Not found
    */
@@ -558,9 +1078,13 @@ export type DeadLettersPostRetryErrors = {
    */
   400: Problem;
   /**
-   * Unauthenticated
+   * Unauthenticated (`unauthenticated`, `session_expired`)
    */
   401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
   /**
    * Not found
    */
@@ -609,9 +1133,13 @@ export type SettingsGetWorkspaceSettingsErrors = {
    */
   400: Problem;
   /**
-   * Unauthenticated
+   * Unauthenticated (`unauthenticated`, `session_expired`)
    */
   401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
   /**
    * Not found
    */
@@ -660,9 +1188,13 @@ export type SettingsPutWorkspaceSettingsErrors = {
    */
   400: Problem;
   /**
-   * Unauthenticated
+   * Unauthenticated (`unauthenticated`, `session_expired`)
    */
   401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
   /**
    * Not found
    */
@@ -698,6 +1230,113 @@ export type SettingsPutWorkspaceSettingsResponses = {
 export type SettingsPutWorkspaceSettingsResponse =
   SettingsPutWorkspaceSettingsResponses[keyof SettingsPutWorkspaceSettingsResponses];
 
+export type AuthSetupData = {
+  body: SetupIn;
+  path?: never;
+  query?: never;
+  url: "/v1/setup";
+};
+
+export type AuthSetupErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthSetupError = AuthSetupErrors[keyof AuthSetupErrors];
+
+export type AuthSetupResponses = {
+  /**
+   * Successful Response
+   */
+  201: SetupOut;
+};
+
+export type AuthSetupResponse = AuthSetupResponses[keyof AuthSetupResponses];
+
+export type AuthSetupTotpData = {
+  body: SetupTotpIn;
+  path?: never;
+  query?: never;
+  url: "/v1/setup/totp";
+};
+
+export type AuthSetupTotpErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AuthSetupTotpError = AuthSetupTotpErrors[keyof AuthSetupTotpErrors];
+
+export type AuthSetupTotpResponses = {
+  /**
+   * Successful Response
+   */
+  200: SignedInOut;
+};
+
+export type AuthSetupTotpResponse =
+  AuthSetupTotpResponses[keyof AuthSetupTotpResponses];
+
 export type UsageGetUsageData = {
   body?: never;
   path?: never;
@@ -720,9 +1359,13 @@ export type UsageGetUsageErrors = {
    */
   400: Problem;
   /**
-   * Unauthenticated
+   * Unauthenticated (`unauthenticated`, `session_expired`)
    */
   401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, ...)
+   */
+  403: Problem;
   /**
    * Not found
    */

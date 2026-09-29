@@ -27,6 +27,8 @@ keys_app = typer.Typer(help="Master key maintenance (P0-08, SEC-6).", no_args_is
 app.add_typer(keys_app, name="keys")
 audit_app = typer.Typer(help="Audit log (P0-15).", no_args_is_help=True)
 app.add_typer(audit_app, name="audit")
+admin_app = typer.Typer(help="Account recovery (P0-13).", no_args_is_help=True)
+app.add_typer(admin_app, name="admin")
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -88,16 +90,24 @@ def start_observability(settings: Settings, service: Literal["api", "worker"]) -
 
 
 def run_boot_checks(settings: Settings) -> None:
-    """The module kill list, the database checks, then the master key file (P0-08): each
-    configuration error exits 78 before the api or the worker starts."""
+    """The module kill list, the database checks, then the master key and pepper files
+    (P0-08, P0-13): each configuration error exits 78 before the api or the worker
+    starts."""
     from tumnis.core.crypto import MasterKeyError  # noqa: PLC0415
     from tumnis.core.modules import deployment_disabled  # noqa: PLC0415
-    from tumnis.settings import boot_checks, install_master_keys  # noqa: PLC0415
+    from tumnis.settings import (  # noqa: PLC0415
+        boot_checks,
+        install_master_keys,
+        install_peppers,
+        require_hosted_tls,
+    )
 
     try:
         deployment_disabled(settings)  # an unknown or required module in the kill list
+        require_hosted_tls(settings)
         asyncio.run(boot_checks(settings))
         install_master_keys(settings)
+        install_peppers(settings)
     except (SettingsError, MasterKeyError) as exc:
         _config_error(exc)
 
@@ -174,6 +184,18 @@ def migrate(
     typer.echo(f"migrate: {messages[position]}", err=True)
 
 
+def _use_master_key_file() -> None:
+    """MASTER_KEY_FILE (or the default path) for the seed writers; a missing file only
+    skips what needs it."""
+    from tumnis.core import crypto  # noqa: PLC0415
+
+    path = os.environ.get("MASTER_KEY_FILE") or str(
+        Settings.model_fields["master_key_file"].default
+    )
+    strict = os.environ.get("DEPLOYMENT_ENV") == "prod"
+    crypto.configure_master_keys(lambda: crypto.load_master_keys(path, strict_owner=strict))
+
+
 @app.command()
 def seed(
     set_name: Annotated[
@@ -203,12 +225,15 @@ def seed(
         typer.echo("DATABASE_URL is not set", err=True)
         raise typer.Exit(2)
     db.configure(database_url, os.environ.get("DATABASE_DIRECT_URL"))
+    _use_master_key_file()  # the seed user's TOTP secret is sealed (P0-13)
+
+    sink = DatabaseSink(skip_missing=True)
 
     async def run() -> dict[str, int]:
         try:
             result = await load_seed(
                 SEED_PATHS[set_name],
-                DatabaseSink(),
+                sink,
                 anchor=anchor.date() if anchor else None,
                 clock=make_clock(),
             )
@@ -221,7 +246,10 @@ def seed(
     except SeedWriterMissingError as exc:
         typer.echo(f"seed: {exc} (the owning module has not landed yet)", err=True)
         raise typer.Exit(1) from exc
-    typer.echo(", ".join(f"{n} {kind}" for kind, n in counts.items()))
+    typer.echo(", ".join(f"{n} {kind}" for kind, n in counts.items() if kind not in sink.skipped))
+    if sink.skipped:
+        skipped = ", ".join(sorted(sink.skipped))
+        typer.echo(f"seed: skipped {skipped} (the owning module has not landed yet)", err=True)
 
 
 class GenTarget(StrEnum):
@@ -367,3 +395,30 @@ def audit_verify(
     typer.echo(f"audit verify: {len(results)} workspaces checked, {bad} broken")
     if broken:
         raise typer.Exit(1)
+
+
+@admin_app.command("reset-totp")
+def admin_reset_totp(email: Annotated[str, typer.Argument(help="The user's email")]) -> None:
+    """Give the user a new TOTP secret (a lost phone) and print its otpauth:// URI to scan;
+    the old codes stop working. Audited as auth.totp_reset. Exit 1 for an unknown email."""
+    from tumnis.core import db  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth_api  # noqa: PLC0415
+    from tumnis.settings import install_master_keys  # noqa: PLC0415
+
+    settings = load_settings()
+    install_master_keys(settings)
+    db.configure(settings.database_direct_url, settings.database_direct_url, pooled=False)
+
+    async def run() -> str:
+        try:
+            return await auth_api.reset_totp(email, now=make_clock().now())
+        finally:
+            await db.dispose()
+
+    try:
+        uri = asyncio.run(run())
+    except auth_api.UnknownUser:
+        typer.echo(f"reset-totp: no user with the email {email}", err=True)
+        raise typer.Exit(1) from None
+    typer.echo("Scan this in the authenticator app; it is shown once:")
+    typer.echo(uri)
