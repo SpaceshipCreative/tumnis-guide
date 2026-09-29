@@ -58,7 +58,11 @@ services:
       migrate: { condition: service_completed_successfully }
 
   postgres:
-    build: ./postgres
+    build:
+      context: ./postgres
+      # pgbackrest.conf, the crontab and the backup scripts are baked in (P0-28).
+      additional_contexts:
+        pgbackrest: ./pgbackrest
     image: tumnis-postgres:18
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

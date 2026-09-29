@@ -46,7 +46,6 @@ def _conf(path: Path) -> dict[str, dict[str, str]]:
 @pytest.mark.contract
 @pytest.mark.req("REL-1")
 @pytest.mark.wp("P0-28")
-@pytest.mark.xfail(strict=True, reason="spec:P0-28")
 def test_no_rclone_sync_anywhere() -> None:
     """T-P0-28-05
     No script or deploy file runs `rclone sync` (or any rclone command that deletes at the
@@ -76,7 +75,6 @@ def test_no_rclone_sync_anywhere() -> None:
 @pytest.mark.contract
 @pytest.mark.req("REL-1", "ADR-0006")
 @pytest.mark.wp("P0-28")
-@pytest.mark.xfail(strict=True, reason="spec:P0-28")
 def test_archive_settings() -> None:
     """T-P0-28-06
     Postgres archives every WAL segment through pgBackRest and forces a segment switch at
@@ -99,7 +97,6 @@ def test_archive_settings() -> None:
 @pytest.mark.contract
 @pytest.mark.req("SEC-9")
 @pytest.mark.wp("P0-28")
-@pytest.mark.xfail(strict=True, reason="spec:P0-28")
 def test_pgbackrest_repos() -> None:
     """T-P0-28-07
     Two repositories: repo1 local with a retention, repo2 S3 (B2) encrypted with no
