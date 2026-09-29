@@ -15,9 +15,15 @@ import type {
   AuditListAuditData,
   AuditListAuditErrors,
   AuditListAuditResponses,
+  AuthConfirmTotpEnrolmentData,
+  AuthConfirmTotpEnrolmentErrors,
+  AuthConfirmTotpEnrolmentResponses,
   AuthCreateKeyData,
   AuthCreateKeyErrors,
   AuthCreateKeyResponses,
+  AuthGetAccountData,
+  AuthGetAccountErrors,
+  AuthGetAccountResponses,
   AuthListKeysData,
   AuthListKeysErrors,
   AuthListKeysResponses,
@@ -48,6 +54,9 @@ import type {
   AuthSignOutOtherDevicesData,
   AuthSignOutOtherDevicesErrors,
   AuthSignOutOtherDevicesResponses,
+  AuthStartTotpEnrolmentData,
+  AuthStartTotpEnrolmentErrors,
+  AuthStartTotpEnrolmentResponses,
   AuthTotpData,
   AuthTotpErrors,
   AuthTotpResponses,
@@ -65,19 +74,33 @@ import type {
   HealthReadyData,
   HealthReadyErrors,
   HealthReadyResponses,
+  SettingsGetSectionData,
+  SettingsGetSectionErrors,
+  SettingsGetSectionResponses,
   SettingsGetWorkspaceSettingsData,
   SettingsGetWorkspaceSettingsErrors,
   SettingsGetWorkspaceSettingsResponses,
+  SettingsListModulesData,
+  SettingsListModulesErrors,
+  SettingsListModulesResponses,
+  SettingsPutSectionData,
+  SettingsPutSectionErrors,
+  SettingsPutSectionResponses,
   SettingsPutWorkspaceSettingsData,
   SettingsPutWorkspaceSettingsErrors,
   SettingsPutWorkspaceSettingsResponses,
+  SettingsSetModuleData,
+  SettingsSetModuleErrors,
+  SettingsSetModuleResponses,
   UsageGetUsageData,
   UsageGetUsageErrors,
   UsageGetUsageResponses,
 } from "./types.gen";
 import {
   zAuditListAuditResponse,
+  zAuthConfirmTotpEnrolmentResponse,
   zAuthCreateKeyResponse,
+  zAuthGetAccountResponse,
   zAuthListKeysResponse,
   zAuthListSessionsResponse,
   zAuthLoginResponse,
@@ -88,13 +111,18 @@ import {
   zAuthSetupResponse,
   zAuthSetupTotpResponse,
   zAuthSignOutOtherDevicesResponse,
+  zAuthStartTotpEnrolmentResponse,
   zAuthTotpResponse,
   zDeadLettersGetDeadLettersResponse,
   zDeadLettersPostDiscardResponse,
   zDeadLettersPostRetryResponse,
   zHealthLiveResponse,
+  zSettingsGetSectionResponse,
   zSettingsGetWorkspaceSettingsResponse,
+  zSettingsListModulesResponse,
+  zSettingsPutSectionResponse,
   zSettingsPutWorkspaceSettingsResponse,
+  zSettingsSetModuleResponse,
   zUsageGetUsageResponse,
 } from "./zod.gen";
 
@@ -177,6 +205,25 @@ export const auditExportAuditCsv = <ThrowOnError extends boolean = false>(
     AuditExportAuditCsvErrors,
     ThrowOnError
   >({ url: "/v1/audit.csv", ...options });
+
+/**
+ * Get Account
+ *
+ * The signed-in user's email and second factor.
+ */
+export const authGetAccount = <ThrowOnError extends boolean = false>(
+  options?: Options<AuthGetAccountData, ThrowOnError>,
+): RequestResult<AuthGetAccountResponses, AuthGetAccountErrors, ThrowOnError> =>
+  (options?.client ?? client).get<
+    AuthGetAccountResponses,
+    AuthGetAccountErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthGetAccountResponse.parseAsync(data),
+    url: "/v1/auth/account",
+    ...options,
+  });
 
 /**
  * Login
@@ -304,6 +351,62 @@ export const authTotp = <ThrowOnError extends boolean = false>(
   >({
     responseValidator: async (data) => await zAuthTotpResponse.parseAsync(data),
     url: "/v1/auth/totp",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Start Totp Enrolment
+ *
+ * With the password: a new TOTP secret (shown once) and its enrolment token. 401
+ * `invalid_credentials`, 429 `locked_out`.
+ */
+export const authStartTotpEnrolment = <ThrowOnError extends boolean = false>(
+  options: Options<AuthStartTotpEnrolmentData, ThrowOnError>,
+): RequestResult<
+  AuthStartTotpEnrolmentResponses,
+  AuthStartTotpEnrolmentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AuthStartTotpEnrolmentResponses,
+    AuthStartTotpEnrolmentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthStartTotpEnrolmentResponse.parseAsync(data),
+    url: "/v1/auth/totp/enrol",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Confirm Totp Enrolment
+ *
+ * A code from the new secret replaces the old one. 401 `invalid_code`,
+ * `invalid_enrol_token`.
+ */
+export const authConfirmTotpEnrolment = <ThrowOnError extends boolean = false>(
+  options: Options<AuthConfirmTotpEnrolmentData, ThrowOnError>,
+): RequestResult<
+  AuthConfirmTotpEnrolmentResponses,
+  AuthConfirmTotpEnrolmentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AuthConfirmTotpEnrolmentResponses,
+    AuthConfirmTotpEnrolmentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAuthConfirmTotpEnrolmentResponse.parseAsync(data),
+    url: "/v1/auth/totp/enrol/confirm",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -469,6 +572,56 @@ export const authRotateKey = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List Modules
+ *
+ * Every module, whether it is on for this workspace, and whether it can be off.
+ */
+export const settingsListModules = <ThrowOnError extends boolean = false>(
+  options?: Options<SettingsListModulesData, ThrowOnError>,
+): RequestResult<
+  SettingsListModulesResponses,
+  SettingsListModulesErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    SettingsListModulesResponses,
+    SettingsListModulesErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSettingsListModulesResponse.parseAsync(data),
+    url: "/v1/settings/modules",
+    ...options,
+  });
+
+/**
+ * Set Module
+ *
+ * Switches the module on or off for this workspace. 422 `module_required`.
+ */
+export const settingsSetModule = <ThrowOnError extends boolean = false>(
+  options: Options<SettingsSetModuleData, ThrowOnError>,
+): RequestResult<
+  SettingsSetModuleResponses,
+  SettingsSetModuleErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    SettingsSetModuleResponses,
+    SettingsSetModuleErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSettingsSetModuleResponse.parseAsync(data),
+    url: "/v1/settings/modules",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Get Workspace Settings
  */
 export const settingsGetWorkspaceSettings = <
@@ -511,6 +664,57 @@ export const settingsPutWorkspaceSettings = <
     responseValidator: async (data) =>
       await zSettingsPutWorkspaceSettingsResponse.parseAsync(data),
     url: "/v1/settings/workspace",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Section
+ *
+ * The section's values without its secrets; 404 `not_found` for an unknown section.
+ */
+export const settingsGetSection = <ThrowOnError extends boolean = false>(
+  options: Options<SettingsGetSectionData, ThrowOnError>,
+): RequestResult<
+  SettingsGetSectionResponses,
+  SettingsGetSectionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    SettingsGetSectionResponses,
+    SettingsGetSectionErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSettingsGetSectionResponse.parseAsync(data),
+    url: "/v1/settings/{section}",
+    ...options,
+  });
+
+/**
+ * Put Section
+ *
+ * Merges `values` into the section at `version`; 409 `stale_version`, 422
+ * `validation_error`, 404 `not_found`.
+ */
+export const settingsPutSection = <ThrowOnError extends boolean = false>(
+  options: Options<SettingsPutSectionData, ThrowOnError>,
+): RequestResult<
+  SettingsPutSectionResponses,
+  SettingsPutSectionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    SettingsPutSectionResponses,
+    SettingsPutSectionErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSettingsPutSectionResponse.parseAsync(data),
+    url: "/v1/settings/{section}",
     ...options,
     headers: {
       "Content-Type": "application/json",

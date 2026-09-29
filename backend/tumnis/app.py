@@ -31,6 +31,7 @@ from tumnis.core import (
     modules,
     ops_status,
     security_headers,
+    settings_router,
     telemetry,
     testing_routes,
 )
@@ -132,6 +133,7 @@ def v1_routes(settings: Settings, extra_routers: Sequence[APIRouter] = ()) -> AP
     v1.include_router(deadletter.router)
     v1.include_router(audit_router.router)
     v1.include_router(auth_router.settings_router)  # R-14
+    v1.include_router(settings_router.router)  # P0-26: after /settings/workspace
     for router in module_routers():
         v1.include_router(router)
     if settings.tumnis_adapters == "fake":

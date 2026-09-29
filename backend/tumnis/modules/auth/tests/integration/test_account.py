@@ -30,7 +30,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-26")
-@pytest.mark.xfail(strict=True, reason="spec:P0-26")
 async def test_account_shows_email_and_second_factor(
     request: pytest.FixtureRequest, workspace: WorkspaceHandle, master_key_file: MasterKeyFile
 ) -> None:
@@ -52,7 +51,6 @@ async def test_account_shows_email_and_second_factor(
 
 @pytest.mark.req("SEC-1", "SEC-3")
 @pytest.mark.wp("P0-26")
-@pytest.mark.xfail(strict=True, reason="spec:P0-26")
 async def test_totp_reenrolment_needs_the_password_and_a_code_from_the_new_secret(
     request: pytest.FixtureRequest,
     app: FastAPI,

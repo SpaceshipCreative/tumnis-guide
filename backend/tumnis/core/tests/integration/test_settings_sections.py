@@ -38,7 +38,6 @@ def _put(client: Any, path: str, payload: dict[str, Any]) -> Any:
 
 @pytest.mark.req("SEC-6", "SEC-3")
 @pytest.mark.wp("P0-26")
-@pytest.mark.xfail(strict=True, reason="spec:P0-26")
 async def test_secret_section_is_sealed_write_only_and_audited(
     request: pytest.FixtureRequest, db: DbUrls, master_key_file: MasterKeyFile
 ) -> None:
@@ -114,7 +113,6 @@ async def test_secret_section_is_sealed_write_only_and_audited(
 
 @pytest.mark.req("SEC-3", "Hosted readiness")
 @pytest.mark.wp("P0-26")
-@pytest.mark.xfail(strict=True, reason="spec:P0-26")
 async def test_module_switches_over_http(
     request: pytest.FixtureRequest,
     db: DbUrls,
@@ -123,7 +121,7 @@ async def test_module_switches_over_http(
 ) -> None:
     """T-P0-26-13
     `GET /v1/settings/modules` lists every registered module with `enabled` and `required`;
-    `PUT /v1/settings/modules/{module}` with `{enabled}` switches it for the workspace
+    `PUT /v1/settings/modules` with `{module, enabled}` switches it for the workspace
     (`module.toggled`, one row) and answers the new state; a required module is 422
     `module_required` and an unknown one 404 `not_found`, neither audited.
     """
@@ -139,18 +137,18 @@ async def test_module_switches_over_http(
     assert items["calendar"] == {"module": "calendar", "enabled": True, "required": False}
     assert all(items[name]["required"] for name in REQUIRED_MODULES)
 
-    off = await _put(client, "/v1/settings/modules/calendar", {"enabled": False})
+    off = await _put(client, "/v1/settings/modules", {"module": "calendar", "enabled": False})
     assert off.status_code == 200, off.text
     assert off.json() == {"module": "calendar", "enabled": False, "required": False}
     assert await enabled("calendar", workspace.id) is False
     relisted = {i["module"]: i for i in (await client.get("/v1/settings/modules")).json()["items"]}
     assert relisted["calendar"]["enabled"] is False
 
-    required = await _put(client, "/v1/settings/modules/tasks", {"enabled": False})
+    required = await _put(client, "/v1/settings/modules", {"module": "tasks", "enabled": False})
     assert required.status_code == 422, required.text
     assert required.json()["code"] == "module_required"
 
-    unknown = await _put(client, "/v1/settings/modules/nope", {"enabled": False})
+    unknown = await _put(client, "/v1/settings/modules", {"module": "nope", "enabled": False})
     assert unknown.status_code == 404, unknown.text
     assert unknown.json()["code"] == "not_found"
 

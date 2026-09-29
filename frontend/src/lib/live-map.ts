@@ -15,8 +15,16 @@ export const LIVE_MAP: Record<
   project: { details: [], lists: [] },
   // tasksGetReviewCount (P0-18)
   review_item: { details: [], lists: [] },
-  // The workspace settings have no id in their path: any settings message refreshes them.
-  settings: { details: [], lists: ["settingsGetWorkspaceSettings"] },
+  // The workspace settings have no id in their path: any settings message refreshes them,
+  // the sections and the module switches too (P0-26).
+  settings: {
+    details: [],
+    lists: [
+      "settingsGetWorkspaceSettings",
+      "settingsGetSection",
+      "settingsListModules",
+    ],
+  },
   // Created, rotated and revoked keys (P0-14): the Settings list refreshes.
   api_key: { details: [], lists: ["authListKeys"] },
   dead_letter: { details: [], lists: ["deadLettersGetDeadLetters"] },
@@ -29,4 +37,5 @@ export const NOT_LIVE = [
   "auditExportAuditCsv",
   "usageGetUsage",
   "authListSessions",
+  "authGetAccount",
 ] as const;

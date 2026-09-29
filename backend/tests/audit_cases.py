@@ -11,8 +11,8 @@ the `X-Request-ID` the client sent as `correlation_id`.
 work package adds the `record()` call and moves its action from `PENDING` to a case.
 `setup.completed` (P0-13) has no case here: setup runs only while no user exists, so it
 cannot run in a Ctx's workspace; T-P0-13-23 checks its row instead. `auth.totp_reset`
-(P0-13) is a CLI action with no request (no address or correlation ID): T-P0-13-29 checks
-its row.
+(P0-13) from the CLI has no request (no address or correlation ID): T-P0-13-29 checks that
+row; its case here is the Settings re-enrolment (P0-26).
 """
 
 from __future__ import annotations
@@ -101,6 +101,15 @@ async def change_timezone(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+async def toggle_module(ctx: Ctx) -> None:
+    """PUT /v1/settings/modules switching a module off: `module.toggled`
+    (P0-08's set_module_enabled behind P0-26's route)."""
+    response = await ctx.session_client.put(
+        "/v1/settings/modules", json={"module": "calendar", "enabled": False}
+    )
+    response.raise_for_status()
+
+
 # --- Sign-in and sessions (P0-13) --------------------------------------------------------
 
 
@@ -155,6 +164,23 @@ async def sign_out_other_devices(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+async def reenrol_totp(ctx: Ctx) -> None:
+    """The password, then a code from the new secret (P0-26): `auth.totp_reset`."""
+    from tests._auth import secret_from_uri, totp_code  # noqa: PLC0415
+
+    started = await ctx.session_client.post("/v1/auth/totp/enrol", json={"password": ctx.password})
+    started.raise_for_status()
+    secret = secret_from_uri(started.json()["otpauth_uri"])
+    confirmed = await ctx.session_client.post(
+        "/v1/auth/totp/enrol/confirm",
+        json={
+            "enrol_token": started.json()["enrol_token"],
+            "code": totp_code(secret, ctx.clock.now()),
+        },
+    )
+    confirmed.raise_for_status()
+
+
 # --- API keys (P0-14) ----------------------------------------------------------------------
 
 
@@ -192,12 +218,14 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("dead_letter.discarded", discard_dead_letter, "user"),
     AuditCase("settings.changed", change_timezone, "user"),
     AuditCase("workspace.timezone_changed", change_timezone, "user"),
+    AuditCase("module.toggled", toggle_module, "user"),
     AuditCase("auth.login", sign_in, "user"),
     AuditCase("auth.login_failed", wrong_password, "user"),
     AuditCase("auth.totp_failed", wrong_code, "user"),
     AuditCase("auth.locked_out", lock_out, "user"),
     AuditCase("auth.logout", log_out, "user"),
     AuditCase("auth.sessions_revoked", sign_out_other_devices, "user"),
+    AuditCase("auth.totp_reset", reenrol_totp, "user"),
     AuditCase("key.created", create_key, "user"),
     AuditCase("key.rotated", rotate_key, "user"),
     AuditCase("key.revoked", revoke_key, "user"),
@@ -205,8 +233,5 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
 
 # action -> the work package that builds its operation and adds its case.
 PENDING: dict[str, str] = {
-    # P0-08 records it in set_module_enabled; the route that toggles a module arrives with
-    # the Settings screen.
-    "module.toggled": "P0-26",
     "drill.completed": "P0-28",
 }

@@ -3,6 +3,16 @@
 import * as z from "zod";
 
 /**
+ * AccountOut
+ */
+export const zAccountOut = z.object({
+  email: z.string(),
+  second_factor: z.literal("totp"),
+  totp_confirmed_at: z.iso.datetime().nullable(),
+  user_id: z.uuid(),
+});
+
+/**
  * AuditEntry
  */
 export const zAuditEntry = z.object({
@@ -99,6 +109,30 @@ export const zLoginOut = z.object({
 });
 
 /**
+ * ModuleFlagIn
+ */
+export const zModuleFlagIn = z.object({
+  enabled: z.boolean(),
+  module: z.string().max(64),
+});
+
+/**
+ * ModuleFlagOut
+ */
+export const zModuleFlagOut = z.object({
+  enabled: z.boolean(),
+  module: z.string(),
+  required: z.boolean(),
+});
+
+/**
+ * ModuleFlagsOut
+ */
+export const zModuleFlagsOut = z.object({
+  items: z.array(zModuleFlagOut),
+});
+
+/**
  * Page[AuditEntry]
  */
 export const zPageAuditEntry = z.object({
@@ -165,6 +199,24 @@ export const zPageSessionOut = z.object({
 });
 
 /**
+ * SettingSectionIn
+ */
+export const zSettingSectionIn = z.object({
+  values: z.record(z.string(), z.unknown()),
+  version: z.int().gte(0).lte(2147483647).nullish(),
+});
+
+/**
+ * SettingSectionOut
+ */
+export const zSettingSectionOut = z.object({
+  secrets_set: z.array(z.string()),
+  section: z.string(),
+  values: z.record(z.string(), z.unknown()),
+  version: z.int().nullable(),
+});
+
+/**
  * SetupIn
  */
 export const zSetupIn = z.object({
@@ -199,6 +251,29 @@ export const zSignedInOut = z.object({
 });
 
 /**
+ * TotpEnrolConfirmIn
+ */
+export const zTotpEnrolConfirmIn = z.object({
+  code: z.string().max(16),
+  enrol_token: z.string().max(2048),
+});
+
+/**
+ * TotpEnrolIn
+ */
+export const zTotpEnrolIn = z.object({
+  password: z.string().max(1024),
+});
+
+/**
+ * TotpEnrolOut
+ */
+export const zTotpEnrolOut = z.object({
+  enrol_token: z.string(),
+  otpauth_uri: z.string(),
+});
+
+/**
  * TotpIn
  */
 export const zTotpIn = z.object({
@@ -226,7 +301,7 @@ export const zVersionIn = z.object({
  * WorkspaceSettingsIn
  */
 export const zWorkspaceSettingsIn = z.object({
-  subtask_threshold_min: z.int().nullish(),
+  subtask_threshold_min: z.int().gte(5).lte(480).nullish(),
   timezone: z.string().nullish(),
   version: z.int().gte(0).lte(2147483647),
 });
@@ -272,6 +347,11 @@ export const zAuditExportAuditCsvQuery = z.object({
   to: z.iso.datetime().nullish(),
 });
 
+/**
+ * Successful Response
+ */
+export const zAuthGetAccountResponse = zAccountOut;
+
 export const zAuthLoginBody = zLoginIn;
 
 /**
@@ -314,6 +394,20 @@ export const zAuthTotpBody = zTotpIn;
  * Successful Response
  */
 export const zAuthTotpResponse = zSignedInOut;
+
+export const zAuthStartTotpEnrolmentBody = zTotpEnrolIn;
+
+/**
+ * Successful Response
+ */
+export const zAuthStartTotpEnrolmentResponse = zTotpEnrolOut;
+
+export const zAuthConfirmTotpEnrolmentBody = zTotpEnrolConfirmIn;
+
+/**
+ * Successful Response
+ */
+export const zAuthConfirmTotpEnrolmentResponse = z.void();
 
 export const zDeadLettersGetDeadLettersQuery = z.object({
   status: z
@@ -392,6 +486,18 @@ export const zAuthRotateKeyResponse = zKeyCreated;
 /**
  * Successful Response
  */
+export const zSettingsListModulesResponse = zModuleFlagsOut;
+
+export const zSettingsSetModuleBody = zModuleFlagIn;
+
+/**
+ * Successful Response
+ */
+export const zSettingsSetModuleResponse = zModuleFlagOut;
+
+/**
+ * Successful Response
+ */
 export const zSettingsGetWorkspaceSettingsResponse = zWorkspaceSettingsOut;
 
 export const zSettingsPutWorkspaceSettingsBody = zWorkspaceSettingsIn;
@@ -400,6 +506,26 @@ export const zSettingsPutWorkspaceSettingsBody = zWorkspaceSettingsIn;
  * Successful Response
  */
 export const zSettingsPutWorkspaceSettingsResponse = zWorkspaceSettingsOut;
+
+export const zSettingsGetSectionPath = z.object({
+  section: z.string(),
+});
+
+/**
+ * Successful Response
+ */
+export const zSettingsGetSectionResponse = zSettingSectionOut;
+
+export const zSettingsPutSectionBody = zSettingSectionIn;
+
+export const zSettingsPutSectionPath = z.object({
+  section: z.string(),
+});
+
+/**
+ * Successful Response
+ */
+export const zSettingsPutSectionResponse = zSettingSectionOut;
 
 export const zAuthSetupBody = zSetupIn;
 

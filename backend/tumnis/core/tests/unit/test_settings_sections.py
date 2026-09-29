@@ -17,7 +17,6 @@ class _Other(BaseModel):
 
 @pytest.mark.req("SEC-6")
 @pytest.mark.wp("P0-26")
-@pytest.mark.xfail(strict=True, reason="spec:P0-26")
 def test_register_section_refuses_reserved_duplicate_and_unknown_secret_names() -> None:
     """T-P0-26-11
     `workspace` and `modules` have routes of their own and cannot be sections; a name taken
