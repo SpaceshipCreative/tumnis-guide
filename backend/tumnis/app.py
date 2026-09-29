@@ -32,11 +32,12 @@ from tumnis.core import (
 from tumnis.core.bodylimit import BodyLimitMiddleware
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import install_problem_handlers
+from tumnis.core.principal import AuthenticationMiddleware
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.request_meta import RequestMetaMiddleware
 from tumnis.core.routing import new_request_log
 from tumnis.modules.auth import router as auth_router
-from tumnis.settings import Settings, install_master_keys
+from tumnis.settings import Settings, install_master_keys, install_peppers
 
 # The built frontend (P0-22 replaces the placeholder shell); present in the image.
 SHELL_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -114,6 +115,7 @@ def create_app(
     settings = settings or Settings()  # values come from the environment
     metrics_token = settings.metrics_token()  # SettingsError: prod needs METRICS_TOKEN_FILE
     master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
+    install_peppers(settings)  # session, CSRF and pre-auth tokens (P0-13)
     db.configure(settings.database_url, settings.database_direct_url)
     modules.configure(settings)  # the deployment's module kill list
     clock = clock or SystemClock()
@@ -145,9 +147,10 @@ def create_app(
     # Middleware, innermost first (add_middleware wraps what is there): correlation ID,
     # source address and user agent for the audit log (P0-15); the body limit outside it
     # (P0-10); outermost the request histogram, timing everything below it (P0-27).
-    # Authentication (P0-13) goes inside the correlation ID and security headers (P0-16)
-    # outside the body limit. Rate limits and CSRF run in TumnisRoute, where the route's
-    # policy is known.
+    # Authentication (P0-13, innermost: the principal from the session cookie) goes inside
+    # the correlation ID, and security headers (P0-16) outside the body limit. Rate limits,
+    # the Origin check and CSRF run in TumnisRoute, where the route's policy is known.
+    app.add_middleware(AuthenticationMiddleware)
     app.add_middleware(RequestMetaMiddleware)
     app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(metrics.RequestMetricsMiddleware)

@@ -52,7 +52,6 @@ def _bare(app: FastAPI, session_cookie: str) -> httpx.AsyncClient:
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 @pytest.mark.parametrize("case", _cases("session"))
 async def test_every_session_write_requires_csrf(
     case: str,
@@ -112,7 +111,6 @@ async def test_every_session_write_requires_csrf(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 def test_csrf_exempt_writes_give_a_reason(capsys: pytest.CaptureFixture[str]) -> None:
     """T-P0-13-26
     Every write whose policy sets `csrf=False` carries `csrf_exempt_reason`; the list is

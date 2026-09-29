@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import functools
 import json
 import secrets
@@ -218,8 +219,15 @@ def workspace(db: DbUrls) -> Iterator[WorkspaceHandle]:
     handle = WorkspaceHandle(
         ws, "Test", WorkspaceContext(ws, SYSTEM_ACTOR), user_id, email, TEST_PASSWORD
     )
-    with use_workspace(handle.ctx):
+    entered = use_workspace(handle.ctx)
+    entered.__enter__()
+    try:
         yield handle
+    finally:
+        # Set up from inside an async test (request.getfixturevalue), the context var was
+        # set in the test's own context, which is gone by teardown.
+        with contextlib.suppress(ValueError):
+            entered.__exit__(None, None, None)
 
 
 @pytest.fixture
@@ -740,32 +748,43 @@ class PepperFile:
 
 
 @pytest.fixture
-def pepper_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PepperFile:
+def pepper_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[PepperFile]:
     """A pepper file (one fresh 32-byte pepper, version 1, mode 0o600) in tmp_path;
-    API_KEY_PEPPER_FILE points at it."""
+    API_KEY_PEPPER_FILE points at it and tumnis.core.crypto loads its peppers."""
+    from tumnis.core import crypto  # noqa: PLC0415
+
     keys = {1: secrets.token_bytes(32)}
     path = write_master_key_file(tmp_path / "pepper.json", keys, active=1)
     monkeypatch.setenv("API_KEY_PEPPER_FILE", str(path))
-    return PepperFile(path, keys, active=1)
+    crypto.configure_peppers(
+        lambda: crypto.load_master_keys(str(path), strict_owner=False, what=crypto.PEPPER_FILE)
+    )
+    try:
+        yield PepperFile(path, keys, active=1)
+    finally:
+        crypto.reset_peppers()
 
 
 @pytest.fixture
-async def app(
+def app(  # noqa: PLR0917
     db: DbUrls,
     dbos_sys_db: DbUrls,
     clock: FixedClock,
     fakes: Fakes,
     master_key_file: MasterKeyFile,
-) -> AsyncIterator[FastAPI]:
-    """create_app on the per-test database with fakes and a master key file; engines
-    disposed afterwards."""
+    pepper_file: PepperFile,
+) -> FastAPI:
+    """create_app on the per-test database with fakes, a master key file and a pepper
+    file. A plain (sync) fixture, so an async test may also reach it through
+    `request.getfixturevalue` (T-P0-08-20 asks for `session_client` that way): its engines
+    keep no idle connections (NullPool), so there is nothing to dispose afterwards."""
     from tumnis.app import create_app  # noqa: PLC0415
     from tumnis.core import db as core_db  # noqa: PLC0415
 
-    try:
-        yield create_app(settings=settings_for(db, dbos_sys_db), clock=clock)
-    finally:
-        await core_db.dispose()
+    settings = settings_for(db, dbos_sys_db, api_key_pepper_file=str(pepper_file.path))
+    built = create_app(settings=settings, clock=clock)
+    core_db.configure(app_url=db.app, direct_url=db.app, owner_url=db.owner, pooled=False)
+    return built
 
 
 class AppFactory(Protocol):
@@ -773,16 +792,25 @@ class AppFactory(Protocol):
 
 
 @pytest.fixture
-def app_factory(
-    db: DbUrls, dbos_sys_db: DbUrls, clock: FixedClock, fakes: Fakes, master_key_file: MasterKeyFile
+def app_factory(  # noqa: PLR0917
+    db: DbUrls,
+    dbos_sys_db: DbUrls,
+    clock: FixedClock,
+    fakes: Fakes,
+    master_key_file: MasterKeyFile,
+    pepper_file: PepperFile,
 ) -> AppFactory:
     """`app_factory(**settings_overrides)`: another create_app on the per-test database
     with fakes and the test clock, for tests that need a second deployment shape (hosted
-    mode, P0-13); engines are disposed by the `app` fixture or the test's own cleanup."""
+    mode, P0-13). Like `app`, its engines keep no idle connections."""
     from tumnis.app import create_app  # noqa: PLC0415
+    from tumnis.core import db as core_db  # noqa: PLC0415
 
     def build(**overrides: Any) -> FastAPI:
-        return create_app(settings=settings_for(db, dbos_sys_db, **overrides), clock=clock)
+        overrides.setdefault("api_key_pepper_file", str(pepper_file.path))
+        built = create_app(settings=settings_for(db, dbos_sys_db, **overrides), clock=clock)
+        core_db.configure(app_url=db.app, direct_url=db.app, owner_url=db.owner, pooled=False)
+        return built
 
     return build
 
@@ -890,21 +918,27 @@ async def enroll_workspace_user(workspace: WorkspaceHandle, clock: FixedClock) -
 
 
 @pytest.fixture
-async def session_client(
-    app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
-) -> AsyncIterator[SessionClient]:
+def session_client(app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock) -> SessionClient:
     """An httpx client signed in (password and TOTP at the clock's time) as the
     `workspace` fixture's user; it sends `X-CSRF-Token` (`session_client.csrf`) and an
     `Idempotency-Key` on every write that lacks them. The clock moves one TOTP step on
-    afterwards, so another sign-in in the test gets a fresh code."""
-    from tests._auth import TOTP_STEP, session_client_for, sign_in  # noqa: PLC0415
+    afterwards, so another sign-in in the test gets a fresh code.
 
-    account = await enroll_workspace_user(workspace, clock)
-    async with session_client_for(app) as http:
+    A plain fixture (async tests may ask for it with `request.getfixturevalue`): the
+    sign-in runs on an event loop of its own in a helper thread; the in-process app and
+    its NullPool engines serve it there as they serve the test later."""
+    from tests._auth import TOTP_STEP, run_async, session_client_for, sign_in  # noqa: PLC0415
+
+    http = session_client_for(app)
+
+    async def start() -> Account:
+        account = await enroll_workspace_user(workspace, clock)
         await sign_in(http, account, clock)
-        http.account = account
-        clock.advance(TOTP_STEP)
-        yield http
+        return account
+
+    http.account = run_async(start)
+    clock.advance(TOTP_STEP)
+    return http
 
 
 # --- Traces and JSON logs (P0-27) ----------------------------------------------------------

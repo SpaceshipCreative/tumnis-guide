@@ -18,16 +18,20 @@ keeps an included router lazy, so `app.routes` alone does not show its routes);
 `route_violations(app)` is the registry the meta-test (tests/meta/test_route_registry.py)
 and the A0.3 sweep build on.
 
-Authentication (P0-13) and scope checks (P0-14) plug into `TumnisRoute` later; until then
-a route's own dependency (for example `audit_router.require_session`) answers 401.
+Before the handler (and before idempotency) `TumnisRoute` refuses a write from another
+origin (403 `bad_origin`), a route that needs a principal without one (401, with the
+authentication middleware's reason, P0-13) and a session write without the session's
+CSRF token (403 `csrf_failed`); scope checks join with P0-14.
 """
 
+import hmac
 import inspect
 from collections import deque
 from collections.abc import Callable, Coroutine, Iterable, Sequence
 from dataclasses import dataclass, field
 from math import ceil
 from typing import Any, Final, Literal, TypeVar, get_args, get_origin
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.dependencies.models import Dependant
@@ -37,7 +41,7 @@ from starlette.responses import StreamingResponse
 from tumnis.core import idempotency, modules
 from tumnis.core.errors import Problem, ProblemError
 from tumnis.core.pagination import Page
-from tumnis.core.principal import principal_of
+from tumnis.core.principal import principal_of, unauthenticated
 from tumnis.core.ratelimit import RateLimiter
 
 AuthMode = Literal[
@@ -73,6 +77,7 @@ class RoutePolicy:
     unpaginated_reason: str | None = None  # a bare list only with a reason (bounded by input)
     project_param: str | None = None  # path/body field holding a project id (P0-14)
     csrf: bool = True  # session writes need CSRF (P0-13); False only with a reason
+    csrf_exempt_reason: str | None = None  # why csrf=False (printed by the CSRF sweep)
     rate_limit: str = "default"  # bucket name in ratelimit.BUCKETS
     max_body_bytes: int = 1_048_576  # plan default 1 MiB; uploads override (P1-16)
     redact_on_replay: tuple[str, ...] = field(default=())  # never stored for replay (P0-14)
@@ -129,6 +134,45 @@ def _check_rate(request: Request, policy: RoutePolicy) -> None:
         )
 
 
+PRINCIPAL_AUTH: Final = frozenset({"session", "session_or_key", "key_or_task_token"})
+CSRF_HEADER: Final = "X-CSRF-Token"
+
+
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}".lower()
+
+
+def _check_origin(request: Request) -> None:
+    """A browser write whose Origin is not this app's (PUBLIC_BASE_URL, else the
+    request's own origin) is 403 `bad_origin` (P0-13, SEC-1). Clients that send no Origin
+    (tools, API keys) pass; SameSite cookies and the CSRF token still apply."""
+    given = request.headers.get("origin")
+    if given is None:
+        return
+    base = getattr(getattr(request.app.state, "settings", None), "public_base_url", None)
+    allowed = _origin(base) if base else _origin(str(request.base_url))
+    if given.lower().rstrip("/") != allowed:
+        raise ProblemError(403, "bad_origin", "This request came from another site")
+
+
+def _check_auth(request: Request, policy: RoutePolicy) -> None:
+    """401 before the handler (and before idempotency) when a route that needs a
+    principal has none; the code says why (`unauthenticated`, `session_expired`). A
+    session write also needs `X-CSRF-Token` equal to the session's token (P0-13): 403
+    `csrf_failed` otherwise. Scope checks join here with P0-14."""
+    if policy.auth not in PRINCIPAL_AUTH:
+        return
+    principal = principal_of(request)
+    if principal.anonymous:
+        raise unauthenticated(request)
+    if request.method in WRITE_METHODS and principal.kind == "session" and policy.csrf:
+        given = request.headers.get(CSRF_HEADER, "")
+        expected = principal.csrf_token or ""
+        if not (given and expected and hmac.compare_digest(given.encode(), expected.encode())):
+            raise ProblemError(403, "csrf_failed", "Send the X-CSRF-Token of this session")
+
+
 def _log_write(request: Request, template: str, response: Response) -> None:
     log = getattr(request.app.state, "request_log", None)
     if isinstance(log, deque):
@@ -163,7 +207,10 @@ class TumnisRoute(APIRoute):
             request.state.policy = policy
             template = _template(request, route)
             request.state.route_template = template
+            if request.method in WRITE_METHODS:
+                _check_origin(request)
             _check_rate(request, policy)
+            _check_auth(request, policy)
             if request.method not in WRITE_METHODS:
                 return await original(request)
             if policy.idempotent:

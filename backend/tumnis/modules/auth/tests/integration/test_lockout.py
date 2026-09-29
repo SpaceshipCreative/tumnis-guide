@@ -34,7 +34,6 @@ def _locked(response: httpx.Response, retry_after: int) -> None:
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_failed_passwords_lock_email_then_unlock(
     client: httpx.AsyncClient, account: Account, clock: FixedClock
 ) -> None:
@@ -65,7 +64,6 @@ async def test_failed_passwords_lock_email_then_unlock(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_failed_totp_codes_lock_second_factor(
     client: httpx.AsyncClient, account: Account, clock: FixedClock
 ) -> None:
@@ -95,7 +93,6 @@ async def test_failed_totp_codes_lock_second_factor(
 
 @pytest.mark.req("SEC-1", "SEC-5")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_address_lock_spans_emails(
     client: httpx.AsyncClient, account: Account, clock: FixedClock
 ) -> None:

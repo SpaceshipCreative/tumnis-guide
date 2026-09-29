@@ -11,8 +11,7 @@ workspace audit log, newest first (`auth="session"`).
 
 Session seam: the routes are declared on `v1_router` with `RoutePolicy(auth="session")`
 (P0-10). `require_session` answers with the workspace context of a session principal on
-`request.state.principal` (set by P0-13's authentication middleware) or of
-`request.state.session_context`, and 401 otherwise; tests override it.
+`request.state.principal` (set by P0-13's authentication middleware), and 401 otherwise.
 """
 
 import csv
@@ -25,13 +24,13 @@ from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
 import sqlalchemy as sa
-from fastapi import Depends, HTTPException, Query, Request
+from fastapi import Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from tumnis.core import audit
 from tumnis.core.pagination import Page, PageParams, SortKey, page_params, paginate
-from tumnis.core.principal import principal_of
+from tumnis.core.principal import principal_of, unauthenticated
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 
@@ -98,14 +97,12 @@ AuditPage = Page[AuditEntry]
 
 
 async def require_session(request: Request) -> WorkspaceContext:
-    """The signed-in session's workspace context (see the module docstring)."""
-    ctx = getattr(request.state, "session_context", None)
-    if isinstance(ctx, WorkspaceContext):
-        return ctx
+    """The signed-in session's workspace context (P0-13's authentication middleware sets
+    the session principal); 401 otherwise (`unauthenticated`, `session_expired`)."""
     principal = principal_of(request)
     if principal.kind == "session" and not principal.anonymous:
         return principal.workspace_context()
-    raise HTTPException(status_code=401, detail="unauthenticated")
+    raise unauthenticated(request)
 
 
 def _utc(value: datetime | None) -> datetime | None:

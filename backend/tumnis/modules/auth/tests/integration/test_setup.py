@@ -27,7 +27,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_hosted_mode_disables_local_signup(
     db: DbUrls, app_factory: AppFactory, pepper_file: PepperFile, client: httpx.AsyncClient
 ) -> None:
@@ -61,7 +60,6 @@ async def test_hosted_mode_disables_local_signup(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_setup_requires_totp_confirmation(
     client: httpx.AsyncClient, clock: FixedClock
 ) -> None:
@@ -104,7 +102,6 @@ async def test_setup_requires_totp_confirmation(
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_setup_completed_is_audited(
     client: httpx.AsyncClient, clock: FixedClock, db: DbUrls
 ) -> None:

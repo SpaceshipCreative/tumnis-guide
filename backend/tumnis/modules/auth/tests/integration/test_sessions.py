@@ -47,7 +47,6 @@ def _set_cookies(response: httpx.Response) -> dict[str, dict[str, str | bool]]:
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_session_cookie_flags(
     client: httpx.AsyncClient, account: Account, clock: FixedClock
 ) -> None:
@@ -74,7 +73,6 @@ async def test_session_cookie_flags(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_idle_session_ends_after_30_days(
     client: httpx.AsyncClient, account: Account, clock: FixedClock
 ) -> None:
@@ -95,7 +93,6 @@ async def test_idle_session_ends_after_30_days(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_sign_out_other_devices_keeps_this_one(
     app: FastAPI, account: Account, clock: FixedClock
 ) -> None:
@@ -144,7 +141,6 @@ async def test_sign_out_other_devices_keeps_this_one(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_logout_revokes_current_session(
     app: FastAPI, account: Account, clock: FixedClock
 ) -> None:
@@ -167,7 +163,6 @@ async def test_logout_revokes_current_session(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_revoke_one_session_by_id(app: FastAPI, account: Account, clock: FixedClock) -> None:
     """T-P0-13-25
     `DELETE /v1/auth/sessions/{id}` revokes that session only (204, then 401 for it); an

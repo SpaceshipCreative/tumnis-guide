@@ -16,6 +16,7 @@ routes. Cookies and header names follow R-18.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Final
@@ -162,3 +163,46 @@ def seed_user() -> tuple[str, str, str]:
 def seed_user_totp(clock: FixedClock) -> str:
     """The seed user's TOTP code at the clock's time."""
     return totp_code(seed_user()[2], clock.now())
+
+
+def run_async[T](make: Callable[[], Awaitable[T]]) -> T:
+    """Run a coroutine to completion on a new event loop in a helper thread, so a plain
+    fixture can do async work even while the test's own loop is running."""
+    import asyncio  # noqa: PLC0415
+    from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(lambda: asyncio.run(_call(make))).result()
+
+
+async def _call[T](make: Callable[[], Awaitable[T]]) -> T:
+    return await make()
+
+
+async def open_session(app: Any, workspace_id: uuid.UUID, user_id: uuid.UUID) -> tuple[str, str]:
+    """A session row for the user made through the auth module (no sign-in route runs, so
+    nothing is audited); returns (session cookie, CSRF token)."""
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.auth import sessions  # noqa: PLC0415
+
+    async with tenant_session(sessions.user_context(workspace_id, user_id)) as s:
+        new = await sessions.create(
+            s,
+            user_id=user_id,
+            now=app.state.clock.now(),
+            user_agent=None,
+            source_ip=None,
+            second_factor="totp",
+        )
+    return new.token, new.csrf
+
+
+async def enroll_totp(user_id: uuid.UUID, workspace_id: uuid.UUID, at: Any) -> str:
+    """A fresh confirmed TOTP secret for the user (through the auth api); returns it."""
+    import pyotp  # noqa: PLC0415
+
+    from tumnis.modules.auth import api  # noqa: PLC0415
+
+    secret = pyotp.random_base32()
+    await api.enroll_totp(user_id, workspace_id, secret, confirmed_at=at)
+    return secret

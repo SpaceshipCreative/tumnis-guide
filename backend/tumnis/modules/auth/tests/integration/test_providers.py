@@ -19,7 +19,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_fake_provider_registers_without_core_changes(
     client: httpx.AsyncClient, account: Account, clock: FixedClock
 ) -> None:

@@ -25,7 +25,16 @@ _PARAM = re.compile(r"\{([^}:]+)(?::[^}]*)?\}")
 
 def policy_of(route: Any) -> Any:
     """The RoutePolicy `route_policy` stored on the endpoint, or None."""
-    return getattr(getattr(route, "endpoint", None), "__tumnis_policy__", None)
+    from tumnis.core.routing import policy_of as routing_policy_of  # noqa: PLC0415
+
+    return routing_policy_of(route)
+
+
+def _walk(app: FastAPI) -> list[Any]:
+    """Every route with included routers unpacked (P0-10's walker)."""
+    from tumnis.core.routing import walk_routes  # noqa: PLC0415
+
+    return walk_routes(app)
 
 
 @cache
@@ -47,7 +56,7 @@ def inventory_app() -> FastAPI:
 
 def _routes(app: FastAPI, auth: frozenset[str]) -> list[tuple[str, str, Any]]:
     found = []
-    for route in app.routes:
+    for route in _walk(app):
         policy = policy_of(route)
         if policy is None or policy.auth not in auth:
             continue
@@ -79,7 +88,7 @@ def key_write_routes(app: FastAPI) -> list[tuple[str, str, Any]]:
 def csrf_exempt_routes(app: FastAPI) -> list[tuple[str, str, str | None]]:
     """(method, path, reason) for writes whose policy turns CSRF off."""
     found = []
-    for route in app.routes:
+    for route in _walk(app):
         policy = policy_of(route)
         if policy is None or policy.csrf:
             continue
@@ -94,9 +103,11 @@ def case_ids(app: FastAPI, kind: str) -> list[str]:
 
 
 def find_route(app: FastAPI, method: str, path: str) -> Any:
-    for route in app.routes:
-        if getattr(route, "path", None) == path and method in (getattr(route, "methods", ()) or ()):
-            return route
+    """The route object the router built for (method, path): its `dependant` is the one
+    the request handler calls."""
+    for route in _walk(app):
+        if route.path == path and method in (route.methods or ()):
+            return getattr(route, "original_route", route)
     raise LookupError(f"{method} {path} is not a route of this app")
 
 

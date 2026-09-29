@@ -30,7 +30,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_login_rehashes_when_parameters_change(
     client: httpx.AsyncClient, account: Account, db: DbUrls
 ) -> None:
@@ -72,14 +71,14 @@ def _session_routes(app: FastAPI) -> list[tuple[str, str]]:
 
 @pytest.mark.req("SEC-1", "FR-9.2")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_password_alone_never_yields_a_session(
-    app: FastAPI, client: httpx.AsyncClient, account: Account
+    app: FastAPI, client: httpx.AsyncClient, account: Account, clock: FixedClock
 ) -> None:
     """T-P0-13-03
     The right password answers `{"step": "totp", "preauth": ...}` and sets no cookie; the
     preauth token, sent as the session cookie or as a bearer token, is 401 on every route
-    whose policy takes a session.
+    whose policy takes a session. (The clock moves a second before each request, so the
+    anonymous rate bucket never answers first.)
     """
     from tests.meta._csrf import fill_path  # noqa: PLC0415
 
@@ -96,10 +95,12 @@ async def test_password_alone_never_yields_a_session(
     assert ("GET", "/v1/auth/sessions") in routes
     for method, path in routes:
         url = fill_path(path)
+        clock.advance(seconds=1)
         as_cookie = await client.request(
             method, url, headers={"Cookie": f"{SESSION_COOKIE}={preauth}"}
         )
         assert as_cookie.status_code == 401, (method, path, as_cookie.text)
+        clock.advance(seconds=1)
         as_bearer = await client.request(
             method, url, headers={"Authorization": f"Bearer {preauth}"}
         )
@@ -108,7 +109,6 @@ async def test_password_alone_never_yields_a_session(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_totp_completes_sign_in_and_rejects_replay(
     client: httpx.AsyncClient, account: Account, clock: FixedClock
 ) -> None:
@@ -148,7 +148,6 @@ async def test_totp_completes_sign_in_and_rejects_replay(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_unknown_email_is_indistinguishable(
     client: httpx.AsyncClient, account: Account, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -184,7 +183,6 @@ async def test_unknown_email_is_indistinguishable(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_cross_origin_login_is_refused(
     client: httpx.AsyncClient, account: Account, clock: FixedClock
 ) -> None:
@@ -231,7 +229,6 @@ async def test_cross_origin_login_is_refused(
 
 @pytest.mark.req("SEC-1")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 async def test_setup_after_sign_in_is_refused(client: httpx.AsyncClient, account: Account) -> None:
     """T-P0-13-24
     Once a user exists, `POST /v1/setup` is 409 `already_set_up` and creates no user.
