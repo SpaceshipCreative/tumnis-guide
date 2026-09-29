@@ -23,7 +23,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-14.2")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 async def test_link_is_idempotent_and_inherits_taint(
     app_db: DbUrls, workspace: WorkspaceHandle, connection: uuid.UUID
 ) -> None:

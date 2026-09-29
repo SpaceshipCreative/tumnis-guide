@@ -469,5 +469,68 @@ async def link_context(
     added_by: str,
     session: AsyncSession | None = None,
 ) -> ContextItemOut:
-    """Idempotent on (owner, target). tainted = target.tainted (rules.propagate_taint)."""
-    raise NotImplementedError
+    """Idempotent on (owner, target). tainted = target.tainted (rules.propagate_taint).
+    A record target needs `target_id` (NotFound when no such row is visible); a bare
+    `url` target needs `target_url` and is tainted (outside content). Linking again
+    returns the existing item (restoring it if it was deleted)."""
+    if (target_type == "url") != (target_id is None) or (target_type == "url") != (
+        target_url is not None
+    ):
+        raise ValueError("a url target takes target_url only; a record target takes target_id")
+    async with session_for(ctx, session) as s:
+        if target_id is None:
+            tainted = rules.propagate_taint(True)
+            key = _context.c.target_url
+            where = _context.c.target_id.is_(None)
+        else:
+            tainted = rules.propagate_taint(await _target_taint(s, target_type, target_id))
+            key = _context.c.target_id
+            where = _context.c.target_id.is_not(None)
+        insert = pg_insert(_context).values(
+            owner_type=owner_type,
+            owner_id=owner_id,
+            target_type=target_type,
+            target_id=target_id,
+            target_url=target_url,
+            tainted=tainted,
+            added_by=added_by,
+        )
+        upsert = insert.on_conflict_do_update(
+            index_elements=[
+                _context.c.workspace_id,
+                _context.c.owner_type,
+                _context.c.owner_id,
+                _context.c.target_type,
+                key,
+            ],
+            index_where=where,
+            set_={"deleted_at": None},
+            where=_context.c.deleted_at.is_not(None),
+        )
+        await s.execute(upsert)
+        row = (
+            await s.execute(
+                select(_context).where(
+                    _context.c.owner_type == owner_type,
+                    _context.c.owner_id == owner_id,
+                    _context.c.target_type == target_type,
+                    key == (target_url if target_id is None else target_id),
+                    where,
+                )
+            )
+        ).one()
+    return ContextItemOut.model_validate(row._mapping)
+
+
+async def _target_taint(s: AsyncSession, target_type: str, target_id: UUID) -> bool:
+    if target_type in _TABLES:
+        table = _TABLES[target_type]
+        found: bool | None = await s.scalar(select(table.c.tainted).where(table.c.id == target_id))
+    else:
+        lookup = _TAINT_LOOKUPS.get(target_type)
+        if lookup is None:
+            raise LookupError(f"no module registered the taint of {target_type!r} targets")
+        found = await lookup(s, target_id)
+    if found is None:
+        raise NotFound(target_type, target_id)
+    return found
