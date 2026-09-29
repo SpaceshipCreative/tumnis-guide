@@ -26,15 +26,22 @@ WORKDIR /app/backend
 
 # Dependencies first (cached until uv.lock changes), then the project itself. The source
 # stays at /app/backend: the CLI reads alembic.ini and fixtures/ beside the package.
+# uv's cache lives in a BuildKit cache mount, never in a layer: the image carries only the
+# virtualenv, and Trivy scans only what runs (P0-16).
 RUN --mount=from=uv,source=/uv,target=/bin/uv \
+    --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=backend/pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=backend/uv.lock,target=uv.lock \
     uv sync --frozen --no-dev --no-install-project
 COPY backend/ ./
-RUN --mount=from=uv,source=/uv,target=/bin/uv uv sync --frozen --no-dev
+RUN --mount=from=uv,source=/uv,target=/bin/uv --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 COPY --from=frontend /src/frontend/dist /app/frontend/dist
 
-RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin tumnis
+# The runtime needs no pip (uv built the virtualenv); its vendored libraries only add
+# findings to the Trivy scan (P0-16).
+RUN /usr/local/bin/python -m pip uninstall --yes --quiet pip \
+    && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin tumnis
 USER tumnis
 EXPOSE 8080
 CMD ["tumnis", "api"]

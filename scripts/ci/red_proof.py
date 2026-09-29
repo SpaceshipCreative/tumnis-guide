@@ -129,6 +129,7 @@ def _junit_results(xml_path: Path) -> list[Result]:
     if not xml_path.is_file():
         return []
     results = []
+    # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse  # own file
     for case in ET.parse(xml_path).getroot().iter("testcase"):  # noqa: S314 (our own file)
         name = f"{case.get('classname', '')}::{case.get('name', '')}"
         tags = {child.tag for child in case}

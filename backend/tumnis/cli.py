@@ -64,6 +64,14 @@ def check_metrics_token(settings: Settings) -> None:
         _config_error(exc)
 
 
+def check_database_tls(settings: Settings) -> None:
+    """Prod reaches the database only with sslmode=verify-full (P0-16, SEC-9)."""
+    try:
+        settings.check_database_tls()
+    except SettingsError as exc:
+        _config_error(exc)
+
+
 def start_observability(settings: Settings, service: Literal["api", "worker"]) -> None:
     """JSON logs on stdout, the tracer provider (OTLP when OTEL_EXPORTER_OTLP_ENDPOINT is
     set) and GlitchTip (when SENTRY_DSN is set), before anything else logs (P0-27)."""
@@ -102,6 +110,7 @@ def api(
     """Serve the HTTP API (and the built frontend) with uvicorn."""
     settings = load_settings()
     check_metrics_token(settings)
+    check_database_tls(settings)
     run_boot_checks(settings)
     start_observability(settings, "api")
     import uvicorn  # noqa: PLC0415
@@ -120,6 +129,7 @@ def api(
 def worker() -> None:
     """Launch DBOS: queues, workflows and schedules."""
     settings = load_settings()
+    check_database_tls(settings)
     run_boot_checks(settings)
     start_observability(settings, "worker")
     from tumnis.worker import main as worker_main  # noqa: PLC0415
@@ -137,6 +147,7 @@ def migrate(
     from tumnis.migrate import MigrationPendingError, upgrade, verify_at_heads  # noqa: PLC0415
 
     settings = load_settings()
+    check_database_tls(settings)
     if settings.database_owner_url is None:
         _config_error("database_owner_url_missing: migrate runs as the owner role")
     try:

@@ -1,0 +1,22 @@
+# gitleaks configuration (P0-16, SEC-7): the default rules plus Tumnis's own token format.
+# The Security CI job runs `gitleaks git` over the commits a change adds; the pre-commit
+# hook runs it on staged changes. An allow-list entry names throwaway test values only,
+# never a real credential (rotate a leaked one; do not allow-list it).
+title = "Tumnis Guide"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "tumnis-token"
+description = "Tumnis API key, task token or device token (tmn_, tmt_, tmd_)"
+regex = '''\btm[ntd]_[a-z2-7]{12}_[A-Za-z0-9_-]{43}'''
+keywords = ["tmn_", "tmt_", "tmd_"]
+
+[[allowlists]]
+description = "Throwaway credentials of the local and CI compose.test stack (never deployed)"
+paths = [
+  '''^deploy/test\.env$''',
+  '''^deploy/pgbackrest/rehearsal\.env$''',
+  '''^deploy/pgbackrest/test-conf\.d/''',
+]
