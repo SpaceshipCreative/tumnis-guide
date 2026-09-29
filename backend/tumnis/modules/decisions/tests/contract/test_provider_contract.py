@@ -44,7 +44,6 @@ def _recording(name: str) -> dict[str, Any]:
 
 @pytest.mark.req("FR-11.1")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 class TestFakeProvider(DecisionsProviderContract):
     """T-P1-01-08"""
 
@@ -58,7 +57,6 @@ class TestFakeProvider(DecisionsProviderContract):
 
 @pytest.mark.req("FR-11.2")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 class TestJevOnRecordings(DecisionsProviderContract):
     """T-P1-01-09"""
 
@@ -74,7 +72,6 @@ class TestJevOnRecordings(DecisionsProviderContract):
 
 @pytest.mark.req("FR-11.2")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 async def test_pinned_model_is_sent_and_answering_model_returned() -> None:
     """T-P1-01-12
     The request body carries the pinned id (`jev-1.13.0`), never an alias; the response's
@@ -127,7 +124,6 @@ async def test_pinned_model_is_sent_and_answering_model_returned() -> None:
 
 @pytest.mark.req("FR-11.9")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 async def test_rate_limit_error_is_retryable_and_opens_breaker() -> None:
     """T-P1-01-16
     A recorded 429 maps to the adapter base's retryable AdapterUnavailable carrying the

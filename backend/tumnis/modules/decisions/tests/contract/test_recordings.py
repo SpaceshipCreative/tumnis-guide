@@ -16,7 +16,6 @@ FIELDS = {"point", "inputs", "request", "response", "recorded_at", "sdk_version"
 
 @pytest.mark.req("FR-11.2")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 def test_recordings_cover_every_point() -> None:
     """T-P1-01-10
     Each of the nine points has at least one recording answered 200; `quick_add_label`

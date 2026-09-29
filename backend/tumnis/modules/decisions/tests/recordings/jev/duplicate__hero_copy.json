@@ -1,0 +1,80 @@
+{
+  "point": "duplicate",
+  "inputs": {
+    "proposal_title": "Update the Acme homepage hero copy",
+    "proposal_first_action": "Open the hero section in the CMS and paste Dana's copy",
+    "candidates": [
+      {
+        "title": "Replace the homepage hero text",
+        "acceptance_criteria": "The hero shows Dana's approved copy on production"
+      },
+      {
+        "title": "Fix the footer links",
+        "acceptance_criteria": "Every footer link resolves"
+      }
+    ]
+  },
+  "request": {
+    "state": {
+      "proposal_title": "Update the Acme homepage hero copy",
+      "proposal_first_action": "Open the hero section in the CMS and paste Dana's copy",
+      "candidates": [
+        {
+          "title": "Replace the homepage hero text",
+          "acceptance_criteria": "The hero shows Dana's approved copy on production"
+        },
+        {
+          "title": "Fix the footer links",
+          "acceptance_criteria": "Every footer link resolves"
+        }
+      ]
+    },
+    "model": "jev-1.13.0",
+    "questions": {
+      "dup_1": {
+        "type": "noul",
+        "instructions": "Candidate 1 in `candidates` describes the same work as the proposal (`proposal_title`, `proposal_first_action`).",
+        "criteria": {
+          "true": "Same work: doing one would complete the other.",
+          "false": "Different work."
+        }
+      },
+      "dup_2": {
+        "type": "noul",
+        "instructions": "Candidate 2 in `candidates` describes the same work as the proposal (`proposal_title`, `proposal_first_action`).",
+        "criteria": {
+          "true": "Same work: doing one would complete the other.",
+          "false": "Different work."
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "x-typesafe-request-id": "req_synthetic_0004"
+    },
+    "body": {
+      "model": "jev-1.13.0",
+      "usage": {
+        "input_tokens": 219,
+        "output_tokens": 2
+      },
+      "answers": {
+        "dup_1": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "dup_2": {
+          "type": "noul",
+          "noul": 0.03
+        }
+      }
+    }
+  },
+  "latency_ms": 205,
+  "recorded_at": null,
+  "sdk_version": "0.7.2",
+  "synthetic": true,
+  "notes": "Synthetic: hand-authored in the typesafe-sdk 0.7.2 wire shape (no real Jev call was made); all names, addresses and domains are invented (example.com/example.org). Replace with scripts/record_jev.py output against the real API."
+}

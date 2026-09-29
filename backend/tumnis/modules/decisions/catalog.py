@@ -15,7 +15,7 @@ include (T-P0-01-09).
 import json
 import math
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Annotated, Any, Final, Literal, Self
@@ -413,19 +413,19 @@ class DecisionInputError(ValueError):
         self.field = field
 
 
-class MissingDecisionInput(DecisionInputError):
+class MissingDecisionInput(DecisionInputError):  # noqa: N818  # the plan's name
     code = "decision_input_missing"
 
 
-class InvalidDecisionInput(DecisionInputError):
+class InvalidDecisionInput(DecisionInputError):  # noqa: N818  # the plan's name
     code = "decision_input_invalid"
 
 
-class TooManyOptions(DecisionInputError):
+class TooManyOptions(DecisionInputError):  # noqa: N818  # the plan's name
     code = "too_many_options"
 
 
-class DecisionRequestTooLarge(ValueError):
+class DecisionRequestTooLarge(ValueError):  # noqa: N818  # the plan's name
     """The request would exceed Jev's token limits (FR-11.9); nothing was sent."""
 
     code = "decision_request_too_large"
@@ -524,52 +524,69 @@ def _nouls(texts: Mapping[str, str]) -> dict[str, QuestionDef]:
     return {qid: NoulDef(instructions=text) for qid, text in texts.items()}
 
 
+def _label(inputs: Mapping[str, Any]) -> dict[str, QuestionDef]:
+    label = ChoiceDef(instructions=LABEL_INSTRUCTIONS, criteria=dict(LABEL_CRITERIA))
+    return {"label": label, **_nouls(LABEL_COMPANIONS)}
+
+
+def _project(inputs: Mapping[str, Any]) -> dict[str, QuestionDef]:
+    return {
+        "project": ChoiceDef(instructions=PROJECT_INSTRUCTIONS, criteria=_project_options(inputs))
+    }
+
+
+def _duplicates(inputs: Mapping[str, Any]) -> dict[str, QuestionDef]:
+    candidates = inputs.get("candidates")
+    count = len(candidates) if isinstance(candidates, list | tuple) else 0
+    if count == 0:
+        raise MissingDecisionInput(DecisionPoint.DUPLICATE, "candidates", "at least one candidate")
+    return {
+        f"dup_{n}": NoulDef(
+            instructions=f"Candidate {n} in `candidates` describes the same work as the "
+            "proposal (`proposal_title`, `proposal_first_action`).",
+            criteria=dict(DUPLICATE_CRITERIA),
+        )
+        for n in range(1, min(count, MAX_DUPLICATE_CANDIDATES) + 1)
+    }
+
+
+def _fixed(
+    qid: str, question: QuestionDef
+) -> Callable[[Mapping[str, Any]], dict[str, QuestionDef]]:
+    return lambda _inputs: {qid: question}
+
+
+_QUESTIONS: Final[Mapping[DecisionPoint, Callable[[Mapping[str, Any]], dict[str, QuestionDef]]]] = {
+    DecisionPoint.QUICK_ADD_LABEL: _label,
+    DecisionPoint.PROJECT_MATCH: _project,
+    DecisionPoint.ACTIONABILITY: _fixed(
+        "actionable",
+        NoulDef(instructions=ACTIONABLE_INSTRUCTIONS, criteria=dict(ACTIONABLE_CRITERIA)),
+    ),
+    DecisionPoint.DUPLICATE: _duplicates,
+    DecisionPoint.APPROVAL_NEED: _fixed(
+        "gated", NoulDef(instructions=GATED_INSTRUCTIONS, criteria=dict(GATED_CRITERIA))
+    ),
+    DecisionPoint.BLOCKING_IMPACT: _fixed(
+        "impact", ScoreDef(instructions=IMPACT_INSTRUCTIONS, criteria=list(IMPACT_LEVELS))
+    ),
+    DecisionPoint.FOCUS_ON_TASK: _fixed(
+        "on_task", NoulDef(instructions=ON_TASK_INSTRUCTIONS, criteria=dict(ON_TASK_CRITERIA))
+    ),
+    DecisionPoint.NUDGE_WARRANTED: _fixed(
+        "nudge", NoulDef(instructions=NUDGE_INSTRUCTIONS, criteria=dict(NUDGE_CRITERIA))
+    ),
+    DecisionPoint.ESTIMATE_PLAUSIBILITY: _fixed(
+        "plausibility",
+        ScoreDef(instructions=PLAUSIBILITY_INSTRUCTIONS, criteria=list(PLAUSIBILITY_LEVELS)),
+    ),
+}
+
+
 def questions_for(point: DecisionPoint, inputs: Mapping[str, Any]) -> dict[str, QuestionDef]:
     """The questions asked for `point`. Only `project_match` (the options) and `duplicate`
     (one Noul per candidate) depend on the inputs."""
-    if point is DecisionPoint.QUICK_ADD_LABEL:
-        label = ChoiceDef(instructions=LABEL_INSTRUCTIONS, criteria=dict(LABEL_CRITERIA))
-        return {"label": label, **_nouls(LABEL_COMPANIONS)}
-    if point is DecisionPoint.PROJECT_MATCH:
-        return {
-            "project": ChoiceDef(
-                instructions=PROJECT_INSTRUCTIONS, criteria=_project_options(inputs)
-            )
-        }
-    if point is DecisionPoint.ACTIONABILITY:
-        return {
-            "actionable": NoulDef(
-                instructions=ACTIONABLE_INSTRUCTIONS, criteria=dict(ACTIONABLE_CRITERIA)
-            )
-        }
-    if point is DecisionPoint.DUPLICATE:
-        candidates = inputs.get("candidates")
-        count = len(candidates) if isinstance(candidates, list | tuple) else 0
-        if count == 0:
-            raise MissingDecisionInput(point, "candidates", "at least one candidate")
-        return {
-            f"dup_{n}": NoulDef(
-                instructions=f"Candidate {n} in `candidates` describes the same work as the "
-                "proposal (`proposal_title`, `proposal_first_action`).",
-                criteria=dict(DUPLICATE_CRITERIA),
-            )
-            for n in range(1, min(count, MAX_DUPLICATE_CANDIDATES) + 1)
-        }
-    if point is DecisionPoint.APPROVAL_NEED:
-        return {"gated": NoulDef(instructions=GATED_INSTRUCTIONS, criteria=dict(GATED_CRITERIA))}
-    if point is DecisionPoint.BLOCKING_IMPACT:
-        return {"impact": ScoreDef(instructions=IMPACT_INSTRUCTIONS, criteria=list(IMPACT_LEVELS))}
-    if point is DecisionPoint.FOCUS_ON_TASK:
-        return {
-            "on_task": NoulDef(instructions=ON_TASK_INSTRUCTIONS, criteria=dict(ON_TASK_CRITERIA))
-        }
-    if point is DecisionPoint.NUDGE_WARRANTED:
-        return {"nudge": NoulDef(instructions=NUDGE_INSTRUCTIONS, criteria=dict(NUDGE_CRITERIA))}
-    return {
-        "plausibility": ScoreDef(
-            instructions=PLAUSIBILITY_INSTRUCTIONS, criteria=list(PLAUSIBILITY_LEVELS)
-        )
-    }
+    return _QUESTIONS[point](inputs)
 
 
 # --- The outbound request ----------------------------------------------------------------
