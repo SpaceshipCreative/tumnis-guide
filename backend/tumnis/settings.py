@@ -22,7 +22,13 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
-from tumnis.core.crypto import MasterKeys, configure_master_keys, load_master_keys
+from tumnis.core.crypto import (
+    PEPPER_FILE,
+    MasterKeys,
+    configure_master_keys,
+    configure_peppers,
+    load_master_keys,
+)
 
 
 class SettingsError(RuntimeError):
@@ -55,6 +61,9 @@ class Settings(BaseSettings):
     cache_backend: Literal["memory", "redis"] = "memory"
     redis_url: str | None = None
     tumnis_disabled_modules: str = ""  # comma-separated deployment kill list (P0-08)
+    # Base URL users reach (links, callbacks) and the only origin allowed to post to the
+    # sign-in routes (P0-13); unset, the request's own origin is used.
+    public_base_url: str | None = None
 
     @model_validator(mode="after")
     def _preview_guard(self) -> Self:
@@ -66,6 +75,12 @@ class Settings(BaseSettings):
                 )
             if self.typesafe_api_key is not None:
                 raise SettingsError("preview_has_production_secret", "a Jev key is set in preview")
+        if self.deployment_mode == "hosted" and not (self.public_base_url or "").startswith(
+            "https://"
+        ):
+            raise SettingsError(
+                "hosted_requires_https", "DEPLOYMENT_MODE=hosted needs an https:// PUBLIC_BASE_URL"
+            )
         if self.cache_backend == "redis":
             raise SettingsError(
                 "cache_backend_unavailable", "the redis cache backend arrives with hosted mode"
@@ -77,6 +92,16 @@ class Settings(BaseSettings):
         """The master key file, loaded and checked once (MasterKeyError when unsafe). The
         owner check applies in prod only: tests and dev run as whoever owns their files."""
         return load_master_keys(self.master_key_file, strict_owner=self.deployment_env == "prod")
+
+    @cached_property
+    def peppers(self) -> MasterKeys:
+        """The pepper file (API_KEY_PEPPER_FILE), loaded and checked once like the master
+        key file (P0-13)."""
+        return load_master_keys(
+            self.api_key_pepper_file,
+            strict_owner=self.deployment_env == "prod",
+            what=PEPPER_FILE,
+        )
 
     @property
     def dbos_system_url(self) -> str:
@@ -95,6 +120,16 @@ def install_master_keys(settings: Settings) -> MasterKeys | None:
     configure_master_keys(lambda: settings.master_keys)
     if settings.deployment_env == "prod" or Path(settings.master_key_file).exists():
         return settings.master_keys
+    return None
+
+
+def install_peppers(settings: Settings) -> MasterKeys | None:
+    """Point tumnis.core.crypto at the deployment's pepper file, loaded and checked now in
+    prod and whenever it exists (MasterKeyError); in dev and preview a missing file fails
+    only at the first sign-in."""
+    configure_peppers(lambda: settings.peppers)
+    if settings.deployment_env == "prod" or Path(settings.api_key_pepper_file).exists():
+        return settings.peppers
     return None
 
 

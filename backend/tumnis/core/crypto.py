@@ -23,7 +23,9 @@ from pathlib import Path
 from uuid import UUID
 
 from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,22 +56,23 @@ class MasterKeys:
 GROUP_OR_OTHERS = 0o077
 
 
-def load_master_keys(path: str, *, strict_owner: bool) -> MasterKeys:
+def load_master_keys(path: str, *, strict_owner: bool, what: str = "master key file") -> MasterKeys:
     """Reads the key file. Refuses (MasterKeyError) a file that is missing, not a regular
     file, readable (or writable) by group or others, malformed, or, with `strict_owner`
-    (prod), owned by anyone but root or the process user."""
+    (prod), owned by anyone but root or the process user. `what` names the file in the
+    errors (the pepper file has the same format and rules, P0-13)."""
     try:
         info = os.stat(path)
     except FileNotFoundError:
-        raise MasterKeyError(f"master key file not found: {path}") from None
+        raise MasterKeyError(f"{what} not found: {path}") from None
     except OSError as exc:
-        raise MasterKeyError(f"master key file unreadable: {path}: {exc.strerror}") from None
+        raise MasterKeyError(f"{what} unreadable: {path}: {exc.strerror}") from None
     if not stat.S_ISREG(info.st_mode):
-        raise MasterKeyError("master key file must be a regular file")
+        raise MasterKeyError(f"{what} must be a regular file")
     if info.st_mode & GROUP_OR_OTHERS:
-        raise MasterKeyError("master key file must not be readable by group or others")
+        raise MasterKeyError(f"{what} must not be readable by group or others")
     if strict_owner and info.st_uid not in (0, os.getuid()):
-        raise MasterKeyError("master key file must be owned by root or the service user")
+        raise MasterKeyError(f"{what} must be owned by root or the service user")
     try:
         body = json.loads(Path(path).read_bytes())
         active = int(body["active"])
@@ -79,12 +82,12 @@ def load_master_keys(path: str, *, strict_owner: bool) -> MasterKeys:
         }
     except (OSError, ValueError, TypeError, KeyError, AttributeError, binascii.Error):
         raise MasterKeyError(
-            'master key file must be JSON {"active": <n>, "keys": {"<n>": "<base64>"}}'
+            f'{what} must be JSON {{"active": <n>, "keys": {{"<n>": "<base64>"}}}}'
         ) from None
     if active not in keys:
-        raise MasterKeyError(f"master key file names active version {active} but lacks it")
+        raise MasterKeyError(f"{what} names active version {active} but lacks it")
     if any(len(key) != KEY_BYTES for key in keys.values()):
-        raise MasterKeyError(f"every master key must be {KEY_BYTES} bytes")
+        raise MasterKeyError(f"every key in the {what} must be {KEY_BYTES} bytes")
     return MasterKeys(active=active, keys=keys)
 
 
@@ -119,6 +122,51 @@ def master_keys() -> MasterKeys:
     if _state.keys is None:
         _state.keys = (_state.loader or _unconfigured)()
     return _state.keys
+
+
+# --- The pepper file (API_KEY_PEPPER_FILE, P0-13; P0-14 reuses it) ------------------------
+# Same format and checks as the master key file: {"active": n, "keys": {"n": "<base64>"}}.
+# Session tokens, CSRF tokens and the signed pre-auth tokens are HMACs under keys derived
+# from the active pepper; API keys (P0-14) record the pepper version they were made with.
+
+PEPPER_FILE = "pepper file"
+
+
+@dataclass
+class _PepperState:
+    loader: Callable[[], MasterKeys] | None = None
+    peppers: MasterKeys | None = None
+
+
+_pepper_state = _PepperState()
+
+
+def _no_pepper() -> MasterKeys:
+    raise MasterKeyError("no pepper file is configured in this process")
+
+
+def configure_peppers(loader: Callable[[], MasterKeys]) -> None:
+    """Where this process gets its peppers (create_app, tests); forgets any loaded."""
+    _pepper_state.loader, _pepper_state.peppers = loader, None
+
+
+def reset_peppers() -> None:
+    configure_peppers(_no_pepper)
+
+
+def peppers() -> MasterKeys:
+    """The configured peppers, loaded once (MasterKeyError when missing or unsafe)."""
+    if _pepper_state.peppers is None:
+        _pepper_state.peppers = (_pepper_state.loader or _no_pepper)()
+    return _pepper_state.peppers
+
+
+def derive_key(secret: bytes, info: str) -> bytes:
+    """A 32-byte key for one purpose from a pepper (HKDF-SHA256, no salt, `info` names
+    the purpose, for example "tumnis:csrf")."""
+    return HKDF(algorithm=hashes.SHA256(), length=KEY_BYTES, salt=None, info=info.encode()).derive(
+        secret
+    )
 
 
 def remembered_data_key(workspace_id: UUID, key_version: int) -> bytes | None:
