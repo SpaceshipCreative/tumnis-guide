@@ -31,6 +31,7 @@ from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import install_problem_handlers
 from tumnis.core.request_meta import RequestMetaMiddleware
 from tumnis.modules.auth import router as auth_router
+from tumnis.modules.usage import router as usage_router
 from tumnis.settings import Settings, install_master_keys
 
 # The built frontend (P0-22 replaces the placeholder shell); present in the image.
@@ -102,6 +103,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     app.include_router(deadletter.router)
     app.include_router(audit_router.router)
     app.include_router(auth_router.settings_router)  # R-14; P0-10 moves it onto v1_router
+    app.include_router(usage_router.router)  # P0-21; P0-10 moves it onto v1_router
     if settings.tumnis_adapters == "fake":
         app.include_router(testing_routes.router)
     if SHELL_DIR.is_dir():
