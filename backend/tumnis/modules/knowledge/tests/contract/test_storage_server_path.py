@@ -230,3 +230,43 @@ async def test_pr52_write_never_lands_outside_when_a_parent_is_swapped_mid_write
     with contextlib.suppress(Exception):
         await backend.write("a/new.txt", body(), if_match=None)
     assert _tree(outside) == before
+
+
+@pytest.mark.contract
+@pytest.mark.req("FR-15.7")
+@pytest.mark.wp("P1-14")
+@pytest.mark.xfail(strict=True, reason="review:PR52 partial create")
+async def test_pr52_failed_copy_on_a_share_without_links_leaves_no_partial_file(
+    tmp_location: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On a share without link() a create copies the temp file into an exclusive new name;
+    when the copy fails partway (ENOSPC, EIO) the new name goes too, so a retry creates it
+    instead of meeting a truncated file."""
+    from tumnis.core.adapters.errors import AdapterError  # noqa: PLC0415
+    from tumnis.modules.knowledge.adapters import server_path  # noqa: PLC0415
+
+    def no_link(*_args: object, **_kwargs: object) -> None:
+        raise OSError(errno.EPERM, "link() not supported")
+
+    write_all = server_path._write_all
+
+    def full_disk_outside_temp(fd: int, chunk: bytes) -> None:
+        if (
+            not os.readlink(f"/proc/self/fd/{fd}")
+            .rpartition("/")[2]
+            .startswith(server_path.TMP_PREFIX)
+        ):
+            raise OSError(errno.ENOSPC, "No space left on device")
+        write_all(fd, chunk)
+
+    monkeypatch.setattr(os, "link", no_link)
+    monkeypatch.setattr(server_path, "_write_all", full_disk_outside_temp)
+    backend = server_path.ServerPathStorage(tmp_location, network_fs=True)
+
+    with pytest.raises(AdapterError):
+        await backend.write("note.md", chunks(b"complete"), if_match=None)
+    assert not (tmp_location / "note.md").exists()
+
+    monkeypatch.setattr(server_path, "_write_all", write_all)
+    await backend.write("note.md", chunks(b"complete"), if_match=None)
+    assert await read_all(backend, "note.md") == b"complete"
