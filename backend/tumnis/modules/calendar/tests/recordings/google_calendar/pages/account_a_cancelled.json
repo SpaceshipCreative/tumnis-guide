@@ -1,0 +1,36 @@
+{
+  "calendar_id": "avery@example.com",
+  "self_email": "avery@example.com",
+  "request": {
+    "pageToken": null,
+    "timeMin": "2026-03-08T05:00:00Z",
+    "timeMax": "2026-03-24T04:00:00Z"
+  },
+  "response": {
+    "kind": "calendar#events",
+    "etag": "\"p33example\"",
+    "summary": "avery@example.com",
+    "description": "",
+    "updated": "2026-03-02T15:04:05.000Z",
+    "timeZone": "America/New_York",
+    "accessRole": "owner",
+    "defaultReminders": [
+      {
+        "method": "popup",
+        "minutes": 10
+      }
+    ],
+    "items": [
+      {
+        "kind": "calendar#event",
+        "etag": "\"3000000000000099\"",
+        "id": "a-kickoff",
+        "status": "cancelled",
+        "htmlLink": "https://calendar.example.com/event?eid=YS1raWNrb2Zm",
+        "updated": "2026-03-09T11:30:00.000Z",
+        "iCalUID": "kickoff-shared@example.com"
+      }
+    ]
+  },
+  "notes": "a-kickoff cancelled after sync 1 (T-P1-09-04). Scrubbed: people, addresses, calendar ids, event ids, iCalUIDs, etags and links are invented (example.com/example.org); times are the fixture week of 2026-03-09 in America/New_York."
+}
