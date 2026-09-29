@@ -17,6 +17,12 @@ none (the subscriber runs in the worker, maybe after the first request). Layout 
 on read (`rules.layout_board` against `projects.api.effective_subtask_threshold`), never
 stored, so a threshold change loses nothing.
 
+Undo (P0-24, R-09): every task write (create, update, status, move, trash) records the
+undoable fields it changed (`rules.UNDO_FIELDS`) in `task_changes`, in the same
+transaction, and answers the change's id as `TaskOut.change_id`. `undo_task` puts a
+change's `before` back for a person, once, while the task is still at the version the
+change left; the undo is a change of its own.
+
 Also here: the ReviewItem interface (R-03, `review.py`), the `ProjectStatsSource` projects'
 health reads (registered at import) and the task seed writer.
 """
@@ -34,6 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tumnis.core import rank, tenancy
 from tumnis.core.clock import SystemClock
 from tumnis.core.errors import ProblemError
+from tumnis.core.ids import uuid7
 from tumnis.core.limits import MAX_ESTIMATE_MINUTES
 from tumnis.core.live import mark_changed
 from tumnis.core.outbox import emit
@@ -45,7 +52,13 @@ from tumnis.core.versioning import NotFound, StaleVersion, Version, update_versi
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import rules
-from tumnis.modules.tasks.models import BoardColumn, Task, TaskComment, TaskContextItem
+from tumnis.modules.tasks.models import (
+    BoardColumn,
+    Task,
+    TaskChange,
+    TaskComment,
+    TaskContextItem,
+)
 from tumnis.modules.tasks.payloads import (
     DOC_BODY_MAX_BYTES,
     TaskCreatedV1,
@@ -84,6 +97,7 @@ _tasks: Table = Task.__table__  # type: ignore[assignment]
 _columns: Table = BoardColumn.__table__  # type: ignore[assignment]
 _comments: Table = TaskComment.__table__  # type: ignore[assignment]
 _links: Table = TaskContextItem.__table__  # type: ignore[assignment]
+_changes: Table = TaskChange.__table__  # type: ignore[assignment]
 
 LIVE_ENTITY: Final = "task"
 PROJECT_ENTITY: Final = "project"  # column edits refresh the project's views
@@ -160,6 +174,9 @@ class TaskOut(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    # The change this write recorded (P0-24, R-09): pass it to `POST /tasks/{id}/undo`.
+    # Null on reads and on a write that changed nothing undoable.
+    change_id: UUID | None = None
 
 
 class TaskPatch(BaseModel):
@@ -268,8 +285,13 @@ def _label(value: str | None) -> Label | None:
     return None if value is None else Label(value)
 
 
-async def _row(s: AsyncSession, task_id: UUID, *, lock: bool = False) -> RowMapping:
-    stmt = select(_tasks).where(_tasks.c.id == task_id, _live(_tasks))
+async def _row(
+    s: AsyncSession, task_id: UUID, *, lock: bool = False, trashed: bool = False
+) -> RowMapping:
+    """The task (404 when missing; a trashed one only with `trashed=True`)."""
+    stmt = select(_tasks).where(_tasks.c.id == task_id)
+    if not trashed:
+        stmt = stmt.where(_live(_tasks))
     if lock:
         stmt = stmt.with_for_update()
     found = (await s.execute(stmt)).mappings().first()
@@ -480,6 +502,48 @@ def _rank_or_422(key: str) -> str:
     return key
 
 
+# --- Change log (P0-24, R-09) ------------------------------------------------------------------
+
+
+async def record_change(
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+) -> UUID:
+    """One `task_changes` row for a task write, in the caller's transaction: the undoable
+    fields it changed (`rules.UNDO_FIELDS`, JSON values) before and after. Answers the
+    change id the write returns as `TaskOut.change_id`."""
+    change_id = uuid7()
+    await s.execute(
+        pg_insert(_changes).values(
+            task_id=task_id,
+            change_id=change_id,
+            actor=str(actor),
+            before=dict(before),
+            after=dict(after),
+            created_by=actor,
+        )
+    )
+    return change_id
+
+
+async def _record(
+    s: AsyncSession, actor: ActorRef, before_row: Mapping[Any, Any], after_row: Mapping[Any, Any]
+) -> UUID | None:
+    """Records what a write changed between two versions of the row; None (no row) when
+    nothing undoable changed."""
+    before, after = rules.change_between(before_row, after_row)
+    if not before:
+        return None
+    return await record_change(s, actor, after_row["id"], before, after)
+
+
+def _with_change(row: Mapping[Any, Any], change_id: UUID | None) -> TaskOut:
+    return _out(row).model_copy(update={"change_id": change_id})
+
+
 # --- Writing ---------------------------------------------------------------------------------
 
 
@@ -542,7 +606,10 @@ async def _insert(
         occurred_at=_now(now),
     )
     mark_changed(s, LIVE_ENTITY, created["id"])
-    return _out(created)
+    change_id = await record_change(
+        s, actor, created["id"], {"deleted": True}, {"deleted": False}
+    )  # undoing a create puts the task in the trash
+    return _with_change(created, change_id)
 
 
 async def create_task(
@@ -611,7 +678,7 @@ async def update_task(
     updated = await _versioned(s, task_id, version, values or {"updated_at": func.now()})
     if changed:
         await _changed(s, updated, changed, now)
-    return _out(updated)
+    return _with_change(updated, await _record(s, actor, row, updated))
 
 
 async def _transition(  # one path for /status and /move
@@ -667,7 +734,7 @@ async def _transition(  # one path for /status and /move
         occurred_at=at,
     )
     mark_changed(s, LIVE_ENTITY, row["id"])
-    return _out(updated)
+    return _with_change(updated, await _record(s, actor, row, updated))
 
 
 async def change_status(
@@ -727,7 +794,116 @@ async def move_task(  # noqa: PLR0917  # R-20's body, plus who and when
     updated = await _versioned(s, task_id, version, values)
     if changed:
         await _changed(s, updated, changed, now)
-    return _out(updated)
+    return _with_change(updated, await _record(s, actor, row, updated))
+
+
+async def trash_task(
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    version: int,
+    *,
+    now: datetime | None = None,
+) -> TaskOut:
+    """Moves the task to the trash (`deleted_at`; the housekeeping purge removes it after
+    30 days, P0-19); agents never hard-delete (UX 9). Emits `task.updated` with `deleted`;
+    undoable like any write."""
+    row = await _row(s, task_id, lock=True)
+    if row["version"] != version:
+        raise _stale(row)
+    updated = await _versioned(s, task_id, version, {"deleted_at": _now(now)})
+    await _changed(s, updated, ["deleted"], now)
+    return _with_change(updated, await _record(s, actor, row, updated))
+
+
+async def _restored_column(s: AsyncSession, row: Mapping[Any, Any], values: dict[str, Any]) -> None:
+    """Keeps a restored column only while it is a live column of the task's project
+    holding the restored status; otherwise the task goes last in the first column that
+    holds it."""
+    status = Status(values.get("status", row["status"]))
+    column_id = values.get("column_id", row["column_id"])
+    live = await s.scalar(
+        select(_columns.c.id).where(
+            _columns.c.id == column_id,
+            _columns.c.project_id == row["project_id"],
+            _columns.c.status_map == status,
+            _live(_columns),
+        )
+    )
+    if live is None:
+        values["column_id"], values["board_rank"] = await _slot(s, row["project_id"], status)
+
+
+async def undo_task(
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    change_id: UUID,
+    version: int,
+    *,
+    now: datetime | None = None,
+) -> TaskOut:
+    """Puts back what change `change_id` of this task changed (R-09, UX 9). A person only
+    (403 `session_required` for an agent); the change must belong to the task (404) and
+    not be undone yet (409 `already_undone`); `version` must be the task's current one
+    (409 `stale_version`: it changed since). Applies the change's `before` without the
+    transition table, recomputes `completed_at` for the restored status, never touches the
+    history fields, marks the change undone and records the undo as a change of its own.
+    Emits `task.updated` and, when the status comes back, `task.status_changed` with
+    `via="undo"`."""
+    if actor_kind(actor) is not ActorKind.HUMAN:
+        raise ProblemError(403, "session_required", "Only a person can undo a change")
+    row = await _row(s, task_id, lock=True, trashed=True)
+    change = (
+        (
+            await s.execute(
+                select(_changes)
+                .where(_changes.c.change_id == change_id, _changes.c.task_id == task_id)
+                .with_for_update()
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if change is None:
+        raise NotFound("task_changes", change_id)
+    if change["undone_at"] is not None:
+        raise ProblemError(409, "already_undone", "This change was already undone")
+    if row["version"] != version:
+        raise _stale(row)
+    at = _now(now)
+    values = rules.restore_values(change["before"], row["completed_at"], at)
+    if "status" in values or "column_id" in values:
+        await _restored_column(s, row, values)
+    updated = (
+        (
+            await s.execute(
+                update(_tasks)
+                .where(_tasks.c.id == task_id, _tasks.c.version == version)
+                .values(**values)
+                .returning(*_tasks.c)
+            )
+        )
+        .mappings()
+        .one()
+    )  # the row is locked at `version`
+    await s.execute(update(_changes).where(_changes.c.id == change["id"]).values(undone_at=at))
+    before, _after = rules.change_between(row, updated)
+    if before:
+        await _changed(s, updated, list(before), now)
+    if updated["status"] != row["status"]:
+        await emit(
+            s,
+            TaskStatusChangedV1(
+                task_id=task_id,
+                from_=Status(row["status"]),
+                to=Status(updated["status"]),
+                actor=str(actor),
+                via="undo",
+            ),
+            occurred_at=at,
+        )
+    return _with_change(updated, await _record(s, actor, row, updated))
 
 
 async def add_comment(
@@ -748,6 +924,17 @@ async def add_comment(
     )
     await _changed(s, row, ["comments"], now)
     return CommentOut.model_validate(dict(created))
+
+
+async def list_comments(
+    s: AsyncSession, task_id: UUID, *, cursor: str | None = None, limit: int = 50
+) -> Page[CommentOut]:
+    """The task's comments, oldest first (404 for a task the caller cannot see)."""
+    await _row(s, task_id)
+    stmt = select(_comments).where(_comments.c.task_id == task_id, _live(_comments))
+    return await paginate(
+        s, stmt, keys=[], id_col=_comments.c.id, cursor=cursor, limit=limit, model=CommentOut
+    )
 
 
 async def link_context_item(

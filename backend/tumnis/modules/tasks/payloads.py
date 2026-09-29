@@ -8,7 +8,7 @@ calls `api.py` (no import cycle inside the module).
 - `task.updated`: fields changed (`changed_fields`, sorted; `comments` when a comment was
   added) and the task's `doc` after the change (R-06: later WPs only add fields).
 - `task.status_changed`: `from`, `to` and the actor (an ActorRef: `user:<id>`,
-  `api_key:<id>`, `system`, ...).
+  `api_key:<id>`, `system`, ...); `via` is `undo` when an undo put the status back (P0-24).
 - `human.decided`: a decision on a review item (R-07's superset). The payload is fixed here;
   P1-13 and P2-05 emit it.
 
@@ -68,6 +68,7 @@ class TaskStatusChangedV1(EventPayload):
     from_: Status = Field(alias="from")
     to: Status
     actor: str
+    via: Literal["undo"] | None = None  # set when an undo put the status back (P0-24)
 
 
 @event_type("human.decided", 1)

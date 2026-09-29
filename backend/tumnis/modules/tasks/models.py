@@ -1,4 +1,5 @@
-"""tasks SQLAlchemy tables owned by this module (mirrors of revision tasks_0001).
+"""tasks SQLAlchemy tables owned by this module (mirrors of revisions tasks_0001 and
+tasks_0003).
 
 `board_rank` and `sort_key` compare bytewise (`COLLATE "C"`), so Postgres orders the
 fractional keys as Python and TypeScript do (core/rank.py)."""
@@ -73,6 +74,19 @@ class TaskContextItem(TenantBase, Base):
 
     task_id: Mapped[UUID] = mapped_column(ForeignKey("tasks.id"))
     context_item_id: Mapped[UUID] = mapped_column(ForeignKey("context_items.id"))
+
+
+class TaskChange(TenantBase, Base):
+    """One task write's undoable fields before and after (P0-24, R-09)."""
+
+    __tablename__ = "task_changes"
+
+    task_id: Mapped[UUID] = mapped_column(ForeignKey("tasks.id"))
+    change_id: Mapped[UUID]
+    actor: Mapped[str]
+    before: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    after: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    undone_at: Mapped[datetime | None]
 
 
 class ReviewItem(TenantBase, Base):
