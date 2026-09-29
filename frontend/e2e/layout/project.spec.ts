@@ -13,7 +13,6 @@ test(
   "T-P0-24-17 project page at both widths",
   { tag: ["@P0-24", "@FR-2.2", "@FR-2.8"] },
   async ({ page }, testInfo) => {
-    test.fail();
     await openProject(page, "Acme brand refresh");
     const main = page.getByRole("main");
     await expect(main.getByRole("textbox", { name: "New task" })).toBeVisible();

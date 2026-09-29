@@ -17,7 +17,6 @@ test(
   "T-P0-24-04 a drag sends one move request with the new board_rank",
   { tag: ["@P0-24", "@FR-3.2"] },
   async ({ page }, testInfo) => {
-    test.fail();
     test.skip(
       testInfo.project.name !== "laptop",
       "pointer drag; the phone moves cards by touch (preview check) or the Move menu",
@@ -89,7 +88,6 @@ test(
   "T-P0-24-05 a keyboard drag moves a card between columns",
   { tag: ["@P0-24", "@UX-7"] },
   async ({ page }) => {
-    test.fail();
     await openProject(page, PROJECT, "?view=board");
     const backlog = section(page, "Backlog");
     const card = boardCards(backlog).first();
