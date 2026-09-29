@@ -3,16 +3,19 @@
 `decisions.jev` is registered with a real factory that imports `adapters/jev.py` (and so
 `typesafe_sdk`) only when a real provider is built, which happens in the worker: the api
 process wires the registry but never imports the SDK (import-linter `api-never-calls-out`).
+`decisions.vllm_generation` (P1-03) is built the same way: only `generation_api` asks it
+(import-linter `generation-callers`), and only the worker makes its outbound call.
 """
 
 import importlib
 from typing import Any
 
 from tumnis.core.adapters.registry import register_adapter
-from tumnis.modules.decisions.adapters.fake import FakeDecisions
-from tumnis.modules.decisions.adapters.port import DecisionsProvider
+from tumnis.modules.decisions.adapters.fake import FakeDecisions, FakeGeneration
+from tumnis.modules.decisions.adapters.port import DecisionsProvider, GenerationProvider
 
 JEV_MODULE = "tumnis.modules.decisions.adapters.jev"
+VLLM_GENERATION_MODULE = "tumnis.modules.decisions.adapters.vllm_generation"
 
 
 def build_jev(**deps: Any) -> DecisionsProvider:
@@ -22,4 +25,17 @@ def build_jev(**deps: Any) -> DecisionsProvider:
     return provider
 
 
+def build_vllm_generation(**deps: Any) -> GenerationProvider:
+    """VllmGeneration(base_url, model, clock=..., net_policy=...), imported on first use."""
+    vllm = importlib.import_module(VLLM_GENERATION_MODULE)
+    provider: GenerationProvider = vllm.VllmGeneration(**deps)
+    return provider
+
+
 register_adapter("decisions.jev", port=DecisionsProvider, real=build_jev, fake=FakeDecisions)
+register_adapter(
+    "decisions.vllm_generation",
+    port=GenerationProvider,
+    real=build_vllm_generation,
+    fake=FakeGeneration,
+)

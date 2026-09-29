@@ -1,0 +1,62 @@
+{
+  "input": {
+    "system": "Rewrite this message as one short sentence to be read aloud. No preamble.",
+    "user": "Focus: Review the Acme agreement (45 min) before the 2 pm call with Dana Example.",
+    "max_tokens": 96
+  },
+  "request": {
+    "method": "POST",
+    "url": "http://vllm.example.org:8000/v1/chat/completions",
+    "body": {
+      "model": "Qwen/Qwen2.5-3B-Instruct",
+      "messages": [
+        {
+          "role": "system",
+          "content": "Rewrite this message as one short sentence to be read aloud. No preamble."
+        },
+        {
+          "role": "user",
+          "content": "Focus: Review the Acme agreement (45 min) before the 2 pm call with Dana Example."
+        }
+      ],
+      "max_tokens": 96,
+      "temperature": 0.2,
+      "n": 1,
+      "stream": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": "chatcmpl-7b2e3c4d5e6f40718c9d0e1f2a3b4c5d",
+      "object": "chat.completion",
+      "created": 1759150000,
+      "model": "Qwen/Qwen2.5-3B-Instruct",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Take the next forty-five minutes to review the Acme agreement before your two o'clock call.",
+            "tool_calls": []
+          },
+          "logprobs": null,
+          "finish_reason": "stop",
+          "stop_reason": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 44,
+        "total_tokens": 64,
+        "completion_tokens": 20
+      },
+      "prompt_logprobs": null
+    }
+  },
+  "recorded_at": null,
+  "vllm_version": "0.12.0",
+  "notes": "Synthetic: hand-authored in the OpenAI-compatible chat completion shape vLLM 0.12 returns (no live vLLM endpoint was reachable from the build machine); the host is example.org and every task, project and person is invented. Replace with a scrubbed recording from the homelab vLLM."
+}
