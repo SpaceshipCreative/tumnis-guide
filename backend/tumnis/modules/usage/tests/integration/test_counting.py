@@ -155,7 +155,6 @@ async def test_counters_are_per_workspace(
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-21")
-@pytest.mark.xfail(strict=True, reason="spec:P0-21")
 async def test_report_by_day_range(
     app: FastAPI, client: httpx.AsyncClient, db: DbUrls, workspace: WorkspaceHandle
 ) -> None:
