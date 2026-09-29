@@ -27,7 +27,7 @@ from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import RowMapping, Table, and_, func, select, update
+from sqlalchemy import RowMapping, Table, and_, case, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,7 +37,7 @@ from tumnis.core.errors import ProblemError
 from tumnis.core.limits import MAX_ESTIMATE_MINUTES
 from tumnis.core.live import mark_changed
 from tumnis.core.outbox import emit
-from tumnis.core.pagination import Page, paginate
+from tumnis.core.pagination import Page, SortKey, paginate
 from tumnis.core.routing import register_project_lookup
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR, ActorRef
@@ -90,6 +90,7 @@ LIVE_ENTITY: Final = "task"
 PROJECT_ENTITY: Final = "project"  # column edits refresh the project's views
 Priority = Literal["low", "normal", "high", "urgent"]
 LabelSource = Literal["user", "jev", "agent", "fallback"]
+TaskOrder = Literal["created", "today"]
 Title = Annotated[str, StringConstraints(min_length=1, max_length=500, strip_whitespace=True)]
 Estimate = Annotated[int, Field(gt=0, le=MAX_ESTIMATE_MINUTES)]
 LongText = Annotated[str, StringConstraints(max_length=8_000)]
@@ -161,6 +162,13 @@ class TaskOut(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+class TaskPage(Page[TaskOut]):
+    """A page of tasks and how many match the filter across every page (P0-23): the Today
+    panel shows five and says "+N more"."""
+
+    total: int
 
 
 class TaskPatch(BaseModel):
@@ -332,12 +340,15 @@ async def list_tasks(
     *,
     project_id: UUID | None = None,
     status: Status | None = None,
+    order: TaskOrder = "created",
     cursor: str | None = None,
     limit: int = 50,
     project_ids: frozenset[UUID] | None = None,
-) -> Page[TaskOut]:
-    """Live tasks in creation order, optionally of one project or one status. `project_ids`
-    limits them (a project-limited key, R-28)."""
+) -> TaskPage:
+    """Live tasks, optionally of one project or one status, with the filter's `total`.
+    `order="created"` is creation order; `order="today"` is `rules.today_order` (priority,
+    then due date with undated last, then oldest, then id) as keyset keys, so the pages
+    walk the same order. `project_ids` limits them (a project-limited key, R-28)."""
     stmt = select(_tasks).where(_live(_tasks))
     if project_id is not None:
         stmt = stmt.where(_tasks.c.project_id == project_id)
@@ -345,9 +356,26 @@ async def list_tasks(
         stmt = stmt.where(_tasks.c.status == status)
     if project_ids is not None:
         stmt = stmt.where(_tasks.c.project_id.in_(project_ids))
-    return await paginate(
-        s, stmt, keys=[], id_col=_tasks.c.id, cursor=cursor, limit=limit, model=TaskOut
+    total = await s.scalar(select(func.count()).select_from(stmt.subquery()))
+    keys = _TODAY_KEYS if order == "today" else []
+    page = await paginate(
+        s, stmt, keys=keys, id_col=_tasks.c.id, cursor=cursor, limit=limit, model=TaskOut
     )
+    return TaskPage(items=page.items, next_cursor=page.next_cursor, total=total or 0)
+
+
+# `rules.today_order` in SQL: the same keys, ranks from `rules.PRIORITY_RANK`.
+_TODAY_KEYS: Final = (
+    SortKey(
+        case(
+            *((_tasks.c.priority == name, rank) for name, rank in rules.PRIORITY_RANK.items()),
+            else_=len(rules.PRIORITY_RANK),
+        )
+    ),
+    SortKey(_tasks.c.due_on.is_(None)),
+    SortKey(_tasks.c.due_on, nulls_last_sentinel=date.max),
+    SortKey(_tasks.c.created_at),
+)
 
 
 # --- Columns ---------------------------------------------------------------------------------
