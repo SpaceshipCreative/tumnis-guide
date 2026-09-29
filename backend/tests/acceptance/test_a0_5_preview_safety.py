@@ -2,11 +2,10 @@
 
 A preview boots on fakes against a database marked `preview` and refuses to start
 (exit 78, EX_CONFIG) with real adapters, the production database, a Jev key or the
-production master key. One test, one row per case: each row carries its own spec marker
-in CASES, so P0-04 removes a row's marker as soon as that row passes. The Playwright part
-is frontend/e2e/acceptance/A0.5-preview-smoke.spec.ts (@smoke).
-
-Turns green with P0-04 (the Jev setting row needs P0-08's workspace_settings).
+production master key. One test, one row per case: a row waiting for code carries its
+own spec marker in CASES, removed as soon as that row passes. P0-04 turned every row but
+`jev_key_setting` green (that one needs P0-08's workspace_settings check). The Playwright
+part is frontend/e2e/acceptance/A0.5-preview-smoke.spec.ts (@smoke).
 """
 
 from __future__ import annotations
@@ -56,8 +55,12 @@ class PreviewCase:
     boots: bool = False
 
 
-def _case(case_id: str, case: PreviewCase) -> Any:
-    return pytest.param(case, id=case_id, marks=pytest.mark.xfail(strict=True, reason="spec:P0-05"))
+# A row still waiting for code carries this marker; it comes off the moment the row passes.
+SPEC = pytest.mark.xfail(strict=True, reason="spec:P0-05")
+
+
+def _case(case_id: str, case: PreviewCase, *marks: Any) -> Any:
+    return pytest.param(case, id=case_id, marks=marks)
 
 
 PREVIEW = {"DEPLOYMENT_ENV": "preview", "TUMNIS_ADAPTERS": "fake"}
@@ -81,6 +84,7 @@ CASES = [
     _case(
         "jev_key_setting",
         PreviewCase(PREVIEW, jev_setting=True, refusal="preview_has_production_secret"),
+        SPEC,  # the workspace_settings check arrives with P0-08
     ),
     _case(
         "prod_master_key",
@@ -169,11 +173,15 @@ async def ready_status() -> tuple[int, str]:
     import httpx  # noqa: PLC0415
 
     from tumnis.app import create_app  # noqa: PLC0415
+    from tumnis.core import db as core_db  # noqa: PLC0415
 
     app = create_app()
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
-        response = await client.get("/health/ready")
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
+            response = await client.get("/health/ready")
+    finally:
+        await core_db.dispose()  # the test database is dropped after the test
     return response.status_code, response.text
 
 
