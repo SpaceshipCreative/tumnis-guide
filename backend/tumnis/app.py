@@ -41,6 +41,7 @@ from tumnis.core.principal import AuthenticationMiddleware
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.request_meta import RequestMetaMiddleware
 from tumnis.core.routing import new_request_log
+from tumnis.migrate import release_revisions
 from tumnis.modules.auth import router as auth_router
 from tumnis.settings import Settings, install_master_keys, install_peppers, require_hosted_tls
 
@@ -172,6 +173,10 @@ def create_app(
     health.clear_health()
     health.register_health("postgres", health.sql_check(db.app_engine, "SELECT 1"), critical=True)
     health.register_health("dbos", health.dbos_check(settings.dbos_system_url), critical=True)
+    # Behind this release's migrations is down; ahead of them (a rollback) is ready (REL-4).
+    health.register_health(
+        "schema", health.schema_check(db.app_engine, release_revisions().position), critical=True
+    )
     # Backups (P0-28): degraded, never down, while the last freshness check failed.
     health.register_health(
         "backups", ops_status.health_check(db.app_engine, "backups"), critical=False
