@@ -314,3 +314,32 @@ async def test_result_for_a_run_on_another_runner_is_dropped(
         (packet.run_id,),
     )
     assert rows[0][0] == 0
+
+
+@pytest.mark.req("FR-5.11")
+@pytest.mark.wp("P1-04")
+async def test_result_acks_its_run_message(
+    workspace: WorkspaceHandle,
+    clock: FixedClock,
+    db: DbUrls,
+    fake_runner: FakeRunnerFactory,
+) -> None:
+    """A result from the run's runner shows the runner got the `run`: its mailbox row turns
+    `acked` even when the runner's ack of it was lost, so the server never resends a run
+    whose result it already has (the daemon would execute the skill again)."""
+    from tumnis.modules.agents.adapters.hermes import (  # noqa: PLC0415
+        DaemonTransport,
+        HermesAgent,
+    )
+    from tumnis.modules.agents.tests.contract.base import SKILL, make_packet  # noqa: PLC0415
+
+    runner = fake_runner(profiles=["acme-site"])
+    runner.ack_server_messages = False  # the runner's ack of the run is lost
+    runner.script("acme-site", SKILL, {"first_action": "Call Acme"})
+    profile_id = fake_runner.register_profile("acme-site", runner=runner)
+    packet = make_packet(profile_id)
+    await HermesAgent(profile_id, DaemonTransport(workspace.ctx, clock)).dispatch(packet)
+    runner.wait_for(lambda r: any(m.type == "result" and m.message_id in r.acked for m in r.sent))
+    run = next(m for m in runner.runs() if m.run_id == packet.run_id)
+    rows = _owner(db, "SELECT status FROM runner_messages WHERE message_id = %s", (run.message_id,))
+    assert rows == [("acked",)]
