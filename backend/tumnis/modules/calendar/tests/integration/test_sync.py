@@ -20,6 +20,7 @@ from tumnis.modules.calendar.tests.integration._calendar import (
     recording,
     refresh_token,
     rows,
+    scalar,
 )
 
 if TYPE_CHECKING:
@@ -320,3 +321,72 @@ async def test_calendar_synced_emitted_once_per_sync(
     synced = outbox(app_db, "calendar.synced")
     assert len(synced) == 2
     assert {row["payload"]["connection_id"] for row in synced} == {str(conn_a)}
+
+
+@pytest.mark.req("FR-14.3")
+@pytest.mark.wp("P1-09")
+@pytest.mark.xfail(strict=True, reason="review:P1-09 per-account sync lock")
+async def test_one_sync_per_account_at_a_time(
+    app_db: DbUrls,
+    workspace: WorkspaceHandle,
+    google: FakeGoogleCalendar,
+    oauth_client: None,
+    dbos: type[DBOS],
+) -> None:
+    """A second sync of an account (Sync now during the scheduled one) ends `busy` while
+    the first holds the account, touching neither its cursor nor its events; the first
+    finishes with one `calendar.synced`, and the next sync runs normally."""
+    import asyncio  # noqa: PLC0415
+
+    conn_a = await connect(workspace.ctx, "a")
+    hold = google.hold_events(ACCOUNTS["a"])
+    first = asyncio.create_task(_sync(workspace, conn_a))
+    await asyncio.wait_for(hold.entered.wait(), 10)
+
+    second = await _sync(workspace, conn_a)
+    assert second == {"status": "busy"}
+    assert rows(app_db, "events", conn_a) == []
+
+    hold.release.set()
+    assert (await first)["status"] == "synced"
+    events = rows(app_db, "events", conn_a)
+    assert events
+    assert len(outbox(app_db, "calendar.synced")) == 1
+
+    assert (await _sync(workspace, conn_a))["status"] == "synced"
+    assert len(outbox(app_db, "calendar.synced")) == 2
+
+
+@pytest.mark.req("FR-14.3")
+@pytest.mark.wp("P1-09")
+@pytest.mark.xfail(strict=True, reason="review:P1-09 per-account sync lock")
+async def test_failed_sync_frees_the_account(
+    app_db: DbUrls,
+    workspace: WorkspaceHandle,
+    google: FakeGoogleCalendar,
+    oauth_client: None,
+    dbos: type[DBOS],
+) -> None:
+    """A sync that failed for good no longer holds its account: the next sync runs and
+    emits `calendar.synced`."""
+    from tumnis.core.adapters.errors import AdapterUnavailable  # noqa: PLC0415
+
+    conn_a = await connect(workspace.ctx, "a")
+    google.fail_events(ACCOUNTS["a"], AdapterUnavailable("calendar.google", "list_events", "503"))
+    with pytest.raises(Exception):  # noqa: B017, PT011  # DBOS may wrap the adapter error
+        await _sync(workspace, conn_a)
+    assert _holder(app_db, conn_a) is not None
+
+    google.fail_events(ACCOUNTS["a"], None)
+    assert (await _sync(workspace, conn_a))["status"] == "synced"
+    assert len(outbox(app_db, "calendar.synced")) == 1
+    assert _holder(app_db, conn_a) is None
+
+
+
+def _holder(db: DbUrls, connection_id: uuid.UUID) -> str | None:
+    """The workflow holding the account's sync lease, if any."""
+    holder: str | None = scalar(
+        db, "SELECT sync_owner FROM calendar_accounts WHERE connection_id = %s", connection_id
+    )
+    return holder

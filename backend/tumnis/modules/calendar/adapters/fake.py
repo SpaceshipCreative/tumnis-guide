@@ -8,11 +8,14 @@ avery@example.com or blake@example.org, each with its primary calendar.
 Scripting hooks: `script_pages` (the next sync's pages for a calendar), `revoke` (a refresh
 token answers the recorded `invalid_grant`), `fail_events` (every events.list of a calendar
 raises), `fail_calendar_list` (the next calendarList calls raise), `script_calendar_list`
-(the next calendarList answers these calendars). `calls` records every
+(the next calendarList answers these calendars), `hold_events` (the next events.list of a
+calendar waits until released). `calls` records every
 call as (op, kwargs) without secrets; `refreshed` lists the refresh tokens used.
 """
 
+import asyncio
 import json
+from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -51,6 +54,14 @@ def _invalid_grant_message() -> str:
     return str(body.get("error", INVALID_GRANT))
 
 
+@dataclass
+class Hold:
+    """An events.list call held open: `entered` is set once it waits, `release` lets it go."""
+
+    entered: asyncio.Event = field(default_factory=asyncio.Event)
+    release: asyncio.Event = field(default_factory=asyncio.Event)
+
+
 class FakeGoogleCalendar:
     def __init__(self, *, clock: Clock | None = None) -> None:
         self._clock = clock or SystemClock()
@@ -59,6 +70,7 @@ class FakeGoogleCalendar:
         self._failing: dict[str, AdapterError] = {}
         self._calendar_list_failures: list[AdapterError] = []
         self._calendar_lists: list[list[CalendarInfo]] = []
+        self._holds: dict[str, Hold] = {}
         self._revoked: set[str] = set()
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.refreshed: list[str] = []
@@ -73,13 +85,21 @@ class FakeGoogleCalendar:
         """Refreshing with this token answers `invalid_grant` from now on."""
         self._revoked.add(refresh_token)
 
-    def fail_events(self, calendar_id: str, error: AdapterError) -> None:
-        """Every events.list of this calendar raises `error`."""
-        self._failing[calendar_id] = error
+    def fail_events(self, calendar_id: str, error: AdapterError | None) -> None:
+        """Every events.list of this calendar raises `error` (None: answers again)."""
+        if error is None:
+            self._failing.pop(calendar_id, None)
+        else:
+            self._failing[calendar_id] = error
 
     def fail_calendar_list(self, error: AdapterError, *, times: int = 1) -> None:
         """The next `times` calendarList calls raise `error`."""
         self._calendar_list_failures = [error] * times
+
+    def hold_events(self, calendar_id: str) -> Hold:
+        """The next events.list of this calendar waits until `release` is set."""
+        hold = self._holds[calendar_id] = Hold()
+        return hold
 
     def script_calendar_list(self, calendars: list[CalendarInfo]) -> None:
         """The next calendarList call answers `calendars` instead of the primary one."""
@@ -130,6 +150,10 @@ class FakeGoogleCalendar:
         page_token: str | None,
     ) -> dict[str, Any]:
         self.calls.append(("list_events", {"calendar_id": calendar_id, "page_token": page_token}))
+        hold = self._holds.pop(calendar_id, None)
+        if hold is not None:
+            hold.entered.set()
+            await hold.release.wait()
         if calendar_id in self._failing:
             raise self._failing[calendar_id]
         scripted = self._scripted.get(calendar_id)
