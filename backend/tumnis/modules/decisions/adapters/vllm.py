@@ -192,9 +192,7 @@ class VllmDecisions(Adapter):
 
         async def send() -> list[tuple[TypedAnswer, str, int]]:
             tasks = [
-                asyncio.ensure_future(
-                    self._ask_one(qid, question, bodies[qid], timeout_ms / 1000)
-                )
+                asyncio.ensure_future(self._ask_one(qid, question, bodies[qid], timeout_ms / 1000))
                 for qid, question in req.questions.items()
             ]
             try:
@@ -230,4 +228,3 @@ class VllmDecisions(Adapter):
 
     async def aclose(self) -> None:
         await self._client.aclose()
-

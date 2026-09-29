@@ -17,6 +17,7 @@ from tumnis.modules.decisions.rules import (
     Route,
     Threshold,
     effective_threshold,
+    low_route,
     main_answer,
     route,
     vote_answer,
@@ -137,3 +138,17 @@ def test_no_valid_sample_is_an_error() -> None:
     question = ChoiceDef(instructions="?", criteria={"a": "A", "b": "B"})
     with pytest.raises(ValueError, match="allowed"):
         vote_answer(question, ["x", "y"])
+
+
+@pytest.mark.parametrize(
+    ("point", "expected"),
+    [
+        (DecisionPoint.QUICK_ADD_LABEL, Route.REVIEW),
+        (DecisionPoint.FOCUS_ON_TASK, Route.DETERMINISTIC),
+        (DecisionPoint.APPROVAL_NEED, Route.APPROVAL_REQUIRED),
+    ],
+)
+def test_low_route_is_the_points_low_confidence_route(
+    point: DecisionPoint, expected: Route
+) -> None:
+    assert low_route(CATALOGUE[point]) is expected

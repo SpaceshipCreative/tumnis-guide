@@ -217,7 +217,7 @@ def effective_threshold(t: Threshold, *, fallback: bool) -> Threshold:
     )
 
 
-def route(
+def route(  # noqa: PLR0911  # one return per row of the plan's routing table
     spec: SpecLike, answer: TypedAnswer, t: Threshold, *, fallback: bool
 ) -> tuple[Route, Any]:
     """Returns the route and the value to apply (label, project key, bool, score)."""
@@ -244,6 +244,12 @@ def route(
     if eff.t_no is not None and answer.noul <= eff.t_no:
         return Route.APPLY, False
     return low, None
+
+
+def low_route(spec: SpecLike) -> Route:
+    """Where a decision goes without a usable answer (every provider failed): the point's
+    `on_low_confidence`."""
+    return _LOW_ROUTE[spec.on_low_confidence]
 
 
 def main_answer(main_question: str, answers: Mapping[str, TypedAnswer]) -> TypedAnswer:
