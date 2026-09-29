@@ -226,7 +226,7 @@ class Request:
 async def request_for(case: Case, route: Any, project: uuid.UUID | None = None) -> Request:
     """A request for the case: path parameters filled with fresh ids, a body built with
     polyfactory from the route's model, and the project (when given) placed where the
-    route's `project_param` names it."""
+    route's `project_param` names it. Required query parameters get a valid value."""
     param = case.policy.project_param or ""
     source, _, name = param.partition(":")
     body = _body(route)
@@ -247,5 +247,17 @@ async def request_for(case: Case, route: Any, project: uuid.UUID | None = None) 
             names = [p.name for p in route.dependant.path_params]
             target = "id" if "id" in names else names[0]
             fill[target] = str(row_id)
+    for query in route.dependant.query_params:  # required ones, e.g. DELETE ?version= (P0-19)
+        if query.field_info.is_required() and query.alias not in params:
+            params[query.alias] = _query_value(query.field_info.annotation)
     url = _PARAM.sub(lambda m: fill.get(m.group(1), str(uuid.uuid4())), case.path)
     return Request(case.method, url, params, body)
+
+
+def _query_value(annotation: Any) -> str:
+    """A valid value for a required query parameter the case does not set."""
+    if annotation is int:
+        return "1"
+    if annotation is uuid.UUID:
+        return str(uuid.uuid4())
+    return "x"
