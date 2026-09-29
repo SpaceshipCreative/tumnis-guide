@@ -21,7 +21,7 @@ function task(overrides: Partial<TaskLite>): TaskLite {
   return makeTask({ completed_at: null, label: null, ...overrides });
 }
 
-test.fails("[P0-24][FR-2.6] T-P0-24-01 grouping table", () => {
+test("[P0-24][FR-2.6] T-P0-24-01 grouping table", () => {
   const cases: [Partial<TaskLite>, Group | null][] = [
     [{ status: "waiting_on_human", label: "human" }, "waiting_on_you"],
     [{ status: "waiting_on_human", label: "ai" }, "waiting_on_you"],
@@ -69,48 +69,45 @@ const LABEL = fc.constantFrom(
 ) satisfies fc.Arbitrary<TaskLite["label"]>;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-test.fails(
-  "[P0-24][FR-2.6] T-P0-24-02 groups partition the visible tasks",
-  () => {
-    fc.assert(
-      fc.property(
-        fc.array(
-          fc.record({
-            status: STATUS,
-            label: LABEL,
-            ago: fc.integer({ min: 0, max: THIRTY_DAYS_MS }),
-          }),
-          { maxLength: 30 },
-        ),
-        (specs) => {
-          const tasks = specs.map(({ status, label, ago }) =>
-            task({
-              status,
-              label,
-              completed_at:
-                status === "done"
-                  ? new Date(NOW.getTime() - ago).toISOString()
-                  : null,
-            }),
-          );
-          const groups = groupTasks(tasks, NOW, TZ);
-          const shown = GROUPS.flatMap((g) => groups[g].map((t) => t.id));
-          // Disjoint: no task in two groups.
-          expect(new Set(shown).size).toBe(shown.length);
-          // Union plus hidden is the input; hidden only when done 7 or more days ago.
-          const hidden = tasks.filter((t) => !shown.includes(t.id));
-          expect(shown.length + hidden.length).toBe(tasks.length);
-          for (const t of hidden) {
-            expect(t.status).toBe("done");
-            expect(
-              localDaysBetween(t.completed_at ?? "", NOW, TZ),
-            ).toBeGreaterThanOrEqual(DONE_RECENT_DAYS);
-          }
-          for (const g of GROUPS) {
-            for (const t of groups[g]) expect(groupOf(t, NOW, TZ)).toBe(g);
-          }
-        },
+test("[P0-24][FR-2.6] T-P0-24-02 groups partition the visible tasks", () => {
+  fc.assert(
+    fc.property(
+      fc.array(
+        fc.record({
+          status: STATUS,
+          label: LABEL,
+          ago: fc.integer({ min: 0, max: THIRTY_DAYS_MS }),
+        }),
+        { maxLength: 30 },
       ),
-    );
-  },
-);
+      (specs) => {
+        const tasks = specs.map(({ status, label, ago }) =>
+          task({
+            status,
+            label,
+            completed_at:
+              status === "done"
+                ? new Date(NOW.getTime() - ago).toISOString()
+                : null,
+          }),
+        );
+        const groups = groupTasks(tasks, NOW, TZ);
+        const shown = GROUPS.flatMap((g) => groups[g].map((t) => t.id));
+        // Disjoint: no task in two groups.
+        expect(new Set(shown).size).toBe(shown.length);
+        // Union plus hidden is the input; hidden only when done 7 or more days ago.
+        const hidden = tasks.filter((t) => !shown.includes(t.id));
+        expect(shown.length + hidden.length).toBe(tasks.length);
+        for (const t of hidden) {
+          expect(t.status).toBe("done");
+          expect(
+            localDaysBetween(t.completed_at ?? "", NOW, TZ),
+          ).toBeGreaterThanOrEqual(DONE_RECENT_DAYS);
+        }
+        for (const g of GROUPS) {
+          for (const t of groups[g]) expect(groupOf(t, NOW, TZ)).toBe(g);
+        }
+      },
+    ),
+  );
+});
