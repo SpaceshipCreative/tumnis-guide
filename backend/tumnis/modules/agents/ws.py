@@ -69,6 +69,7 @@ if TYPE_CHECKING:
 REGISTER_TIMEOUT_S: Final = 10.0  # plan default; app.state.runner_register_timeout_s
 MAX_INVALID: Final = 3  # invalid frames in a row before the socket closes (plan default)
 POLL_S: Final = 1.0
+STOP_S: Final = 5.0  # how long a closing socket waits for its forwarder's turn to end
 RETRY_S: Final = 1.0
 RETRY_MAX_S: Final = 30.0
 POLICY_VIOLATION: Final = 1008
@@ -340,6 +341,11 @@ class _RunnerSocket:
                 if exc is not None and not isinstance(exc, WebSocketDisconnect):
                     _log.error("runner socket task failed", exc_info=exc)
         finally:
+            # The forwarder stops at its next turn, never mid-query: a task cancelled while
+            # it opens a database connection leaves a half-open login on the server.
+            self.waiter._wake(close=True)
+            forwarder = next(t for t in tasks if t.get_name() == "runner-forwarder")
+            await asyncio.wait({forwarder}, timeout=STOP_S)
             for task in tasks:
                 task.cancel()
             for task in tasks:

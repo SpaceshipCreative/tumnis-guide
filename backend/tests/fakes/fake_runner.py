@@ -204,6 +204,18 @@ class FakeRunner:
         for timer in self._timers:
             timer.cancel()
         self._timers.clear()
+        ws = self._ws
+        if ws is not None and self._reader is not None and self._reader.is_alive():
+            # Hang up as the daemon does and let the server close its side (the reader
+            # ends on its close frame) before the test session is torn down: leaving the
+            # session cancels the server's handler wherever it is, even mid-login to
+            # Postgres, and that half-open login holds up the test database's drop.
+            try:
+                with self._send_lock:
+                    ws.close(1000)
+            except Exception as exc:  # the server closed first
+                self.errors.append(exc)
+            self._reader.join(WAIT_S)
         cm, self._ws, self._ws_cm = self._ws_cm, None, None
         if cm is not None:
             try:
