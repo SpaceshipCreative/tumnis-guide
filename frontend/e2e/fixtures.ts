@@ -267,12 +267,17 @@ export function taskCards(
 
 /**
  * `startTime` of the first performance mark named `name`, waiting for it
- * (same approach as P0-29's timing helpers).
+ * (same approach as P0-29's timing helpers). A mark that never comes rejects
+ * after `timeoutMs`, so the test fails with a reason instead of timing out.
  */
-export async function markStartTime(page: Page, name: string): Promise<number> {
+export async function markStartTime(
+  page: Page,
+  name: string,
+  timeoutMs = 10_000,
+): Promise<number> {
   return page.evaluate(
-    (markName) =>
-      new Promise<number>((resolve) => {
+    ([markName, limit]) =>
+      new Promise<number>((resolve, reject) => {
         const seen = performance.getEntriesByName(markName, "mark")[0];
         if (seen) {
           resolve(seen.startTime);
@@ -286,7 +291,13 @@ export async function markStartTime(page: Page, name: string): Promise<number> {
           }
         });
         observer.observe({ type: "mark", buffered: true });
+        setTimeout(() => {
+          observer.disconnect();
+          reject(
+            new Error(`no performance mark ${markName} in ${String(limit)} ms`),
+          );
+        }, limit);
       }),
-    name,
+    [name, timeoutMs] as const,
   );
 }

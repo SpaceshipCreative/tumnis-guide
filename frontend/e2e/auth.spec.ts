@@ -7,7 +7,6 @@ test(
   "T-P0-13-20 signs in with password and TOTP",
   { tag: ["@SEC-1", "@FR-9.2", "@P0-13"] },
   async ({ seededApp, page, context }) => {
-    test.fail();
     const user = seedUser();
     expect(seededApp.baseURL).toBeTruthy();
 
