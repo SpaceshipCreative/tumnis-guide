@@ -47,7 +47,7 @@ def _versions(db: DbUrls) -> set[str]:
 
 @pytest.mark.req("REL-4", "REL-5")
 @pytest.mark.wp("P0-30")
-def test_readiness_schema_at_head_with_dependent_branches(empty_db: DbUrls) -> None:
+def test_issue_25_readiness_schema_at_head_with_dependent_branches(empty_db: DbUrls) -> None:
     """A fresh database upgraded to heads with this release's real migration tree (module
     branches joined by `depends_on`) is at head: `migrate --check` passes and the position
     readiness asks for is at_head. Downgrading one branch makes it behind again."""
@@ -95,7 +95,7 @@ def test_readiness_schema_at_head_with_dependent_branches(empty_db: DbUrls) -> N
 
 @pytest.mark.req("REL-4", "REL-5")
 @pytest.mark.wp("P0-30")
-async def test_readiness_schema_ok_on_migrated_database(
+async def test_issue_25_readiness_schema_ok_on_migrated_database(
     db: DbUrls, client: httpx.AsyncClient, dbos: object
 ) -> None:
     """/health/ready on a database at this release's heads is 200 with `schema` ok. The
