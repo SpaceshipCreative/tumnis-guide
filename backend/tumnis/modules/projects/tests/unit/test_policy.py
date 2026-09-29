@@ -7,7 +7,6 @@ import pytest
 
 @pytest.mark.req("FR-5.6")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 def test_default_policy_matches_fr_5_6() -> None:
     """T-P0-17-16
     The gated list holds email sends, main-branch pushes and merges, force pushes,

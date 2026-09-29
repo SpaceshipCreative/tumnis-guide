@@ -23,7 +23,6 @@ def _health(tasks: Sequence[tuple[str, date | None]], today: date = TODAY) -> st
 
 @pytest.mark.req("FR-1.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 @pytest.mark.parametrize(
     ("tasks", "expected"),
     [
@@ -56,7 +55,6 @@ def test_health_rule_table(tasks: list[tuple[str, date | None]], expected: str) 
 
 @pytest.mark.req("FR-1.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 def test_blocked_wins_over_at_risk() -> None:
     """T-P0-17-02
     A project with a task waiting on the human and an overdue task is blocked; the
@@ -72,7 +70,6 @@ def test_blocked_wins_over_at_risk() -> None:
 
 @pytest.mark.req("FR-1.1", "REL-6")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 def test_overdue_is_judged_in_workspace_timezone() -> None:
     """T-P0-17-03
     A backlog task due 2026-03-09 at 2026-03-10T03:30Z: in America/New_York (local
@@ -95,7 +92,6 @@ def test_overdue_is_judged_in_workspace_timezone() -> None:
 
 @pytest.mark.req("FR-1.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 def test_done_and_trashed_tasks_never_count() -> None:
     """T-P0-17-04
     Done tasks and trashed (deleted) tasks count neither as waiting nor as overdue, and

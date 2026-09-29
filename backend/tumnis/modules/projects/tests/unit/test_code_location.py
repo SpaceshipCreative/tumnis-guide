@@ -9,7 +9,6 @@ import pytest
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 def test_path_xor_url() -> None:
     """T-P0-17-13
     Both a code path and a repo URL raise `CodeLocationConflict` (answered 422
