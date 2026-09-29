@@ -35,7 +35,6 @@ def _record() -> dict[str, Any]:
 
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 async def test_minio_behavior_matches_record(minio: S3Endpoint) -> None:
     """T-P1-14-10
     Against the pinned MinIO image, `IfNoneMatch='*'` on an existing key and a stale

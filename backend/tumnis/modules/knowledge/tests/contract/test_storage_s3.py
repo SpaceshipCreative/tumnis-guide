@@ -60,7 +60,6 @@ def s3_storage(
 @pytest.mark.contract
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 class TestS3StorageMinio(StorageContract):
     """T-P1-14-03
     The shared storage suite passes against the `minio` container (a fresh bucket per
@@ -81,7 +80,6 @@ class TestS3StorageMinio(StorageContract):
 
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P1-14")
-@pytest.mark.xfail(strict=True, reason="spec:P1-14")
 async def test_head_check_fallback_catches_concurrent_change(minio: S3Endpoint) -> None:
     """T-P1-14-11
     With `conditional_put` forced off, another client changes the object after the caller
