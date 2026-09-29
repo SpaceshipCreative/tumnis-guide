@@ -25,12 +25,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import psycopg
+from fastapi import Request  # at runtime: FastAPI reads the override's annotations
 
 from tests._pg import OWNER
 
 if TYPE_CHECKING:
     import httpx
-    from fastapi import FastAPI, Request
+    from fastapi import FastAPI
 
     from tests._pg import DbUrls
     from tumnis.core.clock import FixedClock

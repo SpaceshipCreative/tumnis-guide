@@ -14,7 +14,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 from tumnis import wiring
-from tumnis.core import db, health, ops_status, testing_routes
+from tumnis.core import audit_router, db, health, ops_status, testing_routes
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.request_meta import RequestMetaMiddleware
 from tumnis.settings import Settings
@@ -65,6 +65,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     app.state.settings = settings
     app.state.clock = clock or SystemClock()
     app.include_router(health.router)
+    app.include_router(audit_router.router)
     if settings.tumnis_adapters == "fake":
         app.include_router(testing_routes.router)
     if SHELL_DIR.is_dir():

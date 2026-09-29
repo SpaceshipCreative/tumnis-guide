@@ -32,7 +32,6 @@ async def audit_ctx(app: FastAPI, db: DbUrls, clock: FixedClock) -> AsyncIterato
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 @pytest.mark.parametrize("case", AUDIT_CASES, ids=[c.action for c in AUDIT_CASES])
 async def test_each_action_writes_one_row(
     case: AuditCase, audit_ctx: Ctx, db: DbUrls, clock: FixedClock

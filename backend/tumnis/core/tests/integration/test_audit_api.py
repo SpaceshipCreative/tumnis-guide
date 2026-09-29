@@ -39,7 +39,6 @@ async def _all_pages(client: httpx.AsyncClient, **params: Any) -> list[list[dict
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 async def test_audit_list_paginates_and_is_workspace_scoped(
     app: FastAPI, db: DbUrls, clock: FixedClock
 ) -> None:
@@ -57,7 +56,9 @@ async def test_audit_list_paginates_and_is_workspace_scoped(
     user_a, user_b = uuid.uuid4(), uuid.uuid4()
     start = clock.now()
     await write_rows(WorkspaceContext(a, SYSTEM_ACTOR), 4, clock, actions=ACTIONS)
-    await write_rows(WorkspaceContext(a, ActorRef(f"user:{user_a}")), 3, clock, actions=ACTIONS)
+    # Seq 1 to 4 cycle ACTIONS from key.created, 5 to 7 from key.revoked.
+    as_user_a = WorkspaceContext(a, ActorRef(f"user:{user_a}"))
+    await write_rows(as_user_a, 3, clock, actions=(*ACTIONS[1:], ACTIONS[0]))
     await write_rows(WorkspaceContext(b, SYSTEM_ACTOR), 2, clock)
 
     async with signed_in(app, a, user_a) as as_a, signed_in(app, b, user_b) as as_b:
@@ -88,7 +89,6 @@ async def test_audit_list_paginates_and_is_workspace_scoped(
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 async def test_csv_export_escapes_formulas(app: FastAPI, db: DbUrls, clock: FixedClock) -> None:
     """T-P0-15-12
     An export whose `User-Agent` is `=HYPERLINK(...)` is itself audited as
@@ -112,3 +112,35 @@ async def test_csv_export_escapes_formulas(app: FastAPI, db: DbUrls, clock: Fixe
     assert owner_rows(db, "SELECT count(*) FROM audit_log WHERE action = 'audit.exported'") == [
         (1,)
     ]
+
+
+@pytest.mark.req("SEC-3")
+@pytest.mark.wp("P0-15")
+async def test_audit_routes_need_a_session_and_a_valid_cursor(
+    app: FastAPI, client: httpx.AsyncClient, db: DbUrls
+) -> None:
+    """Without a signed-in session both routes are 401 and nothing is audited; a cursor
+    that does not decode is 400 `invalid_cursor`."""
+    from tests.fixtures import make_workspace  # noqa: PLC0415
+    from tumnis.core.tests.integration._audit import owner_rows, signed_in  # noqa: PLC0415
+
+    for path in ("/v1/audit", "/v1/audit.csv"):
+        assert (await client.get(path)).status_code == 401
+    assert owner_rows(db, "SELECT count(*) FROM audit_log") == [(0,)]
+
+    async with signed_in(app, make_workspace(db), uuid.uuid4()) as session:
+        response = await session.get("/v1/audit", params={"cursor": "not-a-cursor"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid_cursor"
+
+
+@pytest.mark.req("SEC-3")
+@pytest.mark.wp("P0-15")
+async def test_every_response_carries_its_correlation_id(client: httpx.AsyncClient) -> None:
+    """A plausible X-Request-ID is echoed back; a missing or implausible one is replaced by
+    a fresh uuid7."""
+    given = await client.get("/health/live", headers={"X-Request-ID": "req-123:abc"})
+    assert given.headers["x-request-id"] == "req-123:abc"
+    for headers in ({}, {"X-Request-ID": "x" * 200}, {"X-Request-ID": "has space"}):
+        made = (await client.get("/health/live", headers=headers)).headers["x-request-id"]
+        assert uuid.UUID(made).version == 7
