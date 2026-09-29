@@ -4,4 +4,4 @@ pytest applies a conftest only to its own folder, and core and module tests live
 tumnis/ (R-16), so the shared fixtures are a plugin loaded here for the whole rootdir.
 """
 
-pytest_plugins = ["pytester"]
+pytest_plugins = ["pytester", "tests.fixtures"]

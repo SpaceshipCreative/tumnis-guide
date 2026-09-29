@@ -51,7 +51,12 @@ addopts = "--strict-markers --strict-config -p randomly --disable-socket --allow
 xfail_strict = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-filterwarnings = ["error", "ignore::DeprecationWarning:testcontainers.*"]
+filterwarnings = [
+  "error",
+  "ignore::DeprecationWarning:testcontainers.*",
+  # SocketBlockedError warns as it is raised; the error itself is what tests see.
+  "ignore:A test tried to use socket:UserWarning:pytest_socket",
+]
 markers = [
   "req(*ids): PRD requirement IDs this test proves",
   "wp(id): work package that introduced the test",

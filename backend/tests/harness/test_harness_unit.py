@@ -85,7 +85,6 @@ def test_unregistered_marker_fails_collection(pytester: pytest.Pytester) -> None
 
 @pytest.mark.req("Quality rule 5")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 def test_unit_test_cannot_open_network_socket() -> None:
     """T-P0-02-07
     Opening a TCP socket raises SocketBlockedError, both directly and through httpx
