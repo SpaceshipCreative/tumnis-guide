@@ -113,3 +113,39 @@ def test_freshness_is_scheduled_on_the_maintenance_queue_in_prod(
     assert schedule["schedule_name"] == "backup-freshness"
     assert schedule["schedule"] == workflows_ops.BACKUP_FRESHNESS_SCHEDULE == "*/15 * * * *"
     assert schedule["queue_name"] == workflows_ops.MAINTENANCE_QUEUE == "maintenance"
+
+
+@pytest.mark.req("REL-1")
+@pytest.mark.wp("P0-28")
+async def test_database_facts_read_archiver_and_last_successful_runs(
+    db: DbUrls, clock: FixedClock
+) -> None:
+    """The real facts source reads pg_stat_archiver and, per (repo, type), the latest
+    successful run from ops_backup_runs as the app role; failed runs do not count."""
+    import psycopg  # noqa: PLC0415
+
+    from tests._pg import OWNER  # noqa: PLC0415
+    from tumnis.core import db as core_db  # noqa: PLC0415
+    from tumnis.core.workflows_ops import DatabaseBackupFacts  # noqa: PLC0415
+
+    now = clock.now()
+    with psycopg.connect(db.libpq(OWNER)) as conn:
+        conn.execute(
+            "INSERT INTO ops_backup_runs (repo, type, started_at, finished_at, ok) VALUES "
+            "(1, 'full', %(a)s, %(a)s, true), (1, 'full', %(b)s, %(b)s, false), "
+            "(2, 'diff', %(a)s, %(b)s, true)",
+            {"a": now - timedelta(days=2), "b": now - timedelta(hours=1)},
+        )
+    core_db.configure(db.app, db.app, pooled=False)
+    try:
+        facts = await DatabaseBackupFacts().read(now)
+    finally:
+        await core_db.dispose()
+    assert facts.now == now
+    assert facts.last_ok == {
+        (1, "full"): now - timedelta(days=2),
+        (2, "diff"): now - timedelta(hours=1),
+    }
+    # The test server does not archive: nothing archived, nothing failed.
+    assert facts.wal_last_archived_at is None
+    assert facts.wal_failed_since_last_success is False

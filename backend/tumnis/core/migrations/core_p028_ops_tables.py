@@ -13,49 +13,53 @@ deployment_marker. P0-06's table registry allow-lists them with that reason.
 from alembic import op
 
 revision = "core_p028_ops"
-down_revision = "core_0001"
+down_revision = "core_0003"
 branch_labels = None
 depends_on = None
+phase = "expand"
+
+# Each CREATE TABLE starts its line: the table registry (tests/meta/_catalog.py) reads the
+# tables from the offline SQL.
+UPGRADE = (
+    """
+CREATE TABLE ops_backup_runs (
+  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  repo        integer NOT NULL CHECK (repo IN (1, 2)),
+  type        text NOT NULL CHECK (type IN ('full', 'diff', 'incr')),
+  started_at  timestamptz NOT NULL,
+  finished_at timestamptz NOT NULL,
+  ok          boolean NOT NULL
+)
+""",
+    "CREATE INDEX ix_ops_backup_runs_last_ok "
+    "ON ops_backup_runs (repo, type, finished_at DESC) WHERE ok",
+    """
+CREATE TABLE ops_status (
+  "check"    text PRIMARY KEY,
+  ok         boolean NOT NULL,
+  checked_at timestamptz NOT NULL,
+  details    jsonb NOT NULL DEFAULT '{}'::jsonb
+)
+""",
+    """
+CREATE TABLE ops_drill_markers (
+  id         uuid PRIMARY KEY,
+  kind       text NOT NULL CHECK (kind IN ('marker', 'fence')),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+)
+""",
+    # Narrower than the default privileges (02-database.sql): the app role reads backup
+    # runs and drill markers (written as postgres) and upserts ops_status, nothing more.
+    "REVOKE INSERT, UPDATE, DELETE ON ops_backup_runs, ops_drill_markers FROM tumnis_app",
+    "REVOKE DELETE ON ops_status FROM tumnis_app",
+    "GRANT SELECT ON ops_backup_runs, ops_drill_markers TO tumnis_app",
+    "GRANT SELECT, INSERT, UPDATE ON ops_status TO tumnis_app",
+)
 
 
 def upgrade() -> None:
-    op.execute(
-        """
-        CREATE TABLE ops_backup_runs (
-          id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-          repo        smallint NOT NULL CHECK (repo IN (1, 2)),
-          type        text NOT NULL CHECK (type IN ('full', 'diff', 'incr')),
-          started_at  timestamptz NOT NULL,
-          finished_at timestamptz NOT NULL,
-          ok          boolean NOT NULL
-        )
-        """
-    )
-    op.execute(
-        "CREATE INDEX ix_ops_backup_runs_last_ok "
-        "ON ops_backup_runs (repo, type, finished_at DESC) WHERE ok"
-    )
-    op.execute(
-        """
-        CREATE TABLE ops_status (
-          "check"    text PRIMARY KEY,
-          ok         boolean NOT NULL,
-          checked_at timestamptz NOT NULL,
-          details    jsonb NOT NULL DEFAULT '{}'::jsonb
-        )
-        """
-    )
-    op.execute(
-        """
-        CREATE TABLE ops_drill_markers (
-          id         uuid PRIMARY KEY,
-          kind       text NOT NULL CHECK (kind IN ('marker', 'fence')),
-          created_at timestamptz NOT NULL DEFAULT clock_timestamp()
-        )
-        """
-    )
-    op.execute("GRANT SELECT ON ops_backup_runs, ops_drill_markers TO tumnis_app")
-    op.execute("GRANT SELECT, INSERT, UPDATE ON ops_status TO tumnis_app")
+    for statement in UPGRADE:
+        op.execute(statement)
 
 
 def downgrade() -> None:
