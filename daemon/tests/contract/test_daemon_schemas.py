@@ -82,7 +82,6 @@ def _built() -> list[BaseModel]:
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 def test_daemon_messages_match_committed_schemas() -> None:
     """T-P1-04-03
     Every message the daemon builds (register, heartbeat, ack, result, health_report,
