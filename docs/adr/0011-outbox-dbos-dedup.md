@@ -1,5 +1,5 @@
 # ADR-0011: Outbox relay enqueues DBOS workflows with event_id:subscriber deduplication
-Status: Proposed (2026-09-27) | Supersedes: none
+Status: Accepted (2026-09-29) | Supersedes: none
 
 ## Context
 Modules react to each other through events (ADR-0001), and PRD decision 10 puts the event outbox in Postgres. A module's state change and the event it emits must commit together or not at all. Each subscriber must run independently, retry with backoff and land in the dead-letter view when it keeps failing, without touching other subscribers (REL-3). Subscribers run as DBOS workflows (ADR-0002).
@@ -17,7 +17,7 @@ A module changes its rows and inserts an `outbox` row in the same transaction th
 - The relay needs a direct (non-PgBouncer) connection for `LISTEN`.
 - A broker can be put behind the outbox later without changing any module.
 - Tests: relay integration tests prove one enqueue per subscriber, dedup across a crash, and dead-lettering (`backend/tumnis/core/tests/integration/test_relay.py`, `test_dead_letters.py`, `test_outbox.py`; the kill-and-resume pair also runs 20 times nightly).
-- Status stays Proposed until Scott accepts it.
+- Accepted by Scott on 2026-09-29.
 
 ## Sources
 - [DBOS queues tutorial](https://docs.dbos.dev/python/tutorials/queue-tutorial) (deduplication)

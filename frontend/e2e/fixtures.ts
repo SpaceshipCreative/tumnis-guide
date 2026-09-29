@@ -1,11 +1,18 @@
 // Shared Playwright fixtures. Specs import `test` and `expect` from here, never
 // from @playwright/test directly, so every spec can ask for these fixtures.
 //
-// `seededApp` resets the compose.test stack before each test (P0-04).
+// `seededApp` resets the compose.test stack before each test (P0-04); the reset
+// also gives the server its real clock back.
 // `signedInPage` (P0-13) resets the stack too, then signs in as the seed user
 // through the API (password, then the TOTP code of the seed secret at the real
-// time: the stack's clock is real), so the page carries the session and CSRF
-// cookies. Fixtures are lazy, so specs that do not request them are unaffected.
+// time: after a reset the stack's clock is real), so the page carries the
+// session and CSRF cookies. Fixtures are lazy, so specs that do not request
+// them are unaffected.
+// `page` keeps the server clock with the browser's (issue #6): when a test fixes
+// the page's time (`page.clock.install({ time })`, `setFixedTime`,
+// `setSystemTime`), the same instant goes to `POST /v1/test/clock` (fakes only),
+// so TOTP checks and "today" on the server match the page. The override lasts
+// until the next reset; the fixture clears it after a test that set it.
 //
 // Below the fixtures are helpers the acceptance specs share. Helpers hold no
 // assertions: they locate things and read the API, so the work packages that
@@ -44,7 +51,58 @@ interface E2EFixtures {
   signedInPage: Page;
 }
 
+type ClockTime = number | string | Date;
+
+/** `POST /v1/test/clock`: fixes the server clock at `time` (fakes only). */
+export async function setServerClock(
+  request: APIRequestContext,
+  time: ClockTime,
+): Promise<void> {
+  const response = await request.post("/v1/test/clock", {
+    data: { time: new Date(time).toISOString() },
+  });
+  if (!response.ok()) {
+    throw new Error(`POST /v1/test/clock -> ${String(response.status())}`);
+  }
+}
+
+/** Wraps the page clock's instant-setting calls so the server clock follows. */
+function followPageClock(
+  page: Page,
+  request: APIRequestContext,
+): () => boolean {
+  const clock = page.clock;
+  let synced = false;
+  const sync = async (time: ClockTime | undefined): Promise<void> => {
+    if (time === undefined) return;
+    await setServerClock(request, time);
+    synced = true;
+  };
+  const install = clock.install.bind(clock);
+  clock.install = async (options) => {
+    await install(options);
+    await sync(options?.time);
+  };
+  const setFixedTime = clock.setFixedTime.bind(clock);
+  clock.setFixedTime = async (time) => {
+    await setFixedTime(time);
+    await sync(time);
+  };
+  const setSystemTime = clock.setSystemTime.bind(clock);
+  clock.setSystemTime = async (time) => {
+    await setSystemTime(time);
+    await sync(time);
+  };
+  return () => synced;
+}
+
 export const test = base.extend<E2EFixtures>({
+  page: async ({ page, request }, use) => {
+    const synced = followPageClock(page, request);
+    await use(page);
+    // The next test starts on the real clock even if it never resets the stack.
+    if (synced()) await request.post("/v1/test/reset");
+  },
   seededApp: async ({ baseURL, request }, use) => {
     // Mounted only with fake adapters (compose.test and previews).
     const reset = async (set: SeedSetName = "seed"): Promise<void> => {

@@ -36,7 +36,7 @@ from tumnis.core import (
     testing_routes,
 )
 from tumnis.core.bodylimit import BodyLimitMiddleware
-from tumnis.core.clock import Clock, SystemClock
+from tumnis.core.clock import Clock, OverridableClock, SystemClock
 from tumnis.core.errors import document_problem_media_type, install_problem_handlers
 from tumnis.core.etag import ETagMiddleware
 from tumnis.core.principal import AuthenticationMiddleware
@@ -170,6 +170,8 @@ def create_app(
     db.configure(settings.database_url, settings.database_direct_url)
     modules.configure(settings)  # the deployment's module kill list
     clock = clock or SystemClock()
+    if settings.tumnis_adapters == "fake":
+        clock = OverridableClock(clock)  # POST /v1/test/clock can fix it (issue #6)
     cache.configure_backend(cache.InProcessCache(clock, publish=cache.pg_publisher(db.app_engine)))
     deadletter.configure(settings.dbos_system_url)  # the api enqueues through a DBOSClient
     metrics.configure(settings.dbos_system_url)  # queue depth and workflows at scrape time

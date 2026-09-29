@@ -12,6 +12,7 @@ import contextlib
 import functools
 import json
 import secrets
+import threading
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
@@ -113,13 +114,21 @@ def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
 # --- Postgres: one container and template per xdist worker, one clone per test ---------
 
 
+# A throwaway server: no fsync. Every test creates and drops a database (each DROP forces a
+# checkpoint), and one container per xdist worker shares one Docker disk. With fsync on,
+# those flushes stalled commits for hundreds of milliseconds, and a DROP for up to a minute
+# (seen in teardown), which pushed the relay's 1 s latency tests over budget under load.
+PG_TEST_SETTINGS = ("fsync=off", "synchronous_commit=off", "full_page_writes=off")
+
+
 @pytest.fixture(scope="session")
 def pg_container() -> Iterator[PostgresContainer]:
     from testcontainers.community.postgres import PostgresContainer  # noqa: PLC0415
 
-    with PostgresContainer(
+    container = PostgresContainer(
         PG_IMAGE, username="postgres", password="postgres", dbname="postgres", driver=None
-    ) as pg:
+    ).with_command(" ".join(f"-c {setting}" for setting in PG_TEST_SETTINGS))
+    with container as pg:
         bootstrap_roles(pg.get_connection_url())
         yield pg
 
@@ -432,16 +441,61 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
     }
     DBOS(config=config)
     DBOS.reset_system_database(truncate=True)
+    earlier = set(threading.enumerate())  # a destroyed instance's threads may linger
     DBOS.launch()
     # DBOS 3.1 persists queues in the system database, so they register after launch, and
     # it refuses the sync call inside a running event loop (a test that requests this
     # fixture mid-test): register from a thread of its own.
     with ThreadPoolExecutor(max_workers=1) as pool:
         pool.submit(register_queues).result()
+        queues = [queue.name for queue in pool.submit(DBOS.list_queues).result()]
+    _wait_for_queue_workers(queues, earlier)
     try:
         yield DBOS
     finally:
+        _stop_queue_workers(earlier)
         DBOS.destroy(destroy_registry=False)
+
+
+def _wait_for_queue_workers(
+    queues: list[str], earlier: set[threading.Thread], timeout_s: float = 10
+) -> None:
+    """Block until DBOS dequeues from every queue in `queues`. Its queue manager looks for
+    new queues once a second and starts a `queue-worker-<name>` thread for each (dbos
+    3.1.0), so without this wait the first enqueue in a test sat up to a second longer
+    than the queue's polling interval, and timing tests (T-P0-07-07, -08) measured DBOS's
+    startup instead of the relay."""
+    import time  # noqa: PLC0415
+
+    wanted = {f"queue-worker-{name}" for name in queues}
+    deadline = time.monotonic() + timeout_s
+    while not wanted <= {t.name for t in threading.enumerate() if t not in earlier}:
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"DBOS started no worker thread for {sorted(wanted)}")
+        time.sleep(0.01)
+
+
+def _stop_queue_workers(earlier: set[threading.Thread], timeout_s: float = 10) -> None:
+    """Quiesce DBOS before DBOS.destroy stops its event loop and disposes its engine (dbos
+    3.1.0 does both at once): stop dequeuing, then wait for the workflows a test left
+    running. A queue worker that had just dequeued a workflow would hand it to the stopped
+    loop (a coroutine never awaited: an unraisable-exception error at teardown), and a
+    workflow still running holds pooled system-database connections that dispose() cannot
+    close; the garbage collector finds them open later, in another test ("psycopg.Connection
+    ... was deleted while still open")."""
+    import time  # noqa: PLC0415
+
+    from dbos._dbos import _get_dbos_instance  # noqa: PLC0415  # dbos 3.1.0: no public hook
+
+    instance = _get_dbos_instance()
+    for event in instance.background_thread_stop_events:
+        event.set()
+    for thread in threading.enumerate():
+        if thread not in earlier and thread.name.startswith("queue-worker-"):
+            thread.join(timeout=timeout_s)
+    deadline = time.monotonic() + timeout_s
+    while instance._active_workflows_set.activeList() and time.monotonic() < deadline:
+        time.sleep(0.01)
 
 
 @pytest.fixture
@@ -588,20 +642,23 @@ class WorkerKiller:
         assert row is not None
         return int(row[0])
 
-    def _succeeded(self) -> dict[str, Any]:
+    def _deliveries(self) -> tuple[dict[str, Any], int]:
+        """(workflow_id -> output of each succeeded delivery, number not yet succeeded)."""
         from dbos import DBOSClient  # noqa: PLC0415
 
         if self._client is None:
             self._client = DBOSClient(system_database_url=self.sys_db.url(APP))
-        done = self._client.list_workflows(status="SUCCESS", name="deliver_event")
-        return {w.workflow_id: w.output for w in done}
+        workflows = self._client.list_workflows(name="deliver_event")
+        done = {w.workflow_id: w.output for w in workflows if w.status == "SUCCESS"}
+        return done, len(workflows) - len(done)
 
     async def restart_and_drain(self, timeout_s: float = 30) -> dict[str, Any]:
         """Start a worker without the kill point; wait until every outbox row is sent and
-        every (event, subscriber) workflow succeeded; stop it. Returns workflow_id -> output."""
-        from tumnis.core.events import subscribers_for  # noqa: PLC0415
-
-        expected = self.events * len(subscribers_for(self.event))
+        every delivery workflow the relay enqueued succeeded; stop it. Returns workflow_id ->
+        output. The relay enqueues a row's deliveries before it marks the row sent, so once
+        none is unsent the list of delivery workflows is complete. The subscribers are the
+        subprocess's, never counted from this process's registry, which other tests on this
+        xdist worker may have added to."""
         proc = await self._start(None)
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout_s
@@ -611,13 +668,13 @@ class WorkerKiller:
                 if proc.returncode is not None:
                     pytest.fail(f"worker exited with {proc.returncode}\n{self.log_tail()}")
                 unsent = await asyncio.to_thread(self._unsent)
-                done = await asyncio.to_thread(self._succeeded)
-                if unsent == 0 and len(done) >= expected:
+                done, running = await asyncio.to_thread(self._deliveries)
+                if unsent == 0 and running == 0:
                     return done
                 if loop.time() > deadline:
                     pytest.fail(
-                        f"not drained in {timeout_s} s: {unsent} unsent, {len(done)} of "
-                        f"{expected} workflows succeeded\n{self.log_tail()}"
+                        f"not drained in {timeout_s} s: {unsent} unsent, {len(done)} "
+                        f"workflows succeeded, {running} not\n{self.log_tail()}"
                     )
                 await asyncio.sleep(0.1)
         finally:

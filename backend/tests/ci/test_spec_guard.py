@@ -206,6 +206,37 @@ def test_allows_new_tests_and_pure_moves(tmp_path: Path) -> None:
     assert _guard(repo, head) == (0, [])
 
 
+@pytest.mark.req("Quality rule 1")
+@pytest.mark.wp("P0-03")
+def test_ci_files_and_other_non_tests_are_not_locked(tmp_path: Path) -> None:
+    """T-P0-03-18
+    spec-guard locks only existing test files (Scott's call, 2026-09-29): editing or
+    deleting a workflow under .github/, a guard script under scripts/ci/ or any other file
+    that is not a test passes.
+    """
+    workflow = "name: ci\non: [pull_request]\n"
+    repo = make_repo(
+        tmp_path,
+        {
+            ".github/workflows/ci.yml": workflow,
+            ".github/CODEOWNERS": "* @scott\n",
+            "scripts/ci/spec_guard.py": "LOCKED = True\n",
+            "deploy/compose.test.yaml": "services: {}\n",
+        },
+    )
+    head = commit(
+        repo,
+        {
+            ".github/workflows/ci.yml": workflow + "jobs: {}\n",
+            "scripts/ci/spec_guard.py": "LOCKED = False\n",
+            "deploy/compose.test.yaml": "services: {api: {}}\n",
+        },
+        delete=[".github/CODEOWNERS"],
+    )
+
+    assert _guard(repo, head) == (0, [])
+
+
 VITEST_SPEC = dedent(
     """\
     import { expect, test } from "vitest";

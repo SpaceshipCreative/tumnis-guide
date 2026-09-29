@@ -22,7 +22,7 @@ One-time setup on the homelab host:
 4. Optionally bind the `pgbackrest_repo1` volume to a second disk.
 5. The drill runs on the self-hosted `homelab` runner (docker, jq): set the repository variables `DRILL_SOURCE_PG` and `DRILL_SOURCE_APP` to the production Postgres and api container names, and the secret `DRILL_SOURCE_DATABASE_URL` for the threshold re-check. Then run `scripts/drill/b2_no_delete_check.sh` and `gh workflow run restore-drill.yml -f mode=prod`.
 
-Locally: `scripts/drill/restore_drill.sh --mode rehearsal` runs the whole drill against `compose.test.yaml` (repo2 on MinIO, throwaway keys in `pgbackrest/test-conf.d`, overrides in `pgbackrest/rehearsal.env`).
+Locally: `scripts/drill/restore_drill.sh --mode rehearsal` runs the whole drill against `compose.test.yaml` plus `compose.test-backups.yaml` (repo2 on MinIO, throwaway keys in `pgbackrest/test-conf.d`, overrides in `pgbackrest/rehearsal.env`). `compose.test.yaml` alone keeps WAL archiving off and the backup service idle, as previews do; add the overlay only where a test needs backups.
 
 ## Observability (P0-27, REL-5, FR-12.3)
 

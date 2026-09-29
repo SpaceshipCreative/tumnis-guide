@@ -19,19 +19,21 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("REL-1", "SEC-3")
 @pytest.mark.wp("P0-28")
-@pytest.mark.xfail(strict=True, reason="spec:P0-28")
 def test_drill_record_writes_audit_row(
     db: DbUrls, clock: FixedClock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """T-P0-28-10
     `tumnis drill record --mode rehearsal --rpo-seconds 75 --rto-seconds 420 --target T`
     writes one audit_log row with action drill.completed whose details carry both numbers,
-    and upserts ops_status check restore_drill (ok, checked at the clock's time).
+    and upserts ops_status check restore_drill (ok, checked at the clock's time). The row
+    goes to the deployment's first workspace, so the test creates one (issue #10).
     """
     from typer.testing import CliRunner  # noqa: PLC0415
 
+    from tests.fixtures import make_workspace  # noqa: PLC0415
     from tumnis import cli  # noqa: PLC0415
 
+    make_workspace(db, "Drill")
     monkeypatch.setattr(cli, "make_clock", lambda: clock)
     env = {
         "DATABASE_URL": db.app,
