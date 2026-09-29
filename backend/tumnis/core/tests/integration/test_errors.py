@@ -29,7 +29,6 @@ def _problem(response: httpx.Response, status: int, code: str) -> dict[str, Any]
 
 @pytest.mark.req("SAAS-1")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_every_error_is_problem_json_with_code(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
