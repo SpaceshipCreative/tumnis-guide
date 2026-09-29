@@ -49,7 +49,6 @@ def _rules_for(config: dict[str, Any], package: str) -> list[dict[str, Any]]:
 
 @pytest.mark.req("SEC-7")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_renovate_pins_and_groups() -> None:
     """T-P0-01-12
     renovate.json pins exact versions, groups Tiptap and DBOS as manual-merge
