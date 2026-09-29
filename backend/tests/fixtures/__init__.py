@@ -376,6 +376,7 @@ async def app_role_session(db: DbUrls) -> AsyncIterator[AsyncSession]:
 async def _load_set(path: Path, db: DbUrls, clock: FixedClock) -> SeedResult:
     """Through DatabaseSink, i.e. each module's api; works once the entity writers exist
     (projects P0-17, tasks P0-18, events P0-12, documents P0-17)."""
+    import tumnis.wiring  # noqa: F401, PLC0415  # modules register their seed writers
     from tumnis.core import db as core_db  # noqa: PLC0415
     from tumnis.seed import DatabaseSink, load_seed  # noqa: PLC0415
 
@@ -865,6 +866,7 @@ def app_with_fakes(  # noqa: PLR0917
     from tumnis.core.types import ActorRef  # noqa: PLC0415
     from tumnis.modules.auth import api as auth_api  # noqa: PLC0415
     from tumnis.modules.auth.scopes import SCOPES  # noqa: PLC0415
+    import tumnis.wiring  # noqa: F401, PLC0415  # modules register their seed writers
     from tumnis.seed import writers_registered  # noqa: PLC0415
 
     if writers_registered():
