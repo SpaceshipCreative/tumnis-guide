@@ -264,7 +264,6 @@ def _events_stub(tmp_path: Path, login: str) -> Path:
 
 @pytest.mark.req("Quality rule 1")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_spec_change_label_only_counts_from_owner(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

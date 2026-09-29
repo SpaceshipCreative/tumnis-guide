@@ -15,10 +15,13 @@ import argparse
 import ast
 import copy
 import difflib
+import json
 import os
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -42,6 +45,7 @@ GENERATED_HEADER = ("# @generated", "// @generated")
 # Guard and CI definitions are locked files: an agent's PR may not loosen its own checks.
 LOCKED_GLOBS = ("scripts/ci/**", ".github/**")
 PYTESTMARK = "<pytestmark>"
+SPEC_CHANGE = "spec-change"
 
 
 @dataclass(frozen=True)
@@ -230,13 +234,46 @@ def parse(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def issue_events(pr: str) -> list[dict[str, Any]]:
+    """The PR's issue events from `gh api`, or from the GH_API_STUB JSON file in tests."""
+    stub = os.environ.get("GH_API_STUB")
+    if stub:
+        events: list[dict[str, Any]] = json.loads(Path(stub).read_text())
+        return events
+    repo = os.environ.get("GITHUB_REPOSITORY", "{owner}/{repo}")
+    result = subprocess.run(  # noqa: S603 (fixed argv, no shell)
+        ["gh", "api", "--paginate", f"repos/{repo}/issues/{pr}/events", "--jq", ".[]"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+
+
+def label_added_by_owner(pr: str, label: str) -> bool:
+    """True when the latest `labeled` event for `label` has an actor in SPEC_CHANGE_ACTORS."""
+    owners = {a.strip() for a in os.environ.get("SPEC_CHANGE_ACTORS", "").split(",") if a.strip()}
+    if not pr or not owners:
+        return False
+    labeled = [
+        event
+        for event in issue_events(pr)
+        if event.get("event") == "labeled" and (event.get("label") or {}).get("name") == label
+    ]
+    return bool(labeled) and (labeled[-1].get("actor") or {}).get("login") in owners
+
+
 def main(argv: list[str]) -> int:
     args = parse(argv)
     repo = Path(args.repo)
     violations = collect(repo, args.base, args.head)
     fixtures = warnings(repo, args.base, args.head)
-    print_report(report(violations, waived=False, changed_fixtures=fixtures))
-    return 1 if violations else 0
+    labels = {label.strip() for label in args.labels.split(",") if label.strip()}
+    waived = (
+        bool(violations) and SPEC_CHANGE in labels and label_added_by_owner(args.pr, SPEC_CHANGE)
+    )
+    print_report(report(violations, waived=waived, changed_fixtures=fixtures))
+    return 1 if violations and not waived else 0
 
 
 if __name__ == "__main__":
