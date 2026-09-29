@@ -1,0 +1,25 @@
+# The test stack's changes to services of compose.yaml and compose.preview.yaml, merged
+# with them inside compose.test.yaml's `include:` (never used on its own). They cannot sit in
+# compose.test.yaml itself: Compose 2.x (the GitHub runners) refuses a service that both a
+# file and its `include:` define ("services.<name> conflicts with imported resource").
+#
+# The app services run the image built from this checkout (TUMNIS_IMAGE swaps it) and the
+# api is published on loopback only (127.0.0.1:8080; TUMNIS_TEST_PORT moves it).
+x-image: &image
+  image: ${TUMNIS_IMAGE:-tumnis:test}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+
+services:
+  secrets: *image
+  migrate: *image
+  worker: *image
+  seed: *image
+  api:
+    <<: *image
+    ports:
+      - "127.0.0.1:${TUMNIS_TEST_PORT:-8080}:8080"
+  # Off unless the backups overlay resets the profile (issue #21).
+  backup:
+    profiles: [backups]
