@@ -233,7 +233,6 @@ PLAYWRIGHT_SPEC = dedent(
 
 @pytest.mark.req("Quality rule 1")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_typescript_fails_to_test_flip_is_allowed_edit_is_not(tmp_path: Path) -> None:
     """T-P0-03-08
     `test.fails(` to `test(` passes; changing an `expect` in the same test fails; removing

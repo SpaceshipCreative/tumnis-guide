@@ -10,8 +10,12 @@ from __future__ import annotations
 import ast
 import copy
 import fnmatch
+import json
 import os
+import shutil
 import subprocess
+import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -109,6 +113,33 @@ def changes(repo: Path, base: str, head: str) -> list[Change]:
         else:  # M, T (type change) and anything else git reports on an existing path
             result.append(Change("M", path, path))
     return result
+
+
+# --- TypeScript blocks (Vitest and Playwright) ----------------------------------------
+
+TS_TESTS = Path(__file__).resolve().parent / "ts_tests.mjs"
+TsBlock = dict[str, object]  # title, line, tags, fails, skip, text (see ts_tests.mjs)
+
+
+def ts_blocks(sources: Mapping[str, str]) -> dict[str, dict[str, TsBlock]]:
+    """{label: TypeScript source} to {label: {"<describe> > <title>": block}} via Node."""
+    node = shutil.which("node")
+    if node is None:
+        raise RuntimeError("node is required to compare TypeScript tests (ts_tests.mjs)")
+    with tempfile.TemporaryDirectory() as tmp:
+        paths: dict[str, str] = {}
+        for index, (label, source) in enumerate(sources.items()):
+            path = Path(tmp) / f"{index}{''.join(PurePosixPath(label).suffixes)}"
+            path.write_text(source)
+            paths[str(path)] = label
+        result = subprocess.run(  # noqa: S603 (fixed argv, no shell)
+            [node, str(TS_TESTS), *paths],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    raw: dict[str, dict[str, TsBlock]] = json.loads(result.stdout)
+    return {paths[path]: blocks for path, blocks in raw.items()}
 
 
 # --- Python blocks --------------------------------------------------------------------

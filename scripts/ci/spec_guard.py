@@ -29,10 +29,12 @@ from _tests_extract import (
     is_python_test,
     is_spec_xfail,
     is_test_file,
+    is_ts_test,
     is_weakening_decorator,
     locked_blocks,
     matches_any,
     show,
+    ts_blocks,
 )
 
 EXEMPT_GLOBS = ("backend/tests/contract/generated/**", "frontend/src/api/**")
@@ -107,6 +109,22 @@ def compare_python(path: str, base_src: str, head_src: str) -> list[Violation]:
     return out
 
 
+def compare_typescript(path: str, base_src: str, head_src: str) -> list[Violation]:
+    """Same rules on Vitest and Playwright blocks; fails-to-test flips are allowed."""
+    blocks = ts_blocks({"base/" + path: base_src, "head/" + path: head_src})
+    base, head = blocks["base/" + path], blocks["head/" + path]
+    out: list[Violation] = []
+    for key, b in base.items():
+        h = head.get(key)
+        if h is None:
+            out.append(Violation(path, key, "deleted_test", "present on base, missing on head"))
+        elif (h["skip"] and not b["skip"]) or (h["fails"] and not b["fails"]):
+            out.append(Violation(path, key, "added_skip_or_xfail", f"line {h['line']}"))
+        elif h["text"] != b["text"]:
+            out.append(Violation(path, key, "edited_test", unified_diff(b["text"], h["text"])))
+    return out
+
+
 def is_exempt(path: str, base_src: str) -> bool:
     """Generated tests: under an exempt path, or generated on the base commit."""
     first = base_src.split("\n", 1)[0].strip()
@@ -132,13 +150,18 @@ def _compare(repo: Path, base: str, head: str, change: Change) -> list[Violation
     assert change.new is not None  # noqa: S101
     if not is_test_file(change.new):
         return [Violation(change.old, "*", "deleted_file", f"renamed to {change.new}")]
-    head_src = show(repo, head, change.new) or ""
-    if is_python_test(change.old):
+    return compare_file(change.new, base_src, show(repo, head, change.new) or "")
+
+
+def compare_file(path: str, base_src: str, head_src: str) -> list[Violation]:
+    if is_python_test(path):
         try:
-            return compare_python(change.new, base_src, head_src)
+            return compare_python(path, base_src, head_src)
         except SyntaxError as error:
-            return [Violation(change.new, "*", "edited_test", f"head does not parse: {error}")]
-    return _compare_text(change.new, base_src, head_src)
+            return [Violation(path, "*", "edited_test", f"head does not parse: {error}")]
+    if is_ts_test(path):
+        return compare_typescript(path, base_src, head_src)
+    return _compare_text(path, base_src, head_src)
 
 
 def collect(repo: Path, base: str, head: str) -> list[Violation]:
