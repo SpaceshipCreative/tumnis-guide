@@ -1,0 +1,7 @@
+[project]
+name = "tumnis-daemon"
+version = "0.0.0"
+description = "Tumnis runner daemon: runs agent work on the agent server and dials in to Tumnis over WebSocket."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = []
