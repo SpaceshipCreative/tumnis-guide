@@ -1,0 +1,44 @@
+{
+  "input": {
+    "system": "Write one short imperative first step for this task. No preamble.",
+    "user": "Task: Book the venue for the offsite\nProject: Team offsite",
+    "max_tokens": 48
+  },
+  "request": {
+    "method": "POST",
+    "url": "http://vllm.example.org:8000/v1/chat/completions",
+    "body": {
+      "model": "Qwen/Qwen2.5-3B-Instruct",
+      "messages": [
+        {
+          "role": "system",
+          "content": "Write one short imperative first step for this task. No preamble."
+        },
+        {
+          "role": "user",
+          "content": "Task: Book the venue for the offsite\nProject: Team offsite"
+        }
+      ],
+      "max_tokens": 48,
+      "temperature": 0.2,
+      "n": 1,
+      "stream": false
+    }
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "object": "error",
+      "message": "The server is overloaded, try again later.",
+      "type": "ServiceUnavailableError",
+      "param": null,
+      "code": 503
+    }
+  },
+  "recorded_at": null,
+  "vllm_version": "0.12.0",
+  "notes": "Synthetic: hand-authored in the OpenAI-compatible chat completion shape vLLM 0.12 returns (no live vLLM endpoint was reachable from the build machine); the host is example.org and every task, project and person is invented. Replace with a scrubbed recording from the homelab vLLM."
+}

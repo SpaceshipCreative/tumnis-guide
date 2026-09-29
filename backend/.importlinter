@@ -23,6 +23,9 @@ modules =
     tumnis.modules.usage
 ignore_imports =
     tumnis.modules.** -> tumnis.modules.*.api
+# decisions has a second public interface, the Generation slot (P1-03); who may use it is
+# narrowed further by generation-callers below.
+    tumnis.modules.** -> tumnis.modules.decisions.generation_api
 # The one sanctioned test-only exception (P0-12): every module's connector contract tests
 # subclass integrations' ConnectorContract.
     tumnis.modules.*.tests.** -> tumnis.modules.integrations.connector_contract
@@ -153,11 +156,11 @@ ignore_imports =
 unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:api-never-calls-out]
-name = The api process never imports the Jev adapter or its SDK
+name = The api process never imports Jev, its SDK or VllmGeneration
 type = forbidden
 # The composition roots (tumnis.app, worker, cli, wiring) and every module's api, router
-# and mcp, as single modules: none reaches the adapter through static imports. The worker
-# builds JevDecisions lazily through the adapter registry.
+# and mcp, as single modules: none reaches an adapter through static imports. The worker
+# builds JevDecisions and VllmGeneration (P1-03) lazily through the adapter registry.
 as_packages = False
 source_modules =
     tumnis.*
@@ -166,4 +169,27 @@ source_modules =
     tumnis.modules.*.mcp
 forbidden_modules =
     tumnis.modules.decisions.adapters.jev
+    tumnis.modules.decisions.adapters.vllm_generation
     typesafe_sdk
+
+# P1-03 (FR-11.8): the Generation slot writes the placeholder first action and the spoken
+# form of a focus message, never planning, triage or orchestration. Only the enrichment
+# workflow (P1-08) and focus delivery (P2-16) may reach it; decisions reaches the adapter
+# only through the registry, and decisions' own tests drive both files directly.
+[importlinter:contract:generation-callers]
+name = Only enrichment and focus delivery may use the Generation slot
+type = protected
+protected_modules =
+    tumnis.modules.decisions.generation_api
+    tumnis.modules.decisions.adapters.vllm_generation
+allowed_importers =
+    tumnis.modules.agents.workflows
+    tumnis.modules.notifications
+ignore_imports =
+    tumnis.modules.decisions.tests.** -> tumnis.modules.decisions.generation_api
+    tumnis.modules.decisions.tests.** -> tumnis.modules.decisions.adapters.vllm_generation
+unmatched_ignore_imports_alerting = none
+broken_contract_guidance =
+    generation-callers: only tumnis.modules.agents.workflows (enrichment, P1-08) and
+    tumnis.modules.notifications (spoken focus messages, P2-16) may import the Generation
+    slot. Planning, triage and reasoning go through decisions.api or the project agent.
