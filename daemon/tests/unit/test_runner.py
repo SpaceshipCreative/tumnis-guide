@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+
 from tests.conftest import make_run
 from tumnis_daemon.runner import (
     InvalidProfile,

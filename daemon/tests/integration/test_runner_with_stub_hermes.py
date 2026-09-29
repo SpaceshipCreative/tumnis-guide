@@ -8,6 +8,7 @@ import json
 from typing import TYPE_CHECKING
 
 import pytest
+
 from tests.conftest import RECORDINGS, alive, make_run
 from tumnis_daemon.runner import execute
 

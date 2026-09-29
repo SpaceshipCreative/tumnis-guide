@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from jsonschema import Draft202012Validator
+
 from tests.conftest import RECORDINGS, REPO, make_run
 from tumnis_daemon.protocol import (
     HealthReport,

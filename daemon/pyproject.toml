@@ -56,6 +56,9 @@ src = ["tumnis_daemon", "tests"]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S", "DTZ", "PT", "N", "C4", "RET", "PL"]
 ignore = ["PLR0913"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["tumnis_daemon", "tests"]
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S603", "PLR2004"]
 "tests/stubs/*" = ["INP001", "S101", "T201"]

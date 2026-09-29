@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+
 from tumnis_daemon import main as daemon_main
 
 if TYPE_CHECKING:
