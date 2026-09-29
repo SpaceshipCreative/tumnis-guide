@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""A stand-in `hermes` for the daemon's tests (P1-04, T-P1-04-16).
+
+`hermes -p <profile> chat --query-file <f> -s <skill> --format stream-json --source tool`
+replays the recording named by HERMES_STUB_RECORDING line by line on stdout. With
+HERMES_STUB_SLEEP it first starts a child sharing its process group (both pids go to
+HERMES_STUB_PIDFILE), and sleeps that many seconds, so a timeout must kill the group.
+`profile show`, `version`, `mcp list` and `status` answer for the health check.
+"""
+
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+def chat(args: list[str]) -> int:
+    query = Path(args[args.index("--query-file") + 1])
+    if not query.is_file():
+        print(f"no query file {query}", file=sys.stderr)
+        return 2
+    pidfile = os.environ.get("HERMES_STUB_PIDFILE")
+    sleep_s = float(os.environ.get("HERMES_STUB_SLEEP", "0"))
+    if sleep_s:
+        child = subprocess.Popen(["sleep", str(int(sleep_s) + 30)])  # noqa: S603, S607
+        if pidfile:
+            Path(pidfile).write_text(f"{os.getpid()} {child.pid}\n")
+        time.sleep(sleep_s)
+    recording = os.environ.get("HERMES_STUB_RECORDING")
+    if recording:
+        for line in Path(recording).read_text().splitlines():
+            sys.stdout.write(line + "\n")
+            sys.stdout.flush()
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if "chat" in argv:
+        return chat(argv)
+    if argv[:1] == ["version"]:
+        print("hermes 0.9.0")
+        return 0
+    if argv[:2] == ["profile", "show"]:
+        return 0 if argv[2:3] == ["acme-site"] else 1
+    if "mcp" in argv and "list" in argv:
+        print("tumnis  http://tumnis.example.org/mcp  enabled")
+        return 0
+    if "status" in argv:
+        return 0
+    print(f"stub hermes: unknown command {argv}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
