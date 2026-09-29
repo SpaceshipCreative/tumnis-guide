@@ -199,7 +199,6 @@ def test_register_first_or_closed(
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 async def test_protocol_negotiation_and_per_message_ack(
     app: FastAPI,
     workspace: WorkspaceHandle,

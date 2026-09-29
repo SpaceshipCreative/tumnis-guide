@@ -64,7 +64,6 @@ class TestFakeAgent(AgentAdapterContract):
 @pytest.mark.enable_socket
 @pytest.mark.req("FR-14.6")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 class TestHermesDaemonTransportWithFakeRunner(AgentAdapterContract):
     """T-P1-04-10
     AgentAdapterContract passes for HermesAgent(DaemonTransport) with the fake runner
