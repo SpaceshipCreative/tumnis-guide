@@ -64,7 +64,6 @@ def test_every_payload_has_schema_version_const() -> None:
 @pytest.mark.contract
 @pytest.mark.req("FR-14.7", "REL-4")
 @pytest.mark.wp("P0-11")
-@pytest.mark.xfail(strict=True, reason="spec:P0-11")
 @pytest.mark.parametrize("spec", _latest())
 def test_every_payload_accepts_n_and_n_minus_1(spec: Any, repo_root: Path) -> None:
     """T-P0-11-06
@@ -89,7 +88,6 @@ def test_every_payload_accepts_n_and_n_minus_1(spec: Any, repo_root: Path) -> No
 @pytest.mark.contract
 @pytest.mark.req("FR-14.7")
 @pytest.mark.wp("P0-11")
-@pytest.mark.xfail(strict=True, reason="spec:P0-11")
 def test_every_schema_has_fixtures_and_upgraders(repo_root: Path) -> None:
     """T-P0-11-07
     Fixture files exist for N (and N-1 when N > 1); an upgrader exists from N-1.
