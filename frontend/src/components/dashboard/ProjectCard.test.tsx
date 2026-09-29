@@ -15,7 +15,7 @@ import { ProjectCard } from "./ProjectCard";
 const TZ = "America/New_York";
 const VIEWPORTS: readonly Viewport[] = ["phone", "laptop"];
 
-test.fails(
+test(
   "[P0-23][FR-1.1] T-P0-23-01 card shows name, health, next milestone, open count, last agent activity",
   async () => {
     for (const viewport of VIEWPORTS) {
@@ -62,7 +62,7 @@ test.fails(
   },
 );
 
-test.fails(
+test(
   "[P0-23][FR-1.1][UX 10] T-P0-23-02 health uses plain words for all three states",
   () => {
     expect(healthCopy).toEqual({
