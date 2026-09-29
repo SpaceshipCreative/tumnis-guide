@@ -60,18 +60,33 @@ def _unsent(db: DbUrls) -> int:
 
 
 async def _wait_for_deliveries(db: DbUrls, expected: int, timeout_s: float) -> float:
-    """Seconds until test_deliveries holds `expected` rows; fails after `timeout_s`."""
-    from tumnis.core.tests.integration import _deliveries  # noqa: PLC0415
-
+    """Seconds until test_deliveries holds `expected` rows; fails after `timeout_s`. It
+    counts on one connection, in a worker thread: the relay under test runs as a task on
+    this event loop, and a blocking connect and query every 20 ms would stall its wake-up
+    and its relay pass, the very latency being measured."""
     start = time.monotonic()
-    while True:
-        total = sum(_deliveries.counts(db.libpq(OWNER)).values())
-        elapsed = time.monotonic() - start
-        if total >= expected:
-            return elapsed
-        if elapsed > timeout_s:
-            pytest.fail(f"{total} of {expected} deliveries after {timeout_s} s")
-        await asyncio.sleep(0.02)
+    conn = await asyncio.to_thread(_connect_owner, db)
+    try:
+        while True:
+            total = await asyncio.to_thread(_count_deliveries, conn)
+            elapsed = time.monotonic() - start
+            if total >= expected:
+                return elapsed
+            if elapsed > timeout_s:
+                pytest.fail(f"{total} of {expected} deliveries after {timeout_s} s")
+            await asyncio.sleep(0.02)
+    finally:
+        await asyncio.to_thread(conn.close)
+
+
+def _connect_owner(db: DbUrls) -> psycopg.Connection[tuple[Any, ...]]:
+    return psycopg.connect(db.libpq(OWNER), autocommit=True)
+
+
+def _count_deliveries(conn: psycopg.Connection[tuple[Any, ...]]) -> int:
+    row = conn.execute("SELECT count(*) FROM test_deliveries").fetchone()
+    assert row is not None
+    return int(row[0])
 
 
 @pytest.mark.req("ADR-0011", "REL-3")
