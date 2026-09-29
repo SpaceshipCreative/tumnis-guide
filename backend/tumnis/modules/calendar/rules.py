@@ -8,7 +8,7 @@
 """
 
 from collections.abc import Mapping
-from datetime import UTC, date, datetime, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any, Final, Literal
 from zoneinfo import ZoneInfo
 
@@ -56,14 +56,53 @@ def map_event(
     all-day events (start.date) -> busy only if transparency == 'opaque' (plan default),
     and their dates are midnights in `calendar_tz` (the calendar's time zone).
     external_id = f"{calendar_id}:{raw['id']}"; provider_url = raw['htmlLink']."""
-    raise NotImplementedError
+    external_id = f"{calendar_id}:{raw['id']}"
+    if raw.get("status") == "cancelled":
+        return Tombstone(external_id=external_id)
+    start, end = raw["start"], raw["end"]
+    all_day = "date" in start
+    transparency = raw.get("transparency")
+    declined = _self_response(raw.get("attendees", ()), self_email) == "declined"
+    busy = (transparency == "opaque" if all_day else transparency != "transparent") and not declined
+    return MappedEvent(
+        external_id=external_id,
+        calendar_id=calendar_id,
+        provider_url=raw.get("htmlLink"),
+        title=raw.get("summary"),
+        start_at=_instant(start, calendar_tz),
+        end_at=_instant(end, calendar_tz),
+        all_day=all_day,
+        attendees=[a["email"] for a in raw.get("attendees", ()) if a.get("email")],
+        busy=busy,
+    )
+
+
+def _self_response(attendees: Any, self_email: str) -> str | None:
+    """The calendar owner's response: the attendee Google marks `self`, or the one with the
+    owner's address."""
+    wanted = self_email.casefold()
+    for attendee in attendees:
+        if attendee.get("self") or str(attendee.get("email", "")).casefold() == wanted:
+            response: str | None = attendee.get("responseStatus")
+            return response
+    return None
+
+
+def _instant(when: Mapping[str, Any], tz: tzinfo) -> datetime:
+    """A Google start or end in UTC: `dateTime` carries its offset; an all-day `date` is
+    midnight in the calendar's zone."""
+    if "dateTime" in when:
+        return datetime.fromisoformat(when["dateTime"]).astimezone(UTC)
+    return datetime.combine(date.fromisoformat(when["date"]), time(0), tz).astimezone(UTC)
 
 
 def sync_window(today: date, tz: ZoneInfo) -> tuple[datetime, datetime]:
     """[start of yesterday, end of today + 14 days] in UTC (plan default)."""
-    raise NotImplementedError
+    start = datetime.combine(today - timedelta(days=1), time(0), tz)
+    end = datetime.combine(today + timedelta(days=WINDOW_DAYS_AHEAD + 1), time(0), tz)
+    return start.astimezone(UTC), end.astimezone(UTC)
 
 
 def needs_refresh(expires_at: datetime, now: datetime) -> bool:
     """True when the access token expires within REFRESH_SKEW_S of `now`."""
-    raise NotImplementedError
+    return expires_at - now <= timedelta(seconds=REFRESH_SKEW_S)
