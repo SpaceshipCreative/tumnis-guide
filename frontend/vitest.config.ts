@@ -13,6 +13,9 @@ export default mergeConfig(
       include: ["src/**/*.test.{ts,tsx}"],
       restoreMocks: true,
       unstubGlobals: true,
+      // Whole-route journeys (P0-24's undo test renders the project page eight times)
+      // run past the 5 s default on a loaded machine.
+      testTimeout: 20_000,
       coverage: {
         provider: "v8",
         include: ["src/**"],
