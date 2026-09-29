@@ -97,7 +97,6 @@ async def test_request_trace_id_is_stored_on_outbox_row(
 
 @pytest.mark.req("REL-5")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 async def test_subscriber_spans_continue_the_request_trace(
     app: FastAPI,
     client: httpx.AsyncClient,
