@@ -140,7 +140,6 @@ def test_openapi_ts_output_matches_committed(repo_root: Path, tmp_path: Path) ->
 @pytest.mark.contract
 @pytest.mark.req("SAAS-1")
 @pytest.mark.wp("P0-11")
-@pytest.mark.xfail(strict=True, reason="spec:P0-11")
 def test_operation_ids_are_unique_and_stable() -> None:
     """T-P0-11-10
     Every operation ID in the OpenAPI document is unique and equals
