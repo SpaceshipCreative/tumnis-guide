@@ -19,7 +19,7 @@ from sqlalchemy import text
 
 from tumnis.core import db, deadletter, faults, modules, telemetry, tenancy
 from tumnis.core.backoff import full_jitter
-from tumnis.core.schemas import VersionedPayload
+from tumnis.core.schemas import VersionedPayload, versioned
 from tumnis.core.types import SYSTEM_ACTOR
 
 log = logging.getLogger(__name__)
@@ -49,9 +49,8 @@ P = TypeVar("P", bound=EventPayload)
 
 
 class EventTypes:
-    """(name, version) -> payload model. Until P0-11 merges this is its own index; P0-11
-    records each entry in the `events` schema family through `versioned(...)` without
-    changing callers."""
+    """(name, version) -> payload model: the events' own index for `EventEnvelope.typed`.
+    `event_type` also records each entry in the `events` schema family (P0-11)."""
 
     def __init__(self) -> None:
         self._models: dict[tuple[str, int], type[EventPayload]] = {}
@@ -75,8 +74,9 @@ registry = EventTypes()
 
 
 def event_type(name: str, version: int) -> Callable[[type[P]], type[P]]:
-    """Registers a payload model under (name, version), which must be unique. The model's
-    `event_name` and `schema_version` default must say the same."""
+    """Registers a payload model under (name, version), which must be unique, as the
+    `events/<name>` v<version> schema too (`versioned`, P0-11). The model's `event_name`
+    and `schema_version` (a `Literal[version]`) must say the same."""
 
     def register(model: type[P]) -> type[P]:
         declared = model.model_fields["schema_version"].default
@@ -85,6 +85,7 @@ def event_type(name: str, version: int) -> Callable[[type[P]], type[P]]:
                 f"{model.__qualname__} declares {getattr(model, 'event_name', None)} "
                 f"v{declared}, registered as {name} v{version}"
             )
+        versioned("events", name, version)(model)
         registry.register(name, version, model)
         return model
 

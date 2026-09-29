@@ -43,7 +43,6 @@ def _fixture(repo_root: Path, family: str, name: str, version: int) -> dict[str,
 @pytest.mark.contract
 @pytest.mark.req("FR-14.7")
 @pytest.mark.wp("P0-11")
-@pytest.mark.xfail(strict=True, reason="spec:P0-11")
 def test_every_payload_has_schema_version_const() -> None:
     """T-P0-11-05
     Each registered schema has `properties.schema_version.const == version`, and
@@ -125,7 +124,6 @@ class DemoV2(VersionedPayload):
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P0-11")
-@pytest.mark.xfail(strict=True, reason="spec:P0-11")
 def test_upgrade_mechanism_on_demo_family() -> None:
     """T-P0-11-08
     A demo payload with v1 and v2 and an upgrader from v1 shows the full path: v2 parses,

@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from tumnis.settings import Settings
 
 BACKEND = Path(__file__).resolve().parents[2]
+REPO_ROOT = BACKEND.parent
 SEED_SET = BACKEND / "fixtures" / "seed"
 LOAD_SET = BACKEND / "fixtures" / "load" / "load.yaml"
 PG_IMAGE = "pgvector/pgvector:pg18"
@@ -64,6 +65,12 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if drills:
         config.hook.pytest_deselected(items=drills)
         items[:] = [item for item in items if not item.get_closest_marker("drill")]
+
+
+@pytest.fixture
+def repo_root() -> Path:
+    """The repository root (P0-11): generated schemas, fixtures and the frontend hang off it."""
+    return REPO_ROOT
 
 
 @pytest.fixture
