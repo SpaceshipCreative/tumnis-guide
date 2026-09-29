@@ -38,6 +38,11 @@ export const zDeadLetterOut = z.object({
 });
 
 /**
+ * Health
+ */
+export const zHealth = z.enum(["blocked", "at_risk", "on_track"]);
+
+/**
  * KeyCreated
  */
 export const zKeyCreated = z.object({
@@ -136,6 +141,98 @@ export const zProblem = z.object({
 });
 
 /**
+ * ProjectLinkIn
+ */
+export const zProjectLinkIn = z.object({
+  kind: z.enum(["person", "domain", "repo", "coolify_app"]),
+  value: z.string().min(1).max(320),
+});
+
+/**
+ * ProjectCreate
+ */
+export const zProjectCreate = z.object({
+  brief_md: z.string().max(65536).optional().default(""),
+  client: z.string().nullish(),
+  code_path: z.string().nullish(),
+  deadline: z.iso.date().nullish(),
+  goal: z.string().max(280).nullish(),
+  links: z.array(zProjectLinkIn).optional().default([]),
+  name: z.string().min(1).max(120),
+  profile_name: z.string().nullish(),
+  repo_url: z.string().nullish(),
+  schema_version: z.literal(1).optional().default(1),
+  status: z
+    .enum(["active", "on_hold", "completed"])
+    .optional()
+    .default("active"),
+});
+
+/**
+ * ProjectOut
+ */
+export const zProjectOut = z.object({
+  archived_at: z.iso.datetime().nullable(),
+  brief_md: z.string().max(65536).optional().default(""),
+  client: z.string().nullish(),
+  code_path: z.string().nullish(),
+  deadline: z.iso.date().nullish(),
+  goal: z.string().max(280).nullish(),
+  health: zHealth,
+  id: z.uuid(),
+  last_agent_activity_at: z.iso.datetime().nullish(),
+  links: z.array(zProjectLinkIn).optional().default([]),
+  name: z.string().min(1).max(120),
+  next_milestone: z.iso.date().nullable(),
+  open_count: z.int(),
+  profile_name: z.string().nullish(),
+  repo_url: z.string().nullish(),
+  schema_version: z.literal(1).optional().default(1),
+  sort_key: z.string(),
+  status: z
+    .enum(["active", "on_hold", "completed"])
+    .optional()
+    .default("active"),
+  version: z.int(),
+});
+
+/**
+ * Page[ProjectOut]
+ */
+export const zPageProjectOut = z.object({
+  items: z.array(zProjectOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * ProjectPatch
+ *
+ * Fields to change (absent: unchanged; null clears a nullable one) and the version
+ * read.
+ */
+export const zProjectPatch = z.object({
+  client: z.string().nullish(),
+  code_path: z.string().nullish(),
+  deadline: z.iso.date().nullish(),
+  goal: z.string().max(280).nullish(),
+  links: z.array(zProjectLinkIn).nullish(),
+  name: z.string().min(1).max(120).nullish(),
+  profile_name: z.string().nullish(),
+  repo_url: z.string().nullish(),
+  status: z.enum(["active", "on_hold", "completed"]).nullish(),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * ReorderIn
+ */
+export const zReorderIn = z.object({
+  after_id: z.uuid().nullish(),
+  before_id: z.uuid().nullish(),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
  * RotateIn
  */
 export const zRotateIn = z.object({
@@ -216,13 +313,6 @@ export const zUsageRow = z.object({
 });
 
 /**
- * VersionIn
- */
-export const zVersionIn = z.object({
-  version: z.int().gte(0).lte(2147483647),
-});
-
-/**
  * WorkspaceSettingsIn
  */
 export const zWorkspaceSettingsIn = z.object({
@@ -238,6 +328,20 @@ export const zWorkspaceSettingsOut = z.object({
   subtask_threshold_min: z.int(),
   timezone: z.string(),
   version: z.int(),
+});
+
+/**
+ * VersionIn
+ */
+export const zTumnisCoreDeadletterVersionIn = z.object({
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * VersionIn
+ */
+export const zTumnisModulesProjectsRouterVersionIn = z.object({
+  version: z.int().gte(0).lte(2147483647),
 });
 
 /**
@@ -330,7 +434,7 @@ export const zDeadLettersGetDeadLettersQuery = z.object({
  */
 export const zDeadLettersGetDeadLettersResponse = zPageDeadLetterOut;
 
-export const zDeadLettersPostDiscardBody = zVersionIn;
+export const zDeadLettersPostDiscardBody = zTumnisCoreDeadletterVersionIn;
 
 export const zDeadLettersPostDiscardPath = z.object({
   dead_letter_id: z.uuid(),
@@ -341,7 +445,7 @@ export const zDeadLettersPostDiscardPath = z.object({
  */
 export const zDeadLettersPostDiscardResponse = zDeadLetterOut;
 
-export const zDeadLettersPostRetryBody = zVersionIn;
+export const zDeadLettersPostRetryBody = zTumnisCoreDeadletterVersionIn;
 
 export const zDeadLettersPostRetryPath = z.object({
   dead_letter_id: z.uuid(),
@@ -388,6 +492,79 @@ export const zAuthRotateKeyPath = z.object({
  * Successful Response
  */
 export const zAuthRotateKeyResponse = zKeyCreated;
+
+export const zProjectsListProjectsQuery = z.object({
+  include_archived: z.boolean().optional().default(false),
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsListProjectsResponse = zPageProjectOut;
+
+export const zProjectsCreateProjectBody = zProjectCreate;
+
+/**
+ * Successful Response
+ */
+export const zProjectsCreateProjectResponse = zProjectOut;
+
+export const zProjectsGetProjectPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsGetProjectResponse = zProjectOut;
+
+export const zProjectsUpdateProjectBody = zProjectPatch;
+
+export const zProjectsUpdateProjectPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsUpdateProjectResponse = zProjectOut;
+
+export const zProjectsArchiveProjectBody =
+  zTumnisModulesProjectsRouterVersionIn;
+
+export const zProjectsArchiveProjectPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsArchiveProjectResponse = zProjectOut;
+
+export const zProjectsReorderProjectBody = zReorderIn;
+
+export const zProjectsReorderProjectPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsReorderProjectResponse = zProjectOut;
+
+export const zProjectsUnarchiveProjectBody =
+  zTumnisModulesProjectsRouterVersionIn;
+
+export const zProjectsUnarchiveProjectPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsUnarchiveProjectResponse = zProjectOut;
 
 /**
  * Successful Response

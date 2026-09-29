@@ -7,19 +7,25 @@ have no connection or external id, which is why those columns are nullable here 
 canonical unique key is partial.
 """
 
+import hashlib
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from typing import Any, Final, Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from sqlalchemy import Table, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tumnis.core import tenancy
 from tumnis.core.canonical import CanonicalRecord, UpsertStats, upsert_records
 from tumnis.core.schemas import versioned
-from tumnis.core.tenancy import WorkspaceContext, session_for
+from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
+from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.core.versioning import NotFound
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.knowledge.models import Document
+from tumnis.seed import DocumentSeed, register_seed_writer
 
 _documents: Table = Document.__table__  # type: ignore[assignment]
 
@@ -78,3 +84,115 @@ async def _document_taint(session: AsyncSession, document_id: UUID) -> bool | No
 
 
 integrations.register_target_taint("document", _document_taint)
+
+
+# --- Text entries and the project brief (P0-17, FR-2.3, FR-15.1, R-13) -------------------
+
+BRIEF: Final = "brief"
+TEXT_SOURCE: Final = "text"  # `source` of entries written in the app (no connection)
+
+
+class DocumentDTO(BaseModel):
+    id: UUID
+    project_id: UUID | None
+    title: str
+    kind: str
+    role: str | None
+    body_md: str | None
+    trust: Literal["trusted", "untrusted"]
+    tainted: bool
+    pinned: bool
+    version: int
+
+
+def _text_row(
+    project_id: UUID | None, title: str, body_md: str, role: str | None
+) -> dict[str, Any]:
+    """A trusted text entry written in the app; the brief is pinned first (FR-15.1)."""
+    return {
+        "project_id": project_id,
+        "title": title,
+        "kind": "text",
+        "role": role,
+        "body_md": body_md,
+        "trust": "trusted",
+        "tainted": False,
+        "pinned": role == BRIEF,
+        "content_hash": hashlib.sha256(body_md.encode()).digest(),
+        "source": TEXT_SOURCE,
+    }
+
+
+def _brief_conflict() -> dict[str, Any]:
+    return {
+        "index_elements": [_documents.c.workspace_id, _documents.c.project_id],
+        "index_where": _documents.c.role == BRIEF,
+    }
+
+
+async def create_brief(s: AsyncSession, project_id: UUID, title: str, body_md: str) -> bool:
+    """The project's brief, once: a second call (a redelivered `project.created`) finds
+    the brief index taken and writes nothing. True when it wrote the row."""
+    stmt = (
+        pg_insert(_documents)
+        .values(**_text_row(project_id, title, body_md, BRIEF))
+        .on_conflict_do_nothing(**_brief_conflict())
+        .returning(_documents.c.id)
+    )
+    return (await s.execute(stmt)).first() is not None
+
+
+async def put_text_document(
+    s: AsyncSession, project_id: UUID | None, *, title: str, body_md: str, role: str | None
+) -> UUID:
+    """A text entry; for `role="brief"` the project's brief is created or its title and
+    body replaced (so a seed brief lands whether or not the subscriber ran first)."""
+    stmt = pg_insert(_documents).values(**_text_row(project_id, title, body_md, role))
+    if role == BRIEF:
+        stmt = stmt.on_conflict_do_update(
+            **_brief_conflict(),
+            set_={
+                "title": stmt.excluded.title,
+                "body_md": stmt.excluded.body_md,
+                "content_hash": stmt.excluded.content_hash,
+            },
+        )
+    doc_id: UUID = (await s.execute(stmt.returning(_documents.c.id))).scalar_one()
+    return doc_id
+
+
+async def get_brief(project_id: UUID, *, session: AsyncSession | None = None) -> DocumentDTO:
+    """The project's brief (R-13), in the caller's transaction when `session` is given,
+    else in the current workspace context; NotFound until the `project.created`
+    subscriber has run."""
+    ctx = tenancy.current()
+    if ctx is None:
+        raise RuntimeError("get_brief runs in a workspace context")
+    async with session_for(ctx, session) as s:
+        row = (
+            (
+                await s.execute(
+                    select(_documents).where(
+                        _documents.c.project_id == project_id,
+                        _documents.c.role == BRIEF,
+                        _documents.c.deleted_at.is_(None),
+                    )
+                )
+            )
+            .mappings()
+            .first()
+        )
+    if row is None:
+        raise NotFound("documents", project_id)
+    return DocumentDTO.model_validate(dict(row))
+
+
+async def seed_document(workspace_id: UUID, project_id: UUID | None, rec: DocumentSeed) -> UUID:
+    """A seed text entry (the project briefs), written as the system actor."""
+    async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
+        return await put_text_document(
+            s, project_id, title=rec.title, body_md=rec.body, role=rec.role
+        )
+
+
+register_seed_writer("document", seed_document)

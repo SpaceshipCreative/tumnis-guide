@@ -385,6 +385,7 @@ async def app_role_session(db: DbUrls) -> AsyncIterator[AsyncSession]:
 async def _load_set(path: Path, db: DbUrls, clock: FixedClock) -> SeedResult:
     """Through DatabaseSink, i.e. each module's api; works once the entity writers exist
     (projects P0-17, tasks P0-18, events P0-12, documents P0-17)."""
+    import tumnis.wiring  # noqa: F401, PLC0415  # modules register their seed writers
     from tumnis.core import db as core_db  # noqa: PLC0415
     from tumnis.seed import DatabaseSink, load_seed  # noqa: PLC0415
 
@@ -916,6 +917,7 @@ def app_with_fakes(  # noqa: PLR0917
     never refill under the fuzzer's hundreds of requests (P0-10's tests cover the limits).
     A sync fixture: the caller drives the app through its own event loop (Schemathesis
     runs each request in a TestClient, whose lifespan disposes the engines)."""
+    import tumnis.wiring  # noqa: F401, PLC0415  # modules register their seed writers
     from tumnis.app import create_app  # noqa: PLC0415
     from tumnis.core import db as core_db  # noqa: PLC0415
     from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
