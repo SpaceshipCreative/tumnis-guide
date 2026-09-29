@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from sqlalchemy import Table, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -78,3 +78,23 @@ async def _document_taint(session: AsyncSession, document_id: UUID) -> bool | No
 
 
 integrations.register_target_taint("document", _document_taint)
+
+
+# --- The project brief (P0-17, FR-2.3, R-13) ---------------------------------------------
+
+
+class DocumentDTO(BaseModel):
+    id: UUID
+    project_id: UUID | None
+    title: str
+    kind: str
+    role: str | None
+    body_md: str | None
+    trust: Literal["trusted", "untrusted"]
+    tainted: bool
+    pinned: bool
+    version: int
+
+
+async def get_brief(project_id: UUID, *, session: AsyncSession | None = None) -> DocumentDTO:
+    raise NotImplementedError

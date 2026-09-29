@@ -288,8 +288,12 @@ class SeedResult:
 
 
 def read_seed(path: Path) -> list[_SeedDocument]:
-    """Parse and validate a seed file, or every *.yaml in a folder (sorted by name)."""
-    files = sorted(path.glob("*.yaml")) if path.is_dir() else [path]
+    """Parse and validate a seed file, or every *.yaml in a folder (sorted by name) but
+    the `expected_*.yaml` answer files beside them (P0-17's expected health)."""
+    if path.is_dir():
+        files = sorted(p for p in path.glob("*.yaml") if not p.name.startswith("expected_"))
+    else:
+        files = [path]
     if not files:
         raise FileNotFoundError(f"no seed files in {path}")
     return [
