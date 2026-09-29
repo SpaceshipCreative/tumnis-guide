@@ -22,6 +22,9 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8080",
     trace: "retain-on-failure",
+    // An action waiting on UI that is not there yet fails the test instead of timing it
+    // out, so an acceptance spec marked test.fail() fails as expected (P0-22).
+    actionTimeout: 10_000,
   },
   projects: [
     {

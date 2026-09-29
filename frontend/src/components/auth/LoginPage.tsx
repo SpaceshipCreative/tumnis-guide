@@ -91,7 +91,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
         </form>
       ) : (
         <form
-          aria-label="Authentication code"
+          aria-label="Two-step verification"
           className={FORM}
           onSubmit={(e) => void submitCode(e)}
         >

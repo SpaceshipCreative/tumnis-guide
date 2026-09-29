@@ -1,5 +1,6 @@
 // The app (P0-22): the generated client configured once, one QueryClient, the router,
 // the live socket and the service worker.
+import "./lib/zodConfig";
 import "./styles.css";
 
 import { QueryClientProvider } from "@tanstack/react-query";

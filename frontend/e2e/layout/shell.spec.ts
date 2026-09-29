@@ -11,7 +11,6 @@ test(
   "T-P0-22-17 shell is keyboard navigable",
   { tag: ["@P0-22", "@UX-11"] },
   async ({ page }) => {
-    test.fail();
     await openShell(page);
 
     // 1. The first Tab lands on the skip link, which shows itself.

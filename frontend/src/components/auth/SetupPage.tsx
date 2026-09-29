@@ -102,7 +102,7 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
         </form>
       ) : (
         <form
-          aria-label="Authentication code"
+          aria-label="Two-step verification"
           className={FORM}
           onSubmit={(e) => void confirm(e)}
         >
