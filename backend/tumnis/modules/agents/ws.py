@@ -29,7 +29,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 import psycopg
 from fastapi import WebSocket
@@ -494,8 +494,23 @@ class _RunnerSocket:
 
     async def _result(self, message: Result) -> bool:
         """The result as a run event (once per message id), then handed to the run's
-        workflow; acked only once the workflow has it."""
+        workflow; acked only once the workflow has it. A result counts only from the runner
+        the run was dispatched to (its `run` message, uuid5(run_id, "run")); from any other
+        runner it is acked and dropped."""
         async with tenant_session(self.ctx) as s:
+            dispatched_here = await s.scalar(
+                select(_messages.c.id).where(
+                    _messages.c.message_id == uuid5(message.run_id, "run"),
+                    _messages.c.direction == "out",
+                    _messages.c.runner_id == self.runner_id,
+                )
+            )
+            if dispatched_here is None:
+                _log.warning(
+                    "dropped a result for a run not dispatched to this runner",
+                    extra={"run": str(message.run_id), "runner": str(self.runner_id)},
+                )
+                return True
             await s.execute(
                 insert(_events)
                 .values(
