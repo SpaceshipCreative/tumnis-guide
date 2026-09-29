@@ -10,18 +10,23 @@ export const LIVE_MAP: Record<
   { details: string[]; lists: string[] }
 > = {
   // Any task change refreshes the lists and every board (a card may move between boards'
-  // columns, a subtask onto its parent's checklist). searchSearch and
-  // searchTypeaheadTasks join the lists with P0-20. A task's recurrence rule and the
-  // project's recurrence list change with its task messages (P0-19).
+  // columns, a subtask onto its parent's checklist), and search results (P0-20). A task's
+  // recurrence rule and the project's recurrence list change with its task messages (P0-19).
   task: {
     details: ["tasksGetTask", "tasksGetRecurrence"],
-    lists: ["tasksListTasks", "tasksGetBoard", "tasksListRecurrence"],
+    lists: [
+      "tasksListTasks",
+      "tasksGetBoard",
+      "tasksListRecurrence",
+      "searchSearch",
+      "searchTypeaheadTasks",
+    ],
   },
   // A project's board and columns carry its id in their path: column edits and a new card
-  // threshold (FR-3.8) refresh them. searchTypeaheadProjects joins the lists with P0-20.
+  // threshold (FR-3.8) refresh them; any project change refreshes search results (P0-20).
   project: {
     details: ["projectsGetProject", "tasksGetBoard", "tasksGetColumns"],
-    lists: ["projectsListProjects"],
+    lists: ["projectsListProjects", "searchSearch", "searchTypeaheadProjects"],
   },
   // The review badge (P0-18); the review queue joins with P1-13.
   review_item: { details: [], lists: ["tasksGetReviewCount"] },

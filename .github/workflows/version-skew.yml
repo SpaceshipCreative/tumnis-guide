@@ -49,8 +49,19 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Until deploy.yml has published a main image, the registry answers "manifest unknown"
+      # and N is built from the PR's base commit (main's tree) instead; any other pull error
+      # fails the job.
       - name: Rollback rehearsal (main image, this commit, main image)
         if: steps.changed.outputs.migrations == 'true'
-        run: >-
-          scripts/release/rollback_rehearsal.sh
-          "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tumnis:main" "$GITHUB_SHA"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          n="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tumnis:main"
+          if ! out="$(docker pull -q "$n" 2>&1)"; then
+            echo "$out"
+            grep -qi "manifest unknown" <<<"$out" || exit 1
+            echo "::notice::no $n in the registry yet; N is built from the base commit $BASE_SHA"
+            n="$BASE_SHA"
+          fi
+          scripts/release/rollback_rehearsal.sh "$n" "$GITHUB_SHA"

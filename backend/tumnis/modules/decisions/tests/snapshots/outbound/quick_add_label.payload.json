@@ -1,0 +1,61 @@
+{
+  "fields_sent": [
+    "project_goal",
+    "project_name",
+    "reserved_judgments",
+    "title"
+  ],
+  "point": "quick_add_label",
+  "questions": {
+    "label": {
+      "criteria": {
+        "ai": "Fully specified, verifiable by tests or an artifact, and within a software agent's competence.",
+        "human": "Needs a decision, a relationship, a signature, physical presence, or a judgment the user reserved.",
+        "hybrid": "Part of it is AI work and part needs the human.",
+        "unknown": "The title does not say enough to tell."
+      },
+      "instructions": "Who should do this task? Human: it needs a decision, a relationship, a signature, physical presence, or judgment the user has reserved (see `reserved_judgments`). AI: it is fully specified, verifiable by tests or an artifact, and within a software agent's competence. Hybrid: part of it is AI work and part needs the human. Unknown: the title does not say enough to tell.",
+      "type": "choice"
+    },
+    "needs_decision": {
+      "criteria": null,
+      "instructions": "The task needs the user to make a decision.",
+      "type": "noul"
+    },
+    "needs_presence": {
+      "criteria": null,
+      "instructions": "The task needs someone physically present.",
+      "type": "noul"
+    },
+    "needs_relationship": {
+      "criteria": null,
+      "instructions": "The task depends on a personal relationship or conversation.",
+      "type": "noul"
+    },
+    "needs_signature": {
+      "criteria": null,
+      "instructions": "The task needs the user's signature or legal approval.",
+      "type": "noul"
+    },
+    "reserved_judgment": {
+      "criteria": null,
+      "instructions": "The task touches a judgment listed in `reserved_judgments`.",
+      "type": "noul"
+    },
+    "specified_verifiable": {
+      "criteria": null,
+      "instructions": "The task is fully specified and its result can be verified by a test or an artifact.",
+      "type": "noul"
+    }
+  },
+  "state": {
+    "project_goal": "Ship the Acme marketing site redesign by June",
+    "project_name": "Acme site",
+    "reserved_judgments": [
+      "pricing",
+      "hiring",
+      "client contracts"
+    ],
+    "title": "Send Acme the March invoice"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "point": "blocking_impact",
+  "inputs": {
+    "item_kind": "question",
+    "item_summary": "The agent asks which payment provider to use for the Beta app checkout",
+    "project_name": "Beta app",
+    "downstream_task_count": 3,
+    "downstream_human_minutes": 90,
+    "nearest_due_in_days": 4
+  },
+  "request": {
+    "state": {
+      "item_kind": "question",
+      "item_summary": "The agent asks which payment provider to use for the Beta app checkout",
+      "project_name": "Beta app",
+      "downstream_task_count": 3,
+      "downstream_human_minutes": 90,
+      "nearest_due_in_days": 4
+    },
+    "model": "jev-1.13.0",
+    "questions": {
+      "impact": {
+        "type": "score",
+        "instructions": "How much work does this item block until the user answers it? Use the downstream task count, the human minutes waiting on it and the nearest due date.",
+        "criteria": [
+          "Blocks nothing else",
+          "Blocks one small task",
+          "Blocks several tasks or one important task",
+          "Blocks a milestone or a client deliverable",
+          "Blocks the whole project"
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "x-typesafe-request-id": "req_synthetic_0003"
+    },
+    "body": {
+      "model": "jev-1.13.0",
+      "usage": {
+        "input_tokens": 153,
+        "output_tokens": 1
+      },
+      "answers": {
+        "impact": {
+          "type": "score",
+          "score": 2.28,
+          "confidence": 0.62,
+          "legend": {
+            "0": "Blocks nothing else",
+            "1": "Blocks one small task",
+            "2": "Blocks several tasks or one important task",
+            "3": "Blocks a milestone or a client deliverable",
+            "4": "Blocks the whole project"
+          },
+          "probabilities": {
+            "0": 0.02,
+            "1": 0.08,
+            "2": 0.55,
+            "3": 0.3,
+            "4": 0.05
+          }
+        }
+      }
+    }
+  },
+  "latency_ms": 221,
+  "recorded_at": null,
+  "sdk_version": "0.7.2",
+  "synthetic": true,
+  "notes": "Synthetic: hand-authored in the typesafe-sdk 0.7.2 wire shape (no real Jev call was made); all names, addresses and domains are invented (example.com/example.org). Replace with scripts/record_jev.py output against the real API."
+}
