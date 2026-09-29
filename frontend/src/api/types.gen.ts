@@ -367,6 +367,26 @@ export type DeadLetterOut = {
 };
 
 /**
+ * DefaultIn
+ */
+export type DefaultIn = {
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * FolderIn
+ */
+export type FolderIn = {
+  /**
+   * Location Id
+   */
+  location_id: string;
+};
+
+/**
  * Health
  */
 export type Health = "blocked" | "at_risk" | "on_track";
@@ -485,6 +505,77 @@ export type KeyOut = {
  * Label
  */
 export type Label = "human" | "ai" | "hybrid";
+
+/**
+ * LocationIn
+ */
+export type LocationIn = {
+  /**
+   * Is Default
+   */
+  is_default?: boolean;
+  /**
+   * Kind
+   */
+  kind: "server_path" | "s3";
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Root
+   */
+  root: string;
+  s3?: S3ConfigIn | null;
+};
+
+/**
+ * LocationOut
+ */
+export type LocationOut = {
+  /**
+   * Capabilities
+   */
+  capabilities: {
+    [key: string]: boolean;
+  };
+  /**
+   * Endpoint
+   */
+  endpoint: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Is Default
+   */
+  is_default: boolean;
+  /**
+   * Kind
+   */
+  kind: string;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Root
+   */
+  root: string;
+  /**
+   * Status
+   */
+  status: "online" | "offline";
+  /**
+   * Status Reason
+   */
+  status_reason: string | null;
+  /**
+   * Version
+   */
+  version: number;
+};
 
 /**
  * LoginIn
@@ -782,6 +873,32 @@ export type ProjectCreate = {
    * Status
    */
   status?: "active" | "on_hold" | "completed";
+};
+
+/**
+ * ProjectFolderOut
+ */
+export type ProjectFolderOut = {
+  /**
+   * Location Id
+   */
+  location_id: string;
+  /**
+   * Mode
+   */
+  mode: "tumnis_made" | "existing";
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Root Path
+   */
+  root_path: string;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -1097,6 +1214,36 @@ export type RotateIn = {
    * Grace Minutes
    */
   grace_minutes?: number;
+};
+
+/**
+ * S3ConfigIn
+ */
+export type S3ConfigIn = {
+  /**
+   * Access Key
+   */
+  access_key: string;
+  /**
+   * Endpoint
+   */
+  endpoint: string;
+  /**
+   * Path Style
+   */
+  path_style?: boolean;
+  /**
+   * Region
+   */
+  region?: string;
+  /**
+   * Secret Key
+   */
+  secret_key: string;
+  /**
+   * Sse
+   */
+  sse?: "AES256" | null;
 };
 
 /**
@@ -3123,6 +3270,298 @@ export type AuthRotateKeyResponses = {
 
 export type AuthRotateKeyResponse =
   AuthRotateKeyResponses[keyof AuthRotateKeyResponses];
+
+export type KnowledgeListLocationsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/knowledge/locations";
+};
+
+export type KnowledgeListLocationsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeListLocationsError =
+  KnowledgeListLocationsErrors[keyof KnowledgeListLocationsErrors];
+
+export type KnowledgeListLocationsResponses = {
+  /**
+   * Response Knowledge List Locations
+   *
+   * Successful Response
+   */
+  200: Array<LocationOut>;
+};
+
+export type KnowledgeListLocationsResponse =
+  KnowledgeListLocationsResponses[keyof KnowledgeListLocationsResponses];
+
+export type KnowledgeCreateLocationData = {
+  body: LocationIn;
+  path?: never;
+  query?: never;
+  url: "/v1/knowledge/locations";
+};
+
+export type KnowledgeCreateLocationErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeCreateLocationError =
+  KnowledgeCreateLocationErrors[keyof KnowledgeCreateLocationErrors];
+
+export type KnowledgeCreateLocationResponses = {
+  /**
+   * Successful Response
+   */
+  201: LocationOut;
+};
+
+export type KnowledgeCreateLocationResponse =
+  KnowledgeCreateLocationResponses[keyof KnowledgeCreateLocationResponses];
+
+export type KnowledgeSetDefaultLocationData = {
+  body: DefaultIn;
+  path: {
+    /**
+     * Storage Location Id
+     */
+    storage_location_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/locations/{storage_location_id}/default";
+};
+
+export type KnowledgeSetDefaultLocationErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeSetDefaultLocationError =
+  KnowledgeSetDefaultLocationErrors[keyof KnowledgeSetDefaultLocationErrors];
+
+export type KnowledgeSetDefaultLocationResponses = {
+  /**
+   * Successful Response
+   */
+  200: LocationOut;
+};
+
+export type KnowledgeSetDefaultLocationResponse =
+  KnowledgeSetDefaultLocationResponses[keyof KnowledgeSetDefaultLocationResponses];
+
+export type KnowledgeTestLocationData = {
+  body?: never;
+  path: {
+    /**
+     * Storage Location Id
+     */
+    storage_location_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/locations/{storage_location_id}/test";
+};
+
+export type KnowledgeTestLocationErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeTestLocationError =
+  KnowledgeTestLocationErrors[keyof KnowledgeTestLocationErrors];
+
+export type KnowledgeTestLocationResponses = {
+  /**
+   * Successful Response
+   */
+  200: LocationOut;
+};
+
+export type KnowledgeTestLocationResponse =
+  KnowledgeTestLocationResponses[keyof KnowledgeTestLocationResponses];
+
+export type KnowledgeSetProjectFolderData = {
+  body: FolderIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/projects/{project_id}/folder";
+};
+
+export type KnowledgeSetProjectFolderErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeSetProjectFolderError =
+  KnowledgeSetProjectFolderErrors[keyof KnowledgeSetProjectFolderErrors];
+
+export type KnowledgeSetProjectFolderResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProjectFolderOut;
+};
+
+export type KnowledgeSetProjectFolderResponse =
+  KnowledgeSetProjectFolderResponses[keyof KnowledgeSetProjectFolderResponses];
 
 export type ProjectsListProjectsData = {
   body?: never;

@@ -106,6 +106,20 @@ export const zDeadLetterOut = z.object({
 });
 
 /**
+ * DefaultIn
+ */
+export const zDefaultIn = z.object({
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * FolderIn
+ */
+export const zFolderIn = z.object({
+  location_id: z.uuid(),
+});
+
+/**
  * Health
  */
 export const zHealth = z.enum(["blocked", "at_risk", "on_track"]);
@@ -155,6 +169,22 @@ export const zKeyOut = z.object({
  * Label
  */
 export const zLabel = z.enum(["human", "ai", "hybrid"]);
+
+/**
+ * LocationOut
+ */
+export const zLocationOut = z.object({
+  capabilities: z.record(z.string(), z.boolean()),
+  endpoint: z.string().nullable(),
+  id: z.uuid(),
+  is_default: z.boolean(),
+  kind: z.string(),
+  name: z.string(),
+  root: z.string(),
+  status: z.enum(["online", "offline"]),
+  status_reason: z.string().nullable(),
+  version: z.int(),
+});
 
 /**
  * LoginIn
@@ -259,6 +289,17 @@ export const zProblem = z.object({
   status: z.int(),
   title: z.string(),
   type: z.string(),
+});
+
+/**
+ * ProjectFolderOut
+ */
+export const zProjectFolderOut = z.object({
+  location_id: z.uuid(),
+  mode: z.enum(["tumnis_made", "existing"]),
+  project_id: z.uuid(),
+  root_path: z.string(),
+  version: z.int(),
 });
 
 /**
@@ -431,6 +472,29 @@ export const zReviewKindsOut = z.object({
  */
 export const zRotateIn = z.object({
   grace_minutes: z.int().gte(0).lte(1440).optional().default(0),
+});
+
+/**
+ * S3ConfigIn
+ */
+export const zS3ConfigIn = z.object({
+  access_key: z.string(),
+  endpoint: z.string(),
+  path_style: z.boolean().optional().default(true),
+  region: z.string().optional().default("us-east-1"),
+  secret_key: z.string(),
+  sse: z.literal("AES256").nullish(),
+});
+
+/**
+ * LocationIn
+ */
+export const zLocationIn = z.object({
+  is_default: z.boolean().optional().default(false),
+  kind: z.enum(["server_path", "s3"]),
+  name: z.string().min(1).max(100),
+  root: z.string().min(1).max(1024),
+  s3: zS3ConfigIn.nullish(),
 });
 
 /**
@@ -1002,6 +1066,51 @@ export const zAuthRotateKeyPath = z.object({
  * Successful Response
  */
 export const zAuthRotateKeyResponse = zKeyCreated;
+
+/**
+ * Response Knowledge List Locations
+ *
+ * Successful Response
+ */
+export const zKnowledgeListLocationsResponse = z.array(zLocationOut);
+
+export const zKnowledgeCreateLocationBody = zLocationIn;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeCreateLocationResponse = zLocationOut;
+
+export const zKnowledgeSetDefaultLocationBody = zDefaultIn;
+
+export const zKnowledgeSetDefaultLocationPath = z.object({
+  storage_location_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeSetDefaultLocationResponse = zLocationOut;
+
+export const zKnowledgeTestLocationPath = z.object({
+  storage_location_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeTestLocationResponse = zLocationOut;
+
+export const zKnowledgeSetProjectFolderBody = zFolderIn;
+
+export const zKnowledgeSetProjectFolderPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeSetProjectFolderResponse = zProjectFolderOut;
 
 export const zProjectsListProjectsQuery = z.object({
   include_archived: z.boolean().optional().default(false),

@@ -13,6 +13,7 @@ import {
   deadLettersQuery,
   keysQuery,
   sessionsQuery,
+  storageQuery,
   workspaceQuery,
 } from "../components/settings/queries";
 import {
@@ -22,6 +23,7 @@ import {
 } from "../components/settings/sections";
 import { SessionsSection } from "../components/settings/SessionsSection";
 import { SettingsLayout } from "../components/settings/SettingsLayout";
+import { StorageSection } from "../components/settings/StorageSection";
 import { WorkspaceSection } from "../components/settings/WorkspaceSection";
 
 export const settingsSections = SETTINGS_SECTIONS;
@@ -34,6 +36,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   "dead-letters": DeadLettersSection,
   workspace: WorkspaceSection,
   calendar: () => <CalendarSection />,
+  storage: StorageSection,
 };
 
 export const Route = createFileRoute("/settings/$section")({
@@ -69,6 +72,9 @@ export const Route = createFileRoute("/settings/$section")({
         break;
       case "calendar":
         started(queryClient.query(calendarAccountsQuery()));
+        break;
+      case "storage":
+        started(queryClient.query(storageQuery()));
         break;
       default:
         break; // the audit log reads by page
