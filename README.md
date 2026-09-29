@@ -9,18 +9,32 @@ A daily task organizer for freelancers and solopreneurs that turns every project
 
 ## Install
 
-TBD (P0-04). Tumnis runs as one compose file (`deploy/compose.yaml`) deployed by Coolify from `main`. Configuration is environment variables for deployment-level settings only; secrets are root-owned files mounted read-only (`MASTER_KEY_FILE`, `API_KEY_PEPPER_FILE`).
+Tumnis runs as one compose file (`deploy/compose.yaml`: migrate, api, worker, Postgres 18 with pgvector and pgBackRest, PgBouncer), deployed by Coolify from `main` after CI is green (`.github/workflows/deploy.yml` on the homelab runner). Configuration is environment variables for deployment-level settings only; secrets are root-owned files mounted read-only from `/etc/tumnis/secrets` (`MASTER_KEY_FILE`, `API_KEY_PEPPER_FILE`). No port is published on the host: the api is reached through Coolify's proxy over the VPN or Tailscale.
+
+Without Coolify, on any Docker host:
 
 ```bash
-make up     # TBD (P0-04): start the stack locally
-make down   # TBD (P0-04): stop it
+docker build -f deploy/Dockerfile -t ghcr.io/spaceshipcreative/tumnis:local .
+export TUMNIS_VERSION=local APP_DB_PASSWORD=$(openssl rand -hex 24) \
+  OWNER_DB_PASSWORD=$(openssl rand -hex 24) POSTGRES_PASSWORD=$(openssl rand -hex 24)
+sudo mkdir -p /etc/tumnis/secrets
+docker compose -f deploy/compose.yaml up -d --wait
 ```
+
+The local stack with fakes and the seed set (the one CI's end-to-end job and Playwright use):
+
+```bash
+make up     # build and start deploy/compose.test.yaml; api on 127.0.0.1:8080 (TUMNIS_TEST_PORT moves it)
+make down   # stop it and delete its volumes
+```
+
+Every process refuses to start (exit 78) on a configuration that would put a preview near production: `DEPLOYMENT_ENV=preview` needs `TUMNIS_ADAPTERS=fake` and no Jev key, and every process checks the database's `deployment_marker` against `DEPLOYMENT_ENV`.
 
 The runner daemon installs separately on the agent server; see [daemon/README.md](daemon/README.md).
 
 ## Operate
 
-TBD. Health is at `/health/live` and `/health/ready`, metrics at `/metrics` (P0-04 onward). Backups use pgBackRest with a quarterly restore drill (`scripts/drill/restore_drill.sh`, TBD).
+Health is at `/health/live` (no I/O) and `/health/ready` (503 when Postgres or DBOS is down, 200 `degraded` when only a module check fails); metrics at `/metrics` (P0-27). Backups use pgBackRest with a quarterly restore drill (`scripts/drill/restore_drill.sh`, TBD).
 
 ## Develop
 

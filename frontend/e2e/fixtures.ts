@@ -1,12 +1,11 @@
 // Shared Playwright fixtures. Specs import `test` and `expect` from here, never
 // from @playwright/test directly, so every spec can ask for these fixtures.
 //
-// Both fixtures are stubs in P0-02: a spec that requests one fails loudly
-// until its work package fills it in. Fixtures are lazy, so specs that do not
-// request them (like harness.spec.ts) are unaffected.
-import { test as base, type Page } from "@playwright/test";
+// `signedInPage` is a stub until P0-13: a spec that requests it fails loudly.
+// Fixtures are lazy, so specs that do not request them are unaffected.
+import { test as base, expect, type Page } from "@playwright/test";
 
-export { expect } from "@playwright/test";
+export { expect };
 
 /** The compose.test stack reset to the seed set (TUMNIS_ADAPTERS=fake). */
 export interface SeededApp {
@@ -25,10 +24,11 @@ function pending(fixture: string, wp: string, detail: string): never {
 }
 
 export const test = base.extend<E2EFixtures>({
-  seededApp: async ({ baseURL }, use) => {
-    await use(
-      pending("seededApp", "P0-04", `POST ${baseURL ?? ""}/v1/test/reset`),
-    );
+  seededApp: async ({ baseURL, request }, use) => {
+    // Mounted only with fake adapters (compose.test and previews).
+    const response = await request.post("/v1/test/reset");
+    expect(response.status(), "POST /v1/test/reset").toBe(204);
+    await use({ baseURL: baseURL ?? "" });
   },
   signedInPage: async ({ page }, use) => {
     await use(pending("signedInPage", "P0-13", `sign-in from ${page.url()}`));

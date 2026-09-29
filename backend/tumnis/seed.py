@@ -15,6 +15,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Literal, Protocol
 from uuid import UUID
@@ -26,6 +27,17 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 from tumnis.core.clock import Clock, local_to_utc
 
 SCHEMA_VERSION = 1
+
+# The seed and load sets live beside the package in the source tree (backend/fixtures).
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+
+
+class SeedSet(StrEnum):
+    seed = "seed"
+    load = "load"
+
+
+SEED_PATHS = {SeedSet.seed: FIXTURES / "seed", SeedSet.load: FIXTURES / "load" / "load.yaml"}
 DayOffset = Annotated[str, StringConstraints(pattern=r"^[+-]\d+d$")]
 LocalTime = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
 TaskStatus = Literal["backlog", "today", "in_progress", "waiting_on_human", "in_review", "done"]
@@ -200,6 +212,12 @@ _WRITERS: dict[str, SeedWriter] = {}
 
 class SeedWriterMissingError(LookupError):
     """No module has registered a database writer for this record kind yet."""
+
+
+def writers_registered() -> bool:
+    """False until the first module registers a writer (projects P0-17); a seed load before
+    then has nothing to write to."""
+    return bool(_WRITERS)
 
 
 def register_seed_writer(kind: str, writer: SeedWriter) -> None:

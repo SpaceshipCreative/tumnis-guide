@@ -1,0 +1,39 @@
+# PR previews (REL-7), layered on compose.yaml: the seed set on fakes, in a fresh database.
+# The compose project is per PR, so the pgdata volume is the preview's own and never the
+# production volume; the production secrets directory is not mounted.
+x-preview: &preview
+  DEPLOYMENT_ENV: preview
+  TUMNIS_ADAPTERS: fake
+
+x-secrets: &secrets
+  volumes:
+    - preview_secrets:/run/secrets:ro
+
+services:
+  migrate:
+    <<: *secrets
+    environment: *preview
+  api:
+    <<: *secrets
+    environment:
+      <<: *preview
+      # POST /v1/test/reset truncates as the owner role (fakes only).
+      DATABASE_OWNER_URL: postgresql+psycopg://tumnis_owner:${OWNER_DB_PASSWORD}@postgres:5432/tumnis?sslmode=require
+  worker:
+    <<: *secrets
+    environment: *preview
+  seed:
+    image: ghcr.io/spaceshipcreative/tumnis:${TUMNIS_VERSION:-latest}
+    command: ["tumnis", "seed"]
+    environment:
+      <<: *preview
+      DATABASE_URL: postgresql+psycopg://tumnis_app:${APP_DB_PASSWORD}@postgres:5432/tumnis?sslmode=require
+      DATABASE_DIRECT_URL: postgresql+psycopg://tumnis_app:${APP_DB_PASSWORD}@postgres:5432/tumnis?sslmode=require
+    volumes:
+      - preview_secrets:/run/secrets:ro
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: "no"
+
+volumes:
+  preview_secrets: {}

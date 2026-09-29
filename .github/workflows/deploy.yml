@@ -1,0 +1,51 @@
+# Deploy main through Coolify after `ci` is green (P0-04). Runs on the homelab runner:
+# Coolify lives on the private network, so GitHub cannot reach it and Coolify's own
+# GitHub auto-deploy (which fires before CI finishes) stays off (plan B5 #15).
+#
+# Repository settings: variables COOLIFY_URL, COOLIFY_APP_UUID; secret COOLIFY_TOKEN.
+name: deploy
+
+on:
+  workflow_run:
+    workflows: [ci] # the `name:` of .github/workflows/ci.yml
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: [self-hosted, homelab]
+    timeout-minutes: 30
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/tumnis
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+      COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Build and push the image
+        run: |
+          set -euo pipefail
+          image="${IMAGE,,}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -f deploy/Dockerfile -t "$image:sha-$SHA" -t "$image:main" .
+          docker push "$image:sha-$SHA"
+          docker push "$image:main"
+      - name: Point Coolify at this commit's image
+        run: scripts/deploy/coolify.sh set-env TUMNIS_VERSION "sha-$SHA"
+      - name: Deploy and wait
+        run: scripts/deploy/coolify.sh deploy
