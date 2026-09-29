@@ -16,7 +16,6 @@ def _projects(count: int) -> list[dict[str, Any]]:
 
 @pytest.mark.req("FR-11.2")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 def test_every_fr_11_4_point_has_a_spec() -> None:
     """T-P1-01-01
     The catalogue holds exactly the nine FR-11.4 points, each with the primitive FR-11.4
@@ -44,7 +43,6 @@ def test_every_fr_11_4_point_has_a_spec() -> None:
 
 @pytest.mark.req("FR-11.2")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 def test_every_point_defines_abstain() -> None:
     """T-P1-01-02
     Choice points offer an `unknown` option (and the abstain names it); Noul points
@@ -66,7 +64,6 @@ def test_every_point_defines_abstain() -> None:
 
 @pytest.mark.req("FR-11.2")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 def test_primitive_limits_hold() -> None:
     """T-P1-01-03
     A Choice has at most 255 options: project match with 254 projects plus `unknown`
