@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Tumnis Guide backend: modular monolith (ADR-0001)"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+  "aioboto3==15.5.0",
   "alembic==1.20.0",
   "argon2-cffi==25.1.0",
   "cryptography==50.0.1",
@@ -36,7 +37,6 @@ tumnis = "tumnis.cli:app"
 
 [dependency-groups]
 dev = [
-  "aioboto3==15.5.0",
   "asyncssh==2.24.0",
   "hypothesis==6.168.3",
   "import-linter==2.15",

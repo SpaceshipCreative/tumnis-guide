@@ -20,3 +20,9 @@ paths = [
   '''^deploy/pgbackrest/rehearsal\.env$''',
   '''^deploy/pgbackrest/test-conf\.d/''',
 ]
+
+[[allowlists]]
+description = "The S3 conditional-write parameter names (IfNoneMatch=, IfMatch=) that generic-api-key reads as a key; no value is allowed"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^If(None)?Match=$''']

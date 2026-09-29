@@ -37,6 +37,11 @@ import {
   deadLettersPostRetry,
   healthLive,
   healthReady,
+  knowledgeCreateLocation,
+  knowledgeListLocations,
+  knowledgeSetDefaultLocation,
+  knowledgeSetProjectFolder,
+  knowledgeTestLocation,
   type Options,
   projectsArchiveProject,
   projectsCreateProject,
@@ -150,6 +155,21 @@ import type {
   HealthLiveData,
   HealthLiveResponse,
   HealthReadyData,
+  KnowledgeCreateLocationData,
+  KnowledgeCreateLocationError,
+  KnowledgeCreateLocationResponse,
+  KnowledgeListLocationsData,
+  KnowledgeListLocationsError,
+  KnowledgeListLocationsResponse,
+  KnowledgeSetDefaultLocationData,
+  KnowledgeSetDefaultLocationError,
+  KnowledgeSetDefaultLocationResponse,
+  KnowledgeSetProjectFolderData,
+  KnowledgeSetProjectFolderError,
+  KnowledgeSetProjectFolderResponse,
+  KnowledgeTestLocationData,
+  KnowledgeTestLocationError,
+  KnowledgeTestLocationResponse,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectError,
   ProjectsArchiveProjectResponse,
@@ -1242,6 +1262,142 @@ export const authRotateKeyMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await authRotateKey({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const knowledgeListLocationsQueryKey = (
+  options?: Options<KnowledgeListLocationsData>,
+) => createQueryKey("knowledgeListLocations", options);
+
+/**
+ * List Locations
+ */
+export const knowledgeListLocationsOptions = (
+  options?: Options<KnowledgeListLocationsData>,
+) =>
+  queryOptions<
+    KnowledgeListLocationsResponse,
+    KnowledgeListLocationsError,
+    KnowledgeListLocationsResponse,
+    ReturnType<typeof knowledgeListLocationsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeListLocations({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeListLocationsQueryKey(options),
+  });
+
+/**
+ * Create Location
+ */
+export const knowledgeCreateLocationMutation = (
+  options?: Partial<Options<KnowledgeCreateLocationData>>,
+): UseMutationOptions<
+  KnowledgeCreateLocationResponse,
+  KnowledgeCreateLocationError,
+  Options<KnowledgeCreateLocationData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeCreateLocationResponse,
+    KnowledgeCreateLocationError,
+    Options<KnowledgeCreateLocationData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeCreateLocation({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Set Default Location
+ */
+export const knowledgeSetDefaultLocationMutation = (
+  options?: Partial<Options<KnowledgeSetDefaultLocationData>>,
+): UseMutationOptions<
+  KnowledgeSetDefaultLocationResponse,
+  KnowledgeSetDefaultLocationError,
+  Options<KnowledgeSetDefaultLocationData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeSetDefaultLocationResponse,
+    KnowledgeSetDefaultLocationError,
+    Options<KnowledgeSetDefaultLocationData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeSetDefaultLocation({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Test Location
+ */
+export const knowledgeTestLocationMutation = (
+  options?: Partial<Options<KnowledgeTestLocationData>>,
+): UseMutationOptions<
+  KnowledgeTestLocationResponse,
+  KnowledgeTestLocationError,
+  Options<KnowledgeTestLocationData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeTestLocationResponse,
+    KnowledgeTestLocationError,
+    Options<KnowledgeTestLocationData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeTestLocation({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Set Project Folder
+ */
+export const knowledgeSetProjectFolderMutation = (
+  options?: Partial<Options<KnowledgeSetProjectFolderData>>,
+): UseMutationOptions<
+  KnowledgeSetProjectFolderResponse,
+  KnowledgeSetProjectFolderError,
+  Options<KnowledgeSetProjectFolderData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeSetProjectFolderResponse,
+    KnowledgeSetProjectFolderError,
+    Options<KnowledgeSetProjectFolderData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeSetProjectFolder({
         ...options,
         ...fnOptions,
         throwOnError: true,
