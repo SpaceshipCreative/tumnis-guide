@@ -16,11 +16,14 @@ from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tumnis.core.net import NetPolicy
 from tumnis.core.settings_store import open_for_workspace, seal_for_workspace
 from tumnis.core.tenancy import WorkspaceContext, session_for
+from tumnis.modules.decisions import generation_config
 from tumnis.modules.decisions.adapters.port import (
     ChoiceAnswer,
     DecisionsProvider,
+    GenerationProvider,
     NoulAnswer,
     ProviderName,
     ProviderResponse,
@@ -30,6 +33,7 @@ from tumnis.modules.decisions.adapters.port import (
 from tumnis.modules.decisions.catalog import CATALOGUE, DecisionPoint, build_request
 from tumnis.modules.decisions.models import ProviderConfig as ProviderConfigRow
 from tumnis.modules.decisions.rules import is_pinned_model
+from tumnis.settings import GenerationSettings
 
 __all__ = [
     "ChoiceAnswer",
@@ -43,6 +47,7 @@ __all__ = [
     "Slot",
     "TypedAnswer",
     "ask_raw",
+    "configure_generation",
     "get_provider_config",
     "put_provider_config",
 ]
@@ -158,3 +163,15 @@ async def ask_raw(
     req = build_request(point, inputs)
     timeout = CATALOGUE[point].timeout_ms if timeout_ms is None else timeout_ms
     return await provider.ask(req, model=model, timeout_ms=timeout)
+
+
+def configure_generation(
+    settings: GenerationSettings,
+    *,
+    net_policy: NetPolicy | None = None,
+    provider: GenerationProvider | None = None,
+) -> None:
+    """Set the Generation slot's endpoint and timeouts for this process (P1-03): the worker
+    calls it once at start; tests pass a `provider` (a fake). Only `generation_api` asks
+    the slot; nothing here generates text."""
+    generation_config.configure(settings, net_policy=net_policy, provider=provider)
