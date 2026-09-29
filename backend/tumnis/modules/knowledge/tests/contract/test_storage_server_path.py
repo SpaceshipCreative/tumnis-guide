@@ -3,6 +3,7 @@ lets a path out of the location's root (P1-14, FR-15.7, SEC-5)."""
 
 from __future__ import annotations
 
+import contextlib
 import os
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,7 @@ from tumnis.modules.knowledge.tests.contract.storage_contract import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
     from pathlib import Path
 
     from tumnis.modules.knowledge.storage import StorageBackend
@@ -96,3 +98,116 @@ async def test_symlink_escape_refused(tmp_location: Path, tmp_path: Path) -> Non
     assert (tmp_location / "link.txt").is_symlink()
     assert (tmp_location / "linkdir").is_symlink()
     assert await read_all(backend, "ok.txt") == b"ok"
+
+
+class _SwapParent:
+    """Swaps the folder `root/a` for a symlink to `outside` once, right after the adapter's
+    path check (`_resolve`): the time-of-check/time-of-use race of PR #52's review."""
+
+    def __init__(self, root: Path, outside: Path) -> None:
+        self.root, self.outside = root, outside
+
+    def swap(self) -> None:
+        folder = self.root / "a"
+        if folder.is_dir() and not folder.is_symlink():
+            os.rename(folder, self.root / "a-moved")
+            os.symlink(self.outside, folder)
+
+    def after_resolve(self, backend: object, monkeypatch: pytest.MonkeyPatch) -> None:
+        resolve = backend._resolve  # type: ignore[attr-defined]
+
+        def checked_then_swapped(rel: str) -> object:
+            found = resolve(rel)
+            self.swap()
+            return found
+
+        monkeypatch.setattr(backend, "_resolve", checked_then_swapped)
+
+
+def _race_setup(tmp_location: Path, tmp_path: Path) -> tuple[Path, _SwapParent]:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_bytes(b"secret")
+    (tmp_location / "a").mkdir()
+    (tmp_location / "a" / "secret.txt").write_bytes(b"inside")
+    return outside, _SwapParent(tmp_location, outside)
+
+
+@pytest.mark.contract
+@pytest.mark.req("SEC-5")
+@pytest.mark.wp("P1-14")
+@pytest.mark.xfail(strict=True, reason="review:PR52 TOCTOU")
+async def test_pr52_read_refuses_a_parent_swapped_for_a_symlink_after_the_check(
+    tmp_location: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tumnis.modules.knowledge.storage import PathRejected  # noqa: PLC0415
+
+    _outside, race = _race_setup(tmp_location, tmp_path)
+    backend = _server_path(tmp_location)
+    race.after_resolve(backend, monkeypatch)
+
+    with pytest.raises(PathRejected):
+        await read_all(backend, "a/secret.txt")
+
+
+@pytest.mark.contract
+@pytest.mark.req("SEC-5")
+@pytest.mark.wp("P1-14")
+@pytest.mark.xfail(strict=True, reason="review:PR52 TOCTOU")
+async def test_pr52_delete_refuses_a_parent_swapped_for_a_symlink_after_the_check(
+    tmp_location: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tumnis.modules.knowledge.storage import PathRejected  # noqa: PLC0415
+
+    outside, race = _race_setup(tmp_location, tmp_path)
+    backend = _server_path(tmp_location)
+    race.after_resolve(backend, monkeypatch)
+
+    with pytest.raises(PathRejected):
+        await backend.delete("a/secret.txt")
+    assert (outside / "secret.txt").read_bytes() == b"secret"
+
+
+@pytest.mark.contract
+@pytest.mark.req("SEC-5")
+@pytest.mark.wp("P1-14")
+@pytest.mark.xfail(strict=True, reason="review:PR52 TOCTOU")
+async def test_pr52_stat_refuses_a_parent_swapped_for_a_symlink_after_the_check(
+    tmp_location: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tumnis.modules.knowledge.storage import PathRejected  # noqa: PLC0415
+
+    _outside, race = _race_setup(tmp_location, tmp_path)
+    backend = _server_path(tmp_location)
+    race.after_resolve(backend, monkeypatch)
+
+    with pytest.raises(PathRejected):
+        await backend.stat("a/secret.txt")
+
+
+@pytest.mark.contract
+@pytest.mark.req("SEC-5")
+@pytest.mark.wp("P1-14")
+@pytest.mark.parametrize(
+    "network_fs",
+    [False, pytest.param(True, marks=pytest.mark.xfail(strict=True, reason="review:PR52 TOCTOU"))],
+)
+async def test_pr52_write_never_lands_outside_when_a_parent_is_swapped_mid_write(
+    tmp_location: Path, tmp_path: Path, network_fs: bool
+) -> None:
+    from tumnis.modules.knowledge.adapters.server_path import (  # noqa: PLC0415
+        ServerPathStorage,
+    )
+
+    outside, race = _race_setup(tmp_location, tmp_path)
+    before = _tree(outside)
+    backend = ServerPathStorage(tmp_location, network_fs=network_fs)
+
+    async def body() -> AsyncIterator[bytes]:
+        yield b"first half "
+        race.swap()  # after the folders were checked and the temp file opened
+        yield b"second half"
+
+    with contextlib.suppress(Exception):
+        await backend.write("a/new.txt", body(), if_match=None)
+    assert _tree(outside) == before
