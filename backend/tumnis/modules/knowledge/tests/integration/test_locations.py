@@ -499,3 +499,41 @@ async def test_pr52_s3_write_already_landed_counts_as_written(
         checked = await knowledge.check_location(s, location.id, net=SELF_HOSTED)
     assert checked.status == "online"
     assert _count(db, "SELECT count(*) FROM pending_writes") == 0
+
+
+@pytest.mark.req("FR-15.12")
+@pytest.mark.wp("P1-14")
+@pytest.mark.xfail(strict=True, reason="review:PR52 drain chain")
+async def test_pr52_two_offline_saves_of_one_note_both_drain_and_the_newest_lands(
+    db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, tmp_location: Path
+) -> None:
+    """A note saved twice while its location is offline queues two writes to one path
+    with the same precondition; the drain carries the etag of the first into the second,
+    so both land in order and the file ends with the newest text."""
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+
+    ws = knowledge_ws
+    location_id = await _server_path_location(ws, tmp_location, "disk")
+    project_id = await _project(ws, clock)
+    async with tenant_session(ws.ctx) as s:
+        await knowledge.assign_project_folder(s, project_id)
+        note_id = await knowledge.put_text_document(
+            s, project_id, title="Plan", body_md="# Plan v1\n", role=None
+        )
+    (tmp_location / MARKER).unlink()
+    async with tenant_session(ws.ctx) as s:
+        await knowledge.check_location(s, location_id, net=SELF_HOSTED)
+        first = await knowledge.save_note(s, note_id, net=SELF_HOSTED)
+    with psycopg.connect(db.libpq(OWNER)) as conn:
+        conn.execute("UPDATE documents SET body_md = %s WHERE id = %s", ("# Plan v2\n", note_id))
+    async with tenant_session(ws.ctx) as s:
+        second = await knowledge.save_note(s, note_id, net=SELF_HOSTED)
+    assert (first.status, second.status) == ("queued", "queued")
+    assert _count(db, "SELECT count(*) FROM pending_writes") == 2
+
+    (tmp_location / MARKER).write_text("tumnis\n")
+    async with tenant_session(ws.ctx) as s:
+        await knowledge.check_location(s, location_id, net=SELF_HOSTED)
+    assert _count(db, "SELECT count(*) FROM pending_writes") == 0
+    assert (tmp_location / second.path).read_bytes() == b"# Plan v2\n"
