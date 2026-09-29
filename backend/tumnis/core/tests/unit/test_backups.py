@@ -56,7 +56,6 @@ CASES = [
 
 @pytest.mark.req("REL-1")
 @pytest.mark.wp("P0-28")
-@pytest.mark.xfail(strict=True, reason="spec:P0-28")
 @pytest.mark.parametrize(
     ("wal_at", "wal_failing", "last_ok", "expected"),
     [case[1:] for case in CASES],
