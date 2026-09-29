@@ -142,3 +142,71 @@ async def test_verify_reports_an_anchor_that_no_longer_matches(
         async with tenant_session(ctx) as s:
             breaks = await audit.verify_chain(s, ws)
     assert [(b.seq, b.kind) for b in breaks] == [(2, "hash_mismatch"), (2, "anchor_mismatch")]
+
+
+@pytest.mark.req("SEC-3", "REL-5")
+@pytest.mark.wp("P0-15")
+async def test_nightly_verify_records_ops_status(
+    dbos: type[DBOS], db: DbUrls, clock: FixedClock
+) -> None:
+    """The run's outcome reaches the api process through ops_status "audit_chain": not ok,
+    naming the broken workspace, while any chain is broken."""
+    from tests.fixtures import make_workspace  # noqa: PLC0415
+    from tumnis.core.audit_workflows import audit_verify  # noqa: PLC0415
+    from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
+    from tumnis.core.tests.integration._audit import owner_rows, tamper, write_rows  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    a, b = make_workspace(db, "A"), make_workspace(db, "B")
+    for workspace in (a, b):
+        await write_rows(WorkspaceContext(workspace, SYSTEM_ACTOR), 3, clock)
+    await audit_verify(clock.now(), None)
+    status = 'SELECT ok, checked_at, details FROM ops_status WHERE "check" = %s'
+    assert owner_rows(db, status, ("audit_chain",)) == [
+        (True, clock.now(), {"checked": 2, "broken": []})
+    ]
+
+    assert tamper(db, BREAK_SEQ2, (b,)) == 1
+    clock.advance(days=1)
+    await audit_verify(clock.now(), None)
+    assert owner_rows(db, status, ("audit_chain",)) == [
+        (False, clock.now(), {"checked": 2, "broken": [str(b)]})
+    ]
+
+
+@pytest.mark.req("SEC-3", "REL-1")
+@pytest.mark.wp("P0-15")
+def test_drill_record_audits_in_the_first_workspace(
+    db: DbUrls, clock: FixedClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`tumnis drill record` writes one `drill.completed` row, with the drill's numbers, in
+    the deployment's first workspace, on the chain `tumnis audit verify` accepts."""
+    from typer.testing import CliRunner  # noqa: PLC0415
+
+    from tests.fixtures import make_workspace  # noqa: PLC0415
+    from tumnis import cli  # noqa: PLC0415
+    from tumnis.core.tests.integration._audit import owner_rows  # noqa: PLC0415
+
+    first, _second = make_workspace(db, "First"), make_workspace(db, "Second")
+    monkeypatch.setattr(cli, "make_clock", lambda: clock)
+    env = {"DATABASE_URL": db.app, "DATABASE_DIRECT_URL": db.app, "DEPLOYMENT_ENV": "dev"}
+    args = ["drill", "record", "--mode", "rehearsal", "--rpo-seconds", "75"]
+    args += ["--rto-seconds", "420", "--target", "2026-03-09T11:58:00+00:00"]
+    recorded = CliRunner().invoke(cli.app, args, env=env)
+    assert recorded.exit_code == 0, recorded.output
+
+    rows = owner_rows(
+        db,
+        "SELECT workspace_id, seq, actor_type, occurred_at, details FROM audit_log "
+        "WHERE action = 'drill.completed'",
+    )
+    assert len(rows) == 1
+    workspace_id, seq, actor_type, occurred_at, details = rows[0]
+    assert (workspace_id, seq, actor_type, occurred_at) == (first, 1, "system", clock.now())
+    assert (details["rpo_seconds"], details["rto_seconds"], details["mode"]) == (
+        75,
+        420,
+        "rehearsal",
+    )
+    verified = CliRunner().invoke(cli.app, ["audit", "verify"], env=env)
+    assert verified.exit_code == 0, verified.output

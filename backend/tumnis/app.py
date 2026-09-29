@@ -16,6 +16,7 @@ from starlette.types import Scope
 from tumnis import wiring
 from tumnis.core import db, health, ops_status, testing_routes
 from tumnis.core.clock import Clock, SystemClock
+from tumnis.core.request_meta import RequestMetaMiddleware
 from tumnis.settings import Settings
 
 # The built frontend (P0-22 replaces the placeholder shell); present in the image.
@@ -59,6 +60,8 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
         docs_url=None,
         redoc_url=None,
     )
+    # Correlation ID, source address and user agent for the audit log (P0-15).
+    app.add_middleware(RequestMetaMiddleware)
     app.state.settings = settings
     app.state.clock = clock or SystemClock()
     app.include_router(health.router)

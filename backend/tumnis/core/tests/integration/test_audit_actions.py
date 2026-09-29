@@ -64,7 +64,6 @@ async def test_each_action_writes_one_row(
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P0-15")
-@pytest.mark.xfail(strict=True, reason="spec:P0-15")
 async def test_action_rolled_back_leaves_no_audit_row(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:

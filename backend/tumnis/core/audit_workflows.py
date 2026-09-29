@@ -5,7 +5,9 @@ workspace it runs `verify_chain`; a clean chain gets an anchor at its head, a br
 gets none and is logged with its breaks. Two gauges per workspace carry the result:
 `tumnis_audit_chain_ok` (1 clean, 0 broken; P0-27's alert fires on 0) and
 `tumnis_audit_anchored_seq` (the head anchored by the last clean run; truncation after it
-shows as the gauge going down).
+shows as the gauge going down). The gauges live in the worker's process, so the run also
+upserts ops_status "audit_chain" (P0-28's table), which the api's scrape-time ops gauges
+and any readiness check read.
 """
 
 import logging
@@ -16,13 +18,14 @@ from uuid import UUID
 from dbos import DBOS
 from prometheus_client import Gauge
 
-from tumnis.core import audit, db
+from tumnis.core import audit, db, ops_status
 from tumnis.core.metrics import REGISTRY
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 
 AUDIT_VERIFY_SCHEDULE: Final = "23 3 * * *"  # UTC, plan default
 SCHEDULE_NAME: Final = "audit-verify"
+CHECK: Final = "audit_chain"
 
 log = logging.getLogger(__name__)
 
@@ -64,12 +67,29 @@ async def verify_and_anchor(workspace_id: str, now: datetime) -> tuple[bool, int
     return True, current[0] if current else None
 
 
+@DBOS.step()
+async def record_status(broken: list[str], checked: int, now: datetime) -> None:
+    async with db.app_engine().begin() as conn:
+        await ops_status.record(
+            conn,
+            CHECK,
+            ok=not broken,
+            checked_at=now,
+            details={"checked": checked, "broken": broken},
+        )
+
+
 @DBOS.workflow()
 async def audit_verify(scheduled_at: datetime, context: Any) -> None:
     """Scheduled `23 3 * * *` on the maintenance queue (DBOS passes the scheduled time and
     the schedule's context); `scheduled_at` is the anchors' time."""
-    for workspace_id in await list_workspaces():
+    workspaces = await list_workspaces()
+    broken: list[str] = []
+    for workspace_id in workspaces:
         clean, anchored = await verify_and_anchor(workspace_id, scheduled_at)
         AUDIT_CHAIN_OK.labels(workspace=workspace_id).set(1 if clean else 0)
         if anchored is not None:
             AUDIT_ANCHORED_SEQ.labels(workspace=workspace_id).set(anchored)
+        if not clean:
+            broken.append(workspace_id)
+    await record_status(broken, len(workspaces), scheduled_at)
