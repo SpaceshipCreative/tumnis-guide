@@ -21,7 +21,6 @@ MIB = 1_048_576
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_rate_limit_returns_429_with_retry_after(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
@@ -52,7 +51,6 @@ async def test_rate_limit_returns_429_with_retry_after(
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_anonymous_limit_is_per_address(demo_app: Demo) -> None:
     """T-P0-10-13
     Anonymous requests are limited per source address: the first address's 11th request is
@@ -77,7 +75,6 @@ async def test_anonymous_limit_is_per_address(demo_app: Demo) -> None:
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_oversized_body_returns_413(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
