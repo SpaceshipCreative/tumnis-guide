@@ -33,7 +33,6 @@ def _utc(value: str) -> datetime:
 
 @pytest.mark.req("FR-4.7")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 def test_weekend_has_no_window_unless_replan() -> None:
     """T-P1-10-06
     Saturday and Sunday have no window with Monday-to-Friday hours; with `replan=True`
@@ -63,7 +62,6 @@ DST_CASES = [
 
 @pytest.mark.req("REL-6")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 @pytest.mark.parametrize(("zone", "day", "direction"), DST_CASES)
 def test_dst_days(zone: str, day: date, direction: str) -> None:
     """T-P1-10-07
@@ -87,7 +85,6 @@ def test_dst_days(zone: str, day: date, direction: str) -> None:
 
 @pytest.mark.req("REL-6")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 def test_local_to_utc_gap_and_overlap() -> None:
     """T-P1-10-08
     Through `core.clock.local_to_utc` (R-12), and the same conversion the planning rules use:
@@ -124,7 +121,6 @@ def test_local_to_utc_gap_and_overlap() -> None:
 
 @pytest.mark.req("REL-6")
 @pytest.mark.wp("P1-10")
-@pytest.mark.xfail(strict=True, reason="spec:P1-10")
 def test_monday_after_dst_keeps_local_hours() -> None:
     """T-P1-10-09
     The window stays 09:00 to 18:00 local across the US spring change: Monday 2026-03-09
@@ -144,3 +140,27 @@ def test_monday_after_dst_keeps_local_hours() -> None:
         _utc("2026-03-06T14:00:00Z"),
         _utc("2026-03-06T23:00:00Z"),
     )
+
+
+@pytest.mark.req("FR-4.7")
+@pytest.mark.wp("P1-10")
+def test_weekday_without_hours_works_the_default_and_a_folded_window_is_none() -> None:
+    """A weekday with no hours of its own works 09:00 to 18:00 (a new workspace has none
+    stored); a weekend day's own hours apply on Re-plan; hours a spring-forward gap folds
+    to nothing (02:30 to 03:00 on 2026-03-08 in New York) give no window."""
+    from tumnis.modules.planning.rules import working_window  # noqa: PLC0415
+
+    tuesday = working_window(date(2026, 3, 10), NEW_YORK, {}, replan=False)
+    assert tuesday is not None
+    assert (tuesday.start, tuesday.end) == (
+        _utc("2026-03-10T13:00:00Z"),
+        _utc("2026-03-10T22:00:00Z"),
+    )
+    saturday = date(2026, 3, 14)
+    custom = {5: (time(10, 0), time(12, 0))}
+    assert working_window(saturday, NEW_YORK, custom, replan=False) is None
+    window = working_window(saturday, NEW_YORK, custom, replan=True)
+    assert window is not None
+    assert window.minutes == 120
+    folded = {6: (time(2, 30), time(3, 0))}
+    assert working_window(date(2026, 3, 8), NEW_YORK, folded, replan=True) is None
