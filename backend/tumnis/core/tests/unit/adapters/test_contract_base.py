@@ -80,7 +80,6 @@ def contracts(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> Any
 
 @pytest.mark.req("PRD Testability NFR")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 def test_same_cases_run_against_each_impl(pytester: pytest.Pytester, contracts: Any) -> None:
     """T-P0-09-11
     A pytester run of a demo port with fake and real subclasses collects the same case names
@@ -100,7 +99,6 @@ def test_same_cases_run_against_each_impl(pytester: pytest.Pytester, contracts: 
 
 @pytest.mark.req("PRD Testability NFR")
 @pytest.mark.wp("P0-09")
-@pytest.mark.xfail(strict=True, reason="spec:P0-09")
 def test_divergent_fake_fails_the_contract(pytester: pytest.Pytester, contracts: Any) -> None:
     """T-P0-09-12
     The same demo with a fake that lower-cases where the real upper-cases fails only in the

@@ -65,11 +65,13 @@ _CONTRACTS: dict[str, set[str]] = {}
 
 
 def record_contract(name: str, impl: str) -> None:
-    raise NotImplementedError
+    """Called by each `Test*` subclass of `AdapterContract` as its module is imported."""
+    _CONTRACTS.setdefault(name, set()).add(impl)
 
 
 def contract_impls() -> Mapping[str, set[str]]:
-    raise NotImplementedError
+    """Adapter name -> the implementations ("fake", "real", "recorded") with a contract class."""
+    return {name: set(impls) for name, impls in _CONTRACTS.items()}
 
 
 def contract_violations() -> list[str]:
