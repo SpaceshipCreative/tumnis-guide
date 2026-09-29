@@ -26,6 +26,19 @@ ALLOWED: dict[str, str] = {
         "P0-08: the preview boot check sees which provider credential keys any workspace "
         "holds (key names only)"
     ),
+    "app.auth_login_lookup": (
+        "P0-13: the password step finds a user by email before any workspace is known"
+    ),
+    "app.auth_resolve_session": (
+        "P0-13: the authentication middleware finds a session by its token HMAC before "
+        "the workspace is known"
+    ),
+    "app.auth_user_exists": "P0-13: first-run setup runs only while no user exists",
+    "app.auth_throttle_lock": (
+        "P0-13: sign-in failure counters are global (per email, address and user) and "
+        "have no app role grant; locks the counters of one attempt"
+    ),
+    "app.auth_throttle_put": "P0-13: writes back or clears the counters locked above",
 }
 
 _DEFINERS = """

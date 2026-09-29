@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import functools
 import json
 import secrets
 import uuid
@@ -171,15 +172,52 @@ def make_workspace(db: DbUrls, name: str = "Test", timezone: str = "America/New_
     return workspace_id
 
 
+@functools.cache
+def _test_password_hash() -> str:
+    from tests._auth import TEST_PASSWORD  # noqa: PLC0415
+    from tumnis.modules.auth.passwords import hash_password  # noqa: PLC0415
+
+    return hash_password(TEST_PASSWORD)
+
+
+def make_user(db: DbUrls, workspace_id: uuid.UUID) -> tuple[uuid.UUID, str]:
+    """An owner user of the workspace (password `tests._auth.TEST_PASSWORD`, no TOTP yet),
+    inserted as the owner role; returns (user_id, email)."""
+    import psycopg  # noqa: PLC0415
+
+    from tests._pg import OWNER  # noqa: PLC0415
+
+    email = f"user-{workspace_id.hex[-12:]}@example.test"
+    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+        row = conn.execute(
+            "INSERT INTO users (email, password_hash, home_workspace_id) VALUES (%s, %s, %s)"
+            " RETURNING id",
+            (email, _test_password_hash(), workspace_id),
+        ).fetchone()
+        assert row is not None
+        user_id: uuid.UUID = row[0]
+        conn.execute(
+            "INSERT INTO memberships (workspace_id, user_id, role, created_by)"
+            " VALUES (%s, %s, 'owner', 'system')",
+            (workspace_id, user_id),
+        )
+    return user_id, email
+
+
 @pytest.fixture
 def workspace(db: DbUrls) -> Iterator[WorkspaceHandle]:
-    """A workspace (name "Test", America/New_York) made as the owner; the test runs inside
-    its context as the system actor. P0-13 adds a user and a membership."""
+    """A workspace (name "Test", America/New_York) made as the owner, with its owner user
+    (`user_id`, `email`, `password`; no TOTP secret until `enroll_workspace_user`); the
+    test runs inside its context as the system actor."""
+    from tests._auth import TEST_PASSWORD  # noqa: PLC0415
     from tumnis.core.tenancy import WorkspaceContext, use_workspace  # noqa: PLC0415
     from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
 
     ws = make_workspace(db)
-    handle = WorkspaceHandle(ws, "Test", WorkspaceContext(ws, SYSTEM_ACTOR))
+    user_id, email = make_user(db, ws)
+    handle = WorkspaceHandle(
+        ws, "Test", WorkspaceContext(ws, SYSTEM_ACTOR), user_id, email, TEST_PASSWORD
+    )
     with use_workspace(handle.ctx):
         yield handle
 

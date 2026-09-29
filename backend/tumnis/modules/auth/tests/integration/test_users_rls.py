@@ -19,7 +19,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-13")
-@pytest.mark.xfail(strict=True, reason="spec:P0-13")
 def test_app_role_reads_only_its_own_user(db: DbUrls, workspace: WorkspaceHandle) -> None:
     """T-P0-13-19
     Two users in two workspaces. As the app role with `app.user_id` set, `SELECT * FROM
