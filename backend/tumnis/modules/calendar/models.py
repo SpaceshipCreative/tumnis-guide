@@ -37,3 +37,4 @@ class CalendarAccount(TenantBase, Base):
     )
     status: Mapped[str] = mapped_column(server_default=text("'connected'"))
     last_sync_at: Mapped[datetime | None]
+    sync_owner: Mapped[str | None]  # the sync workflow holding the account

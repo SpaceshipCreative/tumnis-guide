@@ -1,11 +1,14 @@
 """calendar DBOS workflows and steps (P1-09).
 
-- `calendar_connector_sync(workspace_id, connection_id)` on the `sync` queue: refresh the
-  access token when it is about to expire (a revoked grant marks the account
-  `needs_reauth` and ends the sync), store the window and first cursor, then one step per
-  events.list page, each committing the page's events with the next cursor; after page n
-  commits, kill point `calendar.sync.page_<n>.committed`. The last step clears the cursor,
-  sets `last_sync_at` and emits one `calendar.synced`. A failed sync emits nothing.
+- `calendar_connector_sync(workspace_id, connection_id)` on the `sync` queue: take the
+  account's sync lease (`calendar_accounts.sync_owner`: a second sync of the account ends
+  `busy` while the holder is pending or enqueued, and replaces a holder that finished or
+  failed for good), refresh the access token when it is about to expire (a revoked grant
+  marks the account `needs_reauth` and ends the sync), store the window and first cursor,
+  then one step per events.list page, each committing the page's events with the next
+  cursor; after page n commits, kill point `calendar.sync.page_<n>.committed`. The last
+  step clears the cursor, sets `last_sync_at`, gives the lease back and emits one
+  `calendar.synced`. A failed sync emits nothing.
 - `calendar_oauth_exchange(workspace_id, pending_id)`: the worker's half of the OAuth
   callback (the api makes no outbound call, architecture principle 3). Step one exchanges
   the one-use code (a refused code ends it and uses the grant up); step two lists the
@@ -43,6 +46,7 @@ SYNC_WORKFLOW: Final = api.SYNC_WORKFLOW
 EXCHANGE_WORKFLOW: Final = api.EXCHANGE_WORKFLOW
 TICK_SCHEDULE_NAME: Final = "calendar-sync-tick"
 TICK_SCHEDULE: Final = f"*/{SYNC_EVERY_MINUTES} * * * *"
+_ACTIVE: Final = frozenset({"PENDING", "ENQUEUED"})  # a sync lease holder still running
 STEP_RETRY: Final[dict[str, Any]] = {
     "retries_allowed": True,
     "max_attempts": 3,
@@ -81,25 +85,44 @@ def _ctx(workspace_id: str) -> WorkspaceContext:
 # --- Sync --------------------------------------------------------------------------------------
 
 
+async def _claim(ctx: WorkspaceContext, conn: UUID, owner: str) -> bool:
+    """Take the account's sync lease; a holder that is no longer pending or enqueued (it
+    finished or failed for good) is replaced."""
+    holder = await api.claim_sync(ctx, conn, owner)
+    if holder is None:
+        return True
+    status = await DBOS.get_workflow_status_async(holder)
+    if status is not None and status.status in _ACTIVE:
+        return False
+    return await api.claim_sync(ctx, conn, owner, replacing=holder) is None
+
+
 @DBOS.step(**STEP_RETRY)
-async def begin_sync(workspace_id: str, connection_id: str) -> dict[str, Any]:
-    """Token check and the sync's window: {"status": "ready", "window": [start, end]}, or
-    {"status": "needs_reauth"} (revoked grant) / {"status": "not_configured"} (no OAuth
-    client to refresh with)."""
+async def begin_sync(workspace_id: str, connection_id: str, owner: str) -> dict[str, Any]:
+    """The account's sync lease, the token check and the sync's window:
+    {"status": "ready", "window": [start, end]}, or {"status": "busy"} (another sync holds
+    the account), {"status": "needs_reauth"} (revoked grant) / {"status": "not_configured"}
+    (no OAuth client to refresh with), both giving the lease back."""
     ctx, conn = _ctx(workspace_id), UUID(connection_id)
     clock = _now_clock()
+    if not await _claim(ctx, conn, owner):
+        return {"status": "busy"}
     if await api.account_status(ctx, conn) == "needs_reauth":
+        await api.release_sync(ctx, conn, owner)
         return {"status": "needs_reauth"}
     tokens = await api.account_tokens(ctx, conn)
     expires_at = datetime.fromisoformat(tokens.get("expires_at") or "1970-01-01T00:00:00+00:00")
     if needs_refresh(expires_at, clock.now()):
         client = await api.oauth_client(ctx)
         if client is None or not tokens.get("refresh_token"):
+            await api.release_sync(ctx, conn, owner)
             return {"status": "not_configured"}
         try:
             fresh = await _google().refresh(client, refresh_token=tokens["refresh_token"])
         except GrantRevoked:
-            await api.mark_needs_reauth(ctx, conn)
+            async with tenant_session(ctx) as s:
+                await api.mark_needs_reauth(ctx, conn, session=s)
+                await api.release_sync(ctx, conn, owner, session=s)
             return {"status": "needs_reauth"}
         await api.store_tokens(ctx, conn, fresh)
     start, end = await api.start_sync(ctx, conn, now=clock.now())
@@ -116,16 +139,23 @@ async def sync_page(workspace_id: str, connection_id: str, page_no: int) -> bool
 
 
 @DBOS.step(**STEP_RETRY)
-async def finish_sync(workspace_id: str, connection_id: str, window: list[str]) -> None:
+async def finish_sync(workspace_id: str, connection_id: str, window: list[str], owner: str) -> None:
     start, end = (datetime.fromisoformat(value) for value in window)
     await api.complete_sync(
-        _ctx(workspace_id), UUID(connection_id), at=_now_clock().now(), window=(start, end)
+        _ctx(workspace_id),
+        UUID(connection_id),
+        at=_now_clock().now(),
+        window=(start, end),
+        owner=owner,
     )
 
 
 @DBOS.workflow(name=SYNC_WORKFLOW)
 async def connector_sync(workspace_id: str, connection_id: str) -> dict[str, Any]:
-    started = await begin_sync(workspace_id, connection_id)
+    owner = DBOS.workflow_id
+    if owner is None:  # pragma: no cover  # always set inside a workflow
+        raise RuntimeError("calendar_connector_sync runs as a DBOS workflow")
+    started = await begin_sync(workspace_id, connection_id, owner)
     if started["status"] != "ready":
         return {"status": started["status"]}
     pages = 0
@@ -134,7 +164,7 @@ async def connector_sync(workspace_id: str, connection_id: str) -> dict[str, Any
         pages += 1
         more = await sync_page(workspace_id, connection_id, pages)
         faults.killpoint(f"calendar.sync.page_{pages}.committed")
-    await finish_sync(workspace_id, connection_id, started["window"])
+    await finish_sync(workspace_id, connection_id, started["window"], owner)
     return {"status": "synced", "pages": pages}
 
 

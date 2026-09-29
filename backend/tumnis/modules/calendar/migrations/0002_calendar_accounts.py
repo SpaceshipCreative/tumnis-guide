@@ -3,7 +3,8 @@
 - `calendar_accounts`: one row per connected Google account (its `connections` row holds
   the sealed tokens): the account's address, its calendar list (`calendars`, for Settings),
   the calendars chosen for sync, `status` (`connected` or `needs_reauth` after a revoked
-  grant) and the last completed sync.
+  grant), the last completed sync and `sync_owner` (the sync workflow holding the account,
+  so a manual and a scheduled sync never run at once).
 - `events.calendar_id`: the Google calendar an event was read from, so deselecting a
   calendar can drop its events. `all_day` and `provider_url` already exist
   (`calendar_0001` and `canonical_columns`).
@@ -38,6 +39,7 @@ def upgrade() -> None:
         ),
         sa.Column("status", sa.Text, nullable=False, server_default=sa.text("'connected'")),
         sa.Column("last_sync_at", sa.TIMESTAMP(timezone=True), nullable=True),
+        sa.Column("sync_owner", sa.Text, nullable=True),
         sa.CheckConstraint(
             "status IN ('connected', 'needs_reauth')", name="ck_calendar_accounts_status"
         ),

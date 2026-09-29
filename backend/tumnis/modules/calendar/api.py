@@ -620,16 +620,59 @@ async def mark_needs_reauth(
         await integrations.save_sync_cursor(ctx, connection_id, None, session=s)
 
 
+async def claim_sync(
+    ctx: WorkspaceContext,
+    connection_id: UUID,
+    owner: str,
+    *,
+    replacing: str | None = None,
+    session: AsyncSession | None = None,
+) -> str | None:
+    """Take the account's sync lease for workflow `owner` (one sync per account at a time:
+    Sync now and the scheduled sync share the cursor). None when `owner` holds it now (it
+    was free, already `owner`'s, or held by `replacing`, a finished workflow); otherwise
+    the workflow that holds it. Compare-and-set on the account row, so two claims never
+    both win."""
+    held = _accounts.c.sync_owner
+    free = (held.is_(None)) | (held == owner)
+    if replacing is not None:
+        free |= held == replacing
+    async with session_for(ctx, session) as s:
+        taken = await s.execute(
+            update(_accounts)
+            .where(_accounts.c.connection_id == connection_id, free)
+            .values(sync_owner=owner)
+            .returning(_accounts.c.id)
+        )
+        if taken.first() is not None:
+            return None
+        holder: str | None = (await _account_by_connection(s, connection_id))["sync_owner"]
+    return holder
+
+
+async def release_sync(
+    ctx: WorkspaceContext, connection_id: UUID, owner: str, *, session: AsyncSession | None = None
+) -> None:
+    """Give the account's sync lease back (only `owner`'s)."""
+    async with session_for(ctx, session) as s:
+        await s.execute(
+            update(_accounts)
+            .where(_accounts.c.connection_id == connection_id, _accounts.c.sync_owner == owner)
+            .values(sync_owner=None)
+        )
+
+
 async def complete_sync(
     ctx: WorkspaceContext,
     connection_id: UUID,
     *,
     at: datetime,
     window: tuple[datetime, datetime],
+    owner: str | None = None,
     session: AsyncSession | None = None,
 ) -> None:
-    """A finished sync: the cursor cleared, `last_sync_at` set and one `calendar.synced`,
-    in one transaction."""
+    """A finished sync: the cursor cleared, `last_sync_at` set, the lease of `owner` given
+    back and one `calendar.synced`, in one transaction."""
     async with session_for(ctx, session) as s:
         await integrations.save_sync_cursor(ctx, connection_id, None, session=s)
         await s.execute(
@@ -637,6 +680,8 @@ async def complete_sync(
             .where(_accounts.c.connection_id == connection_id)
             .values(last_sync_at=at)
         )
+        if owner is not None:
+            await release_sync(ctx, connection_id, owner, session=s)
         await integrations.set_connection_status(
             ctx, connection_id, "ok", last_sync_at=at, session=s
         )
@@ -746,7 +791,8 @@ async def accept_callback(
 async def request_sync(
     ctx: WorkspaceContext, account_id: UUID, *, now: datetime
 ) -> CalendarAccountOut:
-    """Sync now: enqueue the account's sync (one per account and second)."""
+    """Sync now: enqueue the account's sync (one per account and second). While another
+    sync holds the account, the new one ends `busy` (that sync is already running)."""
     account = await get_account(ctx, account_id)
     if account is None:
         raise NotFound("calendar_accounts", account_id)

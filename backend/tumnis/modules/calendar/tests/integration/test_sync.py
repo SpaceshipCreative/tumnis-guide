@@ -325,7 +325,6 @@ async def test_calendar_synced_emitted_once_per_sync(
 
 @pytest.mark.req("FR-14.3")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="review:P1-09 per-account sync lock")
 async def test_one_sync_per_account_at_a_time(
     app_db: DbUrls,
     workspace: WorkspaceHandle,
@@ -359,7 +358,6 @@ async def test_one_sync_per_account_at_a_time(
 
 @pytest.mark.req("FR-14.3")
 @pytest.mark.wp("P1-09")
-@pytest.mark.xfail(strict=True, reason="review:P1-09 per-account sync lock")
 async def test_failed_sync_frees_the_account(
     app_db: DbUrls,
     workspace: WorkspaceHandle,
@@ -381,7 +379,6 @@ async def test_failed_sync_frees_the_account(
     assert (await _sync(workspace, conn_a))["status"] == "synced"
     assert len(outbox(app_db, "calendar.synced")) == 1
     assert _holder(app_db, conn_a) is None
-
 
 
 def _holder(db: DbUrls, connection_id: uuid.UUID) -> str | None:
