@@ -49,7 +49,6 @@ def _quoted(name: str) -> str:
 
 @pytest.mark.req("Hosted readiness", "ADR-0009")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 @pytest.mark.parametrize("table", _declared_tables())
 @pytest.mark.usefixtures("core_db")
 async def test_isolation(
@@ -106,7 +105,6 @@ async def test_isolation(
 
 @pytest.mark.req("ADR-0009")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_every_tenant_table_has_rows_in_both_workspaces(
     db: DbUrls, two_workspaces: tuple[WorkspaceHandle, WorkspaceHandle]
 ) -> None:

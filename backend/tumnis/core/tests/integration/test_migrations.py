@@ -70,7 +70,6 @@ def test_upgrade_downgrade_upgrade_empty(pg_container: PostgresContainer, empty_
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P0-06")
-@pytest.mark.xfail(strict=True, reason="spec:P0-06")
 def test_stairway_on_seeded_database(empty_db: DbUrls) -> None:
     """T-P0-06-11
     For each revision in dependency order: upgrade to it, insert rows with `row_factory`

@@ -151,6 +151,54 @@ def make_workspace(db: DbUrls, name: str = "Test", timezone: str = "America/New_
     return workspace_id
 
 
+@pytest.fixture
+def workspace(db: DbUrls) -> Iterator[WorkspaceHandle]:
+    """A workspace (name "Test", America/New_York) made as the owner; the test runs inside
+    its context as the system actor. P0-13 adds a user and a membership."""
+    from tumnis.core.tenancy import WorkspaceContext, use_workspace  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    ws = make_workspace(db)
+    handle = WorkspaceHandle(ws, "Test", WorkspaceContext(ws, SYSTEM_ACTOR))
+    with use_workspace(handle.ctx):
+        yield handle
+
+
+@pytest.fixture
+def two_workspaces(db: DbUrls) -> tuple[WorkspaceHandle, WorkspaceHandle]:
+    """Workspaces A and B, each with at least one row in every fenced table: the seed set
+    once its writers exist (P0-17, P0-18), and `minimal_row` for any table it leaves empty.
+    Enters no context: isolation tests choose theirs."""
+    import psycopg  # noqa: PLC0415
+
+    from tests._pg import OWNER  # noqa: PLC0415
+    from tests.meta._catalog import fenced_tables, tenant_key  # noqa: PLC0415
+    from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
+    from tumnis.core.tests.integration.row_factory import insert_row, minimal_row  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    pair = tuple(
+        WorkspaceHandle(ws, name, WorkspaceContext(ws, SYSTEM_ACTOR))
+        for name in ("A", "B")
+        for ws in [make_workspace(db, name)]
+    )
+    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+        for table in fenced_tables(conn):
+            if tenant_key(conn, table) != "workspace_id":
+                continue  # the root: each workspace is its own row
+            for handle in pair:
+                has_row = conn.execute(
+                    psycopg.sql.SQL("SELECT 1 FROM {} WHERE workspace_id = %s LIMIT 1").format(
+                        psycopg.sql.Identifier(table)
+                    ),
+                    (handle.id,),
+                ).fetchone()
+                if has_row is None:
+                    insert_row(conn, table, minimal_row(conn, table, handle.id))
+    a, b = pair
+    return a, b
+
+
 @dataclass(frozen=True)
 class PgBouncer:
     """A PgBouncer in transaction mode in front of pg_container (P0-06 spec stub)."""

@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 if TYPE_CHECKING:
     from tests._pg import DbUrls
+    from tests.fixtures import WorkspaceHandle
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
@@ -99,3 +100,18 @@ async def test_update_bumps_version_and_keeps_tenant(db: DbUrls) -> None:
     assert after.version == version + 1
     assert after.updated_at > updated_at
     assert after.name == "after"
+
+
+@pytest.mark.req("ADR-0009")
+@pytest.mark.wp("P0-06")
+@pytest.mark.usefixtures("core_db")
+async def test_workspace_fixture_enters_its_context(workspace: WorkspaceHandle) -> None:
+    """The `workspace` fixture runs the test inside its workspace: app-role transactions
+    see that workspace and its row."""
+    from tumnis.core import db as core_db  # noqa: PLC0415
+    from tumnis.core.tenancy import current  # noqa: PLC0415
+
+    assert current() == workspace.ctx
+    async with core_db.app_sessionmaker()() as session, session.begin():
+        seen = await session.execute(text("SELECT id, name, timezone FROM workspaces"))
+        assert [tuple(r) for r in seen] == [(workspace.id, "Test", "America/New_York")]
