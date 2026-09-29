@@ -429,7 +429,15 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Successful Response",
+            "headers": {
+              "Tumnis-Version": {
+                "description": "The build version (tag, or sha-<commit> for main)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Live",

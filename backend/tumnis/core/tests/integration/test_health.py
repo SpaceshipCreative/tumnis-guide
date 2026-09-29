@@ -137,7 +137,6 @@ async def test_ready_checks_dbos_system_tables(
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P0-30")
-@pytest.mark.xfail(strict=True, reason="spec:P0-30")
 async def test_live_reports_version(clock: FixedClock, monkeypatch: pytest.MonkeyPatch) -> None:
     """T-P0-30-06
     The image's VERSION build arg reaches `tumnis.__version__` (TUMNIS_BUILD_VERSION), and
