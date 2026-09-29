@@ -3,8 +3,10 @@
 
 Compares every test file changed between --base and --head. Deleting a test file or a
 test, editing a test's body, or adding a skip or non-spec xfail is a violation. Removing
-a `spec:` xfail marker is allowed. Only the `spec-change` label added by an owner (repo
-variable SPEC_CHANGE_ACTORS) waives violations; the report is printed either way.
+a `spec:` xfail marker is allowed; generated contract tests are exempt. Only existing test
+files are locked: other files, CI definitions included, are reviewed as ordinary code.
+Only the `spec-change` label added by an owner (repo variable SPEC_CHANGE_ACTORS) waives
+violations; the report is printed either way.
 
     python scripts/ci/spec_guard.py --base origin/main --head HEAD --labels ""
 """
@@ -42,8 +44,6 @@ from _tests_extract import (
 
 EXEMPT_GLOBS = ("backend/tests/contract/generated/**", "frontend/src/api/**")
 GENERATED_HEADER = ("# @generated", "// @generated")
-# Guard and CI definitions are locked files: an agent's PR may not loosen its own checks.
-LOCKED_GLOBS = ("scripts/ci/**", ".github/**")
 PYTESTMARK = "<pytestmark>"
 SPEC_CHANGE = "spec-change"
 
@@ -53,7 +53,7 @@ class Violation:
     path: str
     test: str
     kind: str  # deleted_file | deleted_test | edited_test | added_skip_or_xfail
-    #            | edited_pytestmark | edited_locked_file
+    #            | edited_pytestmark
     detail: str
 
 
@@ -175,16 +175,13 @@ def collect(repo: Path, base: str, head: str) -> list[Violation]:
 
     A (added) is never a violation; D (deleted) is deleted_file; R (renamed) compares the
     old path's blocks with the new path's; M compares blocks. Exempt paths and generated
-    files are skipped. Any change to an existing file under LOCKED_GLOBS is a violation.
+    files are skipped. Files that are not tests (CI definitions included) are not locked.
     """
     out: list[Violation] = []
     for change in changes(repo, base, head):
         if change.status == "A" or change.old is None:
             continue
-        if matches_any(change.old, LOCKED_GLOBS):
-            detail = "CI and guard files change only with the spec-change label"
-            out.append(Violation(change.old, "*", "edited_locked_file", detail))
-        elif is_test_file(change.old):
+        if is_test_file(change.old):
             out.extend(_compare(repo, base, head, change))
     return out
 

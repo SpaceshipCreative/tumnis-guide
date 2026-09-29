@@ -45,17 +45,11 @@ fail() {
 [ $# -eq 2 ] || fail "usage: rollback_rehearsal.sh <N: tag, ref or image> <N+1: tag, ref or image>"
 cd "$REPO"
 
-# The rehearsal starts no backup service, so no pgBackRest stanza exists: WAL archiving
-# stays off (a failing async archive-push makes Postgres restart under the api).
-cat >"$WORK/compose.skew.yaml" <<'YAML'
-services:
-  postgres:
-    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "archive_mode=off"]
-YAML
-
+# compose.test keeps WAL archiving off (issue #21), so the rehearsal needs no pgBackRest
+# stanza and starts no backup service.
 compose() {
   TUMNIS_IMAGE="$IMAGE" TUMNIS_TEST_PORT="$PORT" \
-    docker compose -p "$PROJECT" -f deploy/compose.test.yaml -f "$WORK/compose.skew.yaml" "$@"
+    docker compose -p "$PROJECT" -f deploy/compose.test.yaml "$@"
 }
 
 cleanup() {

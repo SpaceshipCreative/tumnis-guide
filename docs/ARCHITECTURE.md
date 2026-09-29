@@ -613,8 +613,8 @@ Each decision below becomes one short file in `docs/adr/` when the repo is scaff
 | 0007 | Docling for extraction, vision fallback on the vLLM cluster | Accepted | PyMuPDF4LLM (AGPL); Marker (weights licensed only under $5M revenue or funding); MarkItDown (no layout analysis) | Heavier image; extraction isolated in `worker-extract` |
 | 0008 | Tiptap editor with Markdown as the stored form | Accepted | CodeMirror 6: exact Markdown but shows syntax and lacks mentions and slash commands out of the box | Markdown extension is beta: pinned version, canonical style, round-trip tests |
 | 0009 | Row-level security with a transaction-local workspace setting | Accepted (PRD decision 12) | Tenant filters in application code only: one missed `WHERE` leaks data | App role must never own tables or bypass RLS |
-| 0010 | API keys stored as a keyed hash, passwords as argon2id | Proposed | argon2id for keys: slow on every request with no gain for random secrets | Server pepper must be backed up with the master key |
-| 0011 | Outbox relay enqueues DBOS workflows with `event_id:subscriber` deduplication | Proposed | Enqueueing DBOS workflows directly inside the business transaction: not guaranteed atomic with it | Events are delivered at least once; every subscriber is idempotent |
+| 0010 | API keys stored as a keyed hash, passwords as argon2id | Accepted | argon2id for keys: slow on every request with no gain for random secrets | Server pepper must be backed up with the master key |
+| 0011 | Outbox relay enqueues DBOS workflows with `event_id:subscriber` deduplication | Accepted | Enqueueing DBOS workflows directly inside the business transaction: not guaranteed atomic with it | Events are delivered at least once; every subscriber is idempotent |
 
 **File template**
 
