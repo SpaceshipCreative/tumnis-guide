@@ -81,7 +81,6 @@ def _is_package_or_kept(directory: Path) -> bool:
 
 @pytest.mark.req("ADR-0001")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_top_level_folders_exist() -> None:
     """T-P0-01-01
     The A1 top-level folders exist at the repo root.
@@ -140,7 +139,6 @@ def test_module_registry_matches_folders_and_contract() -> None:
 
 @pytest.mark.req("ADR-0001")
 @pytest.mark.wp("P0-01")
-@pytest.mark.xfail(strict=True, reason="spec:P0-01")
 def test_adr_files_and_agent_rules_present() -> None:
     """T-P0-01-11
     11 ADR files with the template headings; AGENTS.md has the required sections;
