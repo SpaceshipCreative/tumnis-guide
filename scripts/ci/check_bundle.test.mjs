@@ -35,7 +35,6 @@ function run(root) {
 
 test(
   "[P0-22][PERF-2] T-P0-22-15 fails over 200 KB compressed",
-  { todo: "spec:P0-22" },
   () => {
     const small = dist(
       { "assets/index-a.js": 150 * KB, "assets/index-a.css": 300 * KB },
