@@ -571,3 +571,13 @@ async def _target_taint(s: AsyncSession, target_type: str, target_id: UUID) -> b
     if found is None:
         raise NotFound(target_type, target_id)
     return found
+
+
+# --- Connection credentials (P1-09) ------------------------------------------------------------
+
+
+async def get_credentials(
+    ctx: WorkspaceContext, connection_id: UUID, *, session: AsyncSession | None = None
+) -> dict[str, Any] | None:
+    """The connection's credentials, opened with the workspace key; None when unset."""
+    raise NotImplementedError
