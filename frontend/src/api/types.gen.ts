@@ -1223,7 +1223,7 @@ export type TaskOut = {
   /**
    * Change Id
    */
-  change_id?: string | null;
+  change_id: string | null;
   /**
    * Column Id
    */
@@ -1276,7 +1276,7 @@ export type TaskOut = {
   /**
    * Schema Version
    */
-  schema_version?: 1;
+  schema_version: 1;
   /**
    * Source
    */

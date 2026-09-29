@@ -2448,6 +2448,7 @@
           }
         },
         "required": [
+          "schema_version",
           "id",
           "project_id",
           "parent_id",
@@ -2471,7 +2472,8 @@
           "source",
           "version",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "change_id"
         ],
         "title": "TaskOut",
         "type": "object"

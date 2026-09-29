@@ -32,7 +32,7 @@ from datetime import date, datetime
 from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import RowMapping, Table, and_, case, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -150,6 +150,10 @@ class TaskCreate(BaseModel):
 
 
 class TaskOut(BaseModel):
+    # Every answer carries every field (`change_id` is null on reads), so the generated
+    # client types them as present (P0-24).
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
     schema_version: Literal[1] = 1
     id: UUID
     project_id: UUID
