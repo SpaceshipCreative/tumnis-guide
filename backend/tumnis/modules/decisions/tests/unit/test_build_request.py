@@ -41,7 +41,6 @@ def all_values(value: Any) -> Iterator[Any]:
 
 @pytest.mark.req("Data flow rule 6")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 @settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
 @given(
     point=st.sampled_from(sorted(POINTS)),
@@ -82,7 +81,6 @@ def test_only_whitelisted_fields_are_sent(
 
 @pytest.mark.req("Data flow rule 6")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 @settings(max_examples=80, suppress_health_check=[HealthCheck.too_slow])
 @given(body=st.text(max_size=12_000))
 @example(body="a" * 2_001)
@@ -111,7 +109,6 @@ def test_project_match_body_capped_at_2000_chars(body: str) -> None:
 
 @pytest.mark.req("Data flow rule 6")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 @pytest.mark.parametrize("point", sorted(POINTS))
 def test_attachments_never_sent(point: str) -> None:
     """T-P1-01-06
@@ -137,7 +134,6 @@ def test_attachments_never_sent(point: str) -> None:
 
 @pytest.mark.req("FR-11.9")
 @pytest.mark.wp("P1-01")
-@pytest.mark.xfail(strict=True, reason="spec:P1-01")
 def test_oversized_request_is_refused() -> None:
     """T-P1-01-13
     A project match over 254 long projects estimates above MAX_REQUEST_TOKENS and raises
