@@ -73,7 +73,6 @@ def _no_ci_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.req("Quality rule 1")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_flags_edited_assertion(tmp_path: Path) -> None:
     """T-P0-03-01
     Changing `assert x == 3` to `assert x >= 3` in an existing test is edited_test.
@@ -86,7 +85,6 @@ def test_flags_edited_assertion(tmp_path: Path) -> None:
 
 @pytest.mark.req("Quality rule 1")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_flags_deleted_test_and_deleted_file(tmp_path: Path) -> None:
     """T-P0-03-02
     Removing a test function, and deleting a test file, are violations.
@@ -131,7 +129,6 @@ def test_allows_removing_spec_xfail_marker_only(tmp_path: Path) -> None:
 
 @pytest.mark.req("Quality rule 1")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_flags_marker_removal_combined_with_edit(tmp_path: Path) -> None:
     """T-P0-03-04
     Dropping the marker and editing the body in the same test is still edited_test.
@@ -190,7 +187,6 @@ def test_skips_generated_contract_tests(tmp_path: Path) -> None:
 
 @pytest.mark.req("Quality rule 1")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:P0-03")
 def test_allows_new_tests_and_pure_moves(tmp_path: Path) -> None:
     """T-P0-03-07
     Adding tests, and renaming a file with unchanged tests, pass.
