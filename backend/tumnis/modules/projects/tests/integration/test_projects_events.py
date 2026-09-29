@@ -30,7 +30,6 @@ def _owner(db: DbUrls, query: str) -> list[tuple[Any, ...]]:
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 async def test_project_created_fires_once(
     app: FastAPI,
     session_client: SessionClient,

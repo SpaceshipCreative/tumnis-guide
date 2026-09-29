@@ -219,7 +219,6 @@ async def test_unarchive_restores_to_lists(
 
 @pytest.mark.req("FR-5.6")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:P0-17")
 async def test_new_project_gets_default_policy_row(
     app: FastAPI, session_client: SessionClient, workspace: WorkspaceHandle, db: DbUrls
 ) -> None:

@@ -68,6 +68,7 @@ class ProjectSeed(_Record):
     client: str | None = None
     goal: str | None = None
     deadline: date | None = None
+    sort_key: str | None = None  # board order (core/rank.py keys, P0-17)
 
 
 class TaskSeed(_Record):
@@ -120,6 +121,7 @@ class _ProjectYaml(_Yaml):
     client: str | None = None
     goal: str | None = None
     deadline: DayOffset | None = None
+    sort_key: str | None = None
     tasks: list[_TaskYaml] = []
 
 
@@ -364,6 +366,7 @@ async def load_seed(
                 client=project.client,
                 goal=project.goal,
                 deadline=_day(day0, project.deadline),
+                sort_key=project.sort_key,
             )
             project_id = await sink.project(ws, project_rec)
             remember("project", project.key, project_id)
