@@ -264,6 +264,16 @@ async def test_errors_map_to_the_adapter_errors() -> None:
         await _ask(vllm_generation(httpx.MockTransport(refused)))
 
 
+@pytest.mark.req("FR-11.8")
+@pytest.mark.wp("P1-03")
+@pytest.mark.parametrize("usage", [["not", "a", "dict"], "12 tokens", 7])
+async def test_malformed_usage_keeps_the_answer(usage: Any) -> None:
+    """Usage metadata that is not an object only drops the token counts from the log line;
+    the generated text still comes back (PR #58 review)."""
+    body = {"choices": [{"message": {"role": "assistant", "content": "Open the file."}}]}
+    assert await _ask(_answer(200, {**body, "usage": usage})) == "Open the file."
+
+
 @pytest.mark.req("FR-11.8", "SEC-5")
 @pytest.mark.wp("P1-03")
 async def test_blocked_destination_sends_nothing() -> None:

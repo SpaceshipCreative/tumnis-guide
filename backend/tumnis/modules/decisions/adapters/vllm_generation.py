@@ -80,7 +80,9 @@ class VllmGeneration(Adapter):
         started = self._clock.now()
         payload = await self.call(OP, send, idempotent=True)
         text = message_text(payload, adapter=self.name, op=OP)
-        usage = payload.get("usage") or {}
+        usage = payload.get("usage")
+        if not isinstance(usage, dict):  # metadata only: never worth losing the answer
+            usage = {}
         _log.info(
             "decisions.generation_call",
             provider="vllm",
