@@ -32,7 +32,6 @@ async def _profile(client: SessionClient, profile_id: str) -> dict[str, Any]:
 
 @pytest.mark.req("FR-5.1", "FR-5.9")
 @pytest.mark.wp("P1-04")
-@pytest.mark.xfail(strict=True, reason="spec:P1-04")
 async def test_register_profile_and_health(
     dbos: type[DBOS], session_client: SessionClient, fake_runner: FakeRunnerFactory
 ) -> None:

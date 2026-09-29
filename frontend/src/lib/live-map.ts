@@ -3,7 +3,14 @@
 // when the message's id is in the query's path, `lists` always match. Every generated
 // query op is here or in NOT_LIVE (T-P0-22-11): a WP that adds a GET adds it here.
 export type LiveEntity =
-  "task" | "project" | "review_item" | "settings" | "api_key" | "dead_letter";
+  | "task"
+  | "project"
+  | "review_item"
+  | "settings"
+  | "api_key"
+  | "dead_letter"
+  | "runner"
+  | "agent_profile";
 
 export const LIVE_MAP: Record<
   LiveEntity,
@@ -37,6 +44,10 @@ export const LIVE_MAP: Record<
   // Created, rotated and revoked keys (P0-14): the Settings list refreshes.
   api_key: { details: [], lists: ["authListKeys"] },
   dead_letter: { details: [], lists: ["deadLettersGetDeadLetters"] },
+  // Runners register, heartbeat, go offline and get new tokens; profiles get health
+  // checks (P1-04): the Settings agents section refreshes.
+  runner: { details: [], lists: ["agentsListRunners"] },
+  agent_profile: { details: [], lists: ["agentsListProfiles"] },
 };
 
 export const NOT_LIVE = [

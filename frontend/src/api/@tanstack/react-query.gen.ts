@@ -10,6 +10,13 @@ import {
 
 import { client } from "../client.gen";
 import {
+  agentsCheckProfileHealth,
+  agentsCreateRunner,
+  agentsListProfiles,
+  agentsListRunners,
+  agentsRegisterProfile,
+  agentsRotateRunnerToken,
+  agentsUpdateProfile,
   auditExportAuditCsv,
   auditListAudit,
   authConfirmTotpEnrolment,
@@ -62,6 +69,27 @@ import {
   usageGetUsage,
 } from "../sdk.gen";
 import type {
+  AgentsCheckProfileHealthData,
+  AgentsCheckProfileHealthError,
+  AgentsCheckProfileHealthResponse,
+  AgentsCreateRunnerData,
+  AgentsCreateRunnerError,
+  AgentsCreateRunnerResponse,
+  AgentsListProfilesData,
+  AgentsListProfilesError,
+  AgentsListProfilesResponse,
+  AgentsListRunnersData,
+  AgentsListRunnersError,
+  AgentsListRunnersResponse,
+  AgentsRegisterProfileData,
+  AgentsRegisterProfileError,
+  AgentsRegisterProfileResponse,
+  AgentsRotateRunnerTokenData,
+  AgentsRotateRunnerTokenError,
+  AgentsRotateRunnerTokenResponse,
+  AgentsUpdateProfileData,
+  AgentsUpdateProfileError,
+  AgentsUpdateProfileResponse,
   AuditExportAuditCsvData,
   AuditExportAuditCsvError,
   AuditListAuditData,
@@ -297,23 +325,26 @@ export const healthReadyOptions = (options?: Options<HealthReadyData>) =>
     queryKey: healthReadyQueryKey(options),
   });
 
-export const auditListAuditQueryKey = (options?: Options<AuditListAuditData>) =>
-  createQueryKey("auditListAudit", options);
+export const agentsListProfilesQueryKey = (
+  options?: Options<AgentsListProfilesData>,
+) => createQueryKey("agentsListProfiles", options);
 
 /**
- * List Audit
+ * List Profiles
  *
- * The workspace's audit log, newest first.
+ * Agent profiles by name, with their last health check.
  */
-export const auditListAuditOptions = (options?: Options<AuditListAuditData>) =>
+export const agentsListProfilesOptions = (
+  options?: Options<AgentsListProfilesData>,
+) =>
   queryOptions<
-    AuditListAuditResponse,
-    AuditListAuditError,
-    AuditListAuditResponse,
-    ReturnType<typeof auditListAuditQueryKey>
+    AgentsListProfilesResponse,
+    AgentsListProfilesError,
+    AgentsListProfilesResponse,
+    ReturnType<typeof agentsListProfilesQueryKey>
   >({
     queryFn: async ({ queryKey, signal }) => {
-      const { data } = await auditListAudit({
+      const { data } = await agentsListProfiles({
         ...options,
         ...queryKey[0],
         signal,
@@ -321,7 +352,7 @@ export const auditListAuditOptions = (options?: Options<AuditListAuditData>) =>
       });
       return data;
     },
-    queryKey: auditListAuditQueryKey(options),
+    queryKey: agentsListProfilesQueryKey(options),
   });
 
 const createInfiniteParams = <
@@ -357,6 +388,178 @@ const createInfiniteParams = <
   }
   return params as unknown as typeof page;
 };
+
+export const agentsListProfilesInfiniteQueryKey = (
+  options?: Options<AgentsListProfilesData>,
+): QueryKey<Options<AgentsListProfilesData>> =>
+  createQueryKey("agentsListProfiles", options, true);
+
+/**
+ * List Profiles
+ *
+ * Agent profiles by name, with their last health check.
+ */
+export const agentsListProfilesInfiniteOptions = (
+  options?: Options<AgentsListProfilesData>,
+) => {
+  const opts = infiniteQueryOptions<
+    AgentsListProfilesResponse,
+    AgentsListProfilesError,
+    InfiniteData<AgentsListProfilesResponse>,
+    QueryKey<Options<AgentsListProfilesData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<AgentsListProfilesData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<AgentsListProfilesData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await agentsListProfiles({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: agentsListProfilesInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Register Profile
+ *
+ * Register a Hermes profile. 422 `invalid_profile_name`, `invalid_profile`; 404 for
+ * an unknown runner or project; 409 `master_exists`, `project_agent_exists`,
+ * `profile_exists`.
+ */
+export const agentsRegisterProfileMutation = (
+  options?: Partial<Options<AgentsRegisterProfileData>>,
+): UseMutationOptions<
+  AgentsRegisterProfileResponse,
+  AgentsRegisterProfileError,
+  Options<AgentsRegisterProfileData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsRegisterProfileResponse,
+    AgentsRegisterProfileError,
+    Options<AgentsRegisterProfileData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsRegisterProfile({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Update Profile
+ *
+ * Move a profile to another runner or endpoint, or pause it. 409 `stale_version`.
+ */
+export const agentsUpdateProfileMutation = (
+  options?: Partial<Options<AgentsUpdateProfileData>>,
+): UseMutationOptions<
+  AgentsUpdateProfileResponse,
+  AgentsUpdateProfileError,
+  Options<AgentsUpdateProfileData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsUpdateProfileResponse,
+    AgentsUpdateProfileError,
+    Options<AgentsUpdateProfileData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsUpdateProfile({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Check Profile Health
+ *
+ * Ask the profile's runner (or endpoint) for its health; the answer lands in the
+ * profile's `health` (reachable, authenticated, version).
+ */
+export const agentsCheckProfileHealthMutation = (
+  options?: Partial<Options<AgentsCheckProfileHealthData>>,
+): UseMutationOptions<
+  AgentsCheckProfileHealthResponse,
+  AgentsCheckProfileHealthError,
+  Options<AgentsCheckProfileHealthData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsCheckProfileHealthResponse,
+    AgentsCheckProfileHealthError,
+    Options<AgentsCheckProfileHealthData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsCheckProfileHealth({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const auditListAuditQueryKey = (options?: Options<AuditListAuditData>) =>
+  createQueryKey("auditListAudit", options);
+
+/**
+ * List Audit
+ *
+ * The workspace's audit log, newest first.
+ */
+export const auditListAuditOptions = (options?: Options<AuditListAuditData>) =>
+  queryOptions<
+    AuditListAuditResponse,
+    AuditListAuditError,
+    AuditListAuditResponse,
+    ReturnType<typeof auditListAuditQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await auditListAudit({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: auditListAuditQueryKey(options),
+  });
 
 export const auditListAuditInfiniteQueryKey = (
   options?: Options<AuditListAuditData>,
@@ -1459,6 +1662,151 @@ export const tasksListReviewKindsOptions = (
     },
     queryKey: tasksListReviewKindsQueryKey(options),
   });
+
+export const agentsListRunnersQueryKey = (
+  options?: Options<AgentsListRunnersData>,
+) => createQueryKey("agentsListRunners", options);
+
+/**
+ * List Runners
+ *
+ * Runners by name, with their status judged from the last heartbeat (online after a
+ * beat in the last 45 s, offline after that, never_seen before the first register).
+ */
+export const agentsListRunnersOptions = (
+  options?: Options<AgentsListRunnersData>,
+) =>
+  queryOptions<
+    AgentsListRunnersResponse,
+    AgentsListRunnersError,
+    AgentsListRunnersResponse,
+    ReturnType<typeof agentsListRunnersQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsListRunners({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsListRunnersQueryKey(options),
+  });
+
+export const agentsListRunnersInfiniteQueryKey = (
+  options?: Options<AgentsListRunnersData>,
+): QueryKey<Options<AgentsListRunnersData>> =>
+  createQueryKey("agentsListRunners", options, true);
+
+/**
+ * List Runners
+ *
+ * Runners by name, with their status judged from the last heartbeat (online after a
+ * beat in the last 45 s, offline after that, never_seen before the first register).
+ */
+export const agentsListRunnersInfiniteOptions = (
+  options?: Options<AgentsListRunnersData>,
+) => {
+  const opts = infiniteQueryOptions<
+    AgentsListRunnersResponse,
+    AgentsListRunnersError,
+    InfiniteData<AgentsListRunnersResponse>,
+    QueryKey<Options<AgentsListRunnersData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<AgentsListRunnersData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<AgentsListRunnersData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await agentsListRunners({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: agentsListRunnersInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Create Runner
+ *
+ * A runner and its device token, shown once. 409 `runner_exists`.
+ */
+export const agentsCreateRunnerMutation = (
+  options?: Partial<Options<AgentsCreateRunnerData>>,
+): UseMutationOptions<
+  AgentsCreateRunnerResponse,
+  AgentsCreateRunnerError,
+  Options<AgentsCreateRunnerData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsCreateRunnerResponse,
+    AgentsCreateRunnerError,
+    Options<AgentsCreateRunnerData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsCreateRunner({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Rotate Runner Token
+ *
+ * A new device token, shown once; the old one stops and the runner's socket closes.
+ */
+export const agentsRotateRunnerTokenMutation = (
+  options?: Partial<Options<AgentsRotateRunnerTokenData>>,
+): UseMutationOptions<
+  AgentsRotateRunnerTokenResponse,
+  AgentsRotateRunnerTokenError,
+  Options<AgentsRotateRunnerTokenData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsRotateRunnerTokenResponse,
+    AgentsRotateRunnerTokenError,
+    Options<AgentsRotateRunnerTokenData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsRotateRunnerToken({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const settingsListModulesQueryKey = (
   options?: Options<SettingsListModulesData>,
