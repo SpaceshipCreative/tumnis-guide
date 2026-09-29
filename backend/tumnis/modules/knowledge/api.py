@@ -742,8 +742,8 @@ async def set_project_location(
     """Move the project's folder to another location while it holds no file (409
     `folder_not_empty` once it does; moving files is P3-14). The old location must answer
     (409 `location_offline`), so an unreachable folder is never assumed empty."""
-    target = await _location_row(s, location_id)
     folder = await _folder_row(s, project_id)
+    target = await _location_row(s, location_id)
     if folder["location_id"] == target["id"]:
         return _folder_out(folder)
     old = await _location_row(s, folder["location_id"])

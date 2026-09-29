@@ -49,4 +49,6 @@ export const NOT_LIVE = [
   "authGetAccount",
   // The review kinds are registered at startup; they change only with a deploy.
   "tasksListReviewKinds",
+  // Storage locations change only from the Settings screen, which refetches after each write.
+  "knowledgeListLocations",
 ] as const;
