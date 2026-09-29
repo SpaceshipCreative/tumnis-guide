@@ -16,7 +16,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 from tumnis import wiring
-from tumnis.core import cache, db, health, ops_status, testing_routes
+from tumnis.core import cache, db, health, modules, ops_status, testing_routes
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import install_problem_handlers
 from tumnis.settings import Settings, install_master_keys
@@ -56,6 +56,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     settings = settings or Settings()  # values come from the environment
     master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
     db.configure(settings.database_url, settings.database_direct_url)
+    modules.configure(settings)  # the deployment's module kill list
     clock = clock or SystemClock()
     cache.configure_backend(cache.InProcessCache(clock, publish=cache.pg_publisher(db.app_engine)))
 

@@ -51,14 +51,18 @@ def _ctx(workspace_id: uuid.UUID) -> Any:
     return WorkspaceContext(workspace_id, SYSTEM_ACTOR)
 
 
-def _app_with_probe(db: DbUrls, clock: FixedClock, **overrides: Any) -> FastAPI:
-    """create_app plus a router guarded by require_module("calendar"), placed first."""
+async def _app_with_probe(db: DbUrls, clock: FixedClock, **overrides: Any) -> FastAPI:
+    """create_app plus a router guarded by require_module("calendar"), placed first. The
+    engines of the previous app are disposed first: create_app points tumnis.core.db at new
+    ones, and a pooled connection left behind would be closed by the garbage collector."""
     from fastapi import APIRouter, Depends  # noqa: PLC0415
 
     from tests.fixtures import settings_for  # noqa: PLC0415
     from tumnis.app import create_app  # noqa: PLC0415
+    from tumnis.core import db as core_db  # noqa: PLC0415
     from tumnis.core.modules import require_module  # noqa: PLC0415
 
+    await core_db.dispose()
     app = create_app(settings=settings_for(db, **overrides), clock=clock)
     router = APIRouter(dependencies=[Depends(require_module("calendar"))])
 
@@ -82,7 +86,6 @@ async def _get_as(app: FastAPI, workspace_id: uuid.UUID) -> httpx.Response:
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.usefixtures("core_db", "deployment_flags")
 async def test_disabled_module_hides_its_routes(
     db: DbUrls, clock: FixedClock, master_key_file: MasterKeyFile
@@ -98,7 +101,7 @@ async def test_disabled_module_hides_its_routes(
     a, b = make_workspace(db, "A"), make_workspace(db, "B")
     await set_module_enabled(_ctx(a), "calendar", False)
 
-    app = _app_with_probe(db, clock)
+    app = await _app_with_probe(db, clock)
     off = await _get_as(app, a)
     assert off.status_code == 404, off.text
     assert off.headers["content-type"].startswith("application/problem+json")
@@ -108,7 +111,7 @@ async def test_disabled_module_hides_its_routes(
     assert on.json() == {"ok": True}
 
     await set_module_enabled(_ctx(b), "calendar", True)
-    killed = _app_with_probe(db, clock, tumnis_disabled_modules="calendar")
+    killed = await _app_with_probe(db, clock, tumnis_disabled_modules="calendar")
     for workspace_id in (a, b):
         response = await _get_as(killed, workspace_id)
         assert response.status_code == 404, response.text
@@ -162,7 +165,6 @@ async def test_disabled_module_subscribers_are_skipped(
 
 @pytest.mark.req("Hosted readiness")
 @pytest.mark.wp("P0-08")
-@pytest.mark.xfail(strict=True, reason="spec:P0-08")
 @pytest.mark.usefixtures("core_db")
 async def test_required_modules_cannot_be_disabled(db: DbUrls) -> None:
     """T-P0-08-15

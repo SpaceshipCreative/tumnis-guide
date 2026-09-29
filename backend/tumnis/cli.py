@@ -54,12 +54,14 @@ def load_settings() -> Settings:
 
 
 def run_boot_checks(settings: Settings) -> None:
-    """The database checks, then the master key file (P0-08): an unsafe key file exits 78
-    before the api or the worker starts."""
+    """The module kill list, the database checks, then the master key file (P0-08): each
+    configuration error exits 78 before the api or the worker starts."""
     from tumnis.core.crypto import MasterKeyError  # noqa: PLC0415
+    from tumnis.core.modules import deployment_disabled  # noqa: PLC0415
     from tumnis.settings import boot_checks, install_master_keys  # noqa: PLC0415
 
     try:
+        deployment_disabled(settings)  # an unknown or required module in the kill list
         asyncio.run(boot_checks(settings))
         install_master_keys(settings)
     except (SettingsError, MasterKeyError) as exc:
