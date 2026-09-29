@@ -112,4 +112,32 @@ describe("StorageSection", () => {
       expect(sent.idempotencyKey).toBeTruthy();
     }
   });
+  test.fails(
+    "[P1-14][FR-15.7] PR52 an S3 location sends its region",
+    async () => {
+      const recorder = new Recorder();
+      server.use(...storageHandlers(recorder));
+      const { user } = renderWithProviders(<StorageSection />);
+      await item("Projects disk");
+
+      // B2 and other providers sign for their own region, not us-east-1.
+      await user.type(screen.getByLabelText("Name"), "B2");
+      await user.selectOptions(screen.getByLabelText("Kind"), "s3");
+      await user.type(screen.getByLabelText("Bucket and prefix"), "tumnis");
+      await user.type(
+        screen.getByLabelText("Endpoint"),
+        "https://s3.us-west-004.backblazeb2.com",
+      );
+      await user.type(screen.getByLabelText("Region"), "us-west-004");
+      await user.type(screen.getByLabelText("Access key"), "keyid-example");
+      await user.type(screen.getByLabelText("Secret key"), "appkey-example");
+      await user.click(screen.getByRole("button", { name: "Add location" }));
+      await waitFor(() => {
+        expect(recorder.writes()).toHaveLength(1);
+      });
+      expect(recorder.sent[0]?.body).toMatchObject({
+        s3: { region: "us-west-004" },
+      });
+    },
+  );
 });
