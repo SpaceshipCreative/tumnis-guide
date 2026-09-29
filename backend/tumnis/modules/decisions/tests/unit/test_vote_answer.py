@@ -10,7 +10,6 @@ import pytest
 
 @pytest.mark.req("FR-11.3")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 def test_vote_shares_and_confidence() -> None:
     """T-P1-02-04
     Five samples `[a, a, a, b, c]` of a three-option Choice give probabilities

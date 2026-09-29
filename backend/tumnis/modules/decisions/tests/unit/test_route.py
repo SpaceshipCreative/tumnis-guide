@@ -74,7 +74,6 @@ def _options(spec: QuestionSpec) -> list[str]:
 
 @pytest.mark.req("FR-11.4")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 @pytest.mark.parametrize(("point", "case"), TABLE)
 def test_route_table(point: str, case: str) -> None:
     """T-P1-02-01
@@ -174,7 +173,6 @@ def _case(draw: st.DrawFn) -> tuple[Any, Any, Any]:
 
 @pytest.mark.req("FR-11.3")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 @settings(max_examples=300, deadline=None)
 @given(_case())
 def test_fallback_is_stricter(case: tuple[Any, Any, Any]) -> None:
@@ -193,7 +191,6 @@ def test_fallback_is_stricter(case: tuple[Any, Any, Any]) -> None:
 
 @pytest.mark.req("FR-11.4")
 @pytest.mark.wp("P1-02")
-@pytest.mark.xfail(strict=True, reason="spec:P1-02")
 def test_approval_need_fails_safe() -> None:
     """T-P1-02-03
     For `approval_need` with its default threshold, 0.05 yields APPLY(false) (not gated);

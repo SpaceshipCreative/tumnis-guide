@@ -182,20 +182,104 @@ class QuestionLike(Protocol):
     def criteria(self) -> Any: ...
 
 
+_CAP: Final = 0.99
+_FLOOR: Final = 0.01
+_LOW_ROUTE: Final = {
+    "review": Route.REVIEW,
+    "deterministic": Route.DETERMINISTIC,
+    "require_approval": Route.APPROVAL_REQUIRED,
+}
+
+
+def _stricter_up(value: float | None, margin: float) -> float | None:
+    """A bar that must be met from above, raised by the margin (cap 0.99), never lowered
+    even when the stored value is already above the cap."""
+    return None if value is None else max(value, min(value + margin, _CAP))
+
+
+def _stricter_down(value: float | None, margin: float) -> float | None:
+    """A bar that must be met from below, lowered by the margin (floor 0.01), never raised."""
+    return None if value is None else min(value, max(value - margin, _FLOOR))
+
+
 def effective_threshold(t: Threshold, *, fallback: bool) -> Threshold:
     """Fallback: min_confidence + margin (cap 0.99), t_yes + margin (cap 0.99), t_no -
-    margin (floor 0.01)."""
-    raise NotImplementedError
+    margin (floor 0.01). A value already beyond a cap or floor is kept, so the fallback
+    is never looser than the primary."""
+    if not fallback:
+        return t
+    return t.model_copy(
+        update={
+            "min_confidence": _stricter_up(t.min_confidence, t.fallback_margin),
+            "t_yes": _stricter_up(t.t_yes, t.fallback_margin),
+            "t_no": _stricter_down(t.t_no, t.fallback_margin),
+        }
+    )
 
 
 def route(
     spec: SpecLike, answer: TypedAnswer, t: Threshold, *, fallback: bool
 ) -> tuple[Route, Any]:
     """Returns the route and the value to apply (label, project key, bool, score)."""
-    raise NotImplementedError
+    eff = effective_threshold(t, fallback=fallback)
+    low = _LOW_ROUTE[spec.on_low_confidence]
+    if isinstance(answer, ChoiceAnswer):
+        if answer.choice == spec.abstain.option:
+            return low, None
+        floor = 1.0 if eff.min_confidence is None else eff.min_confidence
+        if answer.confidence >= floor:
+            return Route.APPLY, answer.choice
+        return low, answer.choice  # kept as a suggestion for the reviewer
+    if isinstance(answer, ScoreAnswer):
+        floor = 1.0 if eff.min_confidence is None else eff.min_confidence
+        if answer.confidence >= floor:
+            return Route.APPLY, answer.score
+        return low, None
+    if spec.point == "approval_need":
+        if eff.t_no is not None and answer.noul <= eff.t_no:
+            return Route.APPLY, False  # confidently not gated
+        return Route.APPROVAL_REQUIRED, None
+    if eff.t_yes is not None and answer.noul >= eff.t_yes:
+        return Route.APPLY, True
+    if eff.t_no is not None and answer.noul <= eff.t_no:
+        return Route.APPLY, False
+    return low, None
+
+
+def main_answer(main_question: str, answers: Mapping[str, TypedAnswer]) -> TypedAnswer:
+    """The answer `route` reads: the one named by the spec's `main_question`. `duplicate`
+    asks one Noul per candidate (`dup_1`, `dup_2`, ...) and routes on the likeliest one."""
+    if main_question in answers:
+        return answers[main_question]
+    prefix = main_question + "_"
+    numbered = [a for qid, a in answers.items() if qid.startswith(prefix)]
+    nouls = [a for a in numbered if isinstance(a, NoulAnswer)]
+    if not nouls:
+        raise KeyError(main_question)
+    return max(nouls, key=lambda a: a.noul)
 
 
 def vote_answer(q: QuestionLike, samples: Sequence[str]) -> TypedAnswer:
     """Choice/Score: probabilities = vote shares; confidence = (k * p_max - 1) / (k - 1);
-    Score value = sum(level * p). Noul: noul = share of 'yes'."""
-    raise NotImplementedError
+    Score value = sum(level * p). Noul: noul = share of 'yes'. Samples outside the allowed
+    set are ignored; ValueError when none is valid."""
+    if q.type == "noul":
+        allowed: list[str] = ["yes", "no"]
+    elif q.type == "score":
+        allowed = [str(n) for n in range(len(q.criteria))]
+    else:
+        allowed = list(q.criteria)
+    valid = [s for s in samples if s in allowed]
+    if not valid:
+        raise ValueError("no sample is one of the allowed answers")
+    shares = {option: valid.count(option) / len(valid) for option in allowed}
+    if q.type == "noul":
+        return NoulAnswer(noul=shares["yes"])
+    p_max = max(shares.values())
+    k = len(allowed)
+    confidence = (k * p_max - 1) / (k - 1)
+    if q.type == "score":
+        score = sum(int(level) * share for level, share in shares.items())
+        return ScoreAnswer(score=score, probabilities=shares, confidence=confidence)
+    winner = next(option for option in allowed if shares[option] == p_max)  # ties: criteria order
+    return ChoiceAnswer(choice=winner, probabilities=shares, confidence=confidence)
