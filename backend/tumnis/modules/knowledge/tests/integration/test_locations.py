@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from tests._pg import DbUrls
     from tests._services import S3Endpoint
-    from tests.fixtures import WorkspaceHandle
+    from tests.fixtures import Fakes, WorkspaceHandle
     from tumnis.core.clock import FixedClock
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
@@ -395,3 +395,49 @@ async def test_pr52_hosted_mode_refuses_server_path_locations(
             await knowledge.check_location(s, location_id, net=HOSTED)
     assert (e.value.status, e.value.code) == (422, "invalid_location")
     assert _files(tmp_location) == []
+
+
+@pytest.mark.req("SEC-5")
+@pytest.mark.wp("P1-14")
+@pytest.mark.xfail(strict=True, reason="review:PR52 hosted https")
+async def test_pr52_hosted_mode_refuses_plain_http_s3_endpoints(
+    db: DbUrls, knowledge_ws: WorkspaceHandle, fakes: Fakes
+) -> None:
+    """Hosted mode refuses an `http://` S3 endpoint even on a public address (422
+    `invalid_location`, nothing saved): keys, SigV4 requests and file bodies never cross the
+    internet in clear. Self-hosted mode keeps http for a LAN MinIO, and hosted takes https."""
+    from tumnis.core.errors import ProblemError  # noqa: PLC0415
+    from tumnis.core.net import ScriptedResolver  # noqa: PLC0415
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+
+    ws = knowledge_ws
+
+    def s3_location(name: str, endpoint: str) -> knowledge.LocationIn:
+        return knowledge.LocationIn(
+            name=name,
+            kind="s3",
+            root="bucket/tumnis",
+            s3=knowledge.S3ConfigIn(
+                endpoint=endpoint, region="us-east-1", access_key="AKIA", secret_key="secret"
+            ),
+        )
+
+    public = ScriptedResolver([["93.184.216.34"]])
+    with pytest.raises(ProblemError) as e:
+        async with tenant_session(ws.ctx) as s:
+            await knowledge.create_location(
+                s, s3_location("clear", "http://s3.example.com"), net=HOSTED, resolver=public
+            )
+    assert (e.value.status, e.value.code) == (422, "invalid_location")
+    assert _count(db, "SELECT count(*) FROM storage_locations") == 0
+
+    async with tenant_session(ws.ctx) as s:
+        await knowledge.create_location(
+            s, s3_location("tls", "https://s3.example.com"), net=HOSTED, resolver=public
+        )
+        lan = ScriptedResolver([["192.168.1.10"]])
+        await knowledge.create_location(
+            s, s3_location("lan", "http://minio.lan:9000"), net=SELF_HOSTED, resolver=lan
+        )
+    assert _count(db, "SELECT count(*) FROM storage_locations") == 2
