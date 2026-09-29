@@ -127,3 +127,35 @@ async def test_undo_restores_and_guards(  # noqa: PLR0917  # the fixtures it nee
     assert final.status_code == 200, final.text
     assert final.json()["rollover_count"] == 2
     assert final.json()["title"] == "Renamed"
+
+
+@pytest.mark.req("UX 9")
+@pytest.mark.wp("P0-24")
+async def test_undo_of_an_older_change_at_the_current_version_is_stale(
+    session_client: SessionClient, make_task: MakeTask
+) -> None:
+    """An undo names both the change and the version that change left. After a title edit
+    and a newer priority edit, undoing the title edit while sending the task's current
+    version is still 409 `stale_version`: the version must be the one the title edit left,
+    so the newer priority edit is never overwritten (CodeRabbit on #57)."""
+    task = await make_task(label="human", estimate_minutes=30)
+    got = await session_client.get(f"/v1/tasks/{task.id}")
+    assert got.status_code == 200, got.text
+    renamed = await session_client.patch(
+        f"/v1/tasks/{task.id}", json={"title": "Renamed", "version": got.json()["version"]}
+    )
+    assert renamed.status_code == 200, renamed.text
+    newer = await session_client.patch(
+        f"/v1/tasks/{task.id}", json={"priority": "high", "version": renamed.json()["version"]}
+    )
+    assert newer.status_code == 200, newer.text
+
+    stale = await session_client.post(
+        f"/v1/tasks/{task.id}/undo",
+        json={"change_id": renamed.json()["change_id"], "version": newer.json()["version"]},
+    )
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["code"] == "stale_version"
+    final = await session_client.get(f"/v1/tasks/{task.id}")
+    assert final.json()["title"] == "Renamed"
+    assert final.json()["priority"] == "high"
