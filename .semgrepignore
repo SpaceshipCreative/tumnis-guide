@@ -1,0 +1,24 @@
+# Paths the Security job's Semgrep scan skips (P0-16). Providing this file replaces
+# Semgrep's defaults, so the usual build and dependency folders are listed here too.
+.git/
+node_modules/
+.venv/
+dist/
+build/
+coverage/
+test-results/
+playwright-report/
+__pycache__/
+*.min.js
+# The custom rules' own test cases: they violate the rules on purpose.
+.semgrep/
+# Generated from the OpenAPI document (make gen, P0-11).
+frontend/src/api/
+# Test code is not shipped: the custom rules skip it too, and gitleaks still scans it for
+# secrets.
+backend/tests/
+**/tests/
+frontend/src/test/
+frontend/e2e/
+*.test.ts
+*.test.tsx

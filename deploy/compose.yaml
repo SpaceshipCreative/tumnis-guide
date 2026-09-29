@@ -12,12 +12,13 @@
 name: tumnis
 
 x-env: &env
-  # The api goes through PgBouncer. That hop is inside the Docker network and unencrypted
-  # until P0-16 turns on client TLS in PgBouncer; PgBouncer to Postgres is TLS already.
-  DATABASE_URL: postgresql+psycopg://tumnis_app:${APP_DB_PASSWORD}@pgbouncer:6432/tumnis?sslmode=disable
+  # TLS on every database hop, verified against the deployment's database CA (db-tls,
+  # P0-16, SEC-9); prod refuses to start on anything weaker than verify-full. The api goes
+  # through PgBouncer.
+  DATABASE_URL: postgresql+psycopg://tumnis_app:${APP_DB_PASSWORD}@pgbouncer:6432/tumnis?sslmode=verify-full&sslrootcert=/etc/tumnis/tls/ca.crt
   # The worker, DBOS and LISTEN use the direct URL (DBOS_SYSTEM_DATABASE_URL defaults to
   # this URL with the database tumnis_dbos).
-  DATABASE_DIRECT_URL: postgresql+psycopg://tumnis_app:${APP_DB_PASSWORD}@postgres:5432/tumnis?sslmode=require
+  DATABASE_DIRECT_URL: postgresql+psycopg://tumnis_app:${APP_DB_PASSWORD}@postgres:5432/tumnis?sslmode=verify-full&sslrootcert=/etc/tumnis/tls/ca.crt
   DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-self-hosted}
   DEPLOYMENT_ENV: ${DEPLOYMENT_ENV:-prod}
   TUMNIS_ADAPTERS: ${TUMNIS_ADAPTERS:-real}
@@ -30,6 +31,7 @@ x-app: &app
   environment: *env
   volumes:
     - /etc/tumnis/secrets:/run/secrets:ro
+    - db_tls_ca:/etc/tumnis/tls:ro # the database CA certificate (sslrootcert)
   restart: unless-stopped
 
 services:
@@ -38,7 +40,7 @@ services:
     command: ["tumnis", "migrate"]
     environment:
       <<: *env
-      DATABASE_OWNER_URL: postgresql+psycopg://tumnis_owner:${OWNER_DB_PASSWORD}@postgres:5432/tumnis?sslmode=require
+      DATABASE_OWNER_URL: postgresql+psycopg://tumnis_owner:${OWNER_DB_PASSWORD}@postgres:5432/tumnis?sslmode=verify-full&sslrootcert=/etc/tumnis/tls/ca.crt
     depends_on:
       postgres: { condition: service_healthy }
     restart: "no"
@@ -87,6 +89,7 @@ services:
       - pgbackrest_repo1:/var/lib/pgbackrest
       - pgbackrest_spool:/var/spool/pgbackrest
       - /etc/pgbackrest/conf.d:/etc/pgbackrest/conf.d:ro
+      - db_tls_postgres:/etc/tumnis/tls:ro # server certificate and key (P0-16)
     shm_size: 256mb
     healthcheck:
       # Over TCP: the init-time server listens on the socket only, so this passes only
@@ -97,6 +100,8 @@ services:
       retries: 12
       start_period: 30s
       start_interval: 1s
+    depends_on:
+      db-tls: { condition: service_completed_successfully }
     restart: unless-stopped
 
   # pgBackRest beside the database (P0-28): stanza setup and a first full backup per
@@ -131,9 +136,24 @@ services:
         exec pgbouncer /etc/pgbouncer/pgbouncer.ini
     volumes:
       - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - db_tls_pgbouncer:/etc/tumnis/tls:ro # its certificate, key and the CA (P0-16)
     depends_on:
       postgres: { condition: service_healthy }
     restart: unless-stopped
+
+  # The database CA and the Postgres and PgBouncer certificates, issued once on first start
+  # (P0-16, SEC-9; deploy/postgres/tumnis-db-tls.sh). The CA key is never stored; to
+  # rotate, remove the db_tls_* volumes and start the stack again.
+  db-tls:
+    build: *postgres-build
+    image: tumnis-postgres:18
+    user: root
+    entrypoint: ["tumnis-db-tls.sh"]
+    volumes:
+      - db_tls_ca:/tls/ca
+      - db_tls_postgres:/tls/postgres
+      - db_tls_pgbouncer:/tls/pgbouncer
+    restart: "no"
 
 volumes:
   pgdata: {}
@@ -141,3 +161,6 @@ volumes:
   # Repository 1 (local). On the homelab, point it at a second disk (driver_opts bind).
   pgbackrest_repo1: {}
   pgbackrest_spool: {}
+  db_tls_ca: {}
+  db_tls_postgres: {}
+  db_tls_pgbouncer: {}

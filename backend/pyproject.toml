@@ -9,6 +9,8 @@ dependencies = [
   "cryptography==50.0.1",
   "dbos==3.1.0",
   "fastapi==0.141.1",
+  "httpx==0.28.1",
+  "nh3==0.3.7",
   "opentelemetry-api==1.45.0",
   "opentelemetry-exporter-otlp-proto-http==1.45.0",
   "opentelemetry-instrumentation-fastapi==0.66b0",
@@ -34,7 +36,6 @@ tumnis = "tumnis.cli:app"
 dev = [
   "aioboto3==15.5.0",
   "asyncssh==2.24.0",
-  "httpx==0.28.1",
   "hypothesis==6.168.3",
   "import-linter==2.15",
   "jsonschema==4.26.0",

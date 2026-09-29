@@ -48,11 +48,14 @@ async def truncate_tables(owner_url: str) -> list[str]:
                 guards = (await conn.execute(_TRUNCATE_GUARDS)).all()
                 for table, trigger in guards:
                     await conn.execute(
+                        # nosemgrep: tumnis-sql-fstring  # identifiers, quoted by the dialect
                         text(f"ALTER TABLE {quote(table)} DISABLE TRIGGER {quote(trigger)}")
                     )
+                # nosemgrep: tumnis-sql-fstring  # `listed` is quoted identifiers only
                 await conn.execute(text(f"TRUNCATE {listed} RESTART IDENTITY CASCADE"))
                 for table, trigger in guards:
                     await conn.execute(
+                        # nosemgrep: tumnis-sql-fstring  # identifiers, quoted by the dialect
                         text(f"ALTER TABLE {quote(table)} ENABLE TRIGGER {quote(trigger)}")
                     )
     finally:
