@@ -88,7 +88,6 @@ async def test_phrase_query(
 
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_fixture_corpus_order(
     search_db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -111,7 +110,6 @@ async def test_fixture_corpus_order(
 
 @pytest.mark.req("FR-3.9")
 @pytest.mark.wp("P0-20")
-@pytest.mark.xfail(strict=True, reason="spec:P0-20")
 async def test_results_are_workspace_isolated(
     search_db: DbUrls,
     two_workspaces: tuple[WorkspaceHandle, WorkspaceHandle],
