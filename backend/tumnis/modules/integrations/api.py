@@ -13,12 +13,15 @@ caller's `session` (already in that workspace) when one is passed, so a sync ste
 write records, cursor and events in one transaction (P3-02).
 """
 
+import base64
+import hashlib
 import json
+import secrets
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import partial
-from typing import Any, Literal, Protocol
+from typing import Any, Final, Literal, Protocol
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field
@@ -45,6 +48,7 @@ from tumnis.modules.integrations.models import (
     ContextItem,
     Message,
     Note,
+    OAuthPending,
     Person,
     RawPayload,
     SyncState,
@@ -710,4 +714,160 @@ async def save_sync_cursor(
                     "items_seen": _sync_state.c.items_seen + insert.excluded.items_seen,
                 },
             )
+        )
+
+
+# --- OAuth grants in flight (P1-09; Google Docs reuses them in P3-02) ---------------------------
+
+OAUTH_PENDING_TTL: Final = timedelta(minutes=10)  # plan default
+_pending: Table = OAuthPending.__table__  # type: ignore[assignment]
+
+
+class OAuthStart(BaseModel):
+    pending_id: UUID
+    state: str
+    code_challenge: str  # S256 of the verifier, base64url without padding
+
+
+class OAuthGrant(BaseModel):
+    """What the worker exchanges: the code, the PKCE verifier and the redirect URI."""
+
+    provider: str
+    code: str
+    code_verifier: str
+    redirect_uri: str
+
+
+def _state_hash(state: str) -> bytes:
+    return hashlib.sha256(state.encode()).digest()
+
+
+def _pending_aad(pending_id: UUID, field: str) -> bytes:
+    return f"oauth_pending:{pending_id}:{field}".encode()
+
+
+async def begin_oauth(
+    ctx: WorkspaceContext,
+    provider: str,
+    *,
+    redirect_uri: str,
+    now: datetime,
+    session: AsyncSession | None = None,
+) -> OAuthStart:
+    """A consent in flight: a random `state` (only its hash is kept) and a PKCE verifier
+    (sealed); valid for OAUTH_PENDING_TTL."""
+    state = secrets.token_urlsafe(32)
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+    async with session_for(ctx, session) as s:
+        pending_id: UUID = (
+            await s.execute(
+                pg_insert(_pending)
+                .values(
+                    provider=provider,
+                    state_hash=_state_hash(state),
+                    key_version=0,
+                    redirect_uri=redirect_uri,
+                    expires_at=now + OAUTH_PENDING_TTL,
+                )
+                .returning(_pending.c.id)
+            )
+        ).scalar_one()
+        key_version, sealed = await seal_for_workspace(
+            s, ctx.workspace_id, verifier.encode(), aad=_pending_aad(pending_id, "verifier")
+        )
+        await s.execute(
+            update(_pending)
+            .where(_pending.c.id == pending_id)
+            .values(verifier_enc=sealed, key_version=key_version)
+        )
+    return OAuthStart(
+        pending_id=pending_id, state=state, code_challenge=challenge.decode().rstrip("=")
+    )
+
+
+async def accept_oauth_code(
+    ctx: WorkspaceContext,
+    provider: str,
+    *,
+    state: str,
+    code: str,
+    now: datetime,
+    session: AsyncSession | None = None,
+) -> UUID | None:
+    """The callback's half: the pending consent `state` names, if it is this provider's,
+    unexpired and unused; the code is stored sealed and the state used up. None when the
+    state is unknown, expired or used (the route answers 400 `oauth_state_invalid`)."""
+    async with session_for(ctx, session) as s:
+        pending_id: UUID | None = (
+            await s.execute(
+                update(_pending)
+                .where(
+                    _pending.c.state_hash == _state_hash(state),
+                    _pending.c.provider == provider,
+                    _pending.c.used_at.is_(None),
+                    _pending.c.deleted_at.is_(None),
+                    _pending.c.expires_at > now,
+                )
+                .values(used_at=now)
+                .returning(_pending.c.id)
+            )
+        ).scalar_one_or_none()
+        if pending_id is None:
+            return None
+        key_version, sealed = await seal_for_workspace(
+            s, ctx.workspace_id, code.encode(), aad=_pending_aad(pending_id, "code")
+        )
+        await s.execute(
+            update(_pending)
+            .where(_pending.c.id == pending_id)
+            .values(code_enc=sealed, key_version=key_version)
+        )
+    return pending_id
+
+
+async def read_oauth_grant(
+    ctx: WorkspaceContext, pending_id: UUID, *, session: AsyncSession | None = None
+) -> OAuthGrant | None:
+    """The accepted grant, opened; None once consumed (or before a code arrived)."""
+    async with session_for(ctx, session) as s:
+        row = (
+            (
+                await s.execute(
+                    select(_pending).where(
+                        _pending.c.id == pending_id, _pending.c.deleted_at.is_(None)
+                    )
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None or row["code_enc"] is None or row["verifier_enc"] is None:
+            return None
+        code = await open_for_workspace(
+            s, ctx.workspace_id, bytes(row["code_enc"]), aad=_pending_aad(pending_id, "code")
+        )
+        verifier = await open_for_workspace(
+            s,
+            ctx.workspace_id,
+            bytes(row["verifier_enc"]),
+            aad=_pending_aad(pending_id, "verifier"),
+        )
+    return OAuthGrant(
+        provider=row["provider"],
+        code=code.decode(),
+        code_verifier=verifier.decode(),
+        redirect_uri=row["redirect_uri"],
+    )
+
+
+async def consume_oauth_grant(
+    ctx: WorkspaceContext, pending_id: UUID, *, session: AsyncSession | None = None
+) -> None:
+    """The grant was exchanged: code and verifier dropped, the row soft-deleted."""
+    async with session_for(ctx, session) as s:
+        await s.execute(
+            update(_pending)
+            .where(_pending.c.id == pending_id)
+            .values(code_enc=None, verifier_enc=None, deleted_at=func.now())
         )

@@ -37,6 +37,13 @@ def load_events() -> None:
         importlib.import_module(f"tumnis.modules.{module}.events")
 
 
+def load_workflows() -> None:
+    """Import every module's workflows, so the worker (and the kill-test workers) can run
+    and recover them."""
+    for module in MODULES:
+        importlib.import_module(f"tumnis.modules.{module}.workflows")
+
+
 def register_module_health() -> None:
     """A module that defines `async def health() -> Status` in its api degrades readiness
     when it fails, never takes it down."""
@@ -77,3 +84,4 @@ def _adapter_check(name: str) -> HealthCheck:
 load_adapters()
 load_apis()
 load_events()
+load_workflows()

@@ -1,5 +1,5 @@
-"""integrations SQLAlchemy tables owned by this module (mirrors of revision
-integrations_0001)."""
+"""integrations SQLAlchemy tables owned by this module (mirrors of revisions
+integrations_0001 and integrations_0002)."""
 
 from datetime import datetime
 from typing import Any
@@ -45,6 +45,19 @@ class SyncState(TenantBase, Base):
     cursor: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     last_page_at: Mapped[datetime | None]
     items_seen: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
+
+
+class OAuthPending(TenantBase, Base):
+    __tablename__ = "oauth_pending"
+
+    provider: Mapped[str]
+    state_hash: Mapped[bytes] = mapped_column(LargeBinary)
+    verifier_enc: Mapped[bytes | None] = mapped_column(LargeBinary)
+    code_enc: Mapped[bytes | None] = mapped_column(LargeBinary)
+    key_version: Mapped[int]
+    redirect_uri: Mapped[str]
+    expires_at: Mapped[datetime]
+    used_at: Mapped[datetime | None]
 
 
 class Person(CanonicalColumns, TenantBase, Base):

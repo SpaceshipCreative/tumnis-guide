@@ -16,6 +16,9 @@ from tumnis.settings import Settings, install_master_keys
 if TYPE_CHECKING:
     from dbos import DBOSConfig
 
+SYNC_QUEUE = "sync"  # connector syncs and OAuth exchanges (A9; P1-09)
+SYNC_WORKER_CONCURRENCY = 4  # plan default
+
 
 def register_queues() -> None:
     """Register every DBOS queue (A9). DBOS 3.1 persists queues in the system database, so
@@ -28,6 +31,7 @@ def register_queues() -> None:
         polling_interval_sec=events.EVENTS_QUEUE_POLL_S,
     )
     DBOS.register_queue(workflows_ops.MAINTENANCE_QUEUE, worker_concurrency=1)
+    DBOS.register_queue(SYNC_QUEUE, worker_concurrency=SYNC_WORKER_CONCURRENCY)
 
 
 def register_schedules(settings: Settings) -> None:
@@ -65,6 +69,25 @@ def register_audit_schedule() -> None:
     )
 
 
+def register_module_schedules() -> None:
+    """Module schedules (A9), applied after DBOS.launch(): the calendar sync tick every 10
+    minutes on the sync queue (P1-09)."""
+    from dbos import DBOS  # noqa: PLC0415
+
+    from tumnis.modules.calendar import workflows as calendar  # noqa: PLC0415
+
+    DBOS.apply_schedules(
+        [
+            {
+                "schedule_name": calendar.TICK_SCHEDULE_NAME,
+                "workflow_fn": calendar.sync_tick,
+                "schedule": calendar.TICK_SCHEDULE,
+                "queue_name": SYNC_QUEUE,
+            }
+        ]
+    )
+
+
 def dbos_config(settings: Settings) -> "DBOSConfig":
     return {"name": "tumnis", "system_database_url": settings.dbos_system_url}
 
@@ -95,6 +118,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     register_queues()
     register_schedules(settings)
     register_audit_schedule()
+    register_module_schedules()
     try:
         asyncio.run(_serve(settings))
     finally:

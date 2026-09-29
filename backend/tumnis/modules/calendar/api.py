@@ -32,6 +32,7 @@ from tumnis.core.settings_store import SettingSection, get_setting, register_sec
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.core.versioning import NotFound, update_versioned
+from tumnis.modules.auth import api as auth
 from tumnis.modules.calendar.adapters.fake import FakeGoogleCalendar
 from tumnis.modules.calendar.adapters.port import (
     CalendarInfo,
@@ -256,6 +257,10 @@ class GoogleCalendar:
         self._clock = clock or SystemClock()
         self._window = window
         self.status = status
+
+    @property
+    def calendar_ids(self) -> list[str]:
+        return list(self._calendar_ids)
 
     def first_cursor(self) -> CalendarCursor:
         """Where a sync with no stored cursor starts: the first calendar, the window."""
@@ -636,6 +641,62 @@ async def complete_sync(
             ),
             occurred_at=at,
         )
+
+
+async def start_sync(
+    ctx: WorkspaceContext, connection_id: UUID, *, now: datetime
+) -> tuple[datetime, datetime]:
+    """A new sync's window (yesterday to today + 14 days in the workspace's timezone) and
+    its first cursor, stored; returns the window."""
+    tz = ZoneInfo((await auth.get_workspace_settings(ctx)).timezone)
+    window = sync_window(now.astimezone(tz).date(), tz)
+    first = CalendarCursor(calendar_index=0, window_start=window[0], window_end=window[1])
+    await integrations.save_sync_cursor(ctx, connection_id, first.model_dump(mode="json"))
+    return window
+
+
+async def sync_next_page(
+    ctx: WorkspaceContext, connection_id: UUID, *, api: GoogleCalendarPort, clock: Clock
+) -> bool:
+    """Fetch the page the stored cursor points at, then store its events and the next
+    cursor in one transaction (a crash resumes after the last committed page). Returns
+    whether more pages follow."""
+    connector = await build_connector(ctx, connection_id, api=api, clock=clock)
+    cursor = await integrations.get_sync_cursor(ctx, connection_id)
+    page = await connector.sync(cursor)
+    following = page.next_cursor
+    if not page.has_more:  # a finished cursor, so a re-run of this page fetches nothing
+        done = CalendarCursor.model_validate(cursor) if cursor else connector.first_cursor()
+        following = done.model_copy(
+            update={"calendar_index": len(connector.calendar_ids), "page_token": None}
+        ).model_dump(mode="json")
+    async with tenant_session(ctx) as s:
+        await ingest_events_page(ctx, connection_id, connector, page, session=s)
+        await integrations.save_sync_cursor(
+            ctx, connection_id, following, at=clock.now(), items=len(page.items), session=s
+        )
+    return page.has_more
+
+
+async def account_status(
+    ctx: WorkspaceContext, connection_id: UUID, *, session: AsyncSession | None = None
+) -> AccountStatus:
+    async with session_for(ctx, session) as s:
+        status: AccountStatus = (await _account_by_connection(s, connection_id))["status"]
+    return status
+
+
+async def connected_accounts(
+    ctx: WorkspaceContext, *, session: AsyncSession | None = None
+) -> list[UUID]:
+    """The connections of the workspace's `connected` accounts (the scheduled sync's)."""
+    async with session_for(ctx, session) as s:
+        rows = await s.execute(
+            select(_accounts.c.connection_id).where(
+                _accounts.c.deleted_at.is_(None), _accounts.c.status == "connected"
+            )
+        )
+        return list(rows.scalars())
 
 
 def _real_connector(**deps: Any) -> GoogleCalendar:
