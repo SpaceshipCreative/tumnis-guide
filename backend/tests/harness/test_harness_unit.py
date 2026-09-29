@@ -248,7 +248,6 @@ def _normalized(sink: InMemorySink) -> list[tuple[str, str, dict[str, str | None
 
 @pytest.mark.req("Quality rule 5")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 async def test_seed_parses_three_projects_thirty_tasks_one_day(clock: FixedClock) -> None:
     """T-P0-02-01
     Seed YAML yields 3 projects, 30 tasks, 1 calendar day into InMemorySink.
@@ -297,7 +296,6 @@ async def test_seed_parses_three_projects_thirty_tasks_one_day(clock: FixedClock
 
 @pytest.mark.req("Quality rule 5")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 async def test_two_seed_loads_identical_apart_from_ids(clock: FixedClock) -> None:
     """T-P0-02-02
     Two loads into two sinks produce equal records after replacing UUIDs with seed keys.

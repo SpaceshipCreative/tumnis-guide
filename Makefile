@@ -29,8 +29,9 @@ e2e:
 gen:
 	@echo "not yet (P0-11)"
 
+## Load the seed set into DATABASE_URL (SET=load for the 2,000-task set, ANCHOR=YYYY-MM-DD).
 seed:
-	@echo "not yet (P0-02)"
+	$(BACKEND) uv run tumnis seed --set $(or $(SET),seed) $(if $(ANCHOR),--anchor $(ANCHOR))
 
 up:
 	@echo "not yet (P0-04)"

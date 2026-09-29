@@ -1,0 +1,7 @@
+# The seed workspace and its one user. Dates across the seed set are offsets from the
+# anchor day (`tumnis seed --anchor YYYY-MM-DD`, default today in this timezone).
+schema_version: 1
+workspace: {key: ws_main, name: "Scott's workspace", timezone: America/New_York}
+users:
+  - {key: u_scott, email: scott@example.test, password: "seed-password-please-change",
+     totp_secret: JBSWY3DPEHPK3PXP}

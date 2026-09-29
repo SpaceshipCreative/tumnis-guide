@@ -1,0 +1,23 @@
+# One text brief per project.
+schema_version: 1
+documents:
+  - key: d_acme_brief
+    project: p_acme
+    title: Acme rebrand brief
+    role: brief
+    body: |
+      Acme wants a friendlier mark. Standing rule: no purple.
+      Deliver three logo drafts, then a brand guide covering colour, type and clear space.
+  - key: d_authenticity_brief
+    project: p_authenticity
+    title: Authenticity course brief
+    role: brief
+    body: |
+      Six short lessons on writing in your own voice. Each lesson is a video under
+      fifteen minutes with one exercise. Launch before the spring term.
+  - key: d_dogfood_brief
+    project: p_dogfood
+    title: Tumnis dogfood brief
+    role: brief
+    body: |
+      Use Tumnis for my own week. Note every rough edge as a task in this project.
