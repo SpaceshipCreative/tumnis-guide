@@ -157,6 +157,7 @@ class LiveHub:
                 async with await psycopg.AsyncConnection.connect(
                     self._dsn, autocommit=True
                 ) as conn:
+                    # nosemgrep: tumnis-sql-fstring  # LIVE_CHANNEL is a module constant
                     await conn.execute(f"LISTEN {LIVE_CHANNEL}")
                     self.listening = True
                     delay = RETRY_S

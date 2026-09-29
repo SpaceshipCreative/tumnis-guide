@@ -1,0 +1,32 @@
+{
+  "fields_sent": [
+    "downstream_human_minutes",
+    "downstream_task_count",
+    "item_kind",
+    "item_summary",
+    "nearest_due_in_days",
+    "project_name"
+  ],
+  "point": "blocking_impact",
+  "questions": {
+    "impact": {
+      "criteria": [
+        "Blocks nothing else",
+        "Blocks one small task",
+        "Blocks several tasks or one important task",
+        "Blocks a milestone or a client deliverable",
+        "Blocks the whole project"
+      ],
+      "instructions": "How much work does this item block until the user answers it? Use the downstream task count, the human minutes waiting on it and the nearest due date.",
+      "type": "score"
+    }
+  },
+  "state": {
+    "downstream_human_minutes": 90,
+    "downstream_task_count": 3,
+    "item_kind": "question",
+    "item_summary": "The agent asks which payment provider to use for the Beta app checkout",
+    "nearest_due_in_days": 4,
+    "project_name": "Beta app"
+  }
+}

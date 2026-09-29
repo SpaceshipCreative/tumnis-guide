@@ -1,0 +1,30 @@
+{
+  "fields_sent": [
+    "activity",
+    "first_action",
+    "minutes_since_activity",
+    "repo_path",
+    "task_title"
+  ],
+  "point": "focus_on_task",
+  "questions": {
+    "on_task": {
+      "criteria": {
+        "false": "The activity is something else.",
+        "true": "The activity is work on this task."
+      },
+      "instructions": "The recent `activity` is work on the task `task_title`.",
+      "type": "noul"
+    }
+  },
+  "state": {
+    "activity": [
+      "Google Docs: Acme proposal 2026",
+      "Slack: #acme"
+    ],
+    "first_action": "Open last year's proposal and copy the outline",
+    "minutes_since_activity": 2,
+    "repo_path": "clients/acme/proposal",
+    "task_title": "Write the Acme proposal"
+  }
+}

@@ -467,6 +467,26 @@ export const zPageRunnerOut = z.object({
 });
 
 /**
+ * SearchHit
+ */
+export const zSearchHit = z.object({
+  entity_id: z.uuid(),
+  entity_type: z.enum(["task", "project"]),
+  project_id: z.uuid().nullable(),
+  score: z.number(),
+  snippet: z.string(),
+  title: z.string(),
+});
+
+/**
+ * Page[SearchHit]
+ */
+export const zPageSearchHit = z.object({
+  items: z.array(zSearchHit),
+  next_cursor: z.string().nullable(),
+});
+
+/**
  * SessionOut
  */
 export const zSessionOut = z.object({
@@ -1132,6 +1152,19 @@ export const zAgentsRotateRunnerTokenPath = z.object({
  */
 export const zAgentsRotateRunnerTokenResponse = zRunnerCreated;
 
+export const zSearchSearchQuery = z.object({
+  q: z.string().max(200).optional().default(""),
+  scope: z.enum(["all", "tasks", "projects"]).optional().default("all"),
+  project_id: z.uuid().nullish(),
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zSearchSearchResponse = zPageSearchHit;
+
 /**
  * Successful Response
  */
@@ -1273,6 +1306,31 @@ export const zTasksChangeStatusPath = z.object({
  * Successful Response
  */
 export const zTasksChangeStatusResponse = zTaskOut;
+
+export const zSearchTypeaheadProjectsQuery = z.object({
+  q: z.string().max(200).optional().default(""),
+  limit: z.int().gte(1).lte(20).optional().default(8),
+});
+
+/**
+ * Response Search Typeahead Projects
+ *
+ * Successful Response
+ */
+export const zSearchTypeaheadProjectsResponse = z.array(zSearchHit);
+
+export const zSearchTypeaheadTasksQuery = z.object({
+  q: z.string().max(200).optional().default(""),
+  project_id: z.uuid().nullish(),
+  limit: z.int().gte(1).lte(20).optional().default(8),
+});
+
+/**
+ * Response Search Typeahead Tasks
+ *
+ * Successful Response
+ */
+export const zSearchTypeaheadTasksResponse = z.array(zSearchHit);
 
 export const zUsageGetUsageQuery = z.object({
   from: z.iso.date(),

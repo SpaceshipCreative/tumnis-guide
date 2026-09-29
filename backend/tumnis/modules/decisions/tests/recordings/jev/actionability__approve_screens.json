@@ -1,0 +1,52 @@
+{
+  "point": "actionability",
+  "inputs": {
+    "kind": "email",
+    "sender_email": "lee@beta.example.org",
+    "subject": "Can you approve the onboarding screens?",
+    "body_head": "Hi Scott, the three onboarding screens are in Figma. Can you approve them by Friday so we can start the build?"
+  },
+  "request": {
+    "state": {
+      "kind": "email",
+      "sender_email": "lee@beta.example.org",
+      "subject": "Can you approve the onboarding screens?",
+      "body_head": "Hi Scott, the three onboarding screens are in Figma. Can you approve them by Friday so we can start the build?"
+    },
+    "model": "jev-1.13.0",
+    "questions": {
+      "actionable": {
+        "type": "noul",
+        "instructions": "This item asks the user to do or decide something, or records a commitment.",
+        "criteria": {
+          "true": "It asks the user to do or decide something, or records a commitment.",
+          "false": "It is informational: nothing is asked of the user and nothing is promised."
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "x-typesafe-request-id": "req_synthetic_0001"
+    },
+    "body": {
+      "model": "jev-1.13.0",
+      "usage": {
+        "input_tokens": 139,
+        "output_tokens": 1
+      },
+      "answers": {
+        "actionable": {
+          "type": "noul",
+          "noul": 0.94
+        }
+      }
+    }
+  },
+  "latency_ms": 190,
+  "recorded_at": null,
+  "sdk_version": "0.7.2",
+  "synthetic": true,
+  "notes": "Synthetic: hand-authored in the typesafe-sdk 0.7.2 wire shape (no real Jev call was made); all names, addresses and domains are invented (example.com/example.org). Replace with scripts/record_jev.py output against the real API."
+}
