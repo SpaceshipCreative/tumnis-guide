@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from tests._pg import DbUrls
     from tumnis.core.clock import FixedClock
     from tumnis.core.tenancy import WorkspaceContext
+    from tumnis.modules.calendar.adapters.port import CalendarInfo
     from tumnis.modules.calendar.adapters.fake import FakeGoogleCalendar
 
 Account = Literal["a", "b"]
@@ -81,8 +82,15 @@ def refresh_token(account: Account) -> str:
 
 
 async def connect(
-    ctx: WorkspaceContext, account: Account, *, now: datetime = T0, expires_in_s: int = 3600
+    ctx: WorkspaceContext,
+    account: Account,
+    *,
+    now: datetime = T0,
+    expires_in_s: int = 3600,
+    also_listed: Sequence[CalendarInfo] = (),
 ) -> uuid.UUID:
+    """Connect (or reconnect) the account; Google lists its primary calendar and
+    `also_listed`."""
     from tumnis.modules.calendar import api  # noqa: PLC0415
     from tumnis.modules.calendar.adapters.port import CalendarInfo, TokenSet  # noqa: PLC0415
 
@@ -93,7 +101,10 @@ async def connect(
         expires_at=now + timedelta(seconds=expires_in_s),
         scope="https://www.googleapis.com/auth/calendar.events.readonly",
     )
-    calendars = [CalendarInfo(id=email, summary=email, primary=True, time_zone="America/New_York")]
+    calendars = [
+        CalendarInfo(id=email, summary=email, primary=True, time_zone="America/New_York"),
+        *also_listed,
+    ]
     account_out = await api.connect_account(ctx, tokens, calendars)
     return account_out.connection_id
 

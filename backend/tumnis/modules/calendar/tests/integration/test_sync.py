@@ -387,3 +387,50 @@ def _holder(db: DbUrls, connection_id: uuid.UUID) -> str | None:
         db, "SELECT sync_owner FROM calendar_accounts WHERE connection_id = %s", connection_id
     )
     return holder
+
+
+TEAM = "team@group.calendar.example.com"
+
+
+def _team_page() -> dict[str, Any]:
+    """One events.list page of the shared team calendar: account a's last recorded page
+    with its event ids renamed, so they never collide with the primary calendar's."""
+    response = recording("account_a_page3")["response"]
+    for item in response["items"]:
+        item["id"] = f"team-{item['id']}"
+    return response
+
+
+@pytest.mark.req("FR-14.4")
+@pytest.mark.wp("P1-09")
+@pytest.mark.xfail(strict=True, reason="review:P1-09 reconnect prunes the selection")
+async def test_reconnect_drops_calendars_no_longer_listed(
+    app_db: DbUrls,
+    workspace: WorkspaceHandle,
+    google: FakeGoogleCalendar,
+    oauth_client: None,
+    dbos: type[DBOS],
+) -> None:
+    """A reconnect keeps the selection only within the calendars Google still lists: a
+    chosen calendar that is gone (unshared or deleted) leaves the selection, its events
+    are soft-deleted and the next sync succeeds."""
+    from tumnis.modules.calendar.adapters.port import CalendarInfo  # noqa: PLC0415
+    from tumnis.modules.calendar.api import list_accounts, select_calendars  # noqa: PLC0415
+
+    team = CalendarInfo(id=TEAM, summary="Team", primary=False, time_zone="America/New_York")
+    conn = await connect(workspace.ctx, "a", also_listed=[team])
+    (account,) = await list_accounts(workspace.ctx)
+    await select_calendars(
+        workspace.ctx, account.id, [ACCOUNTS["a"], TEAM], expected_version=account.version
+    )
+    google.script_pages(TEAM, [_team_page()])
+    assert (await _sync(workspace, conn))["status"] == "synced"
+    assert any(r["calendar_id"] == TEAM for r in rows(app_db, "events", conn))
+
+    await connect(workspace.ctx, "a")  # the team calendar is no longer listed
+
+    (account,) = await list_accounts(workspace.ctx)
+    assert account.selected_calendar_ids == [ACCOUNTS["a"]]
+    for row in rows(app_db, "events", conn):
+        assert (row["deleted_at"] is not None) == (row["calendar_id"] == TEAM)
+    assert (await _sync(workspace, conn))["status"] == "synced"
