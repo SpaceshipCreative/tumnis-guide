@@ -16,7 +16,7 @@ import { AgentsSection } from "./AgentsSection";
 
 const VIEWPORTS: readonly Viewport[] = ["phone", "laptop"];
 
-test.fails("[P1-04][FR-5.9] T-P1-04-19 shows runner and profile health", async () => {
+test("[P1-04][FR-5.9] T-P1-04-19 shows runner and profile health", async () => {
   for (const viewport of VIEWPORTS) {
     const recorder = new Recorder();
     server.use(...agentsHandlers(recorder));
@@ -33,9 +33,7 @@ test.fails("[P1-04][FR-5.9] T-P1-04-19 shows runner and profile health", async (
       name: online.name,
     });
     expect(within(onlineItem).getByText("Online")).toBeInTheDocument();
-    expect(
-      within(onlineItem).getByText(/hermes 0\.9\.1/i),
-    ).toBeInTheDocument();
+    expect(within(onlineItem).getByText(/hermes 0\.9\.1/i)).toBeInTheDocument();
     const offlineItem = within(runners).getByRole("listitem", {
       name: offline.name,
     });

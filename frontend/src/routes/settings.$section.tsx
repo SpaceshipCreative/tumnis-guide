@@ -3,6 +3,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { AccountSection } from "../components/settings/AccountSection";
+import { AgentsSection } from "../components/settings/AgentsSection";
 import { AuditSection } from "../components/settings/AuditSection";
 import { DeadLettersSection } from "../components/settings/DeadLettersSection";
 import { KeysSection } from "../components/settings/KeysSection";
@@ -10,6 +11,8 @@ import {
   accountQuery,
   deadLettersQuery,
   keysQuery,
+  profilesQuery,
+  runnersQuery,
   sessionsQuery,
   workspaceQuery,
 } from "../components/settings/queries";
@@ -30,6 +33,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   keys: KeysSection,
   audit: AuditSection,
   "dead-letters": DeadLettersSection,
+  agents: AgentsSection,
   workspace: WorkspaceSection,
 };
 
@@ -60,6 +64,10 @@ export const Route = createFileRoute("/settings/$section")({
         break;
       case "dead-letters":
         started(queryClient.query(deadLettersQuery()));
+        break;
+      case "agents":
+        started(queryClient.query(runnersQuery()));
+        started(queryClient.query(profilesQuery()));
         break;
       case "workspace":
         started(queryClient.query(workspaceQuery()));

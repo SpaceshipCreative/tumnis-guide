@@ -5,6 +5,7 @@ export const SETTINGS_SECTIONS = [
   "keys",
   "audit",
   "dead-letters",
+  "agents",
   "workspace",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
@@ -15,6 +16,7 @@ export const SECTION_LABELS: Record<SettingsSection, string> = {
   keys: "API keys",
   audit: "Audit log",
   "dead-letters": "Dead letters",
+  agents: "Agents",
   workspace: "Workspace",
 };
 
