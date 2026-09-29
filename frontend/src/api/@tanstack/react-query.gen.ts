@@ -49,15 +49,19 @@ import {
   tasksAddComment,
   tasksChangeStatus,
   tasksCreateTask,
+  tasksDeleteRecurrence,
   tasksGetBoard,
   tasksGetColumns,
+  tasksGetRecurrence,
   tasksGetReviewCount,
   tasksGetTask,
   tasksLinkContextItem,
+  tasksListRecurrence,
   tasksListReviewKinds,
   tasksListTasks,
   tasksMoveTask,
   tasksPutColumns,
+  tasksPutRecurrence,
   tasksUpdateTask,
   usageGetUsage,
 } from "../sdk.gen";
@@ -172,12 +176,18 @@ import type {
   TasksCreateTaskData,
   TasksCreateTaskError,
   TasksCreateTaskResponse,
+  TasksDeleteRecurrenceData,
+  TasksDeleteRecurrenceError,
+  TasksDeleteRecurrenceResponse,
   TasksGetBoardData,
   TasksGetBoardError,
   TasksGetBoardResponse,
   TasksGetColumnsData,
   TasksGetColumnsError,
   TasksGetColumnsResponse,
+  TasksGetRecurrenceData,
+  TasksGetRecurrenceError,
+  TasksGetRecurrenceResponse,
   TasksGetReviewCountData,
   TasksGetReviewCountError,
   TasksGetReviewCountResponse,
@@ -187,6 +197,9 @@ import type {
   TasksLinkContextItemData,
   TasksLinkContextItemError,
   TasksLinkContextItemResponse,
+  TasksListRecurrenceData,
+  TasksListRecurrenceError,
+  TasksListRecurrenceResponse,
   TasksListReviewKindsData,
   TasksListReviewKindsError,
   TasksListReviewKindsResponse,
@@ -199,6 +212,9 @@ import type {
   TasksPutColumnsData,
   TasksPutColumnsError,
   TasksPutColumnsResponse,
+  TasksPutRecurrenceData,
+  TasksPutRecurrenceError,
+  TasksPutRecurrenceResponse,
   TasksUpdateTaskData,
   TasksUpdateTaskError,
   TasksUpdateTaskResponse,
@@ -1400,6 +1416,91 @@ export const projectsUnarchiveProjectMutation = (
   return mutationOptions;
 };
 
+export const tasksListRecurrenceQueryKey = (
+  options?: Options<TasksListRecurrenceData>,
+) => createQueryKey("tasksListRecurrence", options);
+
+/**
+ * List Recurrence
+ *
+ * Recurrence rules, optionally of one project (the Schedule rail).
+ */
+export const tasksListRecurrenceOptions = (
+  options?: Options<TasksListRecurrenceData>,
+) =>
+  queryOptions<
+    TasksListRecurrenceResponse,
+    TasksListRecurrenceError,
+    TasksListRecurrenceResponse,
+    ReturnType<typeof tasksListRecurrenceQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListRecurrence({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListRecurrenceQueryKey(options),
+  });
+
+export const tasksListRecurrenceInfiniteQueryKey = (
+  options?: Options<TasksListRecurrenceData>,
+): QueryKey<Options<TasksListRecurrenceData>> =>
+  createQueryKey("tasksListRecurrence", options, true);
+
+/**
+ * List Recurrence
+ *
+ * Recurrence rules, optionally of one project (the Schedule rail).
+ */
+export const tasksListRecurrenceInfiniteOptions = (
+  options?: Options<TasksListRecurrenceData>,
+) => {
+  const opts = infiniteQueryOptions<
+    TasksListRecurrenceResponse,
+    TasksListRecurrenceError,
+    InfiniteData<TasksListRecurrenceResponse>,
+    QueryKey<Options<TasksListRecurrenceData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<TasksListRecurrenceData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<TasksListRecurrenceData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await tasksListRecurrence({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: tasksListRecurrenceInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
 export const tasksGetReviewCountQueryKey = (
   options?: Options<TasksGetReviewCountData>,
 ) => createQueryKey("tasksGetReviewCount", options);
@@ -1933,6 +2034,95 @@ export const tasksMoveTaskMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await tasksMoveTask({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Delete Recurrence
+ *
+ * Stops the recurrence at the task's version; the instances made so far stay.
+ */
+export const tasksDeleteRecurrenceMutation = (
+  options?: Partial<Options<TasksDeleteRecurrenceData>>,
+): UseMutationOptions<
+  TasksDeleteRecurrenceResponse,
+  TasksDeleteRecurrenceError,
+  Options<TasksDeleteRecurrenceData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksDeleteRecurrenceResponse,
+    TasksDeleteRecurrenceError,
+    Options<TasksDeleteRecurrenceData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksDeleteRecurrence({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const tasksGetRecurrenceQueryKey = (
+  options: Options<TasksGetRecurrenceData>,
+) => createQueryKey("tasksGetRecurrence", options);
+
+/**
+ * Get Recurrence
+ *
+ * The task's recurrence rule; 404 when it has none.
+ */
+export const tasksGetRecurrenceOptions = (
+  options: Options<TasksGetRecurrenceData>,
+) =>
+  queryOptions<
+    TasksGetRecurrenceResponse,
+    TasksGetRecurrenceError,
+    TasksGetRecurrenceResponse,
+    ReturnType<typeof tasksGetRecurrenceQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksGetRecurrence({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksGetRecurrenceQueryKey(options),
+  });
+
+/**
+ * Put Recurrence
+ *
+ * Sets or changes the recurrence at the task's version (a preset or a cron, 422
+ * `invalid_recurrence`); the task becomes the first instance.
+ */
+export const tasksPutRecurrenceMutation = (
+  options?: Partial<Options<TasksPutRecurrenceData>>,
+): UseMutationOptions<
+  TasksPutRecurrenceResponse,
+  TasksPutRecurrenceError,
+  Options<TasksPutRecurrenceData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksPutRecurrenceResponse,
+    TasksPutRecurrenceError,
+    Options<TasksPutRecurrenceData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksPutRecurrence({
         ...options,
         ...fnOptions,
         throwOnError: true,

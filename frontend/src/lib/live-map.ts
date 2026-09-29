@@ -11,10 +11,11 @@ export const LIVE_MAP: Record<
 > = {
   // Any task change refreshes the lists and every board (a card may move between boards'
   // columns, a subtask onto its parent's checklist). searchSearch and
-  // searchTypeaheadTasks join the lists with P0-20.
+  // searchTypeaheadTasks join the lists with P0-20. A task's recurrence rule and the
+  // project's recurrence list change with its task messages (P0-19).
   task: {
-    details: ["tasksGetTask"],
-    lists: ["tasksListTasks", "tasksGetBoard"],
+    details: ["tasksGetTask", "tasksGetRecurrence"],
+    lists: ["tasksListTasks", "tasksGetBoard", "tasksListRecurrence"],
   },
   // A project's board and columns carry its id in their path: column edits and a new card
   // threshold (FR-3.8) refresh them. searchTypeaheadProjects joins the lists with P0-20.
