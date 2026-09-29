@@ -54,7 +54,6 @@ def _recorder() -> tuple[list[httpx.Request], httpx.MockTransport]:
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 @pytest.mark.parametrize("host", BLOCKED_HOSTS)
 async def test_blocked_addresses_are_rejected(host: str) -> None:
     """T-P0-16-06
@@ -72,7 +71,6 @@ async def test_blocked_addresses_are_rejected(host: str) -> None:
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 async def test_dns_flip_still_connects_to_checked_address() -> None:
     """T-P0-16-07
     Given a resolver that answers 93.184.216.34 and then 127.0.0.1, when the guarded client
@@ -99,7 +97,6 @@ async def test_dns_flip_still_connects_to_checked_address() -> None:
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 async def test_any_blocked_answer_rejects_the_host() -> None:
     """T-P0-16-08
     An answer set mixing a public and a loopback address ([93.184.216.34, 127.0.0.1]) is
@@ -128,7 +125,6 @@ async def test_any_blocked_answer_rejects_the_host() -> None:
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 async def test_hosted_mode_rejects_private_ranges_unless_allowlisted() -> None:
     """T-P0-16-09
     Hosted: 10.1.2.3, 192.168.1.5 and 100.101.1.1 are rejected, and 10.1.2.3 is allowed once
@@ -160,7 +156,6 @@ async def test_hosted_mode_rejects_private_ranges_unless_allowlisted() -> None:
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 async def test_redirects_are_rechecked_and_capped() -> None:
     """T-P0-16-10
     The guarded client never follows redirects on its own; `follow_redirects` follows up to
@@ -217,7 +212,6 @@ async def test_redirects_are_rechecked_and_capped() -> None:
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:P0-16")
 async def test_unlisted_port_is_rejected() -> None:
     """T-P0-16-11
     https://example.com:5432/ raises `SsrfBlocked` before anything is resolved or sent; a
@@ -244,3 +238,25 @@ async def test_unlisted_port_is_rejected() -> None:
     async with guarded_client(wider, timeout=5.0, resolver=resolver, inner=inner) as client:
         assert (await client.get("https://example.com:5432/")).status_code == 200
     assert str(seen[0].url) == f"https://{PUBLIC}:5432/"
+
+
+@pytest.mark.req("SEC-5")
+@pytest.mark.wp("P0-16")
+def test_settings_build_the_policy_from_outbound_allowlist() -> None:
+    """DEPLOYMENT_MODE and OUTBOUND_ALLOWLIST become the guard's NetPolicy; an entry that is
+    not an address or a range refuses to start (`outbound_allowlist_invalid`)."""
+    from tumnis.settings import Settings, SettingsError  # noqa: PLC0415
+
+    dsn = "postgresql+psycopg://tumnis_app:x@db.invalid:5432/tumnis"
+    settings = Settings(
+        database_url=dsn,
+        database_direct_url=dsn,
+        deployment_mode="hosted",
+        outbound_allowlist="10.1.0.0/16, 192.168.7.9",
+    )
+    policy = settings.net_policy()
+    assert policy.mode == "hosted"
+    assert policy.allowlist == (ip_network("10.1.0.0/16"), ip_network("192.168.7.9/32"))
+    with pytest.raises(SettingsError) as invalid:
+        Settings(database_url=dsn, database_direct_url=dsn, outbound_allowlist="nas.lan")
+    assert invalid.value.code == "outbound_allowlist_invalid"

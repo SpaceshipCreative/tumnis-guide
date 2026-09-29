@@ -23,6 +23,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tumnis.core.crypto import MasterKeys, configure_master_keys, load_master_keys
+from tumnis.core.net import NetPolicy, parse_allowlist
+from tumnis.core.types import DeploymentMode
 
 
 class SettingsError(RuntimeError):
@@ -46,7 +48,7 @@ class Settings(BaseSettings):
     database_direct_url: str
     database_owner_url: str | None = None
     dbos_system_database_url: str | None = None  # default: direct URL, database tumnis_dbos
-    deployment_mode: Literal["self-hosted", "hosted"] = "self-hosted"
+    deployment_mode: DeploymentMode = "self-hosted"
     deployment_env: DeploymentEnv = "dev"
     tumnis_adapters: Literal["real", "fake"] = "real"
     master_key_file: str = "/run/secrets/tumnis_master_key"
@@ -57,6 +59,9 @@ class Settings(BaseSettings):
     tumnis_disabled_modules: str = ""  # comma-separated deployment kill list (P0-08)
     metrics_token_file: str | None = None  # bearer for /metrics; required in prod (P0-27)
     sentry_dsn: str | None = None  # GlitchTip; unset keeps the SDK off (P0-27)
+    # Comma-separated CIDR ranges (or addresses) the SSRF guard allows in hosted mode even
+    # though they are private (P0-16, SEC-5); self-hosted mode allows the LAN anyway.
+    outbound_allowlist: str = ""
 
     @model_validator(mode="after")
     def _preview_guard(self) -> Self:
@@ -68,11 +73,22 @@ class Settings(BaseSettings):
                 )
             if self.typesafe_api_key is not None:
                 raise SettingsError("preview_has_production_secret", "a Jev key is set in preview")
+        try:
+            parse_allowlist(self.outbound_allowlist.split(","))
+        except ValueError as exc:
+            raise SettingsError("outbound_allowlist_invalid", str(exc)) from exc
         if self.cache_backend == "redis":
             raise SettingsError(
                 "cache_backend_unavailable", "the redis cache backend arrives with hosted mode"
             )
         return self
+
+    def net_policy(self) -> NetPolicy:
+        """The SSRF guard's policy for this deployment (tumnis.core.net.guarded_client)."""
+        return NetPolicy(
+            mode=self.deployment_mode,
+            allowlist=parse_allowlist(self.outbound_allowlist.split(",")),
+        )
 
     def check_database_tls(self) -> None:
         """Prod connects to Postgres and PgBouncer only with verify-full (P0-16, SEC-9)."""
