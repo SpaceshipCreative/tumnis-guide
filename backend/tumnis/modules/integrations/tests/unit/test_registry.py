@@ -7,7 +7,6 @@ import pytest
 
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P0-12")
-@pytest.mark.xfail(strict=True, reason="spec:P0-12")
 def test_connector_registers_in_adapter_registry_with_fake(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

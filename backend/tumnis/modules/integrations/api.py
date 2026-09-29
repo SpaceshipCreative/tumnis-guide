@@ -22,7 +22,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core.adapters.registry import Health, register_adapter
+from tumnis.core.adapters.registry import Health, current_mode, register_adapter, resolve
 from tumnis.core.canonical import CanonicalRecord
 from tumnis.core.schemas import versioned
 from tumnis.core.tenancy import WorkspaceContext
@@ -165,17 +165,24 @@ def register_connector(
 ) -> None:
     """Registers in the adapter registry as 'integrations.connector.<provider>' (so fake
     mode and the fake/contract meta-tests apply) and in the connector index."""
-    register_adapter(connector_adapter_name(provider), port=Connector, real=real, fake=fake)
+    if fake is None:
+        raise ConnectorWithoutFake(
+            f"connector {provider!r} needs a fake (TUMNIS_ADAPTERS=fake runs it in previews)"
+        )
+    name = connector_adapter_name(provider)
+    register_adapter(name, port=Connector, real=real, fake=fake)
+    _CONNECTORS[provider] = ConnectorSpec(provider=provider, kind=kind, adapter_name=name)
 
 
 def connectors() -> Mapping[str, ConnectorSpec]:
     """The connector index: provider -> spec."""
-    raise NotImplementedError
+    return dict(_CONNECTORS)
 
 
 def connector_for(provider: str, **deps: Any) -> Connector:
     """The registered connector for `provider` in the mode `TUMNIS_ADAPTERS` selects."""
-    raise NotImplementedError
+    connector: Connector = resolve(_CONNECTORS[provider].adapter_name, current_mode(), **deps)
+    return connector
 
 
 # --- Ingest -----------------------------------------------------------------------------------
