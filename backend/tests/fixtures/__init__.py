@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
     from testcontainers.community.postgres import PostgresContainer
 
+    from tests._auth import Account, SessionClient
     from tumnis.core.events import EventEnvelope
     from tumnis.core.tenancy import WorkspaceContext
     from tumnis.seed import SeedResult
@@ -148,6 +149,10 @@ class WorkspaceHandle:
     id: uuid.UUID
     name: str
     ctx: WorkspaceContext
+    # Its user (P0-13): an owner membership, a password and no TOTP secret yet.
+    user_id: uuid.UUID | None = None
+    email: str | None = None
+    password: str | None = None
 
 
 def make_workspace(db: DbUrls, name: str = "Test", timezone: str = "America/New_York") -> uuid.UUID:
@@ -686,6 +691,26 @@ def master_key_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
         crypto.reset_master_keys()
 
 
+@dataclass(frozen=True)
+class PepperFile:
+    """The pepper file written for a test (P0-13; P0-14 reuses it): same format and checks
+    as the master key file."""
+
+    path: Path
+    keys: dict[int, bytes]
+    active: int
+
+
+@pytest.fixture
+def pepper_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PepperFile:
+    """A pepper file (one fresh 32-byte pepper, version 1, mode 0o600) in tmp_path;
+    API_KEY_PEPPER_FILE points at it."""
+    keys = {1: secrets.token_bytes(32)}
+    path = write_master_key_file(tmp_path / "pepper.json", keys, active=1)
+    monkeypatch.setenv("API_KEY_PEPPER_FILE", str(path))
+    return PepperFile(path, keys, active=1)
+
+
 @pytest.fixture
 async def app(
     db: DbUrls,
@@ -703,6 +728,25 @@ async def app(
         yield create_app(settings=settings_for(db, dbos_sys_db), clock=clock)
     finally:
         await core_db.dispose()
+
+
+class AppFactory(Protocol):
+    def __call__(self, **overrides: Any) -> FastAPI: ...
+
+
+@pytest.fixture
+def app_factory(
+    db: DbUrls, dbos_sys_db: DbUrls, clock: FixedClock, fakes: Fakes, master_key_file: MasterKeyFile
+) -> AppFactory:
+    """`app_factory(**settings_overrides)`: another create_app on the per-test database
+    with fakes and the test clock, for tests that need a second deployment shape (hosted
+    mode, P0-13); engines are disposed by the `app` fixture or the test's own cleanup."""
+    from tumnis.app import create_app  # noqa: PLC0415
+
+    def build(**overrides: Any) -> FastAPI:
+        return create_app(settings=settings_for(db, dbos_sys_db, **overrides), clock=clock)
+
+    return build
 
 
 @pytest.fixture
@@ -786,3 +830,40 @@ def load_recordings(provider: str) -> list[Recording]:
 def recordings() -> Callable[[str], list[Recording]]:
     """recordings("google_calendar") -> [(raw, expected), ...]."""
     return load_recordings
+
+
+# --- Signed-in clients (P0-13) ----------------------------------------------------------
+
+
+async def enroll_workspace_user(workspace: WorkspaceHandle, clock: FixedClock) -> Account:
+    """Give the `workspace` fixture's user a confirmed TOTP secret (through the auth api)
+    and return what signing in as that user needs."""
+    import pyotp  # noqa: PLC0415
+
+    from tests._auth import Account  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth_api  # noqa: PLC0415
+
+    assert workspace.user_id is not None
+    assert workspace.email is not None
+    assert workspace.password is not None
+    secret = pyotp.random_base32()
+    await auth_api.enroll_totp(workspace.user_id, workspace.id, secret, confirmed_at=clock.now())
+    return Account(workspace.email, workspace.password, secret, workspace.user_id, workspace.id)
+
+
+@pytest.fixture
+async def session_client(
+    app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
+) -> AsyncIterator[SessionClient]:
+    """An httpx client signed in (password and TOTP at the clock's time) as the
+    `workspace` fixture's user; it sends `X-CSRF-Token` (`session_client.csrf`) and an
+    `Idempotency-Key` on every write that lacks them. The clock moves one TOTP step on
+    afterwards, so another sign-in in the test gets a fresh code."""
+    from tests._auth import TOTP_STEP, session_client_for, sign_in  # noqa: PLC0415
+
+    account = await enroll_workspace_user(workspace, clock)
+    async with session_client_for(app) as http:
+        await sign_in(http, account, clock)
+        http.account = account
+        clock.advance(TOTP_STEP)
+        yield http

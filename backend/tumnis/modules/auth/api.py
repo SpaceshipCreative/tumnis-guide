@@ -4,6 +4,7 @@ import zoneinfo
 from datetime import datetime
 from functools import cache
 from typing import Any, Final, cast
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Table, select
@@ -136,3 +137,10 @@ async def put_workspace_settings(
             session, settings_cache_key(ctx.workspace_id, WORKSPACE_SETTINGS_KEY)
         )
     return _out(row)
+
+
+async def enroll_totp(
+    user_id: UUID, workspace_id: UUID, secret: str, *, confirmed_at: datetime | None
+) -> None:
+    """Seal `secret` as the user's TOTP secret (P0-13). Spec skeleton."""
+    raise NotImplementedError("P0-13")
