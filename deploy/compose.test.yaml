@@ -13,29 +13,14 @@
 #   docker compose -f deploy/compose.test.yaml down -v
 name: tumnis-test
 
+# The image, the api port and the backup profile are set in compose.test-overrides.yaml,
+# merged inside the include: this file may only add services (Compose 2.x refuses one that
+# the include also defines).
 include:
-  - path: [compose.yaml, compose.preview.yaml]
+  - path: [compose.yaml, compose.preview.yaml, compose.test-overrides.yaml]
     env_file: test.env
 
-x-image: &image
-  image: ${TUMNIS_IMAGE:-tumnis:test}
-  build:
-    context: ..
-    dockerfile: deploy/Dockerfile
-
 services:
-  secrets: *image
-  migrate: *image
-  worker: *image
-  seed: *image
-  api:
-    <<: *image
-    ports:
-      - "127.0.0.1:${TUMNIS_TEST_PORT:-8080}:8080"
-  # Off unless the backups overlay resets the profile (issue #21).
-  backup:
-    profiles: [backups]
-
   # MinIO over TLS, repo2 of the opt-in backups (compose.test-backups.yaml): a self-signed
   # certificate (pgBackRest speaks only TLS to S3), the server and its bucket.
   minio-certs:
