@@ -45,6 +45,7 @@ export type {
   HealthLiveResponse,
   HealthLiveResponses,
   HealthReadyData,
+  HealthReadyErrors,
   HealthReadyResponses,
   PageAuditEntry,
   PageDeadLetterOut,

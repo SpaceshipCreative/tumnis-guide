@@ -134,9 +134,27 @@ def _from_http(status: int, detail: Any) -> Problem:
     return problem(status, default, text)
 
 
-async def http_exception_handler(_request: Request, exc: Exception) -> Response:
+def _allowed_methods(request: Request) -> str | None:
+    """Every method any route serves at this path. Starlette's 405 names only the first
+    route that matched the path, so a path with GET and PUT on separate routes would
+    answer `Allow: GET` (found by the P0-11 fuzzer)."""
+    from starlette.routing import compile_path  # noqa: PLC0415
+
+    from tumnis.core.routing import walk_routes  # noqa: PLC0415  # routing imports errors
+
+    methods: set[str] = set()
+    for route in walk_routes(request.app):
+        if route.path and route.methods and compile_path(route.path)[0].match(request.url.path):
+            methods |= route.methods
+    return ", ".join(sorted(methods)) or None
+
+
+async def http_exception_handler(request: Request, exc: Exception) -> Response:
     assert isinstance(exc, StarletteHTTPException)  # noqa: S101
-    return problem_response(_from_http(exc.status_code, exc.detail), exc.headers)
+    headers = dict(exc.headers or {})
+    if exc.status_code == HTTPStatus.METHOD_NOT_ALLOWED and (allow := _allowed_methods(request)):
+        headers["Allow"] = allow
+    return problem_response(_from_http(exc.status_code, exc.detail), headers)
 
 
 def _location(loc: Any) -> str:
@@ -168,6 +186,21 @@ async def unsupported_schema_version_handler(_request: Request, exc: Exception) 
 
 async def internal_error_handler(_request: Request, _exc: Exception) -> Response:
     return problem_response(problem(500, "internal_error"))
+
+
+def document_problem_media_type(spec: dict[str, Any]) -> dict[str, Any]:
+    """Problem answers are `application/problem+json`: move every response documented with
+    the Problem model from `application/json` to that media type, so the OpenAPI document
+    (and the fuzzer checking it) says what the api sends."""
+    ref = "#/components/schemas/Problem"
+    for operations in spec.get("paths", {}).values():
+        for operation in operations.values():
+            for response in operation.get("responses", {}).values():
+                content = response.get("content", {})
+                body = content.get("application/json")
+                if body is not None and body.get("schema", {}).get("$ref") == ref:
+                    content[MEDIA_TYPE] = content.pop("application/json")
+    return spec
 
 
 def install_problem_handlers(app: FastAPI) -> None:

@@ -27,6 +27,7 @@ import type {
   HealthLiveData,
   HealthLiveResponses,
   HealthReadyData,
+  HealthReadyErrors,
   HealthReadyResponses,
   SettingsGetWorkspaceSettingsData,
   SettingsGetWorkspaceSettingsErrors,
@@ -85,11 +86,12 @@ export const healthLive = <ThrowOnError extends boolean = false>(
  */
 export const healthReady = <ThrowOnError extends boolean = false>(
   options?: Options<HealthReadyData, ThrowOnError>,
-): RequestResult<HealthReadyResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).get<HealthReadyResponses, unknown, ThrowOnError>({
-    url: "/health/ready",
-    ...options,
-  });
+): RequestResult<HealthReadyResponses, HealthReadyErrors, ThrowOnError> =>
+  (options?.client ?? client).get<
+    HealthReadyResponses,
+    HealthReadyErrors,
+    ThrowOnError
+  >({ url: "/health/ready", ...options });
 
 /**
  * List Audit

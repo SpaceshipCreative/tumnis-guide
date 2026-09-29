@@ -5,15 +5,22 @@ stale version raises `StaleVersion` carrying the current row, which the problem 
 (tumnis.core.errors) answer as 409 `stale_version` with `current`; a missing or deleted row
 raises `NotFound` (404 `not_found`). Writers that shape their resource differently raise
 `StaleVersion(current=<resource>)` themselves.
+
+A request body names the version as `Version`: a Postgres `integer`, so a value past its
+range is 422 `validation_error` rather than a database error (found by P0-11's fuzzer).
 """
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, Final
 from uuid import UUID
 
+from pydantic import Field
 from sqlalchemy import RowMapping, Table, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
+INT4_MAX: Final = 2_147_483_647
+Version = Annotated[int, Field(ge=0, le=INT4_MAX)]
 
 
 class StaleVersion(Exception):  # noqa: N818  # the plan's name (A13, P0-10)

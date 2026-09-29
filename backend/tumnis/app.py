@@ -32,7 +32,7 @@ from tumnis.core import (
 )
 from tumnis.core.bodylimit import BodyLimitMiddleware
 from tumnis.core.clock import Clock, SystemClock
-from tumnis.core.errors import install_problem_handlers
+from tumnis.core.errors import document_problem_media_type, install_problem_handlers
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.request_meta import RequestMetaMiddleware
 from tumnis.core.routing import new_request_log
@@ -114,6 +114,18 @@ def v1_routes(settings: Settings, extra_routers: Sequence[APIRouter] = ()) -> AP
     return v1
 
 
+def _document_problems(app: FastAPI) -> None:
+    """The generated OpenAPI document, with problem answers as application/problem+json."""
+    generate = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        if app.openapi_schema is None:
+            app.openapi_schema = document_problem_media_type(generate())
+        return app.openapi_schema
+
+    app.openapi = openapi  # type: ignore[method-assign]  # FastAPI's documented override
+
+
 def create_app(
     settings: Settings | None = None,
     clock: Clock | None = None,
@@ -150,6 +162,7 @@ def create_app(
         redoc_url=None,
     )
     install_problem_handlers(app)
+    _document_problems(app)
     telemetry.instrument_app(app)  # a SERVER span per request (P0-27)
     # Middleware, innermost first (add_middleware wraps what is there): correlation ID,
     # source address and user agent for the audit log (P0-15); the body limit outside it

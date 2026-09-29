@@ -79,7 +79,7 @@ export const zUsageRow = z.object({
  * VersionIn
  */
 export const zVersionIn = z.object({
-  version: z.int(),
+  version: z.int().gte(0).lte(2147483647),
 });
 
 /**
@@ -88,7 +88,7 @@ export const zVersionIn = z.object({
 export const zWorkspaceSettingsIn = z.object({
   subtask_threshold_min: z.int().nullish(),
   timezone: z.string().nullish(),
-  version: z.int(),
+  version: z.int().gte(0).lte(2147483647),
 });
 
 /**

@@ -265,9 +265,16 @@ export type HealthReadyData = {
   url: "/health/ready";
 };
 
+export type HealthReadyErrors = {
+  /**
+   * Down: a critical check failed
+   */
+  503: unknown;
+};
+
 export type HealthReadyResponses = {
   /**
-   * Successful Response
+   * Ready (`ok`) or `degraded`: a non-critical check failed
    */
   200: unknown;
 };
