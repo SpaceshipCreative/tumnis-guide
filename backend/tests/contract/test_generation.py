@@ -114,7 +114,6 @@ def test_field_change_without_regeneration_is_detected(tmp_path: Path) -> None:
 @pytest.mark.contract
 @pytest.mark.req("ADR-0003")
 @pytest.mark.wp("P0-11")
-@pytest.mark.xfail(strict=True, reason="spec:P0-11")
 def test_openapi_ts_output_matches_committed(repo_root: Path, tmp_path: Path) -> None:
     """T-P0-11-04
     `npx openapi-ts` with its output redirected to a temp dir (OPENAPI_TS_OUTPUT), formatted

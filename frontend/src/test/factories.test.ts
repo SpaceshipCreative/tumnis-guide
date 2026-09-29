@@ -18,19 +18,16 @@ async function load<T>(path: string): Promise<T> {
   return (await import(/* @vite-ignore */ path)) as T;
 }
 
-test.fails(
-  "[P0-11][FR-14.7] a generated factory's output parses with its zod schema",
-  async () => {
-    const { zProblem } = await load<ZodModule>("../api/zod.gen");
-    const { makeProblem } = await load<FactoriesModule>("./factories");
+test("[P0-11][FR-14.7] a generated factory's output parses with its zod schema", async () => {
+  const { zProblem } = await load<ZodModule>("../api/zod.gen");
+  const { makeProblem } = await load<FactoriesModule>("./factories");
 
-    const problem = makeProblem({ code: "not_found", status: 404 });
+  const problem = makeProblem({ code: "not_found", status: 404 });
 
-    expect(zProblem.parse(problem)).toEqual(problem);
-    expect(problem).toMatchObject({
-      code: "not_found",
-      status: 404,
-      schema_version: 1,
-    });
-  },
-);
+  expect(zProblem.parse(problem)).toEqual(problem);
+  expect(problem).toMatchObject({
+    code: "not_found",
+    status: 404,
+    schema_version: 1,
+  });
+});
