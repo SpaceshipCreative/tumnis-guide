@@ -526,6 +526,20 @@ export type PageAuditEntry = {
 };
 
 /**
+ * Page[CommentOut]
+ */
+export type PageCommentOut = {
+  /**
+   * Items
+   */
+  items: Array<CommentOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
  * Page[DeadLetterOut]
  */
 export type PageDeadLetterOut = {
@@ -1161,6 +1175,10 @@ export type TaskOut = {
    */
   board_rank: string;
   /**
+   * Change Id
+   */
+  change_id?: string | null;
+  /**
    * Column Id
    */
   column_id: string | null;
@@ -1349,6 +1367,32 @@ export type TotpIn = {
    * Preauth
    */
   preauth: string;
+};
+
+/**
+ * TrashIn
+ */
+export type TrashIn = {
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * UndoIn
+ *
+ * The change a write answered (`change_id`) and the version it left (R-09).
+ */
+export type UndoIn = {
+  /**
+   * Change Id
+   */
+  change_id: string;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -3831,6 +3875,66 @@ export type TasksCreateTaskResponses = {
 export type TasksCreateTaskResponse =
   TasksCreateTaskResponses[keyof TasksCreateTaskResponses];
 
+export type TasksTrashTaskData = {
+  body: TrashIn;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}";
+};
+
+export type TasksTrashTaskErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksTrashTaskError =
+  TasksTrashTaskErrors[keyof TasksTrashTaskErrors];
+
+export type TasksTrashTaskResponses = {
+  /**
+   * Successful Response
+   */
+  200: TaskOut;
+};
+
+export type TasksTrashTaskResponse =
+  TasksTrashTaskResponses[keyof TasksTrashTaskResponses];
+
 export type TasksGetTaskData = {
   body?: never;
   path: {
@@ -3949,6 +4053,75 @@ export type TasksUpdateTaskResponses = {
 
 export type TasksUpdateTaskResponse =
   TasksUpdateTaskResponses[keyof TasksUpdateTaskResponses];
+
+export type TasksListCommentsData = {
+  body?: never;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: {
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/tasks/{task_id}/comments";
+};
+
+export type TasksListCommentsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksListCommentsError =
+  TasksListCommentsErrors[keyof TasksListCommentsErrors];
+
+export type TasksListCommentsResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageCommentOut;
+};
+
+export type TasksListCommentsResponse =
+  TasksListCommentsResponses[keyof TasksListCommentsResponses];
 
 export type TasksAddCommentData = {
   body: CommentIn;
@@ -4188,6 +4361,65 @@ export type TasksChangeStatusResponses = {
 
 export type TasksChangeStatusResponse =
   TasksChangeStatusResponses[keyof TasksChangeStatusResponses];
+
+export type TasksUndoTaskData = {
+  body: UndoIn;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/undo";
+};
+
+export type TasksUndoTaskErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksUndoTaskError = TasksUndoTaskErrors[keyof TasksUndoTaskErrors];
+
+export type TasksUndoTaskResponses = {
+  /**
+   * Successful Response
+   */
+  200: TaskOut;
+};
+
+export type TasksUndoTaskResponse =
+  TasksUndoTaskResponses[keyof TasksUndoTaskResponses];
 
 export type UsageGetUsageData = {
   body?: never;

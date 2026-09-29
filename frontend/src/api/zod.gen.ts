@@ -189,6 +189,14 @@ export const zPageAuditEntry = z.object({
 });
 
 /**
+ * Page[CommentOut]
+ */
+export const zPageCommentOut = z.object({
+  items: z.array(zCommentOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
  * Page[DeadLetterOut]
  */
 export const zPageDeadLetterOut = z.object({
@@ -515,6 +523,7 @@ export const zTaskOut = z.object({
   actual_minutes: z.int().nullable(),
   assigned_agent_id: z.uuid().nullable(),
   board_rank: z.string(),
+  change_id: z.uuid().nullish(),
   column_id: z.uuid().nullable(),
   completed_at: z.iso.datetime().nullable(),
   created_at: z.iso.datetime(),
@@ -623,6 +632,23 @@ export const zTotpEnrolOut = z.object({
 export const zTotpIn = z.object({
   code: z.string().max(16),
   preauth: z.string().max(2048),
+});
+
+/**
+ * TrashIn
+ */
+export const zTrashIn = z.object({
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * UndoIn
+ *
+ * The change a write answered (`change_id`) and the version it left (R-09).
+ */
+export const zUndoIn = z.object({
+  change_id: z.uuid(),
+  version: z.int().gte(0).lte(2147483647),
 });
 
 /**
@@ -1024,6 +1050,17 @@ export const zTasksCreateTaskBody = zTaskCreate;
  */
 export const zTasksCreateTaskResponse = zTaskOut;
 
+export const zTasksTrashTaskBody = zTrashIn;
+
+export const zTasksTrashTaskPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksTrashTaskResponse = zTaskOut;
+
 export const zTasksGetTaskPath = z.object({
   task_id: z.uuid(),
 });
@@ -1043,6 +1080,20 @@ export const zTasksUpdateTaskPath = z.object({
  * Successful Response
  */
 export const zTasksUpdateTaskResponse = zTaskOut;
+
+export const zTasksListCommentsPath = z.object({
+  task_id: z.uuid(),
+});
+
+export const zTasksListCommentsQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksListCommentsResponse = zPageCommentOut;
 
 export const zTasksAddCommentBody = zCommentIn;
 
@@ -1087,6 +1138,17 @@ export const zTasksChangeStatusPath = z.object({
  * Successful Response
  */
 export const zTasksChangeStatusResponse = zTaskOut;
+
+export const zTasksUndoTaskBody = zUndoIn;
+
+export const zTasksUndoTaskPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksUndoTaskResponse = zTaskOut;
 
 export const zUsageGetUsageQuery = z.object({
   from: z.iso.date(),

@@ -137,6 +137,9 @@ import type {
   TasksLinkContextItemData,
   TasksLinkContextItemErrors,
   TasksLinkContextItemResponses,
+  TasksListCommentsData,
+  TasksListCommentsErrors,
+  TasksListCommentsResponses,
   TasksListReviewKindsData,
   TasksListReviewKindsErrors,
   TasksListReviewKindsResponses,
@@ -149,6 +152,12 @@ import type {
   TasksPutColumnsData,
   TasksPutColumnsErrors,
   TasksPutColumnsResponses,
+  TasksTrashTaskData,
+  TasksTrashTaskErrors,
+  TasksTrashTaskResponses,
+  TasksUndoTaskData,
+  TasksUndoTaskErrors,
+  TasksUndoTaskResponses,
   TasksUpdateTaskData,
   TasksUpdateTaskErrors,
   TasksUpdateTaskResponses,
@@ -198,10 +207,13 @@ import {
   zTasksGetReviewCountResponse,
   zTasksGetTaskResponse,
   zTasksLinkContextItemResponse,
+  zTasksListCommentsResponse,
   zTasksListReviewKindsResponse,
   zTasksListTasksResponse,
   zTasksMoveTaskResponse,
   zTasksPutColumnsResponse,
+  zTasksTrashTaskResponse,
+  zTasksUndoTaskResponse,
   zTasksUpdateTaskResponse,
   zUsageGetUsageResponse,
 } from "./zod.gen";
@@ -1181,6 +1193,30 @@ export const tasksCreateTask = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Trash Task
+ *
+ * Moves the task to the trash (UX 9); `POST /undo` with the answered `change_id`
+ * brings it back.
+ */
+export const tasksTrashTask = <ThrowOnError extends boolean = false>(
+  options: Options<TasksTrashTaskData, ThrowOnError>,
+): RequestResult<TasksTrashTaskResponses, TasksTrashTaskErrors, ThrowOnError> =>
+  (options.client ?? client).delete<
+    TasksTrashTaskResponses,
+    TasksTrashTaskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksTrashTaskResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Get Task
  */
 export const tasksGetTask = <ThrowOnError extends boolean = false>(
@@ -1220,6 +1256,29 @@ export const tasksUpdateTask = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * List Comments
+ *
+ * The task's comments, oldest first.
+ */
+export const tasksListComments = <ThrowOnError extends boolean = false>(
+  options: Options<TasksListCommentsData, ThrowOnError>,
+): RequestResult<
+  TasksListCommentsResponses,
+  TasksListCommentsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TasksListCommentsResponses,
+    TasksListCommentsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListCommentsResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/comments",
+    ...options,
   });
 
 /**
@@ -1317,6 +1376,30 @@ export const tasksChangeStatus = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zTasksChangeStatusResponse.parseAsync(data),
     url: "/v1/tasks/{task_id}/status",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Undo Task
+ *
+ * Puts back what one change did (R-09, UX 9): 409 `already_undone`, or
+ * `stale_version` when the task changed since.
+ */
+export const tasksUndoTask = <ThrowOnError extends boolean = false>(
+  options: Options<TasksUndoTaskData, ThrowOnError>,
+): RequestResult<TasksUndoTaskResponses, TasksUndoTaskErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    TasksUndoTaskResponses,
+    TasksUndoTaskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksUndoTaskResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/undo",
     ...options,
     headers: {
       "Content-Type": "application/json",

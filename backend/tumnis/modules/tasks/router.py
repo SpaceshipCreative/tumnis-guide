@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from tumnis.core.clock import Clock
 from tumnis.core.idempotency import SessionDep
-from tumnis.core.pagination import PageParams, page_params
+from tumnis.core.pagination import Page, PageParams, page_params
 from tumnis.core.principal import principal_of
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.versioning import Version
