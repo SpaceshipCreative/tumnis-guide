@@ -276,7 +276,6 @@ _CHECKS: dict[str, Callable[[Any], Awaitable[None]]] = {
 
 @pytest.mark.req("Quality rule 5")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 @pytest.mark.parametrize(
     "service", ["minio", "sftp_server", pytest.param("clamd", marks=pytest.mark.slow)]
 )
