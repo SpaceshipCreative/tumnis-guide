@@ -206,6 +206,29 @@ async def _put_workspace_settings(
     return _out(row)
 
 
+class WorkspaceTimezone(BaseModel):
+    timezone: str  # IANA name
+    changed_at: datetime  # the settings row's last write: its creation or the last PUT
+
+
+async def workspace_timezone(session: AsyncSession, workspace_id: UUID) -> WorkspaceTimezone:
+    """The workspace's timezone and when its settings row last changed, read in the
+    caller's transaction (not through the cache). P0-19's day close anchors on the change,
+    so a timezone change never rolls Today over mid-day (REL-6)."""
+    row = (
+        (
+            await session.execute(
+                select(WORKSPACES.c.timezone, WORKSPACES.c.updated_at).where(
+                    WORKSPACES.c.id == workspace_id
+                )
+            )
+        )
+        .mappings()
+        .one()
+    )
+    return WorkspaceTimezone(timezone=row["timezone"], changed_at=row["updated_at"])
+
+
 # --- Identity, sign-in and sessions (P0-13, SEC-1, FR-9.1, FR-9.2) -------------------------
 #
 # Sign-in is two steps. The password step (any registered provider) answers a pre-auth
