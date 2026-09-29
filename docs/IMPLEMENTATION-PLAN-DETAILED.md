@@ -230,10 +230,11 @@ markers = [
   "integration: needs Postgres or containers (sockets allowed)",
   "contract: adapter, connector or schema contract",
   "slow: over 5 seconds",
+  "drill: restore drill only, never on PRs",
 ]
 ```
 
-Integration tests carry `@pytest.mark.enable_socket` through a module-level `pytestmark`. Spec tests waiting for code carry `@pytest.mark.xfail(strict=True, reason="spec:P0-18")`; the `spec:` prefix is what spec-guard and the traceability job look for.
+Integration tests carry `@pytest.mark.enable_socket` through a module-level `pytestmark`. Spec tests waiting for code carry `@pytest.mark.xfail(strict=True, reason="spec:P0-18")`; the `spec:` prefix is what spec-guard and the traceability job look for. `drill` tests run only when the marker expression names them (`pytest -m drill` in `restore-drill.yml`); the shared fixtures plugin deselects them from every other run, while `--collect-only` (traceability) still lists them (P0-05).
 
 **Vitest.** Titles carry tags in brackets: `test.fails('[P0-25][FR-3.10] replays each queued item once', …)`. `test.fails` is the expected-failure form; it flips to `test` when the code lands.
 
@@ -291,7 +292,7 @@ Integration tests carry `@pytest.mark.enable_socket` through a module-level `pyt
 
 **Frontend (`frontend/src/test/`)**: `renderWithProviders(ui, {route, queryClient})`, MSW `server` with per-test `server.use(...)`, `vi.useFakeTimers()` helpers, `resetIdb()` over fake-indexeddb, `makeTask()`/`makeProject()` factories generated from zod schemas.
 
-**Playwright (`frontend/e2e/fixtures.ts`)**: `seededApp` (resets the compose.test stack to the seed set through `POST /v1/test/reset`, available only when `TUMNIS_ADAPTERS=fake`), `signedInPage` (TOTP computed from the seed secret), `page.clock` for time travel (`install`, `setFixedTime`, `fastForward`, `runFor`), `fakes` (REST handle to script adapter fakes in the test stack).
+**Playwright (`frontend/e2e/fixtures.ts`)**: `seededApp` (resets the compose.test stack to the seed set through `POST /v1/test/reset`, available only when `TUMNIS_ADAPTERS=fake`), `signedInPage` (TOTP computed from the seed secret), `page.clock` for time travel (`install`, `setFixedTime`, `fastForward`, `runFor`), `fakes` (REST handle to script adapter fakes in the test stack). Until P0-04 and P0-13 fill them, `seededApp` and `signedInPage` are stubs that throw on first use inside the test body (after `test.fail()`), never during fixture setup. Shared helpers, without assertions, live beside them (P0-05): `seedUser()`, `totp(secret, at)`, `listTasks`, `projectIdByName`, `boardColumns`, `recordedWrites`, `quickAddDialog`, `openQuickAdd`, `quickAdd`, `projectCard`, `section`, `taskCards`, `markStartTime`.
 
 ### A6 · Adapter and fake inventory
 
@@ -446,6 +447,8 @@ Static schedules register in `worker.py` after `DBOS.launch()` with `DBOS.apply_
 | `SPEC_CHANGE_ACTORS` | Logins whose `spec-change` label waives spec-guard (P0-03) | Scott's login | GitHub repo variable |
 | `HOMELAB_RUNNER` | `true` moves the Skills and Performance jobs to `[self-hosted, homelab]` | unset (GitHub-hosted stubs) | GitHub repo variable |
 | `GH_API_STUB` | Test-only JSON file standing in for `gh api` in spec-guard | unset | tests |
+| `DRILL_SOURCE_DATABASE_URL` | Source database the restore drill records to; `restore-drill.yml` passes it to `pytest -m drill` as `DATABASE_DIRECT_URL` (P0-05, filled in P0-28) | unset | GitHub secret, homelab runner |
+| `DRILL_MODE`, `DRILL_STARTED_AT` | Set by `restore-drill.yml` for `test_a0_4_restore_drill.py`: `prod` or `rehearsal`, and the run's start (ISO 8601 UTC) | set by the workflow | drill workflow |
 
 Everything per workspace (connector credentials, provider keys, thresholds, working hours, focus levels, timezone) lives in `workspace_settings`, encrypted (P0-08).
 

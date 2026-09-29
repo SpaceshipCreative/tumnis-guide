@@ -1,0 +1,53 @@
+# Restore drill (A0.4, REL-1): manual and quarterly, never on a PR.
+#
+# scripts/drill/restore_drill.sh restores the B2 repository (pgBackRest repo 2) to a
+# scratch container at a marker time and records one `drill.completed` audit row on the
+# source; then `pytest -m drill` (backend/tests/acceptance/test_a0_4_restore_drill.py)
+# re-checks the recorded RPO and RTO against the thresholds versioned in code. Every other
+# pytest run deselects `drill` tests. P0-05 commits this workflow with a stub script that
+# exits 1; P0-28 fills in the drill.
+#
+# Actions are pinned by commit SHA; Renovate bumps the SHA and the version comment.
+name: restore-drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "prod: restore B2 to a scratch volume; rehearsal: MinIO repository"
+        type: choice
+        options: [prod, rehearsal]
+        default: prod
+  schedule:
+    - cron: "41 6 3 1,4,7,10 *" # quarterly: 3rd of Jan, Apr, Jul, Oct, 06:41 UTC
+
+concurrency:
+  group: restore-drill
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+  DRILL_MODE: ${{ inputs.mode || 'prod' }}
+
+jobs:
+  drill:
+    runs-on: [self-hosted, homelab]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Start time (the drill's audit row is read from here on)
+        run: echo "DRILL_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - name: Restore drill
+        run: scripts/drill/restore_drill.sh --mode "$DRILL_MODE"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Thresholds from the recorded drill (pytest -m drill)
+        working-directory: backend
+        env:
+          # The source database the drill recorded to (runner-local secret, P0-28).
+          DATABASE_DIRECT_URL: ${{ secrets.DRILL_SOURCE_DATABASE_URL }}
+        run: |
+          uv sync
+          uv run pytest -m drill -rxX
