@@ -8,7 +8,7 @@ import signal
 import threading
 from typing import TYPE_CHECKING
 
-from tumnis.core import workflows_ops
+from tumnis.core import events, workflows_ops
 from tumnis.settings import Settings
 
 if TYPE_CHECKING:
@@ -17,10 +17,14 @@ if TYPE_CHECKING:
 
 def register_queues() -> None:
     """Register every DBOS queue (A9). DBOS 3.1 persists queues in the system database, so
-    this runs right after DBOS.launch(), in the worker and in the test harness alike.
-    P0-07 adds `events`."""
+    this runs right after DBOS.launch(), in the worker and in the test harness alike."""
     from dbos import DBOS  # noqa: PLC0415
 
+    DBOS.register_queue(
+        events.EVENTS_QUEUE,
+        worker_concurrency=events.EVENTS_WORKER_CONCURRENCY,
+        polling_interval_sec=events.EVENTS_QUEUE_POLL_S,
+    )
     DBOS.register_queue(workflows_ops.MAINTENANCE_QUEUE, worker_concurrency=1)
 
 

@@ -2,19 +2,29 @@
 workflow (P0-07, ADR-0011, ADR-0002)."""
 
 import asyncio
+import contextlib
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, ClassVar, Literal, TypeVar
 from uuid import UUID
 
+from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
+from dbos._error import DBOSQueueDeduplicatedError  # dbos 3.1.0: not re-exported
 from pydantic import BaseModel, ConfigDict, ValidationError
+from sqlalchemy import text
 
+from tumnis.core import db, faults, tenancy
 from tumnis.core.schemas import VersionedPayload
+from tumnis.core.types import SYSTEM_ACTOR
 
 EVENTS_QUEUE = "events"
+EVENTS_WORKER_CONCURRENCY = 8  # A9
+# How often the queue's worker thread looks for queued deliveries. DBOS's default (1 s)
+# would put up to a second between the relay's enqueue and the handler.
+EVENTS_QUEUE_POLL_S = 0.2
 RELAY_BATCH = 100  # plan default
-POLL_SECONDS = 5.0  # plan default
+POLL_SECONDS = 5.0  # plan default ("polls every few seconds as a backstop")
 
 
 class EventSchemaError(ValueError):
@@ -95,7 +105,7 @@ class EventEnvelope(BaseModel):
     payload: dict[str, Any]
 
     @classmethod
-    def from_outbox_row(cls, row: Mapping[str, Any]) -> "EventEnvelope":
+    def from_outbox_row(cls, row: Mapping[Any, Any]) -> "EventEnvelope":
         return cls(
             event_id=row["event_id"],
             name=row["name"],
@@ -176,9 +186,65 @@ def _by_name(sub: Subscriber) -> str:
     return sub.name
 
 
+# --- Relay: outbox rows -> one queued delivery workflow per subscriber ------------------
+
+CLAIM = text("SELECT * FROM app.outbox_claim(:n)")
+MARK_SENT = text("SELECT app.outbox_mark_sent(:ids)")
+
+
+def delivery_id(event_id: UUID | str, subscriber: str) -> str:
+    """The workflow ID (and deduplication ID) of one event's delivery to one subscriber."""
+    return f"{event_id}:{subscriber}"
+
+
+async def _enqueue(subscriber: str, envelope: EventEnvelope) -> None:
+    """SetWorkflowID makes the enqueue idempotent for good (a second enqueue returns the
+    existing workflow, even after it finished); the deduplication ID also refuses a
+    duplicate that another workflow ID would hold while it is queued or running."""
+    wf_id = delivery_id(envelope.event_id, subscriber)
+    with (
+        SetWorkflowID(wf_id),
+        SetEnqueueOptions(deduplication_id=wf_id),
+        contextlib.suppress(DBOSQueueDeduplicatedError),  # an earlier pass queued it
+    ):
+        await DBOS.enqueue_workflow_async(
+            EVENTS_QUEUE, deliver_event, subscriber, envelope.model_dump(mode="json")
+        )
+
+
 async def relay_once(limit: int = RELAY_BATCH) -> int:
-    raise NotImplementedError("P0-07")
+    """Claim up to `limit` unsent rows (app role, direct connection, no workspace), enqueue
+    a delivery per subscriber, mark them sent, in one transaction. Returns the rows claimed."""
+    async with db.direct_sessionmaker()() as session, session.begin():
+        rows = (await session.execute(CLAIM, {"n": limit})).mappings().all()
+        for row in rows:
+            envelope = EventEnvelope.from_outbox_row(row)
+            for sub in subscribers_for(envelope.name):
+                await _enqueue(sub.name, envelope)
+            faults.killpoint("relay.after_enqueue")
+        if rows:
+            await session.execute(MARK_SENT, {"ids": [row["id"] for row in rows]})
+    faults.killpoint("relay.after_mark_sent")
+    return len(rows)
 
 
 async def relay_forever(stop: asyncio.Event, poll_s: float = POLL_SECONDS) -> None:
     raise NotImplementedError("P0-07")
+
+
+# --- Delivery: one workflow per (event, subscriber) -------------------------------------
+
+
+@DBOS.workflow(name="deliver_event")
+async def deliver_event(subscriber: str, envelope: dict[str, Any]) -> str:
+    """Runs the subscriber's handler as a step. Deterministic between steps (ADR-0002)."""
+    await run_handler(subscriber, envelope)
+    faults.killpoint("deliver.after_handler")  # in the workflow body, after the step is recorded
+    return "delivered"
+
+
+@DBOS.step()
+async def run_handler(subscriber: str, envelope: dict[str, Any]) -> None:
+    sub, env = get_subscriber(subscriber), EventEnvelope.model_validate(envelope)
+    with tenancy.use_workspace(tenancy.WorkspaceContext(env.workspace_id, SYSTEM_ACTOR)):
+        await sub.handler(env)

@@ -76,7 +76,6 @@ async def _wait_for_deliveries(db: DbUrls, expected: int, timeout_s: float) -> f
 
 @pytest.mark.req("ADR-0011", "REL-3")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 async def test_each_event_reaches_each_subscriber_once(
     db: DbUrls, dbos: type[DBOS], workspace: WorkspaceHandle
 ) -> None:
@@ -152,7 +151,6 @@ async def test_worker_killed_after_handler_step_does_not_rerun_it(
 
 @pytest.mark.req("ADR-0011")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="spec:P0-07")
 @pytest.mark.usefixtures("core_db")
 async def test_concurrent_relays_claim_disjoint_rows(
     db: DbUrls, workspace: WorkspaceHandle, monkeypatch: pytest.MonkeyPatch
