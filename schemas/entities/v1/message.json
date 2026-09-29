@@ -1,0 +1,136 @@
+{
+  "$id": "https://tumnis.dev/schemas/entities/v1/message.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "An email or chat message. `body_html_sanitized` is filled by the connector's `map`\nthrough `tumnis.core.sanitize.sanitize_html` (pure).",
+  "properties": {
+    "body_html_sanitized": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Body Html Sanitized"
+    },
+    "body_text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Body Text"
+    },
+    "external_id": {
+      "minLength": 1,
+      "title": "External Id",
+      "type": "string"
+    },
+    "fetched_at": {
+      "format": "date-time",
+      "title": "Fetched At",
+      "type": "string"
+    },
+    "from_addr": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "From Addr"
+    },
+    "labels": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Labels",
+      "type": "array"
+    },
+    "provider_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provider Url"
+    },
+    "record_type": {
+      "const": "message",
+      "default": "message",
+      "title": "Record Type",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sent At"
+    },
+    "subject": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Subject"
+    },
+    "thread_external_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Thread External Id"
+    },
+    "to_addrs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "To Addrs",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "external_id",
+    "fetched_at"
+  ],
+  "title": "MessageRecord",
+  "type": "object"
+}

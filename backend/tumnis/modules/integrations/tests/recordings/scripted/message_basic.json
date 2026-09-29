@@ -1,0 +1,34 @@
+{
+  "raw": {
+    "external_id": "msg-001",
+    "record_type": "message",
+    "fetched_at": "2026-03-09T12:00:00Z",
+    "payload": {
+      "id": "msg-001",
+      "from": "client@example.com",
+      "to": ["me@example.org"],
+      "subject": "Invoice",
+      "text": "Hi",
+      "sent_at": "2026-03-09T11:58:00Z",
+      "url": "https://mail.example.com/m/msg-001"
+    }
+  },
+  "expected": [
+    {
+      "schema_version": 1,
+      "record_type": "message",
+      "external_id": "msg-001",
+      "provider_url": "https://mail.example.com/m/msg-001",
+      "fetched_at": "2026-03-09T12:00:00Z",
+      "thread_external_id": null,
+      "sent_at": "2026-03-09T11:58:00Z",
+      "from_addr": "client@example.com",
+      "to_addrs": ["me@example.org"],
+      "subject": "Invoice",
+      "body_text": "Hi",
+      "body_html_sanitized": null,
+      "labels": []
+    }
+  ],
+  "notes": "Scrubbed: sender and recipient replaced with example.com and example.org"
+}

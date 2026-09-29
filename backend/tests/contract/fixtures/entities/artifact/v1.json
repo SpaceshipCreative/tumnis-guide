@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "fetched_at": "2026-03-09T12:00:00Z",
+  "record_type": "artifact",
+  "external_id": "pr-42",
+  "provider_url": "https://code.example.com/acme/site/pull/42",
+  "kind": "pull_request",
+  "url": "https://code.example.com/acme/site/pull/42",
+  "state": "open",
+  "checks": {
+    "ci": "passing"
+  }
+}
