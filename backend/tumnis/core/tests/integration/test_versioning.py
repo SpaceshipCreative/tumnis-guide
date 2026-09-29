@@ -19,7 +19,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P0-10")
-@pytest.mark.xfail(strict=True, reason="spec:P0-10")
 async def test_stale_version_returns_409_with_current_row(
     db: DbUrls, demo_app: Demo, demo_client: httpx.AsyncClient
 ) -> None:
