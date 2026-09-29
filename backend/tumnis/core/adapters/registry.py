@@ -6,7 +6,7 @@ adds the adapter base class, timeouts, breaker and the contract-suite base.
 
 import os
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -57,6 +57,34 @@ def resolve(name: str, mode: AdapterMode, **deps: Any) -> Any:
 
 def registered() -> tuple[AdapterSpec, ...]:
     return tuple(_REGISTRY.values())
+
+
+# --- Contract bookkeeping (P0-09) -------------------------------------------------------
+
+_CONTRACTS: dict[str, set[str]] = {}
+
+
+def record_contract(name: str, impl: str) -> None:
+    raise NotImplementedError
+
+
+def contract_impls() -> Mapping[str, set[str]]:
+    raise NotImplementedError
+
+
+def contract_violations() -> list[str]:
+    raise NotImplementedError
+
+
+# --- Health (P0-09) ----------------------------------------------------------------------
+
+
+def track(name: str, instance: object) -> None:
+    raise NotImplementedError
+
+
+def health_states() -> dict[str, Literal["ok", "degraded"]]:
+    raise NotImplementedError
 
 
 def validate() -> list[str]:
