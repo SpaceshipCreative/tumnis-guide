@@ -163,7 +163,6 @@ def isolated_registry(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 def test_fake_mode_resolves_every_adapter_to_its_fake(
     isolated_registry: Any, fakes: Fakes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -205,7 +204,6 @@ def test_fake_mode_resolves_every_adapter_to_its_fake(
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 def test_adapter_without_fake_is_a_violation(isolated_registry: Any) -> None:
     """T-P0-02-05
     validate() reports a spec registered with fake=None, and the registry-wide test fails on it.
@@ -221,7 +219,6 @@ def test_adapter_without_fake_is_a_violation(isolated_registry: Any) -> None:
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 def test_every_registered_adapter_has_a_fake() -> None:
     """T-P0-02-06
     Over the real registry after the tumnis.wiring import, validate() == [].
