@@ -448,12 +448,12 @@ async def update_project(
 ) -> ProjectOut:
     """Changes the fields the patch sets (links are replaced as a whole) at `version`;
     emits `project.updated` with the changed field names."""
+    current = await _row(s, project_id)  # 404 before any body rule (A0.3, #28)
     values = patch.model_dump(exclude_unset=True, exclude={"version", "links"})
     for required in ("name", "status"):
         if required in values and values[required] is None:
             raise ProblemError(422, "validation_error", f"{required} cannot be null")
     if "code_path" in values or "repo_url" in values:
-        current = await _row(s, project_id)
         _check_location(
             values.get("code_path", current.code_path), values.get("repo_url", current.repo_url)
         )
