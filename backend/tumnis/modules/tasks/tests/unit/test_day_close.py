@@ -25,7 +25,6 @@ def _at(value: str) -> datetime:
 
 @pytest.mark.req("FR-3.6", "REL-6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 def test_next_day_close_across_dst() -> None:
     """T-P0-19-11
     23- and 25-hour days in New York, both Sydney changes, and Santiago's spring-forward day
@@ -60,7 +59,6 @@ def test_next_day_close_across_dst() -> None:
 
 @pytest.mark.req("FR-3.6", "REL-6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 def test_timezone_change_moves_next_close() -> None:
     """T-P0-19-12
     Given a Sydney close at 2026-03-07T13:00Z, when the workspace switches to New York at

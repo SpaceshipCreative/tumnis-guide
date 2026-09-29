@@ -66,7 +66,6 @@ def _check(spec: Any, case: dict[str, Any]) -> None:
 
 @pytest.mark.req("FR-3.5", "REL-6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 def test_daily_preset_across_dst() -> None:
     """T-P0-19-01
     The daily preset lands at 09:00 local on both sides of all eight transitions: New York
@@ -81,7 +80,6 @@ def test_daily_preset_across_dst() -> None:
 
 @pytest.mark.req("FR-3.5", "REL-6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 def test_weekdays_preset_skips_weekend_across_dst() -> None:
     """T-P0-19-02
     Weekdays from Friday 2026-03-06 09:00 EST skip the weekend, and the US spring change
@@ -93,7 +91,6 @@ def test_weekdays_preset_skips_weekend_across_dst() -> None:
 
 @pytest.mark.req("FR-3.5", "REL-6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 def test_nonexistent_local_time_moves_forward() -> None:
     """T-P0-19-03
     A weekly Sunday 02:30 falls in the spring-forward gap in both zones: it fires once, at
@@ -112,7 +109,6 @@ def test_nonexistent_local_time_moves_forward() -> None:
 
 @pytest.mark.req("FR-3.5", "REL-6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 def test_ambiguous_local_time_fires_once() -> None:
     """T-P0-19-04
     A weekly Sunday time inside the fall-back overlap fires once, at the first occurrence
@@ -129,7 +125,6 @@ def test_ambiguous_local_time_fires_once() -> None:
 
 @pytest.mark.req("FR-3.5")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 def test_monthly_31st_clamps_to_month_end() -> None:
     """T-P0-19-05
     Monthly on the 31st clamps to the month's last day (Feb 28, Apr 30, Feb 29 in a leap
@@ -141,7 +136,6 @@ def test_monthly_31st_clamps_to_month_end() -> None:
 
 @pytest.mark.req("FR-3.5", "REL-6")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 def test_cron_agrees_with_presets_and_handles_dst() -> None:
     """T-P0-19-06
     Cron `0 9 * * *` gives the daily rows' instants and `0 9 * * 1-5` the weekdays row's;
@@ -158,7 +152,6 @@ def test_cron_agrees_with_presets_and_handles_dst() -> None:
 
 @pytest.mark.req("FR-3.5")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 def test_invalid_spec_is_rejected() -> None:
     """T-P0-19-07
     validate_spec refuses a preset and a cron together, neither, a 6-field cron, weekly

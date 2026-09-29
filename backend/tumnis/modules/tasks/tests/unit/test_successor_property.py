@@ -38,7 +38,6 @@ EVENTS = st.lists(
 
 @pytest.mark.req("FR-3.5")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 @settings(max_examples=200, deadline=None)
 @given(
     zone=st.sampled_from(ZONES),
@@ -91,7 +90,6 @@ def test_done_or_due_never_both(
 
 @pytest.mark.req("FR-3.5")
 @pytest.mark.wp("P0-19")
-@pytest.mark.xfail(strict=True, reason="spec:P0-19")
 def test_missed_weeks_create_one_instance() -> None:
     """T-P0-19-09
     Given a weekly Monday rule whose latest instance was due 2026-03-02 (09:00 EST) and is
