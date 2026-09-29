@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
     from tests._pg import DbUrls
     from tests._services import ClamdEndpoint, S3Endpoint, SftpEndpoint
+    from tests.fixtures import QueryCounter
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
@@ -32,7 +33,6 @@ _SEEN_DATABASES: set[str] = set()
 
 @pytest.mark.req("Quality rule 5")
 @pytest.mark.wp("P0-02")
-@pytest.mark.xfail(strict=True, reason="spec:P0-02")
 @pytest.mark.parametrize("run", ["first", "second"])
 async def test_db_is_fresh_clone_with_roles(  # noqa: PLR0917
     run: str,
@@ -71,6 +71,22 @@ async def test_db_is_fresh_clone_with_roles(  # noqa: PLR0917
             assert conn.execute("SELECT count(*) FROM harness_probe").fetchone() == (0,)
     finally:
         drop(pg_base, other.name)
+
+
+@pytest.mark.req("Quality rule 5")
+@pytest.mark.wp("P0-02")
+async def test_query_counter_counts_statements(
+    owner_session: AsyncSession, query_counter: QueryCounter
+) -> None:
+    """The query_counter fixture counts the statements an engine sends."""
+    await owner_session.execute(text("SELECT 0"))  # connect first: skip dialect setup queries
+    query_counter.watch(owner_session.bind)
+    await owner_session.execute(text("SELECT 1"))
+    await owner_session.execute(text("SELECT 2"))
+    assert query_counter.count == 2
+    assert query_counter.statements == ["SELECT 1", "SELECT 2"]
+    query_counter.reset()
+    assert query_counter.count == 0
 
 
 # --- T-P0-02-11: DBOS on the test Postgres --------------------------------------------
