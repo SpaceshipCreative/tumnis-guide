@@ -260,6 +260,12 @@ def _dbos_client() -> "DBOSClient":
     return _client
 
 
+def dbos_client() -> "DBOSClient":
+    """The api process's DBOS client, for modules that enqueue a workflow from a route
+    (P1-09: the calendar OAuth exchange and Sync now)."""
+    return _dbos_client()
+
+
 def close() -> None:
     """Destroy a client this module built (application shutdown)."""
     global _client, _client_owned  # process-wide client

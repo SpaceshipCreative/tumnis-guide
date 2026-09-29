@@ -1,0 +1,75 @@
+{
+  "raw": {
+    "external_id": "blake@example.org:b-kickoff",
+    "record_type": "event",
+    "payload": {
+      "calendar_id": "blake@example.org",
+      "self_email": "blake@example.org",
+      "time_zone": "America/New_York",
+      "event": {
+        "kind": "calendar#event",
+        "etag": "\"3662907360408431\"",
+        "id": "b-kickoff",
+        "status": "confirmed",
+        "htmlLink": "https://calendar.example.com/event?eid=Yi1raWNrb2Zm",
+        "created": "2026-02-20T10:00:00.000Z",
+        "updated": "2026-03-02T15:04:05.000Z",
+        "summary": "Acme kickoff",
+        "creator": {
+          "email": "avery@example.com"
+        },
+        "organizer": {
+          "email": "avery@example.com"
+        },
+        "start": {
+          "dateTime": "2026-03-09T09:00:00-04:00",
+          "timeZone": "America/New_York"
+        },
+        "end": {
+          "dateTime": "2026-03-09T10:00:00-04:00",
+          "timeZone": "America/New_York"
+        },
+        "iCalUID": "kickoff-shared@example.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": true
+        },
+        "eventType": "default",
+        "attendees": [
+          {
+            "email": "avery@example.com",
+            "organizer": true,
+            "responseStatus": "accepted"
+          },
+          {
+            "email": "blake@example.org",
+            "self": true,
+            "responseStatus": "accepted"
+          }
+        ],
+        "location": "Room 4, 100 Example Street"
+      }
+    },
+    "fetched_at": "2026-03-09T12:00:00Z"
+  },
+  "expected": [
+    {
+      "schema_version": 1,
+      "record_type": "event",
+      "external_id": "blake@example.org:b-kickoff",
+      "provider_url": "https://calendar.example.com/event?eid=Yi1raWNrb2Zm",
+      "fetched_at": "2026-03-09T12:00:00Z",
+      "calendar_id": "blake@example.org",
+      "title": "Acme kickoff",
+      "start_at": "2026-03-09T13:00:00Z",
+      "end_at": "2026-03-09T14:00:00Z",
+      "all_day": false,
+      "attendees": [
+        "avery@example.com",
+        "blake@example.org"
+      ],
+      "busy": true
+    }
+  ],
+  "notes": "Scrubbed: people, addresses, calendar ids, event ids, iCalUIDs, etags and links are invented (example.com/example.org); times are the fixture week of 2026-03-09 in America/New_York."
+}

@@ -1,0 +1,62 @@
+{
+  "raw": {
+    "external_id": "avery@example.com:a-focus",
+    "record_type": "event",
+    "payload": {
+      "calendar_id": "avery@example.com",
+      "self_email": "avery@example.com",
+      "time_zone": "America/New_York",
+      "event": {
+        "kind": "calendar#event",
+        "etag": "\"3362722744173246\"",
+        "id": "a-focus",
+        "status": "confirmed",
+        "htmlLink": "https://calendar.example.com/event?eid=YS1mb2N1cw",
+        "created": "2026-02-20T10:00:00.000Z",
+        "updated": "2026-03-02T15:04:05.000Z",
+        "summary": "Focus time",
+        "creator": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "organizer": {
+          "email": "avery@example.com",
+          "self": true
+        },
+        "start": {
+          "dateTime": "2026-03-10T14:00:00-04:00",
+          "timeZone": "America/New_York"
+        },
+        "end": {
+          "dateTime": "2026-03-10T16:00:00-04:00",
+          "timeZone": "America/New_York"
+        },
+        "iCalUID": "a-focus@example.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": true
+        },
+        "eventType": "default",
+        "transparency": "transparent"
+      }
+    },
+    "fetched_at": "2026-03-09T12:00:00Z"
+  },
+  "expected": [
+    {
+      "schema_version": 1,
+      "record_type": "event",
+      "external_id": "avery@example.com:a-focus",
+      "provider_url": "https://calendar.example.com/event?eid=YS1mb2N1cw",
+      "fetched_at": "2026-03-09T12:00:00Z",
+      "calendar_id": "avery@example.com",
+      "title": "Focus time",
+      "start_at": "2026-03-10T18:00:00Z",
+      "end_at": "2026-03-10T20:00:00Z",
+      "all_day": false,
+      "attendees": [],
+      "busy": false
+    }
+  ],
+  "notes": "Scrubbed: people, addresses, calendar ids, event ids, iCalUIDs, etags and links are invented (example.com/example.org); times are the fixture week of 2026-03-09 in America/New_York."
+}

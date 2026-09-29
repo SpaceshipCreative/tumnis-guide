@@ -3,7 +3,13 @@
 // when the message's id is in the query's path, `lists` always match. Every generated
 // query op is here or in NOT_LIVE (T-P0-22-11): a WP that adds a GET adds it here.
 export type LiveEntity =
-  "task" | "project" | "review_item" | "settings" | "api_key" | "dead_letter";
+  | "task"
+  | "project"
+  | "review_item"
+  | "settings"
+  | "api_key"
+  | "dead_letter"
+  | "calendar_account";
 
 export const LIVE_MAP: Record<
   LiveEntity,
@@ -49,6 +55,8 @@ export const LIVE_MAP: Record<
   // Created, rotated and revoked keys (P0-14): the Settings list refreshes.
   api_key: { details: [], lists: ["authListKeys"] },
   dead_letter: { details: [], lists: ["deadLettersGetDeadLetters"] },
+  // Connected Google accounts (P1-09): a sync or a revoked grant refreshes the list.
+  calendar_account: { details: [], lists: ["calendarListAccounts"] },
 };
 
 export const NOT_LIVE = [
@@ -61,4 +69,7 @@ export const NOT_LIVE = [
   "authGetAccount",
   // The review kinds are registered at startup; they change only with a deploy.
   "tasksListReviewKinds",
+  // The OAuth start mints a fresh consent URL per call; the callback is a browser redirect.
+  "calendarOauthStart",
+  "calendarOauthCallback",
 ] as const;
