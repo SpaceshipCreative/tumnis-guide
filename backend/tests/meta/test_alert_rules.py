@@ -68,7 +68,6 @@ def _load(path: Path) -> dict[str, Any]:
 @pytest.mark.contract
 @pytest.mark.req("REL-5")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 def test_promtool_passes() -> None:
     """T-P0-27-08
     `promtool test rules alerts.test.yml` exits 0: the rules load and every rule unit test
@@ -89,7 +88,6 @@ def test_promtool_passes() -> None:
 @pytest.mark.contract
 @pytest.mark.req("REL-5")
 @pytest.mark.wp("P0-27")
-@pytest.mark.xfail(strict=True, reason="spec:P0-27")
 def test_required_alerts_exist_and_are_tested() -> None:
     """T-P0-27-09
     alerts.yml defines the eight required alerts, and alerts.test.yml (which loads
