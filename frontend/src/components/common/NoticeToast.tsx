@@ -22,7 +22,7 @@ export function NoticeToast() {
   return (
     <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4">
       <div
-        role="alert"
+        role="status"
         className="pointer-events-auto flex max-w-md items-center gap-3 rounded-md border border-border bg-surface px-4 py-3 text-sm shadow-lg"
       >
         <p>{notice}</p>

@@ -31,6 +31,7 @@ function MoveMenu({
 }) {
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (open)
       menu.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
@@ -51,6 +52,7 @@ function MoveMenu({
         Open
       </button>
       <button
+        ref={toggle}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -74,7 +76,11 @@ function MoveMenu({
               ),
             ];
             const at = items.indexOf(document.activeElement as HTMLElement);
-            if (event.key === "Escape") setOpen(false);
+            if (event.key === "Escape") {
+              // Back to the Move button, not the page: the menu unmounts.
+              setOpen(false);
+              toggle.current?.focus();
+            }
             if (event.key === "ArrowDown")
               items[(at + 1) % items.length]?.focus();
             if (event.key === "ArrowUp") {

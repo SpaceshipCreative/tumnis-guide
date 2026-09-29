@@ -10,13 +10,21 @@ const VIEW_LABELS: Record<ProjectView, string> = {
 };
 const VIEWS = Object.keys(VIEW_LABELS) as ProjectView[];
 
+/** The id of a view's tab; the page's tabpanel names it in `aria-labelledby`. */
+export function viewTabId(panelId: string, view: ProjectView): string {
+  return `${panelId}-tab-${view}`;
+}
+
 export function ViewSwitcher({
   view,
   laptop,
+  panelId,
   onChange,
 }: {
   view: ProjectView;
   laptop: boolean;
+  /** The id of the tabpanel holding the view (laptop). */
+  panelId: string;
   onChange: (view: ProjectView) => void;
 }) {
   const name = useId();
@@ -28,18 +36,23 @@ export function ViewSwitcher({
         className="flex gap-1 border-b border-border"
         onKeyDown={(event) => {
           if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+          event.preventDefault();
           const step = event.key === "ArrowRight" ? 1 : -1;
           const next =
             VIEWS[(VIEWS.indexOf(view) + step + VIEWS.length) % VIEWS.length];
-          if (next) onChange(next);
+          if (!next) return;
+          onChange(next);
+          document.getElementById(viewTabId(panelId, next))?.focus();
         }}
       >
         {VIEWS.map((v) => (
           <button
             key={v}
+            id={viewTabId(panelId, v)}
             type="button"
             role="tab"
             aria-selected={v === view}
+            aria-controls={panelId}
             tabIndex={v === view ? 0 : -1}
             onClick={() => {
               onChange(v);

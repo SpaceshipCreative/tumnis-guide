@@ -4,7 +4,7 @@
 // the last view per project in `uiStore`, server data in Query.
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "@xstate/store-react";
-import { useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import { useIsLaptop } from "../../lib/media";
 import type { ProjectView } from "../../lib/views";
@@ -19,7 +19,7 @@ import { projectQuery, projectTasksQuery } from "./queries";
 import { ContextSheet } from "./rail/ContextSheet";
 import { RightRail } from "./rail/RightRail";
 import { TasksView } from "./TasksView";
-import { ViewSwitcher } from "./ViewSwitcher";
+import { ViewSwitcher, viewTabId } from "./ViewSwitcher";
 
 export interface ProjectPageProps {
   projectId: string;
@@ -27,6 +27,32 @@ export interface ProjectPageProps {
   taskId: string | undefined;
   onView: (view: ProjectView) => void;
   onTask: (taskId: string | undefined) => void;
+}
+
+/** On a laptop the view sits in the tabpanel its tabs control; the phone's radio group
+ * needs none. */
+function ViewPanel({
+  laptop,
+  panelId,
+  view,
+  children,
+}: {
+  laptop: boolean;
+  panelId: string;
+  view: ProjectView;
+  children: ReactNode;
+}) {
+  if (!laptop) return <>{children}</>;
+  return (
+    <div
+      role="tabpanel"
+      id={panelId}
+      aria-labelledby={viewTabId(panelId, view)}
+      className="min-w-0"
+    >
+      {children}
+    </div>
+  );
 }
 
 export function ProjectPage({
@@ -37,6 +63,7 @@ export function ProjectPage({
   onTask,
 }: ProjectPageProps) {
   const laptop = useIsLaptop();
+  const panelId = useId();
   const lastView = useSelector(uiStore, (s) => s.context.lastView[projectId]);
   const view = searchView ?? lastView ?? "tasks";
   const project = useQuery(projectQuery(projectId));
@@ -75,28 +102,35 @@ export function ProjectPage({
           />
         )}
         <Composer projectId={projectId} />
-        <ViewSwitcher view={view} laptop={laptop} onChange={changeView} />
-        {view === "board" ? (
-          <BoardView
-            projectId={projectId}
-            onOpen={(id) => {
-              onTask(id);
-            }}
-          />
-        ) : tasks.isError ? (
-          <p role="alert" className="text-danger">
-            The tasks could not be loaded.
-          </p>
-        ) : (
-          <TasksView
-            tasks={items}
-            now={now}
-            timezone={timezone}
-            onOpen={(id) => {
-              onTask(id);
-            }}
-          />
-        )}
+        <ViewSwitcher
+          view={view}
+          laptop={laptop}
+          panelId={panelId}
+          onChange={changeView}
+        />
+        <ViewPanel laptop={laptop} panelId={panelId} view={view}>
+          {view === "board" ? (
+            <BoardView
+              projectId={projectId}
+              onOpen={(id) => {
+                onTask(id);
+              }}
+            />
+          ) : tasks.isError ? (
+            <p role="alert" className="text-danger">
+              The tasks could not be loaded.
+            </p>
+          ) : (
+            <TasksView
+              tasks={items}
+              now={now}
+              timezone={timezone}
+              onOpen={(id) => {
+                onTask(id);
+              }}
+            />
+          )}
+        </ViewPanel>
       </div>
       {laptop && (
         <RightRail
