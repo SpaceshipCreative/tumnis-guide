@@ -58,7 +58,6 @@ async def client() -> AsyncIterator[httpx.AsyncClient]:
 
 @pytest.mark.req("SAF-2")
 @pytest.mark.wp("P2-10")
-@pytest.mark.xfail(strict=True, reason="spec:P2-10")
 def test_parses_mcp_server_list_redacted(profile_dir: Path) -> None:
     """T-P2-10-01
     The fixture config (the template's four servers plus `shell`) yields each server's
@@ -84,7 +83,6 @@ def test_parses_mcp_server_list_redacted(profile_dir: Path) -> None:
 
 @pytest.mark.req("SAF-3")
 @pytest.mark.wp("P2-10")
-@pytest.mark.xfail(strict=True, reason="spec:P2-10")
 async def test_cross_project_denial_on_fake_github(client: httpx.AsyncClient) -> None:
     """T-P2-10-04
     A token scoped to its own project: its own repo answers 200 with push; another
@@ -119,7 +117,6 @@ async def test_cross_project_denial_on_fake_github(client: httpx.AsyncClient) ->
 
 @pytest.mark.req("SAF-3")
 @pytest.mark.wp("P2-10")
-@pytest.mark.xfail(strict=True, reason="spec:P2-10")
 async def test_broad_token_reports_foreign_reach(client: httpx.AsyncClient) -> None:
     """T-P2-10-05
     A broad token: another project's repo answers 200 with `permissions.push: true`, a
@@ -228,7 +225,6 @@ async def _report_frames(token: str, root: Path) -> list[str]:
 
 @pytest.mark.req("SAF-3")
 @pytest.mark.wp("P2-10")
-@pytest.mark.xfail(strict=True, reason="spec:P2-10")
 @settings(max_examples=25, deadline=None)
 @given(token=TOKENS)
 def test_token_never_leaves_host(token: str) -> None:

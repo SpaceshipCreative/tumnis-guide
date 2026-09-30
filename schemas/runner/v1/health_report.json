@@ -1,4 +1,87 @@
 {
+  "$defs": {
+    "McpServerInfo": {
+      "additionalProperties": false,
+      "description": "One MCP server of a profile (P2-10): its name, transport and a redacted target (the\ncommand's name, or the URL's host); never its arguments, env or headers (FR-5.12).",
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "title": "Name",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "maxLength": 253,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target"
+        },
+        "transport": {
+          "enum": [
+            "stdio",
+            "http"
+          ],
+          "title": "Transport",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "transport"
+      ],
+      "title": "McpServerInfo",
+      "type": "object"
+    },
+    "TokenReach": {
+      "additionalProperties": false,
+      "description": "What one token reaches, as the daemon probed it on the host (the token itself never\nleaves the host). GitHub: a repo is reachable only with `permissions.push` or `admin`;\nCoolify: an application is reachable when the token may read it.",
+      "properties": {
+        "errors": {
+          "default": [],
+          "items": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Errors",
+          "type": "array"
+        },
+        "foreign_reachable": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Foreign Reachable",
+          "type": "array"
+        },
+        "own_reachable": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "default": {},
+          "maxProperties": 50,
+          "title": "Own Reachable",
+          "type": "object"
+        },
+        "token_present": {
+          "title": "Token Present",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "token_present"
+      ],
+      "title": "TokenReach",
+      "type": "object"
+    }
+  },
   "$id": "https://tumnis.dev/schemas/runner/v1/health_report.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
@@ -13,6 +96,17 @@
         }
       ],
       "title": "Authenticated"
+    },
+    "coolify": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TokenReach"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "correlation_id": {
       "maxLength": 128,
@@ -32,6 +126,17 @@
       "default": null,
       "title": "Error"
     },
+    "github": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TokenReach"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "hermes_version": {
       "anyOf": [
         {
@@ -43,6 +148,15 @@
         }
       ],
       "title": "Hermes Version"
+    },
+    "mcp_server_details": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/McpServerInfo"
+      },
+      "maxItems": 200,
+      "title": "Mcp Server Details",
+      "type": "array"
     },
     "mcp_servers": {
       "default": [],
@@ -66,6 +180,19 @@
     "profile_exists": {
       "title": "Profile Exists",
       "type": "boolean"
+    },
+    "profile_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Profile Version"
     },
     "reachable": {
       "title": "Reachable",
