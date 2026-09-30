@@ -3202,6 +3202,17 @@ export const zKnowledgeSetDefaultLocationPath = z.object({
  */
 export const zKnowledgeSetDefaultLocationResponse = zLocationOut;
 
+export const zKnowledgeConfirmHostKeyBody = zHostKeyIn;
+
+export const zKnowledgeConfirmHostKeyPath = z.object({
+  storage_location_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeConfirmHostKeyResponse = zLocationOut;
+
 export const zKnowledgeTestLocationPath = z.object({
   storage_location_id: z.uuid(),
 });

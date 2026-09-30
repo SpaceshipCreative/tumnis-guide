@@ -17911,6 +17911,129 @@
         ]
       }
     },
+    "/v1/knowledge/locations/{storage_location_id}/host-key": {
+      "post": {
+        "operationId": "knowledge_confirm_host_key",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storage_location_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Storage Location Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostKeyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Confirm Host Key",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
     "/v1/knowledge/locations/{storage_location_id}/test": {
       "post": {
         "operationId": "knowledge_test_location",

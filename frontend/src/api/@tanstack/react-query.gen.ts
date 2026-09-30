@@ -2761,6 +2761,33 @@ export const knowledgeSetDefaultLocationMutation = (
 };
 
 /**
+ * Confirm Host Key
+ */
+export const knowledgeConfirmHostKeyMutation = (
+  options?: Partial<Options<KnowledgeConfirmHostKeyData>>,
+): UseMutationOptions<
+  KnowledgeConfirmHostKeyResponse,
+  KnowledgeConfirmHostKeyError,
+  Options<KnowledgeConfirmHostKeyData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeConfirmHostKeyResponse,
+    KnowledgeConfirmHostKeyError,
+    Options<KnowledgeConfirmHostKeyData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeConfirmHostKey({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Test Location
  */
 export const knowledgeTestLocationMutation = (

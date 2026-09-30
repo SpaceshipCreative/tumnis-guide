@@ -133,6 +133,19 @@ async def probe_host_key(
     return ProbedKey(openssh=openssh_key(key), sha256=str(key.get_fingerprint("sha256")))
 
 
+def fingerprint(openssh: str) -> str:
+    """'SHA256:…' of a public key in known_hosts form, as `ssh-keygen -lf` shows it."""
+    return str(asyncssh.import_public_key(openssh).get_fingerprint("sha256"))
+
+
+def check_private_key(pem: bytes) -> None:
+    """ValueError unless `pem` is a private key asyncssh reads without a passphrase."""
+    try:
+        asyncssh.import_private_key(pem)
+    except ValueError as exc:  # asyncssh.KeyImportError among them
+        raise ValueError("not a readable private key without a passphrase") from exc
+
+
 def _is_link(attrs: asyncssh.SFTPAttrs) -> bool:
     return attrs.permissions is not None and stat.S_ISLNK(attrs.permissions)
 
@@ -164,7 +177,7 @@ class SftpStorage(AdapterBase):
     ) -> None:
         super().__init__(policy=policy or POLICY, clock=clock or SystemClock())
         self.host, self.port, self.username = host, port, username
-        self.root = _root(root)
+        self.root = sftp_root(root)
         self._key = private_key_pem
         self._pinned = pinned_host_key.strip()
         self._net = net_policy
@@ -532,7 +545,7 @@ class SftpStorage(AdapterBase):
             return Health.degraded("unreachable")
 
 
-def _root(root: str) -> str:
+def sftp_root(root: str) -> str:
     """The location's folder on the server: '/'-separated, no '.' or '..' segments, no
     trailing '/'; relative to the login folder unless it starts with '/'."""
     stripped = root.strip()
@@ -568,7 +581,10 @@ __all__: builtins.list[str] = [
     "HostKeyChanged",
     "ProbedKey",
     "SftpStorage",
+    "check_private_key",
+    "fingerprint",
     "openssh_key",
     "probe_host_key",
     "sftp_policy",
+    "sftp_root",
 ]
