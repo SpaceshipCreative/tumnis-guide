@@ -7,6 +7,12 @@ BACKEND := cd backend &&
 # each integration worker starts its own Postgres. CI calls pytest directly, so it's unaffected.
 export PYTEST_XDIST_AUTO_NUM_WORKERS ?= $(shell n=$$(nproc); [ $$n -gt 8 ] && echo 8 || echo $$n)
 
+# Vitest workers for `make check`, capped at 8 the same way. The config's own default is one
+# per CPU less one (31 here), and each worker builds a jsdom and renders whole routes: on a
+# shared machine that starves every worker until waits and test budgets run out. CI calls
+# Vitest directly, so it keeps the config's count.
+VITEST_MAX_WORKERS ?= $(shell n=$$(nproc); [ $$n -gt 8 ] && echo 8 || echo $$n)
+
 ## Lint, typecheck, boundaries and unit tests; must finish under 60 s (P0-01).
 check:
 	$(BACKEND) uv run ruff check .
@@ -19,7 +25,7 @@ check:
 	@if [ -d frontend/node_modules ]; then \
 		npm --prefix frontend run typecheck & typecheck=$$!; \
 		npm --prefix frontend run lint && wait $$typecheck \
-			&& npm --prefix frontend run test --if-present -- --run \
+			&& npm --prefix frontend run test --if-present -- --run --maxWorkers=$(VITEST_MAX_WORKERS) \
 			&& node --test scripts/ci/check_bundle.test.mjs; \
 	else \
 		echo "skip frontend: frontend/node_modules absent (run npm ci in frontend/)"; \

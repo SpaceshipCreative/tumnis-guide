@@ -194,6 +194,7 @@ class EventOut(BaseModel):
     all_day: bool
     busy: bool
     provider_url: str | None
+    attendees: list[str] = []  # the attendees' addresses (P1-12 matches them to projects)
 
 
 class CalendarOut(BaseModel):
