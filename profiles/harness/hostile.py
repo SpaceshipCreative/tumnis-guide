@@ -29,17 +29,22 @@ A twin file has `id`, `version`, `twin_of`, `source`, `inject_as`, `envelope`, `
 (and `companions` when its case has them).
 """
 
+import copy
+import hashlib
+import json
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Final, Literal
+from uuid import NAMESPACE_URL, uuid5
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from harness import REPO
-from harness.cases import CaseError
+from harness.assertions import RULE_REQUESTS
+from harness.cases import Case, CaseError, CaseMeta, SchemaName
 from tumnis.modules.projects.rules import ALLOWED_DEFAULT, GATED_DEFAULT
 
 HOSTILE_ROOT: Final = REPO / "backend" / "fixtures" / "hostile"
@@ -233,15 +238,294 @@ def load_hostile(root: Path = HOSTILE_ROOT) -> HostileSet:
     )
 
 
+# --- skills, coverage and injection -------------------------------------------------------
+
+
 @dataclass(frozen=True)
 class SkillRef:
+    """A skill directory, profiles/<profile>/skills/<skill>/."""
+
     profile: str
     skill: str
 
 
+Part = HostileCase | BenignTwin | Companion
+Inject = Callable[[dict[str, Any], Sequence[Part], str], None]
+
+
+@dataclass(frozen=True)
+class SkillBase:
+    """How the suite reaches a skill: the recorded packet a run starts from, the reply's
+    schema and named rules, where each injection point lands in the packet body, and the
+    sources that apply to it."""
+
+    profile: str
+    skill: str
+    packet: Path
+    output_schema: SchemaName
+    rules: tuple[str, ...]
+    inject: Inject
+    sources: tuple[str, ...] = SOURCES
+
+
 def discover_skills(profiles: Path = REPO / "profiles") -> list[SkillRef]:
-    raise NotImplementedError
+    """Every skill directory under `profiles/*/skills`, sorted."""
+    return sorted(
+        (SkillRef(d.parent.parent.name, d.name) for d in profiles.glob("*/skills/*") if d.is_dir()),
+        key=lambda s: (s.profile, s.skill),
+    )
+
+
+def _parts(item: HostileCase | BenignTwin) -> list[Part]:
+    return [item, *item.companions]
+
+
+def _title(part: Part) -> str:
+    envelope = part.envelope
+    title = envelope.get("subject") or envelope.get("title") or envelope.get("channel")
+    return (title or f"{part.source} from {envelope.get('from', 'outside')}")[:200]
+
+
+def outside_text(part: Part) -> str:
+    """A part as the skill reads it: its envelope as header lines, then its content."""
+    head = "\n".join(f"{key}: {value}" for key, value in part.envelope.items())
+    return f"{head}\n\n{part.content}" if head else part.content
+
+
+def _part_id(item_id: str, n: int) -> str:
+    return str(uuid5(NAMESPACE_URL, f"tumnis:hostile:{item_id}:{n}"))
+
+
+def _inject_enrich(body: dict[str, Any], parts: Sequence[Part], item_id: str) -> None:
+    """A task title replaces the task's title; every other part arrives as a document
+    passage, the only outside text an enrichment packet carries."""
+    for n, part in enumerate(parts):
+        if part.inject_as == "task_title":
+            body["task"]["title"] = part.content
+            continue
+        body["passages"].append(
+            {
+                "document_id": _part_id(item_id, n),
+                "title": _title(part),
+                "heading_path": [],
+                "page": 1 if part.source == "document" else None,
+                "text": outside_text(part),
+            }
+        )
+
+
+def _inject_plan(body: dict[str, Any], parts: Sequence[Part], item_id: str) -> None:
+    """Each part arrives as one more candidate task: a task title as its title, any other
+    part as its first action (the planning packet's only long outside text)."""
+    template = body["candidates"][0]
+    for n, part in enumerate(parts):
+        candidate = {**template, "task_id": _part_id(item_id, n), "rollover_count": 0}
+        if part.inject_as == "task_title":
+            candidate.update(title=part.content, first_action=None)
+        else:
+            candidate.update(title=_title(part), first_action=outside_text(part))
+        body["candidates"].append(candidate)
+
+
+RECORDINGS: Final = REPO / "profiles" / "tests" / "recordings"
+BASES: Final[dict[str, SkillBase]] = {
+    "enrich": SkillBase(
+        profile="project-template",
+        skill="enrich",
+        packet=RECORDINGS / "enrich" / "hybrid_invoice.packet.json",
+        output_schema=SchemaName("enrichment", "result", 1),
+        rules=("enrichment_errors",),
+        inject=_inject_enrich,
+    ),
+    "plan": SkillBase(
+        profile="master",
+        skill="plan",
+        packet=RECORDINGS / "plan" / "monday_four_picks.packet.json",
+        output_schema=SchemaName("planning", "result", 1),
+        rules=("planning_errors",),
+        inject=_inject_plan,
+    ),
+}
+
+
+def _base(skill: SkillRef) -> SkillBase | None:
+    base = BASES.get(skill.skill)
+    return base if base is not None and base.profile == skill.profile else None
 
 
 def coverage_gaps(hostile: HostileSet, skills: Sequence[SkillRef]) -> list[str]:
-    raise NotImplementedError
+    """What keeps the suite from covering every skill: a skill the suite cannot inject into
+    (no entry in BASES for its profile), a source that applies to a skill with no case for
+    it, and a case naming a skill that does not exist. [] when everything is covered."""
+    gaps: list[str] = []
+    names = {skill.skill for skill in skills}
+    for skill in skills:
+        label = f"{skill.profile}/{skill.skill}"
+        base = _base(skill)
+        if base is None:
+            gaps.append(f"{label}: no hostile base packet (add one to BASES in harness/hostile.py)")
+        for source in base.sources if base is not None else SOURCES:
+            if not any(
+                c.source == source and c.covers(skill.skill) for c in hostile.cases.values()
+            ):
+                gaps.append(f"{label}: no {source} case")
+    for case in hostile.cases.values():
+        if case.skills != "all" and (unknown := sorted(set(case.skills) - names)):
+            gaps.append(f"case {case.id}: unknown skills {unknown}")
+    return gaps
+
+
+def render_prompt(recorded: str, body: Mapping[str, Any]) -> str:
+    """The recorded packet's prompt with its body JSON replaced: the same instruction, and
+    the JSON written as the packet builder writes it (`<` as `\\u003c`)."""
+    head, marker, _ = recorded.partition("<packet>\n")
+    if not marker:
+        raise CaseError("a recorded packet's prompt carries a <packet> block")
+    data = json.dumps(body, ensure_ascii=False, indent=2).replace("<", "\\u003c")
+    return f"{head}<packet>\n{data}\n</packet>\n"
+
+
+def hostile_packet(base: SkillBase, item: HostileCase | BenignTwin) -> dict[str, Any]:
+    """The base packet with `item` injected: its body, validated as the skill's request,
+    and its prompt."""
+    packet: dict[str, Any] = json.loads(base.packet.read_text(encoding="utf-8"))
+    body = copy.deepcopy(packet["body"])
+    base.inject(body, _parts(item), item.id)
+    for rule in base.rules:
+        try:
+            RULE_REQUESTS[rule].model_validate(body)
+        except ValidationError as exc:
+            raise CaseError(f"{item.id}: not a request {base.skill} can read ({exc})") from exc
+    packet["body"] = body
+    packet["prompt_text"] = render_prompt(packet["prompt_text"], body)
+    return packet
+
+
+@dataclass(frozen=True)
+class HostileRun:
+    """One (case or twin, skill) pair: judged with `judge` (hostile) or `judge_twin`."""
+
+    kind: Literal["hostile", "twin"]
+    case: HostileCase
+    item_id: str
+    base: SkillBase
+    harness_case: Case
+
+    @property
+    def label(self) -> str:
+        return f"{self.item_id}/{self.base.skill}"
+
+
+def _run(
+    kind: Literal["hostile", "twin"],
+    case: HostileCase,
+    item: HostileCase | BenignTwin,
+    base: SkillBase,
+) -> HostileRun:
+    harness_case = Case(
+        id=f"{item.id}--{base.skill}",
+        path=item.path or base.packet,
+        profile=base.profile,
+        skill=base.skill,
+        input_path=base.packet,
+        packet=hostile_packet(base, item),
+        output_schema=base.output_schema,
+        allow=("*",),  # the hostile judge rules on tool calls, not an allow list
+        rules=base.rules,
+        json_checks=(),
+        meta=CaseMeta(),
+    )
+    return HostileRun(kind, case, item.id, base, harness_case)
+
+
+def expand(
+    hostile: HostileSet,
+    skills: Sequence[SkillRef],
+    *,
+    smoke: bool = False,
+    changed_skills: Iterable[str] = (),
+    changed_cases: Iterable[str] = (),
+) -> list[HostileRun]:
+    """Every (case, skill) the case applies to, as a hostile run and a twin run. With
+    `smoke`, only the index's smoke cases, the cases of changed skills and changed cases
+    (what a PR runs; the nightly run takes everything)."""
+    skill_set, case_set = set(changed_skills), set(changed_cases)
+    runs: list[HostileRun] = []
+    for case in hostile.cases.values():
+        for skill in skills:
+            base = _base(skill)
+            if base is None or not case.covers(skill.skill):
+                continue
+            picked = case.id in hostile.smoke or skill.skill in skill_set or case.id in case_set
+            if smoke and not picked:
+                continue
+            runs.append(_run("hostile", case, case, base))
+            runs.append(_run("twin", case, hostile.twins[case.benign_twin], base))
+    return runs
+
+
+def changed(
+    paths: Iterable[str], hostile: HostileSet, skills: Sequence[SkillRef]
+) -> tuple[set[str], set[str]]:
+    """The skills and cases a change touches, from repository paths: a file in a skill's
+    directory changes that skill; any other file of a profile changes all of its skills;
+    a case or twin file changes its case."""
+    by_file: dict[str, str] = {}
+    for case in hostile.cases.values():
+        for item in (case, hostile.twins[case.benign_twin]):
+            if item.path is not None:
+                by_file[item.path.resolve().relative_to(REPO).as_posix()] = case.id
+    touched_skills: set[str] = set()
+    touched_cases: set[str] = set()
+    for path in paths:
+        parts = path.split("/")
+        if parts[0] == "profiles" and len(parts) > 3 and parts[2] == "skills":  # noqa: PLR2004
+            touched_skills.add(parts[3])
+        elif parts[0] == "profiles" and len(parts) > 1:
+            touched_skills |= {s.skill for s in skills if s.profile == parts[1]}
+        elif path in by_file:
+            touched_cases.add(by_file[path])
+    return touched_skills, touched_cases
+
+
+# --- the generated index (profiles/tests/cases/hostile/index.yaml) -------------------------
+
+INDEX: Final = REPO / "profiles" / "tests" / "cases" / "hostile" / "index.yaml"
+GENERATED: Final = (
+    "# @generated by `uv run python -m harness index --suite hostile` from "
+    "backend/fixtures/hostile; do not edit."
+)
+
+
+def _digest(case: HostileCase, twin: BenignTwin) -> str:
+    sha = hashlib.sha256()
+    for item in (case, twin):
+        if item.path is not None:
+            sha.update(item.path.read_bytes())
+    return sha.hexdigest()[:16]
+
+
+def render_index(hostile: HostileSet, skills: Sequence[SkillRef]) -> str:
+    """The Skills job's case index: one entry per (case, skill) with its twin, profile,
+    smoke flag and a digest of both files, so an edited case needs a regenerated index."""
+    meta = json.dumps(hostile.meta, ensure_ascii=False, separators=(", ", ": "))
+    lines = [
+        GENERATED,
+        "# Each entry is a pytest item (T-P2-11-01) that runs on the homelab runner only",
+        "# (--run-skills): the case and its twin, 3 runs each, judged by harness/judge.py.",
+        "suite: hostile",
+        f"version: {hostile.version}",
+        f"meta: {meta}",
+        "runs:",
+    ]
+    for case in hostile.cases.values():
+        twin = hostile.twins[case.benign_twin]
+        for skill in skills:
+            if _base(skill) is None or not case.covers(skill.skill):
+                continue
+            smoke = "true" if case.id in hostile.smoke else "false"
+            lines.append(
+                f"  - {{case: {case.id}, twin: {twin.id}, skill: {skill.skill}, "
+                f"profile: {skill.profile}, smoke: {smoke}, digest: {_digest(case, twin)}}}"
+            )
+    return "\n".join(lines) + "\n"

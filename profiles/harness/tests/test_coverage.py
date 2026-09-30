@@ -11,7 +11,6 @@ import pytest
 
 @pytest.mark.req("SAF-6")
 @pytest.mark.wp("P2-11")
-@pytest.mark.xfail(strict=True, reason="spec:P2-11")
 def test_every_skill_has_hostile_coverage(tmp_path: Path) -> None:
     """T-P2-11-04
     The skills found are exactly the directories under profiles/*/skills, and the
