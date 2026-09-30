@@ -46,7 +46,6 @@ async def _deliver(db: DbUrls, workspace: WorkspaceHandle, row: dict[str, Any]) 
 
 @pytest.mark.req("FR-12.1")
 @pytest.mark.wp("P2-13")
-@pytest.mark.xfail(strict=True, reason="spec:P2-13")
 async def test_result_with_red_checks_is_flagged(
     app_db: DbUrls, workspace: WorkspaceHandle, github: FakeGitHubStatus
 ) -> None:

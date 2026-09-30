@@ -28,7 +28,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-12.1")
 @pytest.mark.wp("P2-13")
-@pytest.mark.xfail(strict=True, reason="spec:P2-13")
 async def test_repos_outside_allow_list_ignored(
     db: DbUrls,
     workspace: WorkspaceHandle,

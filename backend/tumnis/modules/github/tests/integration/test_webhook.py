@@ -46,7 +46,6 @@ def _headers(body: bytes, delivery: str, secret: str = WEBHOOK_SECRET) -> dict[s
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P2-13")
-@pytest.mark.xfail(strict=True, reason="spec:P2-13")
 async def test_replayed_delivery_refused(  # noqa: PLR0917
     db: DbUrls,
     workspace: WorkspaceHandle,

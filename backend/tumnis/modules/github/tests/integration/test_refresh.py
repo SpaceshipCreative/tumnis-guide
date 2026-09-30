@@ -37,7 +37,6 @@ REFRESH = "github_refresh_artifact"
 
 @pytest.mark.req("FR-12.1")
 @pytest.mark.wp("P2-13")
-@pytest.mark.xfail(strict=True, reason="spec:P2-13")
 async def test_refresh_on_open_enqueues_and_updates(  # noqa: PLR0917
     db: DbUrls,
     workspace: WorkspaceHandle,
@@ -103,7 +102,6 @@ async def test_refresh_on_open_enqueues_and_updates(  # noqa: PLR0917
 
 @pytest.mark.req("FR-12.1")
 @pytest.mark.wp("P2-13")
-@pytest.mark.xfail(strict=True, reason="spec:P2-13")
 async def test_polling_refreshes_open_prs_only(
     app_db: DbUrls,
     workspace: WorkspaceHandle,
