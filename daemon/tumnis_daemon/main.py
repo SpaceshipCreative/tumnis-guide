@@ -27,16 +27,15 @@ from tumnis_daemon.protocol import (
     InvalidFrame,
     ProtocolError,
     Provision,
-    ProvisionResult,
     Registered,
     Run,
     ServerMessage,
-    envelope,
     make_ack,
     make_heartbeat,
     make_register,
     parse_server,
 )
+from tumnis_daemon.provision import provision, remembered_profiles
 from tumnis_daemon.runner import check_health, hermes_version, run_skill
 from tumnis_daemon.state import StateStore
 
@@ -108,7 +107,7 @@ async def _session(
         os=_os(),
         daemon_version=_daemon_version(),
         hermes_version=hermes,
-        profiles=list(cfg.profiles),
+        profiles=list(dict.fromkeys([*cfg.profiles, *remembered_profiles(cfg.state_dir)])),
         running_run_ids=state.running_run_ids(),
     )
     await ws.send(register.model_dump_json())
@@ -167,8 +166,8 @@ async def receive_loop(
                     _spawn(tasks, _guarded(runs, run_skill(msg, state, cfg)))
             case HealthCheck():
                 _spawn(tasks, check_health(msg, state, cfg))
-            case Provision():  # P1-06; this daemon does not advertise "provision"
-                _spawn(tasks, state.send_reliably(_no_provision(msg)))
+            case Provision():  # P1-06
+                _spawn(tasks, provision(msg, state, cfg))
             case Ack():
                 state.ack(msg.ack_of)
             case ProtocolError():
@@ -177,18 +176,6 @@ async def receive_loop(
                 pass
         if not isinstance(msg, Ack):
             await ws.send(make_ack(msg).model_dump_json())
-
-
-def _no_provision(msg: Provision) -> ProvisionResult:
-    return ProvisionResult(
-        **envelope(msg.correlation_id),
-        request_id=msg.request_id,
-        profile=msg.profile,
-        status="failed",
-        distribution_version=None,
-        error_code="hermes_error",
-        error="provisioning is not supported by this daemon version",
-    )
 
 
 def cli(argv: list[str] | None = None) -> None:

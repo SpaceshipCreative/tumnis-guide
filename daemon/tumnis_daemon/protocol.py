@@ -214,7 +214,7 @@ def make_register(
         daemon_version=daemon_version,
         hermes_version=hermes_version,
         profiles=[ProfileInfo(name=p) for p in profiles],
-        capabilities=["run", "health"],
+        capabilities=["run", "provision", "health"],
         running_run_ids=running_run_ids,
     )
 

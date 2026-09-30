@@ -8,6 +8,10 @@ state_dir = "/var/lib/tumnis-daemon"
 hermes_bin = "hermes"
 profiles = ["tumnis-master", "acme-site"]
 max_concurrent_runs = 2
+# P1-06: provisioning project profiles
+template_dir = "/opt/tumnis-daemon/share/profiles/project-template"
+hermes_profiles_dir = "/home/tumnis-agent/.hermes/profiles"
+profile_env_file = "/etc/tumnis/profile.env"   # copied to each new profile's .env, 0600
 ```
 """
 
@@ -15,6 +19,9 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+TEMPLATE_DIR = Path("/opt/tumnis-daemon/share/profiles/project-template")
+PROFILE_ENV_FILE = Path("/etc/tumnis/profile.env")
 
 
 @dataclass(frozen=True)
@@ -26,9 +33,20 @@ class DaemonConfig:
     hermes_bin: str = "hermes"
     profiles: tuple[str, ...] = field(default_factory=tuple)
     max_concurrent_runs: int = 2  # plan default
+    template_dir: Path = TEMPLATE_DIR  # the project template of this release (P1-06)
+    hermes_profiles_dir: Path = field(default_factory=lambda: Path.home() / ".hermes" / "profiles")
+    profile_env_file: Path | None = PROFILE_ENV_FILE
 
     def read_token(self) -> str:
         return self.token_file.read_text(encoding="utf-8").strip()
+
+    @property
+    def bundled_template_version(self) -> str | None:
+        """The shipped template's VERSION; None when no template is installed."""
+        try:
+            return (self.template_dir / "VERSION").read_text(encoding="utf-8").strip() or None
+        except OSError:
+            return None
 
 
 def load_config(path: Path) -> DaemonConfig:
@@ -41,4 +59,9 @@ def load_config(path: Path) -> DaemonConfig:
         hermes_bin=str(data.get("hermes_bin", "hermes")),
         profiles=tuple(str(p) for p in data.get("profiles", ())),
         max_concurrent_runs=int(data.get("max_concurrent_runs", 2)),
+        template_dir=Path(data.get("template_dir", TEMPLATE_DIR)),
+        hermes_profiles_dir=Path(
+            data.get("hermes_profiles_dir", Path.home() / ".hermes" / "profiles")
+        ),
+        profile_env_file=Path(data.get("profile_env_file", PROFILE_ENV_FILE)),
     )

@@ -277,7 +277,9 @@ async def run_skill(msg: Run, state: "StateStore", cfg: DaemonConfig) -> None:
 # --- health check ------------------------------------------------------------------------
 
 
-async def _hermes(cfg: DaemonConfig, *args: str) -> tuple[int, str] | None:
+async def _hermes(
+    cfg: DaemonConfig, *args: str, timeout_s: float = HEALTH_TIMEOUT_S
+) -> tuple[int, str] | None:
     """Run one Hermes subcommand; None when it cannot be run or does not finish in time."""
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -292,7 +294,7 @@ async def _hermes(cfg: DaemonConfig, *args: str) -> tuple[int, str] | None:
     except OSError:
         return None
     try:
-        async with asyncio.timeout(HEALTH_TIMEOUT_S):
+        async with asyncio.timeout(timeout_s):
             out, _ = await proc.communicate()
     except TimeoutError:
         _kill_group(proc.pid)

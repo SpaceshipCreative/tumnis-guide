@@ -7,11 +7,11 @@ Hermes profiles Tumnis may run: one master, one per project).
 
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any, Final, Literal
-from uuid import UUID, uuid4
+from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Protocol
+from uuid import UUID, uuid4, uuid5
 
 from pydantic import BaseModel, Field, StringConstraints
-from sqlalchemy import Table, insert, select, text
+from sqlalchemy import Table, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,9 +47,11 @@ from tumnis.modules.agents.skill_io import (
     EnrichmentResult,
     PlanningRequest,
     PlanningResult,
+    ProjectAgentEntry,
 )
 from tumnis.modules.auth import api as auth
 from tumnis.modules.projects import api as projects
+from tumnis.modules.tasks import api as tasks
 
 if TYPE_CHECKING:
     from dbos import DBOSClient
@@ -68,6 +70,7 @@ __all__ = [
     "PlanningResult",
     "ProfileIn",
     "ProfilePatch",
+    "ProjectAgentEntry",
     "RunEvent",
     "RunHandle",
     "RunKind",
@@ -325,11 +328,15 @@ def _profile_out(row: _ProfileRow) -> AgentProfileOut:
 
 
 async def list_profiles(
-    s: AsyncSession, *, cursor: str | None, limit: int
+    s: AsyncSession, *, cursor: str | None, limit: int, project_id: UUID | None = None
 ) -> Page[AgentProfileOut]:
+    """Live profiles by name; with `project_id`, only that project's agent (P1-06)."""
+    query = select(_profiles).where(_live_profiles())
+    if project_id is not None:
+        query = query.where(_profiles.c.project_id == project_id)
     page = await paginate(
         s,
-        select(_profiles).where(_live_profiles()),
+        query,
         keys=[SortKey(_profiles.c.name)],
         id_col=_profiles.c.id,
         cursor=cursor,
@@ -551,3 +558,243 @@ async def agent_for_project(
     online = runner_status(runner.last_heartbeat_at, now) == "online"
     listed = row.name in {str(p.get("name")) for p in runner.inventory}
     return "ready" if online and listed else "offline"
+
+
+# --- Project provisioning (P1-06) ------------------------------------------------------------
+
+TEMPLATE_NAME: Final = "project-template"  # profiles/project-template, shipped by the daemon
+TEMPLATE_VERSION: Final = "1.0.0"  # profiles/project-template/VERSION (a unit test holds them)
+PROVISION_TIMEOUT_S_DEFAULT: Final = 300  # plan default; settings.agents.provision_timeout_s
+PROVISIONING_FAILED: Final = "provisioning_failed"
+ProvisionMode = Literal["create", "link"]
+ProvisionErrorCode = Literal[
+    "template_version_mismatch",
+    "not_found",
+    "hermes_error",
+    "invalid_name",
+    "timeout",
+    "no_runner",
+]
+# The namespace of provisioning request ids (uuid5 of the workflow id): fixed forever, so a
+# replayed step names the same request.
+_PROVISION_NS: Final = UUID("6b0d7a52-2f4e-4c55-9a43-3a1f0e5c7d21")
+
+_provisioning: dict[str, int] = {"timeout_s": PROVISION_TIMEOUT_S_DEFAULT}
+
+
+class ProvisioningFailedPayload(BaseModel):
+    """The `provisioning_failed` review item: the project's profile could not be created
+    or linked. Accept retries provisioning; reject keeps the project without an agent."""
+
+    profile: str = Field(max_length=63)
+    mode: ProvisionMode
+    error_code: ProvisionErrorCode
+    error: str | None = Field(default=None, max_length=4096)
+    attempt: int = Field(ge=0)
+
+
+tasks.register_review_kind(
+    tasks.ReviewKindSpec(
+        kind=PROVISIONING_FAILED,
+        owner_module="agents",
+        payload_schema=ProvisioningFailedPayload,
+        actions=("accept", "reject", "snooze"),  # accept = retry; reject = keep, no agent
+        impact_scope="project",
+    )
+)
+
+
+def configure_provisioning(*, timeout_s: int) -> None:
+    """How long `provision_profile` waits for the runner's answer (the worker sets it from
+    `settings.agents.provision_timeout_s`; tests shorten it, R-30)."""
+    if timeout_s <= 0:
+        raise ValueError("the provision timeout must be positive")
+    _provisioning["timeout_s"] = timeout_s
+
+
+def provision_timeout_s() -> int:
+    return _provisioning["timeout_s"]
+
+
+def provision_workflow_id(project_id: UUID, attempt: int = 0) -> str:
+    """`provision:<project id>` for the first provision, `provision:<project id>:<n>` for
+    retry n."""
+    return f"provision:{project_id}" if attempt == 0 else f"provision:{project_id}:{attempt}"
+
+
+def provision_topic(project_id: UUID) -> str:
+    """The DBOS topic `provision_profile` receives the runner's answer on."""
+    return f"provision:{project_id}"
+
+
+def project_of_provision(workflow_id: str) -> UUID | None:
+    """The project a provisioning workflow id names; None for any other id."""
+    prefix, _, rest = workflow_id.partition(":")
+    if prefix != "provision":
+        return None
+    try:
+        return UUID(rest.partition(":")[0])
+    except ValueError:
+        return None
+
+
+def provision_request_id(workflow_id: str) -> UUID:
+    """The `request_id` of the workflow's `provision` message (deterministic)."""
+    return uuid5(_PROVISION_NS, workflow_id)
+
+
+def provision_message_id(request_id: UUID) -> UUID:
+    """The mailbox message id of a `provision` request: a replayed step writes nothing new."""
+    return uuid5(request_id, "provision")
+
+
+class ProvisionStarter(Protocol):
+    """Enqueues `provision_profile` once (`workflows.start_provision`)."""
+
+    async def __call__(
+        self,
+        workspace_id: UUID,
+        project_id: UUID,
+        mode: ProvisionMode,
+        link_name: str | None,
+        *,
+        attempt: int,
+        dedupe_id: str,
+    ) -> None: ...
+
+
+_starter: list[ProvisionStarter] = []
+
+
+def register_provision_starter(starter: ProvisionStarter) -> None:
+    """workflows registers its enqueue at import: api may not import workflows (the
+    module's own import graph is acyclic), yet the subscriber and the retry start the
+    workflow through api."""
+    _starter[:] = [starter]
+
+
+async def _start_provision(  # noqa: PLR0917  # the workflow's arguments, spelled out
+    workspace_id: UUID,
+    project_id: UUID,
+    mode: ProvisionMode,
+    link_name: str | None,
+    attempt: int,
+    dedupe_id: str,
+) -> None:
+    if not _starter:
+        raise RuntimeError("agents.workflows is not loaded: nothing can start a provision")
+    await _starter[0](
+        workspace_id, project_id, mode, link_name, attempt=attempt, dedupe_id=dedupe_id
+    )
+
+
+async def provision_project(
+    workspace_id: UUID,
+    project_id: UUID,
+    *,
+    mode: ProvisionMode,
+    link_name: str | None,
+    event_id: UUID,
+) -> None:
+    """Start the project's first provision (`project.created`): workflow id
+    `provision:<project id>`, deduplication id `project.created:<event id>:agents`, so a
+    redelivered event starts nothing new."""
+    await _start_provision(
+        workspace_id, project_id, mode, link_name, 0, f"project.created:{event_id}:agents"
+    )
+
+
+async def retry_provision(project_id: UUID, *, ctx: WorkspaceContext | None = None) -> None:
+    """Provision the project's profile again (accepting its `provisioning_failed` item): a
+    `not_provisioned` profile starts retry n+1 (`provision:<project id>:<n+1>`); one still
+    `provisioning` restarts its current attempt, which starts nothing new while that
+    workflow exists; a `ready` profile, or none, is left alone. The row changes before the
+    workflow is enqueued, so a crash in between is healed by the next accept."""
+    from tumnis.core import tenancy  # noqa: PLC0415
+
+    ctx = ctx or tenancy.current()
+    if ctx is None:
+        raise RuntimeError("retry_provision needs a workspace context")
+    async with tenant_session(ctx) as s:
+        row = (
+            await s.execute(
+                select(
+                    _profiles.c.id,
+                    _profiles.c.name,
+                    _profiles.c.status,
+                    _profiles.c.provision_mode,
+                    _profiles.c.provision_attempts,
+                )
+                .where(
+                    _profiles.c.role == "project",
+                    _profiles.c.project_id == project_id,
+                    _live_profiles(),
+                )
+                .with_for_update()
+            )
+        ).first()
+        if row is None or row.status not in {"not_provisioned", "provisioning"}:
+            return
+        attempt: int = row.provision_attempts
+        if row.status == "not_provisioned":
+            attempt += 1
+            await s.execute(
+                update(_profiles)
+                .where(_profiles.c.id == row.id)
+                .values(status="provisioning", provision_attempts=attempt)
+            )
+            mark_changed(s, LIVE_PROFILE, row.id)
+    mode: ProvisionMode = "link" if row.provision_mode == "link" else "create"
+    await _start_provision(
+        ctx.workspace_id,
+        project_id,
+        mode,
+        row.name if mode == "link" else None,
+        attempt,
+        provision_workflow_id(project_id, attempt),
+    )
+
+
+async def master_registry(*, ctx: WorkspaceContext | None = None) -> list[ProjectAgentEntry]:
+    """The master's registry (the `agents` of its planning packet): every project agent of
+    the workspace with its project's name, status and runner, by project name."""
+    from tumnis.core import tenancy  # noqa: PLC0415
+
+    ctx = ctx or tenancy.current()
+    if ctx is None:
+        raise RuntimeError("master_registry needs a workspace context")
+    async with tenant_session(ctx) as s:
+        rows = (
+            await s.execute(
+                select(
+                    _profiles.c.project_id,
+                    _profiles.c.name,
+                    _profiles.c.status,
+                    _runners.c.name.label("runner"),
+                )
+                .select_from(
+                    _profiles.outerjoin(
+                        _runners,
+                        (_runners.c.id == _profiles.c.runner_id) & _runners.c.deleted_at.is_(None),
+                    )
+                )
+                .where(
+                    _profiles.c.role == "project",
+                    _profiles.c.project_id.is_not(None),
+                    _live_profiles(),
+                )
+            )
+        ).all()
+        names = await projects.project_names(s, [row.project_id for row in rows])
+    entries = [
+        ProjectAgentEntry(
+            project_id=row.project_id,
+            project_name=names[row.project_id],
+            profile=row.name,
+            status=row.status,
+            runner=row.runner,
+        )
+        for row in rows
+        if row.project_id in names
+    ]
+    return sorted(entries, key=lambda e: (e.project_name.casefold(), str(e.project_id)))
