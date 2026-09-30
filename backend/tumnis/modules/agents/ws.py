@@ -878,6 +878,11 @@ class _RunnerSocket:
         payload = message.model_dump(mode="json", exclude={"schema_version", "sent_at"})
         if isinstance(message, Stream):  # redacted and cut before storage (P2-04)
             payload["text"] = api.log_text(message.text)
+        # The run's row is locked before its event takes a `seq`, as every run-event writer
+        # does (the others update or lock the row first): a run's events then commit in
+        # seq order, so a reader paging with `after_seq` never skips one although the
+        # sequence is global.
+        await s.execute(select(_runs.c.id).where(_runs.c.id == run_id).with_for_update())
         await s.execute(
             insert(_events)
             .values(run_id=run_id, message_id=message.message_id, kind=kind, payload=payload)
