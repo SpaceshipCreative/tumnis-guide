@@ -30,7 +30,6 @@ def _review(login: str, state: str, at: str) -> Any:
 
 @pytest.mark.req("FR-12.1")
 @pytest.mark.wp("P2-13")
-@pytest.mark.xfail(strict=True, reason="spec:P2-13")
 def test_parse_pr_url() -> None:
     """T-P2-13-10
     github.com pull request URLs parse to (owner, repo, number), with or without a trailing
@@ -83,7 +82,6 @@ def test_parse_pr_url() -> None:
 
 @pytest.mark.req("FR-12.1")
 @pytest.mark.wp("P2-13")
-@pytest.mark.xfail(strict=True, reason="spec:P2-13")
 def test_combine_checks_and_review_tables() -> None:
     """T-P2-13-06
     `combine_checks` merges commit statuses and check runs: red if any failure, error,
@@ -159,7 +157,6 @@ def _sign(secret: bytes, body: bytes) -> str:
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P2-13")
-@pytest.mark.xfail(strict=True, reason="spec:P2-13")
 def test_verify_signature() -> None:
     """T-P2-13-03
     `X-Hub-Signature-256` is `sha256=<hex>` of HMAC-SHA256 over the raw body with the

@@ -35,6 +35,7 @@ import {
   deadLettersGetDeadLetters,
   deadLettersPostDiscard,
   deadLettersPostRetry,
+  githubWebhook,
   healthLive,
   healthReady,
   knowledgeCreateLocation,
@@ -71,7 +72,9 @@ import {
   tasksGetReviewCount,
   tasksGetTask,
   tasksLinkContextItem,
+  tasksLinkPullRequest,
   tasksListComments,
+  tasksListPullRequests,
   tasksListRecurrence,
   tasksListReviewKinds,
   tasksListTasks,
@@ -157,6 +160,9 @@ import type {
   DeadLettersPostRetryData,
   DeadLettersPostRetryError,
   DeadLettersPostRetryResponse,
+  GithubWebhookData,
+  GithubWebhookError,
+  GithubWebhookResponse,
   HealthLiveData,
   HealthLiveResponse,
   HealthReadyData,
@@ -259,9 +265,15 @@ import type {
   TasksLinkContextItemData,
   TasksLinkContextItemError,
   TasksLinkContextItemResponse,
+  TasksLinkPullRequestData,
+  TasksLinkPullRequestError,
+  TasksLinkPullRequestResponse,
   TasksListCommentsData,
   TasksListCommentsError,
   TasksListCommentsResponse,
+  TasksListPullRequestsData,
+  TasksListPullRequestsError,
+  TasksListPullRequestsResponse,
   TasksListRecurrenceData,
   TasksListRecurrenceError,
   TasksListRecurrenceResponse,
@@ -1110,6 +1122,33 @@ export const deadLettersPostRetryMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await deadLettersPostRetry({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Webhook
+ */
+export const githubWebhookMutation = (
+  options?: Partial<Options<GithubWebhookData>>,
+): UseMutationOptions<
+  GithubWebhookResponse,
+  GithubWebhookError,
+  Options<GithubWebhookData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    GithubWebhookResponse,
+    GithubWebhookError,
+    Options<GithubWebhookData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await githubWebhook({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -2635,6 +2674,67 @@ export const tasksMoveTaskMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await tasksMoveTask({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const tasksListPullRequestsQueryKey = (
+  options: Options<TasksListPullRequestsData>,
+) => createQueryKey("tasksListPullRequests", options);
+
+/**
+ * List Pull Requests
+ *
+ * The task's pull requests with their stored status. Opening the task asks for a fresh
+ * read: the worker's answer arrives over `/ws` as a change of the task (FR-12.1).
+ */
+export const tasksListPullRequestsOptions = (
+  options: Options<TasksListPullRequestsData>,
+) =>
+  queryOptions<
+    TasksListPullRequestsResponse,
+    TasksListPullRequestsError,
+    TasksListPullRequestsResponse,
+    ReturnType<typeof tasksListPullRequestsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListPullRequests({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListPullRequestsQueryKey(options),
+  });
+
+/**
+ * Link Pull Request
+ *
+ * Links a github.com pull request (422 `not_a_pull_request`, 422 `repo_not_allowed`
+ * outside Settings > GitHub's allow-list); linking again keeps one link (FR-12.1).
+ */
+export const tasksLinkPullRequestMutation = (
+  options?: Partial<Options<TasksLinkPullRequestData>>,
+): UseMutationOptions<
+  TasksLinkPullRequestResponse,
+  TasksLinkPullRequestError,
+  Options<TasksLinkPullRequestData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksLinkPullRequestResponse,
+    TasksLinkPullRequestError,
+    Options<TasksLinkPullRequestData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksLinkPullRequest({
         ...options,
         ...fnOptions,
         throwOnError: true,

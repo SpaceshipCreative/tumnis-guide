@@ -30,6 +30,7 @@ from tumnis.core import tenancy
 from tumnis.core.errors import ProblemError
 from tumnis.core.live import mark_changed
 from tumnis.core.tenancy import tenant_session
+from tumnis.modules.github import api as github
 from tumnis.modules.tasks.models import ReviewItem
 
 _review: Table = ReviewItem.__table__  # type: ignore[assignment]
@@ -163,3 +164,42 @@ async def review_badge_count(s: AsyncSession, now: datetime) -> int:
         )
     )
     return count or 0
+
+
+# --- Flags (P2-13) ---------------------------------------------------------------------------
+
+RESULT_KIND: Final = "result"  # P2-04 queues these: an agent's finished work, with its links
+CHECKS_RED: Final = "checks_red"
+
+
+async def flag_pull_request_results(s: AsyncSession, key: str, *, red: bool) -> int:
+    """Sets (`red`) or clears the `checks_red` flag on the open `result` review items whose
+    links name the pull request `key` (`owner/repo#number`, `github.pull_request_key`). A
+    decided or trashed item is left alone, and an item already in the wanted state is not
+    touched, so a repeated delivery changes nothing. Returns the items changed."""
+    repo, _, number = key.rpartition("#")
+    needle = f"/{repo}/pull/{number}".lower()
+    rows = (
+        await s.execute(
+            select(_review.c.id, _review.c.payload, _review.c.flags).where(
+                _review.c.kind == RESULT_KIND,
+                text(OPEN_WHERE),
+                func.strpos(func.lower(_review.c.payload["links"].astext), needle) > 0,
+            )
+        )
+    ).all()
+    changed = 0
+    for item_id, payload, flags in rows:
+        links = payload.get("links") if isinstance(payload, dict) else None
+        names = [
+            github.pull_request_key(str(link.get("url", "")))
+            for link in (links if isinstance(links, list) else [])
+            if isinstance(link, dict)
+        ]
+        if key not in names or (CHECKS_RED in flags) == red:
+            continue
+        wanted = [*flags, CHECKS_RED] if red else [f for f in flags if f != CHECKS_RED]
+        await s.execute(_review.update().where(_review.c.id == item_id).values(flags=wanted))
+        mark_changed(s, LIVE_ENTITY, item_id)
+        changed += 1
+    return changed

@@ -29,6 +29,10 @@ ignore_imports =
 # The one sanctioned test-only exception (P0-12): every module's connector contract tests
 # subclass integrations' ConnectorContract.
     tumnis.modules.*.tests.** -> tumnis.modules.integrations.connector_contract
+# P2-13: tasks calls github (linking a pull request); github's integration tests link one
+# through tasks' api and hand `artifact.updated` to tasks' subscriber (T-P2-13-07), which
+# has no api entry. Module code never imports tasks.
+    tumnis.modules.github.tests.** -> tumnis.modules.tasks.events
 # Until modules call each other, the api ignore matches nothing; that is not an error.
 unmatched_ignore_imports_alerting = none
 
@@ -94,6 +98,10 @@ ancestors =
 ignore_imports =
     tumnis.modules.integrations.tests.** -> tumnis.modules.calendar.api
     tumnis.modules.integrations.tests.** -> tumnis.modules.knowledge.api
+# tasks builds on github (P2-13: pull requests on task cards); github's own tests drive
+# tasks' api and subscriber to prove the round trip. Module code never does.
+    tumnis.modules.github.tests.** -> tumnis.modules.tasks.api
+    tumnis.modules.github.tests.** -> tumnis.modules.tasks.events
 unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:search-usage-subscribe-only]
@@ -162,7 +170,8 @@ name = The api process never imports Jev, its SDK or VllmGeneration
 type = forbidden
 # The composition roots (tumnis.app, worker, cli, wiring) and every module's api, router
 # and mcp, as single modules: none reaches an adapter through static imports. The worker
-# builds JevDecisions and VllmGeneration (P1-03) lazily through the adapter registry.
+# builds JevDecisions and VllmGeneration (P1-03) lazily through the adapter registry. P2-13
+# adds the read-only GitHub client, built the same way.
 as_packages = False
 source_modules =
     tumnis.*
@@ -172,6 +181,7 @@ source_modules =
 forbidden_modules =
     tumnis.modules.decisions.adapters.jev
     tumnis.modules.decisions.adapters.vllm_generation
+    tumnis.modules.github.adapters.github_status
     typesafe_sdk
 
 # P1-03 (FR-11.8): the Generation slot writes the placeholder first action and the spoken

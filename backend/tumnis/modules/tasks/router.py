@@ -42,6 +42,12 @@ WRITE_PROJECT = RoutePolicy(
     auth="session_or_key", scopes=WRITE_SCOPE, idempotent=True, project_param="path:project_id"
 )
 SESSION_READ = RoutePolicy(auth="session")
+LIST_PULL_REQUESTS = RoutePolicy(
+    auth="session_or_key",
+    scopes=READ,
+    project_param="lookup:tasks",
+    unpaginated_reason="a task links a handful of pull requests",
+)
 LIST_OF_TASK = RoutePolicy(
     auth="session_or_key", scopes=READ, paginated=True, project_param="lookup:tasks"
 )
@@ -80,6 +86,10 @@ class CommentIn(BaseModel):
 
 class ContextItemIn(BaseModel):
     context_item_id: UUID
+
+
+class PullRequestIn(BaseModel):
+    url: Annotated[str, StringConstraints(min_length=1, max_length=2048, strip_whitespace=True)]
 
 
 class ColumnsIn(BaseModel):
@@ -254,6 +264,28 @@ async def link_context_item(
         task_id,
         body.context_item_id,
         now=_clock(request).now(),
+    )
+
+
+@router.get("/tasks/{task_id}/pull-requests")
+@route_policy(LIST_PULL_REQUESTS)
+async def list_pull_requests(
+    task_id: UUID, request: Request, session: SessionDep
+) -> list[api.PullRequestOut]:
+    """The task's pull requests with their stored status. Opening the task asks for a fresh
+    read: the worker's answer arrives over `/ws` as a change of the task (FR-12.1)."""
+    return await api.pull_requests(session, task_id, now=_clock(request).now())
+
+
+@router.post("/tasks/{task_id}/pull-requests", status_code=201)
+@route_policy(WRITE_TASK)
+async def link_pull_request(
+    task_id: UUID, body: PullRequestIn, request: Request, session: SessionDep
+) -> api.PullRequestOut:
+    """Links a github.com pull request (422 `not_a_pull_request`, 422 `repo_not_allowed`
+    outside Settings > GitHub's allow-list); linking again keeps one link (FR-12.1)."""
+    return await api.link_pull_request(
+        session, principal_of(request).actor, task_id, body.url, now=_clock(request).now()
     )
 
 

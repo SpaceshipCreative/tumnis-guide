@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 SYNC_QUEUE = "sync"  # connector syncs and OAuth exchanges (A9; P1-09)
 SYNC_WORKER_CONCURRENCY = 4  # plan default
+GITHUB_QUEUE = "github"  # pull request status reads (P2-13); its own queue: limiters are per queue
+GITHUB_REFRESHES_PER_MINUTE = 15  # each refresh makes four requests, 304s included
 
 
 def register_queues() -> None:
@@ -33,6 +35,11 @@ def register_queues() -> None:
     )
     DBOS.register_queue(workflows_ops.MAINTENANCE_QUEUE, worker_concurrency=1)
     DBOS.register_queue(SYNC_QUEUE, worker_concurrency=SYNC_WORKER_CONCURRENCY)
+    DBOS.register_queue(
+        GITHUB_QUEUE,
+        worker_concurrency=2,
+        limiter={"limit": GITHUB_REFRESHES_PER_MINUTE, "period": 60},
+    )
 
 
 def register_schedules(settings: Settings) -> None:
