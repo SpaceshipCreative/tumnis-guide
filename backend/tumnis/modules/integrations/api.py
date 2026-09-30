@@ -21,10 +21,10 @@ from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
-from typing import Any, Final, Literal, Protocol
+from typing import Annotated, Any, Final, Literal, Protocol
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field, StringConstraints
 from sqlalchemy import ColumnElement, Table, and_, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import ScalarResult
@@ -58,6 +58,7 @@ from tumnis.modules.integrations.models import (
     Thread,
 )
 from tumnis.modules.integrations.payloads import ArtifactUpdatedV1
+from tumnis.modules.projects import api as projects
 
 ConnectorKind = Literal["email", "notes", "chat", "calendar", "code", "deploy", "knowledge"]
 Capability = Literal["poll", "webhook", "read", "write"]
@@ -1265,3 +1266,29 @@ async def context_targets(
             )
         ).all()
         return [target for target in targets if target is not None]
+
+
+# --- purge (P2-18, R-37) ----------------------------------------------------------------------
+
+
+class PurgeIn(BaseModel):
+    """`POST /v1/purges`: what to purge and why (the reason goes to the audit row).
+    P2-18 purges an archived `project`; P3-09 adds `connection`."""
+
+    scope: Literal["project"]
+    id: UUID
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+
+class PurgeOut(BaseModel):
+    scope: Literal["project"]
+    id: UUID
+    status: Literal["accepted"] = "accepted"
+
+
+async def purge(s: AsyncSession, body: PurgeIn, *, now: datetime) -> PurgeOut:
+    """Purge for good, audited as `data.purged` in this transaction; what the purged thing
+    kept elsewhere (the agent server's archive, packed folders, blobs) goes in the worker
+    (`project.purged` starts `purge_project_archive`)."""
+    await projects.purge_project(s, body.id, body.reason, now=now)
+    return PurgeOut(scope=body.scope, id=body.id)

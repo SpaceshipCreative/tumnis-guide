@@ -91,6 +91,12 @@ CASES = [
     ),
     (
         "events",
+        "project.purged",
+        1,
+        "backend/tests/contract/fixtures/events/project.purged/v1.json",
+    ),
+    (
+        "events",
         "project.updated",
         1,
         "backend/tests/contract/fixtures/events/project.updated/v1.json",

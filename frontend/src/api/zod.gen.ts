@@ -678,6 +678,7 @@ export const zProjectCreateIn = z.object({
  * ProjectOut
  */
 export const zProjectOut = z.object({
+  archive_state: z.enum(["archiving", "archived", "unarchiving"]).nullish(),
   archived_at: z.iso.datetime().nullable(),
   brief_md: z.string().max(65536).optional().default(""),
   client: z.string().nullish(),
@@ -759,6 +760,27 @@ export const zPullRequestOut = z.object({
   state: z.enum(["open", "merged", "closed"]).nullable(),
   title: z.string().nullable(),
   url: z.string(),
+});
+
+/**
+ * PurgeIn
+ *
+ * `POST /v1/purges`: what to purge and why (the reason goes to the audit row).
+ * P2-18 purges an archived `project`; P3-09 adds `connection`.
+ */
+export const zPurgeIn = z.object({
+  id: z.uuid(),
+  reason: z.string().min(1).max(500),
+  scope: z.literal("project"),
+});
+
+/**
+ * PurgeOut
+ */
+export const zPurgeOut = z.object({
+  id: z.uuid(),
+  scope: z.literal("project"),
+  status: z.literal("accepted").optional().default("accepted"),
 });
 
 /**
@@ -2272,6 +2294,13 @@ export const zProjectsUnarchiveProjectPath = z.object({
  * Successful Response
  */
 export const zProjectsUnarchiveProjectResponse = zProjectOut;
+
+export const zPurgesPurgeBody = zPurgeIn;
+
+/**
+ * Successful Response
+ */
+export const zPurgesPurgeResponse = zPurgeOut;
 
 export const zTasksListRecurrenceQuery = z.object({
   project_id: z.uuid().nullish(),
