@@ -40,12 +40,6 @@ STATUSES = "'pending_scan', 'extracting', 'ready', 'quarantined', 'failed'"
 CHUNK_TSV = "to_tsvector('english', coalesce(array_to_string(h, ' '), '') || ' ' || t)"
 
 
-def _check_not_valid(table: str, name: str) -> None:
-    op.execute(
-        f"ALTER TABLE {table} ADD CONSTRAINT {name} CHECK (status IN ({STATUSES})) NOT VALID"
-    )
-
-
 def upgrade() -> None:
     op.add_column(
         "documents",
@@ -53,7 +47,11 @@ def upgrade() -> None:
     )
     op.add_column("documents", sa.Column("status_reason", sa.Text, nullable=True))
     op.add_column("documents", sa.Column("current_version_id", UUID(as_uuid=True), nullable=True))
-    _check_not_valid("documents", "ck_documents_status")
+    op.execute(
+        "ALTER TABLE documents ADD CONSTRAINT ck_documents_status"
+        " CHECK (status IN ('pending_scan', 'extracting', 'ready', 'quarantined', 'failed'))"
+        " NOT VALID"
+    )
     op.execute(
         "ALTER TABLE documents ADD CONSTRAINT fk_documents_current_version_id"
         " FOREIGN KEY (current_version_id) REFERENCES document_versions (id) NOT VALID"
@@ -66,7 +64,11 @@ def upgrade() -> None:
     op.add_column("document_versions", sa.Column("source_name", sa.Text, nullable=True))
     op.add_column("document_versions", sa.Column("mime", sa.Text, nullable=True))
     op.add_column("document_versions", sa.Column("docling_json", sa.LargeBinary, nullable=True))
-    _check_not_valid("document_versions", "ck_document_versions_status")
+    op.execute(
+        "ALTER TABLE document_versions ADD CONSTRAINT ck_document_versions_status"
+        " CHECK (status IN ('pending_scan', 'extracting', 'ready', 'quarantined', 'failed'))"
+        " NOT VALID"
+    )
 
     create_tenant_table(
         "extraction_artifacts",
