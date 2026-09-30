@@ -39,7 +39,6 @@ class TestFakeStorageForS3(TestFakeStorage):  # inherits the markers
     adapter_name = "knowledge.s3"
 
 
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 class TestFakeStorageForSftp(TestFakeStorage):  # inherits the markers
     """T-P3-14-01
     The same fake, as registered for the SFTP adapter (P3-14).
