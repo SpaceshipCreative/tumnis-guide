@@ -83,7 +83,6 @@ def _result_item(db: DbUrls, task_id: UUID) -> tuple[UUID, int, dict[str, Any]]:
 
 @pytest.mark.req("FR-5.8")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_result_moves_task_to_in_review_with_details(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
@@ -141,7 +140,6 @@ async def test_result_moves_task_to_in_review_with_details(  # noqa: PLR0917
 
 @pytest.mark.req("FR-5.8")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_accept_moves_task_to_done(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
@@ -183,7 +181,6 @@ async def test_accept_moves_task_to_done(  # noqa: PLR0917
 
 @pytest.mark.req("FR-5.8")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_reject_adds_comment_and_returns_to_agent(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
@@ -242,7 +239,6 @@ async def test_reject_adds_comment_and_returns_to_agent(  # noqa: PLR0917
 
 @pytest.mark.req("FR-5.8")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_result_with_other_runs_token_refused(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],

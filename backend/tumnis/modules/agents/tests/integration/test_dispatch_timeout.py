@@ -54,7 +54,6 @@ def _run(db: DbUrls, run_id: UUID) -> tuple[str, str | None]:
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_run_times_out_at_limit_and_fails_cleanly(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -109,7 +108,6 @@ async def test_run_times_out_at_limit_and_fails_cleanly(  # noqa: PLR0917
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_wall_clock_ceiling_ends_waiting_run(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,

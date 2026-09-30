@@ -33,7 +33,6 @@ pytestmark = [
 
 @pytest.mark.req("NFR Reliability")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_dropped_runner_fails_run_task_stays_in_progress(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,

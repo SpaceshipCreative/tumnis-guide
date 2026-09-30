@@ -35,7 +35,6 @@ LINES = ["Checking out fix-footer", "git.checkout fix-footer", "Editing src/foot
 
 @pytest.mark.req("FR-5.5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_events_paged_in_order_and_deduped(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
