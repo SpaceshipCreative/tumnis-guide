@@ -55,7 +55,7 @@ def to_chunk_rows(doc: "DoclingDocument", chunker: "HybridChunker") -> list[Chun
 class DoclingExtractor:
     def __init__(self, *, chunk_tokenizer: str, max_tokens: int = 512) -> None:
         self._tokenizer_id = chunk_tokenizer
-        self._max_tokens = max_tokens
+        self._max_tokens = extraction.check_max_tokens(max_tokens)
         self._converter: DocumentConverter | None = None
         self._chunker: HybridChunker | None = None
 

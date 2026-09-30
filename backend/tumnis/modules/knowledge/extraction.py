@@ -28,6 +28,13 @@ FILE_KINDS: frozenset[DocKind] = frozenset(
 )
 
 
+def check_max_tokens(max_tokens: int) -> int:
+    """`max_tokens`, if it can hold any text; a zero or negative limit is a ValueError."""
+    if max_tokens <= 0:
+        raise ValueError(f"max_tokens must be positive, got {max_tokens}")
+    return max_tokens
+
+
 def standard_converter() -> "DocumentConverter":
     """The standard pipeline for PDFs and images: OCR on bitmap regions, table structure
     with cell matching."""
@@ -57,6 +64,7 @@ def standard_converter() -> "DocumentConverter":
 def make_chunker(tokenizer_id: str, max_tokens: int = DEFAULT_MAX_TOKENS) -> "HybridChunker":
     """A `HybridChunker` whose token limit is counted with `tokenizer_id`'s tokenizer
     (prefetched into the image, never downloaded at run time); undersized peers merge."""
+    check_max_tokens(max_tokens)
     from docling_core.transforms.chunker.hybrid_chunker import HybridChunker  # noqa: PLC0415
     from docling_core.transforms.chunker.tokenizer.huggingface import (  # noqa: PLC0415
         HuggingFaceTokenizer,
