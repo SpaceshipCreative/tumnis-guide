@@ -28,9 +28,11 @@ events queue (a bulk import or the seed's thousands of tasks).
 Subscriber names are part of every delivery's workflow id, so they never change.
 """
 
+from datetime import datetime, timedelta
 from typing import Final
 from uuid import UUID
 
+from tumnis.core.clock import SystemClock
 from tumnis.core.events import EventEnvelope, subscribe
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
@@ -50,6 +52,7 @@ __all__ = [
     "apply_review_decision",
     "enrich_on_create",
     "enrich_on_update",
+    "project_has_agent",
     "provision_project",
 ]
 
@@ -57,6 +60,36 @@ PROVISION_SUBSCRIBER: Final = "agents.provision_project"
 REVIEW_SUBSCRIBER: Final = "agents.apply_review_decision"
 ENRICH_CREATE_SUBSCRIBER: Final = "agents.enrich_on_create"
 ENRICH_UPDATE_SUBSCRIBER: Final = "agents.enrich_on_update"
+
+# How long a project seen without a provisioned agent is taken to still have none. The
+# relay runs the enrichment subscribers for every task write, one after another, so a
+# burst of writes in one project (quick adds, an import) asks once, not once per write.
+# A task created in this window after provisioning completes is not enriched; the
+# workflow re-checks every project it does start for.
+NO_AGENT_TTL: Final = timedelta(seconds=5)
+NO_AGENT_MAX: Final = 1024  # projects remembered at once; the oldest go first
+_no_agent: dict[UUID, datetime] = {}  # project id -> when it was seen without an agent
+
+
+def _now() -> datetime:
+    return (api.enrichment_config().clock or SystemClock()).now()
+
+
+async def project_has_agent(project_id: UUID, ctx: WorkspaceContext) -> bool:
+    """Whether the project's agent is provisioned (`workflows.agent_provisioned`), with a
+    project seen without one remembered for `NO_AGENT_TTL`."""
+    now = _now()
+    seen = _no_agent.get(project_id)
+    if seen is not None and now - seen < NO_AGENT_TTL:
+        return False
+    if await workflows.agent_provisioned(project_id, ctx=ctx):
+        _no_agent.pop(project_id, None)
+        return True
+    _no_agent.pop(project_id, None)
+    while len(_no_agent) >= NO_AGENT_MAX:
+        del _no_agent[next(iter(_no_agent))]
+    _no_agent[project_id] = now
+    return False
 
 
 @subscribe("project.created", name=PROVISION_SUBSCRIBER)
@@ -88,7 +121,7 @@ async def enrich_on_create(envelope: EventEnvelope) -> None:
     ctx = WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
     # No workflow at all for a project without a provisioned agent: bulk task writes
     # (imports, the seed) would otherwise queue one per task only to end at once.
-    if not await workflows.agent_provisioned(project_id, ctx=ctx):
+    if not await project_has_agent(project_id, ctx):
         return
     await workflows.start_enrichment(
         envelope.workspace_id,
@@ -103,7 +136,11 @@ async def enrich_on_update(envelope: EventEnvelope) -> None:
     if "label" not in (envelope.payload.get("changed_fields") or []):
         return
     task_id = UUID(str(envelope.payload["task_id"]))
-    async with tenant_session(WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)) as s:
+    ctx = WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
+    project = (envelope.payload.get("doc") or {}).get("project_id")
+    if project is not None and not await project_has_agent(UUID(str(project)), ctx):
+        return  # nothing to enrich with: the task is not read at all
+    async with tenant_session(ctx) as s:
         try:
             task = await tasks.get_task(s, task_id)
         except NotFound:

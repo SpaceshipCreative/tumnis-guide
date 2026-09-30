@@ -128,10 +128,9 @@ function Enriched({ task }: { task: Task }) {
       setFailed(true);
     },
   });
-  const byAgent =
-    task.first_action_source === "agent" || task.label_source === "agent";
-  const eligible =
-    byAgent && task.enrichment_status === "done" ? task.change_id : null;
+  // Whatever it filled (criteria or an estimate alone too), a finished enrichment's
+  // change is the one the read names.
+  const eligible = task.enrichment_status === "done" ? task.change_id : null;
   if (eligible === null && seen !== null) setSeen(null);
   if (eligible !== null && seen === null) setSeen(eligible);
   if (eligible === null || (seen !== null && seen !== eligible)) return null;

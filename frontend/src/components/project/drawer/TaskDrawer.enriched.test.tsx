@@ -106,3 +106,28 @@ test("[P1-08][UX 9] a title edit's answer does not become the enrichment's Undo"
   });
   unmount();
 });
+
+test("[P1-08][UX 9] an enrichment that filled only the criteria offers its Undo", async () => {
+  const project = makeProject({ name: "Acme site" });
+  const task = {
+    ...enrichedTask(project.id, "- The proposal is sent"),
+    first_action: "Call Dana about the scope",
+    first_action_source: null,
+    label_source: "user" as const,
+  };
+  const fake = new ProjectFake({ project, tasks: [task] });
+  server.resetHandlers();
+  server.use(...fake.handlers);
+  server.use(http.get(`/v1/tasks/${task.id}`, () => HttpResponse.json(task)));
+
+  const { unmount } = await renderRoute(
+    `/projects/${project.id}?task=${task.id}`,
+    { viewport: "laptop" },
+  );
+  const drawer = await screen.findByRole("dialog", {
+    name: "Draft the Acme proposal",
+  });
+  expect(await within(drawer).findByText("Enriched by agent")).toBeVisible();
+  expect(within(drawer).getByRole("button", { name: "Undo" })).toBeVisible();
+  unmount();
+});
