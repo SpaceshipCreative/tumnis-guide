@@ -1,11 +1,17 @@
 // Device UI state (P0-22, ADR-0004): what is open on this device, the last view per
-// project (kept in localStorage), the conflict notice and plain notices (P0-24). Server
-// data lives in Query.
+// project (kept in localStorage), the conflict notice and plain notices (P0-24), and the
+// shell's colour theme, sidebar width and phone drawer (DS-01: the theme and the sidebar
+// are kept in localStorage, the drawer never is). Server data lives in Query.
 import { createStore } from "@xstate/store";
 import * as z from "zod";
 
 import { safeGetItem, safeSetItem } from "../lib/storage";
-import type { ThemeChoice } from "../lib/theme";
+import {
+  applyTheme,
+  loadTheme,
+  saveTheme,
+  type ThemeChoice,
+} from "../lib/theme";
 import { projectViews, type ProjectView } from "../lib/views";
 
 export const LAST_VIEW_KEY = "tumnis.lastView";
@@ -62,8 +68,8 @@ export function createUiStore() {
     lastView: loadLastViews(),
     conflict: null,
     notice: null,
-    theme: "system",
-    sidebarCollapsed: false,
+    theme: loadTheme(),
+    sidebarCollapsed: safeGetItem(SIDEBAR_KEY) === "true",
     navOpen: false,
   };
   const store = createStore({
@@ -105,8 +111,20 @@ export function createUiStore() {
   // Persist what changed on top of what storage holds now (another tab may have written
   // other projects since this one loaded), never the whole in-memory map (P0-24).
   let stored = initial.lastView;
-  store.subscribe((snapshot) => {
-    const next = snapshot.context.lastView;
+  let theme = initial.theme;
+  let collapsed = initial.sidebarCollapsed;
+  applyTheme(theme);
+  store.subscribe(({ context }) => {
+    if (context.theme !== theme) {
+      theme = context.theme;
+      saveTheme(theme);
+      applyTheme(theme);
+    }
+    if (context.sidebarCollapsed !== collapsed) {
+      collapsed = context.sidebarCollapsed;
+      safeSetItem(SIDEBAR_KEY, String(collapsed));
+    }
+    const next = context.lastView;
     if (next === stored) return;
     const changed = Object.fromEntries(
       Object.entries(next).filter(([id, view]) => stored[id] !== view),

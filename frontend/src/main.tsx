@@ -1,6 +1,9 @@
 // The app (P0-22): the generated client configured once, one QueryClient, the router,
 // the live socket and the service worker.
 import "./lib/zodConfig";
+// Inter, self-hosted (DS-01): the variable weight axis, normal style; each script's file
+// loads only when the page uses it (unicode-range).
+import "@fontsource-variable/inter/wght.css";
 import "./styles.css";
 
 import { QueryClientProvider } from "@tanstack/react-query";
