@@ -1,5 +1,5 @@
 // The task-first project page (P0-24, FR-2.2 to FR-2.8): the header, the composer, the
-// Tasks or Board view and, on a laptop, the Context rail beside them; on the phone a
+// Tasks, Board or Calendar (P1-12) view and, on a laptop, the Context rail beside them; on the phone a
 // segmented control and the Context sheet. View state lives in the URL (`view`, `task`),
 // the last view per project in `uiStore`, server data in Query. Captures still on the
 // offline queue show as pending rows (P0-25), even when the project cannot load offline.
@@ -8,9 +8,11 @@ import { useSelector } from "@xstate/store-react";
 import { type ReactNode, useId, useState } from "react";
 
 import { useIsLaptop } from "../../lib/media";
+import { mondayOf } from "../../lib/time";
 import type { ProjectView } from "../../lib/views";
 import { uiStore } from "../../stores/uiStore";
 import { BoardView } from "../board/BoardView";
+import { CalendarView } from "./CalendarView";
 import { pendingRow, usePendingTasks } from "../quickadd/queue";
 import { workspaceQuery } from "../settings/queries";
 import { Composer } from "./Composer";
@@ -28,6 +30,9 @@ export interface ProjectPageProps {
   projectId: string;
   view: ProjectView | undefined;
   taskId: string | undefined;
+  /** The Calendar view's ISO Monday; undefined: the current week. */
+  week?: string | undefined;
+  onWeek?: (monday: string) => void;
   onView: (view: ProjectView) => void;
   onTask: (taskId: string | undefined) => void;
 }
@@ -84,6 +89,8 @@ export function ProjectPage({
   projectId,
   view: searchView,
   taskId,
+  week,
+  onWeek = () => undefined,
   onView,
   onTask,
 }: ProjectPageProps) {
@@ -143,7 +150,13 @@ export function ProjectPage({
           onChange={changeView}
         />
         <ViewPanel laptop={laptop} panelId={panelId} view={view}>
-          {view === "board" ? (
+          {view === "calendar" ? (
+            <CalendarView
+              projectId={projectId}
+              week={week ?? mondayOf(now, timezone)}
+              onWeek={onWeek}
+            />
+          ) : view === "board" ? (
             <BoardView
               projectId={projectId}
               onOpen={(id) => {

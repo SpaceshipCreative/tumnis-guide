@@ -14,10 +14,13 @@ const NOT_THE_SHELL = [/^\/v1\//, /^\/ws/, /^\/mcp/, /^\/health/, /^\/metrics/];
 
 export default defineConfig({
   plugins: [
-    // Before the React plugin: it rewrites route files into lazy chunks.
+    // Before the React plugin: it rewrites route files into lazy chunks. Not under Vitest:
+    // there a lazy route is transformed and loaded inside the test that first visits it,
+    // which on a loaded machine alone outlasts `findBy` waits and test budgets. The route
+    // modules then load with the test file instead; the build still splits.
     tanstackRouter({
       target: "react",
-      autoCodeSplitting: true,
+      autoCodeSplitting: !process.env.VITEST,
       routesDirectory: "./src/routes",
       generatedRouteTree: "./src/routeTree.gen.ts",
       routeFileIgnorePattern: "\\.test\\.",
