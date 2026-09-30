@@ -5,13 +5,17 @@ import { screen, within } from "@testing-library/react";
 import { expect, test } from "vitest";
 
 import { makeProject, makeTask } from "../../test/factories";
+import { reviewKinds } from "../../test/msw/handlers";
+import { workingHoursHandlers } from "../../test/msw/planning";
 import { ProjectFake } from "../../test/msw/project";
+import { makeReviewItem, reviewQueue } from "../../test/msw/review";
 import { server } from "../../test/msw/server";
+import { Recorder } from "../../test/msw/settings";
 import { renderRoute } from "../../test/render";
 
 const MARK = "From outside content";
 
-test.fails("[P2-08][SAF-1] shows the mark on card and drawer", async () => {
+test("[P2-08][SAF-1] shows the mark on card and drawer", async () => {
   const project = makeProject({ name: "Acme site" });
   const outside = makeTask({
     project_id: project.id,
@@ -63,4 +67,29 @@ test.fails("[P2-08][SAF-1] shows the mark on card and drawer", async () => {
       unmount();
     }
   }
+});
+
+test("[P2-08][SAF-1] shows the mark on a tainted task's review item", async () => {
+  const queue = reviewQueue([
+    makeReviewItem({
+      target_title: "Reply to the Acme invoice email",
+      target_tainted: true,
+    }),
+    makeReviewItem({
+      target_title: "Tidy the Acme footer",
+      target_tainted: false,
+    }),
+  ]);
+  server.use(
+    reviewKinds(["low_confidence_label"]),
+    ...queue.handlers,
+    ...workingHoursHandlers(new Recorder()),
+  );
+  await renderRoute("/review", { viewport: "phone" });
+  const tainted = await screen.findByRole("article", {
+    name: /Reply to the Acme invoice email/,
+  });
+  const clean = screen.getByRole("article", { name: /Tidy the Acme footer/ });
+  expect(within(tainted).getByText(MARK)).toBeVisible();
+  expect(within(clean).queryByText(MARK)).toBeNull();
 });
