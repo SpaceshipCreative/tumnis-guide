@@ -40,7 +40,6 @@ CASES: dict[str, tuple[str | None, str | None, str | None, dict[str, Any] | None
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 @pytest.mark.parametrize("case", list(CASES))
 def test_packet_carries_code_location(case: str) -> None:
     """T-P2-07-13
@@ -50,7 +49,7 @@ def test_packet_carries_code_location(case: str) -> None:
     for a worktree; one without runs with `workdir_policy: none`.
     """
     from tumnis.modules.agents.api import RunKind, SchemaRef, TaskPacket  # noqa: PLC0415
-    from tumnis.modules.agents.packet_builder import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.packet_builder import (  # noqa: PLC0415
         code_location,
         code_location_of,
         workdir_policy,
