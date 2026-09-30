@@ -29,7 +29,7 @@ from tumnis.modules.agents.adapters.port import (
     RunEvent,
     RunHandle,
 )
-from tumnis.modules.agents.models import AgentProfile, RunEventRow, Runner
+from tumnis.modules.agents.models import AgentProfile, RunEventRow, Runner, RunnerMessage
 from tumnis.modules.agents.packet_builder import TaskPacket
 from tumnis.modules.agents.protocol import McpServerInfo, SchemaRef
 from tumnis.modules.agents.review_kinds import ForeignReach
@@ -235,6 +235,7 @@ class RunOutcome(BaseModel):
 _runners: Table = Runner.__table__  # type: ignore[assignment]
 _profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
 _events: Table = RunEventRow.__table__  # type: ignore[assignment]
+_messages: Table = RunnerMessage.__table__  # type: ignore[assignment]
 STREAM_KINDS: Final = frozenset({"log", "tool_call", "file"})
 
 _NOTIFY = text("SELECT pg_notify(:channel, :payload)")
@@ -926,18 +927,92 @@ async def run_log(s: AsyncSession, run_id: UUID) -> list[RunEvent]:
     return events
 
 
-# --- Task tokens (P2-02); spec stubs until the implementation lands ---------------------------
+# --- Task tokens (P2-02, R-27, Scott decisions 30 and 31) ------------------------------------
+
+REDACTED: Final = "[redacted]"  # what a stored packet's token reads once its run ended
+WORKSPACE_RUN_KINDS: Final = frozenset({RunKind.PLAN, RunKind.NOTIFY})  # master runs
 
 
-async def issue_run_token(ctx: WorkspaceContext, **kwargs: Any) -> str:
-    raise NotImplementedError
+async def issue_run_token(
+    ctx: WorkspaceContext,
+    *,
+    run_id: UUID,
+    kind: RunKind,
+    project_id: UUID | None,
+    api_key_id: UUID,
+    now: datetime,
+) -> str:
+    """The run's task token (shown once): the kind's scopes that the profile's key holds
+    (`run_token_scopes`), limited to the run's project, valid until `run_ended`. A plan or
+    notify run on the master profile has no project and gets a workspace-scoped token that
+    reaches no project (decision 30); every other run names its project (ValueError).
+    `auth.ScopeEscalation` when the key is missing or revoked."""
+    if project_id is None and kind not in WORKSPACE_RUN_KINDS:
+        raise ValueError(f"a {kind.value} run's token names its project")
+    held = await auth.key_scopes(ctx, api_key_id)
+    if held is None:
+        raise auth.ScopeEscalation("the profile's key is missing or revoked")
+    return await auth.issue_task_token(
+        ctx,
+        run_id=run_id,
+        project_id=project_id,
+        api_key_id=api_key_id,
+        scopes=run_token_scopes(kind, held),
+        now=now,
+    )
 
 
 async def run_ended(ctx: WorkspaceContext, run_id: UUID, *, now: datetime) -> int:
-    raise NotImplementedError
+    """Every finished run calls this, whatever its status (idempotent): its task tokens
+    are revoked (refused in every process within a second, `token_expired`), and in the
+    same transaction the token in the stored `run` mailbox message is overwritten with
+    REDACTED, so no backup or dump of the database holds a live or recent token (decision
+    31). Returns how many tokens it revoked."""
+    async with tenant_session(ctx) as s:
+        revoked = await auth.revoke_task_tokens_for_run(ctx, run_id, now=now, session=s)
+        await _redact_run_message(s, run_id)
+    return revoked
+
+
+async def _redact_run_message(s: AsyncSession, run_id: UUID) -> None:
+    message_id = uuid5(run_id, "run")  # the dispatch's mailbox row (DaemonTransport)
+    row = (
+        await s.execute(
+            select(_messages.c.id, _messages.c.payload)
+            .where(_messages.c.message_id == message_id, _messages.c.deleted_at.is_(None))
+            .with_for_update()
+        )
+    ).first()
+    if row is None:
+        return
+    payload = dict(row.payload or {})
+    packet = payload.get("packet")
+    if not isinstance(packet, dict):
+        return
+    callback = packet.get("callback")
+    if not isinstance(callback, dict) or callback.get("task_token") in (None, REDACTED):
+        return
+    payload["packet"] = {**packet, "callback": {**callback, "task_token": REDACTED}}
+    await s.execute(update(_messages).where(_messages.c.id == row.id).values(payload=payload))
 
 
 async def set_profile_key(
     ctx: WorkspaceContext, profile_id: UUID, api_key_id: UUID, *, now: datetime
 ) -> None:
-    raise NotImplementedError
+    """Links the API key the profile's runs issue their task tokens from. 404 for an
+    unknown profile, 422 `invalid_api_key` for a key that is missing or revoked."""
+    if await auth.key_scopes(ctx, api_key_id) is None:
+        raise ProblemError(422, "invalid_api_key", "The key is missing or revoked")
+    async with tenant_session(ctx) as s:
+        await _profile_row(s, profile_id)
+        await s.execute(
+            update(_profiles).where(_profiles.c.id == profile_id).values(api_key_id=api_key_id)
+        )
+        mark_changed(s, LIVE_PROFILE, profile_id)
+
+
+async def profile_key(s: AsyncSession, profile_id: UUID) -> UUID | None:
+    """The key a profile's runs issue task tokens from; None when none is linked."""
+    return await s.scalar(
+        select(_profiles.c.api_key_id).where(_profiles.c.id == profile_id, _live_profiles())
+    )

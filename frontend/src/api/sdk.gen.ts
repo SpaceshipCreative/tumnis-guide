@@ -19,6 +19,9 @@ import type {
   AgentsGetProfileToolsData,
   AgentsGetProfileToolsErrors,
   AgentsGetProfileToolsResponses,
+  AgentsGetTaskPacketData,
+  AgentsGetTaskPacketErrors,
+  AgentsGetTaskPacketResponses,
   AgentsListProfilesData,
   AgentsListProfilesErrors,
   AgentsListProfilesResponses,
@@ -292,6 +295,7 @@ import {
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
   zAgentsGetProfileToolsResponse,
+  zAgentsGetTaskPacketResponse,
   zAgentsListProfilesResponse,
   zAgentsListRunnersResponse,
   zAgentsRegisterProfileResponse,
@@ -2317,6 +2321,30 @@ export const tasksMoveTask = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Get Task Packet
+ *
+ * The task's packet as a run would get it, with no token; the `get_task_packet`
+ * tool's twin. 404 for a task the caller cannot see.
+ */
+export const agentsGetTaskPacket = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsGetTaskPacketData, ThrowOnError>,
+): RequestResult<
+  AgentsGetTaskPacketResponses,
+  AgentsGetTaskPacketErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    AgentsGetTaskPacketResponses,
+    AgentsGetTaskPacketErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsGetTaskPacketResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/packet",
+    ...options,
   });
 
 /**

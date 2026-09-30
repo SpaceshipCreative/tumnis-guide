@@ -15,6 +15,13 @@ so nothing beats on its own: `heartbeat()` sends one beat, stamped by the server
 `offline(profile)` stops answering for the profile and re-registers without it (the
 server then refuses to dispatch to it); `disconnect()` drops the socket.
 
+`fake_runner(..., strict=True)` (P2-02) behaves like an agent that uses its packet: it
+validates every `run` packet against schemas/packet/v1/task_packet.json, refuses one
+without `callback.task_token`, and calls `GET /v1/tasks` back with the token before it
+answers. A refused packet or a failed callback answers `failed` and is listed in
+`strict_failures`; `callbacks` holds each (run, callback status); `check_packet(packet)`
+says why a packet would be refused (None when it would not).
+
 The runner is sync (a reader thread per socket): call it from sync or async tests alike.
 """
 
