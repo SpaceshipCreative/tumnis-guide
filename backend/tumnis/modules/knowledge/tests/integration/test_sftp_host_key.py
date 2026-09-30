@@ -43,7 +43,6 @@ def _rows(db: DbUrls, sql: str, *params: object) -> list[tuple[Any, ...]]:
 
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_host_key_pinned_on_confirmed_first_connect(
     db: DbUrls, knowledge_ws: WorkspaceHandle, sftp_server: SftpEndpoint
 ) -> None:
@@ -102,7 +101,6 @@ async def test_host_key_pinned_on_confirmed_first_connect(
 
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_changed_host_key_refused(
     db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, sftp_server: SftpEndpoint
 ) -> None:

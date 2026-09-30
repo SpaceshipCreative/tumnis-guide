@@ -39,7 +39,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_missing_marker_marks_offline_and_queues_writes(  # fixtures
     db: DbUrls,
     dbos: type[DBOS],
@@ -113,7 +112,6 @@ def _age(path: Path, seconds: int) -> None:
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_share_uses_scans_not_events(  # noqa: PLR0917  # fixtures
     db: DbUrls,
     dbos: type[DBOS],
