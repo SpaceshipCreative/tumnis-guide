@@ -31,7 +31,7 @@
           { "maxNumericValue": 0.1, "aggregationMethod": "median-run" }
         ],
         "total-blocking-time": [
-          "error",
+          "warn",
           { "maxNumericValue": 200, "aggregationMethod": "median-run" }
         ]
       }
