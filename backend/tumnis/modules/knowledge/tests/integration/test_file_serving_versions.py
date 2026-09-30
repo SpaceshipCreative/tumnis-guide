@@ -29,8 +29,9 @@ def _add_version(db: DbUrls, document_id: str, status: str) -> str:
     with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
         row = conn.execute(
             "INSERT INTO document_versions"
-            " (workspace_id, created_by, document_id, version_no, content_hash, size, status)"
-            " SELECT workspace_id, created_by, document_id, 2, content_hash, size, %s"
+            " (workspace_id, created_by, document_id, version_no, content_hash, size, status,"
+            " body_md)"  # NOT NULL: '' until extracted, as store.add_version writes it
+            " SELECT workspace_id, created_by, document_id, 2, content_hash, size, %s, ''"
             " FROM document_versions WHERE document_id = %s AND version_no = 1"
             " RETURNING id",
             (status, document_id),
