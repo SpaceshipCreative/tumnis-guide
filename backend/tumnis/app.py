@@ -138,24 +138,24 @@ def module_routers(name: str = "router") -> list[APIRouter]:
     return found
 
 
-def v1_routes(settings: Settings, extra_routers: Sequence[APIRouter] = ()) -> APIRouter:
-    """Everything under /v1: core's routers, every module's router and any extra ones
-    (tests); the test routes only with fakes."""
-    v1 = APIRouter(prefix="/v1")
-    v1.include_router(deadletter.router)
-    v1.include_router(audit_router.router)
-    v1.include_router(auth_router.settings_router)  # R-14
-    for router in module_routers("settings_router"):  # P1-10: /settings/working-hours
-        if router is not auth_router.settings_router:
-            v1.include_router(router)
-    v1.include_router(settings_router.router)  # P0-26: after the modules' own sections
-    for router in module_routers():
-        v1.include_router(router)
+def v1_routers(settings: Settings, extra_routers: Sequence[APIRouter] = ()) -> list[APIRouter]:
+    """Everything under /v1, in order: core's routers, every module's router and any extra
+    ones (tests); the test routes only with fakes. `create_app` includes each one under the
+    /v1 prefix itself: FastAPI (0.141) includes routers lazily, and a router included
+    without a prefix, as a /v1 router in the app was, has each of its routes built again
+    just to check its path, a quarter of a second per app."""
+    routers = [deadletter.router, audit_router.router, auth_router.settings_router]  # R-14
+    routers += [  # P1-10: /settings/working-hours
+        router
+        for router in module_routers("settings_router")
+        if router is not auth_router.settings_router
+    ]
+    routers.append(settings_router.router)  # P0-26: after the modules' own sections
+    routers += module_routers()
     if settings.tumnis_adapters == "fake":
-        v1.include_router(testing_routes.router)
-    for router in extra_routers:
-        v1.include_router(router)
-    return v1
+        routers.append(testing_routes.router)
+    routers += extra_routers
+    return routers
 
 
 def _document_problems(app: FastAPI) -> None:
@@ -261,7 +261,8 @@ def create_app(
         app.state.request_log = new_request_log()  # GET /v1/test/requests (A0.2)
     app.include_router(health.router)
     app.include_router(metrics.router)  # GET /metrics, bearer (P0-27)
-    app.include_router(v1_routes(settings, extra_routers))
+    for router in v1_routers(settings, extra_routers):
+        app.include_router(router, prefix="/v1")
     _mount_agent_doors(app, settings)
     shell = shell_dir or SHELL_DIR
     if shell.is_dir():
