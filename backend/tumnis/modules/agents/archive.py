@@ -58,8 +58,10 @@ def archive_message_id(archive_id: str) -> UUID:
     return uuid5(_ARCHIVE_NS, f"archive:{archive_id}")
 
 
-def restore_message_id(archive_id: str) -> UUID:
-    return uuid5(_ARCHIVE_NS, f"restore:{archive_id}")
+def restore_message_id(archive_id: str, workflow_id: str) -> UUID:
+    """One `restore` per unarchive attempt: a later attempt (after an earlier one's command
+    was withdrawn) queues a command of its own instead of meeting the withdrawn row."""
+    return uuid5(_ARCHIVE_NS, f"restore:{archive_id}:{workflow_id}")
 
 
 def purge_message_id(archive_id: str) -> UUID:
@@ -192,7 +194,7 @@ async def send_restore(workspace_id: UUID, project_id: UUID, workflow_id: str) -
             return None
         archive_id = str(facts["archive_id"])
         message = Restore(
-            message_id=restore_message_id(archive_id),
+            message_id=restore_message_id(archive_id, workflow_id),
             correlation_id=workflow_id,
             sent_at=SystemClock().now(),
             profile=facts["profile"],
@@ -291,14 +293,20 @@ async def purge_archive(workspace_id: UUID, project_id: UUID) -> None:
         await blobs.delete_blobs(s, module=MODULE, project_id=project_id)
 
 
-async def withdraw_command(workspace_id: UUID, command: str, archive_id: str) -> bool:
-    """Withdraw the `archive` or `restore` command of `archive_id` when its runner never
-    received it (still `queued`: the agent server has been offline all along), so the
-    workflow waiting for its answer can let the one `archive` queue slot go; True when
-    withdrawn. A command the runner has received stays: its answer is on the way."""
-    message_id = (
-        archive_message_id(archive_id) if command == "archive" else restore_message_id(archive_id)
-    )
+async def withdraw_command(
+    workspace_id: UUID, command: str, archive_id: str, workflow_id: str | None = None
+) -> bool:
+    """Withdraw the `archive` or `restore` command of `archive_id` (a `restore` is the one
+    `workflow_id` sent) when its runner never received it (still `queued`: the agent
+    server has been offline all along), so the workflow waiting for its answer can let the
+    one `archive` queue slot go; True when withdrawn. A command the runner has received
+    stays: its answer is on the way."""
+    if command == "archive":
+        message_id = archive_message_id(archive_id)
+    elif workflow_id is not None:
+        message_id = restore_message_id(archive_id, workflow_id)
+    else:
+        raise ValueError("withdrawing a restore needs the workflow that sent it")
     async with tenant_session(_ctx(workspace_id)) as s:
         withdrawn = await s.scalar(
             update(_messages)

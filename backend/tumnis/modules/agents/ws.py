@@ -729,12 +729,14 @@ class _RunnerSocket:
         `archive:<id>` or `restore:<id>`, and acked once the workflow has it. It counts only
         from the runner the command went to; from any other runner, or for no known command,
         it is acked and dropped. It also acks that command's row: the runner got it even if
-        its ack was lost."""
+        its ack was lost. A `restore` is one per unarchive attempt, found by the workflow id
+        the answer echoes as its correlation id."""
         if isinstance(message, ArchiveDone):
             command, message_id = "archive", archive_message_id(message.archive_id)
             topic = archive_topic(message.archive_id)
         else:
-            command, message_id = "restore", restore_message_id(message.archive_id)
+            command = "restore"
+            message_id = restore_message_id(message.archive_id, message.correlation_id)
             topic = restore_topic(message.archive_id)
         async with tenant_session(self.ctx) as s:
             payload = await s.scalar(

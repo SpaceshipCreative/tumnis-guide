@@ -48,3 +48,32 @@ async def test_withdraw_takes_back_only_a_command_never_received(
             b"SELECT message_id, deleted_at IS NOT NULL FROM runner_messages"
         ).fetchall()
     assert dict(rows) == {queued: True, sent: False}
+
+
+@pytest.mark.req("FR-5.10")
+@pytest.mark.wp("P2-18")
+async def test_each_unarchive_attempt_withdraws_only_its_own_restore(
+    app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls
+) -> None:
+    from tests.fakes.fake_runner import create_runner  # noqa: PLC0415
+    from tumnis.modules.agents import archive  # noqa: PLC0415
+
+    runner_id, _token = create_runner(workspace, clock, "homelab-hermes")
+    first, second = (archive.restore_message_id("a-1", w) for w in ("wf-1", "wf-2"))
+    assert first != second
+    with psycopg.connect(db.libpq(OWNER)) as conn:
+        for message_id in (first, second):
+            conn.execute(
+                b"INSERT INTO runner_messages (workspace_id, runner_id, message_id, direction,"
+                b" type, payload, status, created_by) VALUES (%s, %s, %s, 'out', 'restore',"
+                b" '{}'::jsonb, 'queued', 'system')",
+                (workspace.id, runner_id, message_id),
+            )
+
+    assert await archive.withdraw_command(workspace.id, "restore", "a-1", "wf-1") is True
+    with psycopg.connect(db.libpq(OWNER)) as conn:
+        rows = conn.execute(
+            b"SELECT message_id, deleted_at IS NOT NULL FROM runner_messages"
+        ).fetchall()
+    assert dict(rows) == {first: True, second: False}
+    assert await archive.withdraw_command(workspace.id, "restore", "a-1", "wf-2") is True
