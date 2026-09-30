@@ -38,7 +38,7 @@ function card(title: string): HTMLElement {
   return screen.getByRole("article", { name: new RegExp(title) });
 }
 
-test.fails(
+test(
   "[P1-13][UX 7] T-P1-13-12 keyboard primary edit reject snooze open",
   async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -126,7 +126,7 @@ test.fails(
   },
 );
 
-test.fails("[P1-13][FR-1.4] T-P1-13-13 badge follows ws updates", async () => {
+test("[P1-13][FR-1.4] T-P1-13-13 badge follows ws updates", async () => {
   vi.stubGlobal("WebSocket", FakeSocket);
   const queue = reviewQueue([item("Task A"), item("Task B")], 2);
   server.use(
@@ -158,7 +158,7 @@ test.fails("[P1-13][FR-1.4] T-P1-13-13 badge follows ws updates", async () => {
   }
 });
 
-test.fails("[P1-13][UX 11] T-P1-13-14 phone layout", async () => {
+test("[P1-13][UX 11] T-P1-13-14 phone layout", async () => {
   const later = item("Estimate check", {
     kind: "estimate_outlier",
     payload: {

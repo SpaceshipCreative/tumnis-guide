@@ -1,9 +1,10 @@
-// The review queue (P0-22 route; the screen arrives with P1-13). `kind` is a string
-// checked against the registry (R-05), not a closed enum: an unknown kind is dropped.
+// The review queue (P0-22 route, P1-13 screen). `kind` is a string checked against the
+// registry (R-05), not a closed enum: an unknown kind is dropped. `item` names the item
+// that takes focus first.
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import * as z from "zod";
 
-import { Placeholder } from "../components/pages/Placeholder";
+import { ReviewQueue } from "../components/review/ReviewQueue";
 import { reviewKindsOptions } from "../lib/review-kinds";
 
 export const reviewSearch = z.object({
@@ -33,5 +34,6 @@ export const Route = createFileRoute("/review")({
 });
 
 function ReviewPage() {
-  return <Placeholder title="Review" />;
+  const { kind, item } = Route.useSearch();
+  return <ReviewQueue key={kind ?? ""} kind={kind} item={item} />;
 }
