@@ -51,8 +51,10 @@ export function badge(tone: BadgeTone): string {
   return `inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${BADGE_TONE[tone]}`;
 }
 
-/** Tables: a muted header row, rows divided by the border colour. */
-export const TABLE = "w-full text-left text-sm";
+/** Tables: a muted header row, rows divided by the border colour. `relative` makes the
+ * table the containing block of its `sr-only` labels, so inside a sideways-scrolling
+ * wrapper they are clipped with it and never widen the page on the phone. */
+export const TABLE = "relative w-full text-left text-sm";
 export const TABLE_HEAD =
   "bg-surface-muted text-xs font-semibold tracking-wide text-muted uppercase";
 export const TABLE_HEADER_CELL = "px-3 py-2 whitespace-nowrap";
