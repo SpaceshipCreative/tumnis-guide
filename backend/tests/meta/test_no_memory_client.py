@@ -25,7 +25,6 @@ HINDSIGHT = re.compile(r"hindsight", re.IGNORECASE)
 
 @pytest.mark.req("FR-13.5")
 @pytest.mark.wp("P2-03")
-@pytest.mark.xfail(strict=True, reason="spec:P2-03")
 def test_no_hindsight_dependency_or_import(tmp_path: Path) -> None:
     """T-P2-03-10
     `uv.lock` has no package whose name matches `hindsight*`; `.importlinter` has the
