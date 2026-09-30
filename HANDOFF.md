@@ -1,4 +1,61 @@
-# HANDOFF: P2-08 (Taint propagation), continuation c1 next
+# HANDOFF: P2-08 (Taint propagation), continuation c2 next
+
+## c1 status (read first; the c0 notes below are kept for history)
+
+- **PR #114 is open** (https://github.com/SpaceshipCreative/tumnis-guide/pull/114), body from
+  `/tmp/claude-1002/P2-08-c1/pr-body.md` (T-01, T-04..07 rows say "pending CI"; update them with
+  `gh pr edit 114 --body-file …` once CI shows them). `@coderabbitai review` requested ONCE at
+  open; CodeRabbit was still "processing" at handoff (no review, no threads yet). Don't request
+  another full review unless it never arrives (pr-review-loop: re-ask after 10 min).
+- main merged at 74e5866 (#110, #108); `make gen` produced no drift. No A2.x test belongs to P2-08.
+- c1 commits (pushed, head 9ed5189 before this handoff commit):
+  - 8922057 `test(tasks): a taint raise keeps the task version (red)`:
+    `tasks/tests/integration/test_taint_version.py` (new test, not a spec test).
+  - 67bca52 `fix(tasks): … (tasks_0007)`: migration `tasks/migrations/0007_taint_keeps_version.py`,
+    revision `tasks_0007`, down `tasks_0006`. `tasks_touch` gets
+    `WHEN (NOT (OLD.tainted IS DISTINCT FROM NEW.tainted AND to_jsonb(OLD) - 'tainted' =
+    to_jsonb(NEW) - 'tainted'))`; downgrade restores `TOUCH_SQL`. Verified on pgvector:pg18 by
+    hand: taint-only UPDATE keeps version; any other or no-op UPDATE bumps. Fixes locked
+    T-P0-18-11 (test_board). P2-04 and P1-08 also have tasks_0007: whoever merges later re-chains.
+  - 9ed5189 `test(tasks): the taint run helper answers each run once`: ROOT CAUSE of the
+    `run_of` 60 s timeouts: `tests/_taint.py::Runs.setup` scripted the fake runner with
+    `repeat=10_000`, and `repeat` sends the SAME result 10,000 times inline in the runner's reader
+    thread, so a second run's message waited past 60 s (sweep T-07 has one run, so it passed).
+    Now `script(PROFILE, SKILL, {"summary": "Done"})` (a script already serves every run).
+- CI: the red push's integration job hit its 10-min limit (cancelled; the hang above). The fix
+  push (run 36784866876) was pending at handoff. NEXT: read `gh pr checks 114`; for failures
+  `gh run view <id> --log-failed` (job logs need `--allow-escape-sequences` and allowed domain
+  productionresultssa1.blob.core.windows.net). T-01/T-04/T-05/T-06 + test_comment_taint +
+  test_proposal_taint + test_taint_version + test_board must be green in CI (coordinator's rule
+  breach repair: never edit assertions, never re-add markers; fix product/harness code). If T-01
+  is too slow for the 10-min integration budget, lower `MAX_RUNS`, never `max_examples`.
+- **CI on 9ed5189 (run 36784866876), integration: 2 failed, 1179 passed, 21 xfailed in 6m46s.**
+  So T-01, T-05, T-06, T-07, test_comment_taint, test_taint_version and the locked test_board
+  PASSED in CI (the fixes worked). The 2 failures are a HARNESS bug, not env:
+  `test_taint_links.py::test_linking_tainted_item_taints_task_and_unlinking_keeps_it` (T-04) and
+  `test_proposal_taint.py::test_proposal_taint_is_the_or_of_its_items`, both at
+  `make_world(workspace, clock)`: `FATAL: database "t_…" does not exist`. They request only
+  `workspace, clock, db` (no `app`/`dbos`), so `tumnis.core.db`'s engine still points at an
+  earlier test's dropped database (`workspace` doesn't call `core_db.configure`; `dbos`, `app`,
+  `seed` do, tests/fixtures/__init__.py ~404/453/1061). c0 saw the same locally. Fix in the
+  harness, NOT the test signature (adding a fixture to a spec test is a spec change, cf. Scott
+  decision 29): e.g. have the `workspace` fixture (tests/fixtures/__init__.py:234) call
+  `core_db.configure(app_url=db.app, direct_url=db.app, pooled=False)` like `dbos` does, or an
+  autouse fixture in the tasks/integrations integration conftests. Check how
+  `tasks/tests/conftest.py` fixtures (make_task etc.) get a configured engine, and mirror it.
+  Commit as `test(core)`/`fix(tests)`, push, confirm green in CI.
+- CodeRabbit posted its first review at handoff (not yet read): read inline comments, review
+  body (outside-diff/nitpicks) and `reviewThreads`, fix or reply+resolve each.
+- Then: CodeRabbit loop (pr-review-loop.md), fill the PR body results, delete HANDOFF.md in a
+  `chore` commit, push, SendMessage main "#114 MERGE-READY at <sha>".
+- Local tooling: `bash /tmp/claude-1002/P2-08-c1/check.sh` runs `make check` with semgrep's
+  files under the scratch folder (last run green, 1531 unit passed). No local `make test-int` was
+  used in c1 (one allowed).
+- Scott items added in c1: deviation 8 (a taint raise changes neither `version` nor
+  `updated_at`; it still emits `task.updated` and marks the row changed). Already in the PR body.
+
+---
+
 
 Branch `wp/P2-08` (pushed to `origin/wp/P2-08` with this commit). Based on main at 5f1e1b3 (#105).
 **No PR is open yet.** No CodeRabbit review, no CI run. Scratch folder: `$TMPDIR/P2-08-c1/`
