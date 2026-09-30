@@ -35,7 +35,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test.fails(
+test(
   "[P1-07][FR-3.3] T-P1-07-10 pending then confirmed via ws",
   async () => {
     const pending = taskJson({
@@ -88,7 +88,7 @@ test.fails(
   },
 );
 
-test.fails(
+test(
   "[P1-07][UX 2] T-P1-07-11 suggested label shows as suggestion",
   async () => {
     const task = taskJson({
@@ -111,7 +111,7 @@ test.fails(
   },
 );
 
-test.fails(
+test(
   "[P1-07][FR-4.2] T-P1-07-12 one click override sends one PATCH",
   async () => {
     const task = taskJson({
@@ -189,7 +189,7 @@ test.fails(
   },
 );
 
-test.fails(
+test(
   "[P1-07][UX 9] T-P1-07-13 AI label can be undone for the session",
   async () => {
     const changeId = crypto.randomUUID();
