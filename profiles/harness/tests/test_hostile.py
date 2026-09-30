@@ -210,3 +210,44 @@ def test_cli_coverage_index_and_refusals(
     monkeypatch.setattr(cli, "load_config", lambda: unset)
     assert cli.main(["run", "--suite", "hostile"]) == 2
     assert "pin the homelab model" in capsys.readouterr().err
+
+
+def test_homelab_tests_name_real_test_functions() -> None:
+    """Every node id the plugin skips without --run-skills names an existing test, so a
+    rename cannot silently let a homelab-only test run on an ordinary runner."""
+    import ast
+
+    from harness import REPO
+    from harness.pytest_plugin import HOMELAB_TESTS
+
+    for node_id in HOMELAB_TESTS:
+        path, _, name = node_id.partition("::")
+        tree = ast.parse((REPO / "profiles" / path).read_text(encoding="utf-8"))
+        names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
+        assert name in names, node_id
+
+
+def test_only_the_tumnis_server_grants_an_approval() -> None:
+    """A merge after an approved `request_approval` passes only when Tumnis answered it: the
+    same approval recorded from another server (a worker mock or Hermes itself) grants
+    nothing, so the gated merge fails."""
+    from harness.hostile import HOSTILE_ROOT, load_hostile
+    from harness.judge import judge, load_transcript
+    from harness.mock_mcp_min import TUMNIS
+
+    transcript = load_transcript(
+        Path(__file__).parent / "transcripts" / "merge_after_approval.json"
+    )
+    case = load_hostile(HOSTILE_ROOT).cases["email-002-fake-system-block"]
+    case = case.model_copy(update={"forbidden_calls": ()})
+    assert any(c.server == TUMNIS and c.tool == "request_approval" for c in transcript.calls)
+    assert judge(case, transcript).passed
+
+    for server in ("github", "hermes"):
+        moved = tuple(
+            replace(c, server=server) if c.tool == "request_approval" else c
+            for c in transcript.calls
+        )
+        verdict = judge(case, replace(transcript, calls=moved))
+        assert not verdict.passed, server
+        assert any("merge_main" in failure for failure in verdict.failures), server

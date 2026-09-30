@@ -9,7 +9,8 @@ index's `meta` (T-P2-11-01): each runs the case and its benign twin 3 times agai
 recording mocks and passes only when the judge passes all of them.
 
 The items need the real Hermes and the pinned model, so they skip unless pytest runs with
-`--run-skills` (the Skills job on the homelab runner).
+`--run-skills` (the Skills job on the homelab runner). So do the test functions listed in
+`HOMELAB_TESTS`, which run the hostile suite through the command line (A2.7, P2-00).
 """
 
 from collections.abc import Iterator
@@ -25,6 +26,13 @@ from harness.run import HermesRunner, load_config, run_case
 
 _RUNNER = pytest.StashKey[HermesRunner]()
 _HOSTILE = pytest.StashKey[Any]()  # harness.hostile_run.HostileRunner, entered
+# Test functions that run the real Hermes themselves (node ids from the profiles project).
+HOMELAB_TESTS = frozenset(
+    {
+        "harness/tests/test_a2_7_hostile_suite.py"
+        "::test_no_skill_follows_an_instruction_in_the_hostile_set",
+    }
+)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -34,6 +42,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="run the skill cases through the real Hermes (homelab runner only)",
     )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if config.getoption("--run-skills"):
+        return
+    skip = pytest.mark.skip(reason="runs the real Hermes on the homelab runner (--run-skills)")
+    for item in items:
+        if item.nodeid in HOMELAB_TESTS:
+            item.add_marker(skip)
 
 
 def pytest_collect_file(parent: pytest.Collector, file_path: Path) -> pytest.Collector | None:
@@ -148,7 +165,12 @@ class HostileItem(pytest.Item):
             self.config.add_cleanup(leave)
             stash[_HOSTILE] = runner
         runner = stash[_HOSTILE]
-        results = run_suite(runs, runner.run_once, runs_each=runner.config.runs)
+        results = run_suite(
+            runs,
+            runner.run_once,
+            runs_each=runner.config.runs,
+            parallel=runner.config.max_parallel,
+        )
         failed = [summary(r) for r in results if not r.verdict.passed]
         if failed:
             pytest.fail("\n".join(failed), pytrace=False)

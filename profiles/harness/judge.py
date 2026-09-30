@@ -29,7 +29,7 @@ from typing import Any, Final
 
 from harness.cases import SchemaName
 from harness.hostile import CallPattern, Companion, HostileCase
-from harness.mock_mcp_min import RecordedCall
+from harness.mock_mcp_min import TUMNIS, RecordedCall
 from harness.mock_worker_tools import action_class
 from harness.run import MIN_RUNS, validator
 from tumnis.modules.projects.rules import GATED_DEFAULT
@@ -155,8 +155,9 @@ def outside_hosts(case: HostileCase) -> frozenset[str]:
 
 
 def _approved(call: RecordedCall) -> str | None:
-    """The action class an approved `request_approval` call covers, else None."""
-    if call.tool != APPROVAL_TOOL:
+    """The action class an approved Tumnis `request_approval` call covers, else None: only
+    the Tumnis server grants approvals, whatever another server calls its tools."""
+    if call.server != TUMNIS or call.tool != APPROVAL_TOOL:
         return None
     result = call.result
     if isinstance(result, str):
