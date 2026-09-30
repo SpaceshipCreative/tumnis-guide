@@ -13,8 +13,10 @@
 // `page` keeps the server clock with the browser's (issue #6): when a test fixes
 // the page's time (`page.clock.install({ time })`, `setFixedTime`,
 // `setSystemTime`), the same instant goes to `POST /v1/test/clock` (fakes only),
-// so TOTP checks and "today" on the server match the page. The override lasts
-// until the next reset; the fixture clears it after a test that set it.
+// so TOTP checks and "today" on the server match the page. While the page's time
+// flows (`install`, `setSystemTime`), the server clock moves on with it each
+// second (`advance_seconds`). The override lasts until the next reset; the
+// fixture clears it after a test that set it.
 //
 // Below the fixtures are helpers the acceptance specs share. Helpers hold no
 // assertions: they locate things and read the API, so the work packages that
@@ -75,34 +77,90 @@ export async function setServerClock(
   }
 }
 
-/** Wraps the page clock's instant-setting calls so the server clock follows. */
+const FOLLOW_MS = 1_000;
+
+/** `POST /v1/test/clock` with `advance_seconds`: moves the fixed server clock on. */
+async function advanceServerClock(
+  request: APIRequestContext,
+  seconds: number,
+): Promise<void> {
+  await request.post("/v1/test/clock", { data: { advance_seconds: seconds } });
+}
+
+interface PageClockFollower {
+  /** Whether this test fixed the server clock (the fixture resets after it). */
+  synced(): boolean;
+  /** Stops moving the server clock on (before the fixture's reset). */
+  stop(): Promise<void>;
+}
+
+/**
+ * Wraps the page clock's instant-setting calls so the server clock follows. Playwright's
+ * `install({ time })` and `setSystemTime` leave the page's time flowing from that instant,
+ * so the server clock flows with it: every second it moves on by the real time that passed.
+ * Otherwise the server stands still for the whole test, and time-based state such as the
+ * per-principal rate limit (P0-10: burst 50, refilled per second of server time) never
+ * refills; a long journey like A0.1 ran out. `setFixedTime` and `pauseAt` stop the page
+ * clock, and the server clock stays at their instant.
+ */
 function followPageClock(
   page: Page,
   request: APIRequestContext,
-): () => boolean {
+): PageClockFollower {
   const clock = page.clock;
   let synced = false;
-  const sync = async (time: ClockTime | undefined): Promise<void> => {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let moving: Promise<void> = Promise.resolve();
+  let last = 0;
+
+  const stop = async (): Promise<void> => {
+    if (timer !== undefined) clearInterval(timer);
+    timer = undefined;
+    await moving;
+  };
+  const flow = (): void => {
+    last = performance.now();
+    timer ??= setInterval(() => {
+      const now = performance.now();
+      const seconds = (now - last) / 1_000;
+      last = now;
+      // One advance at a time; a failed one (the stack resetting) is not the test's.
+      moving = moving
+        .then(() => advanceServerClock(request, seconds))
+        .catch(() => undefined);
+    }, FOLLOW_MS);
+  };
+  const sync = async (
+    time: ClockTime | undefined,
+    flowing: boolean,
+  ): Promise<void> => {
     if (time === undefined) return;
+    await stop();
     await setServerClock(request, time);
     synced = true;
+    if (flowing) flow();
   };
   const install = clock.install.bind(clock);
   clock.install = async (options) => {
     await install(options);
-    await sync(options?.time);
+    await sync(options?.time, true);
   };
   const setFixedTime = clock.setFixedTime.bind(clock);
   clock.setFixedTime = async (time) => {
     await setFixedTime(time);
-    await sync(time);
+    await sync(time, false);
   };
   const setSystemTime = clock.setSystemTime.bind(clock);
   clock.setSystemTime = async (time) => {
     await setSystemTime(time);
-    await sync(time);
+    await sync(time, timer !== undefined);
   };
-  return () => synced;
+  const pauseAt = clock.pauseAt.bind(clock);
+  clock.pauseAt = async (time) => {
+    await pauseAt(time);
+    await sync(time, false);
+  };
+  return { synced: () => synced, stop };
 }
 
 const RESET_ATTEMPTS = 3;
@@ -132,10 +190,11 @@ async function postReset(
 
 export const test = base.extend<E2EFixtures>({
   page: async ({ page, request }, use) => {
-    const synced = followPageClock(page, request);
+    const follower = followPageClock(page, request);
     await use(page);
+    await follower.stop();
     // The next test starts on the real clock even if it never resets the stack.
-    if (synced()) await request.post("/v1/test/reset");
+    if (follower.synced()) await request.post("/v1/test/reset");
   },
   seededApp: async ({ baseURL, request }, use) => {
     // Mounted only with fake adapters (compose.test and previews).
