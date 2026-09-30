@@ -20,7 +20,7 @@ because `git branch -m` was refused (read-only .git/config). Always push with
 ## Spec tests
 
 - Green, marker removed: T-02, T-03, T-04, T-06, T-07 (profiles/harness/tests), plus the non-spec tests `test_pdf_cases_are_reproducible_and_hide_their_text` and `test_worker_mocks_record_calls_and_map_action_classes`.
-- T-P2-11-05 (`backend/tests/integration/test_hostile_packets.py`): marker removed, never run. A `make test-int` was started in the background, but its result is unknown (the output file was empty at handoff). **First step: run `make test-int` (bare, from the worktree root), or push and read CI's `integration` job.** If it fails, fix `backend/tests/_hostile.py` (the injection plumbing), never the test's assertions. Things that might go wrong:
+- T-P2-11-05 (`backend/tests/integration/test_hostile_packets.py`): marker removed, never run. The background `make test-int` finished after the handoff with most integration tests ERRORing at setup. The cause was Docker API 500s when starting containers on the loaded VM, across every module, so it was environmental and says nothing about T-05. **First step: run `make test-int` (bare, from the worktree root), or push and read CI's `integration` job.** If it fails, fix `backend/tests/_hostile.py` (the injection plumbing), never the test's assertions. Things that might go wrong:
   - an ingest step normalizes the invisible tag characters (case 5), so the containment check fails;
   - `link_context` `added_by="user"`;
   - `make_world` needs the db configured (`_integrations.configured(db)` is used).
