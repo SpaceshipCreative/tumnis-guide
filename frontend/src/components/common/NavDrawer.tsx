@@ -4,40 +4,17 @@
 // button or a link close it and give focus back to the menu button. On a laptop the
 // sidebar shows instead, so a drawer left open closes.
 import { useSelector } from "@xstate/store-react";
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef } from "react";
 
+import { dialogKeyDown } from "../../lib/focusTrap";
 import { useIsLaptop } from "../../lib/media";
 import { uiStore } from "../../stores/uiStore";
 import { MENU_BUTTON_ID } from "./AppHeader";
 import { BrandMark, Icon } from "./icons";
 import { NavGroups } from "./NavGroups";
 
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 function close(): void {
   uiStore.trigger.setNavOpen({ open: false });
-}
-
-/** Keeps Tab and Shift+Tab inside `root`, wrapping at either end. */
-function trapTab(event: KeyboardEvent<HTMLElement>): void {
-  const root = event.currentTarget;
-  const items = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE));
-  const first = items[0];
-  const last = items.at(-1);
-  if (!first || !last) {
-    event.preventDefault();
-    return;
-  }
-  const active = document.activeElement;
-  const inside = active instanceof Node && root.contains(active);
-  if (event.shiftKey && (!inside || active === first)) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && (!inside || active === last)) {
-    event.preventDefault();
-    first.focus();
-  }
 }
 
 function Panel() {
@@ -62,12 +39,7 @@ function Panel() {
         aria-modal="true"
         aria-label="Menu"
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            close();
-          } else if (event.key === "Tab") {
-            trapTab(event);
-          }
+          dialogKeyDown(event, close);
         }}
         className="absolute inset-y-0 left-0 flex w-72 animate-slide-in max-w-[85vw] flex-col overflow-y-auto bg-surface px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl"
       >
