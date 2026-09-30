@@ -102,9 +102,7 @@ class DigestMachine(RuleBasedStateMachine):
         session = self.writers[w]
         if session is None:
             return
-        from tumnis.modules.agents.api import (  # type: ignore[attr-defined]  # noqa: PLC0415
-            append_entry,
-        )
+        from tumnis.modules.agents.api import append_entry  # noqa: PLC0415
         from tumnis.modules.agents.rules import EntrySpec  # noqa: PLC0415
 
         event_id = uuid.uuid4()

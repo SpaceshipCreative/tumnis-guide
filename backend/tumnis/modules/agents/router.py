@@ -1,4 +1,5 @@
-"""agents REST (P1-04, FR-5.1, FR-5.9): runners and agent profiles, session only (admin).
+"""agents REST (P1-04, FR-5.1, FR-5.9): runners and agent profiles, session only (admin);
+and the digests' twins (P2-03), for a session or a key with `tasks:read`.
 
 `/v1/runners` and `/v1/agents/profiles` (not under one module prefix: the plan's paths).
 Creating a runner and rotating its token answer the device token once; an idempotent
@@ -8,8 +9,9 @@ replay answers without it (`redact_on_replay`).
 from typing import Annotated, Final
 from uuid import UUID
 
-from fastapi import Depends, Request
+from fastapi import Depends, Query, Request
 
+from tumnis.core import agent_surface as surface
 from tumnis.core.audit_router import require_session
 from tumnis.core.clock import Clock
 from tumnis.core.idempotency import SessionDep
@@ -17,6 +19,7 @@ from tumnis.core.pagination import Page, PageParams, page_params
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.modules.agents import api
+from tumnis.modules.agents import mcp as tools
 
 router = v1_router("agents", tags=["agents"])
 
@@ -114,3 +117,57 @@ async def check_profile_health(
     return await api.request_health_check(
         ctx, session, id, now=_clock(request).now(), client=hub.client()
     )
+
+
+# --- Digests (P2-03): the get_project_digest and get_workspace_digest tools' twins ----------
+
+DIGEST_READ = frozenset({"tasks:read"})
+Since = Annotated[
+    str | None,
+    Query(max_length=512, description="The previous answer's `next_cursor`; acknowledges it"),
+]
+Limit = Annotated[int, Query(ge=1, le=1000)]
+
+
+@router.get("/digests/project/{project_id}")
+@route_policy(
+    RoutePolicy(auth="session_or_key", scopes=DIGEST_READ, project_param="path:project_id")
+)
+async def get_project_digest(
+    project_id: UUID,
+    request: Request,
+    session: SessionDep,
+    *,
+    since: Since = None,
+    limit: Limit = tools.DEFAULT_LIMIT,
+    schema_version: Annotated[int | None, Query()] = None,
+) -> api.DigestOut:
+    """What changed in the project since the caller's last acknowledged digest (the
+    `get_project_digest` tool's twin); 400 `invalid_cursor` for a cursor issued to another
+    caller or digest."""
+    raw = {
+        "project_id": project_id,
+        "since": since,
+        "limit": limit,
+        "schema_version": schema_version,
+    }
+    found = await surface.rest_twin(request, session, tools.GET_PROJECT_DIGEST, raw)
+    assert isinstance(found, api.DigestOut)  # noqa: S101  # the op's output model
+    return found
+
+
+@router.get("/digests/workspace")
+@route_policy(RoutePolicy(auth="session_or_key", scopes=DIGEST_READ))
+async def get_workspace_digest(
+    request: Request,
+    session: SessionDep,
+    since: Since = None,
+    limit: Limit = tools.DEFAULT_LIMIT,
+    schema_version: Annotated[int | None, Query()] = None,
+) -> api.DigestOut:
+    """The workspace-wide signals since the caller's last acknowledged digest (the
+    `get_workspace_digest` tool's twin)."""
+    raw = {"since": since, "limit": limit, "schema_version": schema_version}
+    found = await surface.rest_twin(request, session, tools.GET_WORKSPACE_DIGEST, raw)
+    assert isinstance(found, api.DigestOut)  # noqa: S101  # the op's output model
+    return found

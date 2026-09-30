@@ -19,7 +19,9 @@ from tumnis.modules.github import api as github
 from tumnis.modules.tasks import api
 from tumnis.modules.tasks.payloads import (
     DOC_BODY_MAX_BYTES,
+    ContextItemLinkedV1,
     HumanDecidedV1,
+    TaskCommentedV1,
     TaskCreatedV1,
     TaskDoc,
     TaskStatusChangedV1,
@@ -28,7 +30,9 @@ from tumnis.modules.tasks.payloads import (
 
 __all__ = [
     "DOC_BODY_MAX_BYTES",
+    "ContextItemLinkedV1",
     "HumanDecidedV1",
+    "TaskCommentedV1",
     "TaskCreatedV1",
     "TaskDoc",
     "TaskStatusChangedV1",

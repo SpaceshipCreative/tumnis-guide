@@ -582,6 +582,57 @@ async def get_context_item_ref(
     return None if row is None else ContextItemOut.model_validate(row._mapping)
 
 
+class ContextItemText(BaseModel):
+    """A context item's full text as it is now (P2-03: the digest joins it at read time,
+    so a later provider edit shows). `attrs` are short facts for the untrusted block's open
+    tag (who sent a message). Targets owned by another module (event, document) carry only
+    what the context item itself holds."""
+
+    context_item_id: UUID
+    target_type: TargetType
+    title: str | None
+    text: str
+    tainted: bool
+    attrs: dict[str, str] = Field(default_factory=dict)
+
+
+async def context_item_text(
+    ctx: WorkspaceContext, context_item_id: UUID, *, session: AsyncSession | None = None
+) -> ContextItemText | None:
+    """The live context item's target text (message: subject and body; note: title and
+    body; artifact: kind, state and URL; url: the URL), or None when the item is gone."""
+    async with session_for(ctx, session) as s:
+        item = await get_context_item_ref(ctx, context_item_id, session=s)
+        if item is None:
+            return None
+        title: str | None = None
+        text = item.target_url or ""
+        attrs: dict[str, str] = {}
+        table = _TABLES.get(item.target_type)
+        row = None
+        if table is not None and item.target_id is not None:
+            row = (await s.execute(select(table).where(table.c.id == item.target_id))).first()
+        if row is not None:
+            found = row._mapping
+            if item.target_type == "message":
+                title = found["subject"]
+                text = found["body_text"] or found["body_html_sanitized"] or ""
+                attrs = {"from": found["from_addr"]} if found["from_addr"] else {}
+            elif item.target_type == "note":
+                title, text = found["title"], found["body_text"] or ""
+            elif item.target_type == "artifact":
+                title = found["kind"]
+                text = " ".join(str(v) for v in (found["state"], found["url"]) if v)
+    return ContextItemText(
+        context_item_id=item.id,
+        target_type=item.target_type,
+        title=title,
+        text=text,
+        tainted=item.tainted,
+        attrs=attrs,
+    )
+
+
 async def _target_taint(s: AsyncSession, target_type: str, target_id: UUID) -> bool:
     if target_type in _TABLES:
         table = _TABLES[target_type]

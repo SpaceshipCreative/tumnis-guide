@@ -318,7 +318,6 @@ async def test_cursor_from_other_consumer_rejected(
 
 @pytest.mark.req("FR-13.1")
 @pytest.mark.wp("P2-03")
-@pytest.mark.xfail(strict=True, reason="spec:P2-03")
 async def test_duplicate_event_delivery_one_entry(
     db: DbUrls,
     workspace: WorkspaceHandle,

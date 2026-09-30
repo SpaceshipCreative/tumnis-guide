@@ -686,3 +686,53 @@ def classify_event(event: DigestEvent) -> list[EntrySpec]:  # noqa: PLR0911
             return [EntrySpec("focus_setting_changed", "workspace", None, None, data)]
         case _:
             return []
+
+
+# --- Untrusted blocks (P2-02's rendering; the digest uses it first, P2-03) ------------------
+#
+# Outside text reaches an agent only inside a block it cannot close: after escaping it holds
+# no literal `<` or `>` (nor a bracket that looks like one, nor an invisible control), and
+# the block's id carries a nonce, so a closing tag forged in a later block cannot match.
+
+CONFUSABLE_BRACKETS: Final = frozenset("＜＞﹤﹥‹›⟨⟩〈〉˂˃ᐸᐳ❮❯〈〉")  # noqa: RUF001
+INVISIBLE_CONTROLS: Final = frozenset(
+    {chr(c) for c in range(0xE0000, 0xE0080)}  # Unicode tag characters
+    | {chr(c) for c in (*range(0x202A, 0x202F), *range(0x2066, 0x206A))}  # bidi controls
+)
+
+
+def escape_untrusted(text: str) -> str:
+    """Order matters: '&' first, so an entity in the input stays literal text."""
+    text = (
+        text.replace("\r\n", "\n").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    )
+    return "".join(
+        f"&#x{ord(ch):X};" if ch in CONFUSABLE_BRACKETS or ch in INVISIBLE_CONTROLS else ch
+        for ch in text
+    )
+
+
+def escape_attr(value: str, limit: int = 200) -> str:
+    return escape_untrusted(value[:limit]).replace('"', "&quot;").replace("\n", " ")
+
+
+def render_block(
+    text: str,
+    *,
+    nonce: str,
+    source: str,
+    item: str | None,
+    attrs: Mapping[str, str],
+    trusted: bool,
+) -> str:
+    """Trusted text as is; anything else as an untrusted block
+    `<untrusted-data id="u-<nonce>" source=... item=... k=v...>` ... `</untrusted-data
+    id="u-<nonce>">`, its content escaped."""
+    if trusted:
+        return text
+    head = " ".join(
+        [f'id="{nonce}"', f'source="{escape_attr(source)}"']
+        + ([f'item="{escape_attr(item)}"'] if item else [])
+        + [f'{k}="{escape_attr(v)}"' for k, v in sorted(attrs.items())]
+    )
+    return f'<untrusted-data {head}>\n{escape_untrusted(text)}\n</untrusted-data id="{nonce}">'

@@ -1,0 +1,47 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/task.commented.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A comment on a task (P2-03: the digest carries it). `author` is the ActorRef that\nwrote it (`user:<id>` for a person); the text is the comment's Markdown.",
+  "properties": {
+    "author": {
+      "title": "Author",
+      "type": "string"
+    },
+    "comment_id": {
+      "format": "uuid",
+      "title": "Comment Id",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task_id": {
+      "format": "uuid",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "task_id",
+    "project_id",
+    "comment_id",
+    "author",
+    "text"
+  ],
+  "title": "TaskCommentedV1",
+  "type": "object"
+}

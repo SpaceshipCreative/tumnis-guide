@@ -31,6 +31,12 @@ CASES = [
     ),
     (
         "events",
+        "context_item.linked",
+        1,
+        "backend/tests/contract/fixtures/events/context_item.linked/v1.json",
+    ),
+    (
+        "events",
         "decision.made",
         1,
         "backend/tests/contract/fixtures/events/decision.made/v1.json",
@@ -82,6 +88,12 @@ CASES = [
         "project.updated",
         1,
         "backend/tests/contract/fixtures/events/project.updated/v1.json",
+    ),
+    (
+        "events",
+        "task.commented",
+        1,
+        "backend/tests/contract/fixtures/events/task.commented/v1.json",
     ),
     (
         "events",
