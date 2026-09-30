@@ -768,6 +768,20 @@ export type HealthCheckAccepted = {
 };
 
 /**
+ * HostKeyIn
+ */
+export type HostKeyIn = {
+  /**
+   * Reason
+   */
+  reason?: string | null;
+  /**
+   * Sha256
+   */
+  sha256: string;
+};
+
+/**
  * KeyCreated
  */
 export type KeyCreated = {
@@ -5793,6 +5807,66 @@ export type KnowledgeSetDefaultLocationResponses = {
 
 export type KnowledgeSetDefaultLocationResponse =
   KnowledgeSetDefaultLocationResponses[keyof KnowledgeSetDefaultLocationResponses];
+
+export type KnowledgeConfirmHostKeyData = {
+  body: HostKeyIn;
+  path: {
+    /**
+     * Storage Location Id
+     */
+    storage_location_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/locations/{storage_location_id}/host-key";
+};
+
+export type KnowledgeConfirmHostKeyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeConfirmHostKeyError =
+  KnowledgeConfirmHostKeyErrors[keyof KnowledgeConfirmHostKeyErrors];
+
+export type KnowledgeConfirmHostKeyResponses = {
+  /**
+   * Successful Response
+   */
+  200: LocationOut;
+};
+
+export type KnowledgeConfirmHostKeyResponse =
+  KnowledgeConfirmHostKeyResponses[keyof KnowledgeConfirmHostKeyResponses];
 
 export type KnowledgeTestLocationData = {
   body?: never;

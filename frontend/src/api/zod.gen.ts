@@ -270,6 +270,14 @@ export const zHealthCheckAccepted = z.object({
 });
 
 /**
+ * HostKeyIn
+ */
+export const zHostKeyIn = z.object({
+  reason: z.string().max(500).nullish(),
+  sha256: z.string().min(1).max(200),
+});
+
+/**
  * KeyCreated
  */
 export const zKeyCreated = z.object({
@@ -1969,6 +1977,17 @@ export const zKnowledgeSetDefaultLocationPath = z.object({
  * Successful Response
  */
 export const zKnowledgeSetDefaultLocationResponse = zLocationOut;
+
+export const zKnowledgeConfirmHostKeyBody = zHostKeyIn;
+
+export const zKnowledgeConfirmHostKeyPath = z.object({
+  storage_location_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeConfirmHostKeyResponse = zLocationOut;
 
 export const zKnowledgeTestLocationPath = z.object({
   storage_location_id: z.uuid(),

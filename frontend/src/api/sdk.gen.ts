@@ -122,6 +122,9 @@ import type {
   HealthReadyData,
   HealthReadyErrors,
   HealthReadyResponses,
+  KnowledgeConfirmHostKeyData,
+  KnowledgeConfirmHostKeyErrors,
+  KnowledgeConfirmHostKeyResponses,
   KnowledgeCreateLocationData,
   KnowledgeCreateLocationErrors,
   KnowledgeCreateLocationResponses,
@@ -333,6 +336,7 @@ import {
   zDeadLettersPostRetryResponse,
   zGithubWebhookResponse,
   zHealthLiveResponse,
+  zKnowledgeConfirmHostKeyResponse,
   zKnowledgeCreateLocationResponse,
   zKnowledgeGetBriefResponse,
   zKnowledgeGetDocumentResponse,
@@ -1277,6 +1281,31 @@ export const knowledgeSetDefaultLocation = <
     responseValidator: async (data) =>
       await zKnowledgeSetDefaultLocationResponse.parseAsync(data),
     url: "/v1/knowledge/locations/{storage_location_id}/default",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Confirm Host Key
+ */
+export const knowledgeConfirmHostKey = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeConfirmHostKeyData, ThrowOnError>,
+): RequestResult<
+  KnowledgeConfirmHostKeyResponses,
+  KnowledgeConfirmHostKeyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeConfirmHostKeyResponses,
+    KnowledgeConfirmHostKeyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeConfirmHostKeyResponse.parseAsync(data),
+    url: "/v1/knowledge/locations/{storage_location_id}/host-key",
     ...options,
     headers: {
       "Content-Type": "application/json",
