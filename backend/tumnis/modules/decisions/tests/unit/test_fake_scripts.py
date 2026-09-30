@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from tumnis.core import fake_scripts
+from tumnis.core.adapters.errors import AdapterUnavailable
 from tumnis.modules.decisions.adapters.fake import (
     FakeDecisions,
     FakeGeneration,
@@ -183,6 +184,29 @@ async def test_fakes_answer_stored_scripts_while_the_store_is_enabled(
     fallback = await vllm.ask(req, model="m", timeout_ms=800)
     assert fallback.answers["label"].type == "choice"
     assert fallback.answers["label"].choice == "human"
+    assert await generation.complete(system="s", user="u", max_tokens=5, timeout_ms=100) == (
+        "From the store"
+    )
+
+
+@pytest.mark.req("REL-7")
+@pytest.mark.wp("P0-04")
+async def test_a_stored_generation_script_replaces_an_in_memory_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-P0-04-30
+    A stored `generation` script replaces the whole in-memory script, failure included:
+    after `script(fail=...)`, `complete()` answers the stored first action instead of
+    raising, as `FakeDecisions.ask()` does with a stored decisions script.
+    """
+    stored = parse_generation_script({"first_action": "From the store"})[1]
+
+    async def lookup(adapter: str, key: str = "") -> dict[str, Any] | None:
+        return stored if (adapter, key) == ("generation", "") else None
+
+    monkeypatch.setattr(fake_scripts, "lookup", lookup)
+    generation = FakeGeneration()
+    generation.script(fail=AdapterUnavailable("decisions.vllm_generation", "chat", "down"))
     assert await generation.complete(system="s", user="u", max_tokens=5, timeout_ms=100) == (
         "From the store"
     )
