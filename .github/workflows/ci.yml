@@ -209,7 +209,7 @@ jobs:
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
           # The timings (A0.6, P0-29) run in the performance job only (hardware-sensitive).
-          npx playwright test
+          npx playwright test --grep-invert "@A0\.6|@P0-29"
       - name: Stack logs on failure
         if: failure() && hashFiles('deploy/compose.test.yaml') != ''
         run: |

@@ -48,9 +48,6 @@ test(
       await cold.goto("/", { waitUntil: "commit" });
       expect(await quickAddUsable(cold)).toBe(true);
       times.push(Date.now() - started);
-      console.log(
-        `TIMING ${testInfo.project.name} ${testInfo.title}: usable at ${String(times.at(-1))} ms`,
-      );
       await cold.close();
     }
     expect(median(times), `runs: ${times.join(", ")} ms`).toBeLessThan(3_000);
