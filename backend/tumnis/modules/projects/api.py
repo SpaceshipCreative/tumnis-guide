@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 
 import structlog
 from pydantic import BaseModel, Field, StringConstraints
+from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import Table, delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,7 +120,8 @@ class ProjectPatch(BaseModel):
     links: list[ProjectLinkIn] | None = None
     profile_name: str | None = None
     subtask_threshold_min: Threshold | None = None
-    local_decisions_only: bool | None = None
+    # optional, never null in the contract; an explicit null still reaches the 422 below
+    local_decisions_only: bool | SkipJsonSchema[None] = None
     version: Version
 
 

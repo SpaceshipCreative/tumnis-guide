@@ -1877,15 +1877,8 @@
             "title": "Links"
           },
           "local_decisions_only": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Local Decisions Only"
+            "title": "Local Decisions Only",
+            "type": "boolean"
           },
           "name": {
             "anyOf": [

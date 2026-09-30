@@ -380,7 +380,7 @@ export const zProjectPatch = z.object({
   deadline: z.iso.date().nullish(),
   goal: z.string().max(280).nullish(),
   links: z.array(zProjectLinkIn).nullish(),
-  local_decisions_only: z.boolean().nullish(),
+  local_decisions_only: z.boolean().optional(),
   name: z.string().min(1).max(120).nullish(),
   profile_name: z.string().nullish(),
   repo_url: z.string().nullish(),

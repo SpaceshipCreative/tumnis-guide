@@ -1032,7 +1032,7 @@ export type ProjectPatch = {
   /**
    * Local Decisions Only
    */
-  local_decisions_only?: boolean | null;
+  local_decisions_only?: boolean;
   /**
    * Name
    */
