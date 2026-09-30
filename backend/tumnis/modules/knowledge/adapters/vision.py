@@ -98,7 +98,7 @@ def _translate(name: str, response: httpx.Response) -> None:
 class VllmVision(Adapter):
     name = "knowledge.vision"
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         base_url: str,
         model: str,

@@ -95,7 +95,6 @@ class TestFakeVision(VisionContract):
 
 @pytest.mark.req("ADR-0007")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 class TestVllmVision(VisionContract):
     """T-P1-16-13
     `VllmVision` on recorded vLLM answers: each recorded page image comes back as
