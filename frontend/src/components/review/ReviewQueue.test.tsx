@@ -38,93 +38,90 @@ function card(title: string): HTMLElement {
   return screen.getByRole("article", { name: new RegExp(title) });
 }
 
-test(
-  "[P1-13][UX 7] T-P1-13-12 keyboard primary edit reject snooze open",
-  async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-03-09T14:00:00Z"));
-    const [a, b, c, d, e] = [
-      item("Task A"),
-      item("Task B"),
-      item("Task C", {
-        kind: "provisioning_failed",
-        target_type: "project",
-        actions: ["accept", "reject", "snooze"],
-        payload: { project_id: "p", error: "timeout", mode: "create" },
-      }),
-      item("Task D"),
-      item("Task E", { project_id: "0b7f3c1e-8a55-4e8e-9a3c-2f4d6e8a1b2c" }),
-    ];
-    const queue = reviewQueue([a, b, c, d, e]);
-    server.use(
-      reviewKinds(PHASE_ONE),
-      ...queue.handlers,
-      ...workingHoursHandlers(new Recorder()),
+test("[P1-13][UX 7] T-P1-13-12 keyboard primary edit reject snooze open", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-03-09T14:00:00Z"));
+  const [a, b, c, d, e] = [
+    item("Task A"),
+    item("Task B"),
+    item("Task C", {
+      kind: "provisioning_failed",
+      target_type: "project",
+      actions: ["accept", "reject", "snooze"],
+      payload: { project_id: "p", error: "timeout", mode: "create" },
+    }),
+    item("Task D"),
+    item("Task E", { project_id: "0b7f3c1e-8a55-4e8e-9a3c-2f4d6e8a1b2c" }),
+  ];
+  const queue = reviewQueue([a, b, c, d, e]);
+  server.use(
+    reviewKinds(PHASE_ONE),
+    ...queue.handlers,
+    ...workingHoursHandlers(new Recorder()),
+  );
+  const { user, router } = await renderRoute("/review");
+
+  const hints = await screen.findByLabelText("Keyboard shortcuts");
+  for (const key of ["Enter", "o", "e", "r", "s", "j", "k"]) {
+    expect(within(hints).getByText(key)).toBeInTheDocument();
+  }
+  await waitFor(() => {
+    expect(card("Task A")).toHaveFocus();
+  });
+
+  // Enter: the kind's primary action; focus moves to the next item
+  await user.keyboard("{Enter}");
+  await waitFor(() => {
+    expect(card("Task B")).toHaveFocus();
+  });
+  // e: edit, here picking the label (2 = AI)
+  await user.keyboard("e");
+  await user.keyboard("2");
+  await waitFor(() => {
+    expect(card("Task C")).toHaveFocus();
+  });
+  // r: reject
+  await user.keyboard("r");
+  await waitFor(() => {
+    expect(card("Task D")).toHaveFocus();
+  });
+  // s, then 1: snooze for an hour
+  await user.keyboard("s");
+  await user.keyboard("1");
+  await waitFor(() => {
+    expect(card("Task E")).toHaveFocus();
+  });
+
+  const decided = queue.recorder.sent.filter((s) => s.method === "POST");
+  expect(decided.map((s) => [s.path, s.body])).toEqual([
+    [`/v1/review/${a.id}/decide`, { action: "accept", version: 1 }],
+    [
+      `/v1/review/${b.id}/decide`,
+      { action: "edit", payload: { label: "ai" }, version: 1 },
+    ],
+    [`/v1/review/${c.id}/decide`, { action: "reject", version: 1 }],
+    [
+      `/v1/review/${d.id}/decide`,
+      {
+        action: "snooze",
+        snooze_until: "2026-03-09T15:00:00.000Z",
+        version: 1,
+      },
+    ],
+  ]);
+  expect(decided.every((s) => s.idempotencyKey)).toBe(true);
+
+  // o: open the target (a task opens in its project's drawer)
+  await user.keyboard("o");
+  await waitFor(() => {
+    expect(router.state.location.pathname).toBe(
+      `/projects/${e.project_id ?? ""}`,
     );
-    const { user, router } = await renderRoute("/review");
-
-    const hints = await screen.findByLabelText("Keyboard shortcuts");
-    for (const key of ["Enter", "o", "e", "r", "s", "j", "k"]) {
-      expect(within(hints).getByText(key)).toBeInTheDocument();
-    }
-    await waitFor(() => {
-      expect(card("Task A")).toHaveFocus();
-    });
-
-    // Enter: the kind's primary action; focus moves to the next item
-    await user.keyboard("{Enter}");
-    await waitFor(() => {
-      expect(card("Task B")).toHaveFocus();
-    });
-    // e: edit, here picking the label (2 = AI)
-    await user.keyboard("e");
-    await user.keyboard("2");
-    await waitFor(() => {
-      expect(card("Task C")).toHaveFocus();
-    });
-    // r: reject
-    await user.keyboard("r");
-    await waitFor(() => {
-      expect(card("Task D")).toHaveFocus();
-    });
-    // s, then 1: snooze for an hour
-    await user.keyboard("s");
-    await user.keyboard("1");
-    await waitFor(() => {
-      expect(card("Task E")).toHaveFocus();
-    });
-
-    const decided = queue.recorder.sent.filter((s) => s.method === "POST");
-    expect(decided.map((s) => [s.path, s.body])).toEqual([
-      [`/v1/review/${a.id}/decide`, { action: "accept", version: 1 }],
-      [
-        `/v1/review/${b.id}/decide`,
-        { action: "edit", payload: { label: "ai" }, version: 1 },
-      ],
-      [`/v1/review/${c.id}/decide`, { action: "reject", version: 1 }],
-      [
-        `/v1/review/${d.id}/decide`,
-        {
-          action: "snooze",
-          snooze_until: "2026-03-09T15:00:00.000Z",
-          version: 1,
-        },
-      ],
-    ]);
-    expect(decided.every((s) => s.idempotencyKey)).toBe(true);
-
-    // o: open the target (a task opens in its project's drawer)
-    await user.keyboard("o");
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe(
-        `/projects/${e.project_id ?? ""}`,
-      );
-    });
-    expect(router.state.location.search).toMatchObject({
-      task: e.target_id,
-    });
-  },
-);
+  });
+  expect(router.state.location.search).toMatchObject({
+    task: e.target_id,
+  });
+});
 
 test("[P1-13][FR-1.4] T-P1-13-13 badge follows ws updates", async () => {
   vi.stubGlobal("WebSocket", FakeSocket);
