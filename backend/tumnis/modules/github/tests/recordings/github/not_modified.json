@@ -1,0 +1,349 @@
+{
+  "notes": "Scrubbed: owners, repositories, user logins and ids, node ids, SHAs, titles, bodies, branch names, timestamps and ETags replaced with invented values; avatar, gravatar and email fields removed; example repositories on github.com. Shapes follow the GitHub REST API (X-GitHub-Api-Version 2022-11-28): GET /repos/{owner}/{repo}/pulls/{n}, /commits/{ref}/status, /commits/{ref}/check-runs and /pulls/{n}/reviews.",
+  "pull": {
+    "owner": "cove-example",
+    "repo": "web",
+    "number": 5
+  },
+  "rounds": 2,
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/repos/cove-example/web/pulls/5",
+      "query": {},
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"b3b15a3a95aaa01d8598ae20fd9cbcac0757a10223f2482ae6c14420a168855f\""
+      },
+      "body": {
+        "url": "https://api.github.com/repos/cove-example/web/pulls/5",
+        "id": 52005,
+        "node_id": "PR_example52005",
+        "html_url": "https://github.com/cove-example/web/pull/5",
+        "number": 5,
+        "state": "open",
+        "locked": false,
+        "title": "Compress hero images",
+        "user": {
+          "login": "ana-example",
+          "id": 9001,
+          "node_id": "U_example9001",
+          "html_url": "https://github.com/ana-example",
+          "type": "User",
+          "site_admin": false
+        },
+        "body": "Invented description.",
+        "created_at": "2026-03-08T09:00:00Z",
+        "updated_at": "2026-03-09T11:30:00Z",
+        "closed_at": null,
+        "merged_at": null,
+        "merge_commit_sha": null,
+        "assignee": null,
+        "assignees": [],
+        "requested_reviewers": [],
+        "requested_teams": [],
+        "labels": [],
+        "draft": false,
+        "head": {
+          "label": "cove-example:feature-5",
+          "ref": "feature-5",
+          "sha": "48e015121354ded54b39b2b6024389065b1a0f07",
+          "user": {
+            "login": "cove-example",
+            "id": 5201,
+            "node_id": "U_example5201",
+            "html_url": "https://github.com/cove-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "repo": {
+            "id": 5200,
+            "node_id": "R_example5200",
+            "name": "web",
+            "full_name": "cove-example/web",
+            "private": true,
+            "owner": {
+              "login": "cove-example",
+              "id": 5201,
+              "node_id": "U_example5201",
+              "html_url": "https://github.com/cove-example",
+              "type": "User",
+              "site_admin": false
+            },
+            "html_url": "https://github.com/cove-example/web",
+            "default_branch": "main"
+          }
+        },
+        "base": {
+          "label": "cove-example:main",
+          "ref": "main",
+          "sha": "40c14e7c6047caf37bd9261a673e1b9ffd9a0e27",
+          "user": {
+            "login": "cove-example",
+            "id": 5201,
+            "node_id": "U_example5201",
+            "html_url": "https://github.com/cove-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "repo": {
+            "id": 5200,
+            "node_id": "R_example5200",
+            "name": "web",
+            "full_name": "cove-example/web",
+            "private": true,
+            "owner": {
+              "login": "cove-example",
+              "id": 5201,
+              "node_id": "U_example5201",
+              "html_url": "https://github.com/cove-example",
+              "type": "User",
+              "site_admin": false
+            },
+            "html_url": "https://github.com/cove-example/web",
+            "default_branch": "main"
+          }
+        },
+        "author_association": "MEMBER",
+        "merged": false,
+        "mergeable": true,
+        "mergeable_state": "clean",
+        "merged_by": null,
+        "comments": 1,
+        "review_comments": 0,
+        "commits": 3,
+        "additions": 40,
+        "deletions": 7,
+        "changed_files": 4
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/cove-example/web/commits/48e015121354ded54b39b2b6024389065b1a0f07/status",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"af07aeaf83d5b8a60b8fe951fe7849fea817afe64e6e6192374dd098c440700b\""
+      },
+      "body": {
+        "state": "success",
+        "statuses": [
+          {
+            "url": "https://api.github.com/repos/cove-example/web/statuses/48e015121354ded54b39b2b6024389065b1a0f07",
+            "id": 7000,
+            "node_id": "SC_example7000",
+            "state": "success",
+            "description": "ci/lint success",
+            "target_url": "https://ci.example.com/cove-example/web/7000",
+            "context": "ci/lint",
+            "created_at": "2026-03-09T11:00:00Z",
+            "updated_at": "2026-03-09T11:05:00Z"
+          }
+        ],
+        "sha": "48e015121354ded54b39b2b6024389065b1a0f07",
+        "total_count": 1,
+        "repository": {
+          "id": 5000,
+          "node_id": "R_example5000",
+          "name": "web",
+          "full_name": "cove-example/web",
+          "private": true,
+          "owner": {
+            "login": "cove-example",
+            "id": 5001,
+            "node_id": "U_example5001",
+            "html_url": "https://github.com/cove-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "html_url": "https://github.com/cove-example/web",
+          "default_branch": "main"
+        },
+        "commit_url": "https://api.github.com/repos/cove-example/web/commits/48e015121354ded54b39b2b6024389065b1a0f07"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/cove-example/web/commits/48e015121354ded54b39b2b6024389065b1a0f07/check-runs",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"f3ea49cdfb4f0c1c16484d9d4c25a89085914e376cc54407bdb93eb07459370c\""
+      },
+      "body": {
+        "total_count": 1,
+        "check_runs": [
+          {
+            "id": 8000,
+            "head_sha": "48e015121354ded54b39b2b6024389065b1a0f07",
+            "node_id": "CR_example8000",
+            "external_id": "",
+            "url": "https://api.github.com/repos/cove-example/web/check-runs/8000",
+            "html_url": "https://github.com/cove-example/web/runs/8000",
+            "details_url": "https://ci.example.com/cove-example/web/runs/8000",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-03-09T11:00:00Z",
+            "completed_at": "2026-03-09T11:06:00Z",
+            "output": {
+              "title": null,
+              "summary": null,
+              "text": null,
+              "annotations_count": 0
+            },
+            "name": "build",
+            "check_suite": {
+              "id": 8500
+            },
+            "app": {
+              "id": 15368,
+              "slug": "github-actions",
+              "name": "GitHub Actions"
+            },
+            "pull_requests": []
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/cove-example/web/pulls/5/reviews",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"29301792922c7f3aba00c732f17034a76776910eade00c862a49d757eed80036\""
+      },
+      "body": []
+    },
+    {
+      "method": "GET",
+      "path": "/repos/cove-example/web/pulls/5",
+      "query": {},
+      "if_none_match": "W/\"b3b15a3a95aaa01d8598ae20fd9cbcac0757a10223f2482ae6c14420a168855f\"",
+      "status": 304,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"b3b15a3a95aaa01d8598ae20fd9cbcac0757a10223f2482ae6c14420a168855f\""
+      },
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/repos/cove-example/web/commits/48e015121354ded54b39b2b6024389065b1a0f07/status",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": "W/\"af07aeaf83d5b8a60b8fe951fe7849fea817afe64e6e6192374dd098c440700b\"",
+      "status": 304,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"af07aeaf83d5b8a60b8fe951fe7849fea817afe64e6e6192374dd098c440700b\""
+      },
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/repos/cove-example/web/commits/48e015121354ded54b39b2b6024389065b1a0f07/check-runs",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": "W/\"f3ea49cdfb4f0c1c16484d9d4c25a89085914e376cc54407bdb93eb07459370c\"",
+      "status": 304,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"f3ea49cdfb4f0c1c16484d9d4c25a89085914e376cc54407bdb93eb07459370c\""
+      },
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/repos/cove-example/web/pulls/5/reviews",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": "W/\"29301792922c7f3aba00c732f17034a76776910eade00c862a49d757eed80036\"",
+      "status": 304,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"29301792922c7f3aba00c732f17034a76776910eade00c862a49d757eed80036\""
+      },
+      "body": null
+    }
+  ],
+  "expected": {
+    "external_id": "cove-example/web#5",
+    "url": "https://github.com/cove-example/web/pull/5",
+    "state": "open",
+    "pr_status": {
+      "repo": "cove-example/web",
+      "number": 5,
+      "title": "Compress hero images",
+      "draft": false,
+      "head_sha": "48e015121354ded54b39b2b6024389065b1a0f07",
+      "checks": "green",
+      "review": "none"
+    }
+  }
+}
