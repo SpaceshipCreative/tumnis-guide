@@ -1,0 +1,24 @@
+"""Remove the spec xfail marker from the named tests (Scott-approved TDD step).
+
+    python unmark.py <file> <test name>...
+"""
+
+import re
+import sys
+
+MARKER = '@pytest.mark.xfail(strict=True, reason="spec:P2-02")'
+path, names = sys.argv[1], sys.argv[2:]
+lines = open(path, encoding="utf-8").read().split("\n")
+for name in names:
+    target = re.compile(rf"^(async )?def {re.escape(name)}\(")
+    at = next(i for i, line in enumerate(lines) if target.match(line))
+    i = at - 1
+    while i >= 0 and lines[i].startswith("@"):
+        if lines[i].strip() == MARKER:
+            del lines[i]
+            print(f"unmarked {name}")
+            break
+        i -= 1
+    else:
+        raise SystemExit(f"no spec marker on {name}")
+open(path, "w", encoding="utf-8").write("\n".join(lines))
