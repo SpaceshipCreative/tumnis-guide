@@ -3,7 +3,9 @@
 // never fetched from the start again. The query's key is the generated
 // `agentsListRunEvents` one, which LIVE_MAP lists under `run`: a live notice for the run
 // (/ws) marks it stale and the next pages come in; while the run is active it also polls,
-// so a lost notice only delays a line.
+// so a lost notice only delays a line. One fetch reads at most MAX_PAGES pages; when it
+// stops at that cap, polling goes on (an ended run too) until a short page arrives.
+import { useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { agentsListRunEventsQueryKey } from "../api/@tanstack/react-query.gen";
@@ -20,6 +22,7 @@ const MAX_PAGES = 20;
 export function useRunEvents(runId: string, { active }: { active: boolean }) {
   const queryClient = useQueryClient();
   const queryKey = agentsListRunEventsQueryKey({ path: { run_id: runId } });
+  const more = useRef(false); // the last fetch stopped at MAX_PAGES, not at a short page
   return useQuery({
     queryKey,
     // The events held so far live in the query's own cache entry (the cursor is the last
@@ -27,6 +30,7 @@ export function useRunEvents(runId: string, { active }: { active: boolean }) {
     queryFn: async ({ signal }) => {
       let events = queryClient.getQueryData<RunEventOut[]>(queryKey) ?? [];
       let after = events.at(-1)?.seq;
+      more.current = true;
       for (let page = 0; page < MAX_PAGES; page += 1) {
         const { data } = await agentsListRunEvents({
           path: { run_id: runId },
@@ -45,11 +49,15 @@ export function useRunEvents(runId: string, { active }: { active: boolean }) {
           events = [...events, ...fresh];
           after = fresh.at(-1)?.seq ?? after;
         }
-        if (data.items.length < RUN_EVENTS_PAGE) break;
+        if (data.items.length < RUN_EVENTS_PAGE) {
+          more.current = false;
+          break;
+        }
       }
       return events;
     },
-    refetchInterval: active ? RUN_EVENTS_POLL_MS : false,
+    refetchInterval: () =>
+      active || more.current ? RUN_EVENTS_POLL_MS : false,
     staleTime: 0,
   });
 }
