@@ -283,6 +283,8 @@ jobs:
           uv run mypy
           uv run pytest -q
           uv run python -m harness check --cases tests/cases
+          uv run python -m harness coverage --suite hostile
+          uv run python -m harness index --suite hostile --check
       - name: Did a skill input change?
         id: changed
         env:
@@ -292,7 +294,10 @@ jobs:
           case "$BASE_SHA" in
             "" | 0000000000000000000000000000000000000000) ;;
             *) git diff --quiet "$BASE_SHA...$GITHUB_SHA" -- profiles schemas/enrichment \
-                 schemas/planning daemon && changed=false ;;
+                 schemas/planning schemas/mcp daemon backend/fixtures/hostile \
+                 backend/tumnis/modules/agents/packet_builder.py \
+                 backend/tumnis/modules/agents/rules.py \
+                 backend/tumnis/modules/projects/rules.py && changed=false ;;
           esac
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
           echo "skill inputs changed: $changed"
@@ -300,6 +305,22 @@ jobs:
         if: runner.environment == 'self-hosted' && steps.changed.outputs.changed == 'true'
         working-directory: profiles
         run: uv run python -m harness run --cases tests/cases --junit "$RUNNER_TEMP/skills-junit.xml"
+      # P2-11: the hostile smoke subset (the index's six cases, plus the cases of changed
+      # skills and changed cases), each with its twin, 3 runs each, recording mocks only.
+      # The full set runs nightly (nightly.yml, skills-hostile).
+      - name: Hostile smoke subset, 3 runs each (homelab Hermes)
+        if: runner.environment == 'self-hosted' && steps.changed.outputs.changed == 'true'
+        working-directory: profiles
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          base=()
+          case "$BASE_SHA" in
+            "" | 0000000000000000000000000000000000000000) ;;
+            *) base=(--base "$BASE_SHA") ;;
+          esac
+          uv run python -m harness run --suite hostile --smoke "${base[@]}" \
+            --junit "$RUNNER_TEMP/hostile-junit.xml"
 
   # Security (P0-16, SEC-7): every tool exits non-zero on a high or critical finding, and
   # the job is required, so such a finding blocks the merge. A finding with no fix yet goes
