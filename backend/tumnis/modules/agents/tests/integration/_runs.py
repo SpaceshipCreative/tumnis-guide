@@ -8,7 +8,11 @@ agents api, the fake runner and the outbox.
   dispatch carries a task token); `world.ai_task(...)` makes a task, `world.request(...)`
   asks for a run through `agents.api.request_run` as the workspace's user.
 - `relay()`: the outbox relay running beside the test (the worker's job), after the
-  set-up's own events are marked sent, so only what the test does is delivered.
+  set-up's own events are marked sent, so only what the test does is delivered. It runs
+  on the test's event loop, which the fake runner's sync `wait_for` blocks: so while it
+  runs, `world.request(...)` and `wait_until(...)` return only once the relay has claimed
+  every event committed so far (`settle()`), and a `wait_for` that follows never waits
+  on an event the blocked relay would have had to deliver.
 - `finish(runner, run_id, output)`, `stream(runner, run_id, seq, text)`: what a daemon
   sends for a run (protocol-2 frames), with their message ids.
 - `wait_until(check)`, `owner_rows(db, sql, params)`, `workflow_status(run_id)`.
@@ -51,6 +55,8 @@ RESULT_OUTPUT: Final[dict[str, Any]] = {
     ],
 }
 _ids = itertools.count(1)
+_relaying: list[DbUrls] = []  # the database of the relay running beside the test, if any
+SETTLE_S: Final = 15.0
 
 
 def owner_rows(db: DbUrls, query: str, params: tuple[Any, ...] = ()) -> list[tuple[Any, ...]]:
@@ -66,13 +72,29 @@ def mark_outbox_sent(db: DbUrls) -> None:
         conn.execute(b"UPDATE outbox SET sent_at = now() WHERE sent_at IS NULL")
 
 
+async def settle(*, every: float = 0.05) -> None:
+    """While `relay()` runs: wait (at most SETTLE_S) until it has claimed every outbox
+    row committed so far, so their deliveries are queued before the test blocks its event
+    loop. No relay beside the test (a worker relays): nothing to wait for."""
+    if not _relaying:
+        return
+    db = _relaying[-1]
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + SETTLE_S
+    while owner_rows(db, "SELECT count(*) FROM outbox WHERE sent_at IS NULL") != [(0,)]:
+        if loop.time() > deadline:
+            return
+        await asyncio.sleep(every)
+
+
 async def wait_until(
     check: Callable[[], Awaitable[bool]] | Callable[[], bool],
     *,
     timeout: float = 15,  # noqa: ASYNC109  # a polling deadline, not a cancel scope
     every: float = 0.05,
 ) -> bool:
-    """Poll `check` until it is true; False when `timeout` passed first."""
+    """Poll `check` until it is true (then `settle()`); False when `timeout` passed
+    first."""
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     while True:
@@ -80,6 +102,7 @@ async def wait_until(
         if asyncio.iscoroutine(found):
             found = await found
         if found:
+            await settle(every=every)
             return True
         if loop.time() > deadline:
             return False
@@ -96,9 +119,11 @@ async def relay(db: DbUrls, *, poll_s: float = 0.1) -> AsyncIterator[None]:
     mark_outbox_sent(db)
     stop = asyncio.Event()
     task = asyncio.create_task(events.relay_forever(stop, poll_s=poll_s))
+    _relaying.append(db)
     try:
         yield
     finally:
+        _relaying.remove(db)
         stop.set()
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -161,6 +186,7 @@ class RunWorld:
         from tumnis.modules.agents import api as agents  # noqa: PLC0415
 
         run_id: uuid.UUID = await agents.request_run(task_id, agents.RunKind(kind), ctx=self.ctx)
+        await settle()  # run.requested claimed before the test may block its loop
         return run_id
 
     def packets(self, run_id: uuid.UUID | None = None) -> list[dict[str, Any]]:
