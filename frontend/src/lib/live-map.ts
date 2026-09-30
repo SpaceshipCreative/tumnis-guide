@@ -117,4 +117,7 @@ export const NOT_LIVE = [
   // yet), and a file is a download, never a cached query.
   "knowledgeGetDocument",
   "knowledgeGetFile",
+  // Calibration is evidence read on demand (P3-08); the Calibration screen refetches after
+  // its own threshold edit.
+  "decisionsGetCalibration",
 ] as const;

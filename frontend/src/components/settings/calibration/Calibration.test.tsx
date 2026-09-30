@@ -52,6 +52,7 @@ function page(labeled: number, withMetrics: boolean) {
     points: [
       {
         decision_point: "project_match",
+        model_version: "jev-1.13.0",
         primitive: "choice",
         threshold: {
           min_confidence: 0.85,
@@ -66,6 +67,7 @@ function page(labeled: number, withMetrics: boolean) {
       },
       {
         decision_point: "actionability",
+        model_version: "jev-1.13.0",
         primitive: "noul",
         threshold: {
           min_confidence: null,
@@ -97,7 +99,7 @@ function handlers(recorder: Recorder, loaded: ReturnType<typeof page>) {
   ];
 }
 
-test.fails("[P3-08][FR-11.5] shows not enough data then metrics", async () => {
+test("[P3-08][FR-11.5] shows not enough data then metrics", async () => {
   const { CalibrationSection } = await load<CalibrationModule>("./Calibration");
 
   // Under 100 labeled outcomes: no numbers, just how many more are needed.
