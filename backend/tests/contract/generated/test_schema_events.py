@@ -103,6 +103,12 @@ CASES = [
     ),
     (
         "events",
+        "review_item.added",
+        1,
+        "backend/tests/contract/fixtures/events/review_item.added/v1.json",
+    ),
+    (
+        "events",
         "task.commented",
         1,
         "backend/tests/contract/fixtures/events/task.commented/v1.json",

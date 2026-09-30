@@ -13,6 +13,8 @@ calls `api.py` (no import cycle inside the module).
   P1-13 and P2-05 emit it.
 - `task.commented` (P2-03): a comment added, with its author and text, for the digest.
 - `context_item.linked` (P2-03): a task newly linked to a ContextItem, for the digest.
+- `review_item.added` (P1-13): a new review item, by id, kind and target only (never the
+  payload); decisions asks Jev how much it blocks.
 
 `doc` holds the title, the body (first action, acceptance criteria and comments, capped at
 8 KB, plan default), whether the task is deleted, and (P0-20, additive) the task's project
@@ -119,3 +121,14 @@ class ContextItemLinkedV1(EventPayload):
     project_id: UUID
     target_type: str
     target_id: UUID | None = None
+
+
+@event_type("review_item.added", 1)
+class ReviewItemAddedV1(EventPayload):
+    event_name: ClassVar[str] = "review_item.added"
+    schema_version: Literal[1] = 1
+    item_id: UUID
+    kind: str
+    project_id: UUID | None
+    target_type: str
+    target_id: UUID

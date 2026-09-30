@@ -514,6 +514,34 @@ export type DeadLetterOut = {
 };
 
 /**
+ * DecideIn
+ *
+ * R-04: the action, its payload when the action takes one, the snooze end for a
+ * snooze, and the version read.
+ */
+export type DecideIn = {
+  /**
+   * Action
+   */
+  action:
+    "accept" | "edit" | "reject" | "snooze" | "answer" | "approve" | "deny";
+  /**
+   * Payload
+   */
+  payload?: {
+    [key: string]: unknown;
+  } | null;
+  /**
+   * Snooze Until
+   */
+  snooze_until?: string | null;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
  * DefaultIn
  */
 export type DefaultIn = {
@@ -1244,6 +1272,20 @@ export type PageRecurrenceOut = {
    * Items
    */
   items: Array<RecurrenceOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
+ * Page[ReviewItemOut]
+ */
+export type PageReviewItemOut = {
+  /**
+   * Items
+   */
+  items: Array<ReviewItemOut>;
   /**
    * Next Cursor
    */
@@ -2109,6 +2151,85 @@ export type ReviewCountOut = {
    * Count
    */
   count: number;
+};
+
+/**
+ * ReviewItemOut
+ *
+ * One item as the queue shows it: its kind's actions and primary action (Enter, R-04),
+ * its target's title when the target is a task or a project, and its impact.
+ */
+export type ReviewItemOut = {
+  /**
+   * Actions
+   */
+  actions: Array<string>;
+  /**
+   * Blocking Impact
+   */
+  blocking_impact: number;
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Decided At
+   */
+  decided_at: string | null;
+  /**
+   * Decision
+   */
+  decision: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Jev Factor
+   */
+  jev_factor: number;
+  /**
+   * Kind
+   */
+  kind: string;
+  /**
+   * Payload
+   */
+  payload: {
+    [key: string]: unknown;
+  };
+  /**
+   * Primary Action
+   */
+  primary_action: string | null;
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Snoozed Until
+   */
+  snoozed_until: string | null;
+  /**
+   * Target Id
+   */
+  target_id: string;
+  /**
+   * Target Title
+   */
+  target_title: string | null;
+  /**
+   * Target Type
+   */
+  target_type: string;
+  /**
+   * Updated At
+   */
+  updated_at: string;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -6823,6 +6944,74 @@ export type TasksListRecurrenceResponses = {
 export type TasksListRecurrenceResponse =
   TasksListRecurrenceResponses[keyof TasksListRecurrenceResponses];
 
+export type TasksListReviewData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Kind
+     */
+    kind?: string | null;
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/review";
+};
+
+export type TasksListReviewErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksListReviewError =
+  TasksListReviewErrors[keyof TasksListReviewErrors];
+
+export type TasksListReviewResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageReviewItemOut;
+};
+
+export type TasksListReviewResponse =
+  TasksListReviewResponses[keyof TasksListReviewResponses];
+
 export type TasksGetReviewCountData = {
   body?: never;
   path?: never;
@@ -6932,6 +7121,66 @@ export type TasksListReviewKindsResponses = {
 
 export type TasksListReviewKindsResponse =
   TasksListReviewKindsResponses[keyof TasksListReviewKindsResponses];
+
+export type TasksDecideReviewData = {
+  body: DecideIn;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/v1/review/{id}/decide";
+};
+
+export type TasksDecideReviewErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksDecideReviewError =
+  TasksDecideReviewErrors[keyof TasksDecideReviewErrors];
+
+export type TasksDecideReviewResponses = {
+  /**
+   * Successful Response
+   */
+  200: ReviewItemOut;
+};
+
+export type TasksDecideReviewResponse =
+  TasksDecideReviewResponses[keyof TasksDecideReviewResponses];
 
 export type AgentsListRunnersData = {
   body?: never;
