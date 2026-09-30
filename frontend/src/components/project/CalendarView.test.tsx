@@ -191,7 +191,7 @@ test("[P1-12][FR-2.6] T-P1-12-03 drop on busy block refused", async () => {
   expect(fake.writes()).toEqual([]);
 });
 
-test.fails("[P1-12][UX 7] T-P1-12-04 keyboard scheduling", async () => {
+test("[P1-12][UX 7] T-P1-12-04 keyboard scheduling", async () => {
   const { fake, user } = setUp("laptop");
   const card = await screen.findByRole("button", {
     name: "Draft the brand guide, 45 minutes",
