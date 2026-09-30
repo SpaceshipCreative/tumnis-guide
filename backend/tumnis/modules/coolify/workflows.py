@@ -1,7 +1,7 @@
 """coolify DBOS workflows and steps (P2-14, FR-12.2).
 
-- `coolify_poll_tick` (schedule `coolify-poll`, every 5 minutes, UTC; plan default): one
-  `poll_workspace` step per workspace.
+- `coolify_poll_tick` (schedule `coolify-poll`, every 5 minutes, UTC; plan default; on the
+  `sync` queue): one `poll_workspace` step per workspace.
 - `poll_workspace` reads the workspace's Coolify settings (base URL, read-only token) and,
   for each application a live project links, the application and its ten newest
   deployments, then records the last deployment and the open-PR previews
@@ -35,6 +35,9 @@ from tumnis.modules.coolify.adapters.port import CoolifyStatus
 
 POLL_SCHEDULE_NAME: Final = "coolify-poll"
 POLL_SCHEDULE: Final = "*/5 * * * *"  # UTC; plan default: every 5 minutes
+# A9's `sync` queue (registered by the worker), as the other connector ticks use: a
+# schedule without a queue goes to DBOS's internal one, which `worker-extract` services too.
+POLL_QUEUE: Final = "sync"
 
 StatusFactory = Callable[[str, api.CoolifySettings | None], CoolifyStatus]
 
@@ -83,6 +86,7 @@ def schedules() -> list[dict[str, Any]]:
             "schedule_name": POLL_SCHEDULE_NAME,
             "workflow_fn": coolify_poll_tick,
             "schedule": POLL_SCHEDULE,
+            "queue_name": POLL_QUEUE,
         }
     ]
 

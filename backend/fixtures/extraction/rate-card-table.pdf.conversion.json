@@ -1,0 +1,34 @@
+{
+  "markdown": "# Acme rate card\n\n## Overview\n\nThis rate card lists what Acme pays for design and build work in 2026. Rates are per hour and exclude VAT.\n\n## Rates\n\nHourly rates by role:\n\n| Role | Hourly rate (EUR) |\n| --- | --- |\n| Senior designer | 160 |\n| Designer | 120 |\n| Developer | 140 |\n| Project manager | 110 |\n\n## Terms\n\nInvoices are due within thirty days. Travel is billed at cost.\n",
+  "grades": {"1": "good", "2": "good", "3": "good"},
+  "text_items": {"1": 3, "2": 3, "3": 3},
+  "chunks": [
+    {
+      "ordinal": 0,
+      "text": "This rate card lists what Acme pays for design and build work in 2026. Rates are per hour and exclude VAT.",
+      "context_text": "Acme rate card\nOverview\nThis rate card lists what Acme pays for design and build work in 2026. Rates are per hour and exclude VAT.",
+      "heading_path": ["Acme rate card", "Overview"],
+      "page_from": 1,
+      "page_to": 1,
+      "extractor": "docling"
+    },
+    {
+      "ordinal": 1,
+      "text": "Hourly rates by role:\nRole | Hourly rate (EUR)\nSenior designer | 160\nDesigner | 120\nDeveloper | 140\nProject manager | 110",
+      "context_text": "Acme rate card\nRates\nHourly rates by role:\nRole | Hourly rate (EUR)\nSenior designer | 160\nDesigner | 120\nDeveloper | 140\nProject manager | 110",
+      "heading_path": ["Acme rate card", "Rates"],
+      "page_from": 2,
+      "page_to": 2,
+      "extractor": "docling"
+    },
+    {
+      "ordinal": 2,
+      "text": "Invoices are due within thirty days. Travel is billed at cost.",
+      "context_text": "Acme rate card\nTerms\nInvoices are due within thirty days. Travel is billed at cost.",
+      "heading_path": ["Acme rate card", "Terms"],
+      "page_from": 3,
+      "page_to": 3,
+      "extractor": "docling"
+    }
+  ]
+}
