@@ -117,6 +117,26 @@ async def test_unreachable_server_answers_each_request_with_an_error() -> None:
     assert [(a["id"], a["error"]["code"]) for a in answers] == [(2, mcp_stdio.SERVER_ERROR)]
 
 
+@pytest.mark.parametrize(
+    ("body", "content_type"),
+    [
+        ("<html>proxy error</html>", "text/html"),
+        ("event: message\ndata: {not json\n\n", "text/event-stream"),
+    ],
+)
+async def test_a_2xx_body_that_is_not_json_answers_the_request_and_the_shim_goes_on(
+    body: str, content_type: str
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content)["id"] == 1:
+            return httpx.Response(200, text=body, headers={"content-type": content_type})
+        return _result(request, {"ok": True})
+
+    answers, _ = await _run(handler, INIT, LIST)
+    assert [(a["id"], "error" in a) for a in answers] == [(1, True), (2, False)]
+    assert answers[0]["error"]["code"] == mcp_stdio.SERVER_ERROR
+
+
 async def test_a_line_that_is_not_json_is_a_parse_error_and_not_sent() -> None:
     answers, seen = await _run(lambda r: _result(r, {}), "{not json")
     assert answers == [

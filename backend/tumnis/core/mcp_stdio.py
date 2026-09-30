@@ -11,7 +11,8 @@ on stdout:
 - an SSE body: one line per `data:` event;
 - a non-2xx answer to a request: a JSON-RPC error line for that request's `id` (code
   -32000; `data` is the problem the server answered), so the client is never left waiting;
-- the server unreachable: the same, with the transport error as the message.
+- the server unreachable: the same, with the transport error as the message;
+- a 2xx body that is not JSON (a proxy's page, a torn SSE event): the same.
 
 After `initialize`, later requests carry `MCP-Protocol-Version` with the negotiated
 version, and an `Mcp-Session-Id` the server assigned (none today: `/mcp` is stateless) is
@@ -89,6 +90,21 @@ class _Session:
                 self.headers["MCP-Protocol-Version"] = version
 
 
+def _fail(out: TextIO, request_id: Any, message: str, data: Any = None) -> None:
+    """A request gets a JSON-RPC error line; a notification, a note on stderr."""
+    if request_id is not None:
+        _emit(out, _error(request_id, message, data))
+    else:
+        print(f"tumnis mcp-stdio: {message}", file=sys.stderr)
+
+
+def _messages(response: httpx.Response) -> list[Any]:
+    """The JSON-RPC messages of a 2xx answer; ValueError when the body is not JSON."""
+    if response.headers.get("content-type", "").startswith("text/event-stream"):
+        return sse_messages(response.text)
+    return [response.json()]
+
+
 async def _relay(
     line: str, out: TextIO, http: httpx.AsyncClient, session: _Session, url: str
 ) -> None:
@@ -108,23 +124,20 @@ async def _relay(
     try:
         response = await http.post(url, content=line.strip(), headers=session.headers)
     except httpx.HTTPError as exc:
-        if request_id is not None:
-            _emit(out, _error(request_id, f"Tumnis is unreachable: {exc!r}"))
+        _fail(out, request_id, f"Tumnis is unreachable: {exc!r}")
         return
     if not response.is_success:
         body = _body(response)
-        if request_id is not None:
-            title = body.get("title") if isinstance(body, dict) else None
-            _emit(out, _error(request_id, str(title or f"HTTP {response.status_code}"), body))
-        else:
-            print(f"tumnis mcp-stdio: HTTP {response.status_code}", file=sys.stderr)
+        title = body.get("title") if isinstance(body, dict) else None
+        _fail(out, request_id, str(title or f"HTTP {response.status_code}"), body)
         return
     if response.status_code == httpx.codes.ACCEPTED or not response.content:
         return
-    if response.headers.get("content-type", "").startswith("text/event-stream"):
-        messages = sse_messages(response.text)
-    else:
-        messages = [response.json()]
+    try:
+        messages = _messages(response)
+    except ValueError:  # a 2xx that is not JSON (a proxy's page, a torn event)
+        _fail(out, request_id, "Tumnis answered with a body that is not JSON")
+        return
     session.learn(response, messages)
     for answer in messages:
         _emit(out, answer)
