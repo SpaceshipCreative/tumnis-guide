@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The Tumnis runner daemon on a Mac (P2-07, R-26): a per-user LaunchAgent, so it runs as
+  the logged-in user (never root; the daemon itself exits 78 as root). Install:
+
+    cp com.tumnis.daemon.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tumnis.daemon.plist
+
+  launchd does not expand "~" or variables: write the config path out in full. The
+  runner registers under the `runner_name` in that config (name it after the machine).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.tumnis.daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/tumnis-daemon/bin/tumnis-daemon</string>
+    <string>run</string>
+    <string>--config</string>
+    <string>/usr/local/etc/tumnis/daemon.toml</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>Umask</key>
+  <integer>63</integer>
+  <key>StandardOutPath</key>
+  <string>/tmp/com.tumnis.daemon.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/com.tumnis.daemon.log</string>
+</dict>
+</plist>

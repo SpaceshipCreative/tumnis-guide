@@ -26,7 +26,6 @@ def _mirrors(cfg: DaemonConfig) -> list[Path]:
 
 @pytest.mark.req("SEC-8")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 @pytest.mark.parametrize("kind", ["path", "repo"])
 async def test_run_gets_worktree_removed_afterwards(
     kind: str,
@@ -76,7 +75,6 @@ async def test_run_gets_worktree_removed_afterwards(
 
 @pytest.mark.req("SEC-8")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 async def test_stale_worktrees_removed_at_start(
     cfg: DaemonConfig,
     tmp_path: Path,
@@ -125,7 +123,6 @@ async def test_stale_worktrees_removed_at_start(
 
 @pytest.mark.req("SEC-8")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 def test_path_outside_agent_home_refused_unless_allowed(
     cfg: DaemonConfig, tmp_path: Path, tmp_git_repo: tuple[Path, Path]
 ) -> None:

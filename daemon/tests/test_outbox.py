@@ -22,7 +22,6 @@ def _size(message: dict[str, Any]) -> int:
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 def test_outbox_full_drops_log_lines_never_results(tmp_path: Path) -> None:
     """T-P2-07-14
     Past `max_bytes`, the oldest `log` lines are dropped and replaced, where the first of

@@ -59,7 +59,6 @@ def _service_section() -> dict[str, str]:
 
 @pytest.mark.req("SEC-8")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 def test_refuses_to_run_as_root(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
@@ -82,7 +81,6 @@ def test_refuses_to_run_as_root(
 
 @pytest.mark.req("SEC-8")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 def test_systemd_unit_hardening() -> None:
     """T-P2-07-10
     The unit parses; every required directive is present with its value; `User` is not

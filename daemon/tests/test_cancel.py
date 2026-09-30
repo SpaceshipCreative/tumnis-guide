@@ -43,7 +43,6 @@ async def _gone(pids: list[int]) -> None:
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 async def test_cancel_terminates_process_group(
     cfg: DaemonConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

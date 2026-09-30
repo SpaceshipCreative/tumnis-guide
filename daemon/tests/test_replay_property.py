@@ -170,7 +170,6 @@ async def _play(  # noqa: PLR0912, PLR0915  # one scenario, read top to bottom
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 @given(scenarios())
 def test_random_disconnects_deliver_each_message_once(
     scenario: tuple[list[str], dict[int, list[str]], int],
