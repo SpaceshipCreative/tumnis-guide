@@ -1,0 +1,16 @@
+id: note_rename_and_edit
+proves: A note renamed and edited outside keeps its identity through tumnis_id, with a new version
+backends: [server_path, s3]
+steps:
+  - tumnis_create_note: {project: acme-site, title: "Plan", body: "v1"}
+  - sync
+  - remember: {as: note, title: "Plan"}
+  - outside_rename: {from: "notes/Plan.md", to: "notes/Roadmap.md"}
+  - outside_write: {path: "notes/Roadmap.md", append: "\nedited outside"}
+  - sync
+  - expect:
+      document: {path: "notes/Roadmap.md", id: note, versions: 2, body_contains: "edited outside"}
+      documents: {count: 1}
+      trashed_documents: {count: 0}
+      listing: ["notes/Roadmap.md"]
+      review_items: []
