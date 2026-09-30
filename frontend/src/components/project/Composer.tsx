@@ -1,13 +1,13 @@
 // The composer (P0-24, FR-2.5): one input; Enter creates a task in this project (label
-// pending, Backlog). The row shows under Up next at once (P0-25 moves the write onto the
-// offline queue).
+// pending, Backlog). The write goes through the offline queue like every capture
+// (P0-25): the row shows under Up next at once with its pending mark, online or not.
 import { useState } from "react";
 
-import { useCreateTask } from "./mutations";
+import { useEnqueueTask } from "../quickadd/queue";
 
 export function Composer({ projectId }: { projectId: string }) {
   const [title, setTitle] = useState("");
-  const create = useCreateTask();
+  const enqueue = useEnqueueTask();
   return (
     <form
       className="flex"
@@ -15,7 +15,7 @@ export function Composer({ projectId }: { projectId: string }) {
         event.preventDefault();
         const trimmed = title.trim();
         if (trimmed === "") return;
-        create.mutate({ projectId, title: trimmed });
+        enqueue({ project_id: projectId, title: trimmed });
         setTitle("");
       }}
     >

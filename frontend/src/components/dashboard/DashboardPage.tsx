@@ -9,7 +9,6 @@ import { useLayoutEffect, useRef } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import { formatToday } from "./format";
 import { ProjectCardGrid } from "./ProjectCardGrid";
-import { QuickAddFab } from "./QuickAddFab";
 import {
   projectsQuery,
   reviewCountQuery,
@@ -90,7 +89,6 @@ export function DashboardPage() {
           className="md:col-span-7"
         />
       </div>
-      <QuickAddFab />
     </div>
   );
 }
