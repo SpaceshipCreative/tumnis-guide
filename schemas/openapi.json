@@ -166,6 +166,79 @@
         "title": "AgentProfileOut",
         "type": "object"
       },
+      "AppDeployStatus": {
+        "properties": {
+          "app_uuid": {
+            "title": "App Uuid",
+            "type": "string"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unavailable",
+                  "rejected"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastDeployOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "previews": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewOut"
+            },
+            "title": "Previews",
+            "type": "array"
+          }
+        },
+        "required": [
+          "app_uuid",
+          "name",
+          "last",
+          "previews",
+          "checked_at",
+          "error"
+        ],
+        "title": "AppDeployStatus",
+        "type": "object"
+      },
       "AuditEntry": {
         "properties": {
           "action": {
@@ -1282,6 +1355,50 @@
         "title": "Label",
         "type": "string"
       },
+      "LastDeployOut": {
+        "properties": {
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "commit",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "LastDeployOut",
+        "type": "object"
+      },
       "LocationIn": {
         "properties": {
           "is_default": {
@@ -1891,6 +2008,52 @@
         ],
         "title": "Preset",
         "type": "string"
+      },
+      "PreviewOut": {
+        "properties": {
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "pull_request_id": {
+            "title": "Pull Request Id",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pull_request_id",
+          "url",
+          "status"
+        ],
+        "title": "PreviewOut",
+        "type": "object"
       },
       "Problem": {
         "additionalProperties": false,
@@ -2508,6 +2671,28 @@
           "name"
         ],
         "title": "ProjectCreate",
+        "type": "object"
+      },
+      "ProjectDeployStatus": {
+        "properties": {
+          "apps": {
+            "items": {
+              "$ref": "#/components/schemas/AppDeployStatus"
+            },
+            "title": "Apps",
+            "type": "array"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "apps"
+        ],
+        "title": "ProjectDeployStatus",
         "type": "object"
       },
       "ProjectFolderOut": {
@@ -7555,6 +7740,131 @@
         "summary": "Oauth Start",
         "tags": [
           "calendar"
+        ]
+      }
+    },
+    "/v1/coolify/status": {
+      "get": {
+        "description": "Deploy status per project in board order; projects without apps are left out.",
+        "operationId": "coolify_list_deploy_status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectDeployStatus"
+                  },
+                  "title": "Response Coolify List Deploy Status",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "List Deploy Status",
+        "tags": [
+          "coolify"
         ]
       }
     },
