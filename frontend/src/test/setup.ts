@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll } from "vitest";
 
 import { configureClient } from "../lib/client";
 import { server } from "./msw/server";
+import { settleRouters } from "./routers";
 
 // The generated client, as main.tsx configures it (absolute URLs on jsdom's origin).
 configureClient();
@@ -22,7 +23,9 @@ configure({ asyncUtilTimeout: 15_000 });
 beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });
 });
-afterEach(() => {
+// Route loads still running finish first, against this test's handlers (routers.ts).
+afterEach(async () => {
+  await settleRouters();
   server.resetHandlers();
   cleanup();
 });
