@@ -25,12 +25,17 @@ beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });
 });
 // Route loads still running finish first, against this test's handlers (routers.ts).
+// If one never settles, the hook still fails, and the teardown below still runs so the
+// next test starts clean.
 afterEach(async () => {
-  await settleRouters();
-  server.resetHandlers();
-  cleanup();
-  // A fresh IndexedDB per test: the offline queue persists there (P0-25).
-  await resetIdb();
+  try {
+    await settleRouters();
+  } finally {
+    server.resetHandlers();
+    cleanup();
+    // A fresh IndexedDB per test: the offline queue persists there (P0-25).
+    await resetIdb();
+  }
 });
 afterAll(() => {
   server.close();
