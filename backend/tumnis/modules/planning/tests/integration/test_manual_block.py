@@ -33,7 +33,6 @@ MONDAY = date(2026, 3, 9)  # the seed's calendar day (the clock's): New York is 
 
 @pytest.mark.req("FR-2.6")
 @pytest.mark.wp("P1-12")
-@pytest.mark.xfail(strict=True, reason="spec:P1-12")
 async def test_busy_block_refused_409(
     app: FastAPI, seed: SeedResult, clock: FixedClock, owner_session: AsyncSession
 ) -> None:
