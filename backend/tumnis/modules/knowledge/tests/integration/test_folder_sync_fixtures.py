@@ -31,7 +31,6 @@ CASES = load_scenarios(SCENARIOS)
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 @pytest.mark.parametrize(
     ("backend", "scenario"),
     [pytest.param(backend, scenario, id=f"{name}-{backend}") for name, backend, scenario in CASES],
