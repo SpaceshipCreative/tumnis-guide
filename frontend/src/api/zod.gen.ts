@@ -1348,7 +1348,7 @@ export const zKnowledgeGetFileQuery = z.object({
 /**
  * Successful Response
  */
-export const zKnowledgeGetFileResponse = z.string();
+export const zKnowledgeGetFileResponse = z.instanceof(Blob);
 
 export const zAuthListKeysQuery = z.object({
   cursor: z.string().max(2048).nullish(),
@@ -1388,7 +1388,7 @@ export const zAuthRotateKeyPath = z.object({
 export const zAuthRotateKeyResponse = zKeyCreated;
 
 export const zKnowledgeUploadDocumentBody = z.object({
-  file: z.string(),
+  file: z.instanceof(Blob),
   project_id: z.uuid().optional(),
   title: z.string().optional(),
 });
