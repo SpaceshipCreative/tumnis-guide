@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "DecisionPoint": {
+      "enum": [
+        "quick_add_label",
+        "project_match",
+        "actionability",
+        "duplicate",
+        "approval_need",
+        "blocking_impact",
+        "focus_on_task",
+        "nudge_warranted",
+        "estimate_plausibility"
+      ],
+      "title": "DecisionPoint",
+      "type": "string"
+    },
+    "Route": {
+      "enum": [
+        "applied",
+        "review",
+        "deterministic",
+        "approval_required"
+      ],
+      "title": "Route",
+      "type": "string"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/events/v1/decision.made.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "cached": {
+      "title": "Cached",
+      "type": "boolean"
+    },
+    "decision_id": {
+      "format": "uuid",
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "decision_point": {
+      "$ref": "#/$defs/DecisionPoint"
+    },
+    "fallback": {
+      "title": "Fallback",
+      "type": "boolean"
+    },
+    "outcome": {
+      "$ref": "#/$defs/Route"
+    },
+    "provider": {
+      "enum": [
+        "jev",
+        "vllm",
+        "fake",
+        "none"
+      ],
+      "title": "Provider",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "decision_id",
+    "decision_point",
+    "outcome",
+    "provider",
+    "fallback",
+    "cached"
+  ],
+  "title": "DecisionMadeV1",
+  "type": "object"
+}

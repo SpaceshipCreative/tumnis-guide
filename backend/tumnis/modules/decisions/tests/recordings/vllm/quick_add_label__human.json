@@ -1,0 +1,573 @@
+{
+  "point": "quick_add_label",
+  "inputs": {
+    "title": "Sign the Acme master services agreement",
+    "project_name": "Acme site",
+    "project_goal": "Ship the Acme marketing site redesign by June",
+    "reserved_judgments": [
+      "pricing",
+      "hiring",
+      "client contracts"
+    ]
+  },
+  "exchanges": [
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: Who should do this task? Human: it needs a decision, a relationship, a signature, physical presence, or judgment the user has reserved (see `reserved_judgments`). AI: it is fully specified, verifiable by tests or an artifact, and within a software agent's competence. Hybrid: part of it is AI work and part needs the human. Unknown: the title does not say enough to tell.\nAllowed answers:\n- human: Needs a decision, a relationship, a signature, physical presence, or a judgment the user reserved.\n- ai: Fully specified, verifiable by tests or an artifact, and within a software agent's competence.\n- hybrid: Part of it is AI work and part needs the human.\n- unknown: The title does not say enough to tell.\nState (JSON): {\"project_goal\":\"Ship the Acme marketing site redesign by June\",\"project_name\":\"Acme site\",\"reserved_judgments\":[\"pricing\",\"hiring\",\"client contracts\"],\"title\":\"Sign the Acme master services agreement\"}\nAllowed answers, exactly one of: human, ai, hybrid, unknown"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "human",
+            "ai",
+            "hybrid",
+            "unknown"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "human"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "human"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "human"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "human"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "human"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: The task needs the user to make a decision.\nAllowed answers:\n- yes: the statement is true\n- no: the statement is false\nState (JSON): {\"project_goal\":\"Ship the Acme marketing site redesign by June\",\"project_name\":\"Acme site\",\"reserved_judgments\":[\"pricing\",\"hiring\",\"client contracts\"],\"title\":\"Sign the Acme master services agreement\"}\nAllowed answers, exactly one of: yes, no"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: The task depends on a personal relationship or conversation.\nAllowed answers:\n- yes: the statement is true\n- no: the statement is false\nState (JSON): {\"project_goal\":\"Ship the Acme marketing site redesign by June\",\"project_name\":\"Acme site\",\"reserved_judgments\":[\"pricing\",\"hiring\",\"client contracts\"],\"title\":\"Sign the Acme master services agreement\"}\nAllowed answers, exactly one of: yes, no"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: The task needs the user's signature or legal approval.\nAllowed answers:\n- yes: the statement is true\n- no: the statement is false\nState (JSON): {\"project_goal\":\"Ship the Acme marketing site redesign by June\",\"project_name\":\"Acme site\",\"reserved_judgments\":[\"pricing\",\"hiring\",\"client contracts\"],\"title\":\"Sign the Acme master services agreement\"}\nAllowed answers, exactly one of: yes, no"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: The task needs someone physically present.\nAllowed answers:\n- yes: the statement is true\n- no: the statement is false\nState (JSON): {\"project_goal\":\"Ship the Acme marketing site redesign by June\",\"project_name\":\"Acme site\",\"reserved_judgments\":[\"pricing\",\"hiring\",\"client contracts\"],\"title\":\"Sign the Acme master services agreement\"}\nAllowed answers, exactly one of: yes, no"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: The task touches a judgment listed in `reserved_judgments`.\nAllowed answers:\n- yes: the statement is true\n- no: the statement is false\nState (JSON): {\"project_goal\":\"Ship the Acme marketing site redesign by June\",\"project_name\":\"Acme site\",\"reserved_judgments\":[\"pricing\",\"hiring\",\"client contracts\"],\"title\":\"Sign the Acme master services agreement\"}\nAllowed answers, exactly one of: yes, no"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: The task is fully specified and its result can be verified by a test or an artifact.\nAllowed answers:\n- yes: the statement is true\n- no: the statement is false\nState (JSON): {\"project_goal\":\"Ship the Acme marketing site redesign by June\",\"project_name\":\"Acme site\",\"reserved_judgments\":[\"pricing\",\"hiring\",\"client contracts\"],\"title\":\"Sign the Acme master services agreement\"}\nAllowed answers, exactly one of: yes, no"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "no"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    }
+  ],
+  "recorded_at": null,
+  "synthetic": true,
+  "notes": "Synthetic, not from the homelab vLLM: chat completions hand-authored in the OpenAI-compatible wire shape, with five votes per question consistent with the matching Jev recording's answer. Scott to re-record against the homelab vLLM."
+}

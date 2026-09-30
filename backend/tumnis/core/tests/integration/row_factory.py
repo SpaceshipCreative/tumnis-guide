@@ -34,6 +34,8 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("project_links", "kind"): "person",
     ("projects", "sort_key"): "a0",  # a valid rank key (core/rank.py); "x" breaks create
     ("provider_configs", "slot"): "decisions",
+    ("decision_log", "provider"): "jev",  # ck_decision_log_provider
+    ("decision_log", "outcome"): "applied",  # ck_decision_log_outcome
     ("board_columns", "sort_key"): "a0",
     ("board_columns", "status_map"): "backlog",  # a task_status enum value
     ("tasks", "board_rank"): "a0",

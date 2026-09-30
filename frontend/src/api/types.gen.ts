@@ -1017,6 +1017,10 @@ export type ProjectOut = {
    */
   links?: Array<ProjectLinkIn>;
   /**
+   * Local Decisions Only
+   */
+  local_decisions_only?: boolean;
+  /**
    * Name
    */
   name: string;
@@ -1085,6 +1089,10 @@ export type ProjectPatch = {
    * Links
    */
   links?: Array<ProjectLinkIn> | null;
+  /**
+   * Local Decisions Only
+   */
+  local_decisions_only?: boolean;
   /**
    * Name
    */
