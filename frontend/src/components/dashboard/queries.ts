@@ -5,6 +5,7 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import {
+  coolifyListDeployStatusOptions,
   projectsListProjectsOptions,
   tasksGetReviewCountOptions,
   tasksListTasksOptions,
@@ -45,6 +46,14 @@ export function todayQuery() {
 export function reviewCountQuery() {
   return queryOptions({
     ...tasksGetReviewCountOptions(),
+    retry: retryOnce,
+  });
+}
+
+/** Linked Coolify applications' last deploys and previews, per project (P2-14). */
+export function deployStatusQuery() {
+  return queryOptions({
+    ...coolifyListDeployStatusOptions(),
     retry: retryOnce,
   });
 }

@@ -1,0 +1,18 @@
+id: external_never_overwritten
+proves: Editing an outside file in Tumnis is refused in the API; a forced state goes to a conflict copy
+backends: [server_path]
+steps:
+  - outside_write: {path: "uploads/spec.md", content: "outside text"}
+  - sync
+  - tumnis_edit_document: {path: "uploads/spec.md", body: "tumnis text", error: not_text}
+  - force_document_body: {path: "uploads/spec.md", body: "forced tumnis text"}
+  - sync
+  - sync
+  - expect:
+      files:
+        "uploads/spec.md": {equals: "outside text"}
+        "uploads/spec (conflict 2026-03-09).md": {contains: "forced tumnis text"}
+      listing: ["uploads/spec (conflict 2026-03-09).md", "uploads/spec.md"]
+      writes: {"uploads/spec.md": []}
+      review_items: [{kind: sync_conflict}]
+      documents: {count: 2}

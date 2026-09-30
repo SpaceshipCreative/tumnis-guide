@@ -159,5 +159,19 @@ class StorageContract(AdapterContract[StorageBackend]):
                 await subject.list(bad, None)
         assert await read_all(subject, "ok.txt") == b"ok"
 
+    async def test_ensure_folder_writes_no_file_and_repeats_harmlessly(
+        self, subject: StorageBackend
+    ) -> None:
+        """P1-15: `ensure_folder` makes a project folder's layout where folders exist, and
+        a no-op where they are key prefixes; it never writes a file, a second call changes
+        nothing, a file can be written inside afterwards, and a hostile path is refused."""
+        await subject.ensure_folder("proj/notes")
+        await subject.ensure_folder("proj/notes")
+        assert (await subject.list("proj/", None)).items == []
+        await subject.write("proj/notes/a.md", chunks(b"a"), if_match=None)
+        assert [s.path for s in (await subject.list("proj/", None)).items] == ["proj/notes/a.md"]
+        with pytest.raises(PathRejected):
+            await subject.ensure_folder("../outside")
+
     async def test_health_ok(self, subject: StorageBackend) -> None:
         assert (await subject.health()).status == "ok"
