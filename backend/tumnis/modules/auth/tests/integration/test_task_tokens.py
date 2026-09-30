@@ -237,6 +237,46 @@ async def test_token_never_carries_delegate_or_ingest(
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
+async def test_token_stays_within_the_keys_project_limit(
+    app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
+) -> None:
+    """A key limited to project A issues tokens for A (or, for a master run, for no
+    project) but never for project B: a token reaches no project its key cannot."""
+    from tests._mcp import make_world  # noqa: PLC0415
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth  # noqa: PLC0415
+
+    world = await make_world(workspace, clock)
+    limited = await auth.create_key(
+        workspace.ctx,
+        auth.KeyIn(
+            name="project A key",
+            scopes=["tasks:read", "tasks:write", "context:read"],
+            project_ids=[world.projects["A"]],
+        ),
+        now=clock.now(),
+    )
+    token = await _token(
+        workspace, clock, kind="task", project_id=world.projects["A"], api_key_id=limited.id
+    )
+    assert token.startswith("tmt_")
+    workspace_token = await agents.issue_run_token(
+        workspace.ctx,
+        run_id=uuid.uuid4(),
+        kind=agents.RunKind.PLAN,
+        project_id=None,
+        api_key_id=limited.id,
+        now=clock.now(),
+    )
+    assert workspace_token.startswith("tmt_")
+    with pytest.raises(auth.ScopeEscalation, match="project"):
+        await _token(
+            workspace, clock, kind="task", project_id=world.projects["B"], api_key_id=limited.id
+        )
+
+
+@pytest.mark.req("SAF-1")
+@pytest.mark.wp("P2-02")
 async def test_resolver_gives_a_projectless_token_no_project_ids(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls
 ) -> None:

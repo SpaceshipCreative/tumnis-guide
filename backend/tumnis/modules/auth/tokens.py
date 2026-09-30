@@ -36,7 +36,8 @@ API_KEYS = cast("Table", ApiKey.__table__)
 
 
 class ScopeEscalation(PermissionError):  # noqa: N818  # the plan's name
-    """A task token asked for a scope its issuing key does not hold (or the key is gone)."""
+    """A task token asked for a scope or project its issuing key does not hold (or the key
+    is gone)."""
 
 
 async def key_scopes(ctx: WorkspaceContext, key_id: UUID) -> frozenset[str] | None:
@@ -54,6 +55,13 @@ async def key_scopes(ctx: WorkspaceContext, key_id: UUID) -> frozenset[str] | No
     return None if row is None else frozenset(row.scopes)
 
 
+async def _key_project_limit(ctx: WorkspaceContext, key_id: UUID) -> frozenset[UUID] | None:
+    """The projects a key is limited to (None: every project)."""
+    async with tenant_session(ctx) as s:
+        limit = await s.scalar(select(API_KEYS.c.project_ids).where(API_KEYS.c.id == key_id))
+    return None if limit is None else frozenset(limit)
+
+
 async def issue_task_token(
     ctx: WorkspaceContext,
     *,
@@ -64,7 +72,8 @@ async def issue_task_token(
     now: datetime,
 ) -> keys.NewSecret:
     """A `tmt_` token for the run, limited to its project (none for a master-profile run:
-    no project at all) and to `scopes`, which must be a subset of the issuing key's. Its
+    no project at all) and to `scopes`, which must be a subset of the issuing key's; a key
+    limited to some projects issues tokens only for one of them (or for none). Its
     `expires_at` backstop counts from the later of `now` and the database's clock (R-29's
     wall-clock ceiling, the same for every process), so a caller's clock set in the past
     cannot issue a token another process already sees as expired."""
@@ -72,6 +81,10 @@ async def issue_task_token(
     if held is None or unknown_scopes(scopes) or not scopes <= held:
         extra = sorted(scopes - (held or frozenset()))
         raise ScopeEscalation(f"the issuing key does not hold: {', '.join(extra) or 'the key'}")
+    if project_id is not None:
+        limit = await _key_project_limit(ctx, api_key_id)
+        if limit is not None and project_id not in limit:
+            raise ScopeEscalation(f"the issuing key does not reach project {project_id}")
     new = keys.generate("tmt", crypto.peppers())
     async with tenant_session(ctx) as s:
         await s.execute(
