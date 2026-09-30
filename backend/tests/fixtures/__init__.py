@@ -851,6 +851,14 @@ class WorkerKiller:
         finally:
             await self._stop(proc)
 
+    async def start(self, killpoint: str | None = None) -> asyncio.subprocess.Process:
+        """A worker on this killer's databases, armed at `killpoint` when one is given, for
+        tests that drive their own workflows (P1-04); end it with `stop`."""
+        return await self._start(killpoint)
+
+    async def stop(self, proc: asyncio.subprocess.Process) -> None:
+        await self._stop(proc)
+
     @staticmethod
     async def _stop(proc: asyncio.subprocess.Process) -> None:
         if proc.returncode is not None:
@@ -898,6 +906,11 @@ async def worker_killer(
             sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(name), sql.Identifier(APP))
         )
     sys_db = DbUrls(pg_base.host, pg_base.port, name)
+    # DBOS's tables up front, so a test may enqueue through a DBOSClient (which never
+    # migrates) before its first worker starts (P1-04).
+    from dbos import run_dbos_database_migrations  # noqa: PLC0415
+
+    await asyncio.to_thread(run_dbos_database_migrations, sys_db.url(APP))
     made: list[WorkerKiller] = []
 
     def factory(

@@ -5,6 +5,7 @@ lint
 unit
 contract
 integration
+daemon
 e2e
 skills
 security

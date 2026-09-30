@@ -1,0 +1,111 @@
+{
+  "$id": "https://tumnis.dev/schemas/runner/v1/health_report.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authenticated": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Authenticated"
+    },
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "hermes_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Hermes Version"
+    },
+    "mcp_servers": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 200,
+      "title": "Mcp Servers",
+      "type": "array"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "profile": {
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "title": "Profile",
+      "type": "string"
+    },
+    "profile_exists": {
+      "title": "Profile Exists",
+      "type": "boolean"
+    },
+    "reachable": {
+      "title": "Reachable",
+      "type": "boolean"
+    },
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "type": {
+      "const": "health_report",
+      "default": "health_report",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "request_id",
+    "profile",
+    "profile_exists",
+    "reachable",
+    "authenticated",
+    "hermes_version"
+  ],
+  "title": "HealthReport",
+  "type": "object"
+}
