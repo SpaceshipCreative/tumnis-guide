@@ -47,12 +47,13 @@ from tumnis.core.base import Base
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.principal import principal_of
-from tumnis.core.tenancy import tenant_session
+from tumnis.core.tenancy import WorkspaceContext, tenant_session
 
 IDEMPOTENCY_TTL: Final = timedelta(hours=24)  # REL-2
 KEY_RE: Final = re.compile(r"^[A-Za-z0-9_\-:.]{8,255}$")
 KEY_HEADER: Final = "Idempotency-Key"
 REPLAYED_HEADER: Final = "Idempotent-Replayed"
+MCP_METHOD: Final = "MCP"  # the method column of an MCP tool call's key row (P2-01)
 # Only these response headers are stored and replayed; never Set-Cookie.
 STORED_HEADERS: Final = ("content-type", "location", "etag")
 
@@ -229,6 +230,75 @@ async def run(request: Request, call_next: Handler) -> Response:
         return rollback.response
     finally:
         request.state.session = None
+
+
+async def run_idempotent(  # one key row: who, which key, what and when
+    ctx: WorkspaceContext,
+    *,
+    principal: str,
+    key: str,
+    route: str,
+    args: Mapping[str, Any],
+    now: datetime,
+    work: Callable[[AsyncSession], Awaitable[bytes]],
+) -> bytes:
+    """`run` for a call that is not an HTTP request (an MCP tool call, P2-01): `work` runs
+    once per (workspace, principal, key) in the key row's transaction and its answer is
+    stored; a retry with the same `route` and `args` gets the stored answer, other ones are
+    422 `idempotency_mismatch`. An error rolls back the work and the key alike."""
+    digest = request_hash(MCP_METHOD, route, canonical(json.dumps(dict(args)).encode()))
+    fields = {
+        "principal": principal,
+        "key": key,
+        "route": route,
+        "method": MCP_METHOD,
+        "request_hash": digest,
+        "expires_at": now + IDEMPOTENCY_TTL,
+    }
+    new_row = (
+        insert(_t)
+        .values(**fields)
+        .on_conflict_do_nothing(index_elements=[_t.c.workspace_id, _t.c.principal, _t.c.key])
+        .returning(_t.c.id)
+    )
+    async with tenant_session(ctx) as s:
+        inserted = (await s.execute(new_row)).first()
+        if inserted is None:  # blocked on the unique index until the first one committed
+            found = (
+                (
+                    await s.execute(
+                        select(_t)
+                        .where(_t.c.principal == principal, _t.c.key == key)
+                        .with_for_update()
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if found["expires_at"] <= now:
+                await s.execute(delete(_t).where(_t.c.id == found["id"]))
+                inserted = (await s.execute(new_row)).first()
+                if inserted is None:  # pragma: no cover  # we hold the row lock
+                    raise ProblemError(409, "idempotency_in_progress")
+            elif (found["request_hash"], found["route"], found["method"]) != (
+                digest,
+                route,
+                MCP_METHOD,
+            ):
+                raise ProblemError(
+                    422, "idempotency_mismatch", "This key was used with a different request"
+                )
+            elif found["response_status"] is None:  # pragma: no cover  # never committed
+                raise ProblemError(409, "idempotency_in_progress")
+            else:
+                return bytes(found["response_body"] or b"")
+        body = await work(s)
+        await s.execute(
+            update(_t)
+            .where(_t.c.id == inserted.id)
+            .values(response_status=200, response_headers={}, response_body=body)
+        )
+        return body
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:

@@ -36,14 +36,16 @@ export const LIVE_MAP: Record<
       "planningGetProjectWeek", // due dates and the tasks to schedule (P1-12)
     ],
   },
-  // A project's board and columns carry its id in their path: column edits and a new card
-  // threshold (FR-3.8) refresh them, a saved brief its Brief rail section (P0-24); any
-  // project change refreshes search results (P0-20). The Coolify poll announces a linked
-  // project when its deploy status changes, and a link edit changes which apps a project
-  // shows (P2-14) and which calendar events match the project's week (P1-12).
+  // A project's board, columns and agent context (P2-01) carry its id in their path:
+  // column edits and a new card threshold (FR-3.8) refresh them, a saved brief its Brief
+  // rail section (P0-24); any project change refreshes search results (P0-20). The Coolify
+  // poll announces a linked project when its deploy status changes, and a link edit
+  // changes which apps a project shows (P2-14) and which calendar events match the
+  // project's week (P1-12).
   project: {
     details: [
       "projectsGetProject",
+      "projectsGetProjectContext",
       "tasksGetBoard",
       "tasksGetColumns",
       "knowledgeGetBrief",

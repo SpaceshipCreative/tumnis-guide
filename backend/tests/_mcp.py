@@ -1,0 +1,398 @@
+"""MCP helpers for the P2-01 spec tests (the agent surface: `/mcp` and its REST twins).
+
+No assertions live here: spec-guard locks the test bodies, and these helpers adapt to the
+registry, the routes and the auth api.
+
+- `mcp_running(app)`: enters the app's MCP session manager (what the lifespan does), for
+  tests that drive `/mcp` through `httpx.ASGITransport`, which runs no lifespan.
+- `http_for(app, key=None)`: a plain httpx client on the app, with the bearer key when
+  given. Unlike `KeyClient` it adds no `Idempotency-Key`: the write-rule tests choose.
+- `rpc`, `mcp_tools`, `mcp_call`: one JSON-RPC POST to `/mcp` (stateless, JSON answers),
+  the tool list, and one tool call read back as an `Outcome`.
+- `rest_call(http, op, args)`: the same call through the op's REST twin (path parameters
+  filled from `args`, the rest as query or body; `idempotency_key` sent as the header).
+- `World` / `make_world(...)`: projects A and B, each with a Hybrid parent task, made
+  through the projects and tasks apis; `SAMPLES[op_name](world, project)` gives an op's
+  arguments aimed at that project (a fresh task for ops that update one).
+- `Callers`: API keys (cached by scopes and projects), a task token bound to a run in
+  project A, and the master key (marked through the caller-facts seam).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import itertools
+import json
+import re
+import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Final
+
+import httpx
+
+from tests._keys import BASE_URL
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from tests.fixtures import WorkspaceHandle
+    from tumnis.core.clock import FixedClock
+
+MCP_PATH: Final = "/mcp"
+MCP_ACCEPT: Final = "application/json, text/event-stream"
+ALL_SCOPES: Final = frozenset(
+    {
+        "tasks:read",
+        "tasks:write",
+        "context:read",
+        "knowledge:write",
+        "drafts:write",
+        "delegate",
+        "ingest",
+    }
+)
+TOKEN_SCOPES: Final = frozenset({"tasks:read", "tasks:write", "context:read"})
+_ids = itertools.count(1)
+
+
+@dataclass(frozen=True)
+class Outcome:
+    """What one call answered: the HTTP status, the problem `code` (None on success) and
+    the result (a tool's `structuredContent`, a REST body, or the problem object)."""
+
+    status: int
+    code: str | None
+    data: Any
+
+    @property
+    def ok(self) -> bool:
+        return self.code is None
+
+
+@asynccontextmanager
+async def mcp_running(app: FastAPI) -> AsyncIterator[None]:
+    """The app's MCP session manager, running (the lifespan enters it in production).
+
+    The manager runs in a task of its own: its anyio task group must be entered and left
+    by one task, and pytest-asyncio may tear an async fixture down in another task than
+    the one that set it up."""
+    manager = app.state.mcp_session_manager
+    started, stop = asyncio.Event(), asyncio.Event()
+
+    async def run() -> None:
+        async with manager.run():
+            started.set()
+            await stop.wait()
+
+    task = asyncio.create_task(run())
+    waiter = asyncio.create_task(started.wait())
+    await asyncio.wait({task, waiter}, return_when=asyncio.FIRST_COMPLETED)
+    if task.done():  # it failed to start: raise its error
+        waiter.cancel()
+        await task
+    try:
+        yield
+    finally:
+        stop.set()
+        await task
+
+
+def http_for(
+    app: FastAPI, key: str | None = None, *, cookies: dict[str, str] | None = None
+) -> httpx.AsyncClient:
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url=BASE_URL,
+        headers=headers,
+        cookies=cookies,
+    )
+
+
+async def rpc(
+    http: httpx.AsyncClient,
+    method: str,
+    params: dict[str, Any] | None = None,
+    *,
+    notification: bool = False,
+) -> httpx.Response:
+    message: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
+    if params is not None:
+        message["params"] = params
+    if not notification:
+        message["id"] = next(_ids)
+    return await http.post(
+        MCP_PATH,
+        json=message,
+        headers={"Accept": MCP_ACCEPT, "Content-Type": "application/json"},
+    )
+
+
+def _problem_outcome(response: httpx.Response) -> Outcome:
+    try:
+        body = response.json()
+    except ValueError:
+        body = {"raw": response.text}
+    code = body.get("code") if isinstance(body, dict) else None
+    return Outcome(response.status_code, code or f"http_{response.status_code}", body)
+
+
+async def mcp_tools(http: httpx.AsyncClient) -> dict[str, dict[str, Any]]:
+    """The tool list by name (`tools/list`)."""
+    response = await rpc(http, "tools/list", {})
+    response.raise_for_status()
+    return {tool["name"]: tool for tool in response.json()["result"]["tools"]}
+
+
+async def mcp_call(http: httpx.AsyncClient, name: str, args: dict[str, Any]) -> Outcome:
+    """One `tools/call`; a tool error's code comes from its structured problem, or from
+    the problem JSON in its text when it carries no structured content."""
+    response = await rpc(http, "tools/call", {"name": name, "arguments": args})
+    if response.status_code != 200:
+        return _problem_outcome(response)
+    body = response.json()
+    if "error" in body:
+        return Outcome(200, f"jsonrpc_{body['error'].get('code')}", body["error"])
+    result = body["result"]
+    structured = result.get("structuredContent")
+    if not result.get("isError"):
+        return Outcome(200, None, structured)
+    problem = structured
+    if problem is None:
+        text = "".join(c.get("text", "") for c in result.get("content", []))
+        try:
+            problem = json.loads(text)
+        except ValueError:
+            problem = {"code": "tool_error", "detail": text}
+    return Outcome(200, str(problem.get("code") or "tool_error"), problem)
+
+
+_PATH_PARAM = re.compile(r"{([^}]+)}")
+
+
+def path_params(rest_path: str) -> list[str]:
+    return _PATH_PARAM.findall(rest_path)
+
+
+def rest_request(op: Any, args: dict[str, Any]) -> tuple[str, str, dict[str, Any], Any, dict]:
+    """(method, url, query, body, headers) for the op's REST twin."""
+    rest = dict(args)
+    key = rest.pop("idempotency_key", None)
+    url = op.rest_path
+    for name in path_params(op.rest_path):
+        url = url.replace("{" + name + "}", str(rest.pop(name)))
+    headers = {"Idempotency-Key": key} if key is not None else {}
+    if op.rest_method == "GET":
+        query = {k: v for k, v in rest.items() if v is not None}
+        return op.rest_method, url, query, None, headers
+    return op.rest_method, url, {}, rest, headers
+
+
+async def rest_call(http: httpx.AsyncClient, op: Any, args: dict[str, Any]) -> Outcome:
+    method, url, query, body, headers = rest_request(op, args)
+    response = await http.request(method, url, params=query or None, json=body, headers=headers)
+    if response.status_code >= 400:
+        return _problem_outcome(response)
+    return Outcome(response.status_code, None, response.json())
+
+
+def idem() -> str:
+    return f"mcp-test-{uuid.uuid4()}"
+
+
+# --- The world the sweeps act on -----------------------------------------------------------
+
+
+@dataclass
+class World:
+    workspace: WorkspaceHandle
+    clock: FixedClock
+    projects: dict[str, uuid.UUID] = field(default_factory=dict)
+    parents: dict[str, uuid.UUID] = field(default_factory=dict)
+
+    async def task(self, project: str, **overrides: Any) -> Any:
+        """A fresh root task in the project, made by the workspace's user."""
+        from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+        from tumnis.core.types import ActorRef  # noqa: PLC0415
+        from tumnis.modules.tasks import api as tasks  # noqa: PLC0415
+
+        actor = ActorRef(f"user:{self.workspace.user_id}")
+        overrides.setdefault("title", f"Sweep task {next(_ids)}")
+        overrides.setdefault("label", "human")
+        overrides.setdefault("estimate_minutes", 45)
+        async with tenant_session(WorkspaceContext(self.workspace.id, actor)) as s:
+            return await tasks.create_task(
+                s,
+                actor,
+                tasks.TaskCreate(project_id=self.projects[project], **overrides),
+                now=self.clock.now(),
+            )
+
+
+async def make_world(workspace: WorkspaceHandle, clock: FixedClock) -> World:
+    """Projects A and B (threshold 30 on A), each with a Hybrid parent task."""
+    from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+    from tumnis.core.types import ActorRef  # noqa: PLC0415
+    from tumnis.modules.projects import api as projects  # noqa: PLC0415
+
+    world = World(workspace, clock)
+    actor = ActorRef(f"user:{workspace.user_id}")
+    for name in ("A", "B"):
+        async with tenant_session(WorkspaceContext(workspace.id, actor)) as s:
+            made = await projects.create_project(
+                s,
+                actor,
+                projects.ProjectCreate(name=f"Surface project {name} {uuid.uuid4().hex[:6]}"),
+                now=clock.now(),
+            )
+            made = await projects.update_project(
+                s,
+                actor,
+                made.id,
+                projects.ProjectPatch(subtask_threshold_min=30, version=made.version),
+                made.version,
+                now=clock.now(),
+            )
+        world.projects[name] = made.id
+        parent = await world.task(name, title=f"Hybrid parent {name}", label="hybrid")
+        world.parents[name] = parent.id
+    return world
+
+
+Sample = Callable[[World, str], Awaitable[dict[str, Any]]]
+
+
+async def _list_tasks(world: World, project: str) -> dict[str, Any]:
+    return {"project_id": str(world.projects[project]), "limit": 50}
+
+
+async def _create_task(world: World, project: str) -> dict[str, Any]:
+    return {
+        "project_id": str(world.projects[project]),
+        "title": f"Made through the surface {next(_ids)}",
+        "label": "human",
+        "estimate_minutes": 20,
+        "idempotency_key": idem(),
+    }
+
+
+async def _update_task_status(world: World, project: str) -> dict[str, Any]:
+    task = await world.task(project)
+    return {
+        "task_id": str(task.id),
+        "to": "today",
+        "version": task.version,
+        "idempotency_key": idem(),
+    }
+
+
+async def _update_estimate(world: World, project: str) -> dict[str, Any]:
+    task = await world.task(project)
+    return {
+        "task_id": str(task.id),
+        "estimate_minutes": 90,
+        "reason": "Bigger than it looked",
+        "version": task.version,
+        "idempotency_key": idem(),
+    }
+
+
+async def _get_project_context(world: World, project: str) -> dict[str, Any]:
+    return {"project_id": str(world.projects[project])}
+
+
+async def _search(world: World, project: str) -> dict[str, Any]:
+    return {"q": "surface", "project_id": str(world.projects[project]), "limit": 20}
+
+
+# One entry per registered op; the sweeps fail on an op without one ("add a sample").
+SAMPLES: Final[dict[str, Sample]] = {
+    "list_tasks": _list_tasks,
+    "create_task": _create_task,
+    "update_task_status": _update_task_status,
+    "update_estimate": _update_estimate,
+    "get_project_context": _get_project_context,
+    "search": _search,
+}
+
+
+# --- Callers ---------------------------------------------------------------------------------
+
+
+@dataclass
+class Callers:
+    """Credentials for the sweeps, made through the auth api in the world's workspace."""
+
+    app: FastAPI
+    world: World
+    _keys: dict[tuple[frozenset[str], frozenset[uuid.UUID] | None], tuple[str, uuid.UUID]] = field(
+        default_factory=dict
+    )
+    master_key_id: uuid.UUID | None = None
+
+    def _ctx(self) -> Any:
+        from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
+        from tumnis.core.types import ActorRef  # noqa: PLC0415
+
+        return WorkspaceContext(
+            self.world.workspace.id, ActorRef(f"user:{self.world.workspace.user_id}")
+        )
+
+    async def key(
+        self, scopes: frozenset[str], projects: frozenset[uuid.UUID] | None = None
+    ) -> tuple[str, uuid.UUID]:
+        """(secret, key id) of a key with exactly these scopes (and project limit)."""
+        from tumnis.modules.auth import api as auth  # noqa: PLC0415
+
+        cache_key = (frozenset(scopes), projects)
+        if cache_key not in self._keys:
+            created = await auth.create_key(
+                self._ctx(),
+                auth.KeyIn(
+                    name=f"sweep {next(_ids)}",
+                    scopes=sorted(scopes),
+                    project_ids=None if projects is None else sorted(projects, key=str),
+                ),
+                now=self.world.clock.now(),
+            )
+            self._keys[cache_key] = (created.key, created.id)
+        return self._keys[cache_key]
+
+    async def task_token(self, project: str = "A", run_id: uuid.UUID | None = None) -> str:
+        """A task token for a run in the project, with `TOKEN_SCOPES`."""
+        from tumnis.modules.auth import api as auth  # noqa: PLC0415
+
+        _secret, parent_id = await self.key(ALL_SCOPES)
+        return await auth.issue_task_token(
+            self._ctx(),
+            run_id=run_id or uuid.uuid4(),
+            project_id=self.world.projects[project],
+            api_key_id=parent_id,
+            scopes=TOKEN_SCOPES,
+            now=self.world.clock.now(),
+        )
+
+    async def master_key(self) -> str:
+        """A key with every scope that the caller-facts seam marks as the master's (P2-02
+        links it to the master profile; until then the test registers the fact)."""
+        from tumnis.core import agent_surface  # noqa: PLC0415
+
+        secret, key_id = await self.key(ALL_SCOPES, None)
+        self.master_key_id = key_id
+
+        async def facts(principal: Any) -> Any:
+            if principal.subject_id == key_id:
+                return agent_surface.CallerFacts(profile_id=None, is_master=True, run_id=None)
+            return None
+
+        agent_surface.register_caller_facts("test-master", facts)
+        return secret
+
+    def close(self) -> None:
+        """Drops the master fact the test registered."""
+        if self.master_key_id is not None:
+            from tumnis.core import agent_surface  # noqa: PLC0415
+
+            agent_surface.unregister_caller_facts("test-master")
