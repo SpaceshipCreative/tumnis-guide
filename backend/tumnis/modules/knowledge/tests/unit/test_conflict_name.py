@@ -28,7 +28,6 @@ CASES = [
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 @pytest.mark.parametrize(
     ("path", "siblings", "expected"),
     CASES,

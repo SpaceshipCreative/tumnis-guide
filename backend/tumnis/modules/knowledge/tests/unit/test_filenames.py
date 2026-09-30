@@ -43,7 +43,6 @@ CASES = [
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 @pytest.mark.parametrize(
     ("kind", "name", "taken", "expected"),
     CASES,
@@ -58,7 +57,7 @@ def test_sanitize_and_dedupe(kind: str, name: str, taken: set[str] | None, expec
     empty -> 'untitled'. `dedupe_name`: a taken name (compared ignoring case) gets ' 2',
     ' 3' before its extension.
     """
-    from tumnis.modules.knowledge.sync_rules import (  # type: ignore[import-untyped]  # red until P1-15 lands  # noqa: PLC0415
+    from tumnis.modules.knowledge.sync_rules import (  # noqa: PLC0415
         dedupe_name,
         sanitize_filename,
     )
@@ -72,7 +71,6 @@ def test_sanitize_and_dedupe(kind: str, name: str, taken: set[str] | None, expec
 
 @pytest.mark.req("FR-15.12", "SEC-5")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 @given(name=st.text())
 def test_sanitized_names_pass_safe_rel_path(name: str) -> None:
     """T-P1-15-06

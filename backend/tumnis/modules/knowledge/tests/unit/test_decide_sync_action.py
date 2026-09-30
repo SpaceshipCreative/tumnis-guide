@@ -123,7 +123,7 @@ def _decide(
     path: str = PATH,
     siblings: frozenset[str] = SIBLINGS,
 ) -> Any:
-    from tumnis.modules.knowledge.sync_rules import (  # type: ignore[import-untyped]  # red until P1-15 lands  # noqa: PLC0415
+    from tumnis.modules.knowledge.sync_rules import (  # noqa: PLC0415
         Local,
         Prev,
         Remote,
@@ -142,7 +142,6 @@ def _decide(
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 @pytest.mark.parametrize(
     ("prev", "remote", "local", "expected"),
     [pytest.param(p, r, lo, e, id=row) for row, p, r, lo, e in ROWS],
@@ -226,7 +225,6 @@ NEVER_FOR_EXTERNAL = {"write_through", "rewrite_from_tumnis", "move_to_tumnis_tr
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 @given(inputs=_inputs(st.just("external")))
 def test_never_overwrites_external_file(inputs: Any) -> None:
     """T-P1-15-02
@@ -248,7 +246,6 @@ CREATES = {"write_new", "rewrite_from_tumnis"}  # write where nothing is
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 @given(inputs=_inputs(st.sampled_from(["tumnis", "external"])))
 def test_every_write_has_a_precondition(inputs: Any) -> None:
     """T-P1-15-03

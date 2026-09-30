@@ -16,7 +16,6 @@ TWIN = UUID("0190a7a0-0000-7000-8000-00000000000c")
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 def test_pairs_by_tumnis_id_then_hash() -> None:
     """T-P1-15-07
     A note renamed and edited outside pairs with its old path by the `tumnis_id` in its
@@ -24,7 +23,7 @@ def test_pairs_by_tumnis_id_then_hash() -> None:
     file with two identical candidates does not pair (trash plus create, never a wrong
     pair). `read_tumnis_id` reads the id from a note's frontmatter.
     """
-    from tumnis.modules.knowledge.sync_rules import (  # type: ignore[import-untyped]  # red until P1-15 lands  # noqa: PLC0415
+    from tumnis.modules.knowledge.sync_rules import (  # noqa: PLC0415
         Prev,
         Remote,
         pair_renames,
