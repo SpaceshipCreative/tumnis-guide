@@ -97,12 +97,13 @@ class ApiKey(TenantBase, Base):
 
 
 class TaskToken(TenantBase, Base):
-    """A `tmt_` token bound to one run and one project (R-27); lives until the run ends."""
+    """A `tmt_` token bound to one run and one project (R-27); lives until the run ends. A
+    master-profile run's token has no project (P2-02, Scott decision 30)."""
 
     __tablename__ = "task_tokens"
 
     run_id: Mapped[UUID]
-    project_id: Mapped[UUID]
+    project_id: Mapped[UUID | None]
     api_key_id: Mapped[UUID] = mapped_column(ForeignKey("api_keys.id"))
     scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'"))
     prefix: Mapped[str]
