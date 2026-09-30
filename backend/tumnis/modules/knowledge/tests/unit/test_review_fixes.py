@@ -113,6 +113,41 @@ async def test_one_file_part_is_spooled(tmp_path: Path) -> None:
     assert dest.read_bytes() == b"first"
 
 
+@pytest.mark.req("SEC-10")
+@pytest.mark.wp("P1-16")
+async def test_no_file_part_touches_no_spool_directory(tmp_path: Path) -> None:
+    """A body with only text fields: 422 `invalid_upload`, and the spool directory is not
+    even made (the schema fuzz found a 500 where the spool directory cannot be created)."""
+    body = (
+        f'--{BOUNDARY}\r\nContent-Disposition: form-data; name="title"\r\n\r\nx\r\n'
+        f"--{BOUNDARY}--\r\n"
+    ).encode()
+    dest = tmp_path / "spool" / "v1"
+
+    with pytest.raises(ProblemError) as caught:
+        await spool_upload(_request(body), dest, on_file=_no_check)
+
+    assert caught.value.problem.code == "invalid_upload"
+    assert not dest.parent.exists()
+
+
+@pytest.mark.req("SEC-10")
+@pytest.mark.wp("P1-16")
+async def test_refused_target_touches_no_spool_directory(tmp_path: Path) -> None:
+    """When `on_file` refuses (a missing project, an offline location), the spool directory
+    is not made either."""
+    body = _file_part("a.txt", b"first") + f"--{BOUNDARY}--\r\n".encode()
+    dest = tmp_path / "spool" / "v1"
+
+    async def refuse(fields: dict[str, str]) -> None:
+        raise NotFound("projects", uuid4())
+
+    with pytest.raises(NotFound):
+        await spool_upload(_request(body), dest, on_file=refuse)
+
+    assert not dest.parent.exists()
+
+
 class _NoRows:
     """A session whose UPDATE ... RETURNING matches nothing."""
 

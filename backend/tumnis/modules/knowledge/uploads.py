@@ -123,6 +123,8 @@ class _Sink:
         if name == FILE_FIELD:
             await self.on_file(self.result.fields)
             self.result.name = params.get(b"filename", b"").decode(errors="replace") or "upload"
+            # Made only now: a refused target or a body without a file part touches no disk.
+            await asyncio.to_thread(self.dest.parent.mkdir, parents=True, exist_ok=True)
             self.handle = await asyncio.to_thread(self.dest.open, "wb")
             self.field = None
         else:
@@ -168,7 +170,6 @@ async def spool_upload(
     collector = _Collector()
     parser = MultipartParser(_boundary(request), collector.callbacks())  # type: ignore[arg-type]
     sink = _Sink(dest, result, on_file)
-    await asyncio.to_thread(dest.parent.mkdir, parents=True, exist_ok=True)
     try:
         async for chunk in request.stream():
             try:
