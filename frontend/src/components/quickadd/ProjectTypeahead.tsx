@@ -1,7 +1,8 @@
 // The project picker in quick add (P0-25, FR-3.9): a combobox over
 // `GET /v1/typeahead/projects?q=` (debounced), followed by the projects this page already
-// holds that match, so a project just created (before the search index has it) and
-// capture while offline still find their project. Arrow keys move, Enter picks, Escape
+// holds that match (the project list is read when the picker mounts), so a project just
+// created (before the search index has it) and capture while offline still find their
+// project. Arrow keys move, Enter picks, Escape
 // closes the list.
 import {
   type QueryClient,
@@ -12,7 +13,9 @@ import { type KeyboardEvent, type RefObject, useId, useState } from "react";
 
 import { searchTypeaheadProjectsOptions } from "../../api/@tanstack/react-query.gen";
 import { useDebounced } from "../../lib/debounce";
+import { loadKnownProjects } from "../../lib/knownProjects";
 import { queryId } from "../../lib/task-cache";
+import { projectsQuery } from "../dashboard/queries";
 
 export interface ProjectChoice {
   id: string;
@@ -35,7 +38,7 @@ function isProject(value: unknown): value is ProjectLike {
   );
 }
 
-/** Projects in the Query cache (the project list and single projects) matching `q`. */
+/** Projects in the Query cache (the project list, single projects) and those this device saw earlier, matching `q`. */
 export function cachedProjects(
   client: QueryClient,
   q: string,
@@ -59,6 +62,10 @@ export function cachedProjects(
         found.set(row.id, { id: row.id, name: row.name });
       }
     }
+  }
+  // Projects this device saw on earlier pages, for a page that holds none (offline).
+  for (const known of loadKnownProjects()) {
+    if (known.name.toLowerCase().includes(needle)) found.set(known.id, known);
   }
   return [...found.values()];
 }
@@ -88,6 +95,10 @@ export function ProjectTypeahead({
     enabled: typing,
     retry: false,
   });
+  // The project list (the dashboard's query, so usually already cached) is what the local
+  // matches come from; loading it here keeps a project findable on a route that has not
+  // read it yet, and warms the cache for capture while offline.
+  useQuery({ ...projectsQuery(), retry: false });
   const options: ProjectChoice[] = [];
   const seen = new Set<string>();
   const server = typing

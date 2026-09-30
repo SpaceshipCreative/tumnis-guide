@@ -9,16 +9,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
 import { useActorRef, useSelector as useActorSelector } from "@xstate/react";
 import { useSelector } from "@xstate/store-react";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import type { ProjectOut } from "../../api/types.gen";
-import { useHotkeys } from "../../lib/hotkeys";
+import { appHotkeys, useHotkeys } from "../../lib/hotkeys";
 import { setSenderHooks } from "../../lib/queueSender";
 import { PUBLIC_PATHS } from "../../lib/session";
 import { invalidateTaskViews } from "../../lib/task-cache";
@@ -212,21 +206,14 @@ export function QuickAddHost({ children }: { children: ReactNode }) {
       actor.send({ type: "ONLINE" });
     }
     wasBare.current = bare;
+    if (bare) {
+      // A key pressed before the redirect to /login must not open a dialog after it.
+      uiStore.trigger.closeQuickAdd();
+      uiStore.trigger.toggleSearch({ open: false });
+    }
   }, [actor, bare]);
 
-  useHotkeys(
-    {
-      onQuickAdd: useCallback(() => {
-        uiStore.trigger.toggleSearch({ open: false });
-        uiStore.trigger.openQuickAdd();
-      }, []),
-      onSearch: useCallback(() => {
-        uiStore.trigger.closeQuickAdd();
-        uiStore.trigger.toggleSearch({});
-      }, []),
-    },
-    !bare,
-  );
+  useHotkeys(appHotkeys, !bare);
 
   // On a project page quick add starts with that project.
   const projectId = PROJECT_PATH.exec(pathname)?.[1];

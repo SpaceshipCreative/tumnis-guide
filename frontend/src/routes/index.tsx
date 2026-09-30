@@ -11,6 +11,7 @@ import {
   todayQuery,
   workspaceQuery,
 } from "../components/dashboard/queries";
+import { loaderRead } from "../lib/loader";
 
 export const dashboardSearch = z.object({
   focus: z
@@ -22,13 +23,13 @@ export const dashboardSearch = z.object({
 export const Route = createFileRoute("/")({
   validateSearch: dashboardSearch,
   loader: async ({ context: { queryClient } }) => {
-    // Fresh cached data answers at once; a failed read is left for its panel to report.
-    const settle = (read: Promise<unknown>) => read.catch(() => undefined);
+    // Fresh cached data answers at once; a failed read is left for its panel to report,
+    // and offline the loader does not wait for the network (lib/loader.ts).
     await Promise.all([
-      settle(queryClient.query(projectsQuery())),
-      settle(queryClient.query(todayQuery())),
-      settle(queryClient.query(reviewCountQuery())),
-      settle(queryClient.query(workspaceQuery())),
+      loaderRead(queryClient, projectsQuery()),
+      loaderRead(queryClient, todayQuery()),
+      loaderRead(queryClient, reviewCountQuery()),
+      loaderRead(queryClient, workspaceQuery()),
     ]);
   },
   // Commit the match at once while the loader runs (an empty page, not a spinner): the
