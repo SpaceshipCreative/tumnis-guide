@@ -19,7 +19,6 @@ test(
   "T-P0-29-01 dashboard first paint under 1 s on LAN",
   { tag: ["@P0-29", "@NFR-Performance", "@PERF-2"] },
   async ({ seededApp, signedInPage: page }, testInfo) => {
-    test.fail();
     test.skip(testInfo.project.name !== "laptop", "laptop width only");
     await seededApp.reset("load"); // 10 projects, 2,000 tasks
     await page.goto("/"); // warm: the service worker installs
@@ -36,7 +35,6 @@ test(
   "T-P0-29-02 quick-add usable within 3 s of a cold PWA open at phone width",
   { tag: ["@P0-29", "@NFR-Responsive"] },
   async ({ seededApp, signedInPage: page, context }, testInfo) => {
-    test.fail();
     test.skip(testInfo.project.name !== "phone", "phone width only");
     await seededApp.reset("load");
     await page.goto("/");
@@ -60,7 +58,6 @@ test(
   "T-P0-29-03 review queue usable within 3 s of a cold PWA open at phone width",
   { tag: ["@P0-29", "@NFR-Responsive"] },
   async ({ seededApp, signedInPage: page, context }, testInfo) => {
-    test.fail();
     test.skip(testInfo.project.name !== "phone", "phone width only");
     await seededApp.reset("load");
     await page.goto("/");
