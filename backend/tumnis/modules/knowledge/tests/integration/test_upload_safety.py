@@ -171,7 +171,6 @@ def _multipart(project_id: object, name: str, size: int, sent: list[int]) -> Asy
 
 @pytest.mark.req("SEC-10")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 async def test_51_mb_refused_50_mb_accepted(
     extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient, db: DbUrls
 ) -> None:
