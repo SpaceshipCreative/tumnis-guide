@@ -33,7 +33,6 @@ test(
   "T-DS-01-08 the theme toggle shows and remembers the choice",
   { tag: ["@DS-01", "@UX-11"] },
   async ({ page }) => {
-    test.fail();
     await page.emulateMedia({ colorScheme: "light" });
     await openShell(page);
     const html = page.locator("html");
@@ -63,7 +62,6 @@ test(
   { tag: ["@DS-01", "@UX-11"] },
   async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "laptop", "a laptop-only control");
-    test.fail();
     await openShell(page);
     const nav = page.getByRole("navigation", { name: "Primary" });
     expect((await nav.boundingBox())?.width ?? 0).toBeGreaterThan(200);
@@ -90,7 +88,6 @@ test(
   { tag: ["@DS-01", "@UX-11"] },
   async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "phone", "a phone-only control");
-    test.fail();
     await openShell(page);
     const open = page.getByRole("button", { name: "Open menu" });
     await open.click();
@@ -121,7 +118,6 @@ test(
   "T-DS-01-11 the header menus work from the keyboard",
   { tag: ["@DS-01", "@UX-7"] },
   async ({ page }) => {
-    test.fail();
     await openShell(page);
     const account = page.getByRole("button", { name: "Account" });
     await account.focus();
@@ -154,7 +150,6 @@ test(
   "T-DS-01-12 no serious accessibility violations in dark mode",
   { tag: ["@DS-01", "@UX-11"] },
   async ({ page }) => {
-    test.fail();
     await page.emulateMedia({ colorScheme: "dark" });
     await openShell(page);
     await expect(page.locator("html")).not.toHaveAttribute("data-theme");
