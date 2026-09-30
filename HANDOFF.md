@@ -22,7 +22,12 @@
   - Declined: the `isPending` guard in `useLabelOverride`, because it fails spec test T-12.
 - `@coderabbitai review` has been requested again after 669c17d. Check for new comments.
 
-## CI (run on 6ce5ff9; 669c17d is running)
+## CI
+
+- Run 2 (2b7d381, run 36694294716): same picture as run 1. `integration` failed on T-P0-20-03, and T-01 at p95 1,551 ms (fastest label 684 ms). CodeRabbit's re-review was still pending.
+- T-01 has now failed in CI twice (1,062 ms, then 1,551 ms), so its marker removal isn't holding in CI. Whether to put the `spec:P1-07` strict xfail back (it would then XPASS-fail on fast runs), or to build option (c) below, is with the coordinator/Scott; this was sent to main.
+
+### Run 1
 
 - Everything green except:
   - `integration`: T-P0-20-03, plus T-01 at p95 1,062 ms.
