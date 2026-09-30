@@ -6,6 +6,7 @@
 // field and "Confirm reject" sends it, so the card stays short until it is needed. A
 // card like the queue's others (DS-01, ADR-0012), with 44 px controls (UX 11).
 import {
+  useCallback,
   useId,
   useRef,
   useState,
@@ -116,6 +117,22 @@ export function ResultItem({
   const field = useRef<HTMLTextAreaElement>(null);
   const [rejecting, setRejecting] = useState(false);
   const showForm = !confirmReject || rejecting;
+  // The card itself, and the caller's ref to it (the queue moves focus between cards).
+  const card = useRef<HTMLElement | null>(null);
+  const setCard = useCallback(
+    (node: HTMLElement | null) => {
+      card.current = node;
+      if (typeof articleRef === "function") articleRef(node);
+      else if (articleRef) articleRef.current = node;
+    },
+    [articleRef],
+  );
+  // Closing the feedback field unmounts what had focus: focus goes back to the card, so
+  // the queue's keys (Enter, j/k, s, r) keep working without a click.
+  const closeForm = () => {
+    setRejecting(false);
+    card.current?.focus();
+  };
   const payload = item.payload;
   const summary = typeof payload.summary === "string" ? payload.summary : "";
   const outcome = OUTCOMES[String(payload.outcome)] ?? "Result";
@@ -144,7 +161,7 @@ export function ResultItem({
 
   return (
     <article
-      ref={articleRef}
+      ref={setCard}
       tabIndex={0}
       aria-labelledby={titleId}
       aria-current={current ? "true" : undefined}
@@ -247,7 +264,7 @@ export function ResultItem({
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape" && confirmReject) {
-                    setRejecting(false);
+                    closeForm();
                   }
                 }}
                 autoFocus={confirmReject}
@@ -266,9 +283,7 @@ export function ResultItem({
                 <button
                   type="button"
                   className={BUTTON_SECONDARY}
-                  onClick={() => {
-                    setRejecting(false);
-                  }}
+                  onClick={closeForm}
                 >
                   Cancel
                 </button>
