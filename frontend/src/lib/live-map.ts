@@ -59,8 +59,11 @@ export const LIVE_MAP: Record<
       "planningGetProjectWeek", // link edits change which events match (P1-12)
     ],
   },
-  // The review badge (P0-18); the review queue joins with P1-13.
-  review_item: { details: [], lists: ["tasksGetReviewCount"] },
+  // The review badge (P0-18) and the review queue (P1-13).
+  review_item: {
+    details: [],
+    lists: ["tasksGetReviewCount", "tasksListReview"],
+  },
   // The workspace settings have no id in their path: any settings message refreshes them,
   // the sections and the module switches too (P0-26).
   settings: {

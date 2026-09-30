@@ -91,6 +91,7 @@ __all__ = [
     "TokenReach",
     "ToolServerOut",
     "issue_run_token",
+    "retry_provision",
     "run_ended",
     "run_log",
     "run_token_scopes",
@@ -683,13 +684,18 @@ _provisioning: dict[str, int] = {"timeout_s": PROVISION_TIMEOUT_S_DEFAULT}
 
 class ProvisioningFailedPayload(BaseModel):
     """The `provisioning_failed` review item: the project's profile could not be created
-    or linked. Accept retries provisioning; reject keeps the project without an agent."""
+    or linked. Accept retries provisioning; reject keeps the project without an agent.
 
-    profile: str = Field(max_length=63)
+    One payload for both producers (Scott decision 29): the provision workflow fills every
+    field; the review queue's contract (P1-13) needs only `project_id`, `mode` and
+    `error`, so `profile`, `error_code` and `attempt` are optional."""
+
+    project_id: UUID
     mode: ProvisionMode
-    error_code: ProvisionErrorCode
     error: str | None = Field(default=None, max_length=4096)
-    attempt: int = Field(ge=0)
+    profile: str | None = Field(default=None, max_length=63)
+    error_code: ProvisionErrorCode | None = None
+    attempt: int | None = Field(default=None, ge=0)
 
 
 tasks.register_review_kind(
@@ -698,7 +704,7 @@ tasks.register_review_kind(
         owner_module="agents",
         payload_schema=ProvisioningFailedPayload,
         actions=("accept", "reject", "snooze"),  # accept = retry; reject = keep, no agent
-        impact_scope="project",
+        impact_scope="project",  # it blocks the whole project (FR-6.1)
     )
 )
 

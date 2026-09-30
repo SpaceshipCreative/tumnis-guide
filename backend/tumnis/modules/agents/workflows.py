@@ -837,6 +837,7 @@ async def finish_provision_step(  # noqa: PLR0917  # the provision's facts, spel
                 target=tasks.TargetRef(type="project", id=pid),
                 project_id=pid,
                 payload=api.ProvisioningFailedPayload(
+                    project_id=pid,
                     profile=pick.name,
                     mode=pick.mode,
                     error_code=code,

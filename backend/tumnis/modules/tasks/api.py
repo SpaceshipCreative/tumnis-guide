@@ -88,31 +88,56 @@ from tumnis.modules.tasks.payloads import (
 )
 from tumnis.modules.tasks.review import (
     DuplicateReviewKind,
+    ImpactFacts,
+    ReviewAction,
+    ReviewItemOut,
     ReviewKindSpec,
     TargetRef,
     UnknownReviewKind,
     add_review_item,
+    decide_review_item,
     flag_pull_request_results,
+    get_review_item,
+    list_review_items,
+    refresh_review_impact,
+    refresh_review_impact_of_task,
     register_review_kind,
     review_badge_count,
+    review_impact_facts,
     review_kinds,
+    set_review_jev,
+    validate_decision,
+    validate_payload,
 )
-from tumnis.modules.tasks.rules import ActorKind, Label, Status
+from tumnis.modules.tasks.rules import ActorKind, Label, Status, jev_factor
 from tumnis.modules.tasks.rules_recurrence import Preset
 from tumnis.seed import TaskSeed, register_seed_writer
 
 __all__ = [
     "ActorKind",
     "DuplicateReviewKind",
+    "ImpactFacts",
     "Label",
+    "ReviewAction",
+    "ReviewItemOut",
     "ReviewKindSpec",
     "Status",
     "TargetRef",
     "UnknownReviewKind",
     "add_review_item",
+    "decide_review_item",
+    "get_review_item",
+    "jev_factor",
+    "list_review_items",
+    "refresh_review_impact",
+    "refresh_review_impact_of_task",
     "register_review_kind",
     "review_badge_count",
+    "review_impact_facts",
     "review_kinds",
+    "set_review_jev",
+    "validate_decision",
+    "validate_payload",
 ]
 
 _tasks: Table = Task.__table__  # type: ignore[assignment]
