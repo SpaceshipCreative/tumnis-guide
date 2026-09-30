@@ -722,11 +722,13 @@ def packet_tainted(blocks: Iterable[Block]) -> bool:
     return any(block.tainted for block in blocks)
 
 
-def comment_tainted(author: str) -> bool:
+def comment_tainted(author: str, *, run_tainted: bool = False) -> bool:
     """Whether a task comment is tainted, from its author (comments keep no taint column):
     a write by an API key, never bound to a run, is tainted (R-31, as
     `agent_surface._taint`). A person's comment is not; a task token's follows its run's
-    taint, which P2-08 propagates."""
+    taint (P2-08): `run_tainted` is the stored taint of the run the token belonged to."""
+    if author.startswith("task_token:"):
+        return run_tainted
     return author.startswith("api_key:")
 
 

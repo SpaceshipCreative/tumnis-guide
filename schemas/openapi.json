@@ -4642,7 +4642,7 @@
         "type": "object"
       },
       "ReviewItemOut": {
-        "description": "One item as the queue shows it: its kind's actions and primary action (Enter, R-04),\nits target's title when the target is a task or a project, and its impact.",
+        "description": "One item as the queue shows it: its kind's actions and primary action (Enter, R-04),\nits target's title when the target is a task or a project, whether that task is\ntainted (P2-08: the queue shows the taint mark), and its impact.",
         "properties": {
           "actions": {
             "items": {
@@ -4740,6 +4740,11 @@
             "format": "uuid",
             "title": "Target Id",
             "type": "string"
+          },
+          "target_tainted": {
+            "default": false,
+            "title": "Target Tainted",
+            "type": "boolean"
           },
           "target_title": {
             "anyOf": [

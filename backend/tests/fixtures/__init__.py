@@ -10,6 +10,7 @@ import asyncio
 import base64
 import contextlib
 import functools
+import gc
 import json
 import secrets
 import threading
@@ -69,6 +70,20 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if drills:
         config.hook.pytest_deselected(items=drills)
         items[:] = [item for item in items if not item.get_closest_marker("drill")]
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Move what collection built into the garbage collector's permanent generation.
+
+    Collecting the whole suite (every run does, even `-m serial`, which then deselects
+    all but a few tests) leaves about half a million tracked objects: every test module,
+    item and parametrize id. Each full (generation 2) collection walked all of them, a
+    pause of about 330 ms on a CI runner that stops every thread of the process. Inside
+    T-P1-07-01's measurement it held the api, the relay and every label in flight at
+    once, which was the p95's tail. Frozen, those objects are skipped by every later
+    collection (Python docs, `gc.freeze`); what the tests create is still collected."""
+    gc.collect()  # garbage from collection is freed, not frozen
+    gc.freeze()
 
 
 @pytest.fixture

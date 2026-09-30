@@ -146,7 +146,7 @@ POST_RESULT = surface.register_op(
 
 async def _profile_facts(principal: Principal) -> surface.CallerFacts | None:
     """The profile an API key is linked to (and whether it is the master's), or a task
-    token's run's profile; None for any other caller."""
+    token's run's profile and taint; None for any other caller."""
     if principal.kind == "api_key" and principal.subject_id is not None:
         async with tenant_session(principal.workspace_context()) as s:
             row = (
@@ -164,8 +164,13 @@ async def _profile_facts(principal: Principal) -> surface.CallerFacts | None:
     if run_id is None:
         return None
     async with tenant_session(principal.workspace_context()) as s:
-        profile_id = await s.scalar(select(_runs.c.profile_id).where(_runs.c.id == run_id))
-    return None if profile_id is None else surface.CallerFacts(profile_id=profile_id)
+        run = (
+            await s.execute(select(_runs.c.profile_id, _runs.c.tainted).where(_runs.c.id == run_id))
+        ).first()
+    if run is None:
+        return None
+    # P2-08: what a tainted run writes is tainted (SAF-1).
+    return surface.CallerFacts(profile_id=run.profile_id, run_tainted=run.tainted)
 
 
 surface.register_caller_facts("agents.profile", _profile_facts)

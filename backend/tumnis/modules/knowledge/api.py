@@ -14,6 +14,7 @@ import os
 import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Final, Literal
 from uuid import UUID
@@ -23,7 +24,7 @@ from sqlalchemy import RowMapping, Table, and_, delete, func, insert, select, te
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import deadletter, settings_store, tenancy
+from tumnis.core import agent_surface, deadletter, settings_store, tenancy
 from tumnis.core.adapters.errors import AdapterError, AdapterRejected, AdapterUnavailable
 from tumnis.core.adapters.registry import current_mode
 from tumnis.core.canonical import CanonicalRecord, UpsertStats, upsert_records
@@ -215,6 +216,53 @@ async def put_text_document(
         )
     doc_id: UUID = (await s.execute(stmt.returning(_documents.c.id))).scalar_one()
     return doc_id
+
+
+AGENT_SOURCE: Final = "agent"  # `source` of a text entry an agent added (`add_document`)
+
+
+async def add_document(  # the tool's input, plus who and when
+    s: AsyncSession,
+    caller: agent_surface.Caller,
+    *,
+    project_id: UUID,
+    title: str,
+    body_markdown: str,
+    tags: Sequence[str] = (),
+    now: datetime | None = None,
+) -> DocumentDTO:
+    """A document an agent adds to a project (P2-08, SAF-1, FR-15.5): always untrusted and
+    written by the caller (agent-written, `source` "agent"), tainted when the caller is
+    (`agent_surface.caller_tainted`: a tainted run's token, or a key with no run). The
+    taint is stored once and never lowered; marking the document trusted later affects
+    future packets, not what was already made from it. P2-17 adds the `add_document` tool,
+    the file under `agent-outputs/` and its extraction on top of this row."""
+    del now  # the row's timestamps come from the database clock, as for text entries
+    row = (
+        (
+            await s.execute(
+                pg_insert(_documents)
+                .values(
+                    project_id=project_id,
+                    title=title,
+                    kind="text",
+                    role=None,
+                    body_md=body_markdown,
+                    trust="untrusted",
+                    tainted=agent_surface.caller_tainted(caller),
+                    pinned=False,
+                    tags=list(tags),
+                    content_hash=hashlib.sha256(body_markdown.encode()).digest(),
+                    source=AGENT_SOURCE,
+                    created_by=caller.principal.actor,
+                )
+                .returning(*_documents.c)
+            )
+        )
+        .mappings()
+        .one()
+    )
+    return DocumentDTO.model_validate(dict(row))
 
 
 async def get_brief(project_id: UUID, *, session: AsyncSession | None = None) -> DocumentDTO:

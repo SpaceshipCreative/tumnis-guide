@@ -24,8 +24,10 @@ is covered without anyone remembering.
    update without `version` fails here). MCP writes run through
    `idempotency.run_idempotent`: the same key and arguments replay the first answer, other
    arguments are 422 `idempotency_mismatch`.
-4. Keys without a run (R-31): a write by an API key (no run) reaches the handler with
-   `taint=TaintSource("keyless_write", tainted=True)`, so what it creates is tainted.
+4. Taint (R-31, P2-08): a write by an API key (no run) reaches the handler with
+   `taint=TaintSource("keyless_write", tainted=True)`, and a write by a task token whose
+   run is tainted with `taint=TaintSource("run", tainted=True)`, so what either creates
+   is tainted (`caller_tainted`).
 5. The handler runs inside the workspace transaction (the REST twin's own session, or one
    opened here for MCP) and answers the output model.
 
@@ -118,6 +120,7 @@ class CallerFacts:
     profile_id: UUID | None = None  # the agent_profiles row the key belongs to (P2-02)
     is_master: bool = False
     run_id: UUID | None = None  # a task token's run (R-31)
+    run_tainted: bool = False  # that run's stored taint (P2-08); False when no row says so
 
 
 @dataclass(frozen=True)
@@ -126,6 +129,7 @@ class Caller:
     profile_id: UUID | None = None
     is_master: bool = False
     run_id: UUID | None = None  # None for profile, cron and script keys (R-31)
+    run_tainted: bool = False  # the run is tainted, so what it writes is (P2-08, SAF-1)
 
     @property
     def scopes(self) -> frozenset[str]:
@@ -153,7 +157,7 @@ async def resolve_caller(principal: Principal) -> Caller:
     """The caller for a principal: every registered resolver's facts, merged."""
     profile_id: UUID | None = None
     run_id: UUID | None = None
-    is_master = False
+    is_master = run_tainted = False
     if not principal.anonymous:
         for resolver in list(_facts.values()):
             found = await resolver(principal)
@@ -162,7 +166,20 @@ async def resolve_caller(principal: Principal) -> Caller:
             profile_id = profile_id or found.profile_id
             run_id = run_id or found.run_id
             is_master = is_master or found.is_master
-    return Caller(principal, profile_id=profile_id, is_master=is_master, run_id=run_id)
+            run_tainted = run_tainted or found.run_tainted
+    return Caller(
+        principal,
+        profile_id=profile_id,
+        is_master=is_master,
+        run_id=run_id,
+        run_tainted=run_tainted,
+    )
+
+
+def caller_tainted(caller: Caller) -> bool:
+    """Whether what the caller writes is tainted: a task token of a tainted run (P2-08),
+    or an API key with no run (R-31). A person's session and a clean run write untainted."""
+    return caller.run_tainted or (caller.principal.kind == "api_key" and caller.run_id is None)
 
 
 # --- Ops -------------------------------------------------------------------------------------
@@ -170,7 +187,8 @@ async def resolve_caller(principal: Principal) -> Caller:
 
 @dataclass(frozen=True)
 class TaintSource:
-    """Why what a call writes is tainted (R-31: a write by a key with no run)."""
+    """Why what a call writes is tainted (R-31: a write by a key with no run; P2-08: a
+    write by a tainted run's token)."""
 
     kind: str
     tainted: bool
@@ -353,10 +371,11 @@ def _parse(op: SurfaceOp, raw: Mapping[str, Any]) -> SurfaceInput:
 
 
 def _taint(op: SurfaceOp, caller: Caller) -> TaintSource | None:
-    """R-31: a write by an API key (never bound to a run) is tainted."""
-    if op.write and caller.principal.kind == "api_key" and caller.run_id is None:
-        return TaintSource(kind="keyless_write", tainted=True)
-    return None
+    """R-31: a write by an API key (never bound to a run) is tainted; P2-08: so is a write
+    by a task token whose run is tainted."""
+    if not op.write or not caller_tainted(caller):
+        return None
+    return TaintSource(kind="run" if caller.run_tainted else "keyless_write", tainted=True)
 
 
 async def authorize_call(op: SurfaceOp, caller: Caller, raw: Mapping[str, Any]) -> None:
