@@ -16,6 +16,7 @@ import type {
   BoardOut,
   ColumnOut,
   CommentOut,
+  PullRequestOut,
   Status,
 } from "../../api/types.gen";
 import type { zProjectOut, zTaskOut } from "../../api/zod.gen";
@@ -100,6 +101,10 @@ export class ProjectFake {
   readonly tasks = new Map<string, Row>();
   readonly changes = new Map<string, Change>();
   readonly comments = new Map<string, CommentOut[]>();
+  /** Pull requests by task (P2-13): what `GET /v1/tasks/{id}/pull-requests` answers. */
+  readonly pullRequests = new Map<string, PullRequestOut[]>();
+  /** Answer the next link with this 422 problem code (`not_a_pull_request`, ...). */
+  refuseLink: string | null = null;
   recurrences: RecurrenceStub[];
   brief: BriefStub;
   timezone: string;
@@ -409,6 +414,33 @@ export class ProjectFake {
           comment,
         ]);
         return HttpResponse.json(comment, { status: 201 });
+      }),
+      http.get("/v1/tasks/:id/pull-requests", ({ params }) =>
+        HttpResponse.json(this.pullRequests.get(String(params.id)) ?? []),
+      ),
+      http.post("/v1/tasks/:id/pull-requests", async ({ params, request }) => {
+        const sent = await this.recorder.record(request);
+        if (this.refuseLink) return problem(422, this.refuseLink);
+        const taskId = String(params.id);
+        const url = (sent.body as { url: string }).url;
+        const match = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
+        const linked: PullRequestOut = {
+          artifact_id: crypto.randomUUID(),
+          url,
+          repo: match?.[1] ?? "unknown/unknown",
+          number: Number(match?.[2] ?? 0),
+          title: null,
+          state: null,
+          draft: false,
+          checks: null,
+          review: null,
+          checked_at: null,
+        };
+        this.pullRequests.set(taskId, [
+          ...(this.pullRequests.get(taskId) ?? []),
+          linked,
+        ]);
+        return HttpResponse.json(linked, { status: 201 });
       }),
       http.get(`/v1/projects/${pid}/board`, () =>
         HttpResponse.json(this.board()),

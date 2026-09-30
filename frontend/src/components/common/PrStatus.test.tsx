@@ -18,7 +18,7 @@ const BASE: PullRequest = {
   checked_at: "2026-03-09T12:00:00Z",
 };
 
-test.fails("[P2-13][FR-12.1] shows state checks and review", () => {
+test("[P2-13][FR-12.1] shows state checks and review", () => {
   const { rerender } = render(<PrStatus pr={BASE} />);
   const link = screen.getByRole("link", {
     name: "Pull request acme-example/site#42, Add the booking form: open, checks passing, approved",
