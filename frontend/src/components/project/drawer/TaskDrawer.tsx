@@ -11,6 +11,7 @@ import { fieldClass, saveClass } from "../rail/RailSection";
 import { statusAction } from "../TaskRow";
 import type { Task } from "../types";
 import { CommentList } from "./CommentList";
+import { PullRequests } from "./PullRequests";
 import { RecurrencePicker } from "./RecurrencePicker";
 
 function TitleForm({ task }: { task: Task }) {
@@ -99,6 +100,7 @@ function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
         </button>
       </div>
       <RecurrencePicker task={task} />
+      <PullRequests taskId={task.id} />
       <CommentList taskId={task.id} />
     </div>
   );

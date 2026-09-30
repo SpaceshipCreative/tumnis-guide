@@ -9,15 +9,15 @@
 Both are nullable additions (expand). `blocking_impact` stays text (P0-18): the queue casts
 it to float8 in its order.
 
-Chained after P0-24's undo log (tasks_0003).
+Chained after P2-13's review_items.flags (tasks_0004).
 """
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import DOUBLE_PRECISION, UUID
 
-revision = "tasks_0004"
-down_revision = "tasks_0003"
+revision = "tasks_0005"
+down_revision = "tasks_0004"
 branch_labels = None
 depends_on = None
 phase = "expand"

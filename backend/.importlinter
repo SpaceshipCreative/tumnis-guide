@@ -29,6 +29,10 @@ ignore_imports =
 # The one sanctioned test-only exception (P0-12): every module's connector contract tests
 # subclass integrations' ConnectorContract.
     tumnis.modules.*.tests.** -> tumnis.modules.integrations.connector_contract
+# P2-13: tasks calls github (linking a pull request); github's integration tests link one
+# through tasks' api and hand `artifact.updated` to tasks' subscriber (T-P2-13-07), which
+# has no api entry. Module code never imports tasks.
+    tumnis.modules.github.tests.** -> tumnis.modules.tasks.events
 # Until modules call each other, the api ignore matches nothing; that is not an error.
 unmatched_ignore_imports_alerting = none
 
@@ -98,6 +102,10 @@ ignore_imports =
 # The review queue's tests (P1-13) run decisions' blocking-impact question against queued
 # items (T-P1-13-05, 06); tasks code itself never calls decisions.
     tumnis.modules.tasks.tests.** -> tumnis.modules.decisions.api
+# tasks builds on github (P2-13: pull requests on task cards); github's own tests drive
+# tasks' api and subscriber to prove the round trip. Module code never does.
+    tumnis.modules.github.tests.** -> tumnis.modules.tasks.api
+    tumnis.modules.github.tests.** -> tumnis.modules.tasks.events
 unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:search-usage-subscribe-only]
@@ -168,7 +176,8 @@ type = forbidden
 # and mcp, as single modules: none reaches an adapter through static imports. The worker
 # builds JevDecisions, VllmDecisions (P1-02) and VllmGeneration (P1-03) lazily through the
 # adapter registry. The name predates VllmDecisions (tests/meta/test_import_contracts.py
-# matches it); the forbidden list below covers all three adapters.
+# matches it); the forbidden list below covers all three adapters. P2-13 adds the
+# read-only GitHub client, built the same way.
 as_packages = False
 source_modules =
     tumnis.*
@@ -179,6 +188,7 @@ forbidden_modules =
     tumnis.modules.decisions.adapters.jev
     tumnis.modules.decisions.adapters.vllm
     tumnis.modules.decisions.adapters.vllm_generation
+    tumnis.modules.github.adapters.github_status
     typesafe_sdk
 
 # P1-03 (FR-11.8): the Generation slot writes the placeholder first action and the spoken

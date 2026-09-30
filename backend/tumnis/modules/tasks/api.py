@@ -63,6 +63,7 @@ from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR, ActorRef
 from tumnis.core.versioning import NotFound, StaleVersion, Version, update_versioned
 from tumnis.modules.auth import api as auth
+from tumnis.modules.github import api as github
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import rules
@@ -93,6 +94,7 @@ from tumnis.modules.tasks.review import (
     UnknownReviewKind,
     add_review_item,
     decide_review_item,
+    flag_pull_request_results,
     get_review_item,
     list_review_items,
     refresh_review_impact,
@@ -1081,6 +1083,66 @@ async def link_context_item(
         target_url=item.target_url,
         tainted=item.tainted,
     )
+
+
+# --- Pull requests (P2-13, FR-12.1) -----------------------------------------------------------
+
+PullRequestOut = github.PullRequestOut
+
+
+async def link_pull_request(
+    s: AsyncSession, actor: ActorRef, task_id: UUID, url: str, *, now: datetime
+) -> PullRequestOut:
+    """Links a GitHub pull request to the task: the URL becomes an Artifact (github's
+    `track_pull_request`) and the task links it as a ContextItem, so it reaches the task
+    the way every outside object does (FR-14.2). 422 `not_a_pull_request` for a URL that is
+    not a github.com pull request (GitHub Enterprise included), 422 `repo_not_allowed`
+    outside the allow-list in Settings > GitHub; then nothing is stored and GitHub is not
+    called. The status is read by the worker (`pull_requests`)."""
+    await _row(s, task_id)
+    try:
+        pull = await github.track_pull_request(_context(), url, now=now, session=s)
+    except github.NotAPullRequest:
+        raise ProblemError(
+            422, "not_a_pull_request", "That is not a github.com pull request URL"
+        ) from None
+    except github.RepoNotAllowed:
+        raise ProblemError(
+            422, "repo_not_allowed", "That repository is not on the GitHub allow-list"
+        ) from None
+    item = await integrations.link_context(
+        _context(),
+        owner_type="task",
+        owner_id=task_id,
+        target_type="artifact",
+        target_id=pull.artifact_id,
+        added_by=actor,
+        session=s,
+    )
+    await link_context_item(s, actor, task_id, item.id, now=now)
+    return pull
+
+
+async def pull_requests(s: AsyncSession, task_id: UUID, *, now: datetime) -> list[PullRequestOut]:
+    """The task's pull requests with the status last stored (state, checks, review; None
+    before the first read). Opening a task is what asks for a fresh read: each stale one
+    is queued for the worker (`github.request_refresh`), and the result arrives over `/ws`
+    as a change of the task."""
+    await _row(s, task_id)
+    ctx = _context()
+    targets = await integrations.context_targets(
+        ctx, owner_type="task", owner_id=task_id, target_type="artifact", session=s
+    )
+    found = await github.pull_requests(ctx, targets, session=s)
+    for pull in found:
+        await github.request_refresh(ctx, pull, now=now)
+    return found
+
+
+async def flag_red_checks(s: AsyncSession, key: str, *, red: bool) -> int:
+    """`tasks.flag_red_checks`: the open result review items linking pull request `key`
+    get the `checks_red` flag while its checks are red, and lose it when they are not."""
+    return await flag_pull_request_results(s, key, red=red)
 
 
 # --- Board -----------------------------------------------------------------------------------
