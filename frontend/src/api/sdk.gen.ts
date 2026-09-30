@@ -15,6 +15,9 @@ import type {
   AgentsCreateRunnerData,
   AgentsCreateRunnerErrors,
   AgentsCreateRunnerResponses,
+  AgentsGetProfileToolsData,
+  AgentsGetProfileToolsErrors,
+  AgentsGetProfileToolsResponses,
   AgentsListProfilesData,
   AgentsListProfilesErrors,
   AgentsListProfilesResponses,
@@ -272,6 +275,7 @@ import type {
 import {
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
+  zAgentsGetProfileToolsResponse,
   zAgentsListProfilesResponse,
   zAgentsListRunnersResponse,
   zAgentsRegisterProfileResponse,
@@ -499,6 +503,30 @@ export const agentsCheckProfileHealth = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zAgentsCheckProfileHealthResponse.parseAsync(data),
     url: "/v1/agents/profiles/{id}/health-check",
+    ...options,
+  });
+
+/**
+ * Get Profile Tools
+ *
+ * The profile's MCP servers from its last health check, read-only (FR-5.12): each
+ * matched against its project's allowlist, and its GitHub and Coolify tokens' reach.
+ */
+export const agentsGetProfileTools = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsGetProfileToolsData, ThrowOnError>,
+): RequestResult<
+  AgentsGetProfileToolsResponses,
+  AgentsGetProfileToolsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    AgentsGetProfileToolsResponses,
+    AgentsGetProfileToolsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsGetProfileToolsResponse.parseAsync(data),
+    url: "/v1/agents/profiles/{id}/tools",
     ...options,
   });
 

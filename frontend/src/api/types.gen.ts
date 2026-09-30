@@ -560,6 +560,30 @@ export type FolderIn = {
 };
 
 /**
+ * ForeignReach
+ *
+ * A token reaching another project's repo (`github`) or app (`coolify`).
+ */
+export type ForeignReach = {
+  /**
+   * Kind
+   */
+  kind: "github" | "coolify";
+  /**
+   * Project Id
+   */
+  project_id?: string | null;
+  /**
+   * Project Name
+   */
+  project_name?: string | null;
+  /**
+   * Target
+   */
+  target: string;
+};
+
+/**
  * FreeBlockOut
  */
 export type FreeBlockOut = {
@@ -856,6 +880,27 @@ export type ManualBlockIn = {
    * Version
    */
   version?: number | null;
+};
+
+/**
+ * McpServerInfo
+ *
+ * One MCP server of a profile (P2-10): its name, transport and a redacted target (the
+ * command's name, or the URL's host); never its arguments, env or headers (FR-5.12).
+ */
+export type McpServerInfo = {
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Target
+   */
+  target?: string | null;
+  /**
+   * Transport
+   */
+  transport: "stdio" | "http";
 };
 
 /**
@@ -1206,18 +1251,40 @@ export type ProfileHealth = {
    * Authenticated
    */
   authenticated?: boolean | null;
+  coolify?: TokenReach | null;
   /**
    * Error
    */
   error?: string | null;
   /**
+   * Extra
+   */
+  extra?: Array<string>;
+  /**
+   * Foreign
+   */
+  foreign?: Array<ForeignReach>;
+  github?: TokenReach | null;
+  /**
+   * Mcp Server Details
+   */
+  mcp_server_details?: Array<McpServerInfo>;
+  /**
    * Mcp Servers
    */
   mcp_servers?: Array<string>;
   /**
+   * Missing
+   */
+  missing?: Array<string>;
+  /**
    * Profile Exists
    */
   profile_exists?: boolean | null;
+  /**
+   * Profile Version
+   */
+  profile_version?: string | null;
   /**
    * Reachable
    */
@@ -1225,11 +1292,15 @@ export type ProfileHealth = {
   /**
    * Status
    */
-  status?: "ok" | "offline" | "unsupported" | "error";
+  status?: "ok" | "warning" | "degraded" | "offline" | "unsupported" | "error";
   /**
    * Version
    */
   version?: string | null;
+  /**
+   * Warnings
+   */
+  warnings?: Array<string>;
 };
 
 /**
@@ -1282,6 +1353,75 @@ export type ProfilePatch = {
    * Version
    */
   version: number;
+};
+
+/**
+ * ProfileToolsOut
+ *
+ * Settings > Agents, one profile's tools, read-only (FR-5.12): the MCP servers it
+ * reported at its last health check, each matched against its project's allowlist
+ * now, and its tokens' reach.
+ */
+export type ProfileToolsOut = {
+  /**
+   * Allowlist
+   */
+  allowlist: Array<string>;
+  /**
+   * Authenticated
+   */
+  authenticated: boolean | null;
+  /**
+   * Checked At
+   */
+  checked_at: string | null;
+  coolify: TokenReach | null;
+  /**
+   * Extra
+   */
+  extra: Array<string>;
+  /**
+   * Foreign
+   */
+  foreign?: Array<ForeignReach>;
+  github: TokenReach | null;
+  /**
+   * Hermes Version
+   */
+  hermes_version: string | null;
+  /**
+   * Missing
+   */
+  missing: Array<string>;
+  /**
+   * Profile Id
+   */
+  profile_id: string;
+  /**
+   * Profile Name
+   */
+  profile_name: string;
+  /**
+   * Profile Version
+   */
+  profile_version: string | null;
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Reachable
+   */
+  reachable: boolean | null;
+  /**
+   * Servers
+   */
+  servers: Array<ToolServerOut>;
+  /**
+   * Status
+   */
+  status:
+    "ok" | "warning" | "degraded" | "offline" | "unsupported" | "error" | null;
 };
 
 /**
@@ -2434,6 +2574,56 @@ export type TextDocumentPatch = {
 };
 
 /**
+ * TokenReach
+ *
+ * What one token reaches, as the daemon probed it on the host (the token itself never
+ * leaves the host). GitHub: a repo is reachable only with `permissions.push` or `admin`;
+ * Coolify: an application is reachable when the token may read it.
+ */
+export type TokenReach = {
+  /**
+   * Errors
+   */
+  errors?: Array<string>;
+  /**
+   * Foreign Reachable
+   */
+  foreign_reachable?: Array<string>;
+  /**
+   * Own Reachable
+   */
+  own_reachable?: {
+    [key: string]: boolean;
+  };
+  /**
+   * Token Present
+   */
+  token_present: boolean;
+};
+
+/**
+ * ToolServerOut
+ */
+export type ToolServerOut = {
+  /**
+   * Allowed
+   */
+  allowed: boolean | null;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Target
+   */
+  target: string | null;
+  /**
+   * Transport
+   */
+  transport: "stdio" | "http" | null;
+};
+
+/**
  * TotpEnrolConfirmIn
  */
 export type TotpEnrolConfirmIn = {
@@ -3009,6 +3199,66 @@ export type AgentsCheckProfileHealthResponses = {
 
 export type AgentsCheckProfileHealthResponse =
   AgentsCheckProfileHealthResponses[keyof AgentsCheckProfileHealthResponses];
+
+export type AgentsGetProfileToolsData = {
+  body?: never;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/v1/agents/profiles/{id}/tools";
+};
+
+export type AgentsGetProfileToolsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsGetProfileToolsError =
+  AgentsGetProfileToolsErrors[keyof AgentsGetProfileToolsErrors];
+
+export type AgentsGetProfileToolsResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProfileToolsOut;
+};
+
+export type AgentsGetProfileToolsResponse =
+  AgentsGetProfileToolsResponses[keyof AgentsGetProfileToolsResponses];
 
 export type AuditListAuditData = {
   body?: never;
