@@ -27,7 +27,7 @@ Also here: the ReviewItem interface (R-03, `review.py`), the `ProjectStatsSource
 health reads (registered at import) and the task seed writer.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Any, Final, Literal
 from uuid import UUID
@@ -438,6 +438,24 @@ async def list_tasks(
         s, stmt, keys=keys, id_col=_tasks.c.id, cursor=cursor, limit=limit, model=TaskOut
     )
     return TaskPage(items=page.items, next_cursor=page.next_cursor, total=total or 0)
+
+
+async def project_tasks(s: AsyncSession, project_id: UUID) -> list[TaskOut]:
+    """Every live task of one project, Done ones included, in creation order: one
+    statement, for views that project the whole project (the Calendar week, P1-12)."""
+    rows = await s.execute(
+        select(_tasks)
+        .where(_live(_tasks), _tasks.c.project_id == project_id)
+        .order_by(_tasks.c.created_at, _tasks.c.id)
+    )
+    return [_out(row._mapping) for row in rows]
+
+
+async def live_task_ids(s: AsyncSession, ids: Collection[UUID]) -> set[UUID]:
+    """The ids among `ids` whose task is live (not trashed, not purged): one statement,
+    even for no ids, so callers keep a fixed statement count (the Calendar week, P1-12)."""
+    rows = await s.execute(select(_tasks.c.id).where(_live(_tasks), _tasks.c.id.in_(list(ids))))
+    return {row.id for row in rows}
 
 
 # `rules.today_order` in SQL: the same keys, ranks from `rules.PRIORITY_RANK`.

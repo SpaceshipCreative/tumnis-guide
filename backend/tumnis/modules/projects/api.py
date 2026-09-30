@@ -400,6 +400,11 @@ async def project_names(s: AsyncSession, project_ids: Iterable[UUID]) -> dict[UU
     return {row.id: row.name for row in rows}
 
 
+async def project_links(s: AsyncSession, project_id: UUID) -> list[ProjectLinkIn]:
+    """A project's live links (person, domain, repo, coolify_app), in the order added."""
+    return (await _links_of(s, [project_id]))[project_id]
+
+
 def check_code_location(code_path: str | None, repo_url: str | None) -> None:
     """The FR-2.1 code location rule for other modules (the task packet, P2-07): raises a
     ValueError with `code` (`code_location_conflict` for both, `invalid_code_location`)."""
