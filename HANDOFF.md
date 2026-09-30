@@ -30,7 +30,10 @@ while a PR conflicts, so check `gh pr view <N> --json mergeable` if CI doesn't s
   resolved keeping both), aed18a1 (CodeRabbit fixes).
 - CodeRabbit: 5 comments, all fixed in aed18a1, replied and resolved; re-review requested, no new
   comments (review 5372441445 empty). 0 unresolved threads.
-- CI on aed18a1: run 36781996519 was in progress at handoff. The earlier run (36779282233) had:
+- CI on aed18a1: run 36781996519 is ALL GREEN (unit was cancelled once at its time limit and passed
+  on rerun); preview is pending, as expected; GitGuardian is red (Scott item below). "#107 MERGE-READY at aed18a1"
+  was SENT to main. Only redo this if #107 gets new commits.
+- History: The earlier run (36779282233) had:
   integration parallel part all green (1211 passed) but the job CANCELLED at its 10-min budget
   in the serial step (the xfail T-16 kill test burnt 60 s waiting; PR2 makes it pass fast), and
   performance failed on Lighthouse total-blocking-time (runner noise; `gh run rerun --failed` once).
