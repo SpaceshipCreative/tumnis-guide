@@ -105,9 +105,7 @@ class DigestMachine(RuleBasedStateMachine):
         from tumnis.modules.agents.api import (  # type: ignore[attr-defined]  # noqa: PLC0415
             append_entry,
         )
-        from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
-            EntrySpec,
-        )
+        from tumnis.modules.agents.rules import EntrySpec  # noqa: PLC0415
 
         event_id = uuid.uuid4()
         spec = EntrySpec(

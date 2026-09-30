@@ -17,7 +17,6 @@ DOCUMENT = uuid.UUID("0192a000-0000-7000-8000-000000000005")
 
 @pytest.mark.req("FR-13.1")
 @pytest.mark.wp("P2-03")
-@pytest.mark.xfail(strict=True, reason="spec:P2-03")
 def test_resolve_start_table() -> None:
     """T-P2-03-02
     Every branch of `resolve_start(acked, since, issued_max) -> (new_acked, read_from)`:
@@ -26,7 +25,7 @@ def test_resolve_start_table() -> None:
     acknowledges it and reads from it; an older cursor reads from the acknowledged
     position, so acknowledged entries never come again.
     """
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
         DigestCursorInvalid,
         Pos,
         resolve_start,
@@ -55,7 +54,7 @@ def test_resolve_start_table() -> None:
 
 
 def _task(actual: int | None = None, estimate: int | None = 60) -> Any:
-    from tumnis.modules.agents.rules import TaskFacts  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import TaskFacts  # noqa: PLC0415
 
     return TaskFacts(
         task_id=TASK, project_id=PROJECT, estimate_minutes=estimate, actual_minutes=actual
@@ -328,14 +327,13 @@ ALL_KINDS = {
 
 @pytest.mark.req("FR-13.1")
 @pytest.mark.wp("P2-03")
-@pytest.mark.xfail(strict=True, reason="spec:P2-03")
 def test_classify_event_kinds() -> None:
     """T-P2-03-03
     Each event maps to the digest kinds of the plan's table and scope, nothing else; a
     project entry names its project (from the payload or the task's facts) and the
     workspace ones name none; together the cases reach every kind.
     """
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
         DIGEST_KINDS,
         DigestEvent,
         classify_event,
@@ -360,13 +358,12 @@ def test_classify_event_kinds() -> None:
 
 @pytest.mark.req("FR-13.1")
 @pytest.mark.wp("P2-03")
-@pytest.mark.xfail(strict=True, reason="spec:P2-03")
 def test_classify_event_data() -> None:
     """The entries carry what the plan's table names: the label's from and to, the rejected
     result's feedback, the approval's class and reason, estimate against actual, and
     whether a comment's author is a person (its text goes in an untrusted block when not).
     """
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
         DigestEvent,
         classify_event,
     )
@@ -411,7 +408,7 @@ def test_classify_event_data() -> None:
         "decision": "approve",
         "reason": "Fine",
     }
-    [_changed, actual] = sorted(
+    [actual, _changed] = sorted(
         classify_event(
             DigestEvent(
                 name="task.status_changed",
