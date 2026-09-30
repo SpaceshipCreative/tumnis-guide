@@ -1,10 +1,23 @@
 // One review item (P1-13, UX 7, UX 11): the generic renderer. The kind's slot says what
 // the item is about and how `edit` collects its payload; the buttons are the kind's own
 // actions (R-04), 44 px tall so they work by thumb. The card is focusable: the queue's
-// keyboard map acts on the focused card.
+// keyboard map acts on the focused card. It is a card like the dashboard's (DS-01,
+// ADR-0012): the title and the kind's name in the header row, the summary and the actions
+// below; the item the `item` search param names has an accent border.
 import { useId, useState, type Ref } from "react";
 
 import type { ReviewItemOut } from "../../api/types.gen";
+import {
+  badge,
+  BUTTON_PRIMARY,
+  BUTTON_SECONDARY,
+  CARD,
+  CARD_BODY,
+  CARD_HEADER,
+  CARD_TITLE,
+  FIELD,
+  FIELD_LABEL,
+} from "../common/ui";
 import { ANSWER, LABELS, slotFor, type Editor } from "./slots";
 
 export type Mode = "idle" | "edit" | "answer" | "snooze";
@@ -17,11 +30,6 @@ export interface DecideAction {
   payload?: Record<string, unknown>;
   snooze?: SnoozeKey;
 }
-
-const BUTTON =
-  "min-h-11 rounded-md border border-border bg-surface px-3 text-sm font-medium hover:bg-surface-muted disabled:opacity-50";
-const PRIMARY_BUTTON =
-  "min-h-11 rounded-md bg-accent px-3 text-sm font-medium text-accent-contrast disabled:opacity-50";
 
 export const SNOOZES: readonly { key: SnoozeKey; text: string }[] = [
   { key: "1", text: "1 hour" },
@@ -75,7 +83,7 @@ function ValueForm({
       }}
       className="flex flex-wrap items-end gap-2"
     >
-      <label htmlFor={inputId} className="flex flex-col gap-1 text-sm">
+      <label htmlFor={inputId} className={`${FIELD_LABEL} w-full sm:w-64`}>
         {editor.label}
         <input
           id={inputId}
@@ -88,14 +96,14 @@ function ValueForm({
           onKeyDown={(event) => {
             if (event.key === "Escape") onCancel();
           }}
-          className="min-h-11 rounded-md border border-border bg-surface px-2"
+          className={FIELD}
           autoFocus // the form opens on a key press: typing goes straight in
         />
       </label>
-      <button type="submit" className={PRIMARY_BUTTON} disabled={busy}>
+      <button type="submit" className={BUTTON_PRIMARY} disabled={busy}>
         Save
       </button>
-      <button type="button" className={BUTTON} onClick={onCancel}>
+      <button type="button" className={BUTTON_SECONDARY} onClick={onCancel}>
         Cancel
       </button>
     </form>
@@ -146,116 +154,122 @@ export function ReviewItemCard({
       onFocus={(event) => {
         if (event.target === event.currentTarget) onFocus();
       }}
-      className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 outline-none focus-visible:ring-2 focus-visible:ring-accent aria-[current=true]:border-accent"
+      className={`${CARD} aria-[current=true]:border-accent`}
     >
-      <header className="flex flex-col gap-1">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted">
-          {slot.name}
-        </p>
-        <h2 id={titleId} className="text-base font-semibold">
+      <header className={CARD_HEADER}>
+        <h2 id={titleId} className={CARD_TITLE}>
           {item.target_title ?? slot.name}
         </h2>
-        <p className="text-sm text-muted">{slot.summary(item)}</p>
+        <span className={badge("neutral")}>{slot.name}</span>
       </header>
+      <div className={CARD_BODY}>
+        <p className="text-sm text-muted">{slot.summary(item)}</p>
 
-      {mode === "idle" && (
-        <div className="flex flex-wrap gap-2">
-          {item.actions.map((action) => (
+        {mode === "idle" && (
+          <div className="flex flex-wrap gap-2">
+            {item.actions.map((action) => (
+              <button
+                key={action}
+                type="button"
+                className={
+                  action === item.primary_action
+                    ? BUTTON_PRIMARY
+                    : BUTTON_SECONDARY
+                }
+                disabled={busy}
+                onClick={() => {
+                  press(action as Action);
+                }}
+              >
+                {actionText(action)}
+              </button>
+            ))}
+            {canOpen(item) && (
+              <button
+                type="button"
+                className={BUTTON_SECONDARY}
+                onClick={onOpen}
+              >
+                Open
+              </button>
+            )}
+          </div>
+        )}
+
+        {mode === "snooze" && (
+          <div
+            role="group"
+            aria-label="Snooze until"
+            className="flex flex-wrap gap-2"
+          >
+            {SNOOZES.map((choice) => (
+              <button
+                key={choice.key}
+                type="button"
+                className={BUTTON_SECONDARY}
+                disabled={busy}
+                onClick={() => {
+                  onDecide({ action: "snooze", snooze: choice.key });
+                }}
+              >
+                {choice.text}
+              </button>
+            ))}
             <button
-              key={action}
               type="button"
-              className={
-                action === item.primary_action ? PRIMARY_BUTTON : BUTTON
-              }
-              disabled={busy}
+              className={BUTTON_SECONDARY}
               onClick={() => {
-                press(action as Action);
+                onMode("idle");
               }}
             >
-              {actionText(action)}
+              Cancel
             </button>
-          ))}
-          {canOpen(item) && (
-            <button type="button" className={BUTTON} onClick={onOpen}>
-              Open
-            </button>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {mode === "snooze" && (
-        <div
-          role="group"
-          aria-label="Snooze until"
-          className="flex flex-wrap gap-2"
-        >
-          {SNOOZES.map((choice) => (
+        {editor?.type === "label" && (
+          <div role="group" aria-label="Label" className="flex flex-wrap gap-2">
+            {LABELS.map((label) => (
+              <button
+                key={label.value}
+                type="button"
+                className={BUTTON_SECONDARY}
+                disabled={busy}
+                onClick={() => {
+                  onDecide({ action: "edit", payload: { label: label.value } });
+                }}
+              >
+                {label.text}
+              </button>
+            ))}
             <button
-              key={choice.key}
               type="button"
-              className={BUTTON}
-              disabled={busy}
+              className={BUTTON_SECONDARY}
               onClick={() => {
-                onDecide({ action: "snooze", snooze: choice.key });
+                onMode("idle");
               }}
             >
-              {choice.text}
+              Cancel
             </button>
-          ))}
-          <button
-            type="button"
-            className={BUTTON}
-            onClick={() => {
+          </div>
+        )}
+
+        {editor !== undefined && editor.type !== "label" && (
+          <ValueForm
+            editor={editor}
+            busy={busy}
+            onCancel={() => {
               onMode("idle");
             }}
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {editor?.type === "label" && (
-        <div role="group" aria-label="Label" className="flex flex-wrap gap-2">
-          {LABELS.map((label) => (
-            <button
-              key={label.value}
-              type="button"
-              className={BUTTON}
-              disabled={busy}
-              onClick={() => {
-                onDecide({ action: "edit", payload: { label: label.value } });
-              }}
-            >
-              {label.text}
-            </button>
-          ))}
-          <button
-            type="button"
-            className={BUTTON}
-            onClick={() => {
-              onMode("idle");
+            onSubmit={(payload) => {
+              onDecide({
+                action: mode === "answer" ? "answer" : "edit",
+                payload,
+              });
             }}
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {editor !== undefined && editor.type !== "label" && (
-        <ValueForm
-          editor={editor}
-          busy={busy}
-          onCancel={() => {
-            onMode("idle");
-          }}
-          onSubmit={(payload) => {
-            onDecide({
-              action: mode === "answer" ? "answer" : "edit",
-              payload,
-            });
-          }}
-        />
-      )}
+          />
+        )}
+      </div>
     </article>
   );
 }

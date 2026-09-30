@@ -3,7 +3,8 @@
 // badge count. Every decision works from the keyboard with visible hints: Enter runs the
 // kind's primary action, e edits (a label: 1, 2 or 3), r rejects (or denies), s snoozes
 // (then 1, 3 or t), o opens the target, j and k (or the arrows) move; after a decision
-// the next item takes focus. At phone width the items stack with 44 px buttons.
+// the next item takes focus. At phone width the items stack with 44 px buttons. Each item
+// is a card (DS-01, ADR-0012), in one readable column on a laptop.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -18,6 +19,7 @@ import {
 import type { ReviewItemOut } from "../../api/types.gen";
 import { ApiError, apiWrite, ConflictError, useWrite } from "../../lib/fetch";
 import { snoozeUntil, type SnoozeChoice } from "../../lib/time";
+import { CARD } from "../common/ui";
 import { workingHoursQuery, workspaceQuery } from "../settings/queries";
 import {
   invalidateReviewReads,
@@ -67,7 +69,7 @@ function Shortcuts() {
           {hint.keys.map((key) => (
             <kbd
               key={key}
-              className="rounded border border-border bg-surface-muted px-1 font-mono"
+              className="rounded border border-border bg-surface px-1.5 font-mono shadow-card"
             >
               {key}
             </kbd>
@@ -274,7 +276,7 @@ export function ReviewQueue({
 
   const total = count.data?.count ?? 0;
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex max-w-3xl flex-col gap-4">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold">{`${String(total)} to review`}</h1>
         <Shortcuts />
@@ -283,12 +285,14 @@ export function ReviewQueue({
         {message}
       </p>
       {queue.isError && (
-        <p role="alert" className="text-sm">
+        <p role="alert" className={`${CARD} px-4 py-3 text-sm text-danger`}>
           The review queue could not be loaded.
         </p>
       )}
       {queue.isSuccess && items.length === 0 && (
-        <p className="text-sm text-muted">Nothing waits for you.</p>
+        <p className={`${CARD} px-4 py-6 text-center text-sm text-muted`}>
+          Nothing waits for you.
+        </p>
       )}
       <ul
         aria-label="Review queue"
