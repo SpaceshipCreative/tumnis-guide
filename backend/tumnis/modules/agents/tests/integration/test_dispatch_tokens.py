@@ -240,3 +240,56 @@ async def test_master_run_token_reaches_no_project(
             api_key_id=master.id,
             now=clock.now(),
         )
+
+
+@pytest.mark.req("SAF-1")
+@pytest.mark.wp("P2-02")
+async def test_a_dispatch_that_fails_ends_its_token(
+    dbos: type[DBOS],
+    fake_runner: FakeRunnerFactory,
+    workspace: WorkspaceHandle,
+    clock: FixedClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R-27: when the dispatch fails with any error (not only an unavailable agent), the
+    run's token is ended before the error propagates, so it never outlives the run."""
+    from tests._mcp import make_world  # noqa: PLC0415
+    from tumnis.core.principal import AuthFailure  # noqa: PLC0415
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+    from tumnis.modules.agents import workflows  # noqa: PLC0415
+    from tumnis.modules.agents.adapters.hermes import DaemonTransport  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth  # noqa: PLC0415
+
+    name, role, skill, out, _output = DISPATCHES["task"]
+    world = await make_world(workspace, clock)
+    runner = fake_runner(profiles=[name], strict=True)
+    profile_id = fake_runner.register_profile(
+        name,
+        runner=runner,
+        role=role,  # type: ignore[arg-type]
+        project_id=world.projects["A"],
+    )
+    key = await auth.create_key(
+        workspace.ctx,
+        auth.KeyIn(name=f"{name} key", scopes=["tasks:read", "tasks:write", "context:read"]),
+        now=clock.now(),
+    )
+    await agents.set_profile_key(workspace.ctx, profile_id, key.id, now=clock.now())
+    task = await world.task("A", title="Tidy the Acme footer", label="ai", estimate_minutes=None)
+    tokens: list[str] = []
+
+    async def broken(_self: object, packet: Any) -> None:
+        tokens.append(packet.callback.task_token)
+        live = await auth.authenticate_bearer(packet.callback.task_token, now=clock.now())
+        assert not isinstance(live, AuthFailure)
+        raise RuntimeError("the mailbox write failed")
+
+    monkeypatch.setattr(DaemonTransport, "dispatch", broken)
+    packet = await _packet("task", profile_id, task, skill, out)
+    handle = await workflows.start_run_skill(workspace.id, packet)
+    with pytest.raises(Exception, match="the mailbox write failed"):
+        await asyncio.wait_for(handle.get_result(), 30)
+
+    assert len(tokens) == 1
+    assert tokens[0].startswith("tmt_")
+    assert isinstance(await auth.authenticate_bearer(tokens[0], now=clock.now()), AuthFailure)

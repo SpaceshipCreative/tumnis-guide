@@ -671,7 +671,7 @@
     "write": false
   },
   {
-    "description": "The task's packet as a run would get it: the task, its project's brief and passages, context items, the policy and the callback (no token), with outside text inside untrusted-data blocks. `kind` is task (default), proposal or stuck.",
+    "description": "The task's packet as a run would get it: the task, its project's brief and passages, context items (with context:read), the policy and the callback (no token), with outside text inside untrusted-data blocks. `kind` is task (default), proposal or stuck.",
     "input_schema": {
       "properties": {
         "kind": {

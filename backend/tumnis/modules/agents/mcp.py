@@ -18,11 +18,12 @@ from uuid import UUID
 from sqlalchemy import Table, select
 
 from tumnis.core import agent_surface as surface
+from tumnis.core.errors import ProblemError
 from tumnis.core.principal import Principal
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.modules.agents import api
 from tumnis.modules.agents.models import AgentProfile, RunRow
-from tumnis.modules.agents.packet_builder import TaskPacket, packet_for_caller
+from tumnis.modules.agents.packet_builder import PacketTooLargeError, TaskPacket, packet_for_caller
 from tumnis.modules.auth import api as auth
 from tumnis.modules.tasks import api as tasks
 
@@ -43,13 +44,19 @@ class GetTaskPacketIn(TaskPacketQuery):
 
 
 async def _packet(call: surface.SurfaceCall, data: GetTaskPacketIn) -> TaskPacket:
-    return await packet_for_caller(
-        call.session,
-        data.task_id,
-        kind=api.RunKind(data.kind),
-        run_id=call.caller.run_id,
-        profile_id=call.caller.profile_id,
-    )
+    """Context items are outside content under `context:read` (FR-14.10): a caller with
+    only `tasks:read` gets the packet without them."""
+    try:
+        return await packet_for_caller(
+            call.session,
+            data.task_id,
+            kind=api.RunKind(data.kind),
+            run_id=call.caller.run_id,
+            profile_id=call.caller.profile_id,
+            with_context="context:read" in call.caller.scopes,
+        )
+    except PacketTooLargeError as exc:
+        raise ProblemError(422, "packet_too_large", str(exc)) from None
 
 
 async def _project_of_task(ctx: WorkspaceContext, raw: Any) -> UUID | None:
@@ -65,7 +72,8 @@ GET_TASK_PACKET = surface.register_op(
         name="get_task_packet",
         description=(
             "The task's packet as a run would get it: the task, its project's brief and"
-            " passages, context items, the policy and the callback (no token), with outside"
+            " passages, context items (with context:read), the policy and the callback (no"
+            " token), with outside"
             " text inside untrusted-data blocks. `kind` is task (default), proposal or stuck."
         ),
         scope="tasks:read",

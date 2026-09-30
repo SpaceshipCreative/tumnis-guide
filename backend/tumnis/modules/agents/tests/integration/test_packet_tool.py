@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 import pytest
@@ -57,3 +58,55 @@ async def test_get_task_packet_has_no_token(
     assert packet["body"]["project"]["id"] == str(world.projects["A"])
     assert packet["policy"]["gated"]
     assert "tmt_" not in packet["prompt_text"]
+
+
+@pytest.mark.req("FR-5.4")
+@pytest.mark.wp("P2-02")
+async def test_get_task_packet_leaves_context_items_out_without_context_read(
+    app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
+) -> None:
+    """Context items are outside content under `context:read`: a caller with only
+    `tasks:read` gets the task's packet without them (on MCP and REST alike), while a
+    caller that holds `context:read` gets them."""
+    from tests._mcp import (  # noqa: PLC0415
+        ALL_SCOPES,
+        Callers,
+        http_for,
+        make_world,
+        mcp_call,
+        mcp_running,
+        rest_call,
+    )
+    from tumnis.core import agent_surface  # noqa: PLC0415
+    from tumnis.modules.integrations import api as integrations  # noqa: PLC0415
+
+    world = await make_world(workspace, clock)
+    callers = Callers(app, world)
+    task = await world.task("A", title="Check the Acme footer", label="ai", estimate_minutes=None)
+    url = "https://example.com/acme-footer-notes"
+    await integrations.link_context(
+        workspace.ctx,
+        owner_type="task",
+        owner_id=task.id,
+        target_type="url",
+        target_url=url,
+        added_by=workspace.ctx.actor,
+    )
+    op = agent_surface.get_op("get_task_packet")
+    full, _ = await callers.key(ALL_SCOPES)
+    narrow, _ = await callers.key(frozenset({"tasks:read"}))
+
+    async with mcp_running(app), http_for(app, full) as http:
+        seen = await mcp_call(http, "get_task_packet", {"task_id": str(task.id)})
+    assert seen.ok, seen
+    assert [item["provider_url"] for item in seen.data["body"]["context_items"]] == [url]
+    assert url in seen.data["prompt_text"]
+
+    async with mcp_running(app), http_for(app, narrow) as http:
+        via_mcp = await mcp_call(http, "get_task_packet", {"task_id": str(task.id)})
+        via_rest = await rest_call(http, op, {"task_id": str(task.id)})
+    for answer in (via_mcp, via_rest):
+        assert answer.ok, answer
+        assert answer.data["body"]["context_items"] == []
+        assert url not in answer.data["prompt_text"]
+        assert url not in json.dumps(answer.data["body"])

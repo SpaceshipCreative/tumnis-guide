@@ -43,6 +43,7 @@ from tumnis.modules.agents.rules import (
     Block,
     BlockSource,
     RunKind,
+    comment_tainted,
     packet_tainted,
     render_block,
     render_task_prompt,
@@ -58,6 +59,7 @@ __all__ = [
     "CodeLocation",
     "ContextBlock",
     "PacketInputs",
+    "PacketTooLargeError",
     "Passage",
     "PathLocation",
     "PolicySection",
@@ -98,12 +100,17 @@ SKILLS: Final[dict[RunKind, str]] = {
     RunKind.STUCK: "unstick",
 }
 COMMENTS_LIMIT: Final = 50  # the task's newest comments a packet carries (plan default)
-CONTEXT_BUDGET_BYTES: Final = PACKET_MAX_BYTES // 2  # raw context text, before escaping
+CONTEXT_BUDGET_BYTES: Final = PACKET_MAX_BYTES // 2  # context blocks, as rendered (escaped)
 _LT_ESCAPED: Final = "\\" + "u003c"  # "<" inside the JSON, the same JSON (P1-05)
 _PREAMBLE_FILE: Final = Path(__file__).with_name("packet_preamble.md")
 TokenStr = Annotated[str, StringConstraints(pattern=r"^tmt_[a-z2-7]{12}_[A-Za-z0-9_-]{43}$")]
 NonceStr = Annotated[str, StringConstraints(pattern=NONCE_RE)]
 Label = Literal["human", "ai", "hybrid"]
+
+
+class PacketTooLargeError(ValueError):
+    """The rendered prompt is over PACKET_MAX_BYTES (text outside the context budget, such
+    as many long comments): refused, never sent cut in half."""
 
 
 @functools.cache
@@ -415,26 +422,33 @@ def _passage(passage: PassageInput, nonce: str) -> Passage:
 
 
 def _context_items(items: list[ContextInput], nonce: str) -> list[ContextBlock]:
-    """Each item's text cut to CONTEXT_ITEM_MAX_BYTES, and all of them to one budget (so the
-    packet stays near PACKET_MAX_BYTES); a cut item says `truncated`."""
+    """Each item's text cut to CONTEXT_ITEM_MAX_BYTES, and all of them to one budget of
+    rendered (escaped) bytes, so the packet stays within PACKET_MAX_BYTES; a cut item says
+    `truncated`. The raw text is cut before escaping, so an escape is never cut in half."""
     out: list[ContextBlock] = []
     budget = CONTEXT_BUDGET_BYTES
     for item in items:
-        text, cut = truncate_utf8(item.text, min(CONTEXT_ITEM_MAX_BYTES, budget))
-        budget -= len(text.encode("utf-8", errors="surrogatepass"))
         attrs = {"type": item.target_type, **item.attrs}
         if item.provider_url:
             attrs["url"] = item.provider_url
-        block = _block(
-            text,
-            nonce=nonce,
-            source=item.source,
-            trusted=False,
-            tainted=item.tainted,
-            item=item.id,
-            attrs=attrs,
-            truncated=cut,
-        )
+        limit = max(min(CONTEXT_ITEM_MAX_BYTES, budget), 0)
+        while True:
+            text, cut = truncate_utf8(item.text, limit)
+            block = _block(
+                text,
+                nonce=nonce,
+                source=item.source,
+                trusted=False,
+                tainted=item.tainted,
+                item=item.id,
+                attrs=attrs,
+                truncated=cut,
+            )
+            size = _utf8_len(block.rendered)
+            if size <= budget or limit == 0:
+                break
+            limit = max(min(limit - 1, limit * budget // size), 0)  # shrink toward the budget
+        budget -= size
         out.append(
             ContextBlock(
                 **block.model_dump(),
@@ -443,6 +457,10 @@ def _context_items(items: list[ContextInput], nonce: str) -> list[ContextBlock]:
             )
         )
     return out
+
+
+def _utf8_len(text: str) -> int:
+    return len(text.encode("utf-8", errors="surrogatepass"))
 
 
 def _json(data: Any) -> str:
@@ -529,6 +547,8 @@ def assemble(
         ("Context items", [c.rendered for c in context]),
     ]
     prompt = render_task_prompt(preamble(), instruction, sections, _json(data))
+    if _utf8_len(prompt) > PACKET_MAX_BYTES:
+        raise PacketTooLargeError(f"task packet prompt exceeds {PACKET_MAX_BYTES} bytes")
     time_cap_s = inputs.policy.time_cap_minutes * 60
     return TaskPacket(
         kind=kind,
@@ -614,7 +634,10 @@ async def gather_inputs(
             tainted=task.tainted,
             by_user=task.source != "agent",
         ),
-        comments=[CommentInput(author=c.created_by, body=c.body_md) for c in comments],
+        comments=[
+            CommentInput(author=c.created_by, body=c.body_md, tainted=comment_tainted(c.created_by))
+            for c in comments
+        ],
         project=ProjectInput(
             id=context.project_id,
             name=context.name,
@@ -700,10 +723,12 @@ async def packet_for_caller(
     kind: RunKind = RunKind.TASK,
     run_id: UUID | None = None,
     profile_id: UUID | None = None,
+    with_context: bool = True,
 ) -> TaskPacket:
     """`get_task_packet`: the task's packet as the caller would get it for a run, with no
     token (`callback.task_token: null`). The run is the caller's (a task token's) or a
-    stable preview id; the nonce is derived from the content, so repeated reads agree."""
+    stable preview id; the nonce is derived from the content, so repeated reads agree.
+    `with_context=False` (a caller without `context:read`) leaves the context items out."""
     project = (await tasks.get_task(s, task_id)).project_id
     if profile_id is None and project is not None:
         profile_id = await s.scalar(
@@ -713,6 +738,8 @@ async def packet_for_caller(
             .limit(1)
         )
     inputs = await gather_inputs(s, task_id, profile_id=profile_id)
+    if not with_context:
+        inputs = inputs.model_copy(update={"context_items": []})
     return assemble(
         inputs,
         kind=kind,

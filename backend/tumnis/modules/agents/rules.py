@@ -612,6 +612,14 @@ def packet_tainted(blocks: Iterable[Block]) -> bool:
     return any(block.tainted for block in blocks)
 
 
+def comment_tainted(author: str) -> bool:
+    """Whether a task comment is tainted, from its author (comments keep no taint column):
+    a write by an API key, never bound to a run, is tainted (R-31, as
+    `agent_surface._taint`). A person's comment is not; a task token's follows its run's
+    taint, which P2-08 propagates."""
+    return author.startswith("api_key:")
+
+
 def truncate_utf8(text: str, max_bytes: int) -> tuple[str, bool]:
     """The longest prefix of `text` within `max_bytes` UTF-8 bytes, and whether it was cut.
     Truncation comes before escaping, so an escape is never cut in half."""

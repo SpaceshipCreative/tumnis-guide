@@ -25,6 +25,7 @@ import asyncio
 import contextvars
 import hashlib
 import json
+import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID, uuid5
@@ -76,6 +77,8 @@ from tumnis.modules.tasks import api as tasks
 
 if TYPE_CHECKING:
     from dbos import DBOSClient, WorkflowHandleAsync
+
+_log = logging.getLogger(__name__)
 
 RECV_GRACE_S: Final = 30  # the run's timeout plus this, then timed_out (plan default)
 HEALTH_TIMEOUT_S: Final = 30
@@ -164,6 +167,14 @@ async def dispatch_step(workspace_id: str, packet: dict[str, Any]) -> str | None
     except api.AgentUnavailable as exc:
         await api.run_ended(ctx, task.run_id, now=SystemClock().now())
         return exc.reason
+    except BaseException:
+        # Any other failure ends the run too (R-27: the token lives no longer than its
+        # run); this step does not retry, so finish_step never runs after it.
+        try:
+            await api.run_ended(ctx, task.run_id, now=SystemClock().now())
+        except Exception:
+            _log.exception("ending run %s after a failed dispatch failed too", task.run_id)
+        raise
     faults.killpoint("agents.dispatch_step")  # the mailbox row has committed
     return None
 
