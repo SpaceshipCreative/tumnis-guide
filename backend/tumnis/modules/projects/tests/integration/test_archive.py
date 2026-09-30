@@ -297,8 +297,8 @@ async def test_killed_worker_resumes_archive_once(  # noqa: PLR0915, PLR0917
         db=db,
         ws=workspace,
         clock=clock,
-        client=None,
-        root=tmp_path / "location",  # type: ignore[arg-type]
+        client=None,  # type: ignore[arg-type]  # this test drives no route
+        root=tmp_path / "location",
     )
     await world.start()
     runner_id, token = create_runner(workspace, clock, "homelab-hermes")
