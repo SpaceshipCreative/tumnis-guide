@@ -60,7 +60,6 @@ CASES: dict[str, tuple[dict[str, Any], bool | None]] = {
 
 @pytest.mark.req("Quality: Hermes skills")
 @pytest.mark.wp("P1-05")
-@pytest.mark.xfail(strict=True, reason="spec:P1-05")
 @pytest.mark.parametrize("case", sorted(CASES))
 def test_operators(case: str) -> None:
     """T-P1-05-06

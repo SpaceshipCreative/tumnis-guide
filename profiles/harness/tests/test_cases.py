@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 @pytest.mark.req("Quality: Hermes skills")
 @pytest.mark.wp("P1-05")
-@pytest.mark.xfail(strict=True, reason="spec:P1-05")
 def test_case_cannot_lower_runs(tmp_path: Path) -> None:
     """T-P1-05-09
     harness.toml fixes three runs per case; a case file with `runs: 1` is rejected when
