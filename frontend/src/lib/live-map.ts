@@ -78,9 +78,12 @@ export const LIVE_MAP: Record<
     lists: ["calendarListAccounts", "planningGetDayCalendar"],
   },
   // Runners register, heartbeat, go offline and get new tokens; profiles get health
-  // checks (P1-04): the Settings agents section refreshes.
+  // checks (P1-04): the Settings agents section refreshes, and a profile's tools (P2-10).
   runner: { details: [], lists: ["agentsListRunners"] },
-  agent_profile: { details: [], lists: ["agentsListProfiles"] },
+  agent_profile: {
+    details: ["agentsGetProfileTools"],
+    lists: ["agentsListProfiles"],
+  },
 };
 
 export const NOT_LIVE = [

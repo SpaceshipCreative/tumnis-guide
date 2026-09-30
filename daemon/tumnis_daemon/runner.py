@@ -17,6 +17,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal
 
+from tumnis_daemon import health
 from tumnis_daemon import worktree as worktree_mod
 from tumnis_daemon.config import DaemonConfig
 from tumnis_daemon.protocol import (
@@ -571,12 +572,16 @@ async def health_report(msg: HealthCheck, cfg: DaemonConfig) -> HealthReport:
     exists = shown is not None and shown[0] == 0
     mcp: list[str] = []
     authenticated: bool | None = None
+    probed: dict[str, Any] = {}
     if exists:
         listed = await _hermes(cfg, "-p", msg.profile, "mcp", "list")
         if listed is not None and listed[0] == 0:
             mcp = parse_mcp_list(listed[1])
         status = await _hermes(cfg, "-p", msg.profile, "status")
         authenticated = None if status is None else status[0] == 0
+        probed = await _probe(msg, cfg)
+        if not mcp:
+            mcp = [server.name for server in probed["mcp_server_details"]]
     return _report(
         msg,
         exists=exists,
@@ -585,7 +590,28 @@ async def health_report(msg: HealthCheck, cfg: DaemonConfig) -> HealthReport:
         version=parse_version(version[1]) if version[0] == 0 else None,
         mcp=mcp,
         error=None if exists else "profile not found",
+        **probed,
     )
+
+
+async def _probe(msg: HealthCheck, cfg: DaemonConfig) -> dict[str, Any]:
+    """P2-10: the profile's MCP servers, its version stamp and its tokens' reach, read and
+    probed on this host (the tokens never leave it)."""
+    profile = health.profile_dir(cfg.hermes_home, msg.profile)
+    github, coolify = await health.token_reach(
+        profile,
+        own_repos=msg.own_repos,
+        foreign_repos=msg.foreign_repos,
+        own_apps=msg.own_apps,
+        foreign_apps=msg.foreign_apps,
+        coolify_base_url=msg.coolify_base_url,
+    )
+    return {
+        "mcp_server_details": health.mcp_servers(profile),
+        "profile_version": health.profile_version(profile),
+        "github": github,
+        "coolify": coolify,
+    }
 
 
 def _report(
@@ -597,6 +623,7 @@ def _report(
     version: str | None = None,
     mcp: list[str] | None = None,
     error: str | None = None,
+    **probed: Any,
 ) -> HealthReport:
     return HealthReport(
         **envelope(msg.correlation_id),
@@ -608,4 +635,5 @@ def _report(
         hermes_version=version,
         mcp_servers=mcp or [],
         error=error,
+        **probed,
     )

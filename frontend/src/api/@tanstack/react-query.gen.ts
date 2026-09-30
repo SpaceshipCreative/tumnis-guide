@@ -12,6 +12,7 @@ import { client } from "../client.gen";
 import {
   agentsCheckProfileHealth,
   agentsCreateRunner,
+  agentsGetProfileTools,
   agentsListProfiles,
   agentsListRunners,
   agentsRegisterProfile,
@@ -104,6 +105,9 @@ import type {
   AgentsCreateRunnerData,
   AgentsCreateRunnerError,
   AgentsCreateRunnerResponse,
+  AgentsGetProfileToolsData,
+  AgentsGetProfileToolsError,
+  AgentsGetProfileToolsResponse,
   AgentsListProfilesData,
   AgentsListProfilesError,
   AgentsListProfilesResponse,
@@ -648,6 +652,37 @@ export const agentsCheckProfileHealthMutation = (
   };
   return mutationOptions;
 };
+
+export const agentsGetProfileToolsQueryKey = (
+  options: Options<AgentsGetProfileToolsData>,
+) => createQueryKey("agentsGetProfileTools", options);
+
+/**
+ * Get Profile Tools
+ *
+ * The profile's MCP servers from its last health check, read-only (FR-5.12): each
+ * matched against its project's allowlist, and its GitHub and Coolify tokens' reach.
+ */
+export const agentsGetProfileToolsOptions = (
+  options: Options<AgentsGetProfileToolsData>,
+) =>
+  queryOptions<
+    AgentsGetProfileToolsResponse,
+    AgentsGetProfileToolsError,
+    AgentsGetProfileToolsResponse,
+    ReturnType<typeof agentsGetProfileToolsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsGetProfileTools({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsGetProfileToolsQueryKey(options),
+  });
 
 export const auditListAuditQueryKey = (options?: Options<AuditListAuditData>) =>
   createQueryKey("auditListAudit", options);
