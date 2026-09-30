@@ -1,33 +1,94 @@
-/* Styling system (P0-22): Tailwind CSS v4 with design tokens as CSS variables, so dark
-   mode and the Tauri client share them. Every transition respects reduced motion. */
+/* Styling system (P0-22; DS-01, ADR-0012): Tailwind CSS v4 with design tokens as CSS
+   variables, so dark mode and the Tauri client share them. The look follows Cruip's Mosaic
+   Lite (violet accent, gray scale, Inter, rounded bordered cards), rebuilt here with values
+   tuned for WCAG AA. Light by default; dark through `prefers-color-scheme`; a manual choice
+   (`data-theme` on <html>, lib/theme.ts) wins over the system's. Every transition respects
+   reduced motion. */
 @import "tailwindcss";
 
-:root {
-  --tg-bg: #f8fafc;
-  --tg-surface: #ffffff;
-  --tg-surface-muted: #f1f5f9;
-  --tg-border: #cbd5e1;
-  --tg-text: #0f172a;
-  --tg-text-muted: #475569;
-  --tg-accent: #1d4ed8;
-  --tg-accent-contrast: #ffffff;
-  --tg-danger: #b91c1c;
-  --tg-focus: #2563eb;
-  color-scheme: light dark;
+/* `dark:` and the dark tokens follow the theme in force: a manual dark choice, or the
+   system's dark when there is no manual light choice. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(
+      :root:not([data-theme="light"]),
+      :root:not([data-theme="light"]) *
+    ) {
+      @slot;
+    }
+  }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --tg-bg: #0f172a;
-    --tg-surface: #111827;
-    --tg-surface-muted: #1e293b;
-    --tg-border: #334155;
-    --tg-text: #f1f5f9;
-    --tg-text-muted: #94a3b8;
-    --tg-accent: #93c5fd;
-    --tg-accent-contrast: #0f172a;
-    --tg-danger: #fca5a5;
-    --tg-focus: #93c5fd;
+:root {
+  /* Gray scale and violet accent (Mosaic's hues; text and accent one step darker for AA). */
+  --tg-bg: #f3f4f6;
+  --tg-surface: #ffffff;
+  --tg-surface-muted: #f9fafb;
+  --tg-border: #e5e7eb;
+  --tg-border-strong: #bfc4cd;
+  --tg-text: #1f2937;
+  --tg-text-muted: #5b6472;
+  --tg-accent: #5d47de;
+  --tg-accent-hover: #4634b1;
+  --tg-accent-contrast: #ffffff;
+  --tg-accent-soft: #f1eeff;
+  --tg-danger: #c52727;
+  --tg-success: #15773a;
+  --tg-warning: #816316;
+  --tg-info: #1c71ae;
+  --tg-focus: #755ff8;
+  --tg-shadow: 0 1px 1px 0 rgb(0 0 0 / 0.05), 0 1px 2px 0 rgb(0 0 0 / 0.02);
+  /* The shell's header height; pages that fill the screen subtract it. */
+  --tg-header-h: 4rem;
+  color-scheme: light;
+
+  @variant dark {
+    --tg-bg: #111827;
+    --tg-surface: #1f2937;
+    --tg-surface-muted: #2a3441;
+    --tg-border: #374151;
+    --tg-border-strong: #4b5563;
+    --tg-text: #f3f4f6;
+    --tg-text-muted: #9ca3af;
+    --tg-accent: #9c8cff;
+    --tg-accent-hover: #b7acff;
+    --tg-accent-contrast: #111827;
+    --tg-accent-soft: #312e5a;
+    --tg-danger: #ff7474;
+    --tg-success: #4bd37d;
+    --tg-warning: #f7cd4c;
+    --tg-info: #7bc8ff;
+    --tg-focus: #9c8cff;
+    --tg-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    color-scheme: dark;
+  }
+}
+
+@theme {
+  /* Inter, self-hosted (main.tsx imports @fontsource-variable/inter); system fonts until
+     it loads and for scripts it does not cover. */
+  --font-sans:
+    "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  --text-sm--line-height: 1.5715;
+  --text-base--letter-spacing: -0.01em;
+  --text-lg--letter-spacing: -0.01em;
+  --text-xl--letter-spacing: -0.01em;
+  --text-2xl--line-height: 1.33;
+  --text-2xl--letter-spacing: -0.01em;
+  --text-3xl--letter-spacing: -0.01em;
+  /* The phone drawer slides in from the left (reduced motion makes it instant). */
+  --animate-slide-in: tg-slide-in 200ms ease-out;
+  @keyframes tg-slide-in {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
   }
 }
 
@@ -36,12 +97,19 @@
   --color-surface: var(--tg-surface);
   --color-surface-muted: var(--tg-surface-muted);
   --color-border: var(--tg-border);
+  --color-border-strong: var(--tg-border-strong);
   --color-text: var(--tg-text);
   --color-muted: var(--tg-text-muted);
   --color-accent: var(--tg-accent);
+  --color-accent-hover: var(--tg-accent-hover);
   --color-accent-contrast: var(--tg-accent-contrast);
+  --color-accent-soft: var(--tg-accent-soft);
   --color-danger: var(--tg-danger);
+  --color-success: var(--tg-success);
+  --color-warning: var(--tg-warning);
+  --color-info: var(--tg-info);
   --color-focus: var(--tg-focus);
+  --shadow-card: var(--tg-shadow);
 }
 
 @layer base {
@@ -50,13 +118,13 @@
     background: var(--tg-bg);
     color: var(--tg-text);
   }
-  body {
-    font-family:
-      system-ui,
-      -apple-system,
-      "Segoe UI",
-      Roboto,
-      sans-serif;
+  /* Tailwind v4 borders default to currentColor; ours default to the token. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--tg-border);
   }
   /* One visible focus ring for every keyboard focus (UX 11). */
   :focus-visible {

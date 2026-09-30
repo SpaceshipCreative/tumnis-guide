@@ -10,7 +10,7 @@ tasks module registers a `ProjectStatsSource` at import (P0-18). Until then ever
 counts zero tasks and is on track. Reads ask the source once per page for every id on it.
 """
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Annotated, Any, Final, Literal, Protocol
 from uuid import UUID
@@ -52,6 +52,7 @@ from tumnis.modules.projects.rules import (
     CodeLocationError,
     Health,
     HealthFacts,
+    effective_tool_allowlist,
     local_today,
     next_milestone,
     project_health,
@@ -353,6 +354,40 @@ async def links_of_kind(
         stmt = stmt.where(_links.c.project_id.in_(project_ids))
     rows = await s.execute(stmt)
     return [ProjectLinkOut(project_id=row.project_id, value=row.value) for row in rows]
+
+
+async def code_repos(s: AsyncSession) -> list[ProjectLinkOut]:
+    """Every live, unarchived project's code repositories (P2-10): its `repo_url`, then
+    its `repo` links, by board order. Values are as stored (a URL or `owner/name`)."""
+    urls = await s.execute(
+        select(_projects.c.id, _projects.c.repo_url)
+        .where(_live(), _projects.c.archived_at.is_(None), _projects.c.repo_url.is_not(None))
+        .order_by(_projects.c.sort_key, _projects.c.id)
+    )
+    found = [ProjectLinkOut(project_id=row.id, value=row.repo_url) for row in urls]
+    return found + await links_of_kind(s, "repo")
+
+
+async def project_names(s: AsyncSession, project_ids: Iterable[UUID]) -> dict[UUID, str]:
+    """The names of these projects (live ones; archived included), for messages."""
+    ids = list(dict.fromkeys(project_ids))
+    if not ids:
+        return {}
+    rows = await s.execute(
+        select(_projects.c.id, _projects.c.name).where(_projects.c.id.in_(ids), _live())
+    )
+    return {row.id: row.name for row in rows}
+
+
+async def tool_allowlist(s: AsyncSession, project_id: UUID) -> tuple[str, ...]:
+    """The MCP servers the project's agent may have (SAF-2, P2-10): its policy's
+    `tool_allowlist`, or the project template's servers while that list is empty."""
+    stored = await s.scalar(
+        select(_policies.c.tool_allowlist).where(
+            _policies.c.project_id == project_id, _policies.c.deleted_at.is_(None)
+        )
+    )
+    return effective_tool_allowlist(stored or [])
 
 
 LOCAL_ONLY_CACHE: Final = register_cache(

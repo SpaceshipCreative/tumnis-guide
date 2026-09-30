@@ -26,7 +26,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from tumnis.core.schemas import VersionedPayload, upgrader, versioned
-from tumnis.modules.agents.rules import NAME_RE, SKILL_RE
+from tumnis.modules.agents.rules import MAX_REACH_TARGETS, NAME_RE, SKILL_RE, TokenReach
 
 __all__ = [
     "NAME_RE",
@@ -42,6 +42,7 @@ __all__ = [
     "HealthReport",
     "Heartbeat",
     "InvalidMessage",
+    "McpServerInfo",
     "Nack",
     "ProfileInfo",
     "ProtocolError",
@@ -57,6 +58,7 @@ __all__ = [
     "ServerMessage",
     "Status",
     "Stream",
+    "TokenReach",
     "UploadArtifact",
     "negotiate",
     "parse_daemon",
@@ -105,6 +107,15 @@ class SchemaRef(_Part):
     family: str = Field(max_length=32)
     name: str = Field(max_length=64)
     version: int = Field(ge=1)
+
+
+class McpServerInfo(_Part):
+    """One MCP server of a profile (P2-10): its name, transport and a redacted target (the
+    command's name, or the URL's host); never its arguments, env or headers (FR-5.12)."""
+
+    name: str = Field(max_length=128)
+    transport: Literal["stdio", "http"]
+    target: str | None = Field(default=None, max_length=253)
 
 
 class ProfileInfo(_Part):
@@ -165,6 +176,11 @@ class HealthReport(Envelope):
     hermes_version: str | None = Field(max_length=64)
     mcp_servers: list[str] = Field(default=[], max_length=200)  # names only (FR-5.12)
     error: str | None = Field(default=None, max_length=ERROR_MAX)
+    # P2-10; defaults keep a report without them valid
+    mcp_server_details: list[McpServerInfo] = Field(default=[], max_length=200)
+    profile_version: str | None = Field(default=None, max_length=64)  # profiles/*/VERSION
+    github: TokenReach | None = None
+    coolify: TokenReach | None = None
 
 
 @versioned("runner", "ack", 1)
@@ -298,6 +314,13 @@ class HealthCheck(Envelope):
     type: Literal["health_check"] = "health_check"
     request_id: UUID
     profile: str = Field(pattern=NAME_RE)
+    # P2-10: what the daemon's token reach probes look at; defaults keep P1-04's valid
+    own_repos: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)  # "owner/name"
+    foreign_repos: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)
+    own_apps: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)  # Coolify UUIDs
+    foreign_apps: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)
+    # compared with the profile's own COOLIFY_BASE_URL; never a token destination (decision 18)
+    coolify_base_url: str | None = Field(default=None, max_length=2048)
 
 
 @versioned("runner", "provision", 1)

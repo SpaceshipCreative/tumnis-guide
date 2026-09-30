@@ -18,7 +18,7 @@ of two transports.
 """
 
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from typing import Any, Final, Protocol
 from uuid import UUID, uuid5
@@ -349,11 +349,14 @@ class DaemonTransport:
                 return AgentHealth(status="offline", reachable=False, detail=exc.reason)
         return AgentHealth(status="ok", reachable=True)
 
-    async def request_health(self, profile_id: UUID, request_id: UUID) -> None:
+    async def request_health(
+        self, profile_id: UUID, request_id: UUID, scope: Mapping[str, Any] | None = None
+    ) -> None:
         """Queue a `health_check` for the profile on its runner (message id
         uuid5(request_id, "health_check"), so a replayed step queues it once); the runner's
-        `health_report` reaches workflow `profile-health:<request_id>`. AgentUnavailable
-        when the runner is offline or does not list the profile."""
+        `health_report` reaches workflow `profile-health:<request_id>`. `scope` carries
+        the repos and apps the token reach probes look at (P2-10). AgentUnavailable when
+        the runner is offline or does not list the profile."""
         async with tenant_session(self.ctx) as s:
             profile, runner_id = await self._runner_for(s, profile_id)
             check = HealthCheck(
@@ -362,6 +365,7 @@ class DaemonTransport:
                 sent_at=self.clock.now(),
                 request_id=request_id,
                 profile=profile,
+                **dict(scope or {}),
             )
             await s.execute(
                 insert(_messages)

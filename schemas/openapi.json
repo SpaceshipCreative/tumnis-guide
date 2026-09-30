@@ -1041,6 +1041,53 @@
         "title": "FolderIn",
         "type": "object"
       },
+      "ForeignReach": {
+        "description": "A token reaching another project's repo (`github`) or app (`coolify`).",
+        "properties": {
+          "kind": {
+            "enum": [
+              "github",
+              "coolify"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "target": {
+            "maxLength": 200,
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target"
+        ],
+        "title": "ForeignReach",
+        "type": "object"
+      },
       "FreeBlockOut": {
         "properties": {
           "end": {
@@ -1606,6 +1653,43 @@
           "block_end"
         ],
         "title": "ManualBlockIn",
+        "type": "object"
+      },
+      "McpServerInfo": {
+        "additionalProperties": false,
+        "description": "One MCP server of a profile (P2-10): its name, transport and a redacted target (the\ncommand's name, or the URL's host); never its arguments, env or headers (FR-5.12).",
+        "properties": {
+          "name": {
+            "maxLength": 128,
+            "title": "Name",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "maxLength": 253,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "transport": {
+            "enum": [
+              "stdio",
+              "http"
+            ],
+            "title": "Transport",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "transport"
+        ],
+        "title": "McpServerInfo",
         "type": "object"
       },
       "ModuleFlagIn": {
@@ -2276,6 +2360,16 @@
             ],
             "title": "Authenticated"
           },
+          "coolify": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenReach"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "error": {
             "anyOf": [
               {
@@ -2287,12 +2381,54 @@
             ],
             "title": "Error"
           },
+          "extra": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Extra",
+            "type": "array"
+          },
+          "foreign": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ForeignReach"
+            },
+            "title": "Foreign",
+            "type": "array"
+          },
+          "github": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenReach"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mcp_server_details": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/McpServerInfo"
+            },
+            "title": "Mcp Server Details",
+            "type": "array"
+          },
           "mcp_servers": {
             "default": [],
             "items": {
               "type": "string"
             },
             "title": "Mcp Servers",
+            "type": "array"
+          },
+          "missing": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
             "type": "array"
           },
           "profile_exists": {
@@ -2306,6 +2442,17 @@
             ],
             "title": "Profile Exists"
           },
+          "profile_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Version"
+          },
           "reachable": {
             "title": "Reachable",
             "type": "boolean"
@@ -2314,6 +2461,8 @@
             "default": "ok",
             "enum": [
               "ok",
+              "warning",
+              "degraded",
               "offline",
               "unsupported",
               "error"
@@ -2331,6 +2480,14 @@
               }
             ],
             "title": "Version"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -2459,6 +2616,182 @@
           "version"
         ],
         "title": "ProfilePatch",
+        "type": "object"
+      },
+      "ProfileToolsOut": {
+        "description": "Settings > Agents, one profile's tools, read-only (FR-5.12): the MCP servers it\nreported at its last health check, each matched against its project's allowlist\nnow, and its tokens' reach.",
+        "properties": {
+          "allowlist": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowlist",
+            "type": "array"
+          },
+          "authenticated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authenticated"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "coolify": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenReach"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extra": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Extra",
+            "type": "array"
+          },
+          "foreign": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ForeignReach"
+            },
+            "title": "Foreign",
+            "type": "array"
+          },
+          "github": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenReach"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hermes_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hermes Version"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_name": {
+            "title": "Profile Name",
+            "type": "string"
+          },
+          "profile_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Version"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "reachable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reachable"
+          },
+          "servers": {
+            "items": {
+              "$ref": "#/components/schemas/ToolServerOut"
+            },
+            "title": "Servers",
+            "type": "array"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ok",
+                  "warning",
+                  "degraded",
+                  "offline",
+                  "unsupported",
+                  "error"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "profile_id",
+          "profile_name",
+          "project_id",
+          "checked_at",
+          "status",
+          "reachable",
+          "authenticated",
+          "hermes_version",
+          "profile_version",
+          "allowlist",
+          "servers",
+          "extra",
+          "missing",
+          "github",
+          "coolify"
+        ],
+        "title": "ProfileToolsOut",
         "type": "object"
       },
       "ProjectContextOut": {
@@ -5235,6 +5568,102 @@
         "title": "TextDocumentPatch",
         "type": "object"
       },
+      "TokenReach": {
+        "additionalProperties": false,
+        "description": "What one token reaches, as the daemon probed it on the host (the token itself never\nleaves the host). GitHub: a repo is reachable only with `permissions.push` or `admin`;\nCoolify: an application is reachable when the token may read it.",
+        "properties": {
+          "errors": {
+            "default": [],
+            "items": {
+              "maxLength": 300,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Errors",
+            "type": "array"
+          },
+          "foreign_reachable": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Foreign Reachable",
+            "type": "array"
+          },
+          "own_reachable": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "default": {},
+            "maxProperties": 50,
+            "title": "Own Reachable",
+            "type": "object"
+          },
+          "token_present": {
+            "title": "Token Present",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "token_present"
+        ],
+        "title": "TokenReach",
+        "type": "object"
+      },
+      "ToolServerOut": {
+        "properties": {
+          "allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "transport": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stdio",
+                  "http"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transport"
+          }
+        },
+        "required": [
+          "name",
+          "transport",
+          "target",
+          "allowed"
+        ],
+        "title": "ToolServerOut",
+        "type": "object"
+      },
       "TotpEnrolConfirmIn": {
         "additionalProperties": false,
         "properties": {
@@ -6246,6 +6675,120 @@
           }
         },
         "summary": "Check Profile Health",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/profiles/{id}/tools": {
+      "get": {
+        "description": "The profile's MCP servers from its last health check, read-only (FR-5.12): each\nmatched against its project's allowlist, and its GitHub and Coolify tokens' reach.",
+        "operationId": "agents_get_profile_tools",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileToolsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Profile Tools",
         "tags": [
           "agents"
         ]

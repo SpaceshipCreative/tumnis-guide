@@ -14,7 +14,7 @@ and `result`. The server picks protocol 2 only for a daemon that lists 2 and adv
 import hashlib
 import json
 from datetime import UTC, datetime
-from typing import Any, Final, Literal
+from typing import Annotated, Any, Final, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -29,6 +29,7 @@ TEXT_MAX: Final = 65_536
 ERROR_MAX: Final = 4_096
 STREAM_TEXT_MAX: Final = 8_192  # one stream line (plan default, 8 KiB)
 TIMEOUT_V2_MAX: Final = 86_400  # R-29
+MAX_REACH_TARGETS: Final = 50  # repos or apps probed per kind (plan default)
 
 Capability = Literal[
     "run", "provision", "health", "stream", "cancel", "upload_artifact", "worktree", "archive"
@@ -141,6 +142,24 @@ class ResultV2(Result):
     status: Literal["succeeded", "failed", "timed_out", "cancelled"]  # type: ignore[assignment]
 
 
+class McpServerInfo(_Model):
+    """One MCP server of a profile: its name, transport and a redacted target (the
+    command's name, or the URL's host); never its arguments, env or headers (P2-10)."""
+
+    name: str = Field(max_length=128)
+    transport: Literal["stdio", "http"]
+    target: str | None = Field(default=None, max_length=253)
+
+
+class TokenReach(_Model):
+    """What one token reaches, probed from the host; the token never reaches Tumnis (P2-10)."""
+
+    token_present: bool
+    own_reachable: dict[str, bool] = Field(default={}, max_length=MAX_REACH_TARGETS)
+    foreign_reachable: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)
+    errors: list[Annotated[str, Field(max_length=300)]] = Field(default=[], max_length=100)
+
+
 class HealthReport(Envelope):
     type: Literal["health_report"] = "health_report"
     request_id: UUID
@@ -151,6 +170,11 @@ class HealthReport(Envelope):
     hermes_version: str | None = Field(max_length=64)
     mcp_servers: list[str] = Field(default=[], max_length=200)
     error: str | None = Field(default=None, max_length=ERROR_MAX)
+    # P2-10; defaults keep a report without them valid
+    mcp_server_details: list[McpServerInfo] = Field(default=[], max_length=200)
+    profile_version: str | None = Field(default=None, max_length=64)
+    github: TokenReach | None = None
+    coolify: TokenReach | None = None
 
 
 class Ack(Envelope):
@@ -236,6 +260,13 @@ class HealthCheck(Envelope):
     type: Literal["health_check"] = "health_check"
     request_id: UUID
     profile: str = Field(pattern=NAME_RE)
+    # P2-10: what the token reach probes look at ("owner/name" repos, Coolify app UUIDs)
+    own_repos: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)
+    foreign_repos: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)
+    own_apps: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)
+    foreign_apps: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)
+    # compared with the profile's own COOLIFY_BASE_URL; never a token destination (decision 18)
+    coolify_base_url: str | None = Field(default=None, max_length=2048)
 
 
 class Provision(Envelope):

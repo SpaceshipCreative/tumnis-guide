@@ -2,7 +2,7 @@
 // server's record (not the old local one) and says so.
 import { useQuery } from "@tanstack/react-query";
 import { act, screen, waitFor } from "@testing-library/react";
-import { delay, http, HttpResponse } from "msw";
+import { http, HttpResponse } from "msw";
 import { expect, test } from "vitest";
 
 import { ConflictToast } from "../components/common/ConflictToast";
@@ -39,9 +39,15 @@ function TaskTitle({ id }: { id: string }) {
 test("[P0-22][REL-2] T-P0-22-08 optimistic update rolls back on 409 and shows the server record", async () => {
   const task = makeTask({ title: "A", version: 3 });
   const current = { ...task, title: "C", version: 4 };
+  // The 409 waits until the test has seen the optimistic "B", so that window is always
+  // observable however slow the machine is (issue #76), instead of racing a real 50 ms.
+  let answer409!: () => void;
+  const conflictGate = new Promise<void>((resolve) => {
+    answer409 = resolve;
+  });
   server.use(
     http.patch("/v1/tasks/:id", async () => {
-      await delay(50);
+      await conflictGate;
       return HttpResponse.json(
         {
           type: "about:blank",
@@ -68,6 +74,7 @@ test("[P0-22][REL-2] T-P0-22-08 optimistic update rolls back on 409 and shows th
   await act(() => user.click(screen.getByRole("button", { name: "Rename" })));
 
   expect(await screen.findByRole("heading", { name: "B" })).toBeVisible();
+  answer409();
   await waitFor(() => {
     expect(screen.getByRole("heading")).toHaveTextContent("C");
   });
