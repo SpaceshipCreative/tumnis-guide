@@ -76,8 +76,14 @@ export const offlineQueueMachine = setup({
     persistNew: (_, params: { item: QueueItem }) => {
       void idbQueue.put(params.item);
     },
+    // What was stored joins what was captured while the read ran (the read can have
+    // started before that capture was written): one row per key, oldest first.
     setItems: assign({
-      items: (_, params: { items: QueueItem[] }) => params.items,
+      items: ({ context }, params: { items: QueueItem[] }) => {
+        const byKey = new Map(params.items.map((i) => [i.idempotencyKey, i]));
+        for (const item of context.items) byKey.set(item.idempotencyKey, item);
+        return [...byKey.values()].sort((a, b) => a.createdAt - b.createdAt);
+      },
     }),
     markOnline: assign({ online: true }),
     markOffline: assign({ online: false }),
@@ -126,8 +132,10 @@ export const offlineQueueMachine = setup({
         problem: undefined,
       };
       enqueue.assign({ items: [next, ...context.items.slice(1)] });
+      // The new row is written first, and the send that follows finds it there; the old
+      // row goes only once the new one is safely stored.
       enqueue(() => {
-        void idbQueue.delete(old.idempotencyKey).then(() => idbQueue.put(next));
+        void idbQueue.put(next).then(() => idbQueue.delete(old.idempotencyKey));
       });
     }),
     announceSynced: () => {

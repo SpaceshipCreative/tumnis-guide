@@ -409,3 +409,71 @@ test("[P0-25][REL-2] a retry answer backs off like a failure, up to 30 s", async
     0, 2_000, 4_000, 16_000, 30_000, 30_000,
   ]);
 });
+
+// Review findings (CodeRabbit on PR 65): two windows in which a capture could be lost.
+test("[P0-25][REL-2] an edited item is in IndexedDB before its send starts", async () => {
+  const first = queueItem("Edit me");
+  await idbQueue.put(first);
+  let storedAtSend: boolean | undefined;
+  let sends = 0;
+  const machine = offlineQueueMachine.provide({
+    actors: {
+      loadItems: fromPromise(() => Promise.resolve([first])),
+      sendHead: fromPromise<SendResult, QueueItem>(async ({ input }) => {
+        sends += 1;
+        if (sends === 1) {
+          return {
+            outcome: "conflict",
+            problem: makeProblem({ status: 422 }) as Problem,
+          };
+        }
+        // What sendQueued asks first: has another tab sent it already?
+        storedAtSend = await idbQueue.has(input.idempotencyKey);
+        return { outcome: "ok", taskId: "t" };
+      }),
+    },
+  });
+  const { actor, state, items } = start(machine, true);
+  await vi.waitFor(() => {
+    expect(state()).toBe("conflict");
+  });
+  actor.send({ type: "EDIT", body: { project_id: PROJECT, title: "Edited" } });
+  const edited = items()[0]?.idempotencyKey ?? "";
+  await vi.waitFor(() => {
+    expect(sends).toBe(2);
+  });
+  expect(storedAtSend).toBe(true);
+  expect(edited).not.toBe(first.idempotencyKey);
+  await vi.waitFor(async () => {
+    expect(await storedKeys()).not.toContain(first.idempotencyKey);
+  });
+});
+
+test("[P0-25][FR-3.10] a capture made while the queue loads survives a load that missed it", async () => {
+  const send = scriptedSend([]);
+  let finishLoad: (items: QueueItem[]) => void = () => undefined;
+  const machine = offlineQueueMachine.provide({
+    actors: {
+      loadItems: fromPromise<QueueItem[]>(
+        () =>
+          new Promise((resolve) => {
+            finishLoad = resolve;
+          }),
+      ),
+      sendHead: send.actor,
+    },
+  });
+  const { actor, state } = start(machine, true);
+  expect(state()).toBe("loading");
+  const older = queueItem("From last session");
+  const early = queueItem("Early");
+  actor.send({ type: "ENQUEUE", item: early });
+  finishLoad([older]);
+  await vi.waitFor(() => {
+    expect(send.calls).toHaveLength(2);
+  });
+  expect(keysIn(send.calls)).toEqual([
+    older.idempotencyKey,
+    early.idempotencyKey,
+  ]);
+});
