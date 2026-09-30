@@ -16,6 +16,7 @@ import { act, type ReactElement, type ReactNode } from "react";
 import { vi } from "vitest";
 
 import { createAppRouter } from "../router";
+import { trackRouter } from "./routers";
 
 /** The two layouts every UI change is checked at (AGENTS.md: 375 and 1280 px). */
 export type Viewport = "phone" | "laptop";
@@ -115,6 +116,33 @@ export interface RenderRouteResult extends RenderResult {
   user: UserEvent;
 }
 
+// Renders a loaded router, tracked until it is unmounted so that setup.ts can let its
+// loads finish after the test (routers.ts, issue #76).
+function renderRouter(
+  router: AnyRouter,
+  queryClient: QueryClient,
+): RenderRouteResult {
+  const user = userEvent.setup();
+  const result = render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  const untrack = trackRouter(router);
+  const unmount = () => {
+    untrack();
+    result.unmount();
+    // Nothing renders this router now. Its load still running would hand the commit to
+    // the unmounted tree (and wait forever for a render); router-core's own transition,
+    // the one it uses before any provider mounts, commits without React instead.
+    router.startTransition = (commit) => {
+      commit();
+      return Promise.resolve(false);
+    };
+  };
+  return { ...result, unmount, router, queryClient, user };
+}
+
 /**
  * The whole app at `url`: the real route tree on a memory history, loaded before the
  * first render (redirects in `beforeLoad` have run by the time it resolves).
@@ -131,14 +159,12 @@ export async function renderRoute(
     queryClient,
     history: createMemoryHistory({ initialEntries: [url] }),
   });
+  // Routes that show their pending state at once (`pendingMs: 0`) would hold it for the
+  // router's minimum, 500 ms of real time, before they commit. Tests have no flash to
+  // avoid: without the minimum a load commits as soon as its data is in.
+  router.update({ ...router.options, defaultPendingMinMs: 0 });
   await act(() => router.load());
-  const user = userEvent.setup();
-  const result = render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return { ...result, router, queryClient, user };
+  return renderRouter(router, queryClient);
 }
 
 /**
@@ -158,11 +184,5 @@ export async function renderWithRouter(
     history: createMemoryHistory({ initialEntries: ["/"] }),
   });
   await act(() => router.load());
-  const user = userEvent.setup();
-  const result = render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return { ...result, router, queryClient, user };
+  return renderRouter(router, queryClient);
 }
