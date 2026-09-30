@@ -1,0 +1,2005 @@
+[
+  {
+    "description": "Create a task or, with parent_id, a subtask in a project. Human and Hybrid tasks need estimate_minutes (minutes of human time); AI tasks carry none. A subtask is laid out against the project's card threshold (layout).",
+    "input_schema": {
+      "$defs": {
+        "Label": {
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ],
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "acceptance_criteria": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acceptance Criteria"
+        },
+        "due_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Due On"
+        },
+        "estimate_minutes": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 960,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimate Minutes"
+        },
+        "first_action": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Action"
+        },
+        "idempotency_key": {
+          "maxLength": 255,
+          "minLength": 8,
+          "pattern": "^[A-Za-z0-9_\\-:.]+$",
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Label"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "priority": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "status": {
+          "default": "backlog",
+          "enum": [
+            "backlog",
+            "today"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "title",
+        "idempotency_key"
+      ],
+      "title": "CreateTaskIn",
+      "type": "object"
+    },
+    "master_only": false,
+    "name": "create_task",
+    "output_schema": {
+      "$defs": {
+        "Label": {
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "Status": {
+          "enum": [
+            "backlog",
+            "today",
+            "in_progress",
+            "waiting_on_human",
+            "in_review",
+            "done"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "description": "A task as the agent surface answers it (P2-01): where a subtask shows against its\nproject's card threshold (`card`, a `checklist` item on its parent's card, or\n`nested_ai` for AI work); null for a root task.",
+      "properties": {
+        "acceptance_criteria": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Acceptance Criteria"
+        },
+        "actual_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Actual Minutes"
+        },
+        "assigned_agent_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assigned Agent Id"
+        },
+        "board_rank": {
+          "title": "Board Rank",
+          "type": "string"
+        },
+        "change_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Change Id"
+        },
+        "column_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Column Id"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Completed At"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "due_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due On"
+        },
+        "estimate_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Estimate Minutes"
+        },
+        "first_action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "First Action"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Label"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "user",
+                "jev",
+                "agent",
+                "fallback"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Label Source"
+        },
+        "layout": {
+          "anyOf": [
+            {
+              "enum": [
+                "card",
+                "checklist",
+                "nested_ai"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Layout"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Id"
+        },
+        "priority": {
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "rollover_count": {
+          "title": "Rollover Count",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Started At"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        },
+        "tainted": {
+          "title": "Tainted",
+          "type": "boolean"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "project_id",
+        "parent_id",
+        "title",
+        "label",
+        "label_source",
+        "status",
+        "priority",
+        "due_on",
+        "estimate_minutes",
+        "first_action",
+        "acceptance_criteria",
+        "assigned_agent_id",
+        "column_id",
+        "board_rank",
+        "rollover_count",
+        "started_at",
+        "completed_at",
+        "actual_minutes",
+        "tainted",
+        "source",
+        "version",
+        "created_at",
+        "updated_at",
+        "change_id",
+        "layout"
+      ],
+      "title": "TaskWithLayoutOut",
+      "type": "object"
+    },
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tasks"
+    },
+    "schema_version": 1,
+    "scope": "tasks:write",
+    "updates_existing": false,
+    "write": true
+  },
+  {
+    "description": "Read a project's context: name, client, goal, deadline, status, domains, code location (path or repository), the brief, the subtask card threshold and the approval policy.",
+    "input_schema": {
+      "properties": {
+        "project_id": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "title": "GetProjectContextIn",
+      "type": "object"
+    },
+    "master_only": false,
+    "name": "get_project_context",
+    "output_schema": {
+      "$defs": {
+        "PolicySummary": {
+          "description": "What an agent may do in the project without asking, and its run limits (FR-5.6).",
+          "properties": {
+            "allowed": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Allowed",
+              "type": "array"
+            },
+            "gated": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Gated",
+              "type": "array"
+            },
+            "max_concurrent_runs": {
+              "title": "Max Concurrent Runs",
+              "type": "integer"
+            },
+            "max_run_minutes": {
+              "title": "Max Run Minutes",
+              "type": "integer"
+            },
+            "max_tasks_per_run": {
+              "title": "Max Tasks Per Run",
+              "type": "integer"
+            },
+            "tool_allowlist": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Tool Allowlist",
+              "type": "array"
+            }
+          },
+          "required": [
+            "gated",
+            "allowed",
+            "tool_allowlist",
+            "max_concurrent_runs",
+            "max_run_minutes",
+            "max_tasks_per_run"
+          ],
+          "title": "PolicySummary",
+          "type": "object"
+        }
+      },
+      "description": "A project as an agent starts work in it: who it is for, what it aims at, where its\ncode and domains are, the brief, the card threshold and the approval policy.",
+      "properties": {
+        "archived": {
+          "title": "Archived",
+          "type": "boolean"
+        },
+        "brief_md": {
+          "title": "Brief Md",
+          "type": "string"
+        },
+        "client": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Client"
+        },
+        "code_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Code Path"
+        },
+        "deadline": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Deadline"
+        },
+        "domains": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Domains",
+          "type": "array"
+        },
+        "goal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Goal"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolicySummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "project_id": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "repo_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Repo Url"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "on_hold",
+            "completed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "subtask_threshold_min": {
+          "title": "Subtask Threshold Min",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "name",
+        "client",
+        "goal",
+        "deadline",
+        "status",
+        "archived",
+        "domains",
+        "code_path",
+        "repo_url",
+        "subtask_threshold_min",
+        "brief_md",
+        "policy"
+      ],
+      "title": "ProjectContextOut",
+      "type": "object"
+    },
+    "rest": {
+      "method": "GET",
+      "path": "/v1/projects/{project_id}/context"
+    },
+    "schema_version": 1,
+    "scope": "tasks:read",
+    "updates_existing": false,
+    "write": false
+  },
+  {
+    "description": "List tasks, oldest first, optionally filtered by project, status, label or parent task. Pages by cursor; `total` counts every match.",
+    "input_schema": {
+      "$defs": {
+        "Label": {
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "Status": {
+          "enum": [
+            "backlog",
+            "today",
+            "in_progress",
+            "waiting_on_human",
+            "in_review",
+            "done"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Label"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "order": {
+          "default": "created",
+          "enum": [
+            "created",
+            "today"
+          ],
+          "title": "Order",
+          "type": "string"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Status"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ListTasksIn",
+      "type": "object"
+    },
+    "master_only": false,
+    "name": "list_tasks",
+    "output_schema": {
+      "$defs": {
+        "Label": {
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "Status": {
+          "enum": [
+            "backlog",
+            "today",
+            "in_progress",
+            "waiting_on_human",
+            "in_review",
+            "done"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "TaskOut": {
+          "properties": {
+            "acceptance_criteria": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Acceptance Criteria"
+            },
+            "actual_minutes": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actual Minutes"
+            },
+            "assigned_agent_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assigned Agent Id"
+            },
+            "board_rank": {
+              "title": "Board Rank",
+              "type": "string"
+            },
+            "change_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Change Id"
+            },
+            "column_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Column Id"
+            },
+            "completed_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Completed At"
+            },
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "due_on": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Due On"
+            },
+            "estimate_minutes": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estimate Minutes"
+            },
+            "first_action": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "First Action"
+            },
+            "id": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Label"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "label_source": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "user",
+                    "jev",
+                    "agent",
+                    "fallback"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Label Source"
+            },
+            "parent_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Id"
+            },
+            "priority": {
+              "enum": [
+                "low",
+                "normal",
+                "high",
+                "urgent"
+              ],
+              "title": "Priority",
+              "type": "string"
+            },
+            "project_id": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            },
+            "rollover_count": {
+              "title": "Rollover Count",
+              "type": "integer"
+            },
+            "schema_version": {
+              "const": 1,
+              "default": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "source": {
+              "title": "Source",
+              "type": "string"
+            },
+            "started_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Started At"
+            },
+            "status": {
+              "$ref": "#/$defs/Status"
+            },
+            "tainted": {
+              "title": "Tainted",
+              "type": "boolean"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            },
+            "version": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "schema_version",
+            "id",
+            "project_id",
+            "parent_id",
+            "title",
+            "label",
+            "label_source",
+            "status",
+            "priority",
+            "due_on",
+            "estimate_minutes",
+            "first_action",
+            "acceptance_criteria",
+            "assigned_agent_id",
+            "column_id",
+            "board_rank",
+            "rollover_count",
+            "started_at",
+            "completed_at",
+            "actual_minutes",
+            "tainted",
+            "source",
+            "version",
+            "created_at",
+            "updated_at",
+            "change_id"
+          ],
+          "title": "TaskOut",
+          "type": "object"
+        }
+      },
+      "description": "A page of tasks and how many match the filter across every page (P0-23): the Today\npanel shows five and says \"+N more\".",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/TaskOut"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Cursor"
+        },
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor",
+        "total"
+      ],
+      "title": "TaskPage",
+      "type": "object"
+    },
+    "rest": {
+      "method": "GET",
+      "path": "/v1/tasks"
+    },
+    "schema_version": 1,
+    "scope": "tasks:read",
+    "updates_existing": false,
+    "write": false
+  },
+  {
+    "description": "Search tasks and projects by text (phrases in quotes, prefixes), best match first; project_id boosts that project's rows. Pages by cursor.",
+    "input_schema": {
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "q": {
+          "default": "",
+          "maxLength": 200,
+          "title": "Q",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "scope": {
+          "default": "all",
+          "enum": [
+            "all",
+            "tasks",
+            "projects"
+          ],
+          "title": "Scope",
+          "type": "string"
+        }
+      },
+      "title": "SearchIn",
+      "type": "object"
+    },
+    "master_only": false,
+    "name": "search",
+    "output_schema": {
+      "$defs": {
+        "SearchHit": {
+          "properties": {
+            "entity_id": {
+              "format": "uuid",
+              "title": "Entity Id",
+              "type": "string"
+            },
+            "entity_type": {
+              "enum": [
+                "task",
+                "project"
+              ],
+              "title": "Entity Type",
+              "type": "string"
+            },
+            "project_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            },
+            "snippet": {
+              "title": "Snippet",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "entity_type",
+            "entity_id",
+            "project_id",
+            "title",
+            "snippet",
+            "score"
+          ],
+          "title": "SearchHit",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/SearchHit"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Cursor"
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "title": "Page[SearchHit]",
+      "type": "object"
+    },
+    "rest": {
+      "method": "GET",
+      "path": "/v1/search"
+    },
+    "schema_version": 1,
+    "scope": "tasks:read",
+    "updates_existing": false,
+    "write": false
+  },
+  {
+    "description": "Re-estimate a Human or Hybrid task (minutes of human time) at the version you read, with the reason for the change.",
+    "input_schema": {
+      "properties": {
+        "estimate_minutes": {
+          "exclusiveMinimum": 0,
+          "maximum": 960,
+          "title": "Estimate Minutes",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "maxLength": 255,
+          "minLength": 8,
+          "pattern": "^[A-Za-z0-9_\\-:.]+$",
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "version": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "estimate_minutes",
+        "reason",
+        "version",
+        "idempotency_key",
+        "task_id"
+      ],
+      "title": "UpdateEstimateIn",
+      "type": "object"
+    },
+    "master_only": false,
+    "name": "update_estimate",
+    "output_schema": {
+      "$defs": {
+        "Label": {
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "Status": {
+          "enum": [
+            "backlog",
+            "today",
+            "in_progress",
+            "waiting_on_human",
+            "in_review",
+            "done"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "description": "A task as the agent surface answers it (P2-01): where a subtask shows against its\nproject's card threshold (`card`, a `checklist` item on its parent's card, or\n`nested_ai` for AI work); null for a root task.",
+      "properties": {
+        "acceptance_criteria": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Acceptance Criteria"
+        },
+        "actual_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Actual Minutes"
+        },
+        "assigned_agent_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assigned Agent Id"
+        },
+        "board_rank": {
+          "title": "Board Rank",
+          "type": "string"
+        },
+        "change_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Change Id"
+        },
+        "column_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Column Id"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Completed At"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "due_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due On"
+        },
+        "estimate_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Estimate Minutes"
+        },
+        "first_action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "First Action"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Label"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "user",
+                "jev",
+                "agent",
+                "fallback"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Label Source"
+        },
+        "layout": {
+          "anyOf": [
+            {
+              "enum": [
+                "card",
+                "checklist",
+                "nested_ai"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Layout"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Id"
+        },
+        "priority": {
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "rollover_count": {
+          "title": "Rollover Count",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Started At"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        },
+        "tainted": {
+          "title": "Tainted",
+          "type": "boolean"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "project_id",
+        "parent_id",
+        "title",
+        "label",
+        "label_source",
+        "status",
+        "priority",
+        "due_on",
+        "estimate_minutes",
+        "first_action",
+        "acceptance_criteria",
+        "assigned_agent_id",
+        "column_id",
+        "board_rank",
+        "rollover_count",
+        "started_at",
+        "completed_at",
+        "actual_minutes",
+        "tainted",
+        "source",
+        "version",
+        "created_at",
+        "updated_at",
+        "change_id",
+        "layout"
+      ],
+      "title": "TaskWithLayoutOut",
+      "type": "object"
+    },
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tasks/{task_id}/estimate"
+    },
+    "schema_version": 1,
+    "scope": "tasks:write",
+    "updates_existing": true,
+    "write": true
+  },
+  {
+    "description": "Move a task to another status at the version you read. Agents may take only the agent transitions (for example, never Backlog to Done).",
+    "input_schema": {
+      "$defs": {
+        "Status": {
+          "enum": [
+            "backlog",
+            "today",
+            "in_progress",
+            "waiting_on_human",
+            "in_review",
+            "done"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "idempotency_key": {
+          "maxLength": 255,
+          "minLength": 8,
+          "pattern": "^[A-Za-z0-9_\\-:.]+$",
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "to": {
+          "$ref": "#/$defs/Status"
+        },
+        "version": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "to",
+        "version",
+        "idempotency_key",
+        "task_id"
+      ],
+      "title": "UpdateTaskStatusIn",
+      "type": "object"
+    },
+    "master_only": false,
+    "name": "update_task_status",
+    "output_schema": {
+      "$defs": {
+        "Label": {
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "Status": {
+          "enum": [
+            "backlog",
+            "today",
+            "in_progress",
+            "waiting_on_human",
+            "in_review",
+            "done"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "description": "A task as the agent surface answers it (P2-01): where a subtask shows against its\nproject's card threshold (`card`, a `checklist` item on its parent's card, or\n`nested_ai` for AI work); null for a root task.",
+      "properties": {
+        "acceptance_criteria": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Acceptance Criteria"
+        },
+        "actual_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Actual Minutes"
+        },
+        "assigned_agent_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assigned Agent Id"
+        },
+        "board_rank": {
+          "title": "Board Rank",
+          "type": "string"
+        },
+        "change_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Change Id"
+        },
+        "column_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Column Id"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Completed At"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "due_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due On"
+        },
+        "estimate_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Estimate Minutes"
+        },
+        "first_action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "First Action"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Label"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "user",
+                "jev",
+                "agent",
+                "fallback"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Label Source"
+        },
+        "layout": {
+          "anyOf": [
+            {
+              "enum": [
+                "card",
+                "checklist",
+                "nested_ai"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Layout"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Id"
+        },
+        "priority": {
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "rollover_count": {
+          "title": "Rollover Count",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Started At"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        },
+        "tainted": {
+          "title": "Tainted",
+          "type": "boolean"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "project_id",
+        "parent_id",
+        "title",
+        "label",
+        "label_source",
+        "status",
+        "priority",
+        "due_on",
+        "estimate_minutes",
+        "first_action",
+        "acceptance_criteria",
+        "assigned_agent_id",
+        "column_id",
+        "board_rank",
+        "rollover_count",
+        "started_at",
+        "completed_at",
+        "actual_minutes",
+        "tainted",
+        "source",
+        "version",
+        "created_at",
+        "updated_at",
+        "change_id",
+        "layout"
+      ],
+      "title": "TaskWithLayoutOut",
+      "type": "object"
+    },
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tasks/{task_id}/status"
+    },
+    "schema_version": 1,
+    "scope": "tasks:write",
+    "updates_existing": true,
+    "write": true
+  }
+]

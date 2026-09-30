@@ -210,6 +210,12 @@ def register_project_lookup(module: str, lookup: ProjectLookup) -> None:
     _project_lookups[module] = lookup
 
 
+def project_lookup(module: str) -> ProjectLookup | None:
+    """The lookup `module` registered, if any (the agent surface locates a write's project
+    or row with it, P2-01)."""
+    return _project_lookups.get(module)
+
+
 def _not_found() -> ProblemError:
     return ProblemError(404, "not_found", "Not found")
 
