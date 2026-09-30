@@ -80,7 +80,6 @@ async def _check(client: SessionClient, profile_id: str) -> dict[str, Any]:
 
 @pytest.mark.req("SAF-2")
 @pytest.mark.wp("P2-10")
-@pytest.mark.xfail(strict=True, reason="spec:P2-10")
 async def test_drift_marks_degraded_and_adds_review_item(
     dbos: type[DBOS],
     session_client: SessionClient,
@@ -116,7 +115,6 @@ async def test_drift_marks_degraded_and_adds_review_item(
 
 @pytest.mark.req("SAF-3")
 @pytest.mark.wp("P2-10")
-@pytest.mark.xfail(strict=True, reason="spec:P2-10")
 async def test_foreign_reach_marks_degraded(
     dbos: type[DBOS],
     session_client: SessionClient,
@@ -200,7 +198,6 @@ async def test_foreign_reach_marks_degraded(
 
 @pytest.mark.req("FR-5.9")
 @pytest.mark.wp("P2-10")
-@pytest.mark.xfail(strict=True, reason="spec:P2-10")
 async def test_health_reports_reachable_authenticated_version(
     dbos: type[DBOS],
     session_client: SessionClient,
