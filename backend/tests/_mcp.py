@@ -317,7 +317,8 @@ async def running_run(world: World, project: str) -> uuid.UUID:
     task token only posts for its own run, so the run is a token's run:
 
     - a real run of the project that a task token was issued for (P2-08's taint sweep
-      calls with a fresh token of a finished run), reopened when it has ended;
+      calls with a fresh token of a finished `run_skill` run), reopened when it has ended
+      and given the fresh AI task when it has none;
     - otherwise the run of the newest task token issued for the project (a fresh AI task's
       run on the project's agent profile, made when there is none);
     - otherwise a new run. Any other caller (a key without a run) may post for it too."""
@@ -340,10 +341,12 @@ async def running_run(world: World, project: str) -> uuid.UUID:
         if real_run is not None:
             await s.execute(
                 text(
-                    "UPDATE runs SET status = 'running', finished_at = NULL"
-                    " WHERE id = :id AND status NOT IN ('running', 'waiting_on_human')"
+                    "UPDATE runs SET status = 'running', finished_at = NULL,"
+                    " task_id = COALESCE(task_id, :t)"
+                    " WHERE id = :id AND (status NOT IN ('running', 'waiting_on_human')"
+                    " OR task_id IS NULL)"
                 ),
-                {"id": real_run},
+                {"id": real_run, "t": task.id},
             )
             run_id: uuid.UUID = real_run
             return run_id
