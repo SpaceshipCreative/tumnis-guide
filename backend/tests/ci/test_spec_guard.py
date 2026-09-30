@@ -237,6 +237,26 @@ def test_ci_files_and_other_non_tests_are_not_locked(tmp_path: Path) -> None:
     assert _guard(repo, head) == (0, [])
 
 
+GOLDEN_PATH = "backend/tumnis/modules/agents/tests/contract/golden/plain_ai.json"
+
+
+@pytest.mark.req("Quality rule 1")
+@pytest.mark.wp("P2-02")
+def test_golden_files_are_locked(tmp_path: Path) -> None:
+    """Golden files under tests/contract/golden/ are locked like tests (P2-02): editing
+    one is edited_test and deleting one is deleted_file; adding one passes."""
+    golden = '{"kind": "task", "tainted": false}\n'
+    other = GOLDEN_PATH.replace("plain_ai", "tainted")
+    repo = make_repo(tmp_path, {GOLDEN_PATH: golden, other: golden})
+    edited = commit(repo, {GOLDEN_PATH: golden.replace("false", "true")}, delete=[other])
+    assert _guard(repo, edited) == (1, ["deleted_file", "edited_test"])
+
+    (tmp_path / "added").mkdir()
+    repo2 = make_repo(tmp_path / "added", {"README.md": "x\n"})
+    added = commit(repo2, {GOLDEN_PATH: golden})
+    assert _guard(repo2, added) == (0, [])
+
+
 VITEST_SPEC = dedent(
     """\
     import { expect, test } from "vitest";

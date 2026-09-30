@@ -417,3 +417,65 @@ def reach_targets(
         )
     )
     return ReachTargets(own_repos, foreign_repos, own_apps, foreign_apps, owners)
+
+
+# --- Untrusted blocks and task tokens (P2-02, SAF-1, R-27) ----------------------------------
+# Spec stubs: the red commit declares the names; the implementation follows marker by marker.
+
+CONFUSABLE_BRACKETS: Final = frozenset(
+    "\uff1c\uff1e\ufe64\ufe65\u2039\u203a\u27e8\u27e9\u2329\u232a\u02c2\u02c3\u1438\u1433\u276e\u276f\u3008\u3009"
+)
+INVISIBLE_CONTROLS: Final = frozenset(
+    {chr(c) for c in range(0xE0000, 0xE0080)}
+    | set("\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
+)
+BlockSource = Literal[
+    "user",
+    "task",
+    "comment",
+    "brief",
+    "document",
+    "email",
+    "chat",
+    "note",
+    "event",
+    "artifact",
+    "file",
+    "url",
+    "agent",
+]
+
+
+class Block(BaseModel):
+    trust: Literal["trusted", "untrusted"]
+    tainted: bool
+    source: BlockSource
+    item: str | None = None
+    rendered: str
+    truncated: bool = False
+
+
+def escape_untrusted(text: str) -> str:
+    raise NotImplementedError
+
+
+def escape_attr(value: str, limit: int = 200) -> str:
+    raise NotImplementedError
+
+
+def unescape_untrusted(text: str) -> str:
+    raise NotImplementedError
+
+
+def render_block(
+    text: str, *, nonce: str, source: str, item: str | None, attrs: dict[str, str], trusted: bool
+) -> str:
+    raise NotImplementedError
+
+
+def packet_tainted(blocks: Iterable[Block]) -> bool:
+    raise NotImplementedError
+
+
+def run_token_scopes(kind: RunKind, key_scopes: frozenset[str]) -> frozenset[str]:
+    raise NotImplementedError
