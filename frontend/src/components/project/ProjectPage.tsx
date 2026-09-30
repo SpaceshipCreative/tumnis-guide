@@ -1,7 +1,8 @@
 // The task-first project page (P0-24, FR-2.2 to FR-2.8): the header, the composer, the
 // Tasks or Board view and, on a laptop, the Context rail beside them; on the phone a
 // segmented control and the Context sheet. View state lives in the URL (`view`, `task`),
-// the last view per project in `uiStore`, server data in Query.
+// the last view per project in `uiStore`, server data in Query. Captures still on the
+// offline queue show as pending rows (P0-25), even when the project cannot load offline.
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "@xstate/store-react";
 import { type ReactNode, useId, useState } from "react";
@@ -10,14 +11,16 @@ import { useIsLaptop } from "../../lib/media";
 import type { ProjectView } from "../../lib/views";
 import { uiStore } from "../../stores/uiStore";
 import { BoardView } from "../board/BoardView";
+import { pendingRow, usePendingTasks } from "../quickadd/queue";
 import { workspaceQuery } from "../settings/queries";
 import { Composer } from "./Composer";
 import { TaskDrawer } from "./drawer/TaskDrawer";
-import { groupOf } from "./grouping";
+import { groupOf, type TaskLite } from "./grouping";
 import { ProjectHeader } from "./ProjectHeader";
 import { projectQuery, projectTasksQuery } from "./queries";
 import { ContextSheet } from "./rail/ContextSheet";
 import { RightRail } from "./rail/RightRail";
+import { TaskRow } from "./TaskRow";
 import { TasksView } from "./TasksView";
 import { ViewSwitcher, viewTabId } from "./ViewSwitcher";
 
@@ -27,6 +30,28 @@ export interface ProjectPageProps {
   taskId: string | undefined;
   onView: (view: ProjectView) => void;
   onTask: (taskId: string | undefined) => void;
+}
+
+/** Pending rows on their own, while the project itself cannot be shown (offline). */
+function PendingList({ rows }: { rows: readonly TaskLite[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <section aria-label="Waiting to sync" className="mt-4 flex flex-col gap-2">
+      <h2 className="text-sm font-semibold tracking-wide text-muted uppercase">
+        Waiting to sync
+      </h2>
+      <ul className="flex flex-col gap-2">
+        {rows.map((row) => (
+          <TaskRow
+            key={row.id}
+            task={row}
+            subtasksOf={() => []}
+            onOpen={() => undefined}
+          />
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 /** On a laptop the view sits in the tabpanel its tabs control; the phone's radio group
@@ -71,18 +96,27 @@ export function ProjectPage({
   const workspace = useQuery(workspaceQuery());
   const timezone = workspace.data?.timezone ?? "UTC";
   const [now] = useState(() => new Date());
+  const pending = usePendingTasks(projectId).map(pendingRow);
 
   if (project.isPending) {
-    return <p className="text-muted">Loading the project…</p>;
+    return (
+      <>
+        <p className="text-muted">Loading the project…</p>
+        <PendingList rows={pending} />
+      </>
+    );
   }
   if (project.isError) {
     return (
-      <p role="alert" className="text-danger">
-        This project could not be loaded.
-      </p>
+      <>
+        <p role="alert" className="text-danger">
+          This project could not be loaded.
+        </p>
+        <PendingList rows={pending} />
+      </>
     );
   }
-  const items = tasks.data?.items ?? [];
+  const items = [...(tasks.data?.items ?? []), ...pending];
   const today = items.filter((t) => groupOf(t, now, timezone) === "today");
   const changeView = (next: ProjectView) => {
     uiStore.trigger.setLastView({ projectId, view: next });
@@ -117,9 +151,12 @@ export function ProjectPage({
               }}
             />
           ) : tasks.isError ? (
-            <p role="alert" className="text-danger">
-              The tasks could not be loaded.
-            </p>
+            <>
+              <p role="alert" className="text-danger">
+                The tasks could not be loaded.
+              </p>
+              <PendingList rows={pending} />
+            </>
           ) : (
             <TasksView
               tasks={items}

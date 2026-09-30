@@ -1,6 +1,7 @@
 // Quick add on the phone (P0-23, UX 11): a round button in the bottom third, right side
 // for the right thumb, above the bottom bar and the safe area. It opens the quick-add
-// dialog through the ui store (the dialog itself arrives with P0-25); on a laptop `/` does.
+// dialog through the ui store; on a laptop `/` does. The shell's quick-add host shows it
+// on every route (P0-25).
 import { uiStore } from "../../stores/uiStore";
 
 export function QuickAddFab() {
