@@ -6,7 +6,10 @@ of two transports.
   `dispatched` run event, then NOTIFYs `runner_mailbox`; the api process holding the
   runner's socket forwards the row and writes the daemon's `result` as a run event.
   `stream` reads the run's events (LISTEN on the run events channel) up to the terminal
-  one.
+  one. P2-07: the `run` row is a version-2 `run` (the api renders it for a protocol-1
+  daemon) whose `workdir_policy` asks for a worktree when the packet carries a code
+  location; `cancel` queues a `cancel` for a protocol-2 runner and, for an older one,
+  marks the run cancelled itself ("stop requested, runner is an older version").
 - `McpEndpointTransport`: a profile kept running as a server, reached with the MCP Python
   SDK's Streamable HTTP client through `tumnis.core.net.guarded_client`; it calls the
   endpoint's `run_skill(profile, skill, packet_json)` tool. The pinned Hermes has no such
@@ -25,7 +28,7 @@ import psycopg
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from psycopg import sql
-from sqlalchemy import Table, select, text
+from sqlalchemy import Table, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,8 +44,8 @@ from tumnis.modules.agents.adapters.port import (
     RunHandle,
 )
 from tumnis.modules.agents.models import AgentProfile, RunEventRow, Runner, RunnerMessage, RunRow
-from tumnis.modules.agents.packet_builder import TaskPacket
-from tumnis.modules.agents.protocol import HealthCheck, Run
+from tumnis.modules.agents.packet_builder import TaskPacket, workdir_policy
+from tumnis.modules.agents.protocol import Cancel, HealthCheck, RunV2
 
 # Channels (agents.api names them too; adapters may not import the api).
 RUNNER_CHANNEL: Final = "runner_mailbox"
@@ -53,8 +56,13 @@ RUN_TOOL: Final = "run_skill"
 MCP_GRACE_S: Final = 30  # the run's timeout plus this for the call
 HEALTH_TIMEOUT_S: Final = 10.0
 RESULT_STATUSES: Final = frozenset({"succeeded", "failed", "timed_out"})
-_STREAMED: Final = frozenset({"dispatched", "result", "failed"})
+_STREAMED: Final = frozenset(
+    {"dispatched", "result", "failed", "log", "tool_call", "file", "artifact", "status"}
+)
 _TERMINAL: Final = frozenset({"result", "failed"})
+TERMINAL_RUN: Final = frozenset({"succeeded", "failed", "cancelled", "timed_out", "runner_lost"})
+OLDER_RUNNER: Final = "stop requested, runner is an older version"
+PROTOCOL_2: Final = 2
 
 _profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
 _runners: Table = Runner.__table__  # type: ignore[assignment]
@@ -178,7 +186,7 @@ class DaemonTransport:
                 )
                 .on_conflict_do_nothing(index_elements=["id"])
             )
-            run = Run(
+            run = RunV2(
                 message_id=uuid5(packet.run_id, "run"),
                 correlation_id=packet.correlation_id,
                 sent_at=now,
@@ -188,6 +196,7 @@ class DaemonTransport:
                 packet=packet.model_dump(mode="json"),
                 output_schema=packet.output_schema,
                 timeout_s=packet.timeout_s,
+                workdir_policy=workdir_policy(packet),
             )
             await s.execute(
                 insert(_messages)
@@ -261,8 +270,76 @@ class DaemonTransport:
                     pass
 
     async def cancel(self, run: RunHandle) -> None:
-        """Phase 1 has no agent-side cancel (protocol 2 adds it); a finished run is left
-        as it is."""
+        """Stop a run. A finished run is left as it is. A runner on protocol 2 gets a
+        `cancel` (mailbox row uuid5(run_id, "cancel")) and answers with a `cancelled`
+        result. An older runner would not understand one: the run is marked cancelled
+        here, with a `failed` run event, its workflow is told, and the result the runner
+        sends when it ends is acked and ignored (REL-4)."""
+        now = self.clock.now()
+        async with tenant_session(self.ctx) as s:
+            found = (
+                await s.execute(
+                    select(_runs.c.status, _runs.c.workflow_id)
+                    .where(_runs.c.id == run.run_id)
+                    .with_for_update()  # serialised with the workflow's finish_step
+                )
+            ).first()
+            if found is None or found.status in TERMINAL_RUN:
+                return
+            ended = await s.scalar(
+                select(_events.c.id).where(
+                    _events.c.run_id == run.run_id, _events.c.kind.in_(_TERMINAL)
+                )
+            )
+            if ended is not None:
+                return
+            mailbox = (
+                await s.execute(
+                    select(_messages.c.runner_id, _runners.c.protocol_version)
+                    .join(_runners, _runners.c.id == _messages.c.runner_id)
+                    .where(_messages.c.message_id == uuid5(run.run_id, "run"))
+                )
+            ).first()
+            if mailbox is not None and (mailbox.protocol_version or 1) >= PROTOCOL_2:
+                cancel = Cancel(
+                    message_id=uuid5(run.run_id, "cancel"),
+                    correlation_id=run.correlation_id,
+                    sent_at=now,
+                    run_id=run.run_id,
+                    reason="stopped by the user",
+                )
+                await s.execute(
+                    insert(_messages)
+                    .values(
+                        runner_id=mailbox.runner_id,
+                        message_id=cancel.message_id,
+                        direction="out",
+                        type=cancel.type,
+                        payload=cancel.model_dump(mode="json"),
+                    )
+                    .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
+                )
+                await _notify(s, RUNNER_CHANNEL, {"runner": str(mailbox.runner_id), "close": False})
+                return
+            await s.execute(
+                update(_runs)
+                .where(_runs.c.id == run.run_id)
+                .values(status="cancelled", finished_at=now, error=OLDER_RUNNER)
+            )
+            await s.execute(
+                insert(_events)
+                .values(
+                    run_id=run.run_id,
+                    message_id=uuid5(run.run_id, "failed"),
+                    kind="failed",
+                    payload={"status": "cancelled", "error": OLDER_RUNNER},
+                )
+                .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
+            )
+            await _notify(s, RUN_EVENTS_CHANNEL, {"run": str(run.run_id)})
+            workflow_id = found.workflow_id
+        if workflow_id is not None:
+            await _tell_workflow(workflow_id, run.run_id)
 
     async def health(self, profile_id: UUID) -> AgentHealth:
         async with tenant_session(self.ctx) as s:
@@ -298,6 +375,22 @@ class DaemonTransport:
                 .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
             )
             await _notify(s, RUNNER_CHANNEL, {"runner": str(runner_id), "close": False})
+
+
+async def _tell_workflow(workflow_id: str, run_id: UUID) -> None:
+    """Best effort: the run's waiting `run_skill` workflow hears it was cancelled (the
+    topic agents.api.run_topic names; adapters may not import the api)."""
+    try:
+        from dbos import DBOS  # noqa: PLC0415
+
+        await DBOS.send_async(
+            workflow_id,
+            {"status": "cancelled", "error": OLDER_RUNNER},
+            f"run:{run_id}",
+            idempotency_key=f"cancel:{run_id}",
+        )
+    except Exception:  # no DBOS here, or the workflow is gone: the run row says it all
+        return
 
 
 def _unreachable(exc: BaseException) -> bool:

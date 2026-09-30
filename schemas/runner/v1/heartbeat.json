@@ -13,6 +13,19 @@
       "title": "Message Id",
       "type": "string"
     },
+    "outbox_depth": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Outbox Depth"
+    },
     "running_run_ids": {
       "default": [],
       "items": {

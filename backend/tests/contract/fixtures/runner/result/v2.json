@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "message_id": "01950000-0000-7000-8000-000000002009",
+  "correlation_id": "run:01950000-0000-7000-8000-000000000101",
+  "sent_at": "2026-03-09T12:00:00Z",
+  "type": "result",
+  "run_id": "01950000-0000-7000-8000-000000000101",
+  "status": "cancelled",
+  "exit_code": null,
+  "output_json": null,
+  "text": "",
+  "error": "stopped by the user",
+  "duration_ms": 1500,
+  "tokens": null,
+  "hermes_session_id": "sess-0001"
+}
