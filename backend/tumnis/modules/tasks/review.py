@@ -303,6 +303,8 @@ async def _insert(  # noqa: PLR0917  # add_review_item's fields, spelled out
     payload: dict[str, Any],
     dedupe_key: str | None,
 ) -> UUID:
+    # A task target stores its task's project, so refresh_review_impact finds the item.
+    project_id = await _scope_project(s, target.type, target.id, project_id)
     impact = await _impact(s, spec, target.type, target.id, project_id)
     stmt = pg_insert(_review).values(
         kind=spec.kind,
