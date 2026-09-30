@@ -31,6 +31,7 @@ from harness.assertions import RULE_REQUESTS, RULES, InvalidCheck, validate_chec
 CASE_KEYS: Final = frozenset({"id", "profile", "skill", "input", "output_schema", "meta", "expect"})
 EXPECT_KEYS: Final = frozenset({"tool_calls", "rules", "json"})
 META_KEYS: Final = frozenset({"test_id", "req", "wp", "xfail"})
+SUITE_DIR: Final = "hostile"  # tests/cases/hostile/ holds the hostile suite's index (P2-11)
 _ID: Final = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 _NAME: Final = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")  # the runner protocol's NAME_RE
 _GLOB: Final = re.compile(r"^[A-Za-z0-9_.*?-]{1,128}$")
@@ -199,9 +200,17 @@ def load_case(path: Path) -> Case:
     )
 
 
+def is_suite_file(path: Path) -> bool:
+    """A file of a suite's own folder (`<cases>/hostile/`, P2-11), which holds the suite's
+    generated index rather than skill cases."""
+    return SUITE_DIR in path.parent.parts
+
+
 def load_cases(root: Path) -> list[Case]:
-    """Every case under `root` (`*.yaml`, recursively), sorted by path; ids are unique."""
-    cases = [load_case(p) for p in sorted(root.rglob("*.yaml"))]
+    """Every case under `root` (`*.yaml`, recursively, outside the suite folders), sorted
+    by path; ids are unique."""
+    paths = [p for p in sorted(root.rglob("*.yaml")) if not is_suite_file(p.relative_to(root))]
+    cases = [load_case(p) for p in paths]
     seen: dict[str, Path] = {}
     for case in cases:
         if case.id in seen:

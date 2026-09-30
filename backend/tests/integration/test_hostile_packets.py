@@ -25,7 +25,6 @@ MIN_LINE = 12  # characters: a payload line this long is distinctive enough to s
 
 @pytest.mark.req("SAF-6")
 @pytest.mark.wp("P2-11")
-@pytest.mark.xfail(strict=True, reason="spec:P2-11")
 async def test_every_case_renders_inside_one_block_and_taints(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
