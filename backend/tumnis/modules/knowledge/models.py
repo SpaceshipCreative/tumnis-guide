@@ -1,12 +1,13 @@
 """knowledge SQLAlchemy tables owned by this module (mirrors of revisions knowledge_0001
-to knowledge_0003, and knowledge_0005)."""
+to knowledge_0006)."""
 
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import BigInteger, ForeignKey, LargeBinary, Text, text
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy import BigInteger, Computed, ForeignKey, LargeBinary, Text, text
+from sqlalchemy import text as sql_text  # `Chunk.text` shadows `text` inside its class body
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tumnis.core.base import Base, TenantBase
@@ -33,6 +34,9 @@ class Document(CanonicalColumns, TenantBase, Base):
     fetched_at: Mapped[datetime | None]  # type: ignore[assignment]
     role: Mapped[str | None]  # knowledge_0002: "brief" marks the project's pinned brief
     body_md: Mapped[str | None]  # knowledge_0002: a text entry's Markdown body
+    status: Mapped[str] = mapped_column(server_default=text("'ready'"))  # knowledge_0006
+    status_reason: Mapped[str | None]
+    current_version_id: Mapped[UUID | None] = mapped_column(ForeignKey("document_versions.id"))
 
 
 class StorageLocation(TenantBase, Base):
@@ -69,8 +73,44 @@ class DocumentVersion(TenantBase, Base):
     document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id"))
     version_no: Mapped[int]
     content_hash: Mapped[bytes] = mapped_column(LargeBinary)
-    body_md: Mapped[str]
+    body_md: Mapped[str | None]  # an upload's is its Markdown export, set once extracted
     size: Mapped[int] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(server_default=text("'ready'"))  # knowledge_0006
+    status_reason: Mapped[str | None]
+    source_name: Mapped[str | None]  # the name an upload or a folder file arrived under
+    mime: Mapped[str | None]  # what libmagic sniffed
+    docling_json: Mapped[bytes | None] = mapped_column(LargeBinary)  # gzip
+
+
+class ExtractionArtifact(TenantBase, Base):
+    """What one extraction step hands the next (knowledge_0006): the converted document,
+    its Markdown, the vision pages, the chunks; one row per (version, stage)."""
+
+    __tablename__ = "extraction_artifacts"
+
+    version_id: Mapped[UUID] = mapped_column(ForeignKey("document_versions.id"))
+    stage: Mapped[str]
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class Chunk(TenantBase, Base):
+    """A searchable piece of a document version (knowledge_0006); `tsv` is generated from
+    the heading path and the text."""
+
+    __tablename__ = "chunks"
+
+    document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id"))
+    document_version_id: Mapped[UUID] = mapped_column(ForeignKey("document_versions.id"))
+    ordinal: Mapped[int]
+    text: Mapped[str]
+    context_text: Mapped[str]
+    heading_path: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=sql_text("'{}'"))
+    page_from: Mapped[int | None]
+    page_to: Mapped[int | None]
+    extractor: Mapped[str] = mapped_column(server_default=sql_text("'docling'"))
+    tsv: Mapped[str] = mapped_column(
+        TSVECTOR, Computed("chunk_tsv(heading_path, text)", persisted=True)
+    )
 
 
 class PendingWrite(TenantBase, Base):

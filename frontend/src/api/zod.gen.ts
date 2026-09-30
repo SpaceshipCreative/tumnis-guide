@@ -140,6 +140,31 @@ export const zDocumentDto = z.object({
 });
 
 /**
+ * DocumentStatusOut
+ *
+ * A document's state as the upload flow polls it (P1-17 owns the full read).
+ */
+export const zDocumentStatusOut = z.object({
+  current_version_id: z.uuid().nullable(),
+  id: z.uuid(),
+  kind: z.string(),
+  path: z.string().nullable(),
+  project_id: z.uuid().nullable(),
+  status: z.enum([
+    "pending_scan",
+    "extracting",
+    "ready",
+    "quarantined",
+    "failed",
+  ]),
+  status_reason: z.string().nullable(),
+  tainted: z.boolean(),
+  title: z.string(),
+  trust: z.enum(["trusted", "untrusted"]),
+  version: z.int(),
+});
+
+/**
  * FolderIn
  */
 export const zFolderIn = z.object({
@@ -1055,6 +1080,15 @@ export const zUndoIn = z.object({
 });
 
 /**
+ * UploadAccepted
+ */
+export const zUploadAccepted = z.object({
+  id: z.uuid(),
+  status: z.literal("pending_scan"),
+  version_id: z.uuid(),
+});
+
+/**
  * UsageRow
  */
 export const zUsageRow = z.object({
@@ -1355,6 +1389,19 @@ export const zDeadLettersPostRetryPath = z.object({
  */
 export const zDeadLettersPostRetryResponse = zDeadLetterOut;
 
+export const zKnowledgeGetFilePath = z.object({
+  document_id: z.uuid(),
+});
+
+export const zKnowledgeGetFileQuery = z.object({
+  version: z.int().nullish(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeGetFileResponse = z.instanceof(Blob);
+
 export const zAuthListKeysQuery = z.object({
   cursor: z.string().max(2048).nullish(),
   limit: z.int().gte(1).lte(200).optional().default(50),
@@ -1391,6 +1438,26 @@ export const zAuthRotateKeyPath = z.object({
  * Successful Response
  */
 export const zAuthRotateKeyResponse = zKeyCreated;
+
+export const zKnowledgeUploadDocumentBody = z.object({
+  file: z.instanceof(Blob),
+  project_id: z.uuid().optional(),
+  title: z.string().optional(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeUploadDocumentResponse = zUploadAccepted;
+
+export const zKnowledgeGetDocumentPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeGetDocumentResponse = zDocumentStatusOut;
 
 export const zKnowledgeUpdateDocumentBody = zTextDocumentPatch;
 

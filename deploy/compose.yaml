@@ -51,6 +51,10 @@ services:
     environment:
       <<: *env
       METRICS_TOKEN_FILE: /run/secrets/tumnis_metrics_token # bearer for /metrics (P0-27)
+    volumes:
+      - /etc/tumnis/secrets:/run/secrets:ro
+      - db_tls_ca:/etc/tumnis/tls:ro
+      - spool:/var/lib/tumnis/spool # uploads wait here for worker-extract (P1-16)
     depends_on:
       migrate: { condition: service_completed_successfully }
       pgbouncer: { condition: service_started }
@@ -68,6 +72,40 @@ services:
     command: ["tumnis", "worker"]
     depends_on:
       migrate: { condition: service_completed_successfully }
+
+  # Upload scanning and extraction (P1-16, SEC-10): the only process that dequeues the
+  # `extract` queue, and the only one that runs Docling. It reads the uploads the api spooled,
+  # works in its own scratch volume and asks clamd to scan each file before anything else
+  # reads it. One conversion at a time, under a memory limit so a large PDF cannot take the
+  # host down.
+  worker-extract:
+    <<: *app
+    command: ["tumnis", "worker", "--queues", "extract"]
+    mem_limit: 4g
+    environment:
+      <<: *env
+      KNOWLEDGE__CLAMD_HOST: clamd
+    volumes:
+      - /etc/tumnis/secrets:/run/secrets:ro
+      - db_tls_ca:/etc/tumnis/tls:ro
+      - spool:/var/lib/tumnis/spool
+      - scratch:/scratch
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      clamd: { condition: service_healthy, required: false } # previews and tests use the fake scanner
+
+  # ClamAV's daemon; the extract worker streams each upload to it (INSTREAM). The signature
+  # database updates itself (freshclam) into its own volume; StreamMaxLength is raised above
+  # the 50 MiB upload limit in clamd/clamd.conf. The image is the one the integration tests
+  # use (backend/tests/_services.py).
+  clamd:
+    image: clamav/clamav-debian@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578
+    mem_limit: 3g
+    volumes:
+      - ./clamd/clamd.conf:/etc/clamav/clamd.conf:ro
+      - clamd_db:/var/lib/clamav
+    expose: ["3310"]
+    restart: unless-stopped
 
   postgres:
     build: &postgres-build
@@ -157,6 +195,9 @@ services:
 
 volumes:
   pgdata: {}
+  spool: {} # uploads between the api and worker-extract (P1-16)
+  scratch: {} # worker-extract's working space
+  clamd_db: {}
   pgsocket: {}
   # Repository 1 (local). On the homelab, point it at a second disk (driver_opts bind).
   pgbackrest_repo1: {}

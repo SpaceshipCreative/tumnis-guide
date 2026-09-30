@@ -24,6 +24,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH=/app/.venv/bin:$PATH
 WORKDIR /app/backend
 
+# libmagic reads an upload's real type from its content (P1-16, SEC-10).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Dependencies first (cached until uv.lock changes), then the project itself. The source
 # stays at /app/backend: the CLI reads alembic.ini and fixtures/ beside the package.
 # uv's cache lives in a BuildKit cache mount, never in a layer: the image carries only the
@@ -41,7 +46,8 @@ COPY --from=frontend /src/frontend/dist /app/frontend/dist
 # The runtime needs no pip (uv built the virtualenv); its vendored libraries only add
 # findings to the Trivy scan (P0-16).
 RUN /usr/local/bin/python -m pip uninstall --yes --quiet pip \
-    && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin tumnis
+    && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin tumnis \
+    && install -d -o tumnis -g tumnis /var/lib/tumnis/spool /scratch
 # The release this image is (a tag, or sha-<commit> for main): tumnis.__version__ and the
 # Tumnis-Version header on /health/live (P0-30). Last, so a new version reuses every layer.
 ARG VERSION=0.0.0+dev

@@ -6,13 +6,13 @@ shows now (`Remote`) and the linked Document now (`Local`). Tumnis never overwri
 it did not create, and every write it decides carries a precondition: the etag the folder
 shows now, or create-only.
 
-Also here: rename pairing, conflict names, file names Tumnis gives (sanitized for every
-filesystem a folder may live on, de-duplicated ignoring case), and the `tumnis_id`
-frontmatter that keeps a note's identity through an outside rename.
+Also here: rename pairing, conflict names, de-duplicated file names (ignoring case), and
+the `tumnis_id` frontmatter that keeps a note's identity through an outside rename. The
+sanitizing itself (`sanitize_filename`, `numbered_name`) is `rules.py`'s, shared with
+uploads (P1-16), and re-exported here.
 """
 
 import re
-import unicodedata
 from collections.abc import Callable, Sequence
 from datetime import date, datetime
 from enum import StrEnum
@@ -21,7 +21,26 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from tumnis.modules.knowledge.rules import LOOKALIKE_DOTS, LOOKALIKE_SEPARATORS
+from tumnis.modules.knowledge.rules import numbered_name, sanitize_filename, split_ext
+
+__all__ = [  # `numbered_name` and `sanitize_filename` are rules.py's (shared with uploads)
+    "Action",
+    "Local",
+    "Origin",
+    "Prev",
+    "Remote",
+    "ReviewKind",
+    "SyncDecision",
+    "conflict_name",
+    "decide_sync_action",
+    "dedupe_name",
+    "note_body",
+    "numbered_name",
+    "pair_renames",
+    "read_tumnis_id",
+    "render_note",
+    "sanitize_filename",
+]
 
 Origin = Literal["tumnis", "external"]
 ReviewKind = Literal[
@@ -258,67 +277,6 @@ def note_body(text: str) -> str:
 
 # --- Names --------------------------------------------------------------------------------
 
-MAX_NAME_BYTES: Final = 200  # plan default; a number or a conflict marker may be added
-_FORBIDDEN_IN_NAME: Final = frozenset('/\\:*?"<>|')
-_ALLOWED_FORMAT: Final = frozenset("‌‍")  # as safe_rel_path allows
-_SPECIAL: Final = frozenset("./")
-_RESERVED: Final = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)", re.IGNORECASE)
-
-
-def _clean_char(ch: str) -> str:
-    category = unicodedata.category(ch)
-    if category in {"Cc", "Cs"} or (category == "Cf" and ch not in _ALLOWED_FORMAT):
-        return ""
-    if ch in _FORBIDDEN_IN_NAME or ch in LOOKALIKE_SEPARATORS or ch in LOOKALIKE_DOTS:
-        return "-"
-    if ch not in _SPECIAL and _SPECIAL & set(unicodedata.normalize("NFKC", ch)):
-        return "-"  # reads as '.' or '/' once compatibility-normalized
-    return ch
-
-
-def _split_ext(name: str) -> tuple[str, str]:
-    """(stem, extension): the extension is the last suffix; a dotfile or a name without a
-    suffix has none."""
-    dot = name.rfind(".")
-    return (name[:dot], name[dot:]) if dot > 0 else (name, "")
-
-
-def _cut(name: str, limit: int) -> str:
-    """`name` within `limit` bytes of UTF-8, shortening the stem and keeping the extension
-    (whole characters only); an "extension" over a quarter of the limit is not one."""
-    if len(name.encode()) <= limit:
-        return name
-    stem, ext = _split_ext(name)
-    if len(ext.encode()) > limit // 4:
-        stem, ext = name, ""
-    room = limit - len(ext.encode())
-    return stem.encode()[:room].decode(errors="ignore").rstrip(" .") + ext
-
-
-def sanitize_filename(name: str) -> str:
-    """NFC; control and format characters dropped; `/ \\ : * ? " < > |` and look-alike
-    separators or dots replaced with '-'; spaces and dots trimmed at both ends; a leading
-    '~' replaced with '-'; Windows reserved names (CON, PRN, AUX, NUL, COM1-9, LPT1-9,
-    before the first dot) given a trailing '_'; cut to 200 bytes keeping the extension;
-    empty -> 'untitled'. The result passes `safe_rel_path` unchanged."""
-    cleaned = "".join(_clean_char(ch) for ch in unicodedata.normalize("NFC", name))
-    cleaned = unicodedata.normalize("NFC", cleaned).strip(" .")
-    if cleaned.startswith("~"):
-        cleaned = "-" + cleaned[1:]
-    if reserved := _RESERVED.match(cleaned):
-        cleaned = f"{cleaned[: reserved.end(1)]}_{cleaned[reserved.end(1) :]}"
-    cleaned = unicodedata.normalize("NFC", _cut(cleaned, MAX_NAME_BYTES))
-    return cleaned or "untitled"
-
-
-def numbered_name(name: str, n: int) -> str:
-    """'Plan.md', 2 -> 'Plan 2.md'; the number goes before the extension (none: at the end);
-    1 is the name itself."""
-    if n <= 1:
-        return name
-    stem, ext = _split_ext(name)
-    return f"{stem} {n}{ext}"
-
 
 def _free(path: str, make: Callable[[str, int], str], taken: frozenset[str]) -> str:
     folder, _, name = path.rpartition("/")
@@ -344,7 +302,7 @@ def conflict_name(path: str, day: date, siblings: frozenset[str]) -> str:
     marker = f"(conflict {day.isoformat()})"
 
     def make(name: str, n: int) -> str:
-        stem, ext = _split_ext(name)
+        stem, ext = split_ext(name)
         return numbered_name(f"{stem} {marker}", n) + ext
 
     return _free(path, make, frozenset(s.casefold() for s in siblings))

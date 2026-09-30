@@ -93,4 +93,8 @@ export const NOT_LIVE = [
   "calendarOauthCallback",
   // Storage locations change only from the Settings screen, which refetches after each write.
   "knowledgeListLocations",
+  // An upload's status is polled until extraction settles (P1-16; no document live message
+  // yet), and a file is a download, never a cached query.
+  "knowledgeGetDocument",
+  "knowledgeGetFile",
 ] as const;
