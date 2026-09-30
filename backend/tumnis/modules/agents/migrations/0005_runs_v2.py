@@ -44,7 +44,8 @@ branch_labels = None
 depends_on = None
 phase = "expand"
 
-ACTIVE = "'queued', 'running', 'waiting_on_human', 'held'"
+# The active run statuses (queued, running, waiting on a human, held), as SQL.
+ACTIVE_WHERE = "status IN ('queued', 'running', 'waiting_on_human', 'held') AND task_id IS NOT NULL"
 RUN_COLUMNS = (
     "state_seq",
     "active_seconds_used",
@@ -95,7 +96,7 @@ def upgrade() -> None:
         "runs",
         ["workspace_id", "task_id", "kind"],
         unique=True,
-        postgresql_where=sa.text(f"status IN ({ACTIVE}) AND task_id IS NOT NULL"),
+        postgresql_where=sa.text(ACTIVE_WHERE),
     )
 
 
