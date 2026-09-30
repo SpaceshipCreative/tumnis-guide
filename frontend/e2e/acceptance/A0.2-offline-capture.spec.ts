@@ -17,7 +17,6 @@ test(
   "A0.2 offline capture syncs exactly once",
   { tag: ["@A0.2", "@FR-3.10", "@REL-2", "@P0-05"] },
   async ({ seededApp, signedInPage: page, context }, testInfo) => {
-    test.fail();
     const phone = testInfo.project.name === "phone";
     expect(seededApp.baseURL).toBeTruthy();
     const swReady = await page.evaluate(() =>
