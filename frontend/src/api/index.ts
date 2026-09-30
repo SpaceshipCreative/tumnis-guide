@@ -544,6 +544,7 @@ export type {
   SetupIn,
   SetupOut,
   SetupTotpIn,
+  SftpConfigIn,
   SignedInOut,
   Status,
   StatusBody,

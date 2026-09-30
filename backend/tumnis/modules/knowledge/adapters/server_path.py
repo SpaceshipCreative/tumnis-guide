@@ -27,7 +27,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import ClassVar, Final
+from typing import ClassVar, Final, Literal
 
 from tumnis.core.adapters.base import Adapter as AdapterBase
 from tumnis.core.adapters.base import AdapterRejected, AdapterUnavailable, CallPolicy
@@ -67,12 +67,14 @@ class ServerPathStorage(AdapterBase):
         self,
         root: Path | str,
         *,
+        kind: Literal["server_path", "share"] = "server_path",
         network_fs: bool = False,
         clock: Clock | None = None,
         policy: CallPolicy | None = None,
     ) -> None:
         super().__init__(policy=policy or POLICY, clock=clock or SystemClock())
         self.root = Path(root).resolve()
+        self.kind = kind
         self.network_fs = network_fs
         # (dev, inode, size, mtime_ns) -> sha256 hex, so a listing does not rehash
         # unchanged files; a replace always hashes afresh.

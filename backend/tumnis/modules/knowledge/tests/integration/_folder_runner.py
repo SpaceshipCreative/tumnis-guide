@@ -152,6 +152,7 @@ class FolderRunner:
                 s, self.ws.ctx.actor, projects.ProjectCreate(name=project), now=self.clock.now()
             )
             self.project_id = created.id
+            folder: knowledge.ProjectFolderOut | None
             if self.mode == "existing":
                 folder = await knowledge.use_existing_folder(
                     s, created.id, location_id=location.id, path=self.existing_path,

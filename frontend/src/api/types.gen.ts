@@ -915,7 +915,7 @@ export type LocationIn = {
   /**
    * Kind
    */
-  kind: "server_path" | "s3";
+  kind: "server_path" | "s3" | "share" | "sftp";
   /**
    * Name
    */
@@ -925,6 +925,7 @@ export type LocationIn = {
    */
   root: string;
   s3?: S3ConfigIn | null;
+  sftp?: SftpConfigIn | null;
 };
 
 /**
@@ -942,6 +943,10 @@ export type LocationOut = {
    */
   endpoint: string | null;
   /**
+   * Host Key Sha256
+   */
+  host_key_sha256?: string | null;
+  /**
    * Id
    */
   id: string;
@@ -958,13 +963,17 @@ export type LocationOut = {
    */
   name: string;
   /**
+   * Pending Host Key Sha256
+   */
+  pending_host_key_sha256?: string | null;
+  /**
    * Root
    */
   root: string;
   /**
    * Status
    */
-  status: "online" | "offline";
+  status: "online" | "offline" | "pending_host_key" | "host_key_changed";
   /**
    * Status Reason
    */
@@ -2586,6 +2595,28 @@ export type SetupTotpIn = {
    * Setup Token
    */
   setup_token: string;
+};
+
+/**
+ * SftpConfigIn
+ */
+export type SftpConfigIn = {
+  /**
+   * Host
+   */
+  host: string;
+  /**
+   * Port
+   */
+  port?: number;
+  /**
+   * Private Key
+   */
+  private_key: string;
+  /**
+   * Username
+   */
+  username: string;
 };
 
 /**

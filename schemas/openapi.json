@@ -1676,7 +1676,9 @@
           "kind": {
             "enum": [
               "server_path",
-              "s3"
+              "s3",
+              "share",
+              "sftp"
             ],
             "title": "Kind",
             "type": "string"
@@ -1697,6 +1699,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/S3ConfigIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sftp": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SftpConfigIn"
               },
               {
                 "type": "null"
@@ -1732,6 +1744,17 @@
             ],
             "title": "Endpoint"
           },
+          "host_key_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Key Sha256"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1749,6 +1772,17 @@
             "title": "Name",
             "type": "string"
           },
+          "pending_host_key_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Host Key Sha256"
+          },
           "root": {
             "title": "Root",
             "type": "string"
@@ -1756,7 +1790,9 @@
           "status": {
             "enum": [
               "online",
-              "offline"
+              "offline",
+              "pending_host_key",
+              "host_key_changed"
             ],
             "title": "Status",
             "type": "string"
@@ -4966,6 +5002,42 @@
           "code"
         ],
         "title": "SetupTotpIn",
+        "type": "object"
+      },
+      "SftpConfigIn": {
+        "properties": {
+          "host": {
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "port": {
+            "default": 22,
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Port",
+            "type": "integer"
+          },
+          "private_key": {
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Private Key",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "username",
+          "private_key"
+        ],
+        "title": "SftpConfigIn",
         "type": "object"
       },
       "SignedInOut": {

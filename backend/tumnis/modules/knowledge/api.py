@@ -55,7 +55,12 @@ from tumnis.modules.knowledge.models import (
     ProjectFolder,
     StorageLocation,
 )
-from tumnis.modules.knowledge.rules import is_network_fs, safe_rel_path, sanitize_filename
+from tumnis.modules.knowledge.rules import (
+    ActorKind,
+    is_network_fs,
+    safe_rel_path,
+    sanitize_filename,
+)
 from tumnis.modules.knowledge.storage import (
     FileStat,
     Health,
@@ -264,7 +269,8 @@ register_seed_writer("document", seed_document)
 # Postgres) queue in `pending_writes`, and the next healthy check drains the queue in
 # insertion order. Every storage call goes through `open_backend`.
 
-LocationKind = Literal["server_path", "s3"]
+LocationKind = Literal["server_path", "s3", "share", "sftp"]
+LocationStatus = Literal["online", "offline", "pending_host_key", "host_key_changed"]
 Row = Mapping[Any, Any]  # a location or folder row (RowMapping), or the dict of one
 
 _locations: Table = StorageLocation.__table__  # type: ignore[assignment]
@@ -287,11 +293,19 @@ class S3ConfigIn(BaseModel):
     sse: Literal["AES256"] | None = None
 
 
+class SftpConfigIn(BaseModel):
+    host: str = Field(min_length=1, max_length=253)  # checked by the SSRF guard at every use
+    port: int = Field(default=22, ge=1, le=65535)
+    username: str = Field(min_length=1, max_length=64)
+    private_key: str = Field(min_length=1, max_length=16384)  # write-only, sealed, never answered
+
+
 class LocationIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     kind: LocationKind
-    root: str = Field(min_length=1, max_length=1024)  # absolute path, or bucket/prefix
+    root: str = Field(min_length=1, max_length=1024)  # absolute path, bucket/prefix, SFTP folder
     s3: S3ConfigIn | None = None
+    sftp: SftpConfigIn | None = None
     is_default: bool = False
 
 
@@ -301,11 +315,13 @@ class LocationOut(BaseModel):
     kind: str
     root: str
     endpoint: str | None  # S3 only; the keys are never answered
-    status: Literal["online", "offline"]
+    status: LocationStatus
     status_reason: str | None
     is_default: bool
     capabilities: dict[str, bool]
     version: int
+    host_key_sha256: str | None = None  # SFTP: the pinned host key's fingerprint
+    pending_host_key_sha256: str | None = None  # SFTP: the key the server shows, to confirm
 
 
 class ProjectFolderOut(BaseModel):
@@ -1864,3 +1880,42 @@ async def stream_file(
     ):
         async for chunk in backend.read(info.path):
             yield chunk
+
+
+# --- SFTP host keys and existing folders (P3-14): red-phase seams --------------------------
+
+
+async def confirm_host_key(
+    s: AsyncSession,
+    location_id: UUID,
+    sha256: str,
+    *,
+    reason: str | None = None,
+    net: NetPolicy,
+    resolver: Resolver = system_resolver,
+) -> LocationOut:
+    """Pin the SFTP host key the server shows when `sha256` is exactly its fingerprint."""
+    raise NotImplementedError("P3-14")
+
+
+async def use_existing_folder(
+    s: AsyncSession,
+    project_id: UUID,
+    *,
+    location_id: UUID,
+    path: str,
+    net: NetPolicy,
+    resolver: Resolver = system_resolver,
+) -> ProjectFolderOut:
+    """Make a folder the user already keeps the project's folder (mode `existing`)."""
+    raise NotImplementedError("P3-14")
+
+
+async def rename_document(s: AsyncSession, document_id: UUID, *, title: str) -> DocumentDTO:
+    """Rename a document; an outside file keeps its name on disk (the title only)."""
+    raise NotImplementedError("P3-14")
+
+
+async def delete_document(s: AsyncSession, document_id: UUID, *, actor: ActorKind) -> str:
+    """Delete a document as `actor`; the outcome `may_delete` gives."""
+    raise NotImplementedError("P3-14")

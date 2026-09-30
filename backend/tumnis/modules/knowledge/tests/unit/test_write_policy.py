@@ -86,7 +86,7 @@ def test_write_rename_delete_tables() -> None:
     for mode, path, origin in itertools.product(MODES, PATHS, ORIGINS):
         policy = WritePolicy(mode=mode)  # type: ignore[arg-type]
         assert policy.tumnis_subdir == "Tumnis/"
-        assert may_write(policy, path, origin) is _write_expected(mode, path, origin), (
+        assert may_write(policy, path, origin) is _write_expected(mode, path, origin), (  # type: ignore[arg-type]
             mode,
             path,
             origin,
