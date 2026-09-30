@@ -1,0 +1,5 @@
+{"type": "session", "session_id": "sess-enrich-0001", "profile": "acme-site", "model": "example-model"}
+{"type": "assistant", "text": "Reading the packet for the enrich skill."}
+{"type": "tool_call", "name": "skill_view", "arguments": {"name": "enrich"}}
+{"type": "tool_result", "name": "skill_view", "ok": true}
+{"type": "result", "subtype": "success", "is_error": false, "text": "```json\n{\"first_action\": \"Open last month's invoice in Wave and duplicate it\", \"estimate_minutes\": 20, \"acceptance_criteria\": [\"The March invoice is sent to Acme\"]}\n```", "session_id": "sess-enrich-0001", "duration_ms": 8123, "usage": {"input_tokens": 1520, "output_tokens": 210}}

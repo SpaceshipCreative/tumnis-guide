@@ -6,10 +6,13 @@ import { http, HttpResponse, type RequestHandler } from "msw";
 
 import type {
   AccountOut,
+  AgentProfileOut,
   AuditEntry,
   DeadLetterOut,
   KeyOut,
   PageAuditEntry,
+  RunnerCreated,
+  RunnerOut,
   SessionOut,
   WorkspaceSettingsOut,
 } from "../../api/types.gen";
@@ -254,5 +257,130 @@ export function accountHandlers(recorder: Recorder): RequestHandler[] {
       current = account({ totp_confirmed_at: "2026-03-09T12:00:00Z" });
       return new HttpResponse(null, { status: 204 });
     }),
+  ];
+}
+
+// --- Agents (P1-04) ------------------------------------------------------------------
+
+export const RUNNERS: RunnerOut[] = [
+  {
+    id: "01950000-0000-7000-8000-000000000401",
+    name: "homelab-hermes",
+    host: "hermes.example.org",
+    os: "linux",
+    daemon_version: "0.1.0",
+    hermes_version: "0.9.1",
+    protocol_version: 1,
+    last_heartbeat_at: "2026-03-09T11:59:50Z",
+    status: "online",
+    profiles: ["tumnis-master", "acme-site"],
+    created_at: "2026-03-01T12:00:00Z",
+  },
+  {
+    id: "01950000-0000-7000-8000-000000000402",
+    name: "laptop-hermes",
+    host: "laptop.example.org",
+    os: "darwin",
+    daemon_version: "0.1.0",
+    hermes_version: "0.9.0",
+    protocol_version: 1,
+    last_heartbeat_at: "2026-03-08T09:00:00Z",
+    status: "offline",
+    profiles: ["beta-app"],
+    created_at: "2026-03-02T12:00:00Z",
+  },
+];
+
+export const PROFILES: AgentProfileOut[] = [
+  {
+    id: "01950000-0000-7000-8000-000000000501",
+    name: "tumnis-master",
+    role: "master",
+    transport: "daemon",
+    project_id: null,
+    runner_id: RUNNERS[0]?.id ?? null,
+    endpoint: null,
+    status: "ready",
+    profile_version: "1.0.0",
+    health: {
+      reachable: true,
+      authenticated: true,
+      version: "0.9.1",
+      profile_exists: true,
+      mcp_servers: ["tumnis"],
+      error: null,
+      status: "ok",
+    },
+    health_checked_at: "2026-03-09T11:58:00Z",
+    version: 3,
+    created_at: "2026-03-01T12:05:00Z",
+  },
+  {
+    id: "01950000-0000-7000-8000-000000000502",
+    name: "beta-app",
+    role: "project",
+    transport: "daemon",
+    project_id: "01950000-0000-7000-8000-000000000601",
+    runner_id: RUNNERS[1]?.id ?? null,
+    endpoint: null,
+    status: "registered",
+    profile_version: null,
+    health: {
+      reachable: false,
+      authenticated: null,
+      version: null,
+      profile_exists: null,
+      mcp_servers: [],
+      error: "runner offline",
+      status: "offline",
+    },
+    health_checked_at: "2026-03-09T10:00:00Z",
+    version: 1,
+    created_at: "2026-03-02T12:05:00Z",
+  },
+];
+
+export const NEW_RUNNER_TOKEN = "tmd_abcdefgh_SECRETSECRETSECRETSECRET";
+
+export function agentsHandlers(recorder: Recorder): RequestHandler[] {
+  return [
+    http.get("*/v1/runners", () =>
+      HttpResponse.json({ items: RUNNERS, next_cursor: null }),
+    ),
+    http.get("*/v1/agents/profiles", () =>
+      HttpResponse.json({ items: PROFILES, next_cursor: null }),
+    ),
+    http.post("*/v1/runners", async ({ request }) => {
+      const sent = await recorder.record(request);
+      const body = sent.body as { name: string };
+      const created: RunnerCreated = {
+        id: "01950000-0000-7000-8000-000000000403",
+        name: body.name,
+        host: null,
+        os: null,
+        daemon_version: null,
+        hermes_version: null,
+        protocol_version: null,
+        last_heartbeat_at: null,
+        status: "never_seen",
+        profiles: [],
+        created_at: "2026-03-09T12:00:00Z",
+        token: NEW_RUNNER_TOKEN,
+      };
+      return HttpResponse.json(created, { status: 201 });
+    }),
+    http.post(
+      "*/v1/agents/profiles/:id/health-check",
+      async ({ request, params }) => {
+        await recorder.record(request);
+        return HttpResponse.json(
+          {
+            request_id: "01950000-0000-7000-8000-000000000701",
+            profile_id: String(params.id),
+          },
+          { status: 202 },
+        );
+      },
+    ),
   ];
 }

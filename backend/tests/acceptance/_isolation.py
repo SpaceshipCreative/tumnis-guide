@@ -39,7 +39,12 @@ CALLER_AUTH = {
     "key": frozenset({"session_or_key", "key_or_task_token"}),
 }
 # `{id}` after a path segment whose table name is not the segment itself.
-TABLE_ALIASES = {"review": "review_items", "keys": "api_keys", "columns": "board_columns"}
+TABLE_ALIASES = {
+    "review": "review_items",
+    "keys": "api_keys",
+    "columns": "board_columns",
+    "profiles": "agent_profiles",
+}
 
 
 @dataclass(frozen=True)

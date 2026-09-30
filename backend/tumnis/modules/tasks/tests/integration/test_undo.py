@@ -159,3 +159,41 @@ async def test_undo_of_an_older_change_at_the_current_version_is_stale(
     final = await session_client.get(f"/v1/tasks/{task.id}")
     assert final.json()["title"] == "Renamed"
     assert final.json()["priority"] == "high"
+
+
+@pytest.mark.req("UX 9", "REL-2")
+@pytest.mark.wp("P0-24")
+async def test_undo_moves_the_task_version_on(
+    session_client: SessionClient, make_task: MakeTask
+) -> None:
+    """An undo is a write like any other (REL-2): it answers the task one version on, the
+    task reads back at that version, a write at the version before the undo is 409
+    `stale_version`, and a write at the answered version goes through (CodeRabbit on #57)."""
+    task = await make_task(label="human", estimate_minutes=30)
+    got = await session_client.get(f"/v1/tasks/{task.id}")
+    assert got.status_code == 200, got.text
+    renamed = await session_client.patch(
+        f"/v1/tasks/{task.id}", json={"title": "Renamed", "version": got.json()["version"]}
+    )
+    assert renamed.status_code == 200, renamed.text
+    before_undo = renamed.json()["version"]
+
+    undone = await session_client.post(
+        f"/v1/tasks/{task.id}/undo",
+        json={"change_id": renamed.json()["change_id"], "version": before_undo},
+    )
+    assert undone.status_code == 200, undone.text
+    assert undone.json()["title"] == got.json()["title"]
+    assert undone.json()["version"] == before_undo + 1
+    read = await session_client.get(f"/v1/tasks/{task.id}")
+    assert read.json()["version"] == undone.json()["version"]
+
+    stale = await session_client.patch(
+        f"/v1/tasks/{task.id}", json={"priority": "high", "version": before_undo}
+    )
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["code"] == "stale_version"
+    fresh = await session_client.patch(
+        f"/v1/tasks/{task.id}", json={"priority": "high", "version": undone.json()["version"]}
+    )
+    assert fresh.status_code == 200, fresh.text

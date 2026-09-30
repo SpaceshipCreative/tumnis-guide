@@ -8,7 +8,7 @@ import asyncio
 import contextlib
 import importlib
 import signal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from tumnis.core import audit_workflows, cache, events, faults, modules, workflows_ops
 from tumnis.core.clock import SystemClock
@@ -19,6 +19,12 @@ if TYPE_CHECKING:
 
 SYNC_QUEUE = "sync"  # connector syncs and OAuth exchanges (A9; P1-09)
 SYNC_WORKER_CONCURRENCY = 4  # plan default
+
+
+def _agents() -> Any:
+    """agents.workflows, imported by name (as wiring does) so no module's tests import
+    another module through this composition root."""
+    return importlib.import_module("tumnis.modules.agents.workflows")
 
 
 def register_queues() -> None:
@@ -33,6 +39,10 @@ def register_queues() -> None:
     )
     DBOS.register_queue(workflows_ops.MAINTENANCE_QUEUE, worker_concurrency=1)
     DBOS.register_queue(SYNC_QUEUE, worker_concurrency=SYNC_WORKER_CONCURRENCY)
+    # Agent runs and profile health checks (P1-04), partitioned by profile.
+    agents = _agents()
+    DBOS.register_queue(agents.RUNS_QUEUE, partition_concurrency=agents.RUNS_PARTITION_CONCURRENCY)
+    DBOS.register_queue(agents.RUNNER_SWEEP_QUEUE, worker_concurrency=1)
 
 
 def register_schedules(settings: Settings) -> None:
@@ -51,6 +61,25 @@ def register_schedules(settings: Settings) -> None:
                 }
             ]
         )
+
+
+def register_runner_sweep() -> None:
+    """The runner sweep (P1-04), each minute on its own queue (never behind a long
+    maintenance job), in every deployment: runners offline after three missed heartbeats,
+    their runs `runner_lost`."""
+    from dbos import DBOS  # noqa: PLC0415
+
+    agents = _agents()
+    DBOS.apply_schedules(
+        [
+            {
+                "schedule_name": agents.RUNNER_SWEEP_NAME,
+                "workflow_fn": agents.runner_sweep,
+                "schedule": agents.RUNNER_SWEEP_SCHEDULE,
+                "queue_name": agents.RUNNER_SWEEP_QUEUE,
+            }
+        ]
+    )
 
 
 def register_audit_schedule() -> None:
@@ -151,6 +180,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     register_schedules(settings)
     register_audit_schedule()
     register_module_schedules()
+    register_runner_sweep()
     register_task_schedules()
     try:
         asyncio.run(_serve(settings))

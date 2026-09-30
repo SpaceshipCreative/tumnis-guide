@@ -1,0 +1,110 @@
+{
+  "$defs": {
+    "RunKind": {
+      "enum": [
+        "enrich",
+        "plan",
+        "task",
+        "proposal",
+        "stuck",
+        "notify"
+      ],
+      "title": "RunKind",
+      "type": "string"
+    },
+    "SchemaRef": {
+      "additionalProperties": false,
+      "description": "Names a @versioned model, e.g. (\"enrichment\", \"result\", 1).",
+      "properties": {
+        "family": {
+          "maxLength": 32,
+          "title": "Family",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 64,
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "family",
+        "name",
+        "version"
+      ],
+      "title": "SchemaRef",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/packet/v1/task_packet.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "body": {
+      "additionalProperties": true,
+      "title": "Body",
+      "type": "object"
+    },
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/RunKind"
+    },
+    "output_schema": {
+      "$ref": "#/$defs/SchemaRef"
+    },
+    "profile_id": {
+      "format": "uuid",
+      "title": "Profile Id",
+      "type": "string"
+    },
+    "prompt_text": {
+      "title": "Prompt Text",
+      "type": "string"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "skill": {
+      "pattern": "^[a-z][a-z0-9-]{0,40}$",
+      "title": "Skill",
+      "type": "string"
+    },
+    "timeout_s": {
+      "maximum": 3600,
+      "minimum": 10,
+      "title": "Timeout S",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "kind",
+    "run_id",
+    "profile_id",
+    "skill",
+    "output_schema",
+    "correlation_id",
+    "timeout_s",
+    "prompt_text",
+    "body"
+  ],
+  "title": "TaskPacket",
+  "type": "object"
+}
