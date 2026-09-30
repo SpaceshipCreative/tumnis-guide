@@ -12,6 +12,7 @@ import re
 import unicodedata
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Final, Literal
 
 
@@ -255,3 +256,42 @@ def numbered_name(name: str, n: int) -> str:
         return name
     stem, ext = split_ext(name)
     return f"{stem} {n}{ext}"
+
+
+# --- Existing folders (P3-14, FR-15.12): red-phase seams; the spec tests turn them green --
+
+
+class ActorKind(StrEnum):
+    user = "user"
+    agent = "agent"
+    system = "system"
+
+
+@dataclass(frozen=True)
+class WritePolicy:
+    mode: Literal["tumnis_made", "existing"]
+    tumnis_subdir: str = "Tumnis/"  # FR-15.12
+
+
+def may_write(p: WritePolicy, path: str, origin: Literal["tumnis", "external"] | None) -> bool:
+    """existing mode: only paths under Tumnis/, and never over a file whose origin is
+    external. tumnis_made: anywhere in the root, never over an external file."""
+    raise NotImplementedError("P3-14")
+
+
+def may_rename(p: WritePolicy, src_origin: str) -> bool:
+    """External files: never."""
+    raise NotImplementedError("P3-14")
+
+
+def may_delete(
+    p: WritePolicy, origin: str, actor: ActorKind, confirmed_by_user: bool
+) -> Literal["trash", "delete_at_source", "index_only", "refuse"]:
+    """tumnis origin: trash. external origin: agent -> refuse; otherwise index_only without
+    the user's confirmation, delete_at_source with it."""
+    raise NotImplementedError("P3-14")
+
+
+def trash_dir(p: WritePolicy) -> str:
+    """`.tumnis/trash/` in a Tumnis-made folder; `Tumnis/.trash/` in an existing one."""
+    raise NotImplementedError("P3-14")
