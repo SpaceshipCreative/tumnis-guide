@@ -4,7 +4,8 @@
 // `agentsListRunEvents` one, which LIVE_MAP lists under `run`: a live notice for the run
 // (/ws) marks it stale and the next pages come in; while the run is active it also polls,
 // so a lost notice only delays a line. One fetch reads at most MAX_PAGES pages; when it
-// stops at that cap, polling goes on (an ended run too) until a short page arrives.
+// stops at that cap on a full page, polling goes on (an ended run too) until a short
+// page arrives; a failed fetch does not keep an ended run polling.
 import { useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -30,7 +31,8 @@ export function useRunEvents(runId: string, { active }: { active: boolean }) {
     queryFn: async ({ signal }) => {
       let events = queryClient.getQueryData<RunEventOut[]>(queryKey) ?? [];
       let after = events.at(-1)?.seq;
-      more.current = true;
+      more.current = false; // a failed fetch never keeps an ended run polling
+      let full = false;
       for (let page = 0; page < MAX_PAGES; page += 1) {
         const { data } = await agentsListRunEvents({
           path: { run_id: runId },
@@ -49,11 +51,10 @@ export function useRunEvents(runId: string, { active }: { active: boolean }) {
           events = [...events, ...fresh];
           after = fresh.at(-1)?.seq ?? after;
         }
-        if (data.items.length < RUN_EVENTS_PAGE) {
-          more.current = false;
-          break;
-        }
+        full = data.items.length >= RUN_EVENTS_PAGE;
+        if (!full) break;
       }
+      more.current = full; // stopped at MAX_PAGES on a full page: more remain
       return events;
     },
     refetchInterval: () =>

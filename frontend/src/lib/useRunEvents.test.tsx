@@ -66,3 +66,35 @@ test("[P2-04][FR-5.5] an ended run's long log is read to its end", async () => {
   });
   expect(result.current.data?.at(-1)?.seq).toBe(TOTAL);
 });
+
+test("[P2-04][FR-5.5] an ended run whose events fail to load stops asking", async () => {
+  vi.useFakeTimers({
+    shouldAdvanceTime: true,
+    toFake: ["setInterval", "setTimeout"],
+  });
+  let asked = 0;
+  server.use(
+    http.get("*/v1/runs/:id/events", () => {
+      asked += 1;
+      return HttpResponse.json({ title: "Not found" }, { status: 404 });
+    }),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+
+  const { result } = renderHook(() => useRunEvents(RUN_ID, { active: false }), {
+    wrapper,
+  });
+
+  await waitFor(() => {
+    expect(result.current.isError).toBe(true);
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3 * RUN_EVENTS_POLL_MS);
+  });
+  expect(asked).toBe(1);
+});
