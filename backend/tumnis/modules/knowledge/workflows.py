@@ -54,7 +54,7 @@ from uuid import UUID
 from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
 
 from tumnis.core import faults
-from tumnis.modules.knowledge import api, pipeline, sync
+from tumnis.modules.knowledge import api, move, pipeline, sync
 
 log = logging.getLogger(__name__)
 
@@ -342,15 +342,67 @@ async def enqueue_folder_extraction(workspace_id: UUID, version_id: UUID, _path:
 sync.register_extraction(enqueue_folder_extraction)
 
 
-# --- Moving a project folder (P3-14): red-phase seam ---------------------------------------
+# --- Moving a project folder (P3-14, FR-15.12, REL-3) ---------------------------------------
+
+MOVE_WORKFLOW: Final = "knowledge_move_project_folder"
 
 
-@DBOS.workflow(name="knowledge_move_project_folder")
+@DBOS.step(**STEP_RETRY)
+async def move_begin_step(
+    workspace_id: str, project_id: str, to_location: str, to_path: str
+) -> dict[str, Any]:
+    return await move.begin(workspace_id, project_id, to_location, to_path)
+
+
+@DBOS.step(**STEP_RETRY)
+async def move_list_step(workspace_id: str, record: dict[str, Any]) -> list[list[str]]:
+    return await move.list_source(workspace_id, record)
+
+
+@DBOS.step(**STEP_RETRY)
+async def move_copy_step(workspace_id: str, record: dict[str, Any], batch: list[list[str]]) -> None:
+    await move.copy_batch(workspace_id, record, batch)
+
+
+@DBOS.step(**STEP_RETRY)
+async def move_verify_step(
+    workspace_id: str, record: dict[str, Any], files: list[list[str]]
+) -> dict[str, list[Any]] | None:
+    return await move.verify(workspace_id, record, files)
+
+
+@DBOS.step(**STEP_RETRY)
+async def move_fail_step(workspace_id: str, move_id: str, reason: str) -> None:
+    await move.fail(workspace_id, move_id, reason)
+
+
+@DBOS.step(**STEP_RETRY)
+async def move_switch_step(
+    workspace_id: str, record: dict[str, Any], stats: dict[str, list[Any]]
+) -> None:
+    await move.switch(workspace_id, record, stats)
+
+
+@DBOS.workflow(name=MOVE_WORKFLOW)
 async def move_project_folder(
     workspace_id: str, project_id: str, to_location: str, to_path: str
 ) -> dict[str, Any]:
-    """Copy the project's folder to `to_location`/`to_path`, verify every hash, switch."""
-    raise NotImplementedError("P3-14")
+    """Copy the project's folder to `to_location`/`to_path` in batches (kill point
+    `knowledge.move_project_folder.batch_<n>` after batch n), verify every hash, switch.
+    A resumed move copies only the batches left. The source is never changed."""
+    record = await move_begin_step(workspace_id, project_id, to_location, to_path)
+    if "error" in record:
+        return {"status": "refused", "reason": record["error"]}
+    files = await move_list_step(workspace_id, record)
+    for n, start in enumerate(range(0, len(files), move.BATCH), start=1):
+        await move_copy_step(workspace_id, record, files[start : start + move.BATCH])
+        faults.killpoint(f"knowledge.move_project_folder.batch_{n}")
+    stats = await move_verify_step(workspace_id, record, files)
+    if stats is None:
+        await move_fail_step(workspace_id, record["move_id"], "hash_mismatch")
+        return {"status": "failed", "reason": "hash_mismatch", "move_id": record["move_id"]}
+    await move_switch_step(workspace_id, record, stats)
+    return {"status": "switched", "move_id": record["move_id"], "verified": len(stats)}
 
 
 # P2-18: the folder steps of the project archive workflows register with projects.

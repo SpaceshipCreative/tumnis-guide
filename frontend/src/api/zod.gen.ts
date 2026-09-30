@@ -193,6 +193,29 @@ export const zDefaultIn = z.object({
 });
 
 /**
+ * DeleteAtSourceIn
+ */
+export const zDeleteAtSourceIn = z.object({
+  confirm_token: z.string().min(16).max(200),
+  reason: z.string().min(1).max(500),
+});
+
+/**
+ * DeleteConfirmationOut
+ */
+export const zDeleteConfirmationOut = z.object({
+  confirm_token: z.string(),
+  expires_at: z.iso.datetime(),
+});
+
+/**
+ * DeleteOut
+ */
+export const zDeleteOut = z.object({
+  outcome: z.string(),
+});
+
+/**
  * DocumentDTO
  */
 export const zDocumentDto = z.object({
@@ -241,6 +264,14 @@ export const zEstimateBody = z.object({
   reason: z.string().min(1).max(500),
   schema_version: z.int().nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * ExistingFolderIn
+ */
+export const zExistingFolderIn = z.object({
+  location_id: z.uuid(),
+  path: z.string().min(1).max(1024),
 });
 
 /**
@@ -452,6 +483,13 @@ export const zMoveIn = z.object({
   board_rank: z.string().min(1).max(48),
   column_id: z.uuid(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * MoveStarted
+ */
+export const zMoveStarted = z.object({
+  workflow_id: z.string(),
 });
 
 /**
@@ -2093,6 +2131,15 @@ export const zKnowledgeUploadDocumentBody = z.object({
  */
 export const zKnowledgeUploadDocumentResponse = zUploadAccepted;
 
+export const zKnowledgeDeleteDocumentPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeDeleteDocumentResponse = zDeleteOut;
+
 export const zKnowledgeGetDocumentPath = z.object({
   document_id: z.uuid(),
 });
@@ -2112,6 +2159,26 @@ export const zKnowledgeUpdateDocumentPath = z.object({
  * Successful Response
  */
 export const zKnowledgeUpdateDocumentResponse = zDocumentDto;
+
+export const zKnowledgeDeleteAtSourceBody = zDeleteAtSourceIn;
+
+export const zKnowledgeDeleteAtSourcePath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeDeleteAtSourceResponse = zDeleteOut;
+
+export const zKnowledgeIssueDeleteConfirmationPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeIssueDeleteConfirmationResponse = zDeleteConfirmationOut;
 
 /**
  * Response Knowledge List Locations
@@ -2158,6 +2225,17 @@ export const zKnowledgeTestLocationPath = z.object({
  */
 export const zKnowledgeTestLocationResponse = zLocationOut;
 
+export const zKnowledgeUseExistingFolderBody = zExistingFolderIn;
+
+export const zKnowledgeUseExistingFolderPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeUseExistingFolderResponse = zProjectFolderOut;
+
 export const zKnowledgeSetProjectFolderBody = zFolderIn;
 
 export const zKnowledgeSetProjectFolderPath = z.object({
@@ -2168,6 +2246,17 @@ export const zKnowledgeSetProjectFolderPath = z.object({
  * Successful Response
  */
 export const zKnowledgeSetProjectFolderResponse = zProjectFolderOut;
+
+export const zKnowledgeMoveProjectFolderBody = zExistingFolderIn;
+
+export const zKnowledgeMoveProjectFolderPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeMoveProjectFolderResponse = zMoveStarted;
 
 export const zPlanningGetProjectWeekPath = z.object({
   monday: z.iso.date(),
