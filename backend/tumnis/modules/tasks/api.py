@@ -95,7 +95,15 @@ from tumnis.modules.tasks.review import (
     review_badge_count,
     review_kinds,
 )
-from tumnis.modules.tasks.rules import ActorKind, Label, Status
+from tumnis.modules.tasks.rules import (
+    ActorKind,
+    Label,
+    LabelSource,
+    LabelState,
+    Status,
+    label_state,
+    may_auto_label,
+)
 from tumnis.modules.tasks.rules_recurrence import Preset
 from tumnis.seed import TaskSeed, register_seed_writer
 
@@ -103,11 +111,15 @@ __all__ = [
     "ActorKind",
     "DuplicateReviewKind",
     "Label",
+    "LabelSource",
+    "LabelState",
     "ReviewKindSpec",
     "Status",
     "TargetRef",
     "UnknownReviewKind",
     "add_review_item",
+    "label_state",
+    "may_auto_label",
     "register_review_kind",
     "review_badge_count",
     "review_kinds",
@@ -122,7 +134,6 @@ _changes: Table = TaskChange.__table__  # type: ignore[assignment]
 LIVE_ENTITY: Final = "task"
 PROJECT_ENTITY: Final = "project"  # column edits refresh the project's views
 Priority = Literal["low", "normal", "high", "urgent"]
-LabelSource = Literal["user", "jev", "agent", "fallback"]
 TaskOrder = Literal["created", "today"]
 Title = Annotated[str, StringConstraints(min_length=1, max_length=500, strip_whitespace=True)]
 Estimate = Annotated[int, Field(gt=0, le=MAX_ESTIMATE_MINUTES)]

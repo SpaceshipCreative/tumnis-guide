@@ -23,7 +23,6 @@ CASES = [
 
 @pytest.mark.req("FR-4.1")
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 @pytest.mark.parametrize(("source", "label", "suggestion", "may", "state"), CASES)
 def test_may_auto_label_and_state(
     source: Any, label: Label | None, suggestion: Label | None, may: bool, state: str
@@ -33,7 +32,7 @@ def test_may_auto_label_and_state(
     leave the task open to relabelling. The chip is confirmed when the label is set,
     suggested when only a suggestion exists, and pending otherwise.
     """
-    from tumnis.modules.tasks.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.tasks.rules import (  # noqa: PLC0415
         label_state,
         may_auto_label,
     )

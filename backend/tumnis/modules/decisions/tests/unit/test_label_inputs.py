@@ -12,7 +12,6 @@ WHITELIST = {"title", "parent_title", "project_name", "project_goal", "reserved_
 
 @pytest.mark.req("Data flow rule 6")
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 def test_label_inputs_are_whitelisted() -> None:
     """T-P1-07-14
     A task with a description (first action, acceptance criteria), comments and links, in
@@ -21,7 +20,7 @@ def test_label_inputs_are_whitelisted() -> None:
     appears in any value.
     """
     from tumnis.modules.decisions.catalog import DecisionPoint, build_request  # noqa: PLC0415
-    from tumnis.modules.decisions.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.decisions.rules import (  # noqa: PLC0415
         label_inputs,
     )
 
