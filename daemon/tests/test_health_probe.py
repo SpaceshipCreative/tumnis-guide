@@ -320,3 +320,88 @@ async def test_coolify_probes_only_the_profiles_own_url(profile_dir: Path) -> No
     assert moved.own_reachable == {}
     assert moved.errors == ["coolify: the profile's Coolify is not Tumnis's Coolify"]
     assert own.call_count == 1
+
+
+@pytest.mark.wp("P2-10")
+def test_unreadable_env_and_version_fall_back(profile_dir: Path) -> None:
+    """A `.env` or `VERSION` that is not UTF-8 reads as absent instead of stopping the
+    health report."""
+    from tumnis_daemon.health import profile_version, read_env  # noqa: PLC0415
+
+    (profile_dir / ".env").write_bytes(b"GITHUB_TOKEN=\xff\xfe\n")
+    (profile_dir / "VERSION").write_bytes(b"\xff1.0.0\n")
+
+    assert read_env(profile_dir) == {}
+    assert profile_version(profile_dir) is None
+
+
+@pytest.mark.req("SAF-3")
+@pytest.mark.wp("P2-10")
+async def test_coolify_cleartext_only_on_the_lan(profile_dir: Path) -> None:
+    """Scott, decision 7: a Coolify token goes over plain http only to a private or
+    loopback address; a public address over http gets no request."""
+    from tumnis_daemon.health import token_reach  # noqa: PLC0415
+
+    env = profile_dir / ".env"
+    base = env.read_text()
+    with respx.mock(assert_all_called=False) as fake:
+        public = fake.route(host="8.8.8.8").respond(200, json={})
+        lan = fake.get("http://127.0.0.1:8000/api/v1/applications/app-own").respond(200, json={})
+
+        env.write_text(base + "COOLIFY_BASE_URL=http://8.8.8.8\n")
+        _, refused = await token_reach(
+            profile_dir,
+            own_repos=[],
+            foreign_repos=[],
+            own_apps=["app-own"],
+            foreign_apps=[],
+            coolify_base_url=None,
+        )
+        env.write_text(base + "COOLIFY_BASE_URL=http://127.0.0.1:8000\n")
+        _, allowed = await token_reach(
+            profile_dir,
+            own_repos=[],
+            foreign_repos=[],
+            own_apps=["app-own"],
+            foreign_apps=[],
+            coolify_base_url=None,
+        )
+
+    assert not public.called
+    assert refused is not None
+    assert refused.errors == ["coolify: COOLIFY_BASE_URL must use https:// outside the LAN"]
+    assert lan.called
+    assert allowed is not None
+    assert allowed.own_reachable == {"app-own": True}
+
+
+@pytest.mark.wp("P2-10")
+async def test_reach_probes_stop_at_the_deadline(profile_dir: Path) -> None:
+    """Slow providers cannot hold the health report past the server's wait: probes still
+    running at the deadline are cancelled and reported as an error."""
+    from tumnis_daemon.health import token_reach  # noqa: PLC0415
+
+    async def slow(_request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(5)
+        return httpx.Response(200, json=_repo(True))
+
+    loop = asyncio.get_running_loop()
+    with respx.mock(base_url=GITHUB, assert_all_called=False) as fake:
+        fake.get("/repos/acme/site").mock(side_effect=slow)
+        started = loop.time()
+        github, coolify = await token_reach(
+            profile_dir,
+            own_repos=["acme/site"],
+            foreign_repos=[],
+            own_apps=[],
+            foreign_apps=[],
+            coolify_base_url=None,
+            deadline_s=0.2,
+        )
+
+    assert loop.time() - started < 2
+    assert coolify is None
+    assert github is not None
+    assert github.token_present is True
+    assert github.own_reachable == {}
+    assert github.errors == ["github: probes did not finish in 0.2 s"]

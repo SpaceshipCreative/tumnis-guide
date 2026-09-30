@@ -22,9 +22,10 @@ provider or a library (which could echo the token) is ever passed on.
 """
 
 import asyncio
+import ipaddress
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Coroutine, Mapping, Sequence
 from pathlib import Path, PurePath
 from typing import Any, Final
 from urllib.parse import urlsplit
@@ -36,6 +37,8 @@ from tumnis_daemon.protocol import MAX_REACH_TARGETS, McpServerInfo, TokenReach
 
 PROBE_TIMEOUT_S: Final = 5.0  # each request (plan default)
 PROBE_CONCURRENCY: Final = 8
+# All reach probes together, well under the server's 30 s wait for the health report.
+PROBE_DEADLINE_S: Final = 20.0
 MAX_SERVERS: Final = 200
 GITHUB_API: Final = "https://api.github.com"
 GITHUB_API_VERSION: Final = "2022-11-28"  # as P2-13's GitHub adapter
@@ -106,7 +109,7 @@ def read_env(profile: Path) -> dict[str, str]:
     empty when there is none."""
     try:
         text = (profile / ".env").read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, ValueError):  # missing, unreadable, or not UTF-8
         return {}
     env: dict[str, str] = {}
     for line in text.splitlines():
@@ -130,7 +133,7 @@ def profile_version(profile: Path) -> str | None:
     """The profile's `VERSION` stamp, else its `distribution.yaml` version."""
     try:
         stamp = (profile / "VERSION").read_text(encoding="utf-8").strip().splitlines()
-    except OSError:
+    except (OSError, ValueError):  # missing, unreadable, or not UTF-8
         stamp = []
     if stamp and stamp[0].strip():
         return stamp[0].strip()[:64]
@@ -233,6 +236,17 @@ def _origin(url: str) -> tuple[str, str, int | None] | None:
     return parts.scheme, parts.hostname.lower(), port
 
 
+async def _cleartext_allowed(host: str) -> bool:
+    """Plain http only to the LAN (Scott, decision 7): every address the host resolves to
+    is private or loopback. A name that does not resolve is refused."""
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(host, None)
+    except OSError:
+        return False
+    addresses = {ipaddress.ip_address(str(info[4][0]).split("%", 1)[0]) for info in infos}
+    return bool(addresses) and all(a.is_private or a.is_loopback for a in addresses)
+
+
 async def probe_coolify(
     client: httpx.AsyncClient,
     base_url: str | None,
@@ -256,6 +270,11 @@ async def probe_coolify(
     origin = _origin(base_url)
     if origin is None:
         return TokenReach(token_present=True, errors=["coolify: COOLIFY_BASE_URL is not usable"])
+    if origin[0] == "http" and not await _cleartext_allowed(origin[1]):
+        return TokenReach(
+            token_present=True,
+            errors=["coolify: COOLIFY_BASE_URL must use https:// outside the LAN"],
+        )
     if server_base_url is not None and _origin(server_base_url) != origin:
         return TokenReach(
             token_present=True, errors=["coolify: the profile's Coolify is not Tumnis's Coolify"]
@@ -302,24 +321,41 @@ async def token_reach(
     own_apps: Sequence[str],
     foreign_apps: Sequence[str],
     coolify_base_url: str | None,
+    deadline_s: float = PROBE_DEADLINE_S,
 ) -> tuple[TokenReach | None, TokenReach | None]:
-    """The GitHub and Coolify reach of the profile's tokens; None for a kind with nothing
-    to probe."""
+    """The GitHub and Coolify reach of the profile's tokens, probed side by side; None for
+    a kind with nothing to probe. Probes still running at `deadline_s` are cancelled and
+    that kind reports the timeout as an error, so the health report is never late."""
     env = read_env(profile)
-    github: TokenReach | None = None
-    coolify: TokenReach | None = None
+    tokens = {
+        "github": _first(env, GITHUB_TOKEN_VARS),
+        "coolify": _first(env, COOLIFY_TOKEN_VARS),
+    }
+    reach: dict[str, TokenReach] = {}
     async with httpx.AsyncClient(timeout=PROBE_TIMEOUT_S, follow_redirects=False) as client:
+        jobs: dict[str, Coroutine[Any, Any, TokenReach]] = {}
         if own_repos or foreign_repos:
-            github = await probe_github(
-                client, _first(env, GITHUB_TOKEN_VARS), own=own_repos, foreign=foreign_repos
+            jobs["github"] = probe_github(
+                client, tokens["github"], own=own_repos, foreign=foreign_repos
             )
         if own_apps or foreign_apps:
-            coolify = await probe_coolify(
+            jobs["coolify"] = probe_coolify(
                 client,
                 _first(env, COOLIFY_URL_VARS),
-                _first(env, COOLIFY_TOKEN_VARS),
+                tokens["coolify"],
                 own=own_apps,
                 foreign=foreign_apps,
                 server_base_url=coolify_base_url,
             )
-    return github, coolify
+        try:
+            async with asyncio.timeout(deadline_s):
+                reach = dict(zip(jobs, await asyncio.gather(*jobs.values()), strict=True))
+        except TimeoutError:
+            reach = {
+                kind: TokenReach(
+                    token_present=bool(tokens[kind]),
+                    errors=[f"{kind}: probes did not finish in {deadline_s:g} s"],
+                )
+                for kind in jobs
+            }
+    return reach.get("github"), reach.get("coolify")
