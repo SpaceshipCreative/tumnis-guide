@@ -19,6 +19,7 @@ import {
   SECONDARY,
   SECTION,
 } from "./styles";
+import { badge } from "../common/ui";
 
 type Kind = "server_path" | "s3";
 
@@ -228,9 +229,7 @@ export function StorageSection() {
                 {location.name}
               </p>
               {location.is_default && (
-                <span className="rounded-full border border-border px-2 text-sm">
-                  Default
-                </span>
+                <span className={badge("accent")}>Default</span>
               )}
             </div>
             <p className="text-sm [overflow-wrap:anywhere]">

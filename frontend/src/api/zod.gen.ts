@@ -13,6 +13,23 @@ export const zAccountOut = z.object({
 });
 
 /**
+ * AgentProfileChoice
+ *
+ * The project's agent (P1-06): a new Hermes profile from the project template
+ * (`create`, the default; named after the project, so `name` is ignored), or an existing
+ * profile on the agent server, by `name` (`link`; `create_project` answers 422
+ * `invalid_profile_choice` without one). The agents module provisions it on
+ * `project.created`.
+ */
+export const zAgentProfileChoice = z.object({
+  mode: z.enum(["create", "link"]).optional().default("create"),
+  name: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]{0,62}$/)
+    .nullish(),
+});
+
+/**
  * AuditEntry
  */
 export const zAuditEntry = z.object({
@@ -529,9 +546,13 @@ export const zProjectLinkIn = z.object({
 });
 
 /**
- * ProjectCreate
+ * ProjectCreateIn
+ *
+ * The body of `POST /v1/projects`: a project and the agent to give it (P1-06), a new
+ * profile from the template (the default, also when `profile` is absent) or an existing
+ * one. Reads never carry it: the agent is the agents module's.
  */
-export const zProjectCreate = z.object({
+export const zProjectCreateIn = z.object({
   brief_md: z.string().max(65536).optional().default(""),
   client: z.string().nullish(),
   code_path: z.string().nullish(),
@@ -539,6 +560,7 @@ export const zProjectCreate = z.object({
   goal: z.string().max(280).nullish(),
   links: z.array(zProjectLinkIn).optional().default([]),
   name: z.string().min(1).max(120),
+  profile: zAgentProfileChoice.nullish(),
   profile_name: z.string().nullish(),
   repo_url: z.string().nullish(),
   schema_version: z.literal(1).optional().default(1),
@@ -1434,6 +1456,7 @@ export const zTumnisModulesProjectsRouterVersionIn = z.object({
 export const zHealthLiveResponse = z.record(z.string(), z.string());
 
 export const zAgentsListProfilesQuery = z.object({
+  project_id: z.uuid().nullish(),
   cursor: z.string().max(2048).nullish(),
   limit: z.int().gte(1).lte(200).optional().default(50),
 });
@@ -1799,7 +1822,7 @@ export const zProjectsListProjectsQuery = z.object({
  */
 export const zProjectsListProjectsResponse = zPageProjectOut;
 
-export const zProjectsCreateProjectBody = zProjectCreate;
+export const zProjectsCreateProjectBody = zProjectCreateIn;
 
 /**
  * Successful Response

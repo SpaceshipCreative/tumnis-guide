@@ -21,6 +21,7 @@ Rebuild the look on our own tokens, with no UI kit and no Mosaic source in the r
 - **Type.** Inter, self-hosted from `@fontsource-variable/inter` (pinned), as `--font-sans`. The Latin file is precached for the offline shell; other scripts load on first use through `unicode-range`.
 - **Shell.** On a laptop a sidebar with the same destinations in two groups, collapsible to icons (remembered per device, `uiStore.sidebarCollapsed`). A sticky header with search (opens the Mod+K palette through `uiStore.searchOpen`), the review queue with its count (the one badge, nothing shown at zero), help with the keyboard shortcuts, and an account menu (settings, theme, sign out). On a phone the bottom bar stays in thumb reach and the header's menu button opens a modal drawer with the grouped links (focus trapped, Escape closes, the page behind inert). No destination was added for the look.
 - **Primitives.** Menus and the drawer are small hand-written components following the WAI-ARIA menu button and modal dialog patterns. A Radix primitive can still replace one when a screen needs more than they do (ADR-0004).
+- **Shared classes.** `components/common/ui.ts` holds the class sets for buttons (primary, secondary, danger, quiet), fields, cards (`Card`: a labelled region with a header row), badges (`badge(tone)`: neutral, accent, success, warning, danger, info on soft tints), tables and dialogs. `settings/styles.ts` and the project rail's field classes point at them, so Settings, sign-in, setup and the rail share one look.
 - **Cards and charts** follow in DS-01's later PRs: rounded, bordered cards with header rows within the PRD's one-screen and five-task limits, and a Chart.js wrapper loaded only through a dynamic import on pages that already have metrics.
 
 ## Consequences
@@ -28,6 +29,7 @@ Rebuild the look on our own tokens, with no UI kit and no Mosaic source in the r
 - We own the accessibility of the menu, popover and drawer; their keyboard behaviour is covered by T-DS-01-03 to T-DS-01-07 (Vitest) and T-DS-01-08 to T-DS-01-12 (Playwright at 375 and 1280 px, including axe in dark mode).
 - The initial JavaScript grows only by the shell's own code; fonts are CSS assets and do not count against the 200 KB budget.
 - The header adds 4 rem at the top; a page that fills the screen (the dashboard) subtracts `--tg-header-h`.
+- Components colour themselves only through the tokens: no Tailwind hue with a shade (`text-emerald-700`) and no white or black text. T-DS-01-13 checks every source file, so a page on another branch that adds one fails until it uses a token.
 - No Mosaic code, CSS or images enter the repository, so its licence places no terms on ours.
 
 ## Sources

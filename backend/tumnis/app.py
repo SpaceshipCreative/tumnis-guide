@@ -25,6 +25,7 @@ from tumnis.core import (
     cache,
     db,
     deadletter,
+    fake_scripts,
     health,
     live,
     mcp_server,
@@ -84,8 +85,12 @@ class ShellFiles(StaticFiles):
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """The cache invalidation listener (P0-08) and the live hub (P0-22) run beside the
     server; they reconnect on their own, so a database that is down at start does not stop
-    the api. The MCP session manager (P2-01) runs for the app's whole life."""
+    the api. The MCP session manager (P2-01) runs for the app's whole life. With fake
+    adapters, the fakes in this process read the scripts posted to
+    `/v1/test/fakes/{adapter}/script` (R-37) while it serves."""
     settings: Settings = app.state.settings
+    if settings.tumnis_adapters == "fake":
+        fake_scripts.enable()
     stop = asyncio.Event()
     listener = cache.CacheInvalidationListener(settings.database_direct_url)
     task = asyncio.create_task(listener.run(stop))
@@ -100,6 +105,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         stop.set()
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(asyncio.gather(task, hub_task, runner_task), cache.POLL_S * 5)
+        fake_scripts.disable()
         deadletter.close()
         await metrics.dispose()
         await db.dispose()

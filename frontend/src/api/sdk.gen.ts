@@ -414,7 +414,8 @@ export const healthReady = <ThrowOnError extends boolean = false>(
 /**
  * List Profiles
  *
- * Agent profiles by name, with their last health check.
+ * Agent profiles by name, with their last health check; `project_id` narrows them to
+ * that project's agent (the project header, P1-06).
  */
 export const agentsListProfiles = <ThrowOnError extends boolean = false>(
   options?: Options<AgentsListProfilesData, ThrowOnError>,

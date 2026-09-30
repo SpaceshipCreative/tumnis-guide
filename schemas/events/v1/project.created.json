@@ -1,4 +1,36 @@
 {
+  "$defs": {
+    "AgentProfileChoice": {
+      "additionalProperties": false,
+      "description": "The project's agent (P1-06): a new Hermes profile from the project template\n(`create`, the default; named after the project, so `name` is ignored), or an existing\nprofile on the agent server, by `name` (`link`; `create_project` answers 422\n`invalid_profile_choice` without one). The agents module provisions it on\n`project.created`.",
+      "properties": {
+        "mode": {
+          "default": "create",
+          "enum": [
+            "create",
+            "link"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "title": "AgentProfileChoice",
+      "type": "object"
+    }
+  },
   "$id": "https://tumnis.dev/schemas/events/v1/project.created.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
@@ -24,6 +56,13 @@
     "name": {
       "title": "Name",
       "type": "string"
+    },
+    "profile": {
+      "$ref": "#/$defs/AgentProfileChoice",
+      "default": {
+        "mode": "create",
+        "name": null
+      }
     },
     "project_id": {
       "format": "uuid",
