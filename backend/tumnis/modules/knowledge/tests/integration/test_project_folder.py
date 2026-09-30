@@ -49,7 +49,7 @@ async def test_new_project_gets_tumnis_made_folder(
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
     from tumnis.modules.knowledge import events as knowledge_events  # noqa: PLC0415
-    from tumnis.modules.knowledge import sync  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.knowledge import sync  # noqa: PLC0415
     from tumnis.modules.projects import api as projects  # noqa: PLC0415
 
     ws = knowledge_ws
@@ -103,7 +103,7 @@ async def test_new_project_gets_tumnis_made_folder(
             )
         )
         async with tenant_session(ws.ctx) as s:
-            again = await knowledge.ensure_project_folder(s, project.id, net=SELF_HOSTED)  # type: ignore[attr-defined]  # red until P1-15 lands
+            again = await knowledge.ensure_project_folder(s, project.id, net=SELF_HOSTED)
         assert again is not None
         assert again.root_path == folder.root_path
     finally:

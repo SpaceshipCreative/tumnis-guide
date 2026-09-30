@@ -1273,6 +1273,17 @@ async def add_version(s: AsyncSession, document_id: UUID, data: bytes, body_md: 
     return version_id
 
 
+async def latest_version_hash(s: AsyncSession, document_id: UUID) -> bytes | None:
+    """The sha256 of the Document's latest version, None when it has none."""
+    latest = await s.scalar(
+        select(_versions.c.content_hash)
+        .where(_versions.c.document_id == document_id)
+        .order_by(_versions.c.version_no.desc())
+        .limit(1)
+    )
+    return bytes(latest) if latest is not None else None
+
+
 async def create_file_document(  # the Document's columns
     s: AsyncSession,
     project_id: UUID,

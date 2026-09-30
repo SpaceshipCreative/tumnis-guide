@@ -69,7 +69,7 @@ async def test_manifest_includes_tumnis_made_and_opted_in_only(
         )
 
     async with tenant_session(ws.ctx) as s:
-        sources = await knowledge.backup_sources(s)  # type: ignore[attr-defined]  # red until P1-15 lands
+        sources = await knowledge.backup_sources(s)
 
     got = {(src.project_id, src.location_id, src.source, src.dest, src.mode) for src in sources}
     assert got == {

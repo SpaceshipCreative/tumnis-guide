@@ -120,8 +120,8 @@ async def test_versions_kept_on_outside_edit(
         await runner.sync()
         doc_id, _version = runner._doc_by_path("uploads/terms.txt")
         async with tenant_session(knowledge_ws.ctx) as s:
-            versions = await knowledge.list_document_versions(s, doc_id)  # type: ignore[attr-defined]  # red until P1-15 lands
-            first = await knowledge.get_document_version(s, versions[0].id)  # type: ignore[attr-defined]  # red until P1-15 lands
+            versions = await knowledge.list_document_versions(s, doc_id)
+            first = await knowledge.get_document_version(s, versions[0].id)
     finally:
         await runner.close()
 

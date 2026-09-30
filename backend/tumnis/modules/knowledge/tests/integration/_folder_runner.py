@@ -99,15 +99,15 @@ class FolderRunner:
     async def start(self, project: str = "acme-site") -> None:
         from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
         from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
-        from tumnis.modules.knowledge import sync  # type: ignore[attr-defined]  # noqa: PLC0415
+        from tumnis.modules.knowledge import sync  # noqa: PLC0415
         from tumnis.modules.projects import api as projects  # noqa: PLC0415
 
         sync.configure(net=SELF_HOSTED)
         self._restore.append(lambda: sync.configure(net=None))
         previous = sync.use(clock=self.clock, extraction=self._record_extraction)
         self._restore.append(lambda: sync.use(clock=previous[0], extraction=previous[1]))
-        knowledge.use_backend_hook(lambda _row, built: RecordingStorage(built, self.storage_log))  # type: ignore[attr-defined]  # red until P1-15 lands
-        self._restore.append(lambda: knowledge.use_backend_hook(None))  # type: ignore[attr-defined]  # red until P1-15 lands
+        knowledge.use_backend_hook(lambda _row, built: RecordingStorage(built, self.storage_log))
+        self._restore.append(lambda: knowledge.use_backend_hook(None))
 
         async with tenant_session(self.ws.ctx) as s:
             location = await knowledge.create_location(
@@ -120,7 +120,7 @@ class FolderRunner:
                 s, self.ws.ctx.actor, projects.ProjectCreate(name=project), now=self.clock.now()
             )
             self.project_id = created.id
-            folder = await knowledge.ensure_project_folder(s, created.id, net=SELF_HOSTED)  # type: ignore[attr-defined]  # red until P1-15 lands
+            folder = await knowledge.ensure_project_folder(s, created.id, net=SELF_HOSTED)
         assert folder is not None
         self.folder_root = folder.root_path
         self.storage_log.clear()
@@ -319,7 +319,7 @@ class FolderRunner:
 
         doc_id = self._doc_by_title(title)[0] if title else self._doc_by_path(path or "")[0]
         async with tenant_session(self.ws.ctx) as s:
-            await knowledge.trash_document(s, doc_id)  # type: ignore[attr-defined]  # red until P1-15 lands
+            await knowledge.trash_document(s, doc_id)
 
     async def tumnis_edit_document(self, path: str, body: str, error: str) -> None:
         from tumnis.core.errors import ProblemError  # noqa: PLC0415
@@ -348,8 +348,12 @@ class FolderRunner:
         from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
 
         async with tenant_session(self.ws.ctx) as s:
-            await knowledge.place_upload(  # type: ignore[attr-defined]  # red until P1-15 lands
-                s, self.project_id, name, chunks(content.encode()), net=SELF_HOSTED
+            await knowledge.place_upload(
+                s,
+                self.project_id,  # type: ignore[arg-type]  # set by the scenario's setup
+                name,
+                chunks(content.encode()),
+                net=SELF_HOSTED,
             )
 
     def remember(self, name: str, path: str | None = None, title: str | None = None) -> None:
@@ -363,7 +367,7 @@ class FolderRunner:
         from tumnis.modules.knowledge import workflows  # noqa: PLC0415
 
         with SetWorkflowID(f"scenario-sync-{uuid.uuid4()}"):
-            return await workflows.folder_sync(str(self.ws.id), str(self.location_id))  # type: ignore[attr-defined]  # red until P1-15 lands
+            return await workflows.folder_sync(str(self.ws.id), str(self.location_id))
 
     # --- Database reads ------------------------------------------------------------------
 

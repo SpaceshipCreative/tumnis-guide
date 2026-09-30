@@ -25,6 +25,7 @@ import asyncio
 import hashlib
 import logging
 from collections.abc import Awaitable, Callable, Iterable, Mapping
+from datetime import date
 from pathlib import PurePosixPath
 from typing import Any, Final, Literal
 from uuid import UUID
@@ -114,7 +115,7 @@ def net() -> NetPolicy:
     from tumnis.settings import Settings  # noqa: PLC0415
 
     try:
-        return Settings().net_policy()  # type: ignore[call-arg]  # read from the environment
+        return Settings().net_policy()  # read from the environment
     except ValidationError:  # no deployment settings (in-process tests): the default mode
         return NetPolicy(mode="self-hosted")
 
@@ -168,7 +169,7 @@ async def _head(backend: StorageBackend, path: str) -> str:
     return got[:HEAD_BYTES].decode("utf-8", errors="ignore")
 
 
-def _prev(row: Mapping[str, Any]) -> Prev:
+def _prev(row: Mapping[Any, Any]) -> Prev:
     return Prev(
         path=row["path"],
         size=row["size"],
@@ -181,7 +182,7 @@ def _prev(row: Mapping[str, Any]) -> Prev:
     )
 
 
-def local_bytes(doc: Mapping[str, Any]) -> bytes:
+def local_bytes(doc: Mapping[Any, Any]) -> bytes:
     """What Tumnis would write for the Document: a note under its frontmatter, any other
     Document its text."""
     if doc["kind"] == "text":
@@ -189,7 +190,7 @@ def local_bytes(doc: Mapping[str, Any]) -> bytes:
     return (doc["body_md"] or "").encode()
 
 
-def _local(doc: Mapping[str, Any], record: Mapping[str, Any] | None) -> Local:
+def _local(doc: Mapping[Any, Any], record: Mapping[Any, Any] | None) -> Local:
     if doc["kind"] == "text":
         digest = hashlib.sha256(local_bytes(doc)).hexdigest()
     else:
@@ -217,7 +218,7 @@ class _Scan:
         self.folders: list[RowMapping] = []
 
 
-async def _list(backend: StorageBackend, folder: Mapping[str, Any], scan: _Scan) -> None:
+async def _list(backend: StorageBackend, folder: Mapping[Any, Any], scan: _Scan) -> None:
     root = folder["root_path"]
     cursor: str | None = None
     while True:
@@ -231,7 +232,7 @@ async def _list(backend: StorageBackend, folder: Mapping[str, Any], scan: _Scan)
             return
 
 
-def _differs(stat: FileStat, record: Mapping[str, Any] | None) -> bool:
+def _differs(stat: FileStat, record: Mapping[Any, Any] | None) -> bool:
     return record is None or (stat.size, stat.mtime, stat.etag) != (
         record["size"],
         record["mtime"],
@@ -322,7 +323,11 @@ def _item(  # one plan entry, spelled out
     }
 
 
-async def plan(workspace_id: str, location_id: str) -> list[dict[str, Any]]:  # noqa: PLR0912
+_Entry = tuple[str, Prev | None, str | None, Local | None, str | None]
+# (path, prev, listed path, local, renamed from)
+
+
+async def plan(workspace_id: str, location_id: str) -> list[dict[str, Any]]:
     """Every decision for the location that does something, in path order."""
     ctx, loc = _ctx(workspace_id), UUID(location_id)
     scan = _Scan()
@@ -338,65 +343,92 @@ async def plan(workspace_id: str, location_id: str) -> list[dict[str, Any]]:  # 
                 await _list(backend, folder, scan)
             await _hash_changed(backend, scan, etag_is_hash=kind == "server_path")
         taken = await api.taken_paths(s, loc)
-        roots = {f["project_id"]: f["root_path"] for f in scan.folders}
-        root_of_path = {p: roots[pid] for p, pid in scan.project_of.items()}
-
-        prevs = {path: _prev(row) for path, row in scan.records.items()}
-        missing = [prev for path, prev in prevs.items() if path not in scan.files]
-        new = [
-            (path, _remote(stat, scan.hashes.get(path)), scan.ids.get(path))
-            for path, stat in scan.files.items()
-            if path not in prevs
-        ]
-        pairs = [
-            (old, moved)
-            for old, moved in pair_renames(missing, new)
-            if _same_folder(old, moved, roots.values())
-        ]
-        renamed = {moved: old for old, moved in pairs}
-        gone = {old for old, _moved in pairs}
         taken |= {p.casefold() for p in scan.files}
-        siblings = set(scan.files) | set(scan.records)
+        roots = {f["project_id"]: f["root_path"] for f in scan.folders}
+        entries = _listed_entries(scan, roots)
+        entries += await _unwritten_entries(s, loc, scan, roots, entries=entries, taken=taken)
+    siblings = set(scan.files) | set(scan.records) | {e[0] for e in entries}
+    return _decide(scan, roots, entries, siblings, today)
 
-        entries: list[tuple[str, Prev | None, str | None, Local | None, str | None]] = []
-        used: set[UUID] = set()  # Documents the plan has placed already
-        for path in sorted(scan.files):
-            old = renamed.get(path)
-            record = scan.records.get(old or path)
-            prev = prevs[old].model_copy(update={"path": path}) if old else prevs.get(path)
-            doc_id = record["document_id"] if record is not None else None
-            if record is None:
-                found = scan.ids.get(path)
-                doc = scan.docs.get(found) if found is not None else None
-                if (
-                    doc is not None
-                    and doc["kind"] == "text"
-                    and doc["id"] not in {r["document_id"] for r in scan.records.values()}
-                    and doc["project_id"] == scan.project_of[path]
-                ):
-                    doc_id = doc["id"]  # a note written before its record (a crash)
-            if doc_id is not None:
-                used.add(doc_id)
-            entries.append((path, prev, path, _local_of(scan, doc_id, record), old))
-        for path, prev in sorted(prevs.items()):
-            if path in scan.files or path in gone:
-                continue
-            record = scan.records[path]
-            if record["document_id"] is not None:
-                used.add(record["document_id"])
-            entries.append((path, prev, None, _local_of(scan, record["document_id"], record), None))
-        for doc_id, doc in sorted(scan.docs.items(), key=lambda kv: str(kv[0])):
-            if doc_id in used or doc["deleted_at"] is not None or doc["kind"] != "text":
-                continue
-            root = roots.get(doc["project_id"])
-            if root is None:
-                continue
-            path = await api.note_path(
-                s, loc, root, doc["title"], document_id=doc_id, backend=None, taken=taken
-            )
-            siblings.add(path)
-            entries.append((path, None, None, _local_of(scan, doc_id, None), None))
 
+def _listed_entries(scan: _Scan, roots: Mapping[UUID, str]) -> list[_Entry]:
+    """One entry per listed file (renames paired) and per record whose file is gone."""
+    prevs = {path: _prev(row) for path, row in scan.records.items()}
+    missing = [prev for path, prev in prevs.items() if path not in scan.files]
+    new = [
+        (path, _remote(stat, scan.hashes.get(path)), scan.ids.get(path))
+        for path, stat in scan.files.items()
+        if path not in prevs
+    ]
+    pairs = [
+        (old, moved)
+        for old, moved in pair_renames(missing, new)
+        if _same_folder(old, moved, roots.values())
+    ]
+    renamed = {moved: old for old, moved in pairs}
+    gone = {old for old, _moved in pairs}
+    linked = {r["document_id"] for r in scan.records.values()}
+    entries: list[_Entry] = []
+    for path in sorted(scan.files):
+        old = renamed.get(path)
+        record = scan.records.get(old or path)
+        prev = prevs[old].model_copy(update={"path": path}) if old else prevs.get(path)
+        doc_id = record["document_id"] if record is not None else None
+        if record is None:
+            found = scan.ids.get(path)
+            doc = scan.docs.get(found) if found is not None else None
+            if (
+                doc is not None
+                and doc["kind"] == "text"
+                and doc["id"] not in linked
+                and doc["project_id"] == scan.project_of[path]
+            ):
+                doc_id = doc["id"]  # a note written before its record (a crash)
+        entries.append((path, prev, path, _local_of(scan, doc_id, record), old))
+    for path, prev in sorted(prevs.items()):
+        if path in scan.files or path in gone:
+            continue
+        record = scan.records[path]
+        entries.append((path, prev, None, _local_of(scan, record["document_id"], record), None))
+    return entries
+
+
+async def _unwritten_entries(  # the notes no entry places yet
+    s: AsyncSession,
+    loc: UUID,
+    scan: _Scan,
+    roots: Mapping[UUID, str],
+    *,
+    entries: list[_Entry],
+    taken: set[str],
+) -> list[_Entry]:
+    """One entry per live note of a project on the location that has no file yet, at the
+    free path its title gives."""
+    used = {e[3].document_id for e in entries if e[3] is not None}
+    used |= {r["document_id"] for r in scan.records.values() if r["document_id"] is not None}
+    found: list[_Entry] = []
+    for doc_id, doc in sorted(scan.docs.items(), key=lambda kv: str(kv[0])):
+        if doc_id in used or doc["deleted_at"] is not None or doc["kind"] != "text":
+            continue
+        root = roots.get(doc["project_id"])
+        if root is None:
+            continue
+        path = await api.note_path(
+            s, loc, root, doc["title"], document_id=doc_id, backend=None, taken=taken
+        )
+        found.append((path, None, None, _local_of(scan, doc_id, None), None))
+    return found
+
+
+def _decide(
+    scan: _Scan,
+    roots: Mapping[UUID, str],
+    entries: list[_Entry],
+    siblings: set[str],
+    today: date,
+) -> list[dict[str, Any]]:
+    """The plan: each entry's decision, leaving out what writes nothing (bar renames) and
+    a file already unindexed."""
     items = []
     for path, prev, listed, local, old in entries:
         stat = scan.files.get(listed) if listed is not None else None
@@ -427,7 +459,6 @@ async def plan(workspace_id: str, location_id: str) -> list[dict[str, Any]]:  # 
                 rename_from=old,
             )
         )
-    del root_of_path
     return items
 
 
@@ -447,7 +478,7 @@ def _project_of(
     return None
 
 
-def _local_of(scan: _Scan, doc_id: UUID | None, record: Mapping[str, Any] | None) -> Local | None:
+def _local_of(scan: _Scan, doc_id: UUID | None, record: Mapping[Any, Any] | None) -> Local | None:
     if doc_id is None:
         return None
     doc = scan.docs.get(doc_id)
@@ -492,9 +523,10 @@ class _Apply:
     def __init__(  # the decision and its world
         self,
         s: AsyncSession,
+        *,
         backend: StorageBackend,
         location_id: UUID,
-        item: Mapping[str, Any],
+        item: Mapping[Any, Any],
         record: RowMapping | None,
         doc: RowMapping | None,
     ) -> None:
@@ -579,7 +611,7 @@ class _Apply:
         )
         self.extract.append([str(version_id), path])
 
-    async def from_folder(self, doc: Mapping[str, Any], data: bytes, *, restore: bool) -> int:
+    async def from_folder(self, doc: Mapping[Any, Any], data: bytes, *, restore: bool) -> int:
         """The Document's next version from the folder's bytes; its new row version."""
         if doc["kind"] == "text":
             body: str | None = note_body(data.decode("utf-8", errors="replace"))
@@ -601,18 +633,13 @@ class _Apply:
             self.extract.append([str(version_id), self.path])
         return version
 
-    async def snapshot(self, doc: Mapping[str, Any]) -> None:
+    async def snapshot(self, doc: Mapping[Any, Any]) -> None:
         """A note's text as a version, unless its latest version already holds it."""
         if doc["kind"] != "text":
             return
         body = (doc["body_md"] or "").encode()
-        latest = await self.s.scalar(
-            select(api._versions.c.content_hash)  # knowledge's own table
-            .where(api._versions.c.document_id == doc["id"])
-            .order_by(api._versions.c.version_no.desc())
-            .limit(1)
-        )
-        if latest is None or bytes(latest) != hashlib.sha256(body).digest():
+        latest = await api.latest_version_hash(self.s, doc["id"])
+        if latest != hashlib.sha256(body).digest():
             await api.add_version(self.s, doc["id"], body, doc["body_md"] or "")
 
     # Actions ---------------------------------------------------------------------------------
@@ -703,7 +730,8 @@ class _Apply:
 
     async def adopt(self) -> None:
         doc = self.the_doc()
-        assert self.remote is not None and self.local is not None  # noqa: S101  # row 3
+        assert self.remote is not None  # noqa: S101  # row 3
+        assert self.local is not None  # noqa: S101
         stat = await self.backend.stat(self.path)
         if stat is None:
             raise _Stale
@@ -830,7 +858,7 @@ class _Apply:
         await self.drop_record()
 
 
-def _unchanged(item: Mapping[str, Any], record: RowMapping | None, doc: RowMapping | None) -> bool:
+def _unchanged(item: Mapping[Any, Any], record: RowMapping | None, doc: RowMapping | None) -> bool:
     """The record and the Document still hold what the plan saw."""
     prev = item["prev"]
     if (prev is None) != (record is None):
@@ -845,12 +873,11 @@ def _unchanged(item: Mapping[str, Any], record: RowMapping | None, doc: RowMappi
         return True
     if doc is None:
         return False
-    return (
-        doc["version"] == local["version"] and (doc["deleted_at"] is not None) == local["trashed"]
-    )
+    same: bool = doc["version"] == local["version"]
+    return same and (doc["deleted_at"] is not None) == local["trashed"]
 
 
-async def apply(workspace_id: str, location_id: str, item: Mapping[str, Any]) -> list[list[str]]:
+async def apply(workspace_id: str, location_id: str, item: Mapping[Any, Any]) -> list[list[str]]:
     """Apply one planned decision; the [version id, path] pairs to extract."""
     loc = UUID(location_id)
     async with tenant_session(_ctx(workspace_id)) as s:
@@ -889,7 +916,9 @@ async def apply(workspace_id: str, location_id: str, item: Mapping[str, Any]) ->
             )
         try:
             async with api.open_backend(s, loc, net=net()) as backend:
-                work = _Apply(s, backend, loc, item, record, doc)
+                work = _Apply(
+                    s, backend=backend, location_id=loc, item=item, record=record, doc=doc
+                )
                 await work.run()
         except _Stale:
             await s.rollback()
@@ -928,6 +957,8 @@ async def locations() -> list[tuple[str, str]]:
     found: list[tuple[str, str]] = []
     for workspace_id in workspaces:
         async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
-            ids = await s.scalars(select(_locations.c.id).where(_locations.c.deleted_at.is_(None)))
+            ids: Iterable[UUID] = await s.scalars(
+                select(_locations.c.id).where(_locations.c.deleted_at.is_(None))
+            )
             found += [(str(workspace_id), str(i)) for i in ids]
     return found

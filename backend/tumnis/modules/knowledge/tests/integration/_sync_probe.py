@@ -35,4 +35,4 @@ def _counting(row: Any, _built: Any) -> CountingStorage:
 
 
 if os.environ.get(LOG_ENV):
-    api.use_backend_hook(_counting)  # type: ignore[attr-defined]  # red until P1-15 lands
+    api.use_backend_hook(_counting)
