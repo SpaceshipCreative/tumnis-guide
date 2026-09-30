@@ -1,135 +1,112 @@
-# HANDOFF: P2-04 (dispatch_run and the run view), continuation c3 next
+# HANDOFF: P2-04 (dispatch_run and the run view), continuation c4 next
 
-Branch `wp/P2-04` (pushed to `origin/wp/P2-04`). Based on main at cf20116 (#106); main had
-not moved at c2. **No PR is open yet.** No CodeRabbit review, no CI run on a PR yet.
-Scratch folder for the next agent: `$TMPDIR/P2-04-c3/`.
+**PR #111** https://github.com/SpaceshipCreative/tumnis-guide/pull/111, branch `wp/P2-04`, open.
+It includes main up to 9fb5496 (#108: P2-00 acceptance, with A2.1 J3.spec.ts and
+phase2.ts/testHooks.ts). CodeRabbit reviewed once, when the PR opened; don't request a new
+full review unless it's needed (quota).
+Scratch folder for the next agent: `$TMPDIR/P2-04-c4/`. Copy these from
+`/tmp/claude-1002/P2-04-c3/`: `check.sh` (make check with the SEMGREP_* vars; fix the
+paths), `unmark.py` (removes one named test's `xfail(strict)` marker) and `crshow.sh`.
 
-## Commits
+## Commits in c3 (after c2's e01b695)
 
-| Commit | What |
+| SHA | What |
 | --- | --- |
-| 38f6010 | c0: backend spec tests (red) + `_runs.py` helpers |
-| b6939c8 | c1: rules, migrations, api, payloads, workflows, frontend red specs (WIP) |
-| e3e7e34 | c2: subscribers, result decision, ws result path, sweep signal, routes, `post_result`, fixtures + `make gen`, `run` live entity |
-| (this commit) | c2: authz/MCP sweep helpers for runs and `post_result`, RunOut trimmed, RunView/ResultItem/useRunEvents + queue wiring, T-02/T-14/T-15/T-16 markers removed, handoff |
+| 69c1398 | merge origin/main (#108) |
+| bdb67bf | `_runs.workflow_status` reads DBOS on a plain thread (the sync API refused a running loop: the T-01 bug) |
+| 3c726bc | semgrep `tumnis-sql-fstring`: no f-string in the agents_0005 partial index (security job) |
+| 10bc95b | `_runs.settle()`: `world.request` and `wait_until` wait until the test relay has claimed every committed outbox row. The relay runs on the test loop, and FakeRunner's sync `wait_for` blocks that loop, so run.requested was never relayed. This was the root cause of most red tests. |
+| b0d0730 | `finish_run_in`: waiting_on_human, then running, then succeeded, for a result posted while waiting (CodeRabbit critical). New test `test_run_edges.py::test_result_while_waiting_on_human_succeeds` |
+| 842234a | `_apply_result_decision`: rerun in a savepoint. A refusal other than run_already_active is logged, and the rejection stands (CodeRabbit major). Test `test_reject_kept_when_the_rerun_is_refused` |
+| ccdd715 | `ws._insert_event` locks the run row before its event takes a seq, so events commit in seq order (CodeRabbit major) |
+| a14e5d5 | ResultItem: Escape or Cancel refocuses the card (CodeRabbit minor). New `ResultItem.focus.test.tsx` |
+| 12d143b | markers removed: T-04, T-08, T-09, T-10, T-11, T-12, T-13, T-18. All XPASS(strict) in CI run 36780630695 |
+| 0b6c07f | `worker.main` calls `install_peppers(settings)`. The worker issues task tokens, and only the CLI boot checks installed the peppers. Likely why the kill tests never reached their killpoints (60 s timeouts) |
+| 3bdb084 | `settle()` also waits until the world's fake runner holds a `run` message for every running run of its profiles. prepare_run marks a run running before its packet reaches the runner, which raced T-01's final `len(runs()) == 3` |
+| 19f4e89 | useRunEvents keeps the events and cursor in the query cache (CodeRabbit nitpick) |
+| (this) | handoff |
 
-`make check` passes at this commit (run through `$TMPDIR/P2-04-c2/check.sh`, which sets the
-three SEMGREP_* variables under $TMPDIR; copy it to your own folder).
+## Spec-test state
 
-## State of the spec tests
+- GREEN, markers removed: T-02, T-03, T-04, T-08, T-09, T-10, T-11, T-12, T-13, T-14,
+  T-15, T-16, T-17, T-18, T-19.
+- STILL `xfail(strict)`: T-01 (`test_two_runs_per_project_third_waits`) and T-05, T-06,
+  T-07 (`test_dispatch_kill.py`, 3 params). CI run 36782373006 (commit 3bdb084) showed 4 F
+  in the progress dots, but it was CANCELLED at 10:16 (98%) by the job's 10-minute
+  timeout, before the summary printed. The 4 F may be these 4 as XPASS(strict), but that
+  isn't proven. Remove their markers only after a completed CI run lists them as
+  `FAILED ... [XPASS(strict)]` (use unmark.py). I asked for one rerun of that run's failed
+  job, but this handoff push cancels it. Read the CI run for the handoff commit instead.
+- DENIED (don't route around it): removing markers in a diagnostic commit to see tracebacks
+  ([Security Test Removal]), and reading Makefile/pytest config for that purpose. The
+  coordinator knows. The only allowed feedback is CI XPASS(strict) plus reading the code.
 
-- GREEN, markers removed: T-03, T-17, T-19 (unit, c1); T-02 `test_other_project_not_blocked`
-  and T-14 `test_double_run_click_refused` (XPASS(strict) in c2's local `make test-int`);
-  T-15 RunView and T-16 ResultItem (Vitest; `test.fails` -> `test`, prettier reflowed the
-  RunView body's indentation only; watch spec-guard on the PR).
-- STILL xfail (strict), reasons unknown (xfailed tests print no traceback): T-01, T-04,
-  T-18, T-08, T-05/06/07 (kill), T-09, T-10, T-11, T-12, T-13. The coordinator now forbids
-  more than one full local `make test-int` per continuation (Docker overload): use CI as the
-  authority. To see their tracebacks, open the PR and read CI, or temporarily remove markers
-  in a throwaway commit on the PR branch and read CI's integration log, then put back the
-  markers of the ones still red (never weaken an assertion).
-- c2's local `make test-int` (before the fixes in this commit) also failed these, now fixed:
-  `tests/meta/test_authz_matrix.py` (no LOOKUP_TARGETS entry for runs: added `run_row` in
-  tests/meta/_authz.py), `tests/meta/test_mcp_*` (no `post_result` sample: added
-  `running_run` + `_post_result` in tests/_mcp.py; the sample posts for the newest task
-  token's run of the project, so the scope matrix's task-token caller posts for its own run).
-  Environment-only failures seen locally (not ours): folder_sync s3 (Docker 500),
-  pgbouncer (Docker 500), typeahead latency (load), rclone (known), decisions
-  test_log_never_holds_input_text (CancelledError under load).
+## CI state
 
-## Remaining steps (in order)
+- The integration job is over its locked 10-min budget. Main's pytest takes 7:06; ours
+  took 9:14 in run 2 (kill tests at 60 s each) and was cancelled in run 3. The coordinator
+  has been told. Scott decision 8 allows a 15-min budget only through a spec-change PR the
+  coordinator labels. NEVER edit ci.yml or test_ci_config.py here.
+- Lever inside the helpers: about 10 s of teardown in each test that leaves a dispatch_run
+  parked in recv (DBOS destroy joins background threads with a 10 s timeout). Idea: at
+  `relay()` exit, cancel the active dispatch_run workflows with
+  `DBOS.cancel_workflow_async(str(run_id))` (DBOS only, no DB rows change). First check in
+  dbos/_sys_db.py that cancel wakes a parked recv. Do NOT emit run.signal{cancel} there:
+  T-13 pages events after relay exit and a "Stopped by you" line breaks it.
+- The kill tests should now take about 10 s each, not 60, if the pepper fix was their cause.
+- Everything else was green on 3bdb084: lint, unit, contract, security (after 3c726bc),
+  e2e, performance, spec-guard, traceability. `preview` stays pending (expected).
 
-1. Push (done by this commit), open PR1: `gh pr create --base main --head wp/P2-04 --title
-   "[P2-04] impl: dispatch_run and the run view" --body-file <file>`; then
-   `gh pr comment <url> --body "@coderabbitai review"` once. Decide: this branch now also
-   holds the frontend (RunView, ResultItem, useRunEvents, queue wiring). Recommended: keep it
-   in PR1 and leave PR2 (`wp/P2-04-impl-2`) for A2.1 support: the drawer Run button and
-   `run` search param on `projects.$projectId`, files touched in the run view, the
-   compose-stack fake runner hooks `POST /v1/test/fakes/runner/script` `{task_title, runs}`
-   and `GET /v1/test/fakes/runner/last-packet` (coordinator: they are P2-04's, R-37; see
-   `frontend/e2e/phase2.ts` on `origin/wp/P2-00-spec` for the script shape: stream,
-   upload_artifact, result, ask_human steps), `signals.py` refactor, `supervise_run`,
-   `reconcile_runs` (hourly on maintenance), settings wiring for `configure_runs`.
-2. Read CI; fix the still-red P2-04 integration tests one at a time; remove each marker
-   only after it passed. Likely suspects to check first:
-   - T-01: `workflow_status(waiting) == "ENQUEUED"` with the in-test DBOS; the runs queue
-     now polls every 0.5 s (`RUNS_QUEUE_POLL_S`).
-   - T-09/10/11/12: REST `POST /v1/runs/{id}/result` with the packet's task token (the
-     `run_world` key must give `tasks:write`); `accept_result` then `run.signal{result}`.
-     T-09 posts twice: if the run ends (token revoked) before the second post, it 401s
-     (race; report to Scott, never weaken).
-   - T-13: `ws._insert_event` now stores stream text through `api.log_text`; paging by seq.
-   - T-04/T-18: `configure_runs` in the test process; `_supervise` caps; closing line.
-   - T-08: sweep emits `run.signal{runner_lost}` for dispatch_run runs (workflow_id =
-     run id), in `sweep_workspace_step`.
-   - T-05..07 kill tests: worker subprocess; ws `_result` (test process) goes through
-     `accept_result` and the worker's relay delivers the signal.
-3. Review loop (pr-review-loop.md), MERGE-READY to main with SendMessage.
+## Review threads
 
-## Decisions settled in c2 (binding; c0 1-15 and c1's list still hold)
+All 4 CodeRabbit inline threads were replied to and resolved: seq ordering (ccdd715),
+refused rerun (842234a), waiting to succeeded (b0d0730), and focus (a14e5d5). The nitpick
+(useRunEvents cache) is fixed in 19f4e89; no thread to resolve. Check for new comments
+after the next push.
 
-- `accept_result`: a caller holding a task token posts only for its run (403
-  `run_mismatch`); a key with NO run may post for any run it can reach. Needed by the
-  locked P2-01 sweeps (T-P2-01-05/10/11 require every write op to succeed for an
-  ALL_SCOPES key with no run). PR-body deviation from the plan's "task token must belong
-  to inp.run_id".
-- ws `_result`: a run whose `workflow_id == str(run_id)` (dispatch_run) takes
-  `_dispatched_run_result` (succeeded -> `accept_result` in a savepoint, ProblemError
-  logged; else or invalid output -> `run.signal{agent_failed}`); never DBOS. A `cancelled`
-  answer after the run ended is acked and dropped (the log stays closed).
-- DBOS 3.1.0 `DBOS.send_async` from inside a step sends directly (no step recorded) with
-  the idempotency key (checked in dbos/_core.py `send_bulk`); `deliver_signal` needs no
-  fresh-context wrapper. `register_queue(..., polling_interval_sec=)` is the poll kwarg.
-- Part A alignment: `result.posted` carries summary and links; `run.started` status
-  `running`; `run.finished` `duration_s`.
-- `RunOut` trimmed to what the run view reads (error and active_seconds_used default), so
-  the locked RunView fixture validates against the generated zod.
-- RunView elapsed counts in 5-second steps (the locked T-15 checks 1:10 then 1:15 under
-  `shouldAdvanceTime`, where real time drifts the fake clock by about a second).
-- ResultItem: standalone = feedback field + Reject disabled until typed (T-16). In the
-  review queue `confirmReject`: Reject opens the field, "Confirm reject" sends (A2.1 on
-  wp/P2-00-spec clicks Reject first, then fills Feedback, then Confirm reject). Enter and r
-  stop propagation so the queue does not act twice.
-- `POST /v1/tasks/{task_id}/run` is `session_or_key` + `tasks:write` + idempotent +
-  `lookup:tasks`; run routes use `lookup:runs`.
+## Remaining steps
 
-## PR-body deviations to record (c1's list plus these)
+1. Read CI for the handoff commit. If integration completes, remove the markers of every
+   P2-04 test listed as XPASS(strict) and push.
+2. If the budget still cancels it, try the teardown lever above, then report to main.
+3. Update the PR body (`gh pr edit 111 --body-file`). The test section should list the
+   markers now off. Add these deviations: seq lock on every run-event writer; waiting to
+   running to succeeded in finish_run_in; rerun refusal keeps the rejection; worker
+   installs peppers (shared file backend/tumnis/worker.py). Test helpers: settle semantics.
+   Then add these Scott items: the pepper gap and the budget.
+4. When CI is green and there are no open threads: SendMessage main "#111 MERGE-READY at
+   <sha>".
+5. PR2 (`wp/P2-04-impl-2`, from wp/P2-04): the A2.1 pieces. These are the drawer Run button
+   and the `run` search param on projects.$projectId, files touched in the run view, and
+   the compose fake runner hooks `POST /v1/test/fakes/runner/script` `{task_title, runs}`
+   and `GET /v1/test/fakes/runner/last-packet` (`{packet, run_messages}`; see
+   frontend/e2e/testHooks.ts and phase2.ts on main). Also `supervise_run` and signals.py,
+   reconcile_runs, and the configure_runs settings. Un-fail A2.1 only if it passes.
 
-- No deduplication_id on the partitioned `runs` queue (DBOS 3.1.0 refuses it; Context7
-  /dbos-inc/dbos-docs); deterministic workflow id + partial unique index.
-- No `priority_enabled` in DBOS 3.1.0 `register_queue`; priority via `SetEnqueueOptions`.
-- `over_ceiling` takes the ceiling as a parameter; `dispatch_run(workspace_id, run_id)`;
-  P2-09 pause/held not built.
-- `result` review item added in `agents.accept_result`; `results.task_id` ON DELETE CASCADE;
-  `run_events.seq` one global sequence; `result/task_result/1` schema not registered.
-- Keyless `post_result` allowed (above); ResultItem `confirmReject` mode; 5 s elapsed step.
-- `run_skill` partitions `runs` by profile id, `dispatch_run` by project id: a project using
-  both can reach 4 at once.
-- `send_to_agent` replayed after `inside_send` issues a second token; run end revokes both.
-- Migrations: `agents_0005` (after agents_0004), `tasks_0007` (after tasks_0006). P1-08 also
-  adds a tasks_0007: whichever merges second re-chains to tasks_0008 (coordinator).
-- Docs cited: Context7 /dbos-inc/dbos-docs (queue tutorial: partitioned queues, priority;
-  client.send idempotency_key), dbos 3.1.0 source (`_dbos.py register_queue`,
-  `_core.py send_bulk`).
+## Decisions and deviations
+
+c0, c1 and c2 hold (see git history of this file: a4ef89b, b6939c8, e01b695), plus the c3
+fixes above. For the PR-body deviations list, see e01b695's HANDOFF and the current PR body.
 
 ## Scott / coordinator items
 
-- SPEC CONFLICT to raise: T-P2-04-16 (ResultItem: Reject disabled until feedback typed)
-  vs A2.1 on wp/P2-00-spec (click Reject, then fill Feedback, then "Confirm reject").
-  Resolved by the queue-only `confirmReject` mode; flag it anyway.
-- A2.1 (`frontend/e2e/journeys/J3.spec.ts`) is P2-00's; after it merges, merge main and
-  un-fail A2.1 only if it passes (needs PR2's pieces above).
-- R-29's 24-hour ceiling remains a plan default flagged for Scott.
-- Open: who mints a profile's API key (keyless profiles dispatch without a token).
-- T-09 second-post race vs token revocation (report, never weaken).
+- NEW: the worker never installed the API-key peppers. Fixed in shared file
+  backend/tumnis/worker.py (0b6c07f).
+- NEW: the integration CI budget (above).
+- Spec conflict: T-16 standalone Reject vs A2.1's Confirm-reject flow (queue-only
+  `confirmReject` mode).
+- R-29's 24 h ceiling is a plan default. Open: who mints a profile's API key.
+- T-09 double post vs token revocation race (it passed in CI; still note it).
+- Denied diagnostic (above).
 
 ## Verify commands
 
 ```bash
-bash $TMPDIR/P2-04-c3/check.sh      # a copy of c2's check.sh: make check with SEMGREP_* set
-cd backend && uv run ruff check . && uv run mypy tumnis && uv run lint-imports
+bash $TMPDIR/P2-04-c4/check.sh            # make check
+cd backend && uv run ruff check . && uv run mypy tumnis
 cd frontend && npx vitest run src/components/runs src/components/review src/lib
-make test-int                       # bare, at most once per continuation; CI is the judge
+gh pr checks 111 --repo SpaceshipCreative/tumnis-guide
+gh api --allow-escape-sequences repos/SpaceshipCreative/tumnis-guide/actions/jobs/<job>/logs   # needs allowed_domains *.blob.core.windows.net
 ```
 
 Push with `/usr/bin/git push origin HEAD:wp/P2-04`. Use `/usr/bin/git`. Never merge.
