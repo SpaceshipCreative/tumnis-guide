@@ -53,46 +53,43 @@ const TOOLS = {
   coolify: null,
 };
 
-test.fails(
-  "[P2-10][FR-5.12] lists servers read-only with match state",
-  async () => {
-    const { AgentTools } = await load<AgentToolsModule>("./AgentTools");
-    for (const viewport of VIEWPORTS) {
-      server.use(
-        http.get("*/v1/agents/profiles/:id/tools", ({ params }) =>
-          params.id === PROFILE_ID
-            ? HttpResponse.json(TOOLS)
-            : HttpResponse.json({ code: "not_found" }, { status: 404 }),
-        ),
-      );
-      const { unmount } = renderWithProviders(
-        <AgentTools profileId={PROFILE_ID} />,
-        { viewport },
-      );
+test("[P2-10][FR-5.12] lists servers read-only with match state", async () => {
+  const { AgentTools } = await load<AgentToolsModule>("./AgentTools");
+  for (const viewport of VIEWPORTS) {
+    server.use(
+      http.get("*/v1/agents/profiles/:id/tools", ({ params }) =>
+        params.id === PROFILE_ID
+          ? HttpResponse.json(TOOLS)
+          : HttpResponse.json({ code: "not_found" }, { status: 404 }),
+      ),
+    );
+    const { unmount } = renderWithProviders(
+      <AgentTools profileId={PROFILE_ID} />,
+      { viewport },
+    );
 
-      const servers = await screen.findByRole("list", { name: "MCP servers" });
-      const allowed = within(servers).getByRole("listitem", { name: "tumnis" });
-      expect(within(allowed).getByText("Allowed")).toBeInTheDocument();
-      expect(
-        within(allowed).getByText(/tumnis\.example\.org/),
-      ).toBeInTheDocument();
-      const extra = within(servers).getByRole("listitem", { name: "shell" });
-      expect(within(extra).getByText("Not allowed")).toBeInTheDocument();
-      expect(extra).toHaveAttribute("data-drift", "extra");
-      expect(allowed).not.toHaveAttribute("data-drift");
+    const servers = await screen.findByRole("list", { name: "MCP servers" });
+    const allowed = within(servers).getByRole("listitem", { name: "tumnis" });
+    expect(within(allowed).getByText("Allowed")).toBeInTheDocument();
+    expect(
+      within(allowed).getByText(/tumnis\.example\.org/),
+    ).toBeInTheDocument();
+    const extra = within(servers).getByRole("listitem", { name: "shell" });
+    expect(within(extra).getByText("Not allowed")).toBeInTheDocument();
+    expect(extra).toHaveAttribute("data-drift", "extra");
+    expect(allowed).not.toHaveAttribute("data-drift");
 
-      const missing = screen.getByRole("list", { name: "Missing servers" });
-      expect(within(missing).getByText("coolify")).toBeInTheDocument();
-      expect(screen.getByText(/beta\/app/)).toBeInTheDocument();
-      expect(screen.getByText(/Hermes 0\.9\.1/)).toBeInTheDocument();
-      expect(screen.getByText(/profile 1\.0\.0/)).toBeInTheDocument();
+    const missing = screen.getByRole("list", { name: "Missing servers" });
+    expect(within(missing).getByText("coolify")).toBeInTheDocument();
+    expect(screen.getByText(/beta\/app/)).toBeInTheDocument();
+    expect(screen.getByText(/Hermes 0\.9\.1/)).toBeInTheDocument();
+    expect(screen.getByText(/profile 1\.0\.0/)).toBeInTheDocument();
 
-      // Read-only: nothing here edits the profile (FR-5.12).
-      expect(screen.queryAllByRole("button")).toHaveLength(0);
-      expect(screen.queryAllByRole("textbox")).toHaveLength(0);
-      expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
-      expect(screen.queryAllByRole("combobox")).toHaveLength(0);
-      unmount();
-    }
-  },
-);
+    // Read-only: nothing here edits the profile (FR-5.12).
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    unmount();
+  }
+});

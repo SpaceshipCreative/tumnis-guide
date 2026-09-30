@@ -1230,7 +1230,7 @@ export type ProfileToolsOut = {
   /**
    * Foreign
    */
-  foreign: Array<ForeignReach>;
+  foreign?: Array<ForeignReach>;
   github: TokenReach | null;
   /**
    * Hermes Version

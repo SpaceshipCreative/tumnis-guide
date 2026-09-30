@@ -187,7 +187,7 @@ class ProfileToolsOut(BaseModel):
     missing: list[str]
     github: TokenReach | None
     coolify: TokenReach | None
-    foreign: list[ForeignReach]
+    foreign: list[ForeignReach] = []  # named foreign reach; the tokens' lists stand alone
 
 
 class AgentProfileOut(BaseModel):

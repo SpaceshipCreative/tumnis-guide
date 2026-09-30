@@ -2272,6 +2272,7 @@
             "type": "array"
           },
           "foreign": {
+            "default": [],
             "items": {
               "$ref": "#/components/schemas/ForeignReach"
             },
@@ -2391,8 +2392,7 @@
           "extra",
           "missing",
           "github",
-          "coolify",
-          "foreign"
+          "coolify"
         ],
         "title": "ProfileToolsOut",
         "type": "object"

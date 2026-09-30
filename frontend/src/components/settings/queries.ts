@@ -1,6 +1,7 @@
 // The reads each Settings section makes (P0-26), shared by the sections and the route's
 // loader so a prefetch fills exactly the query the section then reads.
 import {
+  agentsGetProfileToolsOptions,
   agentsListProfilesOptions,
   agentsListRunnersOptions,
   authGetAccountOptions,
@@ -41,3 +42,6 @@ export const runnersQuery = () =>
   agentsListRunnersOptions({ query: { limit: 100 } });
 export const profilesQuery = () =>
   agentsListProfilesOptions({ query: { limit: 100 } });
+// Settings > Agents > a profile's tools (P2-10, FR-5.12): read-only.
+export const profileToolsQuery = (profileId: string) =>
+  agentsGetProfileToolsOptions({ path: { profile_id: profileId } });

@@ -1034,7 +1034,7 @@ export const zProfileToolsOut = z.object({
   checked_at: z.iso.datetime().nullable(),
   coolify: zTokenReach.nullable(),
   extra: z.array(z.string()),
-  foreign: z.array(zForeignReach),
+  foreign: z.array(zForeignReach).optional().default([]),
   github: zTokenReach.nullable(),
   hermes_version: z.string().nullable(),
   missing: z.array(z.string()),
