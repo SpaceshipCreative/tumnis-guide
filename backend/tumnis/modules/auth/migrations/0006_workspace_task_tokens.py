@@ -21,7 +21,14 @@ phase = "expand"
 
 
 def upgrade() -> None:
-    op.alter_column("task_tokens", "project_id", existing_type=UUID(as_uuid=True), nullable=True)
+    # squawk's ban-drop-not-null guards readers that assume a value. The readers of this
+    # column are auth's own (the resolver function, which yields {NULL}: no project, and
+    # `keys._row`); the previous release reads {NULL} as a limit no project is in, and
+    # never issues a project-less token, so running both releases side by side is safe.
+    op.execute(
+        "-- squawk-ignore ban-drop-not-null\n"
+        "ALTER TABLE task_tokens ALTER COLUMN project_id DROP NOT NULL"
+    )
 
 
 def downgrade() -> None:
