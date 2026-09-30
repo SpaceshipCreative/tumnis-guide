@@ -31,6 +31,9 @@ EVENTS_WORKER_CONCURRENCY = 8  # A9
 EVENTS_QUEUE_POLL_S = 0.2
 RELAY_BATCH = 100  # plan default
 POLL_SECONDS = 5.0  # plan default ("polls every few seconds as a backstop")
+# A direct subscriber only starts its own workflow; past this, the relay stops waiting
+# for it and queues its delivery instead, so one slow start never holds the relay's claim.
+DIRECT_TIMEOUT_S = 2.0
 
 
 class EventSchemaError(ValueError):
@@ -227,10 +230,12 @@ async def _enqueue(subscriber: str, envelope: EventEnvelope) -> None:
 
 
 async def _run_direct(sub: Subscriber, envelope: EventEnvelope) -> bool:
-    """A direct subscriber's handler, run by the relay; False (logged) if it raised, so the
-    caller queues the ordinary delivery. Its exception never reaches the relay's claim."""
+    """A direct subscriber's handler, run by the relay; False (logged) if it raised or took
+    longer than `DIRECT_TIMEOUT_S`, so the caller queues the ordinary delivery. Its
+    exception never reaches the relay's claim."""
     try:
-        await run_subscriber(envelope, sub.name)
+        async with asyncio.timeout(DIRECT_TIMEOUT_S):
+            await run_subscriber(envelope, sub.name)
     except Exception:
         log.exception("direct subscriber %s failed; queueing its delivery", sub.name)
         return False

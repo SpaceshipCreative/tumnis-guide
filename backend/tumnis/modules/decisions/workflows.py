@@ -81,7 +81,7 @@ async def load_label_task(workspace_id: str, task_id: str) -> dict[str, Any] | N
         project={"name": project.name, "goal": project.goal},
         reserved_judgments=reserved,
     )
-    return {"inputs": inputs, "project_id": str(task.project_id)}
+    return {"inputs": inputs, "project_id": str(task.project_id), "title": task.title}
 
 
 @DBOS.step()
@@ -100,8 +100,9 @@ async def decide_label(
 
 @DBOS.step()
 async def apply_label(
-    workspace_id: str, task_id: str, project_id: str, decided: dict[str, Any]
+    workspace_id: str, task_id: str, project_id: str, title: str, decided: dict[str, Any]
 ) -> Outcome:
+    """Writes nothing for a title the task no longer has (`for_title`)."""
     d = api.Decision.model_validate(decided)
     if d.provider == "none":
         return "unanswered"  # decide queued the decision_unavailable item itself
@@ -120,6 +121,7 @@ async def apply_label(
                 reason=reason,
                 confidence=confidence,
                 decision_id=d.decision_id,
+                for_title=title,
             )
             return "skipped" if change is None else "applied"
         if label is not None:
@@ -132,6 +134,7 @@ async def apply_label(
                 confidence=confidence,
                 decision_id=d.decision_id,
                 probabilities=probabilities,
+                for_title=title,
             )
             return "suggested" if kept else "skipped"
         task = await tasks.get_task(s, UUID(task_id))
@@ -157,7 +160,7 @@ async def label_task(workspace_id: str, task_id: str) -> Outcome:
     if loaded is None:
         return "skipped"
     decided = await decide_label(workspace_id, task_id, loaded["inputs"], loaded["project_id"])
-    return await apply_label(workspace_id, task_id, loaded["project_id"], decided)
+    return await apply_label(workspace_id, task_id, loaded["project_id"], loaded["title"], decided)
 
 
 async def _start(workspace_id: UUID, task_id: UUID, event_id: UUID) -> None:
@@ -174,7 +177,9 @@ async def start_label(workspace_id: UUID, task_id: UUID, *, event_id: UUID) -> N
     workflow it started (DBOS runs a workflow ID once). The workflow's first step skips a
     task that is gone or whose label the user chose."""
     # A fresh context: DBOS refuses to start a workflow from inside a step, which is where
-    # the handler runs when the relay falls back to a queued delivery.
-    await asyncio.create_task(
-        _start(workspace_id, task_id, event_id), context=contextvars.Context()
+    # the handler runs when the relay falls back to a queued delivery. Shielded: if the
+    # relay stops waiting (its direct-handler timeout), the start still completes, and
+    # the queued delivery's own start finds this workflow.
+    await asyncio.shield(
+        asyncio.create_task(_start(workspace_id, task_id, event_id), context=contextvars.Context())
     )

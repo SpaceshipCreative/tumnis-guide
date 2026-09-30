@@ -5,6 +5,7 @@ module switch and the queueing are stand-ins."""
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
@@ -82,11 +83,16 @@ def relay(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
         seen["ran"].append(("testdirect.failing", envelope.event_id))
         raise RuntimeError("cannot start")
 
+    async def slow(envelope: Any) -> None:
+        seen["ran"].append(("testdirect.slow", envelope.event_id))
+        await asyncio.sleep(5)
+
     async def queued(envelope: Any) -> None:  # pragma: no cover  # only ever queued here
         raise AssertionError("a queued subscriber's handler runs in its delivery")
 
     events.subscribe(EVENT, name="testdirect.fine", direct=True)(fine)
     events.subscribe(EVENT, name="testdirect.failing", direct=True)(failing)
+    events.subscribe(EVENT, name="testdirect.slow", direct=True)(slow)
     events.subscribe(EVENT, name="testdirect.queued")(queued)
 
     async def enabled(module: str, workspace_id: uuid.UUID) -> bool:
@@ -96,12 +102,18 @@ def relay(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
         seen["queued"].append(subscriber)
 
     monkeypatch.setattr(modules, "enabled", enabled)
+    monkeypatch.setattr(events, "DIRECT_TIMEOUT_S", 0.05)
     monkeypatch.setattr(events, "_enqueue", enqueue)
     monkeypatch.setattr(db, "direct_sessionmaker", lambda: lambda: seen["session"])
     try:
         yield seen
     finally:
-        for name in ("testdirect.fine", "testdirect.failing", "testdirect.queued"):
+        for name in (
+            "testdirect.fine",
+            "testdirect.failing",
+            "testdirect.slow",
+            "testdirect.queued",
+        ):
             events._subscribers.pop(name, None)
 
 
@@ -124,13 +136,18 @@ def test_subscribe_records_direct() -> None:
 @pytest.mark.req("FR-3.3")
 @pytest.mark.wp("P1-07")
 async def test_relay_runs_direct_subscribers_and_queues_the_rest(relay: dict[str, Any]) -> None:
-    """A direct handler runs in the relay's pass and is not queued; one that raises is
-    queued as an ordinary delivery; a plain subscriber is queued; the row is marked sent."""
+    """A direct handler runs in the relay's pass and is not queued; one that raises, or
+    outlasts `DIRECT_TIMEOUT_S`, is queued as an ordinary delivery; a plain subscriber is
+    queued; the row is marked sent."""
     from tumnis.core.events import relay_once  # noqa: PLC0415
 
     claimed = await relay_once()
 
     assert claimed == 1
-    assert [name for name, _ in relay["ran"]] == ["testdirect.failing", "testdirect.fine"]
-    assert relay["queued"] == ["testdirect.failing", "testdirect.queued"]
+    assert [name for name, _ in relay["ran"]] == [
+        "testdirect.failing",
+        "testdirect.fine",
+        "testdirect.slow",
+    ]
+    assert relay["queued"] == ["testdirect.failing", "testdirect.queued", "testdirect.slow"]
     assert relay["session"].marked == [[1]]

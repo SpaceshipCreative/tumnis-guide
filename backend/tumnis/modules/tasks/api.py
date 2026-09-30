@@ -867,6 +867,11 @@ async def _label_overridden(
 # --- AI labels (P1-07, FR-4.1, R-08) ---------------------------------------------------------
 
 
+def _retitled(row: RowMapping, for_title: str | None) -> bool:
+    """Whether the task's title is no longer the one the AI's answer was decided for."""
+    return for_title is not None and row["title"] != for_title
+
+
 async def set_ai_label(
     s: AsyncSession,
     task_id: UUID,
@@ -876,16 +881,19 @@ async def set_ai_label(
     reason: str,
     confidence: float | None,
     decision_id: UUID,
+    for_title: str | None = None,
     now: datetime | None = None,
 ) -> UUID | None:
     """The AI's label, unless a person chose one first: the row is locked and updated only
     while `label_source` is not `user`, so a human override committed while the decision
-    ran always wins (None, nothing written). Clears any suggestion, bumps the version,
+    ran always wins (None, nothing written). With `for_title` (the title the label was
+    decided for), nothing is written once the title has changed: the retitle's own label
+    is on its way (FR-4.1). Clears any suggestion, bumps the version,
     records the change (R-09, undoable by a person) and returns its id; emits
     `task.updated` with `label`, `label_reason` and `label_source` and marks the task
     changed for /ws."""
     row = await _row(s, task_id, lock=True)
-    if not may_auto_label(row["label_source"]):
+    if not may_auto_label(row["label_source"]) or _retitled(row, for_title):
         return None
     values = {
         "label": label,
@@ -932,14 +940,15 @@ async def set_label_suggestion(
     confidence: float | None,
     decision_id: UUID,
     probabilities: Mapping[str, float] | None = None,
+    for_title: str | None = None,
     now: datetime | None = None,
 ) -> bool:
     """A low-confidence label: kept as `label_suggestion` (the label stays pending, R-08)
     with one open `low_confidence_label` review item for the human, unless a person has
-    chosen the label (False, nothing written). Emits `task.updated` with
-    `label_suggestion`."""
+    chosen the label, or the title is no longer `for_title` (False, nothing written).
+    Emits `task.updated` with `label_suggestion`."""
     row = await _row(s, task_id, lock=True)
-    if not may_auto_label(row["label_source"]):
+    if not may_auto_label(row["label_source"]) or _retitled(row, for_title):
         return False
     updated = await _versioned(
         s,
