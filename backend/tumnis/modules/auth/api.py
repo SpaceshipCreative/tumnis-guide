@@ -1325,15 +1325,16 @@ async def revoke_task_tokens_for_run(ctx: WorkspaceContext, run_id: UUID, *, now
 
 
 async def task_token_run(principal: Principal) -> UUID | None:
-    """The run a task token belongs to (the agent surface's caller, R-31); None for any
-    other principal."""
+    """The run a live task token belongs to (the agent surface's caller, R-31); None for
+    any other principal, and for a token revoked since a process cached its lookup."""
     if principal.kind != "task_token" or principal.subject_id is None:
         return None
     async with tenant_session(principal.workspace_context()) as s:
         run_id: UUID | None = await s.scalar(
             select(tokens.TASK_TOKENS.c.run_id).where(
                 # nosemgrep: tumnis-secret-eq  # a filter on the token row's id, not a secret
-                tokens.TASK_TOKENS.c.id == principal.subject_id
+                tokens.TASK_TOKENS.c.id == principal.subject_id,
+                tokens.TASK_TOKENS.c.revoked_at.is_(None),
             )
         )
     return run_id
