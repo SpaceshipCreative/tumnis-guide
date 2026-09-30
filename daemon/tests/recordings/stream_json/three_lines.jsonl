@@ -1,0 +1,5 @@
+{"type": "session", "session_id": "sess-stream-0001", "profile": "acme-site", "model": "example-model"}
+{"type": "assistant", "text": "Reading the packet for the enrich skill."}
+{"type": "assistant", "text": "Looking up last month's invoice."}
+{"type": "assistant", "text": "Drafting the first action."}
+{"type": "result", "subtype": "success", "is_error": false, "text": "{\"first_action\": \"Open last month's invoice in Wave and duplicate it\", \"estimate_minutes\": 20, \"acceptance_criteria\": [\"The March invoice is sent to Acme\"]}", "session_id": "sess-stream-0001", "duration_ms": 2100, "usage": {"input_tokens": 900, "output_tokens": 120}}
