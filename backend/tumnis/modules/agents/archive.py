@@ -20,7 +20,7 @@ from typing import Any, Final
 from uuid import UUID, uuid5
 
 import structlog
-from sqlalchemy import Table, delete, exists, select
+from sqlalchemy import Table, delete, exists, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -287,6 +287,29 @@ async def purge_archive(workspace_id: UUID, project_id: UUID) -> None:
         await blobs.delete_blobs(s, module=MODULE, project_id=project_id)
 
 
+async def withdraw_command(workspace_id: UUID, command: str, archive_id: str) -> bool:
+    """Withdraw the `archive` or `restore` command of `archive_id` when its runner never
+    received it (still `queued`: the agent server has been offline all along), so the
+    workflow waiting for its answer can let the one `archive` queue slot go; True when
+    withdrawn. A command the runner has received stays: its answer is on the way."""
+    message_id = (
+        archive_message_id(archive_id) if command == "archive" else restore_message_id(archive_id)
+    )
+    async with tenant_session(_ctx(workspace_id)) as s:
+        withdrawn = await s.scalar(
+            update(_messages)
+            .where(
+                _messages.c.message_id == message_id,
+                _messages.c.direction == "out",
+                _messages.c.status == "queued",
+                _messages.c.deleted_at.is_(None),
+            )
+            .values(deleted_at=SystemClock().now())
+            .returning(_messages.c.id)
+        )
+    return withdrawn is not None
+
+
 async def dispatch_allowed(s: AsyncSession, profile_id: UUID) -> bool:
     """Whether runs may be dispatched to the profile: never while its project is archived
     or its archive or unarchive is under way (P2-18). A master profile has no project."""
@@ -302,6 +325,7 @@ _HOOKS: dict[str, projects.ArchiveHook] = {
     "agents.send_restore": send_restore,
     "agents.finish_restore": finish_restore,
     "agents.purge_archive": purge_archive,
+    "agents.withdraw_command": withdraw_command,
 }
 for _name, _hook in _HOOKS.items():
     projects.register_archive_hook(_name, _hook)

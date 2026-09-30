@@ -43,7 +43,9 @@ _log = structlog.get_logger(__name__)
 
 ARCHIVE_QUEUE: Final = "archive"
 ARCHIVE_CONCURRENCY: Final = 1
-WAIT_SLICE_S: Final = 3600  # one recv at a time; an offline agent server is waited for
+# One recv at a time. After a slice without an answer, a command the agent server never
+# received (offline all along) is withdrawn, so it cannot hold the one queue slot.
+WAIT_SLICE_S: Final = 3600
 ARCHIVE_TOPIC_PREFIX: Final = "archive:"
 RESTORE_TOPIC_PREFIX: Final = "restore:"
 
@@ -108,9 +110,33 @@ async def send_archive_step(workspace_id: str, project_id: str, workflow_id: str
 
 @DBOS.step()
 async def store_archive_step(workspace_id: str, project_id: str, done: dict[str, Any]) -> bool:
-    kept = await _step(workspace_id, project_id, "archiving", "agents.store_archive", done)
+    """The daemon's archive facts, kept whatever the state is now: the home is packed and
+    out of the live list, so a later unarchive must restore it and a purge delete it."""
+    kept = await _hook("agents.store_archive", UUID(workspace_id), UUID(project_id), done)
     faults.killpoint(KILL_PROFILE_STORED)
     return bool(kept)
+
+
+@DBOS.step()
+async def withdraw_step(workspace_id: str, command: str, archive_id: str) -> bool:
+    """True when the command was withdrawn: its runner never received it."""
+    withdrawn = await _hook("agents.withdraw_command", UUID(workspace_id), command, archive_id)
+    return bool(withdrawn)
+
+
+async def _answer(workspace_id: str, command: str, archive_id: str) -> dict[str, Any] | None:
+    """The runner's answer to `command` (in the workflow body, R-30); None once a slice has
+    passed and the command was withdrawn, never having reached the runner."""
+    topic = ARCHIVE_TOPIC_PREFIX if command == "archive" else RESTORE_TOPIC_PREFIX
+    while True:
+        done: dict[str, Any] | None = await DBOS.recv_async(
+            f"{topic}{archive_id}", timeout_seconds=WAIT_SLICE_S
+        )
+        if done is not None:
+            return done
+        if await withdraw_step(workspace_id, command, archive_id):
+            _log.warning("runner_command_withdrawn", command=command, archive_id=archive_id)
+            return None
 
 
 @DBOS.step()
@@ -151,12 +177,8 @@ async def archive_project(workspace_id: str, project_id: str, actor: str) -> str
     assert workflow_id is not None  # noqa: S101  # inside a workflow
     archive_id = await send_archive_step(workspace_id, project_id, workflow_id)
     if archive_id is not None:
-        done = None
-        while done is None:  # recv in the workflow body, never in a step (R-30)
-            done = await DBOS.recv_async(
-                f"{ARCHIVE_TOPIC_PREFIX}{archive_id}", timeout_seconds=WAIT_SLICE_S
-            )
-        if not await store_archive_step(workspace_id, project_id, done):
+        done = await _answer(workspace_id, "archive", archive_id)
+        if done is None or not await store_archive_step(workspace_id, project_id, done):
             _log.warning("profile_not_archived", project_id=project_id, reply=done)
     while await run_logs_step(workspace_id, project_id):
         pass
@@ -230,12 +252,8 @@ async def unarchive_project(workspace_id: str, project_id: str, actor: str) -> s
         pass
     archive_id = await send_restore_step(workspace_id, project_id, workflow_id)
     if archive_id is not None:
-        done = None
-        while done is None:  # R-30
-            done = await DBOS.recv_async(
-                f"{RESTORE_TOPIC_PREFIX}{archive_id}", timeout_seconds=WAIT_SLICE_S
-            )
-        if not await finish_restore_step(workspace_id, project_id, done):
+        done = await _answer(workspace_id, "restore", archive_id)
+        if done is None or not await finish_restore_step(workspace_id, project_id, done):
             raise ProfileNotRestored(f"profile archive {archive_id} did not restore")
     finished = await finish_unarchive_step(workspace_id, project_id, actor)
     return "unarchived" if finished else "skipped"

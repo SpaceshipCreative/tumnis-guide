@@ -177,9 +177,12 @@ async def put_blob(
     raw: bytes,
     level: int = LEVEL,
 ) -> None:
-    """Store `raw` compressed; a blob by that name already there is kept as it is."""
+    """Store `raw` compressed. A blob by that name already there (a replayed step) is kept
+    as it is when it holds the same bytes; BlobCorrupt when it holds other bytes, before
+    the caller goes on to delete the live rows it thinks the blob holds."""
     stored = compress(raw, level)
-    await s.execute(
+    digest = sha256_hex(raw)
+    inserted = await s.scalar(
         insert(_t)
         .values(
             module=module,
@@ -189,13 +192,26 @@ async def put_blob(
             codec=CODEC,
             raw_size=len(raw),
             stored_size=len(stored),
-            sha256=sha256_hex(raw),
+            sha256=digest,
             data=stored,
         )
         .on_conflict_do_nothing(
             index_elements=["workspace_id", "module", "kind", "project_id", "ref"]
         )
+        .returning(_t.c.id)
     )
+    if inserted is not None:
+        return
+    held = await s.scalar(
+        select(_t.c.sha256).where(
+            _t.c.module == module,
+            _t.c.kind == kind,
+            _t.c.project_id == project_id,
+            _t.c.ref == ref,
+        )
+    )
+    if held != digest:
+        raise BlobCorrupt(f"blob {module}/{kind}/{ref} of {project_id} holds other content")
 
 
 def _which(module: str, kind: str | None, project_id: UUID) -> list[Any]:
