@@ -7,6 +7,8 @@
   `never_seen` until its first register.
 - Profile and runner names: `NAME_RE` (also what the runner protocol accepts), so a name
   can never carry a path or a shell trick; a few names are reserved.
+- Project profiles (P1-06): `profile_name_for` names a project's Hermes profile after the
+  project, and `provision_outcome` turns the runner's answer into the profile's status.
 - `select_runner`: the runner a daemon-transport profile runs on, when it is online and
   lists the profile in its inventory.
 - Skill replies (P1-05): `enrichment_errors` and `planning_errors`, the cross-field checks
@@ -15,7 +17,8 @@
 """
 
 import re
-from collections.abc import Sequence
+import unicodedata
+from collections.abc import Sequence, Set
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Final, Literal, Protocol
@@ -28,6 +31,9 @@ SKILL_RE: Final = r"^[a-z][a-z0-9-]{0,40}$"
 HEARTBEAT_S: Final = 15  # architecture: every 15 seconds
 MISSED_BEATS: Final = 3
 RESERVED_PROFILE_NAMES: Final = frozenset({"default", "root", "hermes", "tumnis"})
+MASTER_PROFILE_NAME: Final = "tumnis-master"  # the master's profile; never a project's
+PROFILE_NAME_MAX: Final = 40  # a project profile's generated name (plan default)
+FALLBACK_PROFILE_NAME: Final = "project"
 
 Label = Literal["human", "ai", "hybrid"]  # the task labels (FR-4.1)
 ESTIMATED_LABELS: Final[frozenset[str]] = frozenset({"human", "hybrid"})
@@ -114,6 +120,47 @@ def validate_profile_name(name: str) -> str:
     if name in RESERVED_PROFILE_NAMES:
         raise InvalidProfileName(f"{name!r} is a reserved name")
     return name
+
+
+def profile_name_for(project_name: str, taken: Set[str]) -> str:
+    """The Hermes profile name for a project: lower-case and ASCII-folded, runs of anything
+    but [a-z0-9] as one dash, no dash at either end, at most PROFILE_NAME_MAX characters;
+    'project' when nothing is left. A name in `taken`, reserved, or the master's gets
+    '-2', '-3' … (cut so the suffix fits)."""
+    folded = unicodedata.normalize("NFKD", project_name).encode("ascii", "ignore").decode()
+    slug = re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")
+    base = slug[:PROFILE_NAME_MAX].rstrip("-") or FALLBACK_PROFILE_NAME
+    unavailable = set(taken) | RESERVED_PROFILE_NAMES | {MASTER_PROFILE_NAME}
+    if base not in unavailable:
+        return base
+    n = 2
+    while True:
+        suffix = f"-{n}"
+        candidate = base[: PROFILE_NAME_MAX - len(suffix)].rstrip("-") + suffix
+        if candidate not in unavailable:
+            return candidate
+        n += 1
+
+
+class ProvisionAnswer(Protocol):
+    """What `provision_outcome` reads of the runner's `provision_result`."""
+
+    @property
+    def status(self) -> str: ...
+
+
+ProvisionOutcome = Literal["ready", "not_provisioned"]
+
+
+def provision_outcome(
+    result: ProvisionAnswer | None, *, mode: Literal["create", "link"]
+) -> ProvisionOutcome:
+    """created or exists (create) and linked (link) -> ready; failed, an answer that does
+    not fit the mode, or no answer in time (None) -> not_provisioned."""
+    if result is None:
+        return "not_provisioned"
+    ok = {"create": {"created", "exists"}, "link": {"linked"}}[mode]
+    return "ready" if result.status in ok else "not_provisioned"
 
 
 def select_runner(
