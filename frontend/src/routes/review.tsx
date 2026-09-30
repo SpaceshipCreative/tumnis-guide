@@ -1,6 +1,7 @@
 // The review queue (P0-22 route; the screen arrives with P1-13). `kind` is a string
 // checked against the registry (R-05), not a closed enum: an unknown kind is dropped.
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import { useLayoutEffect } from "react";
 import * as z from "zod";
 
 import { Placeholder } from "../components/pages/Placeholder";
@@ -32,6 +33,13 @@ export const Route = createFileRoute("/review")({
   component: ReviewPage,
 });
 
+/** Marked once the review queue has rendered and takes input (P0-29 times it). */
+const REVIEW_READY_MARK = "tumnis:review-ready";
+
 function ReviewPage() {
+  // P1-13's screen keeps this mark, placed where its queue has rendered with data.
+  useLayoutEffect(() => {
+    performance.mark(REVIEW_READY_MARK);
+  }, []);
   return <Placeholder title="Review" />;
 }

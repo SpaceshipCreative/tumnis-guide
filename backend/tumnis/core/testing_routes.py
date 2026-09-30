@@ -14,7 +14,8 @@ from uuid import UUID
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from pydantic import AwareDatetime, BaseModel, model_validator
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tumnis.core.clock import OverridableClock
@@ -29,6 +30,9 @@ KEEP_TABLES = frozenset({"deployment_marker"})
 # The relay's claim table, locked before every other table (issue #51).
 OUTBOX = "outbox"
 _LOCK_OUTBOX = text("LOCK TABLE outbox IN ACCESS EXCLUSIVE MODE")
+# SQLSTATE deadlock_detected, and how many times a reset runs its TRUNCATE before giving up.
+DEADLOCK_DETECTED = "40P01"
+DEADLOCK_ATTEMPTS = 3
 # The statement-level guards of the append-only tables (pg_trigger.tgtype bit 32).
 _TRUNCATE_GUARDS = text(
     "SELECT c.relname, t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid"
@@ -38,45 +42,62 @@ _TRUNCATE_GUARDS = text(
 
 
 async def truncate_tables(owner_url: str) -> list[str]:
-    """TRUNCATE every table in `public` but the kept ones and Alembic's, as the owner."""
+    """TRUNCATE every table in `public` but the kept ones and Alembic's, as the owner.
+
+    The TRUNCATE locks the tables in name order, so a reader that holds a later table and
+    then reads an earlier one closes a lock cycle; Postgres aborts the TRUNCATE (P0-29: a
+    load-set reset in CI). The reader finishes once the TRUNCATE gives way, so the reset
+    tries again, up to `DEADLOCK_ATTEMPTS` times."""
     engine = create_async_engine(owner_url, poolclass=NullPool)
+    attempt = 1
     try:
-        async with engine.begin() as conn:
-            names = [
-                name
-                for (name,) in await conn.execute(
-                    text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
-                )
-                if name not in KEEP_TABLES and not name.startswith("alembic_version")
-            ]
-            if names:
-                quote = conn.dialect.identifier_preparer.quote
-                listed = ", ".join(quote(name) for name in sorted(names))
-                # Issue #51: `outbox` first, before any other lock. A relay pass holds its
-                # claim on `outbox` while it reads `module_flags` on another connection;
-                # a TRUNCATE that took `module_flags` first and then waited for the claim
-                # deadlocked with it, unseen by Postgres. Waiting here holds nothing the
-                # relay needs, and a claim that starts later waits for the reset.
-                if OUTBOX in names:
-                    await conn.execute(_LOCK_OUTBOX)
-                # The append-only tables (P0-15) refuse TRUNCATE by trigger, the owner's
-                # included; a reset empties their chains with everything else, the guards
-                # off only inside this transaction.
-                guards = (await conn.execute(_TRUNCATE_GUARDS)).all()
-                for table, trigger in guards:
-                    await conn.execute(
-                        # nosemgrep: tumnis-sql-fstring  # identifiers, quoted by the dialect
-                        text(f"ALTER TABLE {quote(table)} DISABLE TRIGGER {quote(trigger)}")
-                    )
-                # nosemgrep: tumnis-sql-fstring  # `listed` is quoted identifiers only
-                await conn.execute(text(f"TRUNCATE {listed} RESTART IDENTITY CASCADE"))
-                for table, trigger in guards:
-                    await conn.execute(
-                        # nosemgrep: tumnis-sql-fstring  # identifiers, quoted by the dialect
-                        text(f"ALTER TABLE {quote(table)} ENABLE TRIGGER {quote(trigger)}")
-                    )
+        while True:
+            try:
+                return await _truncate_once(engine)
+            except DBAPIError as error:
+                deadlock = getattr(error.orig, "sqlstate", None) == DEADLOCK_DETECTED
+                if not deadlock or attempt == DEADLOCK_ATTEMPTS:
+                    raise
+                attempt += 1
     finally:
         await engine.dispose()
+
+
+async def _truncate_once(engine: AsyncEngine) -> list[str]:
+    async with engine.begin() as conn:
+        names = [
+            name
+            for (name,) in await conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+            )
+            if name not in KEEP_TABLES and not name.startswith("alembic_version")
+        ]
+        if names:
+            quote = conn.dialect.identifier_preparer.quote
+            listed = ", ".join(quote(name) for name in sorted(names))
+            # Issue #51: `outbox` first, before any other lock. A relay pass holds its
+            # claim on `outbox` while it reads `module_flags` on another connection;
+            # a TRUNCATE that took `module_flags` first and then waited for the claim
+            # deadlocked with it, unseen by Postgres. Waiting here holds nothing the
+            # relay needs, and a claim that starts later waits for the reset.
+            if OUTBOX in names:
+                await conn.execute(_LOCK_OUTBOX)
+            # The append-only tables (P0-15) refuse TRUNCATE by trigger, the owner's
+            # included; a reset empties their chains with everything else, the guards
+            # off only inside this transaction.
+            guards = (await conn.execute(_TRUNCATE_GUARDS)).all()
+            for table, trigger in guards:
+                await conn.execute(
+                    # nosemgrep: tumnis-sql-fstring  # identifiers, quoted by the dialect
+                    text(f"ALTER TABLE {quote(table)} DISABLE TRIGGER {quote(trigger)}")
+                )
+            # nosemgrep: tumnis-sql-fstring  # `listed` is quoted identifiers only
+            await conn.execute(text(f"TRUNCATE {listed} RESTART IDENTITY CASCADE"))
+            for table, trigger in guards:
+                await conn.execute(
+                    # nosemgrep: tumnis-sql-fstring  # identifiers, quoted by the dialect
+                    text(f"ALTER TABLE {quote(table)} ENABLE TRIGGER {quote(trigger)}")
+                )
     return names
 
 
