@@ -1229,6 +1229,41 @@ def recordings() -> Callable[[str], list[Recording]]:
     return load_recordings
 
 
+# --- Hostile snippets (P2-02, SAF-1; shared with P2-11) ---------------------------------
+
+HOSTILE_SNIPPETS = BACKEND / "fixtures" / "hostile" / "snippets.yaml"
+
+
+@dataclass(frozen=True)
+class HostileSnippet:
+    """One hostile example: its text and a plain marker string inside it that must never
+    reach a prompt outside an `<untrusted-data>` block."""
+
+    name: str
+    why: str
+    input: str
+    marker: str
+
+
+@functools.cache
+def load_hostile_snippets() -> dict[str, HostileSnippet]:
+    """The twelve cases of backend/fixtures/hostile/snippets.yaml, by name (in file order;
+    usable at collection time, for parametrize)."""
+    import yaml  # noqa: PLC0415
+
+    data = yaml.safe_load(HOSTILE_SNIPPETS.read_text(encoding="utf-8"))
+    return {
+        name: HostileSnippet(name, case["why"], case["input"], case["marker"])
+        for name, case in data["cases"].items()
+    }
+
+
+@pytest.fixture
+def hostile_snippets() -> dict[str, HostileSnippet]:
+    """hostile_snippets["plain_close"].input -> the text (P2-02, P2-11)."""
+    return load_hostile_snippets()
+
+
 # --- Signed-in clients (P0-13) ----------------------------------------------------------
 
 

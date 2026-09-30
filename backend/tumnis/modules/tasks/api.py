@@ -49,6 +49,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import ScalarResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import rank, tenancy
@@ -1153,6 +1154,59 @@ async def link_context_item(
         target_url=item.target_url,
         tainted=item.tainted,
     )
+
+
+async def context_item_ids(s: AsyncSession, task_id: UUID) -> list[UUID]:
+    """The context items linked to the task, oldest link first (P2-02's task packet; 404
+    for a task the caller cannot see)."""
+    await _row(s, task_id)
+    rows: ScalarResult[UUID] = await s.scalars(
+        select(_links.c.context_item_id)
+        .where(_links.c.task_id == task_id, _live(_links))
+        .order_by(_links.c.created_at, _links.c.id)
+    )
+    return list(rows)
+
+
+class EstimateSample(BaseModel):
+    """A finished Human or Hybrid task's estimate beside its actual time (P2-02)."""
+
+    task_id: UUID
+    label: Label
+    estimate_minutes: int
+    actual_minutes: int
+
+
+ESTIMATE_HISTORY_LIMIT: Final = 10  # finished tasks a task packet carries (plan default)
+
+
+async def estimate_history(
+    s: AsyncSession, project_id: UUID, *, limit: int = ESTIMATE_HISTORY_LIMIT
+) -> list[EstimateSample]:
+    """The project's most recently finished Human and Hybrid tasks that have both an
+    estimate and an actual time, newest first (the task packet's estimate history)."""
+    rows = await s.execute(
+        select(_tasks.c.id, _tasks.c.label, _tasks.c.estimate_minutes, _tasks.c.actual_minutes)
+        .where(
+            _tasks.c.project_id == project_id,
+            _live(_tasks),
+            _tasks.c.label.in_(("human", "hybrid")),
+            _tasks.c.completed_at.is_not(None),
+            _tasks.c.estimate_minutes.is_not(None),
+            _tasks.c.actual_minutes.is_not(None),
+        )
+        .order_by(_tasks.c.completed_at.desc(), _tasks.c.id.desc())
+        .limit(limit)
+    )
+    return [
+        EstimateSample(
+            task_id=row.id,
+            label=row.label,
+            estimate_minutes=row.estimate_minutes,
+            actual_minutes=row.actual_minutes,
+        )
+        for row in rows
+    ]
 
 
 # --- Pull requests (P2-13, FR-12.1) -----------------------------------------------------------

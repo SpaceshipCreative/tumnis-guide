@@ -91,8 +91,12 @@ class FakeRunner:
         clock: FixedClock,
         hermes_version: str = "0.9.0",
         daemon_version: str = "0.1.0",
+        strict: bool = False,
     ) -> None:
         self.client = client
+        self.strict = strict  # P2-02: validate every packet and call back with its token
+        self.strict_failures: list[str] = []
+        self.callbacks: list[tuple[uuid.UUID, int]] = []  # (run, status of list_tasks)
         self.token = token
         self.runner_id = runner_id
         self.name = name
@@ -361,6 +365,11 @@ class FakeRunner:
         scripted = self._scripts.get((run.profile, run.skill))
         if scripted is None or run.profile in self._offline:
             return
+        if self.strict:
+            refused = self._strict_check(run)
+            if refused is not None:
+                self.strict_failures.append(refused)
+                scripted = Scripted(None, scripted.delay_ms, "failed", scripted.repeat)
         result = Result(
             **self._envelope(run.correlation_id),
             run_id=run.run_id,
@@ -388,6 +397,38 @@ class FakeRunner:
         timer.daemon = True
         self._timers.append(timer)
         timer.start()
+
+    # --- strict mode (P2-02) -------------------------------------------------------------
+
+    def check_packet(self, packet: dict[str, Any]) -> str | None:
+        """Why strict mode refuses the packet (schema, or no task token), None if it is fine."""
+        import json  # noqa: PLC0415
+
+        from jsonschema import Draft202012Validator  # noqa: PLC0415
+
+        from tests.fixtures import REPO_ROOT  # noqa: PLC0415
+
+        schema = json.loads((REPO_ROOT / "schemas/packet/v1/task_packet.json").read_text())
+        errors = sorted(e.message for e in Draft202012Validator(schema).iter_errors(packet))
+        if errors:
+            return f"packet does not validate: {errors[0]}"
+        callback = packet.get("callback") or {}
+        if not callback.get("task_token"):
+            return "packet carries no task token"
+        return None
+
+    def _strict_check(self, run: Run) -> str | None:
+        """Validates the packet, then calls `list_tasks` back with its token (the REST twin)
+        the way an agent would; None when both are fine."""
+        refused = self.check_packet(run.packet)
+        if refused is not None:
+            return refused
+        token = run.packet["callback"]["task_token"]
+        response = self.client.get("/v1/tasks", headers=runner_headers(token))
+        self.callbacks.append((run.run_id, response.status_code))
+        if response.status_code != 200:
+            return f"list_tasks callback answered {response.status_code}"
+        return None
 
     def _answer_health(self, check: Any) -> None:
         from tumnis.modules.agents.protocol import HealthReport  # noqa: PLC0415
@@ -553,6 +594,7 @@ class FakeRunnerFactory(Protocol):
         *,
         name: str = "homelab-hermes",
         connect: bool = True,
+        strict: bool = False,
     ) -> FakeRunner: ...
 
     def register_profile(
@@ -578,10 +620,17 @@ class _Factory:
         *,
         name: str = "homelab-hermes",
         connect: bool = True,
+        strict: bool = False,
     ) -> FakeRunner:
         runner_id, token = create_runner(self.workspace, self.clock, name)
         runner = FakeRunner(
-            self.client, token, runner_id, name=name, profiles=profiles, clock=self.clock
+            self.client,
+            token,
+            runner_id,
+            name=name,
+            profiles=profiles,
+            clock=self.clock,
+            strict=strict,
         )
         self.made.append(runner)
         if connect:
