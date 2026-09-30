@@ -81,6 +81,22 @@ export const zCalendarsIn = z.object({
 });
 
 /**
+ * Callback
+ *
+ * Where the agent calls back, and with what: the run's task token, valid until the
+ * run ends (null when the packet is read outside a run, `get_task_packet`).
+ */
+export const zCallback = z.object({
+  mcp_url: z.string(),
+  rest_base_url: z.string(),
+  task_token: z
+    .string()
+    .regex(/^tmt_[a-z2-7]{12}_[A-Za-z0-9_-]{43}$/)
+    .nullish(),
+  token_valid_until: z.literal("run_end").optional().default("run_end"),
+});
+
+/**
  * CommentIn
  */
 export const zCommentIn = z.object({
@@ -466,6 +482,22 @@ export const zPlannedBlockOut = z.object({
 });
 
 /**
+ * PolicySection
+ *
+ * What the agent may do without asking, and its run limits (FR-5.6, SAF-5). The action
+ * classes are the project policy's own vocabulary (projects.rules.GATED_DEFAULT).
+ */
+export const zPolicySection = z.object({
+  allowed: z.array(z.string()),
+  gated: z.array(z.string()),
+  max_delegation_depth: z.int().nullish(),
+  max_tasks_per_run: z.int().nullish(),
+  tainted_run_all_gated: z.boolean().optional().default(true),
+  time_cap_minutes: z.int().gte(1),
+  tool_allowlist: z.array(z.string()).optional().default([]),
+});
+
+/**
  * PolicySummary
  *
  * What an agent may do in the project without asking, and its run limits (FR-5.6).
@@ -823,6 +855,18 @@ export const zRotateIn = z.object({
 });
 
 /**
+ * RunKind
+ */
+export const zRunKind = z.enum([
+  "enrich",
+  "plan",
+  "task",
+  "proposal",
+  "stuck",
+  "notify",
+]);
+
+/**
  * RunnerCreated
  */
 export const zRunnerCreated = z.object({
@@ -893,6 +937,17 @@ export const zLocationIn = z.object({
   name: z.string().min(1).max(100),
   root: z.string().min(1).max(1024),
   s3: zS3ConfigIn.nullish(),
+});
+
+/**
+ * SchemaRef
+ *
+ * Names a @versioned model, e.g. ("enrichment", "result", 1).
+ */
+export const zSchemaRef = z.object({
+  family: z.string().max(32),
+  name: z.string().max(64),
+  version: z.int().gte(1),
 });
 
 /**
@@ -1142,6 +1197,29 @@ export const zBoardOut = z.object({
   columns: z.array(zBoardColumnOut),
   project_id: z.uuid(),
   threshold_min: z.int(),
+});
+
+/**
+ * TaskPacket
+ */
+export const zTaskPacket = z.object({
+  block_nonce: z
+    .string()
+    .regex(/^u-[0-9a-f]{16}$/)
+    .nullish(),
+  body: z.record(z.string(), z.unknown()),
+  callback: zCallback.nullish(),
+  correlation_id: z.string().max(128),
+  kind: zRunKind,
+  output_schema: zSchemaRef,
+  policy: zPolicySection.nullish(),
+  profile_id: z.uuid(),
+  prompt_text: z.string(),
+  run_id: z.uuid(),
+  schema_version: z.literal(1).optional().default(1),
+  skill: z.string().regex(/^[a-z][a-z0-9-]{0,40}$/),
+  tainted: z.boolean().optional().default(false),
+  timeout_s: z.int().gte(10).lte(3600),
 });
 
 /**
@@ -2321,6 +2399,20 @@ export const zTasksMoveTaskPath = z.object({
  * Successful Response
  */
 export const zTasksMoveTaskResponse = zTaskOut;
+
+export const zAgentsGetTaskPacketPath = z.object({
+  task_id: z.uuid(),
+});
+
+export const zAgentsGetTaskPacketQuery = z.object({
+  schema_version: z.int().nullish(),
+  kind: z.enum(["task", "proposal", "stuck"]).optional().default("task"),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsGetTaskPacketResponse = zTaskPacket;
 
 export const zTasksListPullRequestsPath = z.object({
   task_id: z.uuid(),

@@ -694,6 +694,310 @@
     "write": false
   },
   {
+    "description": "The task's packet as a run would get it: the task, its project's brief and passages, context items (with context:read), the policy and the callback (no token), with outside text inside untrusted-data blocks. `kind` is task (default), proposal or stuck.",
+    "input_schema": {
+      "properties": {
+        "kind": {
+          "default": "task",
+          "enum": [
+            "task",
+            "proposal",
+            "stuck"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "title": "GetTaskPacketIn",
+      "type": "object"
+    },
+    "master_only": false,
+    "name": "get_task_packet",
+    "output_schema": {
+      "$defs": {
+        "Callback": {
+          "additionalProperties": false,
+          "description": "Where the agent calls back, and with what: the run's task token, valid until the\nrun ends (null when the packet is read outside a run, `get_task_packet`).",
+          "properties": {
+            "mcp_url": {
+              "title": "Mcp Url",
+              "type": "string"
+            },
+            "rest_base_url": {
+              "title": "Rest Base Url",
+              "type": "string"
+            },
+            "task_token": {
+              "anyOf": [
+                {
+                  "pattern": "^tmt_[a-z2-7]{12}_[A-Za-z0-9_-]{43}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Task Token"
+            },
+            "token_valid_until": {
+              "const": "run_end",
+              "default": "run_end",
+              "title": "Token Valid Until",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mcp_url",
+            "rest_base_url"
+          ],
+          "title": "Callback",
+          "type": "object"
+        },
+        "PolicySection": {
+          "additionalProperties": false,
+          "description": "What the agent may do without asking, and its run limits (FR-5.6, SAF-5). The action\nclasses are the project policy's own vocabulary (projects.rules.GATED_DEFAULT).",
+          "properties": {
+            "allowed": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Allowed",
+              "type": "array"
+            },
+            "gated": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Gated",
+              "type": "array"
+            },
+            "max_delegation_depth": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Max Delegation Depth"
+            },
+            "max_tasks_per_run": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Max Tasks Per Run"
+            },
+            "tainted_run_all_gated": {
+              "default": true,
+              "title": "Tainted Run All Gated",
+              "type": "boolean"
+            },
+            "time_cap_minutes": {
+              "minimum": 1,
+              "title": "Time Cap Minutes",
+              "type": "integer"
+            },
+            "tool_allowlist": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Tool Allowlist",
+              "type": "array"
+            }
+          },
+          "required": [
+            "gated",
+            "allowed",
+            "time_cap_minutes"
+          ],
+          "title": "PolicySection",
+          "type": "object"
+        },
+        "RunKind": {
+          "enum": [
+            "enrich",
+            "plan",
+            "task",
+            "proposal",
+            "stuck",
+            "notify"
+          ],
+          "title": "RunKind",
+          "type": "string"
+        },
+        "SchemaRef": {
+          "additionalProperties": false,
+          "description": "Names a @versioned model, e.g. (\"enrichment\", \"result\", 1).",
+          "properties": {
+            "family": {
+              "maxLength": 32,
+              "title": "Family",
+              "type": "string"
+            },
+            "name": {
+              "maxLength": 64,
+              "title": "Name",
+              "type": "string"
+            },
+            "version": {
+              "minimum": 1,
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "family",
+            "name",
+            "version"
+          ],
+          "title": "SchemaRef",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "block_nonce": {
+          "anyOf": [
+            {
+              "pattern": "^u-[0-9a-f]{16}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Block Nonce"
+        },
+        "body": {
+          "additionalProperties": true,
+          "title": "Body",
+          "type": "object"
+        },
+        "callback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Callback"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "correlation_id": {
+          "maxLength": 128,
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/RunKind"
+        },
+        "output_schema": {
+          "$ref": "#/$defs/SchemaRef"
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolicySection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "profile_id": {
+          "format": "uuid",
+          "title": "Profile Id",
+          "type": "string"
+        },
+        "prompt_text": {
+          "title": "Prompt Text",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "skill": {
+          "pattern": "^[a-z][a-z0-9-]{0,40}$",
+          "title": "Skill",
+          "type": "string"
+        },
+        "tainted": {
+          "default": false,
+          "title": "Tainted",
+          "type": "boolean"
+        },
+        "timeout_s": {
+          "maximum": 3600,
+          "minimum": 10,
+          "title": "Timeout S",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "run_id",
+        "profile_id",
+        "skill",
+        "output_schema",
+        "correlation_id",
+        "timeout_s",
+        "prompt_text",
+        "body"
+      ],
+      "title": "TaskPacket",
+      "type": "object"
+    },
+    "rest": {
+      "method": "GET",
+      "path": "/v1/tasks/{task_id}/packet"
+    },
+    "schema_version": 1,
+    "scope": "tasks:read",
+    "updates_existing": false,
+    "write": false
+  },
+  {
     "description": "List tasks, oldest first, optionally filtered by project, status, label or parent task. Pages by cursor; `total` counts every match.",
     "input_schema": {
       "$defs": {

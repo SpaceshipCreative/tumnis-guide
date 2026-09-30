@@ -13,6 +13,7 @@ import {
   agentsCheckProfileHealth,
   agentsCreateRunner,
   agentsGetProfileTools,
+  agentsGetTaskPacket,
   agentsListProfiles,
   agentsListRunners,
   agentsRegisterProfile,
@@ -117,6 +118,9 @@ import type {
   AgentsGetProfileToolsData,
   AgentsGetProfileToolsError,
   AgentsGetProfileToolsResponse,
+  AgentsGetTaskPacketData,
+  AgentsGetTaskPacketError,
+  AgentsGetTaskPacketResponse,
   AgentsListProfilesData,
   AgentsListProfilesError,
   AgentsListProfilesResponse,
@@ -3568,6 +3572,37 @@ export const tasksMoveTaskMutation = (
   };
   return mutationOptions;
 };
+
+export const agentsGetTaskPacketQueryKey = (
+  options: Options<AgentsGetTaskPacketData>,
+) => createQueryKey("agentsGetTaskPacket", options);
+
+/**
+ * Get Task Packet
+ *
+ * The task's packet as a run would get it, with no token; the `get_task_packet`
+ * tool's twin. 404 for a task the caller cannot see.
+ */
+export const agentsGetTaskPacketOptions = (
+  options: Options<AgentsGetTaskPacketData>,
+) =>
+  queryOptions<
+    AgentsGetTaskPacketResponse,
+    AgentsGetTaskPacketError,
+    AgentsGetTaskPacketResponse,
+    ReturnType<typeof agentsGetTaskPacketQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsGetTaskPacket({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsGetTaskPacketQueryKey(options),
+  });
 
 export const tasksListPullRequestsQueryKey = (
   options: Options<TasksListPullRequestsData>,

@@ -1,5 +1,113 @@
 {
   "$defs": {
+    "Callback": {
+      "additionalProperties": false,
+      "description": "Where the agent calls back, and with what: the run's task token, valid until the\nrun ends (null when the packet is read outside a run, `get_task_packet`).",
+      "properties": {
+        "mcp_url": {
+          "title": "Mcp Url",
+          "type": "string"
+        },
+        "rest_base_url": {
+          "title": "Rest Base Url",
+          "type": "string"
+        },
+        "task_token": {
+          "anyOf": [
+            {
+              "pattern": "^tmt_[a-z2-7]{12}_[A-Za-z0-9_-]{43}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Task Token"
+        },
+        "token_valid_until": {
+          "const": "run_end",
+          "default": "run_end",
+          "title": "Token Valid Until",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mcp_url",
+        "rest_base_url"
+      ],
+      "title": "Callback",
+      "type": "object"
+    },
+    "PolicySection": {
+      "additionalProperties": false,
+      "description": "What the agent may do without asking, and its run limits (FR-5.6, SAF-5). The action\nclasses are the project policy's own vocabulary (projects.rules.GATED_DEFAULT).",
+      "properties": {
+        "allowed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed",
+          "type": "array"
+        },
+        "gated": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Gated",
+          "type": "array"
+        },
+        "max_delegation_depth": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Delegation Depth"
+        },
+        "max_tasks_per_run": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tasks Per Run"
+        },
+        "tainted_run_all_gated": {
+          "default": true,
+          "title": "Tainted Run All Gated",
+          "type": "boolean"
+        },
+        "time_cap_minutes": {
+          "minimum": 1,
+          "title": "Time Cap Minutes",
+          "type": "integer"
+        },
+        "tool_allowlist": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tool Allowlist",
+          "type": "array"
+        }
+      },
+      "required": [
+        "gated",
+        "allowed",
+        "time_cap_minutes"
+      ],
+      "title": "PolicySection",
+      "type": "object"
+    },
     "RunKind": {
       "enum": [
         "enrich",
@@ -45,10 +153,34 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "block_nonce": {
+      "anyOf": [
+        {
+          "pattern": "^u-[0-9a-f]{16}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Block Nonce"
+    },
     "body": {
       "additionalProperties": true,
       "title": "Body",
       "type": "object"
+    },
+    "callback": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Callback"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "correlation_id": {
       "maxLength": 128,
@@ -60,6 +192,17 @@
     },
     "output_schema": {
       "$ref": "#/$defs/SchemaRef"
+    },
+    "policy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PolicySection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "profile_id": {
       "format": "uuid",
@@ -85,6 +228,11 @@
       "pattern": "^[a-z][a-z0-9-]{0,40}$",
       "title": "Skill",
       "type": "string"
+    },
+    "tainted": {
+      "default": false,
+      "title": "Tainted",
+      "type": "boolean"
     },
     "timeout_s": {
       "maximum": 3600,

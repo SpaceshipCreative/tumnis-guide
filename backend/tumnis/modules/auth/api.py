@@ -1267,8 +1267,11 @@ async def authenticate_bearer(token: str, *, now: datetime) -> Principal | AuthF
         return None
     rows = await keys.lookup(parsed.kind, parsed.prefix)
     found = keys.verify(parsed.secret, rows, crypto.peppers())
-    if found is None or found.revoked_at is not None:
+    if found is None:
         return AuthFailure("unauthenticated")
+    if found.revoked_at is not None:
+        # A task token is revoked when its run ends (R-27): it has expired with the run.
+        return AuthFailure("unauthenticated", "token_expired" if parsed.kind == "tmt" else None)
     if found.expires_at is not None and now >= found.expires_at:
         return AuthFailure("unauthenticated", _EXPIRED_DETAIL.get(parsed.kind))
     if parsed.kind == "tmn":
@@ -1307,21 +1310,31 @@ async def issue_task_token(
     ctx: WorkspaceContext,
     *,
     run_id: UUID,
-    project_id: UUID,
+    project_id: UUID | None,
     api_key_id: UUID,
     scopes: frozenset[str],
     now: datetime,
 ) -> str:
-    """A `tmt_` token for the run (shown once); see tumnis.modules.auth.tokens."""
+    """A `tmt_` token for the run (shown once); see tumnis.modules.auth.tokens. No
+    project only for a master-profile run (a workspace-scoped token, P2-02)."""
     new = await tokens.issue_task_token(
         ctx, run_id=run_id, project_id=project_id, api_key_id=api_key_id, scopes=scopes, now=now
     )
     return new.display
 
 
-async def revoke_task_tokens_for_run(ctx: WorkspaceContext, run_id: UUID, *, now: datetime) -> int:
-    """Ends every token of the run (called when the run ends, whatever the outcome)."""
-    return await tokens.revoke_task_tokens_for_run(ctx, run_id, now=now)
+async def revoke_task_tokens_for_run(
+    ctx: WorkspaceContext, run_id: UUID, *, now: datetime, session: AsyncSession | None = None
+) -> int:
+    """Ends every token of the run (called when the run ends, whatever the outcome); with
+    `session`, in the caller's transaction."""
+    return await tokens.revoke_task_tokens_for_run(ctx, run_id, now=now, session=session)
+
+
+async def key_scopes(ctx: WorkspaceContext, key_id: UUID) -> frozenset[str] | None:
+    """The scopes of a live API key of the workspace; None when it is missing or revoked
+    (P2-02: a profile's key, which its runs' task tokens are a subset of)."""
+    return await tokens.key_scopes(ctx, key_id)
 
 
 async def task_token_run(principal: Principal) -> UUID | None:
