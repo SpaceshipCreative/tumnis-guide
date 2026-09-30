@@ -123,6 +123,49 @@ async def test_stale_or_invalid_hours_are_refused(
     assert week["days"][3] == {"weekday": 3, "start": "09:00", "end": "18:00"}
 
 
+@pytest.mark.req("FR-4.7", "FR-1.3")
+@pytest.mark.wp("P1-10")
+async def test_saved_hours_and_timezone_announce_a_settings_change(
+    app: FastAPI,
+    session_client: SessionClient,
+    workspace: WorkspaceHandle,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Saving new hours, or a new workspace timezone, announces `settings` for the
+    workspace on the live socket so other browsers refetch the hours and the day's free
+    blocks; a save that changes nothing announces nothing."""
+    from tumnis.core import live  # noqa: PLC0415
+
+    marks: list[tuple[str, Any]] = []
+    real = live.mark_changed
+
+    def spy(session: Any, entity: str, id: Any) -> None:
+        marks.append((entity, id))
+        real(session, entity, id)
+
+    monkeypatch.setattr(live, "mark_changed", spy)
+
+    monday = {"weekday": 0, "start": "10:00", "end": "16:00"}
+    url = "/v1/settings/working-hours"
+    saved = await session_client.put(url, json={"days": [monday], "version": 0})
+    assert saved.status_code == 200, saved.text
+    assert marks == [("settings", workspace.id)]
+
+    marks.clear()
+    again = await session_client.put(url, json={"days": [monday], "version": 1})
+    assert again.status_code == 200, again.text
+    assert marks == []
+
+    current = (await session_client.get("/v1/settings/workspace")).json()
+    moved = await session_client.put(
+        "/v1/settings/workspace",
+        json={"timezone": "Europe/Berlin", "version": current["version"]},
+        headers={"Idempotency-Key": "planning-timezone-live"},
+    )
+    assert moved.status_code == 200, moved.text
+    assert ("settings", workspace.id) in marks
+
+
 @pytest.mark.req("FR-1.3")
 @pytest.mark.wp("P1-10")
 async def test_calendar_synced_drops_cached_days(

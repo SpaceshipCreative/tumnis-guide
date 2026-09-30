@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import Table, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import audit
+from tumnis.core import audit, live
 from tumnis.core.cache import CacheKey, CacheSpec, invalidate_on_commit, register_cache
 from tumnis.core.clock import local_to_utc
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
@@ -193,6 +193,7 @@ async def put_working_hours(
                 occurred_at=now,
             )
             await invalidate_on_commit(s, tag=free_blocks_tag(ctx.workspace_id))
+            live.mark_changed(s, "settings", ctx.workspace_id)
         return _week(await _rows(s))
 
 

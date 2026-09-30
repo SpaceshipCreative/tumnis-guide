@@ -45,6 +45,7 @@ export const LIVE_MAP: Record<
       "settingsGetSection",
       "settingsListModules",
       "settingsGetWorkingHours",
+      "planningGetDayCalendar",
     ],
   },
   // Created, rotated and revoked keys (P0-14): the Settings list refreshes.

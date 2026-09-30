@@ -213,6 +213,7 @@ async def _put_workspace_settings(
         session, settings_cache_key(ctx.workspace_id, WORKSPACE_SETTINGS_KEY)
     )
     await invalidate_on_commit(session, tag=workspace_settings_tag(ctx.workspace_id))
+    live.mark_changed(session, "settings", ctx.workspace_id)
     return _out(row)
 
 
