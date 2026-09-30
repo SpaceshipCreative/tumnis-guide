@@ -40,13 +40,19 @@ beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });
 });
 // Route loads still running finish first, against this test's handlers (routers.ts).
+// If one never settles, the hook still fails, and the teardown below still runs so the
+// next test starts clean.
 afterEach(async () => {
-  await settleRouters();
-  server.resetHandlers();
-  cleanup();
-  // A fresh IndexedDB per test: the offline queue persists there (P0-25).
-  await resetIdb();
-  const missed = unhandled.splice(0);
+  let missed: string[] = [];
+  try {
+    await settleRouters();
+  } finally {
+    server.resetHandlers();
+    cleanup();
+    // A fresh IndexedDB per test: the offline queue persists there (P0-25).
+    await resetIdb();
+    missed = unhandled.splice(0);
+  }
   if (missed.length > 0) {
     throw new Error(
       `Requests without an MSW handler (add them with server.use): ${[...new Set(missed)].join(", ")}`,
