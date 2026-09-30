@@ -214,6 +214,9 @@ def knowledge_app(app_factory: Any, minio: S3Endpoint, clamd: ClamdEndpoint) -> 
     from tumnis.settings import KnowledgeSettings  # noqa: PLC0415
 
     work = Path(tempfile.mkdtemp(prefix="a1-knowledge-"))
+    # Each undo goes on the list as soon as its change is made, so a failure part-way
+    # through still leaves nothing behind (the list runs in pop order).
+    KNOWLEDGE_APP_UNDO.append(lambda: shutil.rmtree(work, ignore_errors=True))
     (work / "spool").mkdir()
     (work / "scratch").mkdir()
     settings = KnowledgeSettings(
@@ -224,13 +227,12 @@ def knowledge_app(app_factory: Any, minio: S3Endpoint, clamd: ClamdEndpoint) -> 
     )
     app = app_factory(knowledge=settings)
     previous_settings = pipeline.configure(settings)
+    KNOWLEDGE_APP_UNDO.append(lambda: pipeline.configure(previous_settings))
     previous_parts = pipeline.use(
         scanner=ClamAV(clamd.host, clamd.port, clock=SystemClock()),
         extractor=DoclingExtractor(chunk_tokenizer=settings.chunk_tokenizer),
     )
-    KNOWLEDGE_APP_UNDO.append(lambda: shutil.rmtree(work, ignore_errors=True))
     KNOWLEDGE_APP_UNDO.append(lambda: pipeline.use(**previous_parts))
-    KNOWLEDGE_APP_UNDO.append(lambda: pipeline.configure(previous_settings))
     return _WithMinioLocation(app, minio)
 
 
