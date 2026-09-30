@@ -20,8 +20,13 @@ function onShortcut(event: KeyboardEvent<HTMLElement>): void {
     next?.focus();
     event.preventDefault();
   } else if ((event.key === "s" || event.key === "d") && row) {
-    row
-      .querySelector<HTMLElement>(`[data-status-action="${event.key}"]`)
+    // The row's own action: a subtask row nested inside it has its own.
+    [
+      ...row.querySelectorAll<HTMLElement>(
+        `[data-status-action="${event.key}"]`,
+      ),
+    ]
+      .find((button) => button.closest("li[data-task-id]") === row)
       ?.click();
   }
 }

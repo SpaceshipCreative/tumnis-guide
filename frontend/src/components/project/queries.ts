@@ -1,9 +1,8 @@
 // The project page's reads (P0-24), shared by the route loader and the components so a
 // prefetch fills exactly the queries the page reads. Generated ops are validated by the
-// generated zod schemas and listed in LIVE_MAP. The recurrence reads are hand queries
-// shaped like P0-19's routes (`GET /v1/recurrence?project_id=`, `GET
-// /v1/tasks/{id}/recurrence`) until those ops are generated; a missing route reads as
-// "nothing repeats".
+// generated zod schemas and listed in LIVE_MAP. The project's recurring tasks use the
+// generated `tasksListRecurrence` (every page); the task's own rule is a hand query shaped
+// like P0-19's `GET /v1/tasks/{id}/recurrence`. A missing route reads as "nothing repeats".
 import { queryOptions } from "@tanstack/react-query";
 
 import {
@@ -11,9 +10,19 @@ import {
   projectsGetProjectOptions,
   tasksGetBoardOptions,
   tasksListCommentsOptions,
+  tasksListRecurrenceOptions,
   tasksListTasksOptions,
 } from "../../api/@tanstack/react-query.gen";
-import { tasksListComments, tasksListTasks } from "../../api/sdk.gen";
+import {
+  tasksListComments,
+  tasksListRecurrence,
+  tasksListTasks,
+} from "../../api/sdk.gen";
+import type {
+  PageRecurrenceOut,
+  RecurrenceOut,
+  TasksListRecurrenceData,
+} from "../../api/types.gen";
 import { apiUrl } from "../../lib/fetch";
 
 export const TASK_PAGE_LIMIT = 200; // the API's largest page
@@ -125,19 +134,46 @@ async function readJson<T>(path: string, missing: T): Promise<T> {
   return (await response.json()) as T;
 }
 
-export const projectRecurrenceQuery = (projectId: string) =>
-  queryOptions({
-    queryKey: [
-      { _id: "tasksListRecurrence", query: { project_id: projectId } },
-    ] as const,
-    queryFn: async () =>
-      (
-        await readJson<{ items: RecurrenceRule[] }>(
-          `/recurrence?project_id=${encodeURIComponent(projectId)}`,
-          { items: [] },
-        )
-      ).items,
+/** One page of `GET /v1/recurrence`, or null when the route answers 404. */
+async function recurrencePage(
+  query: NonNullable<TasksListRecurrenceData["query"]>,
+  signal: AbortSignal,
+): Promise<PageRecurrenceOut | null> {
+  const { data, response } = await tasksListRecurrence({ query, signal });
+  if (data !== undefined) return data;
+  if (response?.status === 404) return null;
+  throw new Error(
+    response ? `Request failed (${String(response.status)})` : "Request failed",
+  );
+}
+
+/**
+ * Every recurring task of the project (`GET /v1/recurrence?project_id=`): follows
+ * `next_cursor` through every page like `projectTasksQuery`, under the generated op's
+ * key. A 404 on the first page (the route is not there) reads as none.
+ */
+export const projectRecurrenceQuery = (projectId: string) => {
+  const query = { project_id: projectId, limit: TASK_PAGE_LIMIT };
+  return queryOptions({
+    queryKey: tasksListRecurrenceOptions({ query }).queryKey,
+    queryFn: async ({ signal }): Promise<RecurrenceOut[]> => {
+      const first = await recurrencePage(query, signal);
+      if (first === null) return [];
+      const items = [...first.items];
+      let cursor = first.next_cursor;
+      while (cursor) {
+        const { data: page } = await tasksListRecurrence({
+          query: { ...query, cursor },
+          signal,
+          throwOnError: true,
+        });
+        items.push(...page.items);
+        cursor = page.next_cursor;
+      }
+      return items;
+    },
   });
+};
 
 export const taskRecurrenceQuery = (taskId: string) =>
   queryOptions({

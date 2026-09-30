@@ -208,6 +208,21 @@ jobs:
           docker compose -f deploy/compose.test.yaml logs --no-color api postgres \
             | grep -E 'ERROR|FATAL|Traceback|deadlock|" 5[0-9][0-9]' | grep -v 'violates foreign key' | tail -n 300 || true
           echo "::endgroup::"
+          # The whole run's logs per service, for the artifact below (issue #56).
+          mkdir -p stack-logs
+          for service in api worker postgres; do
+            docker compose -f deploy/compose.test.yaml logs --no-color --timestamps "$service" \
+              > "stack-logs/$service.log" 2>&1 || true
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure() && hashFiles('deploy/compose.test.yaml') != ''
+        with:
+          name: e2e-logs
+          path: |
+            stack-logs/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Skills and Performance need the homelab self-hosted runner (P1-05, P0-29). Until the
   # repo variable HOMELAB_RUNNER is "true" they run as stubs on a GitHub-hosted runner, so
