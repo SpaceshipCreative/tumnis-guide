@@ -42,6 +42,7 @@ from tumnis.modules.agents.rules import (
     RunStatus,
     TokenReach,
     allowlist_drift,
+    run_token_scopes,
     runner_status,
     validate_profile_name,
 )
@@ -89,7 +90,11 @@ __all__ = [
     "TaskPacket",
     "TokenReach",
     "ToolServerOut",
+    "issue_run_token",
+    "run_ended",
     "run_log",
+    "run_token_scopes",
+    "set_profile_key",
 ]
 
 RUNNER_CHANNEL: Final = "runner_mailbox"  # NOTIFY {"runner": id, "close": bool}
@@ -919,3 +924,20 @@ async def run_log(s: AsyncSession, run_id: UUID) -> list[RunEvent]:
     for slot, line in zip(slots, lines, strict=True):
         events[slot] = line
     return events
+
+
+# --- Task tokens (P2-02); spec stubs until the implementation lands ---------------------------
+
+
+async def issue_run_token(ctx: WorkspaceContext, **kwargs: Any) -> str:
+    raise NotImplementedError
+
+
+async def run_ended(ctx: WorkspaceContext, run_id: UUID, *, now: datetime) -> int:
+    raise NotImplementedError
+
+
+async def set_profile_key(
+    ctx: WorkspaceContext, profile_id: UUID, api_key_id: UUID, *, now: datetime
+) -> None:
+    raise NotImplementedError

@@ -103,6 +103,9 @@ ignore_imports =
 # tasks' api and subscriber to prove the round trip. Module code never does.
     tumnis.modules.github.tests.** -> tumnis.modules.tasks.api
     tumnis.modules.github.tests.** -> tumnis.modules.tasks.events
+# agents builds on auth (P2-02: a task token per dispatch); auth's task-token tests issue
+# tokens the way a dispatch does, through agents' api.
+    tumnis.modules.auth.tests.** -> tumnis.modules.agents.api
 unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:search-usage-subscribe-only]

@@ -52,6 +52,7 @@ class TaskPacket(VersionedPayload):
     timeout_s: int = Field(ge=10, le=3600)
     prompt_text: str  # fixed instructions + the body JSON between <packet> markers
     body: dict[str, Any]  # EnrichmentRequest or PlanningRequest (P1-05)
+    tainted: bool = False  # P2-02: the OR of every block in body
 
 
 def render_prompt(skill: str, output_schema: SchemaRef, body: Mapping[str, Any]) -> str:
@@ -121,3 +122,22 @@ def workdir_policy(packet: TaskPacket) -> Literal["none", "worktree"]:
     """`worktree` for a packet with a code location (the daemon prepares one), else
     `none`."""
     return "none" if code_location_of(packet) is None else "worktree"
+
+
+# --- The task packet builder (P2-02); spec stubs until the implementation lands ---------------
+
+
+class PacketInputs(BaseModel):
+    pass
+
+
+def assemble(inputs: PacketInputs, **kwargs: Any) -> TaskPacket:
+    raise NotImplementedError
+
+
+def packet_blocks(packet: TaskPacket) -> list[Any]:
+    raise NotImplementedError
+
+
+async def build_packet(kind: RunKind, **kwargs: Any) -> TaskPacket:
+    raise NotImplementedError
