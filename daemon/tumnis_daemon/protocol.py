@@ -152,7 +152,7 @@ class McpServerInfo(_Model):
 
 
 class TokenReach(_Model):
-    """What one token reaches, probed on the host; the token never leaves it (P2-10)."""
+    """What one token reaches, probed from the host; the token never reaches Tumnis (P2-10)."""
 
     token_present: bool
     own_reachable: dict[str, bool] = Field(default={}, max_length=MAX_REACH_TARGETS)

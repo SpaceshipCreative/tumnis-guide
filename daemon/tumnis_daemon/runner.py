@@ -337,16 +337,11 @@ def _signal_group(pid: int, sig: signal.Signals) -> None:
 
 
 def profile_version(cfg: DaemonConfig, profile: str) -> str | None:
-    """The profile's `VERSION` file (`~/.hermes/profiles/<profile>/VERSION`), None when it
-    has none."""
+    """The profile's version stamp, read from `<hermes_home>/profiles/<profile>` exactly as
+    the health report reads it (`VERSION`, else `distribution.yaml`); None when it has none."""
     if not re.fullmatch(NAME_RE, profile):
         return None
-    path = cfg.agent_home / ".hermes" / "profiles" / profile / "VERSION"
-    try:
-        text = path.read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeDecodeError):
-        return None
-    return text[:64] or None
+    return health.profile_version(health.profile_dir(cfg.hermes_home, profile))
 
 
 async def touched_files(worktree: Path) -> list[str]:
@@ -596,7 +591,7 @@ async def health_report(msg: HealthCheck, cfg: DaemonConfig) -> HealthReport:
 
 async def _probe(msg: HealthCheck, cfg: DaemonConfig) -> dict[str, Any]:
     """P2-10: the profile's MCP servers, its version stamp and its tokens' reach, read and
-    probed on this host (the tokens never leave it)."""
+    probed from this host (each token goes only to its own provider, never to Tumnis)."""
     profile = health.profile_dir(cfg.hermes_home, msg.profile)
     github, coolify = await health.token_reach(
         profile,

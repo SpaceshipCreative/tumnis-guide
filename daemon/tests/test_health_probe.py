@@ -335,6 +335,32 @@ def test_unreadable_env_and_version_fall_back(profile_dir: Path) -> None:
     assert profile_version(profile_dir) is None
 
 
+@pytest.mark.wp("P2-10")
+def test_run_and_health_read_the_same_profile_version(profile_dir: Path, tmp_path: Path) -> None:
+    """A run's `status{started}` version and the health report's come from the same
+    profile folder, `<hermes_home>/profiles/<name>`, even when `agent_home` points
+    elsewhere (a Mac LaunchAgent, or an explicit `hermes_home`)."""
+    from tumnis_daemon.config import DaemonConfig  # noqa: PLC0415
+    from tumnis_daemon.health import profile_version as probed  # noqa: PLC0415
+    from tumnis_daemon.runner import profile_version  # noqa: PLC0415
+
+    (profile_dir / "VERSION").write_text("1.4.0\n", encoding="utf-8")
+    cfg = DaemonConfig(
+        server_url="ws://127.0.0.1:1",
+        runner_name="homelab-hermes",
+        token_file=tmp_path / "token",
+        state_dir=tmp_path / "state",
+        agent_home=tmp_path / "other",
+        hermes_home=profile_dir.parent.parent,
+    )
+
+    assert profile_version(cfg, "acme-site") == probed(profile_dir) == "1.4.0"
+    (profile_dir / "VERSION").unlink()
+    (profile_dir / "distribution.yaml").write_text("version: 2.0.1\n", encoding="utf-8")
+    assert profile_version(cfg, "acme-site") == probed(profile_dir) == "2.0.1"
+    assert profile_version(cfg, "Not-A-Name") is None
+
+
 @pytest.mark.req("SAF-3")
 @pytest.mark.wp("P2-10")
 async def test_coolify_cleartext_only_on_the_lan(profile_dir: Path) -> None:

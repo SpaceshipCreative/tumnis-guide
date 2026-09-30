@@ -1,5 +1,5 @@
 """The profile health probes (P2-10, SAF-2, SAF-3, FR-5.12): run on the host, as the user
-that owns the profile, so the profile's tokens never leave it.
+that owns the profile: each token goes only to its own provider, never to Tumnis.
 
 - MCP servers: the profile's `config.yaml` (key `mcp_servers`, Hermes's own config) and
   `mcp.json` (key `mcpServers`, what a profile distribution ships), reported as name,
