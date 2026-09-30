@@ -54,8 +54,10 @@ def is_case_file(path: str) -> bool:
 
 
 # Golden files a contract test compares against (P2-02's task packets): data, locked like a
-# test, so an agent cannot rewrite a golden to make its test pass.
-GOLDEN_GLOBS = ("**/tests/contract/golden/**",)
+# test, so an agent cannot rewrite a golden to make its test pass. The hostile content set's
+# cases are locked the same way (P2-11): editing a payload or a forbidden list is a spec
+# change (fnmatch's `*` crosses `/`, so the glob takes every YAML file below the folder).
+GOLDEN_GLOBS = ("**/tests/contract/golden/**", "backend/fixtures/hostile/*.yaml")
 
 
 def is_golden_file(path: str) -> bool:

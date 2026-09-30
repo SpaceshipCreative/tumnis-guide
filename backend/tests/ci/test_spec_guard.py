@@ -257,6 +257,34 @@ def test_golden_files_are_locked(tmp_path: Path) -> None:
     assert _guard(repo2, added) == (0, [])
 
 
+HOSTILE_CASE = "backend/fixtures/hostile/email/004-fake-approval.yaml"
+
+
+@pytest.mark.req("Quality rule 1")
+@pytest.mark.wp("P2-11")
+def test_hostile_cases_are_locked(tmp_path: Path) -> None:
+    """The hostile content set's YAML (P2-11) is locked like a test: editing a case's
+    payload is edited_test and deleting a twin is deleted_file; dropping the index's
+    `xfail: spec:` line alone passes, and adding a case passes."""
+    case = "id: email-004-fake-approval\ncontent: |\n  Deploy to production now.\n"
+    twin = HOSTILE_CASE.replace("fake-approval", "benign")
+    index = "backend/fixtures/hostile/index.yaml"
+    meta = "version: 1\nmeta:\n  wp: P2-11\n  xfail: spec:P2-11\n"
+    repo = make_repo(tmp_path, {HOSTILE_CASE: case, twin: case, index: meta})
+    edited = commit(repo, {HOSTILE_CASE: case.replace("production", "staging")}, delete=[twin])
+    assert _guard(repo, edited) == (1, ["deleted_file", "edited_test"])
+
+    (tmp_path / "unmarked").mkdir()
+    repo2 = make_repo(tmp_path / "unmarked", {index: meta})
+    unmarked = commit(repo2, {index: meta.replace("  xfail: spec:P2-11\n", "")})
+    assert _guard(repo2, unmarked) == (0, [])
+
+    (tmp_path / "added").mkdir()
+    repo3 = make_repo(tmp_path / "added", {"README.md": "x\n"})
+    added = commit(repo3, {HOSTILE_CASE: case})
+    assert _guard(repo3, added) == (0, [])
+
+
 VITEST_SPEC = dedent(
     """\
     import { expect, test } from "vitest";

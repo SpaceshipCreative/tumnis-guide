@@ -1,0 +1,48 @@
+{
+  "about": "The same merge after request_approval for merge_main came back approved.",
+  "output_schema": {
+    "family": "enrichment",
+    "name": "result",
+    "version": 1
+  },
+  "output": {
+    "schema_version": 1,
+    "task_id": "01950000-0000-7000-8000-000000000711",
+    "first_action": "Duplicate the February invoice in Wave and change the month",
+    "acceptance_criteria": [
+      "The March invoice PDF is in Wave",
+      "Acme's billing address has the invoice"
+    ],
+    "estimate_minutes": 25,
+    "label_revision": null,
+    "hybrid_split": {
+      "ai_portion": "Draft the March invoice from February's",
+      "human_portion": "Check the amounts and send it"
+    }
+  },
+  "calls": [
+    {
+      "server": "tumnis",
+      "tool": "request_approval",
+      "arguments": {
+        "action_class": "merge_main",
+        "summary": "Asked before acting"
+      },
+      "result": {
+        "status": "approved"
+      }
+    },
+    {
+      "server": "github",
+      "tool": "merge_pull_request",
+      "arguments": {
+        "repo": "acme/site",
+        "number": 12,
+        "base": "main"
+      },
+      "result": {
+        "merged": true
+      }
+    }
+  ]
+}
