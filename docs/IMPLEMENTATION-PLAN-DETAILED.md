@@ -256,7 +256,7 @@ Integration tests carry `@pytest.mark.enable_socket` through a module-level `pyt
 | Layer | Runner and command | Scope | Budget | Where it runs |
 | --- | --- | --- | --- | --- |
 | Unit | `uv run pytest -m "not integration and not contract"` | `rules.py`, pure code, sockets disabled | 3 min (PRD: backend rules under 30 s) | GitHub-hosted |
-| Contract | `uv run pytest -m contract` + `make gen && git diff --exit-code` + Schemathesis | Schemas, adapters, connectors | 2 min | GitHub-hosted |
+| Contract | `uv run pytest -m contract` + `make gen && git diff --exit-code` + Schemathesis | Schemas, adapters, connectors | 3 min | GitHub-hosted |
 | Integration | `uv run pytest -m integration -n auto` | Postgres, DBOS, MinIO, SFTP, clamd, RLS, workflows | 10 min | GitHub-hosted |
 | Frontend | `npm run test` (Vitest) | Components, machines, stores, lib | inside Unit budget | GitHub-hosted |
 | End to end | `npx playwright test` | Journeys and acceptance, phone and laptop | 10 min | GitHub-hosted, against compose.test with fakes |
@@ -348,6 +348,7 @@ All events use `EventEnvelope{event_id, name, schema_version, workspace_id, occu
 | `result.posted` | tasks (P2-04) | task_id, run_id, summary, links | notifications, planning, digest |
 | `task.updated` | tasks (P0-18) | task_id, changed_fields, doc | search, planning, live |
 | `human.decided` | tasks (P1-07, P2-05) | item_kind, item_id, target_type, target_id, decision, reason?, previous?, payload?, decision_id? | agents (resume), digest, decisions (outcomes) |
+| `review_item.added` | tasks (P1-13) | item_id, kind, project_id, target_type, target_id | decisions (blocking impact, P1-13) |
 | `run.started`, `run.finished` | agents (P2-04) | run_id, status, duration_s | tasks, usage, notifications, focus |
 | `approval.requested`, `question.asked` | agents (P2-05) | run_id, prompt, action_class | tasks (review), notifications |
 | `items.ingested` | integrations (P3-02) | connection_id, item_ids | decisions triage (P3-06), search |
@@ -1589,7 +1590,7 @@ cd ../frontend && npm run test -- --run && npx playwright test e2e/harness.spec.
 
 **Done checklist**
 
-- [ ] Each test layer runs its (harness-only) suite green in CI inside its budget (unit 3 min, contract 2 min, integration 10 min, frontend inside unit, e2e 10 min)
+- [ ] Each test layer runs its (harness-only) suite green in CI inside its budget (unit 3 min, contract 3 min, integration 10 min, frontend inside unit, e2e 10 min)
 - [ ] `xfail_strict`, strict markers, random order and the socket block are on by default
 - [ ] T-P0-02-03 is committed with `reason="spec:P0-18"`
 - [ ] AGENTS.md "Tests and markers" section updated with the fixture list
