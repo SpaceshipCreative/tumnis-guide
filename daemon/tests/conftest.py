@@ -10,7 +10,7 @@ import stat
 import subprocess
 import uuid
 from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -175,3 +175,44 @@ class MemoryLink:
 
     def close(self) -> None:
         self.closed = True
+
+
+# --- P2-18: a profile home to archive -----------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ProfileHome:
+    """`cfg` with the Hermes profiles under `tmp_path`, and the profile `name` living at
+    `home` (remembered by the daemon, so its register lists it)."""
+
+    cfg: DaemonConfig
+    name: str
+    home: Path
+
+
+@pytest.fixture
+def tmp_profile_home(cfg: DaemonConfig, tmp_path: Path) -> ProfileHome:
+    """The profile `acme-site` with nested files, an empty file, an executable, a private
+    `.env` (0600) and a symlink inside the tree (archived as a link, never followed)."""
+    profiles = tmp_path / "hermes" / "profiles"
+    home = profiles / "acme-site"
+    (home / "memories").mkdir(parents=True)
+    (home / "sessions" / "2026").mkdir(parents=True)
+    (home / "skills" / "tumnis").mkdir(parents=True)
+    (home / "config.yaml").write_text("model: local\n" * 40)
+    (home / "SOUL.md").write_text("# Acme site agent\n\nWrite plainly.\n" * 50)
+    (home / ".env").write_text("TUMNIS_MCP_URL=https://tumnis.example.org/mcp\n")
+    (home / ".env").chmod(0o600)
+    (home / "memories" / "notes.md").write_text("The client prefers short emails.\n" * 200)
+    (home / "sessions" / "2026" / "01.jsonl").write_text('{"role": "user", "text": "hi"}\n' * 300)
+    (home / "skills" / "tumnis" / "empty.txt").write_bytes(b"")
+    (home / "skills" / "tumnis" / "run.sh").write_text("#!/bin/sh\necho ok\n")
+    (home / "skills" / "tumnis" / "run.sh").chmod(0o755)
+    (home / "latest-session").symlink_to("sessions/2026/01.jsonl")
+    state = tmp_path / "state"
+    state.mkdir(exist_ok=True)
+    (state / "profiles.json").write_text(json.dumps(["acme-site"]))
+    # `cfg` also names the profile in daemon.toml: archiving must drop it from the live
+    # list all the same.
+    daemon_cfg = replace(cfg, hermes_profiles_dir=profiles, hermes_home=profiles.parent)
+    return ProfileHome(cfg=daemon_cfg, name="acme-site", home=home)

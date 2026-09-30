@@ -313,3 +313,7 @@ async def extract_document(workspace_id: str, version_id: str, source: str) -> s
         DBOS.logger.exception("extraction of %s failed", version_id)
         await fail_step(workspace_id, version_id, FAILED)
         return "failed"
+
+
+# P2-18: the folder steps of the project archive workflows register with projects.
+from tumnis.modules.knowledge import archive as _archive  # noqa: E402, F401

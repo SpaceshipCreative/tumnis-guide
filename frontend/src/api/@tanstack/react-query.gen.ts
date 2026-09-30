@@ -69,6 +69,7 @@ import {
   projectsReorderProject,
   projectsUnarchiveProject,
   projectsUpdateProject,
+  purgesPurge,
   searchSearch,
   searchTypeaheadProjects,
   searchTypeaheadTasks,
@@ -277,6 +278,9 @@ import type {
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectError,
   ProjectsUpdateProjectResponse,
+  PurgesPurgeData,
+  PurgesPurgeError,
+  PurgesPurgeResponse,
   SearchSearchData,
   SearchSearchError,
   SearchSearchResponse,
@@ -2378,6 +2382,33 @@ export const projectsUnarchiveProjectMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await projectsUnarchiveProject({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Purge
+ */
+export const purgesPurgeMutation = (
+  options?: Partial<Options<PurgesPurgeData>>,
+): UseMutationOptions<
+  PurgesPurgeResponse,
+  PurgesPurgeError,
+  Options<PurgesPurgeData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PurgesPurgeResponse,
+    PurgesPurgeError,
+    Options<PurgesPurgeData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await purgesPurge({
         ...options,
         ...fnOptions,
         throwOnError: true,

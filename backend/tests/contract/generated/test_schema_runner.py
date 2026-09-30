@@ -31,6 +31,12 @@ CASES = [
     ),
     (
         "runner",
+        "archive_done",
+        1,
+        "backend/tests/contract/fixtures/runner/archive_done/v1.json",
+    ),
+    (
+        "runner",
         "cancel",
         1,
         "backend/tests/contract/fixtures/runner/cancel/v1.json",
@@ -79,6 +85,12 @@ CASES = [
     ),
     (
         "runner",
+        "purge_archive",
+        1,
+        "backend/tests/contract/fixtures/runner/purge_archive/v1.json",
+    ),
+    (
+        "runner",
         "register",
         1,
         "backend/tests/contract/fixtures/runner/register/v1.json",
@@ -88,6 +100,18 @@ CASES = [
         "registered",
         1,
         "backend/tests/contract/fixtures/runner/registered/v1.json",
+    ),
+    (
+        "runner",
+        "restore",
+        1,
+        "backend/tests/contract/fixtures/runner/restore/v1.json",
+    ),
+    (
+        "runner",
+        "restore_done",
+        1,
+        "backend/tests/contract/fixtures/runner/restore_done/v1.json",
     ),
     (
         "runner",

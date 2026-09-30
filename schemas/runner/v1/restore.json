@@ -1,8 +1,8 @@
 {
-  "$id": "https://tumnis.dev/schemas/runner/v1/archive.json",
+  "$id": "https://tumnis.dev/schemas/runner/v1/restore.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "P2-18: pack a profile's home into one archive and take it out of the live list.",
+  "description": "P2-18: put an archived profile back, checked against the expected manifest digest.",
   "properties": {
     "archive_id": {
       "maxLength": 128,
@@ -12,6 +12,11 @@
     "correlation_id": {
       "maxLength": 128,
       "title": "Correlation Id",
+      "type": "string"
+    },
+    "expected_manifest_digest": {
+      "maxLength": 64,
+      "title": "Expected Manifest Digest",
       "type": "string"
     },
     "message_id": {
@@ -36,8 +41,8 @@
       "type": "string"
     },
     "type": {
-      "const": "archive",
-      "default": "archive",
+      "const": "restore",
+      "default": "restore",
       "title": "Type",
       "type": "string"
     }
@@ -48,8 +53,9 @@
     "correlation_id",
     "sent_at",
     "profile",
-    "archive_id"
+    "archive_id",
+    "expected_manifest_digest"
   ],
-  "title": "Archive",
+  "title": "Restore",
   "type": "object"
 }

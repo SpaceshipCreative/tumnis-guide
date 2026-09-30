@@ -57,6 +57,9 @@ class StateStore:
             d.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.outbox = Outbox(state_dir / "state.db", max_bytes=outbox_max_bytes)
         self.running: set[UUID] = set()  # run ids executing now (heartbeats report them)
+        # P2-18: the profile of each claimed run, running or waiting for its turn, until
+        # `release` (an archive of that profile is refused meanwhile)
+        self.run_profiles: dict[UUID, str] = {}
         self.protocol_version = 1  # set from `registered` on every connect
         self.ws: Sender | None = None  # the live connection, None while disconnected
         self._cancels: dict[UUID, tuple[asyncio.Event, list[str]]] = {}
@@ -173,6 +176,11 @@ class StateStore:
 
     def release(self, run_id: UUID) -> None:
         self._cancels.pop(run_id, None)
+        self.run_profiles.pop(run_id, None)
+
+    def busy_profiles(self) -> frozenset[str]:
+        """The profiles with a claimed run still in progress (P2-18)."""
+        return frozenset(p for r, p in self.run_profiles.items() if r in self.running)
 
     def cancel(self, run_id: UUID, reason: str) -> bool:
         """Flip the run's cancel switch; False when the run is not running here."""

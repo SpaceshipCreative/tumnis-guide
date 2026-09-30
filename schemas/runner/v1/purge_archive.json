@@ -1,8 +1,8 @@
 {
-  "$id": "https://tumnis.dev/schemas/runner/v1/archive.json",
+  "$id": "https://tumnis.dev/schemas/runner/v1/purge_archive.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "P2-18: pack a profile's home into one archive and take it out of the live list.",
+  "description": "P2-18: forget an archived profile for good; its archive is deleted.",
   "properties": {
     "archive_id": {
       "maxLength": 128,
@@ -36,8 +36,8 @@
       "type": "string"
     },
     "type": {
-      "const": "archive",
-      "default": "archive",
+      "const": "purge_archive",
+      "default": "purge_archive",
       "title": "Type",
       "type": "string"
     }
@@ -50,6 +50,6 @@
     "profile",
     "archive_id"
   ],
-  "title": "Archive",
+  "title": "PurgeArchive",
   "type": "object"
 }

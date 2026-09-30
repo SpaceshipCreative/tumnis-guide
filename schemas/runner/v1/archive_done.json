@@ -1,0 +1,104 @@
+{
+  "$id": "https://tumnis.dev/schemas/runner/v1/archive_done.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "P2-18: the answer to `archive`: the pack's path, size and sha256 and the digest of\nthe profile's manifest, or an `error_code`.",
+  "properties": {
+    "archive_id": {
+      "maxLength": 128,
+      "title": "Archive Id",
+      "type": "string"
+    },
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "enum": [
+            "active_run",
+            "not_found",
+            "invalid_name",
+            "failed"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "manifest_digest": {
+      "maxLength": 64,
+      "title": "Manifest Digest",
+      "type": "string"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "path": {
+      "maxLength": 4096,
+      "title": "Path",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "sha256": {
+      "maxLength": 64,
+      "title": "Sha256",
+      "type": "string"
+    },
+    "size": {
+      "minimum": 0,
+      "title": "Size",
+      "type": "integer"
+    },
+    "type": {
+      "const": "archive_done",
+      "default": "archive_done",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "archive_id",
+    "path",
+    "size",
+    "sha256",
+    "manifest_digest"
+  ],
+  "title": "ArchiveDone",
+  "type": "object"
+}

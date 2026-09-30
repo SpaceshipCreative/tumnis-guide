@@ -182,6 +182,9 @@ import type {
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectErrors,
   ProjectsUpdateProjectResponses,
+  PurgesPurgeData,
+  PurgesPurgeErrors,
+  PurgesPurgeResponses,
   SearchSearchData,
   SearchSearchErrors,
   SearchSearchResponses,
@@ -350,6 +353,7 @@ import {
   zProjectsReorderProjectResponse,
   zProjectsUnarchiveProjectResponse,
   zProjectsUpdateProjectResponse,
+  zPurgesPurgeResponse,
   zSearchSearchResponse,
   zSearchTypeaheadProjectsResponse,
   zSearchTypeaheadTasksResponse,
@@ -1672,6 +1676,27 @@ export const projectsUnarchiveProject = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zProjectsUnarchiveProjectResponse.parseAsync(data),
     url: "/v1/projects/{project_id}/unarchive",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Purge
+ */
+export const purgesPurge = <ThrowOnError extends boolean = false>(
+  options: Options<PurgesPurgeData, ThrowOnError>,
+): RequestResult<PurgesPurgeResponses, PurgesPurgeErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    PurgesPurgeResponses,
+    PurgesPurgeErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPurgesPurgeResponse.parseAsync(data),
+    url: "/v1/purges",
     ...options,
     headers: {
       "Content-Type": "application/json",

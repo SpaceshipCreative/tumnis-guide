@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "message_id": "01950000-0000-7000-8000-000000001021",
+  "correlation_id": "req:01950000-0000-7000-8000-000000000403",
+  "sent_at": "2026-03-09T12:00:00Z",
+  "type": "restore_done",
+  "archive_id": "01950000-0000-7000-8000-000000000501",
+  "manifest_digest": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+  "ok": true,
+  "error": null
+}
