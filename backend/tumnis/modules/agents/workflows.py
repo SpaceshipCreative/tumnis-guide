@@ -1246,34 +1246,36 @@ async def enrich_task(workspace_id: str, task_id: str, only: list[str] | None = 
         return "not_needed"
     snap = TaskSnapshot.model_validate(loaded["snapshot"])
     await enrich_placeholder_step(workspace_id, loaded["snapshot"], loaded["project_name"])
-    label: str | None = snap.label
-    waited = 0.0
-    while label is None and waited < loaded["label_wait_s"]:
-        await DBOS.sleep_async(LABEL_POLL_S)
-        waited += LABEL_POLL_S
-        label = await enrich_label_step(workspace_id, task_id)
-    state = await enrich_availability_step(workspace_id, task_id, str(snap.project_id))
-    if state != "ready":
-        return state
-    built = await enrich_request_step(workspace_id, task_id, str(snap.project_id), only)
-    if built is None:
-        return "not_needed"
-    request = EnrichmentRequest.model_validate(built["request"])
-    run_id = uuid5(ENRICH_RUNS, DBOS.workflow_id or task_id)
-    packet = TaskPacket(
-        kind=RunKind.ENRICH,
-        run_id=run_id,
-        profile_id=UUID(built["profile_id"]),
-        skill=ENRICH_SKILL,
-        output_schema=ENRICH_RESULT,
-        correlation_id=f"enrich:{task_id}",
-        timeout_s=loaded["run_timeout_s"],
-        prompt_text=render_prompt(ENRICH_SKILL, ENRICH_RESULT, built["request"]),
-        body=built["request"],
-    )
-    # `running` is on the task from here: whatever raises ends it `failed` (a status that
-    # lets a later relabel enrich again), and the workflow keeps its error.
+    # `pending` is on the task from here: whatever raises (the label wait, availability,
+    # the request, the dispatch, the apply) ends it `failed`, a status that lets a later
+    # relabel enrich again, and the workflow keeps its error. A worker killed meanwhile
+    # (CancelledError, not an Exception) is left for DBOS recovery to resume.
     try:
+        label: str | None = snap.label
+        waited = 0.0
+        while label is None and waited < loaded["label_wait_s"]:
+            await DBOS.sleep_async(LABEL_POLL_S)
+            waited += LABEL_POLL_S
+            label = await enrich_label_step(workspace_id, task_id)
+        state = await enrich_availability_step(workspace_id, task_id, str(snap.project_id))
+        if state != "ready":
+            return state
+        built = await enrich_request_step(workspace_id, task_id, str(snap.project_id), only)
+        if built is None:
+            return "not_needed"
+        request = EnrichmentRequest.model_validate(built["request"])
+        run_id = uuid5(ENRICH_RUNS, DBOS.workflow_id or task_id)
+        packet = TaskPacket(
+            kind=RunKind.ENRICH,
+            run_id=run_id,
+            profile_id=UUID(built["profile_id"]),
+            skill=ENRICH_SKILL,
+            output_schema=ENRICH_RESULT,
+            correlation_id=f"enrich:{task_id}",
+            timeout_s=loaded["run_timeout_s"],
+            prompt_text=render_prompt(ENRICH_SKILL, ENRICH_RESULT, built["request"]),
+            body=built["request"],
+        )
         with SetWorkflowID(run_workflow_id(run_id)):
             outcome = await run_skill(workspace_id, packet.model_dump(mode="json"))
         result = _checked_result(request, outcome)

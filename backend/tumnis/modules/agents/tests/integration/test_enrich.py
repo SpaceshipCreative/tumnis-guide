@@ -655,6 +655,43 @@ async def test_invalid_json_fails_cleanly(
     assert rows(db, "SELECT event_name FROM dead_letters") == []
 
 
+@pytest.mark.req("FR-4.6")
+@pytest.mark.wp("P1-08")
+async def test_step_raising_before_dispatch_ends_failed(  # noqa: PLR0917
+    dbos: type[DBOS],
+    fake_runner: FakeRunnerFactory,
+    workspace: WorkspaceHandle,
+    clock: FixedClock,
+    db: DbUrls,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review of PR #109: a step that raises after the placeholder but before the dispatch
+    (here the request) ends the enrichment `failed`, not stuck `pending`, so a later
+    relabel can enrich the task again; the placeholder stays and nothing is dispatched.
+    """
+    from tumnis.modules.agents import workflows  # noqa: PLC0415
+
+    async def broken_request(*_args: object) -> dict[str, Any] | None:
+        raise RuntimeError("request could not be built")
+
+    monkeypatch.setattr(workflows, "enrich_request_step", broken_request)
+    _subscribers()
+    runner = fake_runner(profiles=[ACME])
+    project_id = agent_project(fake_runner, runner, ACME, db)
+    runner.script(ACME, SKILL, recorded("enrich_ok_human"))
+
+    with enrichment_settings(clock):
+        task = await new_task(workspace, clock, project_id, "Send the March invoice", label="human")
+        await relay()
+        assert await until(_status(db, task.id, "done", "failed")), "no enrichment in time"
+
+    row = task_row(db, task.id)
+    assert row["enrichment_status"] == "failed"
+    assert (row["first_action"], row["first_action_source"]) == (PLACEHOLDER, "placeholder")
+    assert rows(db, "SELECT id FROM runs WHERE task_id = %s", task.id) == []
+    assert runner.runs() == []
+
+
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P1-08")
 @pytest.mark.slow
