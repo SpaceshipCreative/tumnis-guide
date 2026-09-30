@@ -19,7 +19,7 @@ from typing import Any, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from sqlalchemy import RowMapping, Table, delete, func, insert, select, text, update
+from sqlalchemy import RowMapping, Table, and_, delete, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1155,12 +1155,33 @@ class DownloadInfo:
     size: int
 
 
+async def _newer_version_unreleased(
+    s: AsyncSession, document_id: UUID, current_version_id: UUID | None
+) -> bool:
+    """Whether a version after the current one is not `ready` (scanning, quarantined,
+    failed). A folder replacement is written in place before it is scanned, so the file at
+    the document's path may already be that version's bytes."""
+    newer = _versions.c.status != "ready"
+    if current_version_id is not None:
+        current_no = (
+            select(_versions.c.version_no)
+            .where(_versions.c.id == current_version_id)
+            .scalar_subquery()
+        )
+        newer = and_(newer, _versions.c.version_no > current_no)
+    found = await s.scalar(
+        select(_versions.c.id).where(_versions.c.document_id == document_id, newer).limit(1)
+    )
+    return found is not None
+
+
 async def download_info(
     ctx: WorkspaceContext, document_id: UUID, *, version_no: int | None, net: NetPolicy
 ) -> DownloadInfo:
     """The document's file if it may be served: 404 for a document or version that does
     not exist, 409 `not_available` unless it is `ready` (still scanning, quarantined,
-    failed)."""
+    failed), unless a requested version is the current one (the folder keeps one file per
+    document) and unless no later version is still unreleased."""
     async with tenant_session(ctx) as s:
         doc = (
             (
@@ -1192,7 +1213,12 @@ async def download_info(
             if ver is None:
                 raise NotFound("document_versions", document_id)
             status, source_name = ver["status"], ver["source_name"]
+            current = doc["current_version_id"]
+            if current is not None and ver["id"] != current:
+                status = "replaced"  # the folder keeps the current version's bytes only
         if status != "ready" or doc["path"] is None or doc["storage_location_id"] is None:
+            raise ProblemError(409, "not_available", "The file is not available yet")
+        if await _newer_version_unreleased(s, document_id, doc["current_version_id"]):
             raise ProblemError(409, "not_available", "The file is not available yet")
         if source_name is None:
             source_name = await s.scalar(
