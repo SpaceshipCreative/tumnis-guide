@@ -1,5 +1,5 @@
 // The review badge (P0-23, FR-1.4): how many decisions wait for the human, linking to the
-// review queue. The count is 0 until modules queue review items (P1-13).
+// review queue (P1-13). A live `review_item` message refreshes the count (LIVE_MAP).
 import { Link } from "@tanstack/react-router";
 
 export function ReviewBadge({ count }: { count: number }) {
