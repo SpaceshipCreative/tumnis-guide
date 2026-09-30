@@ -45,7 +45,6 @@ def _archive(name: str, archive_id: str) -> object:
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P2-18")
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 async def test_archive_compresses_profile_and_removes_from_live_list(
     tmp_profile_home: ProfileHome,
 ) -> None:
@@ -81,7 +80,6 @@ async def test_archive_compresses_profile_and_removes_from_live_list(
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P2-18")
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 async def test_restore_is_byte_for_byte(tmp_profile_home: ProfileHome) -> None:
     """T-P2-18-02
     Archive, then restore with the manifest digest the archive reported: `restore_done`
@@ -127,7 +125,6 @@ async def test_restore_is_byte_for_byte(tmp_profile_home: ProfileHome) -> None:
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P2-18")
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 async def test_archive_refused_while_a_run_is_active(tmp_profile_home: ProfileHome) -> None:
     """A profile with an active run is not archived: `archive_done` carries
     `error_code="active_run"`, no archive file is written and the home stays in place."""
@@ -150,7 +147,6 @@ async def test_archive_refused_while_a_run_is_active(tmp_profile_home: ProfileHo
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P2-18")
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 async def test_restore_with_wrong_digest_leaves_profile_archived(
     tmp_profile_home: ProfileHome,
 ) -> None:
