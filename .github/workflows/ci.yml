@@ -342,7 +342,9 @@ jobs:
   # perf/baseline.json (a p95 more than 20% worse, or over its NFR, fails); Lighthouse CI
   # at 375 px; the Playwright timings (A0.6, T-P0-29-01..03), which the e2e job leaves out.
   # On the homelab runner once HOMELAB_RUNNER is "true"; until then GitHub-hosted, where
-  # timings vary more (perf/baseline.json names the runner it was measured on).
+  # timings vary more (perf/baseline.json names the runner it was measured on). The
+  # Playwright timings run only on the homelab runner (plan: hardware-sensitive); each pays
+  # a load-set reset, which a GitHub-hosted run cannot fit in the job's 5 minutes.
   performance:
     runs-on: ${{ vars.HOMELAB_RUNNER == 'true' && fromJSON('["self-hosted", "homelab"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
@@ -396,7 +398,18 @@ jobs:
           --collect.url="$E2E_BASE_URL/"
           --collect.url="$E2E_BASE_URL/projects/$PROJECT_ID?view=board"
           --collect.settings.extraHeaders="$LHCI_EXTRA_HEADERS"
-      - name: Playwright timings on the load set (A0.6, T-P0-29-01..03)
+      # The LHRs carry the session header in configSettings.extraHeaders; drop it before
+      # the upload (upload-artifact leaves hidden directories such as .lighthouseci/ out).
+      - name: Lighthouse reports for the artifact, without the session header
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/lhci"
+          for lhr in frontend/.lighthouseci/lhr-*.json; do
+            [ -e "$lhr" ] || continue
+            jq 'del(.configSettings.extraHeaders)' "$lhr" > "$RUNNER_TEMP/lhci/$(basename "$lhr")"
+          done
+      - name: Playwright timings on the load set (A0.6, T-P0-29-01..03), homelab runner only
+        if: runner.environment == 'self-hosted'
         working-directory: frontend
         run: |
           npx playwright test --grep "@A0\.6|@P0-29"
@@ -410,7 +423,7 @@ jobs:
           name: performance
           path: |
             ${{ runner.temp }}/k6/
-            frontend/.lighthouseci/
+            ${{ runner.temp }}/lhci/
             frontend/test-results/
           if-no-files-found: ignore
           retention-days: 14
