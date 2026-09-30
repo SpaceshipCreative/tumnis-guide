@@ -160,7 +160,6 @@ async def test_token_scopes_are_subset_of_key(
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 @pytest.mark.usefixtures("master_key_file")
 async def test_token_fails_after_run_ends(
     app: FastAPI,
