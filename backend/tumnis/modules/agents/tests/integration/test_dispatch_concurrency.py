@@ -45,7 +45,6 @@ def _status(db: DbUrls, run_id: UUID) -> str | None:
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_two_runs_per_project_third_waits(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,

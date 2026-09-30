@@ -45,7 +45,6 @@ KILL_POINTS = {
 @pytest.mark.req("NFR Reliability")
 @pytest.mark.wp("P2-04")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 @pytest.mark.parametrize("point", list(KILL_POINTS))
 async def test_killed_worker_resumes_and_finishes_once(  # noqa: PLR0917
     point: str,
