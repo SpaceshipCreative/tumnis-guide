@@ -22,9 +22,13 @@ export interface CalendarStripProps {
 export function CalendarStrip({ day }: CalendarStripProps) {
   const calendar = useQuery(dayCalendarQuery(day));
   // Until the first answer, a placeholder of the card's height holds the layout.
-  if (calendar.isPending) return <div aria-hidden="true" className="h-40" />;
+  if (calendar.isPending) return <div aria-hidden="true" className="h-36" />;
   return (
-    <Card title="Calendar and free blocks" className="shrink-0">
+    <Card
+      title="Calendar and free blocks"
+      className="shrink-0"
+      bodyClassName="flex min-w-0 flex-col gap-2 px-4 py-3"
+    >
       {calendar.data ? (
         <Strip calendar={calendar.data} now={new Date()} />
       ) : (

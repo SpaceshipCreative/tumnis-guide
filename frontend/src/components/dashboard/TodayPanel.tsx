@@ -4,7 +4,6 @@
 import { Link } from "@tanstack/react-router";
 
 import { Card } from "../common/Card";
-import { CARD_BODY } from "../common/ui";
 import { TodayItem } from "./TodayItem";
 import type { TodayTask } from "./types";
 
@@ -33,7 +32,7 @@ export function TodayPanel({
     <Card
       title="Today"
       className={`min-h-0 ${className}`}
-      bodyClassName={`${CARD_BODY} min-h-0 flex-1 md:overflow-y-auto`}
+      bodyClassName="flex min-h-0 min-w-0 flex-1 flex-col px-4 py-2 md:overflow-y-auto"
       action={
         more > 0 && (
           <Link

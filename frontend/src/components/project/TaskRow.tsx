@@ -76,7 +76,7 @@ export function TaskRow({
             onClick={() => {
               change.mutate({ task, to: action.to });
             }}
-            className={`${BUTTON_SECONDARY} shrink-0 md:min-h-8`}
+            className={`${BUTTON_SECONDARY} shrink-0 md:min-h-8 md:py-1`}
           >
             {action.text}
           </button>
