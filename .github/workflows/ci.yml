@@ -208,7 +208,8 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
-          npx playwright test
+          # The timings (A0.6, P0-29) run in the performance job only (hardware-sensitive).
+          npx playwright test --grep-invert "@A0\.6|@P0-29"
       - name: Stack logs on failure
         if: failure() && hashFiles('deploy/compose.test.yaml') != ''
         run: |
@@ -336,11 +337,83 @@ jobs:
           image --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /.trivyignore --exit-code 1
           tumnis:ci
 
+  # Performance (P0-29, PERF-1, PERF-2): the budgets on the load set (10 projects, 2,000
+  # tasks) of the compose.test stack. The bundle budget on the image's own dist; k6 against
+  # perf/baseline.json (a p95 more than 20% worse, or over its NFR, fails); Lighthouse CI
+  # at 375 px; the Playwright timings (A0.6, T-P0-29-01..03), which the e2e job leaves out.
+  # On the homelab runner once HOMELAB_RUNNER is "true"; until then GitHub-hosted, where
+  # timings vary more (perf/baseline.json names the runner it was measured on).
   performance:
     runs-on: ${{ vars.HOMELAB_RUNNER == 'true' && fromJSON('["self-hosted", "homelab"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
+    env:
+      K6_IMAGE: grafana/k6:2.3.0@sha256:9c2dee7f8ed74d317e4027c06a10f169b625638189de8d4555d0b3486a5aeb34
+      LHCI_CLI: "@lhci/cli@0.15.1"
+      E2E_BASE_URL: http://localhost:8080
     steps:
-      - run: echo "Performance job is a stub until P0-29 (k6, Lighthouse CI, bundle budget)"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Start the test stack; install Chromium and pull k6 meanwhile
+        run: |
+          (cd frontend && npm ci --no-audit --no-fund && npx playwright install chromium) \
+            > "$RUNNER_TEMP/install.log" 2>&1 &
+          install=$!
+          docker pull -q "$K6_IMAGE" > /dev/null &
+          pull=$!
+          docker compose -f deploy/compose.test.yaml up -d --wait
+          wait "$install" || { cat "$RUNNER_TEMP/install.log"; exit 1; }
+          wait "$pull"
+      - name: Bundle budget of the served build (T-P0-29-09) and the threshold builder (T-P0-29-06)
+        run: |
+          docker cp "$(docker compose -f deploy/compose.test.yaml ps -q api):/app/frontend/dist" "$RUNNER_TEMP/dist"
+          node scripts/ci/check_bundle.mjs "$RUNNER_TEMP/dist"
+          node --test perf/thresholds.test.mjs scripts/ci/check_bundle.test.mjs
+      - name: Load set; an API key for k6 and a session for Lighthouse
+        run: |
+          curl -fsS -X POST "$E2E_BASE_URL/v1/test/reset?set=load"
+          node perf/sign_in.mjs --base "$E2E_BASE_URL" --github-env
+      - name: k6 against perf/baseline.json (T-P0-29-04, T-P0-29-05)
+        run: |
+          mkdir -p "$RUNNER_TEMP/k6"
+          status=0
+          for script in quickadd dashboard; do
+            docker run --rm --network host -u "$(id -u):$(id -g)" \
+              -v "$PWD/perf:/perf:ro" -v "$RUNNER_TEMP/k6:/out" \
+              -e BASE_URL="$E2E_BASE_URL" -e TUMNIS_KEY -e PROJECT_ID \
+              "$K6_IMAGE" run --quiet --summary-export "/out/$script.json" "/perf/k6/$script.js" \
+              || status=1
+          done
+          node perf/check_summary.mjs "$RUNNER_TEMP"/k6/*.json
+          exit "$status"
+      - name: Lighthouse CI, Core Web Vitals at 375 px (T-P0-29-08)
+        working-directory: frontend
+        run: >-
+          npx --yes "$LHCI_CLI" autorun --config=lighthouserc.json
+          --collect.url="$E2E_BASE_URL/"
+          --collect.url="$E2E_BASE_URL/projects/$PROJECT_ID?view=board"
+          --collect.settings.extraHeaders="$LHCI_EXTRA_HEADERS"
+      - name: Playwright timings on the load set (A0.6, T-P0-29-01..03)
+        working-directory: frontend
+        run: |
+          npx playwright test --grep "@A0\.6|@P0-29"
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f deploy/compose.test.yaml logs --no-color --tail=200 api worker
+      # The k6 summaries are what a new perf/baseline.json is drawn from (make perf-baseline).
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: performance
+          path: |
+            ${{ runner.temp }}/k6/
+            frontend/.lighthouseci/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
 
   # A job skipped by `if:` counts as passing for branch protection, which is why the two
   # PR-only guards skip only on push to main.

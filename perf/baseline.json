@@ -1,0 +1,8 @@
+{
+  "quick_add": { "p95_ms": 500 },
+  "dashboard_projects": { "p95_ms": 300 },
+  "dashboard_today": { "p95_ms": 300 },
+  "typeahead": { "p95_ms": 100 },
+  "measured_on": "bootstrap: the NFR values, until CI measures a baseline",
+  "commit": ""
+}
