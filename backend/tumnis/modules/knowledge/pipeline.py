@@ -21,6 +21,7 @@ import asyncio
 import contextlib
 import gzip
 import hashlib
+import hmac
 import json
 import shutil
 import zipfile
@@ -318,7 +319,7 @@ async def _same_file(backend: StorageBackend, path: str, sha256: str) -> bool:
     digest = hashlib.sha256()
     async for chunk in backend.read(path):
         digest.update(chunk)
-    return digest.hexdigest() == sha256
+    return hmac.compare_digest(digest.hexdigest(), sha256)
 
 
 async def place(workspace_id: str, version_id: str, ref: Ref) -> str:

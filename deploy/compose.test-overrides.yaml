@@ -15,6 +15,7 @@ services:
   secrets: *image
   migrate: *image
   worker: *image
+  worker-extract: *image
   seed: *image
   api:
     <<: *image
