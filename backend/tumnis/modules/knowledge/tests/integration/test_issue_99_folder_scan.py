@@ -33,6 +33,7 @@ SCANNED = ["read", "scan", "sniff", "convert", "vlm", "store", "chunk", "index",
 
 
 async def _one(data: bytes) -> AsyncIterator[bytes]:
+    """`data` as the one-chunk stream a storage write takes."""
     yield data
 
 
@@ -80,6 +81,7 @@ async def _sync(env: ExtractEnv) -> Any:
 
 
 def _doc_at(db: DbUrls, env: ExtractEnv, path: str) -> uuid.UUID:
+    """The document the folder sync linked to the file at `path` (in the folder)."""
     found = rows(
         db,
         "SELECT d.id FROM folder_files f JOIN documents d ON d.id = f.document_id"
@@ -117,6 +119,7 @@ async def _settled(
 
 
 def _version_id(db: DbUrls, document_id: uuid.UUID) -> uuid.UUID:
+    """The document's newest version."""
     return uuid.UUID(
         str(
             scalar(
@@ -130,6 +133,7 @@ def _version_id(db: DbUrls, document_id: uuid.UUID) -> uuid.UUID:
 
 
 async def _refused(http: SessionClient, document_id: uuid.UUID) -> None:
+    """`GET /v1/files/{id}` refuses the file: 409 `not_available`."""
     served = await http.get(f"/v1/files/{document_id}")
     assert served.status_code == 409, served.text
     assert served.json()["code"] == "not_available"
@@ -242,6 +246,32 @@ async def test_issue_99_outside_edit_is_scanned_before_it_is_served(
     await _outside(env, "uploads/contract terms.txt", eicar())
     await _sync(env)
     assert await _settled(db, document_id, versions=2) == ["ready", "quarantined"]
+    await _refused(session_client, document_id)
+
+
+@pytest.mark.req("SEC-10", "FR-15.12")
+@pytest.mark.wp("P1-15")
+async def test_issue_99_never_released_folder_file_is_not_served(
+    extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient, db: DbUrls
+) -> None:
+    """A folder file the pipeline never released is not served, even marked `ready`: rows
+    written before this fix are `ready` by the column default, with no current version
+    (only the pipeline's last step sets one), and correcting their path must not make
+    them downloadable unscanned."""
+    import psycopg  # noqa: PLC0415
+
+    from tests._pg import OWNER  # noqa: PLC0415
+
+    env = extract_env
+    document_id = await _place(env, "legacy.txt", b"Written before the scan existed.\n")
+    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+        conn.execute("UPDATE documents SET status = 'ready' WHERE id = %s", (document_id,))
+        conn.execute(
+            "UPDATE document_versions SET status = 'ready' WHERE document_id = %s",
+            (document_id,),
+        )
+
+    assert _statuses(db, document_id) == ("ready", ["ready"])
     await _refused(session_client, document_id)
 
 
