@@ -48,7 +48,6 @@ CEILINGS = {
 
 @pytest.mark.req("PERF-1")
 @pytest.mark.wp("P0-29")
-@pytest.mark.xfail(strict=True, reason="spec:P0-29")
 async def test_query_count_is_constant(
     app: FastAPI,
     seed: SeedResult,
