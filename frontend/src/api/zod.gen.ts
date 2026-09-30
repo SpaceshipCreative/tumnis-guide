@@ -1267,7 +1267,7 @@ export const zAgentsCheckProfileHealthPath = z.object({
 export const zAgentsCheckProfileHealthResponse = zHealthCheckAccepted;
 
 export const zAgentsGetProfileToolsPath = z.object({
-  profile_id: z.uuid(),
+  id: z.uuid(),
 });
 
 /**

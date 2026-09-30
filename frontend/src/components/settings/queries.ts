@@ -44,4 +44,4 @@ export const profilesQuery = () =>
   agentsListProfilesOptions({ query: { limit: 100 } });
 // Settings > Agents > a profile's tools (P2-10, FR-5.12): read-only.
 export const profileToolsQuery = (profileId: string) =>
-  agentsGetProfileToolsOptions({ path: { profile_id: profileId } });
+  agentsGetProfileToolsOptions({ path: { id: profileId } });

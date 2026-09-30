@@ -5699,18 +5699,18 @@
         ]
       }
     },
-    "/v1/agents/profiles/{profile_id}/tools": {
+    "/v1/agents/profiles/{id}/tools": {
       "get": {
         "description": "The profile's MCP servers from its last health check, read-only (FR-5.12): each\nmatched against its project's allowlist, and its GitHub and Coolify tokens' reach.",
         "operationId": "agents_get_profile_tools",
         "parameters": [
           {
             "in": "path",
-            "name": "profile_id",
+            "name": "id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Profile Id",
+              "title": "Id",
               "type": "string"
             }
           }

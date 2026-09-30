@@ -506,7 +506,7 @@ export const agentsGetProfileTools = <ThrowOnError extends boolean = false>(
   >({
     responseValidator: async (data) =>
       await zAgentsGetProfileToolsResponse.parseAsync(data),
-    url: "/v1/agents/profiles/{profile_id}/tools",
+    url: "/v1/agents/profiles/{id}/tools",
     ...options,
   });
 

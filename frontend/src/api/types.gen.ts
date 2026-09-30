@@ -2952,12 +2952,12 @@ export type AgentsGetProfileToolsData = {
   body?: never;
   path: {
     /**
-     * Profile Id
+     * Id
      */
-    profile_id: string;
+    id: string;
   };
   query?: never;
-  url: "/v1/agents/profiles/{profile_id}/tools";
+  url: "/v1/agents/profiles/{id}/tools";
 };
 
 export type AgentsGetProfileToolsErrors = {
