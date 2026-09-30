@@ -1,72 +1,89 @@
-# P2-18 handoff (Project archive and unarchive)
+# P2-18 handoff 2 (Project archive and unarchive)
 
-Stopped on the coordinator's HANDOFF NOW. The spec tests are written but only partly checked red. There is no PR yet. Branch `wp/P2-18` is pushed to origin by this handoff commit.
+Stopped on the context watcher's HANDOFF NOW. There is no PR yet. The branch `wp/P2-18` on origin holds everything listed below (this handoff commit included).
 
-## State
+## Commits (on top of main 9b35155)
 
-- Commit: `chore: P2-18 handoff`. It holds all work in progress: the spec tests, fixtures, fake-runner support and the zstandard pins. No product code yet.
-- Red status:
-  - Daemon: 4/4 xfailed (`cd daemon && uv run pytest -q tests/test_archive.py -rx`).
-  - Backend integration: not run yet. They need Docker, so run `make test-int` bare from the worktree root. Before the red commit, check that the `archive_world` fixture SETS UP without error (a fixture error is an ERROR, not an xfail).
-- Before the red commit, still to do:
-  1. Write T-P2-18-09 at `backend/tests/acceptance/test_seed_archive_roundtrip.py::test_seed_project_survives_round_trip`. Use the `seed` fixture plus `ArchiveWorld` (see `_archive.py`) and a protocol-2 `fake_runner` (`runner = fake_runner(profiles=[...], connect=False); runner.homes[name] = {...}; runner.connect_v2()`). Compare tasks, documents, run_events, the folder tree and `runner.homes[profile]` before and after an archive and unarchive round trip.
-  2. Add `AuditCase("data.purged", ...)` to `backend/tests/audit_cases.py`. Its perform must archive a project first, then `POST /v1/purges`.
-  3. Run `make check` and confirm everything is red. Then drop HANDOFF.md from the tree or keep it updated, and commit `test(projects): P2-18 spec tests (red)`.
+- `a64d45c` test(projects): P2-18 spec tests (red): T-01..09, the `data.purged` AuditCase, and `.importlinter` ignores for `projects.tests -> knowledge.**` (two contracts).
+- `10496f3` feat(projects): the archive_project, unarchive_project and purge backend.
+- `203fe03` feat(agents): runner archive messages and socket hand-over (a subagent's work): protocol models, ws `_archive_answer`, fixtures, runner schemas.
+- `5f39cf5` feat(daemon): archive, restore and purge profiles. The 4 daemon spec tests pass, and their markers are removed.
+- `74d254b` fix(knowledge): a folder that was never made packs as empty; the archives folder is made first.
+- `34b67c7` chore(gen): `make gen`, which produced openapi (`archive_state`, `POST /v1/purges`), the frontend client, `schemas/events/v1/project.purged.json` and `test_schema_events.py`.
 
-## Files so far
+## State of the tests
 
-- `daemon/tests/conftest.py`: `tmp_profile_home` fixture (`ProfileHome`). It has nested files, an empty file, 0600 `.env`, a 0755 script and a relative symlink. `daemon.toml` also lists the profile.
-- `daemon/tests/test_archive.py`: T-01 and T-02, plus two extra tests (active_run refusal, wrong digest).
-- `backend/tests/fakes/fake_runner.py`: `connect_v2()`, `homes`, `archived`, `busy`, `home_digest()`, `archives()`, `restores()`, and answers to `archive`, `restore` and `purge_archive`. It imports `ArchiveDone`, `RestoreDone` and `tumnis.core.archive_blobs.Manifest`, none of which exist yet.
-- `backend/tumnis/modules/projects/tests/integration/_archive.py`: `ArchiveWorld` helpers. `_archive_probe.py` is the worker-subprocess storage log. `conftest.py` provides the `archive_world` fixture. `test_archive.py` holds T-03 to T-08.
-- Shared files: `daemon/pyproject.toml` and `daemon/uv.lock`, `backend/pyproject.toml` and `backend/uv.lock`, each with `zstandard==0.25.0` added (docs: Context7 `/indygreg/python-zstandard`).
+- Daemon: 63 passed. The markers on T-01/T-02 and the two extra archive tests are removed.
+- Backend unit (`-m "not integration and not contract"`): 1461 passed, as of `10496f3`.
+- `make test` (the subagent's run): 2 failures are ours and still OPEN, because the event fixture `backend/tests/contract/fixtures/events/project.purged/v1.json` is missing. Add it by copying the shape of `fixtures/events/project.archived/v1.json`. The failing tests are `test_versions::test_every_schema_has_fixtures_and_upgraders` and `test_every_payload_accepts_n_and_n_minus_1[events/project.purged]`. The other 2 failures are environmental: semgrep on `~/.semgrep` (set `SEMGREP_*` env to `$TMPDIR` as vm-agent-rules says) and promtool.
+- `make test-int`: the first green-tree run was INCONCLUSIVE. Docker answered 500 on a container start under VM load (exit 2). Nothing about the archive tests is known yet. The backend markers on T-03..T-09 are still `xfail(strict)`: a pass shows up as XPASS(strict), and that is the signal to remove that marker.
+- `make check`: lint, format, mypy and lint-imports are clean. Unit is green as of `10496f3`, apart from the semgrep sandbox issue. Helper script: `/tmp/claude-1002/P2-18-c1/check.sh` sets the semgrep env and writes `/tmp/claude-1002/P2-18-c1/check.log`.
 
-## Interfaces the tests lock (implement exactly)
+## Next steps
 
-- Daemon, `tumnis_daemon.archive`:
-  - `manifest_of(root) -> Manifest`, where `Manifest(entries: tuple[(path, size, sha256)])` has `.digest()`. A symlink is hashed as its link target and never followed.
-  - `live_profiles(cfg)`: `cfg.profiles` plus remembered profiles, minus archived ones. An exclusion set is kept in `state_dir`.
-  - `async handle_archive(msg, cfg, *, busy=frozenset()) -> ArchiveDone`. It writes `state_dir/archives/<archive_id>.tar.zst`. A busy profile gets `error_code="active_run"`.
-  - `async handle_restore(msg, cfg) -> RestoreDone`. It sets `ok=False` on a digest mismatch and keeps the archive file.
-  - Use the tarfile `filter="tar"` (checked in the 3.13 source: it keeps modes except the go-w bits, and it blocks writes through links). Validate `archive_id` as a safe filename.
-- Daemon `protocol.py`: `ArchiveDone(archive_id, path, size, sha256, manifest_digest, error_code: Literal["active_run", ...] | None = None, error=None)`, `Restore(profile, archive_id, expected_manifest_digest)`, `RestoreDone(archive_id, manifest_digest, ok)` and `PurgeArchive(profile, archive_id)`. Add `"archive"` to `CAPABILITIES`. Replace the `archive_not_supported` case in `main._handle`, and use `live_profiles` in the register.
-- Backend `agents/protocol.py`: the same four models at runner v1, added to the unions and the `_DAEMON`/`_SERVER` maps. Add fixtures `backend/tests/contract/fixtures/runner/<name>/v1.json`, then run `make gen` (also needed for the `archive_state` OpenAPI change) and commit what it writes.
-- Backend `agents/ws.py`: add `restore` and `purge_archive` to `PROTOCOL_2_COMMANDS`. Handle `archive_done` and `restore_done` like `_provision_result`: correlation_id = workflow id, topic `archive:<archive_id>` / `restore:<archive_id>`, idempotency key = message_id.
-- Core: `tumnis/core/archive_blobs.py` holds `Manifest`, the zstd helpers and the put/take/delete functions. Revision `core_0009_archived_blobs` goes after `core_0008_fake_scripts`. Table `archived_blobs(module, kind, project_id, ref, codec, raw_size, stored_size, sha256, data)` is a tenant table, unique on `(workspace_id, module, kind, project_id, ref)`, with `ON CONFLICT DO NOTHING`. Check `tests/meta/test_table_registry.py`.
-- Projects:
-  - Revision `projects_0002`: `archive_state text NULL CHECK IN ('archiving','archived','unarchiving')`. Add it to `ProjectOut` (the tests read `archive_state` from `GET /v1/projects/{id}`).
-  - The routes stay synchronous. Locked T-P0-17-11/12 need `archived_at` set or cleared immediately and exactly one `project.archived` row. The archive route sets `archive_state='archiving'`; unarchive sets `'unarchiving'` when the state is not null.
-  - A subscriber in `projects/events.py` starts `archive_project` on `project.archived` and `unarchive_project` on `project.updated` (with `archived_at` changed and archived False). Enqueue it like `agents.workflows.start_provision` (fresh `contextvars.Context()`), with the workflow id taken from the event id.
-  - New DBOS queue `archive` in `worker.register_queues`, `partition_concurrency=1`, partition key `archive:<project_id>`.
-  - Workflow `archive_project(workspace_id, project_id, actor)`. This deviates from the plan's signature, because the steps need the workspace. Its kill points: `projects.archive.{begin,profile_sent,profile_stored,run_logs,excerpts,folder,finish}`. `finish` emits `project.updated`, never a second `project.archived`, and audits.
-  - Hooks go in `projects.api` registries. `agents`, `knowledge` and `integrations` all import `projects`, so `projects` must not import them.
-- Agents `agents/archive.py`:
-  - Profile hooks: send_archive returns the archive_id, or None when the profile has no runner. The workflow does the recv in its body (R-30) with `WAIT_SLICE_S=3600`.
-  - The archive result is stored as an `archived_blobs` row (`kind=profile_archive`), so there is no agents migration (P2-02/P2-03 in flight).
-  - Run logs: `run_events` of runs whose profile belongs to the project go to blobs with `module="agents"`, `kind="run_events"`, one step per 500-run batch.
-  - Dispatch is refused while the project is archived or has an archive_state.
-- Integrations: excerpts are `context_items` with `owner_type='project'`, stored as blobs with `module="integrations"`, `kind="context_items"`.
-- Knowledge `knowledge/archive.py`:
-  - Tumnis-made folder: tar + zstd the folder into one file OUTSIDE the folder root (e.g. `.tumnis/archives/<folder id>.tar.zst` at the location root), verify the manifest by reading it back, then delete the files. `folder_files` rows are kept. If the pack would exceed 50 MiB (`MAX_FILE_BYTES`), fall back to index-only; this is a deviation and a Scott item.
-  - Existing folder: `folder_files` rows and the chunks of the project's documents go to blobs with `module="knowledge"`.
-  - `sync._load` must skip the folders of projects whose `archive_state` is not null or that are archived, through `projects.api`.
-  - Use `sync.net()` for the net policy.
-- Purge: `POST /v1/purges {scope:"project", id, reason}` in `integrations/router.py`.
-  - Session only, idempotent write, answers 202. 409 `not_archived`; 422 for a missing or blank reason. It records `audit.record("data.purged", target=("project", id), reason=...)` in the route transaction, soft-deletes the project so GET answers 404, and emits an event.
-  - The network and storage deletes (daemon `purge_archive` message, the packed file, the blobs) run in worker subscribers, never in the api process.
+1. Add the `project.purged` event fixture (see above). Run `make check`, then `make test`.
+2. Run `make test-int` bare. Expect to debug T-03..T-09 and the `data.purged` audit case (T-P0-15-07). Things to watch:
+   - `knowledge/archive.py`:
+     - `_tree` catches `storage.NotFound` for a folder that was never made. Check which error ServerPathStorage actually raises.
+     - `restore_rows` uses `jsonb_populate_recordset`. Array columns (`chunks.heading_path`) and `OVERRIDING SYSTEM VALUE` are untested.
+   - T-08 (kill test): the worker subprocess relays `project.archived`, so a second `archive_project` starts under another workflow id. Both run on the `archive` queue (global `concurrency=1`; DBOS refuses an unkeyed enqueue on a partitioned queue, which is why the queue isn't partitioned). The second finds the state `archived` and returns `skipped`.
+   - T-09: the seed workspace goes through a hand-built `WorkspaceHandle`. If seed events relayed during `archive` touch documents, compare that test's reads with the plan.
+3. Remove each backend xfail marker once its test passes (Scott approved this).
+4. Open the PR. Push `/usr/bin/git push origin HEAD:wp/P2-18`, then run `gh pr create --base main --head wp/P2-18 --title "[P2-18] impl: Project archive and unarchive" --body-file <file>`, then comment `@coderabbitai review` once. The body lists docs, deviations and Scott items (below).
+5. Work the review loop (`~/tumnis-coordinator/pr-review-loop.md`). When CI is green and no threads are open, SendMessage "#<PR> MERGE-READY at <sha>" to main.
+6. Delete HANDOFF.md in a chore commit.
 
-## Scott items / deviations to report
+## Design (as built)
 
-- No archive UI exists. The done-checklist line "unarchive from Settings and the archived projects list" is not built, and no spec covers it.
-- The 50 MiB pack cap falls back to index-only.
-- The routes stay synchronous. `finish_archive` emits `project.updated`, not `project.archived`.
-- The workflow signature adds `workspace_id`.
-- "Excerpts" are taken to be the project's context_items. Phase 3 will widen this.
-- Purge soft-deletes the project and drops its archives. The live tasks and documents rows are left alone.
+- `core/archive_blobs.py` + `core_0009_archived_blobs` (after `core_0008_fake_scripts`):
+  - The tenant table is `archived_blobs(module, kind, project_id, ref, codec, raw_size, stored_size, sha256, data)`, unique on `(workspace_id, module, kind, project_id, ref)`.
+  - `Manifest` has a canonical-JSON digest; the daemon keeps an identical copy.
+  - `snapshot_rows` (`to_jsonb`) and `restore_rows` (`jsonb_populate_recordset`, generated columns skipped) handle the rows.
+  - put/blobs/delete handle the blobs.
+- `projects_0002`: `archive_state` NULL | `archiving` | `archived` | `unarchiving`.
+  - Archive route: `archived_at` and `archiving`.
+  - Unarchive route: `unarchiving` when a state is set.
+  - `projects.api`: `register_archive_hook`/`archive_hook`, `archive_facts`, `dormant_projects`, `move_archive_state`, `purge_project`.
+- `projects/events.py` subscribers: `projects.start_archive` (on `project.archived`), `projects.start_unarchive` (on the `project.updated` with `archived_at` changed and archived false) and `projects.start_purge` (on the new `project.purged`). They lazily import `projects/workflows.py`, which enqueues on the `archive` queue with workflow id `<name>:<event id>`.
+- `projects/workflows.py`: `archive_project(workspace_id, project_id, actor)`, `unarchive_project`, `purge_project_archive`.
+  - Kill points `projects.archive.{begin,profile_sent,profile_stored,run_logs,excerpts,folder,finish}`.
+  - The `recv` loops in the workflow body with `WAIT_SLICE_S=3600`.
+  - Each step no-ops once the project has left the state it expects.
+- Hooks:
+  - `agents/archive.py`: `send_archive`/`store_archive`/`send_restore`/`finish_restore`, run logs in 500-run blobs, `purge_archive` (sends `purge_archive`), and `dispatch_allowed`, which `dispatch_step` uses to refuse "project_archived".
+  - `integrations/archive.py`: `context_items` excerpts.
+  - `knowledge/archive.py`: a Tumnis-made folder is packed to `.tumnis/archives/<folder id>.tar.zst` at the location root, verified, then its files deleted. `folder_files` rows are kept. An existing folder, or a pack over 50 MiB, archives index-only (`folder_files` and chunks go to blobs).
+  - Each is registered by importing it from the module's `workflows.py`. `ws.py` imports `agents.archive` too, so the hooks also register in the api process, which is harmless.
+- `sync._load` skips dormant projects' folders and their records.
+- `worker.py`: the `archive` queue, with `concurrency=1`, is in `register_queues` and `main_queues`.
+- Purge: `POST /v1/purges` in `integrations/router.py` (session only, idempotent, 202), through `integrations.api.purge` → `projects.api.purge_project`.
+  - 409 `not_archived` when `archived_at` is null or the state is `unarchiving`.
+  - The `data.purged` audit row carries the reason; the project is soft-deleted and emits `project.purged`.
+  - The worker drops the blobs and the pack, and sends the daemon's `purge_archive`.
+
+## Deviations / Scott items (for the PR body)
+
+- No archive UI. The done-checklist line "unarchive from Settings and the archived projects list" is not built, and no spec covers it.
+- The `archive` queue is used instead of the plan's `maintenance`, because T-08 locks the name. It is global `concurrency=1`, not partitioned, because DBOS 3.1 requires a partition key on every enqueue to a partitioned queue and T-08 enqueues without one.
+- The workflow signature adds `workspace_id`, and the routes stay synchronous. `finish` emits `project.updated`, not a second `project.archived`, and writes no audit row: the plan's "audit" is left for the purge only.
+- A pack over 50 MiB falls back to index-only.
+- "Excerpts" means the project's `context_items`.
+- Purge soft-deletes the project and drops its archives. Live tasks and documents rows are left alone.
+- An unarchive whose profile restore doesn't match the manifest fails the workflow, and the project stays `unarchiving`.
+- The daemon's `busy` is taken when the archive command arrives. The server-side guard is `dispatch_allowed`.
+- Shared-file edits:
+  - `backend/pyproject.toml`, `backend/uv.lock`, `daemon/pyproject.toml`, `daemon/uv.lock`: `zstandard==0.25.0`.
+  - `backend/.importlinter`: projects.tests → knowledge ignores.
+  - `backend/tests/audit_cases.py`: the `data.purged` case.
+- Revisions: `core_0009_archived_blobs` and `projects_0002`.
+- Docs:
+  - Context7 `/indygreg/python-zstandard` (0.25.0: `ZstdCompressor.compress`/`stream_writer`, `ZstdDecompressor.decompress`/`stream_reader`).
+  - Context7 `/dbos-inc/dbos-transact-py` (partitioned queues need `queue_partition_key`; `EnqueueOptions`).
+  - https://docs.python.org/3.13/library/tarfile.html (extraction filters, `tar_filter`, `TarInfo.replace`).
 
 ## Verify
 
-- `cd daemon && uv run pytest -q tests/test_archive.py`
-- `make check`
-- `make test` and `make test-int`, each bare from the worktree root.
-- Push with `/usr/bin/git push origin HEAD:wp/P2-18`. Scratch files go in `$TMPDIR/P2-18-c0/`.
+- `cd daemon && uv run pytest -q`
+- `/tmp/claude-1002/P2-18-c1/check.sh`, then read `/tmp/claude-1002/P2-18-c1/check.log`
+- `make test` and `make test-int`, each run bare from the worktree root.
+- Scratch files go in `/tmp/claude-1002/P2-18-c2/`.
