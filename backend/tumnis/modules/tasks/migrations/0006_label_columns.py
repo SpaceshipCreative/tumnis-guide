@@ -7,8 +7,8 @@
 - `label_suggestion`: a low-confidence answer, never written to `label` (it stays NULL,
   pending) until the human accepts it (R-08).
 
-All nullable additions (expand). Chained after P2-13's review_items.flags (tasks_0004);
-P1-13's tasks_0005 (#80) is re-chained whichever merges second.
+All nullable additions (expand). Chained after P1-13's review_items Jev columns
+(tasks_0005).
 """
 
 import sqlalchemy as sa
@@ -16,7 +16,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import DOUBLE_PRECISION, ENUM, UUID
 
 revision = "tasks_0006"
-down_revision = "tasks_0004"
+down_revision = "tasks_0005"
 branch_labels = None
 depends_on = None
 phase = "expand"

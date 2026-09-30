@@ -1,5 +1,5 @@
 """tasks SQLAlchemy tables owned by this module (mirrors of revisions tasks_0001,
-tasks_0003, tasks_0004 and tasks_0006).
+tasks_0003, tasks_0004, tasks_0005 and tasks_0006).
 
 `board_rank` and `sort_key` compare bytewise (`COLLATE "C"`), so Postgres orders the
 fractional keys as Python and TypeScript do (core/rank.py)."""
@@ -109,7 +109,9 @@ class ReviewItem(TenantBase, Base):
     target_id: Mapped[UUID]
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     dedupe_key: Mapped[str | None]
-    blocking_impact: Mapped[str | None]
+    blocking_impact: Mapped[str | None]  # a float's text (P0-18); the queue casts it (P1-13)
+    jev_factor: Mapped[float | None]  # P1-13, revision tasks_0005
+    decision_id: Mapped[UUID | None]  # P1-13: the blocking-impact decision that set it
     snoozed_until: Mapped[datetime | None]
     decided_at: Mapped[datetime | None]
     decision: Mapped[str | None]

@@ -83,6 +83,7 @@ import {
   tasksAddComment,
   tasksChangeStatus,
   tasksCreateTask,
+  tasksDecideReview,
   tasksDeleteRecurrence,
   tasksGetBoard,
   tasksGetColumns,
@@ -94,6 +95,7 @@ import {
   tasksListComments,
   tasksListPullRequests,
   tasksListRecurrence,
+  tasksListReview,
   tasksListReviewKinds,
   tasksListTasks,
   tasksMoveTask,
@@ -317,6 +319,9 @@ import type {
   TasksCreateTaskData,
   TasksCreateTaskError,
   TasksCreateTaskResponse,
+  TasksDecideReviewData,
+  TasksDecideReviewError,
+  TasksDecideReviewResponse,
   TasksDeleteRecurrenceData,
   TasksDeleteRecurrenceError,
   TasksDeleteRecurrenceResponse,
@@ -350,9 +355,12 @@ import type {
   TasksListRecurrenceData,
   TasksListRecurrenceError,
   TasksListRecurrenceResponse,
+  TasksListReviewData,
+  TasksListReviewError,
   TasksListReviewKindsData,
   TasksListReviewKindsError,
   TasksListReviewKindsResponse,
+  TasksListReviewResponse,
   TasksListTasksData,
   TasksListTasksError,
   TasksListTasksResponse,
@@ -2465,6 +2473,95 @@ export const tasksListRecurrenceInfiniteOptions = (
   return opts as Omit<typeof opts, "initialData">;
 };
 
+export const tasksListReviewQueryKey = (
+  options?: Options<TasksListReviewData>,
+) => createQueryKey("tasksListReview", options);
+
+/**
+ * List Review
+ *
+ * The review queue (FR-6.1): open, unsnoozed items by blocking impact (downstream
+ * tasks and human minutes, times Jev's factor when it applied), then age; `kind` keeps
+ * one registered kind.
+ */
+export const tasksListReviewOptions = (
+  options?: Options<TasksListReviewData>,
+) =>
+  queryOptions<
+    TasksListReviewResponse,
+    TasksListReviewError,
+    TasksListReviewResponse,
+    ReturnType<typeof tasksListReviewQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListReview({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListReviewQueryKey(options),
+  });
+
+export const tasksListReviewInfiniteQueryKey = (
+  options?: Options<TasksListReviewData>,
+): QueryKey<Options<TasksListReviewData>> =>
+  createQueryKey("tasksListReview", options, true);
+
+/**
+ * List Review
+ *
+ * The review queue (FR-6.1): open, unsnoozed items by blocking impact (downstream
+ * tasks and human minutes, times Jev's factor when it applied), then age; `kind` keeps
+ * one registered kind.
+ */
+export const tasksListReviewInfiniteOptions = (
+  options?: Options<TasksListReviewData>,
+) => {
+  const opts = infiniteQueryOptions<
+    TasksListReviewResponse,
+    TasksListReviewError,
+    InfiniteData<TasksListReviewResponse>,
+    QueryKey<Options<TasksListReviewData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<TasksListReviewData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<TasksListReviewData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await tasksListReview({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: tasksListReviewInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
 export const tasksGetReviewCountQueryKey = (
   options?: Options<TasksGetReviewCountData>,
 ) => createQueryKey("tasksGetReviewCount", options);
@@ -2524,6 +2621,37 @@ export const tasksListReviewKindsOptions = (
     },
     queryKey: tasksListReviewKindsQueryKey(options),
   });
+
+/**
+ * Decide Review
+ *
+ * Decides one item (R-04): 422 `action_not_allowed` for an action its kind lacks,
+ * `invalid_review_payload` or `invalid_snooze`; 409 `already_decided` or
+ * `stale_version`. Emits `human.decided`; the owning module applies the effect.
+ */
+export const tasksDecideReviewMutation = (
+  options?: Partial<Options<TasksDecideReviewData>>,
+): UseMutationOptions<
+  TasksDecideReviewResponse,
+  TasksDecideReviewError,
+  Options<TasksDecideReviewData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksDecideReviewResponse,
+    TasksDecideReviewError,
+    Options<TasksDecideReviewData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksDecideReview({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const agentsListRunnersQueryKey = (
   options?: Options<AgentsListRunnersData>,

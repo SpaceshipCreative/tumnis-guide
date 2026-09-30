@@ -134,6 +134,27 @@ export const zDeadLetterOut = z.object({
 });
 
 /**
+ * DecideIn
+ *
+ * R-04: the action, its payload when the action takes one, the snooze end for a
+ * snooze, and the version read.
+ */
+export const zDecideIn = z.object({
+  action: z.enum([
+    "accept",
+    "edit",
+    "reject",
+    "snooze",
+    "answer",
+    "approve",
+    "deny",
+  ]),
+  payload: z.record(z.string(), z.unknown()).nullish(),
+  snooze_until: z.iso.datetime().nullish(),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
  * DefaultIn
  */
 export const zDefaultIn = z.object({
@@ -740,6 +761,40 @@ export const zReorderIn = z.object({
  */
 export const zReviewCountOut = z.object({
   count: z.int(),
+});
+
+/**
+ * ReviewItemOut
+ *
+ * One item as the queue shows it: its kind's actions and primary action (Enter, R-04),
+ * its target's title when the target is a task or a project, and its impact.
+ */
+export const zReviewItemOut = z.object({
+  actions: z.array(z.string()),
+  blocking_impact: z.number(),
+  created_at: z.iso.datetime(),
+  decided_at: z.iso.datetime().nullable(),
+  decision: z.string().nullable(),
+  id: z.uuid(),
+  jev_factor: z.number(),
+  kind: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+  primary_action: z.string().nullable(),
+  project_id: z.uuid().nullable(),
+  snoozed_until: z.iso.datetime().nullable(),
+  target_id: z.uuid(),
+  target_title: z.string().nullable(),
+  target_type: z.string(),
+  updated_at: z.iso.datetime(),
+  version: z.int(),
+});
+
+/**
+ * Page[ReviewItemOut]
+ */
+export const zPageReviewItemOut = z.object({
+  items: z.array(zReviewItemOut),
+  next_cursor: z.string().nullable(),
 });
 
 /**
@@ -2013,6 +2068,17 @@ export const zTasksListRecurrenceQuery = z.object({
  */
 export const zTasksListRecurrenceResponse = zPageRecurrenceOut;
 
+export const zTasksListReviewQuery = z.object({
+  kind: z.string().max(41).nullish(),
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksListReviewResponse = zPageReviewItemOut;
+
 /**
  * Successful Response
  */
@@ -2022,6 +2088,17 @@ export const zTasksGetReviewCountResponse = zReviewCountOut;
  * Successful Response
  */
 export const zTasksListReviewKindsResponse = zReviewKindsOut;
+
+export const zTasksDecideReviewBody = zDecideIn;
+
+export const zTasksDecideReviewPath = z.object({
+  id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksDecideReviewResponse = zReviewItemOut;
 
 export const zAgentsListRunnersQuery = z.object({
   cursor: z.string().max(2048).nullish(),

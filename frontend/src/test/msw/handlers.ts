@@ -1,6 +1,8 @@
 import { http, HttpResponse, type RequestHandler } from "msw";
 
+import type { PageReviewItemOut } from "../../api/types.gen";
 import { dashboardDefaults } from "./dashboard";
+import { workingHours } from "./planning";
 
 /**
  * `GET /v1/review/kinds` answering these registered kinds (the P0-18 registry). The
@@ -47,6 +49,30 @@ export const handlers: RequestHandler[] = [
   // The project page reads the agent profiles for its header (P1-06): none by default.
   http.get("/v1/agents/profiles", () =>
     HttpResponse.json({ items: [], next_cursor: null }),
+  ),
+  // The review queue page (P1-13, the shell's review link): nothing to review, and the
+  // default working hours its snooze-until-tomorrow reads.
+  http.get("*/v1/review", () =>
+    HttpResponse.json({
+      items: [],
+      next_cursor: null,
+    } satisfies PageReviewItemOut),
+  ),
+  http.get("*/v1/settings/working-hours", () =>
+    HttpResponse.json(workingHours()),
+  ),
+  // A project page opened from another page (the review queue's `o`): no such project
+  // unless the test declares one.
+  http.get("*/v1/projects/:projectId", () =>
+    HttpResponse.json(
+      {
+        type: "about:blank",
+        title: "Not found",
+        status: 404,
+        code: "not_found",
+      },
+      { status: 404 },
+    ),
   ),
   ...dashboardDefaults,
 ];

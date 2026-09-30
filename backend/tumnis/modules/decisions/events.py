@@ -13,6 +13,10 @@ itself rather than queueing a delivery behind the events queue, which keeps the 
 within its 1 s budget (FR-3.3; the plan's fallback, "the relay starts `label_task`
 directly").
 
+`decisions.assess_blocking_impact` listens to `review_item.added` (P1-13, FR-11.4): Jev's
+blocking-impact Score for the new item, stored as its factor in the review queue's order.
+A second delivery asks again (served from the 24-hour cache) and stores the same factor.
+
 A subscriber's name is part of every delivery's workflow ID, so it never changes.
 """
 
@@ -27,6 +31,7 @@ from tumnis.modules.decisions.payloads import DecisionMadeV1, DecisionUnavailabl
 __all__ = [
     "DecisionMadeV1",
     "DecisionUnavailablePayload",
+    "assess_blocking_impact",
     "label_on_create",
     "label_on_title_change",
     "record_outcome",
@@ -81,3 +86,9 @@ async def label_on_title_change(envelope: EventEnvelope) -> None:
         event_id=envelope.event_id,
         as_of=envelope.occurred_at,
     )
+
+
+@subscribe("review_item.added", name="decisions.assess_blocking_impact")
+async def assess_blocking_impact(envelope: EventEnvelope) -> None:
+    """Runs in the event's workspace (run_subscriber applies it)."""
+    await api.assess_blocking_impact(UUID(str(envelope.payload["item_id"])))

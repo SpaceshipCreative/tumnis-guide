@@ -99,6 +99,9 @@ ancestors =
 ignore_imports =
     tumnis.modules.integrations.tests.** -> tumnis.modules.calendar.api
     tumnis.modules.integrations.tests.** -> tumnis.modules.knowledge.api
+# The review queue's tests (P1-13) run decisions' blocking-impact question against queued
+# items (T-P1-13-05, 06); tasks code itself never calls decisions.
+    tumnis.modules.tasks.tests.** -> tumnis.modules.decisions.api
 # tasks builds on github (P2-13: pull requests on task cards); github's own tests drive
 # tasks' api and subscriber to prove the round trip. Module code never does.
     tumnis.modules.github.tests.** -> tumnis.modules.tasks.api

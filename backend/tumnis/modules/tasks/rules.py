@@ -18,12 +18,12 @@
 - Today's order: priority, then due date (undated last), then age.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from enum import StrEnum
 from math import ceil
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, Protocol
 from uuid import UUID
 
 
@@ -402,3 +402,137 @@ def restore_values(
         done = values["status"] == Status.DONE
         values["completed_at"] = (completed_at or now) if done else None
     return values
+
+
+# --- Review queue order (P1-13, FR-6.1, FR-11.4, R-04) -----------------------------------------
+
+ImpactScope = Literal["task", "project", "workspace"]
+ReviewAction = Literal["accept", "edit", "reject", "snooze", "answer", "approve", "deny"]  # R-04
+PRIMARY_ACTIONS: Final[tuple[ReviewAction, ...]] = ("accept", "approve", "answer")  # Enter
+MINUTES_PER_TASK_EQUIVALENT: Final = 30  # plan default: 30 human minutes count like one task
+JEV_APPLIED: Final = "applied"  # decisions' Route.APPLY value
+JEV_MIDDLE_LEVEL: Final = 2  # of the five blocking-impact levels, 0 to 4
+JEV_STEP: Final = 0.25  # plan default: the factor runs 0.5 to 1.5 over the five levels
+
+
+@dataclass(frozen=True, slots=True)
+class GraphTask:
+    """What `downstream` needs from one live task."""
+
+    id: UUID
+    parent_id: UUID | None
+    status: Status
+    label: Label | None
+    estimate_minutes: int | None
+    due_on: date | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TaskGraph:
+    """The live tasks of the scope a review item's impact reads (the caller loads them:
+    the project's for "task" and "project", every task for "workspace")."""
+
+    tasks: tuple[GraphTask, ...]
+
+
+def _counts(tasks: Iterable[GraphTask]) -> tuple[int, int]:
+    open_tasks = [task for task in tasks if task.status is not Status.DONE]
+    minutes = sum(task.estimate_minutes or 0 for task in open_tasks if task.label in HUMAN_TIME)
+    return len(open_tasks), minutes
+
+
+def scope_tasks(
+    target_task_id: UUID | None, scope: ImpactScope, graph: TaskGraph
+) -> list[GraphTask]:
+    """The tasks an item's impact reads, Done ones included: "task" = the target task and
+    its descendants (none without a target task in `graph`); "project" and "workspace" =
+    every task in `graph`."""
+    if scope != "task":
+        return list(graph.tasks)
+    children: dict[UUID | None, list[GraphTask]] = {}
+    by_id: dict[UUID, GraphTask] = {}
+    for task in graph.tasks:
+        children.setdefault(task.parent_id, []).append(task)
+        by_id[task.id] = task
+    root = by_id.get(target_task_id) if target_task_id is not None else None
+    if root is None:
+        return []
+    subtree, stack = [], [root]
+    while stack:
+        task = stack.pop()
+        subtree.append(task)
+        stack.extend(children.get(task.id, ()))
+    return subtree
+
+
+def downstream(
+    target_task_id: UUID | None, scope: ImpactScope, graph: TaskGraph
+) -> tuple[int, int]:
+    """(open task count, sum of estimate_minutes of open Human/Hybrid tasks) over the kind's
+    impact scope (`scope_tasks`). AI and pending tasks add to the count, never to the
+    minutes."""
+    return _counts(scope_tasks(target_task_id, scope, graph))
+
+
+def nearest_due(target_task_id: UUID | None, scope: ImpactScope, graph: TaskGraph) -> date | None:
+    """The earliest due date among the open tasks of the scope (Jev's `nearest_due_in_days`
+    input); None when none of them is dated."""
+    dates = [
+        task.due_on
+        for task in scope_tasks(target_task_id, scope, graph)
+        if task.status is not Status.DONE and task.due_on is not None
+    ]
+    return min(dates, default=None)
+
+
+def deterministic_impact(tasks: int, minutes: int) -> float:
+    return tasks + minutes / MINUTES_PER_TASK_EQUIVALENT
+
+
+class ScoreLike(Protocol):
+    """decisions' ScoreAnswer as the factor reads it (tasks cannot import decisions)."""
+
+    @property
+    def score(self) -> float: ...
+
+
+def jev_factor(answer: ScoreLike | None, route: str | None) -> float:
+    """1.0 unless the blocking-impact decision applied (`route` is decisions' Route value
+    "applied"); then 1 + 0.25 * (score - 2), i.e. 0.5 to 1.5 over the five levels."""
+    if answer is None or route != JEV_APPLIED:
+        return 1.0
+    return 1 + JEV_STEP * (answer.score - JEV_MIDDLE_LEVEL)
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewRow:
+    """What the queue order needs from one open item."""
+
+    id: UUID
+    created_at: datetime
+    impact: float  # deterministic_impact of what it blocks
+    jev_factor: float = 1.0
+
+
+def review_key(row: ReviewRow) -> tuple[float, datetime, UUID]:
+    """The biggest weighted impact first, then the oldest, then the id."""
+    return (-(row.impact * row.jev_factor), row.created_at, row.id)
+
+
+def review_order(rows: Sequence[ReviewRow]) -> list[ReviewRow]:
+    """Sort key (-deterministic_impact * jev_factor, created_at, id)."""
+    return sorted(rows, key=review_key)
+
+
+class KindActions(Protocol):
+    @property
+    def actions(self) -> tuple[str, ...]: ...
+
+
+def primary_action(spec: KindActions) -> str:
+    """The first of accept, approve, answer present in spec.actions (Enter key, R-04); a
+    kind with none of them has its first action."""
+    for action in PRIMARY_ACTIONS:
+        if action in spec.actions:
+            return action
+    return spec.actions[0]

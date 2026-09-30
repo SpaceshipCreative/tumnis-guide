@@ -11,6 +11,8 @@ calls `api.py` (no import cycle inside the module).
   `api_key:<id>`, `system`, ...); `via` is `undo` when an undo put the status back (P0-24).
 - `human.decided`: a decision on a review item (R-07's superset). The payload is fixed here;
   P1-13 and P2-05 emit it.
+- `review_item.added` (P1-13): a new review item, by id, kind and target only (never the
+  payload); decisions asks Jev how much it blocks.
 
 `doc` holds the title, the body (first action, acceptance criteria and comments, capped at
 8 KB, plan default), whether the task is deleted, and (P0-20, additive) the task's project
@@ -89,3 +91,14 @@ class HumanDecidedV1(EventPayload):
     previous: dict[str, Any] | None = None
     payload: dict[str, Any] | None = None
     decision_id: UUID | None = None
+
+
+@event_type("review_item.added", 1)
+class ReviewItemAddedV1(EventPayload):
+    event_name: ClassVar[str] = "review_item.added"
+    schema_version: Literal[1] = 1
+    item_id: UUID
+    kind: str
+    project_id: UUID | None
+    target_type: str
+    target_id: UUID

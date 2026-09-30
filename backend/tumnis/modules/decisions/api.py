@@ -15,6 +15,7 @@ logs every decision (typed answers, never the inputs) with a `decision.made` eve
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from types import MappingProxyType
 from typing import Annotated, Any, Final, Literal, Self
 from uuid import UUID
 
@@ -62,7 +63,11 @@ from tumnis.modules.decisions.limiter import credential_fingerprint, limiter_for
 from tumnis.modules.decisions.models import DecisionLog
 from tumnis.modules.decisions.models import ProviderConfig as ProviderConfigRow
 from tumnis.modules.decisions.models import Threshold as ThresholdRow
-from tumnis.modules.decisions.payloads import DecisionMadeV1, DecisionUnavailablePayload
+from tumnis.modules.decisions.payloads import (
+    DecisionMadeV1,
+    DecisionUnavailablePayload,
+    DecisionValueEdit,
+)
 from tumnis.modules.decisions.rules import (
     DEFAULT_THRESHOLDS,
     Route,
@@ -97,6 +102,7 @@ __all__ = [
     "TypedAnswer",
     "VllmSettings",
     "ask_raw",
+    "assess_blocking_impact",
     "configure_generation",
     "configure_net_policy",
     "decide",
@@ -329,6 +335,7 @@ DECISION_UNAVAILABLE: Final = tasks.ReviewKindSpec(
     payload_schema=DecisionUnavailablePayload,
     actions=("accept", "edit", "reject", "snooze"),  # accept asks again, edit sets by hand
     impact_scope="task",
+    action_payloads=MappingProxyType({"edit": DecisionValueEdit}),  # P1-13
 )
 tasks.register_review_kind(DECISION_UNAVAILABLE)
 
@@ -752,3 +759,51 @@ async def record_outcome(
         return
     async with tenant_session(_context()) as s:
         await s.execute(stmt)
+
+
+# --- Blocking impact of a review item (P1-13, FR-11.4) -----------------------------------
+
+
+async def assess_blocking_impact(
+    item_id: UUID, *, providers: Providers | None = None, clock: Clock | None = None
+) -> Decision | None:
+    """Worker-only. Asks `blocking_impact` about an open review item (subject
+    `review_item`) with what it blocks (tasks' `review_impact_facts`), and stores the
+    factor the answer gives the item's order (`tasks.jev_factor`: 1.0 unless the decision
+    applied) with the decision's id. With no provider answering nothing is written, so the
+    factor stays 1.0 and the deterministic impact alone orders the queue. None when the
+    item is no longer open."""
+    ctx = _context()
+    clock = clock or SystemClock()
+    async with tenant_session(ctx) as s:
+        facts = await tasks.review_impact_facts(s, item_id)
+    if facts is None:
+        return None
+    inputs: dict[str, Any] = {
+        "item_kind": facts.kind,
+        "item_summary": facts.target_title or facts.kind.replace("_", " "),
+        "downstream_task_count": facts.tasks,
+        "downstream_human_minutes": facts.minutes,
+    }
+    if facts.project_name is not None:
+        inputs["project_name"] = facts.project_name
+    if facts.nearest_due is not None:
+        inputs["nearest_due_in_days"] = (facts.nearest_due - clock.now().date()).days
+    decision = await decide(
+        DecisionPoint.BLOCKING_IMPACT,
+        inputs,
+        subject=SubjectRef(type="review_item", id=item_id),
+        project_id=facts.project_id,
+        providers=providers,
+        clock=clock,
+    )
+    if decision.provider == "none":
+        return decision
+    answer = decision.answers.get(CATALOGUE[DecisionPoint.BLOCKING_IMPACT].main_question)
+    score = answer if isinstance(answer, ScoreAnswer) else None
+    await tasks.set_review_jev(
+        item_id,
+        jev_factor=tasks.jev_factor(score, decision.route.value),
+        decision_id=decision.decision_id,
+    )
+    return decision
