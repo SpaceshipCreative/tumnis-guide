@@ -1,6 +1,9 @@
 // One task in the Tasks view (P0-24, FR-2.6, UX 7): its title opens the drawer; one status
-// action (Start, or Done for a Human task in progress); subtasks indented underneath.
+// action (Start, or Done for a Human task in progress); subtasks indented underneath. A
+// capture still on the offline queue shows with its pending mark and no actions (P0-25).
 import { formatDay, formatMinutes } from "../dashboard/format";
+import { PendingMark } from "../quickadd/PendingMark";
+import { isPendingId, pendingKey } from "../quickadd/queue";
 import type { TaskLite } from "./grouping";
 import { useChangeStatus, type Status } from "./mutations";
 
@@ -31,8 +34,8 @@ export function TaskRow({
 }) {
   const subtasks = subtasksOf(task.id);
   const change = useChangeStatus();
-  const draft = task.id.startsWith("draft-");
-  const action = draft ? null : statusAction(task);
+  const pending = isPendingId(task.id);
+  const action = pending ? null : statusAction(task);
   const estimate =
     task.label === "ai" || task.estimate_minutes === null
       ? null
@@ -48,7 +51,7 @@ export function TaskRow({
           <button
             type="button"
             data-task-open
-            disabled={draft}
+            disabled={pending}
             title="Open (Enter)"
             onClick={() => {
               onOpen(task.id);
@@ -57,7 +60,8 @@ export function TaskRow({
           >
             {task.title}
           </button>
-          <p className="flex flex-wrap gap-x-2 text-xs text-muted">
+          <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
+            {pending && <PendingMark idempotencyKey={pendingKey(task.id)} />}
             <span>
               {task.label === null ? "No label yet" : LABEL_TEXT[task.label]}
             </span>

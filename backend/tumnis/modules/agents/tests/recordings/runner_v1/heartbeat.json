@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "message_id": "7f724611-1f17-48c8-8524-8f074948e28b",
+  "correlation_id": "runner:homelab-hermes",
+  "sent_at": "2026-09-30T02:25:16.691325Z",
+  "type": "heartbeat",
+  "seq": 3,
+  "running_run_ids": [
+    "1a0539ca-b63f-4fb8-a9a1-6942dd0d9a54"
+  ]
+}
