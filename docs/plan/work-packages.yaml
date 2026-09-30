@@ -378,7 +378,7 @@ phases:
       traces: [PERF-1, PERF-2, "NFR Performance", "NFR Responsive"]
       red:
       - "Playwright timing on the load fixture: dashboard first paint under 1 s; quick-add usable within 3 s of a cold PWA open at phone width"
-      - "k6: quick-add round trip under 500 ms; any NFR latency more than 20% worse than the committed baseline fails the build"
+      - "k6: quick-add round trip under 500 ms; any NFR latency more than 20% and at least 50 ms worse than the committed baseline fails the build (Scott decision 27)"
       - "Query-count assertions on the dashboard, task list and board endpoints stay fixed as rows grow; Lighthouse CI holds the Core Web Vitals budget at phone width"
       green: "k6 scripts, query-count fixture, Lighthouse config, baseline file."
       done: "A0.6 passes."
