@@ -256,7 +256,7 @@ Integration tests carry `@pytest.mark.enable_socket` through a module-level `pyt
 | Layer | Runner and command | Scope | Budget | Where it runs |
 | --- | --- | --- | --- | --- |
 | Unit | `uv run pytest -m "not integration and not contract"` | `rules.py`, pure code, sockets disabled | 3 min (PRD: backend rules under 30 s) | GitHub-hosted |
-| Contract | `uv run pytest -m contract` + `make gen && git diff --exit-code` + Schemathesis | Schemas, adapters, connectors | 2 min | GitHub-hosted |
+| Contract | `uv run pytest -m contract` + `make gen && git diff --exit-code` + Schemathesis | Schemas, adapters, connectors | 3 min | GitHub-hosted |
 | Integration | `uv run pytest -m integration -n auto` | Postgres, DBOS, MinIO, SFTP, clamd, RLS, workflows | 10 min | GitHub-hosted |
 | Frontend | `npm run test` (Vitest) | Components, machines, stores, lib | inside Unit budget | GitHub-hosted |
 | End to end | `npx playwright test` | Journeys and acceptance, phone and laptop | 10 min | GitHub-hosted, against compose.test with fakes |
@@ -1589,7 +1589,7 @@ cd ../frontend && npm run test -- --run && npx playwright test e2e/harness.spec.
 
 **Done checklist**
 
-- [ ] Each test layer runs its (harness-only) suite green in CI inside its budget (unit 3 min, contract 2 min, integration 10 min, frontend inside unit, e2e 10 min)
+- [ ] Each test layer runs its (harness-only) suite green in CI inside its budget (unit 3 min, contract 3 min, integration 10 min, frontend inside unit, e2e 10 min)
 - [ ] `xfail_strict`, strict markers, random order and the socket block are on by default
 - [ ] T-P0-02-03 is committed with `reason="spec:P0-18"`
 - [ ] AGENTS.md "Tests and markers" section updated with the fixture list
