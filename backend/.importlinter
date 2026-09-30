@@ -94,6 +94,9 @@ ancestors =
 ignore_imports =
     tumnis.modules.integrations.tests.** -> tumnis.modules.calendar.api
     tumnis.modules.integrations.tests.** -> tumnis.modules.knowledge.api
+# The review queue's tests (P1-13) run decisions' blocking-impact question against queued
+# items (T-P1-13-05, 06); tasks code itself never calls decisions.
+    tumnis.modules.tasks.tests.** -> tumnis.modules.decisions.api
 unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:search-usage-subscribe-only]
