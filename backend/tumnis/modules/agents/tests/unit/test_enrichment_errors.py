@@ -105,17 +105,14 @@ def _result(task_id: str, revision: str | None, *, estimate: bool, split: bool) 
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P1-05")
-@pytest.mark.xfail(strict=True, reason="spec:P1-05")
 @pytest.mark.parametrize("case", sorted(CASES))
 def test_cross_field_rules(case: str) -> None:
     """T-P1-05-10
     Over label, label revision, estimate and split presence (and the task id), the
     enrichment result breaks exactly the listed cross-field rules.
     """
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
-        enrichment_errors,
-    )
-    from tumnis.modules.agents.skill_io import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import enrichment_errors  # noqa: PLC0415
+    from tumnis.modules.agents.skill_io import (  # noqa: PLC0415
         EnrichmentRequest,
         EnrichmentResult,
     )

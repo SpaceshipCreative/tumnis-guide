@@ -32,7 +32,6 @@ SKILL_SCHEMAS: tuple[tuple[Family, str], ...] = (
 
 @pytest.mark.req("FR-14.7")
 @pytest.mark.wp("P1-05")
-@pytest.mark.xfail(strict=True, reason="spec:P1-05")
 @pytest.mark.parametrize(("family", "name"), SKILL_SCHEMAS)
 def test_schemas_generated_and_examples_valid(family: Family, name: str, repo_root: Path) -> None:
     """T-P1-05-11
@@ -58,3 +57,33 @@ def test_schemas_generated_and_examples_valid(family: Family, name: str, repo_ro
     parsed = parse_versioned(family, name, example)
     assert type(parsed) is spec.model
     assert json.loads(parsed.model_dump_json()) == example
+
+
+RECORDED_BODIES: dict[str, tuple[Family, str]] = {
+    "enrich": ("enrichment", "request"),
+    "plan": ("planning", "request"),
+}
+
+
+@pytest.mark.req("FR-5.2")
+@pytest.mark.wp("P1-05")
+def test_recorded_packets_match_the_models(repo_root: Path) -> None:
+    """The skill harness's recorded packets (profiles/tests/recordings/<skill>/) are
+    TaskPackets whose body validates against the committed request schema and whose
+    prompt_text is what render_prompt makes of that body, so a schema change fails here
+    until they are regenerated."""
+    from tumnis.core.schemas import parse_versioned  # noqa: PLC0415
+    from tumnis.modules.agents.packet_builder import TaskPacket, render_prompt  # noqa: PLC0415
+
+    recordings = sorted((repo_root / "profiles/tests/recordings").glob("*/*.packet.json"))
+    assert {p.parent.name for p in recordings} == set(RECORDED_BODIES)
+    for path in recordings:
+        packet = TaskPacket.model_validate_json(path.read_text())
+        family, name = RECORDED_BODIES[path.parent.name]
+        assert packet.skill == path.parent.name
+        assert (packet.output_schema.family, packet.output_schema.name) == (family, "result")
+        schema = json.loads((repo_root / f"schemas/{family}/v1/{name}.json").read_text())
+        Draft202012Validator(schema).validate(packet.body)
+        body = parse_versioned(family, name, packet.body)
+        assert json.loads(body.model_dump_json()) == packet.body
+        assert packet.prompt_text == render_prompt(packet.skill, packet.output_schema, packet.body)

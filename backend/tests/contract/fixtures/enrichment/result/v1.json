@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "task_id": "01950000-0000-7000-8000-000000000711",
+  "first_action": "Duplicate the February invoice in Wave and change the month",
+  "acceptance_criteria": [
+    "The March invoice PDF is in Wave",
+    "Acme's billing address has the invoice"
+  ],
+  "estimate_minutes": 25,
+  "label_revision": null,
+  "hybrid_split": {
+    "ai_portion": "Draft the March invoice from February's",
+    "human_portion": "Check the amounts and send it"
+  }
+}
