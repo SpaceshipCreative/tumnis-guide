@@ -3348,14 +3348,14 @@ async def use_existing_folder(
     that already holds this project's files is not re-pointed (409 `folder_not_empty`,
     moving files is the move job), and a folder that is, holds or sits inside another
     project's folder on the location is refused (409 `folder_taken`)."""
-    try:
+    location = await _location_row(s, location_id)
+    if not await projects.project_exists(s, project_id):
+        raise NotFound("projects", project_id)
+    try:  # the rows are found (404) before any rule about the body
         root = safe_rel_path(path.strip("/"))
     except PathRejected as exc:
         raise _storage_problem(exc) from exc
-    location = await _location_row(s, location_id)
     _require_online(location)
-    if not await projects.project_exists(s, project_id):
-        raise NotFound("projects", project_id)
     current = (
         (await s.execute(select(_folders).where(_folders.c.project_id == project_id)))
         .mappings()
@@ -3530,19 +3530,30 @@ async def delete_at_source(
     synced). Audited as `knowledge.deleted_at_source` with the reason."""
     await _delete_target(s, document_id)
     now = SystemClock().now()
-    used = await s.scalar(
-        update(_confirmations)
+    offered = _token_hash(confirm_token)
+    issued = await s.execute(
+        select(_confirmations.c.id, _confirmations.c.token_sha256)
         .where(
-            _confirmations.c.token_sha256 == _token_hash(confirm_token),
             _confirmations.c.document_id == document_id,
             _confirmations.c.issued_to == user_id,
             _confirmations.c.used_at.is_(None),
             _confirmations.c.expires_at > now,
             _confirmations.c.deleted_at.is_(None),
         )
-        .values(used_at=now)
-        .returning(_confirmations.c.id)
+        .with_for_update()
     )
+    match = next(
+        (row.id for row in issued if hmac.compare_digest(bytes(row.token_sha256), offered)),
+        None,
+    )
+    used = None
+    if match is not None:
+        used = await s.scalar(
+            update(_confirmations)
+            .where(_confirmations.c.id == match, _confirmations.c.used_at.is_(None))
+            .values(used_at=now)
+            .returning(_confirmations.c.id)
+        )
     if used is None:
         raise ProblemError(422, "confirmation_invalid", "Confirm the delete again.")
     await s.execute(

@@ -20,6 +20,7 @@ The source is never written, moved or deleted by the move job.
 """
 
 import hashlib
+import hmac
 from collections.abc import AsyncIterator, Callable, Mapping
 from datetime import datetime
 from typing import Any, Final
@@ -228,7 +229,7 @@ async def verify(
             except StorageError:
                 return None
             stat = await target.stat(path)
-            if held != digest or stat is None:
+            if stat is None or not hmac.compare_digest(held, digest):
                 return None
             stats[inside] = [stat.size, stat.mtime.isoformat(), stat.etag]
     return stats
