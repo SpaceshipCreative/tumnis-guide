@@ -12,7 +12,7 @@ import hashlib
 import json
 import os
 import re
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path, PurePosixPath
 from typing import Any, Final, Literal
@@ -49,6 +49,7 @@ from tumnis.modules.knowledge.adapters.server_path import ServerPathStorage
 from tumnis.modules.knowledge.models import (
     Document,
     DocumentVersion,
+    FolderFile,
     PendingWrite,
     ProjectFolder,
     StorageLocation,
@@ -67,7 +68,9 @@ from tumnis.modules.knowledge.storage import (
     spool,
 )
 from tumnis.modules.knowledge.storage import NotFound as FileMissing
+from tumnis.modules.knowledge.sync_rules import dedupe_name, render_note, sanitize_filename
 from tumnis.modules.projects import api as projects
+from tumnis.modules.tasks import api as tasks
 from tumnis.seed import DocumentSeed, register_seed_writer
 
 _documents: Table = Document.__table__  # type: ignore[assignment]
@@ -430,17 +433,28 @@ def _backend(
     raise ProblemError(422, "invalid_location", f"{row['kind']} locations are not supported yet")
 
 
+BackendHook = Callable[[Row, StorageBackend], StorageBackend]
+_backend_hook: list[BackendHook | None] = [None]
+
+
+def use_backend_hook(fn: BackendHook | None) -> None:
+    """Wrap every backend `open_backend` builds (tests: a write log, a counting store);
+    None removes the hook."""
+    _backend_hook[0] = fn
+
+
 @asynccontextmanager
 async def _opened(
     s: AsyncSession, row: RowMapping, *, net: NetPolicy, resolver: Resolver
 ) -> AsyncIterator[StorageBackend]:
     config = await _open_config(s, row) if row["config_enc"] is not None else None
-    backend = _backend(row, config, net=net, resolver=resolver)
+    built = _backend(row, config, net=net, resolver=resolver)
+    hook = _backend_hook[0]
     try:
-        yield backend
+        yield hook(row, built) if hook is not None else built
     finally:
-        if isinstance(backend, S3Storage):
-            await backend.aclose()
+        if isinstance(built, S3Storage):
+            await built.aclose()
 
 
 async def _location_row(s: AsyncSession, location_id: UUID) -> RowMapping:
@@ -665,12 +679,23 @@ async def _drain(s: AsyncSession, location_id: UUID, backend: StorageBackend) ->
     counts as landed (a crash between the write and the delete); any other is a conflict
     left queued for the sync engine (P1-15). Rows for one path chain: each after the first
     takes the etag the previous one left, since they were queued against the same file.
-    An outage stops the drain."""
+    An outage stops the drain.
+
+    Each landed note is recorded in `folder_files` (P1-15), synced at the Document's
+    version when its body is still the queued one, else at 0 so the next sync writes the
+    newer body through."""
     queued = (
         (
             await s.execute(
-                select(_pending, _versions.c.body_md, _versions.c.content_hash)
+                select(
+                    _pending,
+                    _versions.c.body_md,
+                    _versions.c.document_id,
+                    _documents.c.body_md.label("current_body"),
+                    _documents.c.version.label("doc_version"),
+                )
                 .join(_versions, _versions.c.id == _pending.c.document_version_id)
+                .join(_documents, _documents.c.id == _versions.c.document_id)
                 .where(_pending.c.location_id == location_id, _pending.c.deleted_at.is_(None))
                 .order_by(_pending.c.created_at, _pending.c.id)
             )
@@ -680,7 +705,8 @@ async def _drain(s: AsyncSession, location_id: UUID, backend: StorageBackend) ->
     )
     landed: dict[str, str] = {}  # path -> etag an earlier row of this drain left there
     for item in queued:
-        body, path = item["body_md"].encode(), item["path"]
+        body = render_note(item["document_id"], item["body_md"]).encode()
+        path = item["path"]
         try:
             written = await backend.write(
                 path, _one_chunk(body), landed.get(path, item["if_match"])
@@ -695,6 +721,17 @@ async def _drain(s: AsyncSession, location_id: UUID, backend: StorageBackend) ->
             return
         landed[path] = written.etag
         await s.execute(delete(_pending).where(_pending.c.id == item["id"]))
+        current = item["current_body"] == item["body_md"]
+        await record_file(
+            s,
+            location_id,
+            written,
+            content_hash=hashlib.sha256(body).hexdigest(),
+            origin="tumnis",
+            document_id=item["document_id"],
+            synced_version=item["doc_version"] if current else 0,
+            last_op="drain",
+        )
 
 
 async def _holds(backend: StorageBackend, path: str, body: bytes, current: FileStat | None) -> bool:
@@ -734,19 +771,37 @@ def _folder_out(row: Row) -> ProjectFolderOut:
 
 
 async def assign_project_folder(s: AsyncSession, project_id: UUID) -> ProjectFolderOut | None:
-    """The project's folder (`<project id>`) on the workspace default location, once: a
-    second call finds it and writes nothing. None while the workspace has no default."""
+    """The project's folder on the workspace default location, named after the project
+    (sanitized, and numbered when the location already has a folder of that name; P1-15),
+    once: a second call finds it and writes nothing. None while the workspace has no
+    default. Records the folder only; `ensure_project_folder` also makes it."""
     default = await s.scalar(
         select(_locations.c.id).where(_locations.c.is_default, _locations.c.deleted_at.is_(None))
     )
     if default is None:
         return None
-    await s.execute(
-        pg_insert(_folders)
-        .values(project_id=project_id, location_id=default, root_path=str(project_id))
-        .on_conflict_do_nothing(index_elements=[_folders.c.workspace_id, _folders.c.project_id])
-    )
+    existing = await s.scalar(select(_folders.c.id).where(_folders.c.project_id == project_id))
+    if existing is None:
+        await s.execute(
+            pg_insert(_folders)
+            .values(
+                project_id=project_id,
+                location_id=default,
+                root_path=await _folder_name(s, project_id, default),
+            )
+            .on_conflict_do_nothing(index_elements=[_folders.c.workspace_id, _folders.c.project_id])
+        )
     return await get_project_folder(s, project_id)
+
+
+async def _folder_name(s: AsyncSession, project_id: UUID, location_id: UUID) -> str:
+    """`sanitize_filename(project name)`, numbered past the location's other folders
+    (compared ignoring case; deleted folders count, their files may still be there)."""
+    name = (await projects.get_project(s, project_id)).name
+    taken: list[str] = list(
+        await s.scalars(select(_folders.c.root_path).where(_folders.c.location_id == location_id))
+    )
+    return dedupe_name(sanitize_filename(name), frozenset(p.casefold() for p in taken))
 
 
 async def _folder_row(s: AsyncSession, project_id: UUID) -> RowMapping:
@@ -846,7 +901,7 @@ async def write_project_file(
             raise _storage_problem(exc) from exc
 
 
-async def save_note(
+async def save_note(  # queue, write and record, one branch each
     s: AsyncSession,
     document_id: UUID,
     *,
@@ -854,15 +909,22 @@ async def save_note(
     net: NetPolicy,
     resolver: Resolver = system_resolver,
 ) -> NoteWrite:
-    """Snapshot a text document into `document_versions` and write it to
-    `<folder>/notes/<document id>.md`. While the location is offline the write queues in
-    `pending_writes` (the text is safe in Postgres) and lands on the next healthy check."""
+    """Snapshot a text document into `document_versions` and write it to its file: the
+    path its `folder_files` record names, else `<folder>/notes/<sanitized title>.md`
+    (numbered when taken). The file is the body under `tumnis_id` frontmatter (P1-15,
+    Scott's decision 15), so the note keeps its identity when renamed outside; without
+    `if_match` a recorded file is replaced only while it still holds what was last synced.
+    While the location is offline the write queues in `pending_writes` (the text is safe
+    in Postgres) and lands on the next healthy check."""
     doc = (
         (
             await s.execute(
-                select(_documents.c.project_id, _documents.c.body_md).where(
-                    _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
-                )
+                select(
+                    _documents.c.project_id,
+                    _documents.c.body_md,
+                    _documents.c.title,
+                    _documents.c.version,
+                ).where(_documents.c.id == document_id, _documents.c.deleted_at.is_(None))
             )
         )
         .mappings()
@@ -872,8 +934,8 @@ async def save_note(
         raise NotFound("documents", document_id)
     folder = await _folder_row(s, doc["project_id"])
     location = await _location_row(s, folder["location_id"])
-    body = (doc["body_md"] or "").encode()
-    digest = hashlib.sha256(body)
+    text_body = doc["body_md"] or ""
+    body = render_note(document_id, text_body).encode()
     last = await s.scalar(
         select(func.max(_versions.c.version_no)).where(_versions.c.document_id == document_id)
     )
@@ -882,15 +944,15 @@ async def save_note(
         .values(
             document_id=document_id,
             version_no=(last or 0) + 1,
-            content_hash=digest.digest(),
-            body_md=doc["body_md"] or "",
-            size=len(body),
+            content_hash=hashlib.sha256(text_body.encode()).digest(),
+            body_md=text_body,
+            size=len(text_body.encode()),
         )
         .returning(_versions.c.id)
     )
-    path = f"{folder['root_path']}/notes/{document_id}.md"
-    written = NoteWrite(status="written", location_id=location["id"], path=path)
-    queued = NoteWrite(status="queued", location_id=location["id"], path=path)
+    record = await file_record_of(s, location["id"], document_id)
+    if record is not None and if_match is None:
+        if_match = record["etag"]
     online = location["status"] == "online"
     async with _opened(s, location, net=net, resolver=resolver) as backend:
         if online:
@@ -898,25 +960,48 @@ async def save_note(
             if health.status != "ok":
                 await _set_status(s, location["id"], health)
                 online = False
+        if record is not None:
+            path = record["path"]
+        else:
+            path = await note_path(
+                s,
+                location["id"],
+                folder["root_path"],
+                doc["title"],
+                document_id=document_id,
+                backend=backend if online else None,
+            )
+        landed: FileStat | None = None
         if online:
             try:
-                await backend.write(path, _one_chunk(body), if_match)
+                landed = await backend.write(path, _one_chunk(body), if_match)
             except PreconditionFailed as exc:
                 if not await _holds(backend, path, body, exc.current):
                     raise _storage_problem(exc) from exc
+                landed = exc.current
             except (LocationOffline, AdapterUnavailable) as exc:
                 await _set_status(s, location["id"], Health.degraded(type(exc).__name__))
                 online = False
             except (StorageError, AdapterError) as exc:
                 raise _storage_problem(exc) from exc
-    if online:
-        return written
+    if landed is not None:
+        await record_file(
+            s,
+            location["id"],
+            landed,
+            content_hash=hashlib.sha256(body).hexdigest(),
+            origin="tumnis",
+            document_id=document_id,
+            synced_version=doc["version"],
+            last_op="save_note",
+        )
+        return NoteWrite(status="written", location_id=location["id"], path=path)
     await s.execute(
         insert(_pending).values(
             location_id=location["id"], path=path, document_version_id=version_id, if_match=if_match
         )
     )
-    return queued
+    return NoteWrite(status="queued", location_id=location["id"], path=path)
 
 
 # --- Text documents edited in the app (P0-24: the project page's Brief rail) --------------
@@ -959,3 +1044,440 @@ async def update_text_document(
     if row["project_id"] is not None:
         mark_changed(s, "project", row["project_id"])
     return DocumentDTO.model_validate(dict(row))
+
+
+# --- Project folders and the sync engine's records (P1-15, FR-15.12, FR-15.6, REL-1) ------
+#
+# A Tumnis-made project folder holds `uploads/`, `notes/`, `agent-outputs/` and Tumnis's own
+# `.tumnis/` (its trash). `folder_files` records every file the sync engine (`sync.py`,
+# the `knowledge_folder_sync` workflow) knows on a location: its state at the last sync,
+# who made it and the Document it is linked to. Everything Tumnis writes into a folder
+# (note saves, uploads, the engine's own writes) is recorded, so the next scan never takes
+# it for an outside file.
+
+FOLDER_LAYOUT: Final = ("uploads", "notes", "agent-outputs", ".tumnis")
+TUMNIS_DIR: Final = ".tumnis"
+FOLDER_SOURCE: Final = "folder"  # documents.source of a Document made from a folder file
+UPLOAD_SOURCE: Final = "upload"  # ... of an upload Tumnis placed in the folder
+SYNC_REVIEW_KINDS: Final = (
+    "sync_conflict",
+    "deleted_outside_edited_inside",
+    "edited_outside_deleted_inside",
+)
+
+_files: Table = FolderFile.__table__  # type: ignore[assignment]
+
+
+class SyncReviewPayload(BaseModel):
+    """A folder sync decision waiting for the user: `accept` keeps Tumnis's version, `edit`
+    the folder's, `reject` keeps both."""
+
+    location_id: UUID
+    path: str
+    conflict_path: str | None = None
+    document_id: UUID | None = None
+
+
+for _kind in SYNC_REVIEW_KINDS:
+    tasks.register_review_kind(
+        tasks.ReviewKindSpec(
+            kind=_kind,
+            owner_module="knowledge",
+            payload_schema=SyncReviewPayload,
+            actions=("accept", "edit", "reject", "snooze"),
+            impact_scope="project",
+        )
+    )
+
+
+async def record_file(  # one keyword per column
+    s: AsyncSession,
+    location_id: UUID,
+    stat: FileStat,
+    *,
+    content_hash: str,
+    origin: Literal["tumnis", "external"],
+    document_id: UUID | None,
+    synced_version: int | None,
+    last_op: str,
+) -> None:
+    """Insert or replace the record of `stat.path` on the location."""
+    values = {
+        "size": stat.size,
+        "mtime": stat.mtime,
+        "etag": stat.etag,
+        "content_hash": content_hash,
+        "origin": origin,
+        "document_id": document_id,
+        "synced_version": synced_version,
+        "last_op": last_op,
+    }
+    stmt = pg_insert(_files).values(location_id=location_id, path=stat.path, **values)
+    await s.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[_files.c.workspace_id, _files.c.location_id, _files.c.path],
+            set_=values,
+        )
+    )
+
+
+async def file_record_of(
+    s: AsyncSession, location_id: UUID, document_id: UUID
+) -> RowMapping | None:
+    """The live record of the Document's file on the location, if it has one."""
+    row: RowMapping | None = (
+        (
+            await s.execute(
+                select(_files)
+                .where(
+                    _files.c.location_id == location_id,
+                    _files.c.document_id == document_id,
+                    _files.c.deleted_at.is_(None),
+                )
+                .order_by(_files.c.id)
+            )
+        )
+        .mappings()
+        .first()
+    )
+    return row
+
+
+async def taken_paths(s: AsyncSession, location_id: UUID) -> set[str]:
+    """Every path the location's records and queued writes hold, casefolded."""
+    recorded: list[str] = list(
+        await s.scalars(select(_files.c.path).where(_files.c.location_id == location_id))
+    )
+    queued: list[str] = list(
+        await s.scalars(
+            select(_pending.c.path).where(
+                _pending.c.location_id == location_id, _pending.c.deleted_at.is_(None)
+            )
+        )
+    )
+    return {p.casefold() for p in (*recorded, *queued)}
+
+
+async def free_path(
+    path: str, taken: set[str], backend: StorageBackend | None, *, tries: int = 1000
+) -> str:
+    """`path`, or its first numbered name that no taken name holds, nor a file (when the
+    location answers); the name found joins `taken`."""
+    for _ in range(tries):
+        candidate = dedupe_name(path, frozenset(taken))
+        taken.add(candidate.casefold())
+        if backend is None or await backend.stat(candidate) is None:
+            return candidate
+    raise ProblemError(409, "name_taken", "No free name for that file.")
+
+
+async def note_path(  # the note's place, its folder and where to look
+    s: AsyncSession,
+    location_id: UUID,
+    root_path: str,
+    title: str,
+    *,
+    document_id: UUID,
+    backend: StorageBackend | None,
+    taken: set[str] | None = None,
+) -> str:
+    """Where a note without a file record goes: the path of a write already queued for it,
+    else `<folder>/notes/<sanitized title>.md`, numbered past every taken name."""
+    queued: str | None = await s.scalar(
+        select(_pending.c.path)
+        .join(_versions, _versions.c.id == _pending.c.document_version_id)
+        .where(
+            _pending.c.location_id == location_id,
+            _pending.c.deleted_at.is_(None),
+            _versions.c.document_id == document_id,
+        )
+        .order_by(_pending.c.created_at, _pending.c.id)
+        .limit(1)
+    )
+    if queued is not None:
+        return queued
+    busy = taken if taken is not None else await taken_paths(s, location_id)
+    return await free_path(f"{root_path}/notes/{sanitize_filename(title)}.md", busy, backend)
+
+
+async def ensure_project_folder(
+    s: AsyncSession, project_id: UUID, *, net: NetPolicy, resolver: Resolver = system_resolver
+) -> ProjectFolderOut | None:
+    """The project's folder (`assign_project_folder`), made on the location with its
+    layout (`uploads/`, `notes/`, `agent-outputs/`, `.tumnis/`) when Tumnis made it. Once:
+    making it again changes nothing, and no file is written. An offline or failing
+    location keeps the record; the next folder sync makes the layout. None while the
+    workspace has no default location."""
+    folder = await assign_project_folder(s, project_id)
+    if folder is None or folder.mode != "tumnis_made":
+        return folder
+    location = await _location_row(s, folder.location_id)
+    if location["status"] != "online":
+        return folder
+    try:
+        async with _opened(s, location, net=net, resolver=resolver) as backend:
+            await make_layout(backend, folder.root_path)
+    except (StorageError, AdapterError):
+        pass  # made by the next folder sync, once the location answers
+    return folder
+
+
+async def make_layout(backend: StorageBackend, root_path: str) -> None:
+    """A Tumnis-made folder's subfolders (a no-op on S3)."""
+    for sub in FOLDER_LAYOUT:
+        await backend.ensure_folder(f"{root_path}/{sub}")
+
+
+async def trash_document(s: AsyncSession, document_id: UUID) -> None:
+    """Send a Document to Tumnis's trash. Its file is left to the folder sync: a file
+    Tumnis made moves to `.tumnis/trash/`, an outside file is only unindexed."""
+    project_id = await s.scalar(
+        update(_documents)
+        .where(_documents.c.id == document_id, _documents.c.deleted_at.is_(None))
+        .values(deleted_at=func.now())
+        .returning(_documents.c.project_id)
+    )
+    found = await s.scalar(select(_documents.c.id).where(_documents.c.id == document_id))
+    if found is None:
+        raise NotFound("documents", document_id)
+    if project_id is not None:
+        mark_changed(s, "project", project_id)
+
+
+def text_of(data: bytes) -> str | None:
+    """A file's bytes as text when they are UTF-8 without NULs (a stand-in body until
+    extraction, P1-16); None otherwise."""
+    try:
+        text_body = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return None if "\x00" in text_body else text_body
+
+
+async def add_version(s: AsyncSession, document_id: UUID, data: bytes, body_md: str | None) -> UUID:
+    """The Document's next version: `data`'s hash and size, and its text."""
+    last = await s.scalar(
+        select(func.max(_versions.c.version_no)).where(_versions.c.document_id == document_id)
+    )
+    version_id: UUID = await s.scalar(
+        insert(_versions)
+        .values(
+            document_id=document_id,
+            version_no=(last or 0) + 1,
+            content_hash=hashlib.sha256(data).digest(),
+            body_md=body_md or "",
+            size=len(data),
+        )
+        .returning(_versions.c.id)
+    )
+    return version_id
+
+
+async def create_file_document(  # the Document's columns
+    s: AsyncSession,
+    project_id: UUID,
+    location_id: UUID,
+    path: str,
+    data: bytes,
+    *,
+    source: str,
+    tainted: bool = True,
+) -> tuple[UUID, int, UUID]:
+    """A Document for a file in a project folder: (id, version, first version id). Files
+    are untrusted; outside ones tainted (FR-15.5)."""
+    body = text_of(data)
+    row = (
+        await s.execute(
+            insert(_documents)
+            .values(
+                project_id=project_id,
+                title=PurePosixPath(path).name,
+                kind="file",
+                trust="untrusted",
+                tainted=tainted,
+                storage_location_id=location_id,
+                path=path,
+                body_md=body,
+                content_hash=hashlib.sha256(data).digest(),
+                source=source,
+            )
+            .returning(_documents.c.id, _documents.c.version)
+        )
+    ).one()
+    version_id = await add_version(s, row.id, data, body)
+    mark_changed(s, "project", project_id)
+    return row.id, row.version, version_id
+
+
+class UploadPlaced(BaseModel):
+    document_id: UUID
+    location_id: UUID
+    path: str  # relative to the location's root
+
+
+async def place_upload(  # the upload and where it goes
+    s: AsyncSession,
+    project_id: UUID,
+    name: str,
+    data: AsyncIterator[bytes],
+    *,
+    net: NetPolicy,
+    resolver: Resolver = system_resolver,
+) -> UploadPlaced:
+    """Place an upload at `uploads/<sanitized name>` in the project's folder (numbered when
+    the name is taken, ignoring case), create-only, as a Document with its first version,
+    recorded so the folder sync takes it for Tumnis's own. 409 `location_offline` while
+    the location is offline."""
+    folder = await _folder_row(s, project_id)
+    location = await _location_row(s, folder["location_id"])
+    _require_online(location)
+    try:
+        body = await spool(data)
+    except TooLarge as exc:
+        raise _storage_problem(exc) from exc
+    wanted = f"{folder['root_path']}/uploads/{sanitize_filename(name)}"
+    taken = await taken_paths(s, location["id"])
+    placed: FileStat | None = None
+    async with _opened(s, location, net=net, resolver=resolver) as backend:
+        if (await _health(backend)).status != "ok":
+            raise ProblemError(409, "location_offline", "The location is offline.")
+        while placed is None:
+            path = await free_path(wanted, taken, backend)
+            try:
+                placed = await backend.write(path, _one_chunk(body), None)
+            except PreconditionFailed:
+                continue  # made since the stat: take the next name
+            except (StorageError, AdapterError) as exc:
+                raise _storage_problem(exc) from exc
+    document_id, version, _version_id = await create_file_document(
+        s, project_id, location["id"], placed.path, body, source=UPLOAD_SOURCE
+    )
+    await record_file(
+        s,
+        location["id"],
+        placed,
+        content_hash=hashlib.sha256(body).hexdigest(),
+        origin="tumnis",
+        document_id=document_id,
+        synced_version=version,
+        last_op="place_upload",
+    )
+    return UploadPlaced(document_id=document_id, location_id=location["id"], path=placed.path)
+
+
+class DocumentVersionOut(BaseModel):
+    id: UUID
+    document_id: UUID
+    version_no: int
+    content_hash: str  # sha256 hex
+    size: int
+    body_md: str | None
+
+
+def _version_out(row: Row) -> DocumentVersionOut:
+    return DocumentVersionOut(
+        id=row["id"],
+        document_id=row["document_id"],
+        version_no=row["version_no"],
+        content_hash=bytes(row["content_hash"]).hex(),
+        size=row["size"],
+        body_md=row["body_md"],
+    )
+
+
+async def list_document_versions(s: AsyncSession, document_id: UUID) -> list[DocumentVersionOut]:
+    """Every kept version of the Document, oldest first (FR-15.6)."""
+    rows = (
+        (
+            await s.execute(
+                select(_versions)
+                .where(_versions.c.document_id == document_id, _versions.c.deleted_at.is_(None))
+                .order_by(_versions.c.version_no)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    return [_version_out(row) for row in rows]
+
+
+async def get_document_version(s: AsyncSession, version_id: UUID) -> DocumentVersionOut:
+    row = (
+        (
+            await s.execute(
+                select(_versions).where(
+                    _versions.c.id == version_id, _versions.c.deleted_at.is_(None)
+                )
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise NotFound("document_versions", version_id)
+    return _version_out(row)
+
+
+class BackupSource(BaseModel):
+    """One folder the nightly backup copies (REL-1): `source` is what `rclone copy` reads
+    (a server path, or `tumnis-<location id>:<bucket>/<prefix>/<folder>` for S3, a remote
+    the backup host configures), `dest` the project's own place under the backup remote."""
+
+    project_id: UUID
+    location_id: UUID
+    source: str
+    dest: str
+    mode: Literal["tumnis_made", "existing"]
+
+
+async def backup_sources(s: AsyncSession) -> list[BackupSource]:
+    """Every live Tumnis-made project folder of the workspace, and every existing folder
+    whose project opted in (`backup_opt_in`)."""
+    rows = (
+        await s.execute(
+            select(
+                _folders.c.workspace_id,
+                _folders.c.project_id,
+                _folders.c.location_id,
+                _folders.c.root_path,
+                _folders.c.mode,
+                _locations.c.kind,
+                _locations.c.root,
+            )
+            .join(_locations, _locations.c.id == _folders.c.location_id)
+            .where(
+                _folders.c.deleted_at.is_(None),
+                _locations.c.deleted_at.is_(None),
+                (_folders.c.mode == "tumnis_made") | _folders.c.backup_opt_in,
+            )
+            .order_by(_folders.c.project_id)
+        )
+    ).all()
+    found = []
+    for row in rows:
+        if row.kind == "s3":
+            bucket, prefix = _s3_root(row.root)
+            base = f"{bucket}/{prefix}" if prefix else bucket
+            source = f"tumnis-{row.location_id}:{base}/{row.root_path}"
+        else:
+            source = f"{row.root}/{row.root_path}"
+        found.append(
+            BackupSource(
+                project_id=row.project_id,
+                location_id=row.location_id,
+                source=source,
+                dest=f"{row.workspace_id}/{row.project_id}",
+                mode=row.mode,
+            )
+        )
+    return found
+
+
+async def backup_manifest(workspace_ids: Sequence[UUID]) -> list[BackupSource]:
+    """`backup_sources` of each workspace, read as the system actor (the CLI's
+    `tumnis knowledge backup-sources`)."""
+    found: list[BackupSource] = []
+    for workspace_id in workspace_ids:
+        async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
+            found += await backup_sources(s)
+    return found
