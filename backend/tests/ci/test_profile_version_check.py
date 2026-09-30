@@ -36,7 +36,6 @@ def _check(repo: Repo, head: str) -> int:
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-05")
-@pytest.mark.xfail(strict=True, reason="spec:P1-05")
 def test_change_without_bump_fails(tmp_path: Path) -> None:
     """T-P1-05-13
     A diff touching profiles/master/skills/ without a VERSION change fails; bumping
