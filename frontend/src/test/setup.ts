@@ -5,6 +5,7 @@ import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
 
 import { configureClient } from "../lib/client";
+import { resetIdb } from "./idb";
 import { server } from "./msw/server";
 import { settleRouters } from "./routers";
 
@@ -43,6 +44,8 @@ afterEach(async () => {
   await settleRouters();
   server.resetHandlers();
   cleanup();
+  // A fresh IndexedDB per test: the offline queue persists there (P0-25).
+  await resetIdb();
   const missed = unhandled.splice(0);
   if (missed.length > 0) {
     throw new Error(

@@ -55,7 +55,6 @@ test(
     ],
   },
   async ({ seededApp, page, context }, testInfo) => {
-    test.fail();
     const phone = testInfo.project.name === "phone";
     const user = seedUser();
     expect(seededApp.baseURL).toBeTruthy(); // seed set loaded
