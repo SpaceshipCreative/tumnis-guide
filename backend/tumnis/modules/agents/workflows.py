@@ -10,16 +10,25 @@
   waiting on them `runner_lost`, telling each waiting workflow through `DBOS.send`.
 - `check_profile_health(workspace_id, profile_id, request_id)`: asks the runner (or the
   endpoint) and writes the profile's `health`.
+- `provision_profile(workspace_id, project_id, mode, link_name, attempt)` (P1-06): gives a
+  project its Hermes profile (created from the template or linked) exactly once; workflow
+  id `provision:<project id>` (retry n: `provision:<project id>:<n>`), the runner's answer
+  on topic `provision:<project id>`.
 """
 
+import asyncio
+import contextlib
+import contextvars
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID, uuid5
 
-from dbos import DBOS, SetWorkflowID
-from pydantic import ValidationError
+from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
+from dbos._error import DBOSQueueDeduplicatedError  # dbos 3.1.0: not re-exported
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import Table, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import audit, db, faults
 from tumnis.core.clock import SystemClock
@@ -29,9 +38,25 @@ from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.agents import api
 from tumnis.modules.agents.adapters.hermes import DaemonTransport, McpEndpointTransport
-from tumnis.modules.agents.models import AgentProfile, RunEventRow, Runner, RunRow
+from tumnis.modules.agents.models import (
+    AgentProfile,
+    RunEventRow,
+    Runner,
+    RunnerMessage,
+    RunRow,
+)
 from tumnis.modules.agents.packet_builder import TaskPacket
-from tumnis.modules.agents.rules import runner_status
+from tumnis.modules.agents.protocol import Provision, ProvisionResult
+from tumnis.modules.agents.rules import (
+    MASTER_PROFILE_NAME,
+    InvalidProfileName,
+    profile_name_for,
+    provision_outcome,
+    runner_status,
+    validate_profile_name,
+)
+from tumnis.modules.projects import api as projects
+from tumnis.modules.tasks import api as tasks
 
 if TYPE_CHECKING:
     from dbos import DBOSClient, WorkflowHandleAsync
@@ -50,6 +75,7 @@ _profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
 _runners: Table = Runner.__table__  # type: ignore[assignment]
 _runs: Table = RunRow.__table__  # type: ignore[assignment]
 _events: Table = RunEventRow.__table__  # type: ignore[assignment]
+_messages: Table = RunnerMessage.__table__  # type: ignore[assignment]
 
 
 def _ctx(workspace_id: str) -> WorkspaceContext:
@@ -334,3 +360,306 @@ async def check_profile_health(workspace_id: str, profile_id: str, request_id: s
         report = await DBOS.recv_async(topic=api.HEALTH_TOPIC, timeout_seconds=HEALTH_TIMEOUT_S)
         health = _health_from_report(report)
     await record_health_step(workspace_id, profile_id, health)
+
+
+# --- provision_profile (P1-06) ----------------------------------------------------------------
+
+
+class _Chosen(BaseModel):
+    """What `choose_name_step` settled: the project's profile row, its name and mode, and
+    the error that ends the provision before it starts (`invalid_name`, `no_project`)."""
+
+    profile_id: UUID | None
+    name: str
+    mode: api.ProvisionMode
+    error_code: str | None = None
+
+
+async def _taken_names(s: AsyncSession) -> set[str]:
+    """Every profile name the workspace has used (deleted rows included: the unique index
+    spans them) and every profile its runners reported."""
+    names: set[str] = set((await s.scalars(select(_profiles.c.name))).all())
+    inventories: list[list[dict[str, Any]]] = list(
+        (await s.scalars(select(_runners.c.inventory))).all()
+    )
+    for inventory in inventories:
+        names |= {str(p.get("name")) for p in inventory or []}
+    return names
+
+
+async def _link_refusal(s: AsyncSession, name: str | None) -> bool:
+    """True when `name` cannot be linked: invalid, reserved, the master's, or another
+    profile row's."""
+    if name is None or name == MASTER_PROFILE_NAME:
+        return True
+    try:
+        validate_profile_name(name)
+    except InvalidProfileName:
+        return True
+    return await s.scalar(select(_profiles.c.id).where(_profiles.c.name == name)) is not None
+
+
+@DBOS.step()
+async def choose_name_step(
+    workspace_id: str, project_id: str, mode: str, link_name: str | None
+) -> dict[str, Any]:
+    """The project's live profile row when it has one (a retry, or a replay), set
+    `provisioning`; otherwise a new row, `provisioning`: named after the project (create)
+    or the linked name. A link to a name that cannot be linked gets a generated name and
+    `invalid_name`, so the project still has its agent row to retry."""
+    pid = UUID(project_id)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        found = (
+            await s.execute(
+                select(_profiles.c.id, _profiles.c.name, _profiles.c.provision_mode).where(
+                    _profiles.c.role == "project",
+                    _profiles.c.project_id == pid,
+                    _profiles.c.deleted_at.is_(None),
+                )
+            )
+        ).first()
+        if found is not None:
+            await s.execute(
+                update(_profiles).where(_profiles.c.id == found.id).values(status="provisioning")
+            )
+            mark_changed(s, api.LIVE_PROFILE, found.id)
+            chosen_mode: api.ProvisionMode = "link" if found.provision_mode == "link" else "create"
+            return _Chosen(profile_id=found.id, name=found.name, mode=chosen_mode).model_dump(
+                mode="json"
+            )
+        names = await projects.project_names(s, [pid])
+        if pid not in names:
+            return _Chosen(
+                profile_id=None, name=link_name or "", mode="create", error_code="no_project"
+            ).model_dump(mode="json")
+        chosen = _Chosen(profile_id=None, name=link_name or "", mode="link")
+        if mode != "link" or await _link_refusal(s, link_name):
+            chosen = _Chosen(
+                profile_id=None,
+                name=profile_name_for(names[pid], await _taken_names(s)),
+                mode="create",
+                error_code="invalid_name" if mode == "link" else None,
+            )
+        profile_id = await s.scalar(
+            insert(_profiles)
+            .values(
+                name=chosen.name,
+                role="project",
+                project_id=pid,
+                transport="daemon",
+                status="not_provisioned" if chosen.error_code else "provisioning",
+                provision_mode=chosen.mode,
+            )
+            .returning(_profiles.c.id)
+        )
+        mark_changed(s, api.LIVE_PROFILE, profile_id)
+    return chosen.model_copy(update={"profile_id": profile_id}).model_dump(mode="json")
+
+
+@DBOS.step()
+async def pick_runner_step(workspace_id: str) -> str | None:
+    """The runner for a new project profile: the master's runner, else the online runners
+    first, oldest first; None when the workspace has no runner."""
+    async with tenant_session(_ctx(workspace_id)) as s:
+        master_runner = await s.scalar(
+            select(_profiles.c.runner_id).where(
+                _profiles.c.role == "master",
+                _profiles.c.deleted_at.is_(None),
+                _profiles.c.runner_id.is_not(None),
+            )
+        )
+        if master_runner is not None:
+            return str(master_runner)
+        runner = await s.scalar(
+            select(_runners.c.id)
+            .where(_runners.c.deleted_at.is_(None))
+            .order_by((_runners.c.status == "online").desc(), _runners.c.created_at, _runners.c.id)
+            .limit(1)
+        )
+    return None if runner is None else str(runner)
+
+
+@DBOS.step()
+async def send_provision_step(  # noqa: PLR0917  # the message's fields, spelled out
+    workspace_id: str, workflow_id: str, profile_id: str, runner_id: str, name: str, mode: str
+) -> None:
+    """The profile on its runner and the `provision` mailbox row (message id
+    uuid5(request id, "provision"), request id uuid5 of the workflow id, so a replayed step
+    queues nothing new), then the NOTIFY that wakes the runner's socket."""
+    request_id = api.provision_request_id(workflow_id)
+    message = Provision(
+        message_id=api.provision_message_id(request_id),
+        correlation_id=workflow_id,
+        sent_at=SystemClock().now(),
+        request_id=request_id,
+        profile=name,
+        mode="link" if mode == "link" else "create",
+        template=api.TEMPLATE_NAME,
+        template_version=api.TEMPLATE_VERSION,
+    )
+    async with tenant_session(_ctx(workspace_id)) as s:
+        await s.execute(
+            update(_profiles)
+            .where(_profiles.c.id == UUID(profile_id))
+            .values(runner_id=UUID(runner_id))
+        )
+        await s.execute(
+            insert(_messages)
+            .values(
+                runner_id=UUID(runner_id),
+                message_id=message.message_id,
+                direction="out",
+                type=message.type,
+                payload=message.model_dump(mode="json"),
+            )
+            .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
+        )
+        await api.notify_runner(s, UUID(runner_id))
+    faults.killpoint("agents.send_provision_step")  # the mailbox row has committed
+
+
+def _failure(reply: ProvisionResult | None) -> tuple[str, str | None]:
+    """The error code and detail of a provision that did not end ready."""
+    if reply is None:
+        return "timeout", "no answer from the runner in time"
+    if reply.status == "failed":
+        return reply.error_code or "hermes_error", reply.error
+    return "hermes_error", f"unexpected answer {reply.status!r}"
+
+
+@DBOS.step()
+async def finish_provision_step(  # noqa: PLR0917  # the provision's facts, spelled out
+    workspace_id: str,
+    project_id: str,
+    chosen: dict[str, Any],
+    attempt: int,
+    reply: dict[str, Any] | None,
+    error_code: str | None,
+) -> str:
+    """`ready` (the profile's version recorded and its name added to its runner's
+    inventory, so runs dispatch to it at once) or `not_provisioned` with a
+    `provisioning_failed` review item on the project (one open item per project)."""
+    pick = _Chosen.model_validate(chosen)
+    answer = None if reply is None else ProvisionResult.model_validate(reply)
+    outcome = (
+        "not_provisioned" if error_code is not None else provision_outcome(answer, mode=pick.mode)
+    )
+    pid = UUID(project_id)
+    assert pick.profile_id is not None  # noqa: S101  # choose_name_step wrote the row
+    async with tenant_session(_ctx(workspace_id)) as s:
+        if outcome == "ready" and answer is not None:
+            runner_id = await s.scalar(
+                update(_profiles)
+                .where(_profiles.c.id == pick.profile_id)
+                .values(status="ready", profile_version=answer.distribution_version)
+                .returning(_profiles.c.runner_id)
+            )
+            if runner_id is not None:
+                await _list_on_runner(s, runner_id, pick.name, answer.distribution_version)
+                mark_changed(s, api.LIVE_RUNNER, runner_id)
+        else:
+            code, detail = (error_code, None) if error_code is not None else _failure(answer)
+            await s.execute(
+                update(_profiles)
+                .where(_profiles.c.id == pick.profile_id)
+                .values(status="not_provisioned")
+            )
+            await tasks.add_review_item(
+                api.PROVISIONING_FAILED,
+                target=tasks.TargetRef(type="project", id=pid),
+                project_id=pid,
+                payload=api.ProvisioningFailedPayload(
+                    profile=pick.name,
+                    mode=pick.mode,
+                    error_code=code,
+                    error=detail,
+                    attempt=attempt,
+                ).model_dump(mode="json"),
+                dedupe_key=f"{api.PROVISIONING_FAILED}:{pid}",
+                session=s,
+            )
+        mark_changed(s, api.LIVE_PROFILE, pick.profile_id)
+    return outcome
+
+
+async def _list_on_runner(s: AsyncSession, runner_id: UUID, name: str, version: str | None) -> None:
+    """Add the profile to the runner's inventory until its next register reports it."""
+    inventory = await s.scalar(
+        select(_runners.c.inventory).where(_runners.c.id == runner_id).with_for_update()
+    )
+    listed = list(inventory or [])
+    if any(p.get("name") == name for p in listed):
+        return
+    listed.append({"name": name, "distribution_name": None, "distribution_version": version})
+    await s.execute(update(_runners).where(_runners.c.id == runner_id).values(inventory=listed))
+
+
+@DBOS.workflow(name="provision_profile")
+async def provision_profile(
+    workspace_id: str, project_id: str, mode: str, link_name: str | None, attempt: int = 0
+) -> str:
+    """The project's Hermes profile, created from the template or linked, exactly once:
+    the steps are idempotent, the runner's answer arrives on `provision:<project id>`
+    (never inside a step, R-30), and no answer in `provision_timeout_s` counts as failed.
+    Never retries an install by itself: a failure is a review item (accept retries)."""
+    chosen = await choose_name_step(workspace_id, project_id, mode, link_name)
+    if chosen["error_code"] == "no_project":
+        return "no_project"
+    if chosen["error_code"] is not None:
+        return await finish_provision_step(
+            workspace_id, project_id, chosen, attempt, None, chosen["error_code"]
+        )
+    runner = await pick_runner_step(workspace_id)
+    if runner is None:
+        return await finish_provision_step(
+            workspace_id, project_id, chosen, attempt, None, "no_runner"
+        )
+    workflow_id = api.provision_workflow_id(UUID(project_id), attempt)
+    await send_provision_step(
+        workspace_id, workflow_id, chosen["profile_id"], runner, chosen["name"], chosen["mode"]
+    )
+    reply = await DBOS.recv_async(
+        topic=api.provision_topic(UUID(project_id)), timeout_seconds=api.provision_timeout_s()
+    )
+    return await finish_provision_step(workspace_id, project_id, chosen, attempt, reply, None)
+
+
+async def start_provision(  # the workflow's arguments, spelled out
+    workspace_id: UUID,
+    project_id: UUID,
+    mode: api.ProvisionMode,
+    link_name: str | None,
+    *,
+    attempt: int,
+    dedupe_id: str,
+) -> None:
+    """Enqueue `provision_profile` (workflow id `provision:<project id>[:<attempt>]`) on the
+    runs queue, partitioned by project, once: an existing workflow id returns that workflow
+    and the deduplication id refuses a second while the first is queued or running.
+
+    Subscribers run inside a DBOS step, and DBOS refuses to start a workflow from a step,
+    so the enqueue runs in a fresh context (no enclosing workflow): the new workflow is a
+    root of its own, and a re-run step enqueues the same ids again, which is a no-op."""
+
+    async def enqueue() -> None:
+        with (
+            SetWorkflowID(api.provision_workflow_id(project_id, attempt)),
+            SetEnqueueOptions(
+                deduplication_id=dedupe_id, queue_partition_key=f"provision:{project_id}"
+            ),
+            contextlib.suppress(DBOSQueueDeduplicatedError),
+        ):
+            await DBOS.enqueue_workflow_async(
+                RUNS_QUEUE,
+                provision_profile,
+                str(workspace_id),
+                str(project_id),
+                mode,
+                link_name,
+                attempt,
+            )
+
+    await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
+
+
+api.register_provision_starter(start_provision)

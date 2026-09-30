@@ -107,6 +107,13 @@ def configure_generation(settings: Settings) -> None:
     decisions.configure_net_policy(settings.net_policy())
 
 
+def configure_agents(settings: Settings) -> None:
+    """How long profile provisioning waits for the runner (P1-06): only the worker runs
+    `provision_profile`."""
+    agents = importlib.import_module("tumnis.modules.agents.api")
+    agents.configure_provisioning(timeout_s=settings.agents.provision_timeout_s)
+
+
 def register_module_schedules() -> None:
     """Module schedules (A9), applied after DBOS.launch(): a module's `workflows.schedules()`
     lists its own (P1-09: the calendar sync tick every 10 minutes on the sync queue)."""
@@ -168,6 +175,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     install_master_keys(settings)
     modules.configure(settings)
     configure_generation(settings)
+    configure_agents(settings)
     cache.configure_backend(
         cache.InProcessCache(SystemClock(), publish=cache.pg_publisher(db.direct_engine))
     )

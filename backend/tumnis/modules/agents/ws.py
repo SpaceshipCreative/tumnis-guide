@@ -56,6 +56,7 @@ from tumnis.modules.agents.protocol import (
     Heartbeat,
     InvalidMessage,
     ProtocolError,
+    ProvisionResult,
     Register,
     Registered,
     Result,
@@ -386,6 +387,8 @@ class _RunnerSocket:
             return await self._result(message)
         elif isinstance(message, HealthReport):
             await self._health_report(message)
+        elif isinstance(message, ProvisionResult):
+            return await self._provision_result(message)
         return True
 
     # --- forwarding ----------------------------------------------------------------------
@@ -571,3 +574,44 @@ class _RunnerSocket:
             )
         except Exception:  # a report nobody waits for any more
             _log.warning("health report without its workflow", extra={"id": message.request_id})
+
+    async def _provision_result(self, message: ProvisionResult) -> bool:
+        """The runner's answer to a `provision` (P1-06), handed to the provisioning
+        workflow that sent it (the `provision` row's correlation id) and acked once the
+        workflow has it. It counts only from the runner the request went to; from any other
+        runner, or for no known request, it is acked and dropped. It also acks that
+        `provision` row: the runner got it even if its ack was lost."""
+        async with tenant_session(self.ctx) as s:
+            payload = await s.scalar(
+                update(_messages)
+                .where(
+                    _messages.c.message_id == api.provision_message_id(message.request_id),
+                    _messages.c.direction == "out",
+                    _messages.c.type == "provision",
+                    _messages.c.runner_id == self.runner_id,
+                )
+                .values(
+                    status="acked",
+                    acked_at=func.coalesce(_messages.c.acked_at, self.now()),
+                )
+                .returning(_messages.c.payload)
+            )
+        workflow_id = None if payload is None else payload.get("correlation_id")
+        project_id = None if workflow_id is None else api.project_of_provision(workflow_id)
+        if workflow_id is None or project_id is None:
+            _log.warning(
+                "dropped a provision result for no request sent to this runner",
+                extra={"request": str(message.request_id), "runner": str(self.runner_id)},
+            )
+            return True
+        try:
+            await self.hub.client().send_async(
+                workflow_id,
+                message.model_dump(mode="json"),
+                api.provision_topic(project_id),
+                str(message.message_id),
+            )
+        except Exception:  # not acked: the daemon resends and the send is idempotent
+            _log.exception("could not hand a provision result to its workflow")
+            return False
+        return True

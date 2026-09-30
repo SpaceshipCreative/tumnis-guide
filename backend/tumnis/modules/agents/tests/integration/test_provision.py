@@ -104,7 +104,7 @@ async def _create_project(
     from tumnis.core.events import relay_once  # noqa: PLC0415
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
     from tumnis.modules.projects import api as projects  # noqa: PLC0415
-    from tumnis.modules.projects.api import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.projects.api import (  # noqa: PLC0415
         AgentProfileChoice,
         ProjectCreateIn,
     )
@@ -132,7 +132,6 @@ def _subscribers() -> None:
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_project_created_provisions_once(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -148,7 +147,7 @@ async def test_project_created_provisions_once(
     _subscribers()
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
     from tumnis.modules.agents import api as agents  # noqa: PLC0415
-    from tumnis.modules.agents.api import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.api import (  # noqa: PLC0415
         TEMPLATE_VERSION,
     )
 
@@ -175,7 +174,6 @@ async def test_project_created_provisions_once(
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_duplicate_event_delivery_provisions_once(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -200,7 +198,7 @@ async def test_duplicate_event_delivery_provisions_once(
     )
     from tumnis.core.outbox import outbox_table  # noqa: PLC0415
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
-    from tumnis.modules.agents.events import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.events import (  # noqa: PLC0415
         PROVISION_SUBSCRIBER,
     )
 
@@ -237,7 +235,6 @@ async def test_duplicate_event_delivery_provisions_once(
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_killed_worker_resumes_without_second_install(
     worker_killer: WorkerKillerFactory,
     app_factory: AppFactory,
@@ -287,7 +284,6 @@ async def test_killed_worker_resumes_without_second_install(
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_link_existing_profile_checks_existence(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -320,7 +316,6 @@ async def test_link_existing_profile_checks_existence(
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_master_registry_updated(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -336,7 +331,7 @@ async def test_master_registry_updated(
     _subscribers()
     from tumnis.core.tenancy import use_workspace  # noqa: PLC0415
     from tumnis.modules.agents import api as agents  # noqa: PLC0415
-    from tumnis.modules.agents.api import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.api import (  # noqa: PLC0415
         ProjectAgentEntry,
         master_registry,
     )
@@ -373,7 +368,6 @@ async def test_master_registry_updated(
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_failed_provision_leaves_project_usable(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -424,7 +418,6 @@ async def test_failed_provision_leaves_project_usable(
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_timeout_counts_as_failure_and_retry_works(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -440,7 +433,7 @@ async def test_timeout_counts_as_failure_and_retry_works(
     """
     _subscribers()
     from tumnis.core.tenancy import use_workspace  # noqa: PLC0415
-    from tumnis.modules.agents.api import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.api import (  # noqa: PLC0415
         configure_provisioning,
         provision_timeout_s,
         retry_provision,
