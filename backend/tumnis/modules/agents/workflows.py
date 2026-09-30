@@ -26,6 +26,7 @@ from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import Table, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import audit, db, faults
@@ -415,7 +416,14 @@ async def _link_refusal(s: AsyncSession, name: str | None) -> bool:
     return await s.scalar(select(_profiles.c.id).where(_profiles.c.name == name)) is not None
 
 
-@DBOS.step()
+def name_collision(exc: BaseException) -> bool:
+    """True for the unique profile-name index refusing an insert: two projects whose names
+    normalise alike picked the same free name at once, in different queue partitions. The
+    loser's transaction rolled back, so its step runs again and sees the winner's name."""
+    return isinstance(exc, IntegrityError) and "ux_agent_profiles_ws_name" in str(exc.orig)
+
+
+@DBOS.step(retries_allowed=True, max_attempts=3, interval_seconds=0.1, should_retry=name_collision)
 async def choose_name_step(
     workspace_id: str, project_id: str, mode: str, link_name: str | None
 ) -> dict[str, Any]:
@@ -483,10 +491,26 @@ async def choose_name_step(
 
 
 @DBOS.step()
-async def pick_runner_step(workspace_id: str) -> str | None:
-    """The runner for a new project profile: the master's runner, else the online runners
-    first, oldest first; None when the workspace has no runner."""
+async def pick_runner_step(workspace_id: str, link_name: str | None = None) -> str | None:
+    """The runner for a project profile: for a link, a runner whose inventory lists the
+    profile (online first, oldest first); otherwise, or when none lists it, the master's
+    runner, else the online runners first, oldest first; None when the workspace has no
+    runner."""
     async with tenant_session(_ctx(workspace_id)) as s:
+        if link_name is not None:
+            owner = await s.scalar(
+                select(_runners.c.id)
+                .where(
+                    _runners.c.deleted_at.is_(None),
+                    _runners.c.inventory.contains([{"name": link_name}]),
+                )
+                .order_by(
+                    (_runners.c.status == "online").desc(), _runners.c.created_at, _runners.c.id
+                )
+                .limit(1)
+            )
+            if owner is not None:
+                return str(owner)
         master_runner = await s.scalar(
             select(_profiles.c.runner_id).where(
                 _profiles.c.role == "master",
@@ -635,7 +659,9 @@ async def provision_profile(
         return await finish_provision_step(
             workspace_id, project_id, chosen, attempt, None, chosen["error_code"]
         )
-    runner = await pick_runner_step(workspace_id)
+    runner = await pick_runner_step(
+        workspace_id, chosen["name"] if chosen["mode"] == "link" else None
+    )
     if runner is None:
         return await finish_provision_step(
             workspace_id, project_id, chosen, attempt, None, "no_runner"
