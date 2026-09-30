@@ -40,12 +40,20 @@ export function trapTab(event: KeyboardEvent<HTMLElement>): void {
   }
 }
 
+// A keydown that belongs to an IME composition. MDN's keydown guidance checks both:
+// Safari reports the key that ends a composition with `isComposing` false and
+// keyCode 229.
+export function isComposing(event: KeyboardEvent<HTMLElement>): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- keyCode 229 is the only IME signal in Safari
+  return event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229;
+}
+
 export function dialogKeyDown(
   event: KeyboardEvent<HTMLElement>,
   onClose: () => void,
 ): void {
   if (event.key === "Escape") {
-    if (event.nativeEvent.isComposing) return;
+    if (isComposing(event)) return;
     event.preventDefault();
     onClose();
     return;

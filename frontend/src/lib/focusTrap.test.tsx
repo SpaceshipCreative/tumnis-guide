@@ -61,6 +61,10 @@ test("Escape closes the dialog, but not while an IME composition is open", () =>
   expect(onClose).not.toHaveBeenCalled();
   expect(composing).toBe(true); // not default-prevented: the IME gets it
 
+  // Safari: the key that ends a composition has keyCode 229, not isComposing.
+  fireEvent.keyDown(first, { key: "Escape", keyCode: 229 });
+  expect(onClose).not.toHaveBeenCalled();
+
   const plain = fireEvent.keyDown(first, { key: "Escape" });
   expect(onClose).toHaveBeenCalledTimes(1);
   expect(plain).toBe(false);
