@@ -67,12 +67,11 @@ def _documents(db: DbUrls, project_id: uuid.UUID) -> list[tuple[Any, ...]]:
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P2-18")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 async def test_seed_project_survives_round_trip(  # noqa: PLR0915, PLR0917
     db: DbUrls,
     dbos: type[DBOS],
+    app: FastAPI,  # before `seed`, as the week-view tests have it: after it, sign-in is a 401
     seed: SeedResult,
-    app: FastAPI,
     clock: FixedClock,
     tmp_path: Path,
 ) -> None:

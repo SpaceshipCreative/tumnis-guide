@@ -219,7 +219,7 @@ class ArchiveWorld:
                 owner_exec(
                     self.db,
                     "INSERT INTO run_events (workspace_id, run_id, message_id, kind, payload,"
-                    " created_by) VALUES (%s, %s, %s, 'stream', %s::jsonb, 'system')",
+                    " created_by) VALUES (%s, %s, %s, 'log', %s::jsonb, 'system')",
                     (self.ws.id, run_id, uuid.uuid4(), json.dumps(payload)),
                 )
         return uuid.UUID(str(profile_id))
@@ -234,18 +234,13 @@ class ArchiveWorld:
                 (self.ws.id, project_id, f"https://example.org/brief-{i}"),
             )
 
-    async def _state(self, project_id: uuid.UUID) -> str | None:
-        found = await self.client.get(f"/v1/projects/{project_id}")
-        found.raise_for_status()
-        state: str | None = found.json()["archive_state"]
-        return state
-
     async def _settle(self, project_id: uuid.UUID, want: str | None) -> None:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + SETTLE_S
         while True:
             await self.relay()
-            if await self._state(project_id) == want:
+            # the owner connection, not the route: polling the route hits its rate limit
+            if self.archive_state(project_id) == want:
                 return
             if loop.time() > deadline:
                 raise AssertionError(f"archive_state never became {want!r}")
@@ -276,10 +271,13 @@ class ArchiveWorld:
     # --- readers --------------------------------------------------------------------------
 
     def archive_state(self, project_id: uuid.UUID) -> str | None:
-        [(state,)] = owner_rows(
-            self.db, "SELECT archive_state FROM projects WHERE id = %s", (project_id,)
+        """The project's `project_archives` state; None while it is live (no row)."""
+        rows = owner_rows(
+            self.db,
+            "SELECT state FROM project_archives WHERE project_id = %s AND deleted_at IS NULL",
+            (project_id,),
         )
-        return state  # type: ignore[no-any-return]
+        return rows[0][0] if rows else None
 
     def run_events(self, project_id: uuid.UUID) -> list[tuple[Any, ...]]:
         return owner_rows(
@@ -328,11 +326,13 @@ class ArchiveWorld:
         )
 
     def add_chunks(self, project_id: uuid.UUID, n: int = 2) -> None:
-        """`n` chunks for one of the project's folder documents (as extraction leaves them)."""
+        """`n` chunks for one of the project's folder documents (as extraction leaves them),
+        on its current version, or its latest one while the folder sync extracts nothing."""
         [(document_id, version_id)] = owner_rows(
             self.db,
-            "SELECT id, current_version_id FROM documents WHERE project_id = %s"
-            " AND current_version_id IS NOT NULL AND deleted_at IS NULL ORDER BY id LIMIT 1",
+            "SELECT d.id, coalesce(d.current_version_id, (SELECT v.id FROM document_versions v"
+            " WHERE v.document_id = d.id ORDER BY v.id DESC LIMIT 1)) FROM documents d"
+            " WHERE d.project_id = %s AND d.deleted_at IS NULL ORDER BY d.id LIMIT 1",
             (project_id,),
         )
         for i in range(n):

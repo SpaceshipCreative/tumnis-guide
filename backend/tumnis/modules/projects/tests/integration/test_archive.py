@@ -72,7 +72,6 @@ def _members(packed: Path) -> dict[str, bytes]:
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P2-18")
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 async def test_archive_compresses_logs_and_excerpts(archive_world: ArchiveWorld) -> None:
     """T-P2-18-03
     A project with three runs of forty log lines and two context items: archiving moves
@@ -109,7 +108,6 @@ async def test_archive_compresses_logs_and_excerpts(archive_world: ArchiveWorld)
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P2-18")
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 async def test_tumnis_made_folder_packed_into_one_file(archive_world: ArchiveWorld) -> None:
     """T-P2-18-04
     A Tumnis-made folder holding five files (one empty) is packed into one tar + zstd
@@ -137,7 +135,6 @@ async def test_tumnis_made_folder_packed_into_one_file(archive_world: ArchiveWor
 
 @pytest.mark.req("FR-15.6")
 @pytest.mark.wp("P2-18")
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 async def test_unarchive_restores_folder_byte_for_byte(archive_world: ArchiveWorld) -> None:
     """T-P2-18-05
     Archive then unarchive a Tumnis-made folder: every file is back with the same bytes
@@ -165,7 +162,6 @@ async def test_unarchive_restores_folder_byte_for_byte(archive_world: ArchiveWor
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P2-18")
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 async def test_existing_folder_stays_and_only_index_archived(
     archive_world: ArchiveWorld, db: DbUrls
 ) -> None:
@@ -208,7 +204,6 @@ async def test_existing_folder_stays_and_only_index_archived(
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P2-18")
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 async def test_purge_is_session_only_and_audited(
     archive_world: ArchiveWorld,
     session_client: SessionClient,
@@ -261,7 +256,6 @@ async def test_purge_is_session_only_and_audited(
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P2-18")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P2-18")
 @pytest.mark.parametrize("killpoint", KILL_STEPS)
 async def test_killed_worker_resumes_archive_once(  # noqa: PLR0915, PLR0917
     killpoint: str,
