@@ -877,6 +877,16 @@ async def start_provision(  # the workflow's arguments, spelled out
 api.register_provision_starter(start_provision)
 
 
+# --- enrich_task (P1-08): red-phase seam; the spec tests turn it green ---------------------
+
+
+async def start_enrichment(
+    workspace_id: UUID, task_id: UUID, project_id: UUID, *, key: str
+) -> None:
+    """Enqueue `enrich_task` for the task (workflow id `enrich:<task id>:<key>`)."""
+    raise NotImplementedError("P1-08")
+
+
 # --- profile_health_sweep ---------------------------------------------------------------------
 
 

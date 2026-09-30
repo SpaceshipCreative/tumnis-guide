@@ -15,6 +15,11 @@ so nothing beats on its own: `heartbeat()` sends one beat, stamped by the server
 `offline(profile)` stops answering for the profile and re-registers without it (the
 server then refuses to dispatch to it); `disconnect()` drops the socket.
 
+P1-08: a scripted output whose `task_id` is `TASK_ID_SENTINEL` answers with the id of the
+task the run's packet names (`body.task.id`), so one recorded enrichment result fits any
+task; `script(..., gate=threading.Event())` holds the answer until the test sets the gate
+(a user edit while the run is in flight).
+
 The runner is sync (a reader thread per socket): call it from sync or async tests alike.
 """
 
@@ -45,6 +50,9 @@ if TYPE_CHECKING:
     )
 
 WAIT_S = 10.0
+GATE_WAIT_S = 60.0  # a gated answer gives up waiting after this long
+# A scripted output's `task_id` equal to this becomes the run's own task (P1-08).
+TASK_ID_SENTINEL = "00000000-0000-0000-0000-000000000000"
 ResultStatus = Literal["succeeded", "failed", "timed_out"]
 ProvisionStatus = Literal["created", "exists", "linked", "failed"]
 ProvisionError = Literal["template_version_mismatch", "not_found", "hermes_error", "invalid_name"]
@@ -70,6 +78,7 @@ class Scripted:
     delay_ms: int = 0
     status: ResultStatus = "succeeded"
     repeat: int = 1  # send the same result (same message_id) this many times
+    gate: threading.Event | None = None  # answer only once the test sets it (P1-08)
 
 
 @dataclass(frozen=True)
@@ -135,8 +144,9 @@ class FakeRunner:
         delay_ms: int = 0,
         status: ResultStatus = "succeeded",
         repeat: int = 1,
+        gate: threading.Event | None = None,
     ) -> None:
-        self._scripts[(profile, skill)] = Scripted(output_json, delay_ms, status, repeat)
+        self._scripts[(profile, skill)] = Scripted(output_json, delay_ms, status, repeat, gate)
 
     def script_health(self, profile: str, **fields: Any) -> None:
         """Fields of the `health_report` for the profile (reachable, authenticated,
@@ -361,13 +371,14 @@ class FakeRunner:
         scripted = self._scripts.get((run.profile, run.skill))
         if scripted is None or run.profile in self._offline:
             return
+        output = _for_task(scripted.output_json, run.packet)
         result = Result(
             **self._envelope(run.correlation_id),
             run_id=run.run_id,
             status=scripted.status,
             exit_code=0 if scripted.status == "succeeded" else 1,
-            output_json=scripted.output_json,
-            text="" if scripted.output_json is None else str(scripted.output_json),
+            output_json=output,
+            text="" if output is None else str(output),
             error=None if scripted.status == "succeeded" else scripted.status,
             duration_ms=scripted.delay_ms,
             tokens={"input": 100, "output": 20},
@@ -376,11 +387,16 @@ class FakeRunner:
 
         def answer() -> None:
             try:
+                if scripted.gate is not None and not scripted.gate.wait(GATE_WAIT_S):
+                    return
                 for _ in range(scripted.repeat):
                     self.send(result)
             except Exception as exc:  # the socket went away meanwhile
                 self.errors.append(exc)
 
+        if scripted.gate is not None and scripted.delay_ms <= 0:
+            threading.Thread(target=answer, daemon=True).start()  # never block the reader
+            return
         if scripted.delay_ms <= 0:
             answer()
             return
@@ -469,6 +485,14 @@ class FakeRunner:
         from tumnis.modules.agents.protocol import Provision  # noqa: PLC0415
 
         return [m for m in self.received if isinstance(m, Provision)]
+
+
+def _for_task(output: dict[str, Any] | None, packet: dict[str, Any]) -> dict[str, Any] | None:
+    """The scripted output, its sentinel `task_id` replaced by the packet's task (P1-08)."""
+    if output is None or output.get("task_id") != TASK_ID_SENTINEL:
+        return output
+    task = (packet.get("body") or {}).get("task") or {}
+    return {**output, "task_id": task.get("id", TASK_ID_SENTINEL)}
 
 
 # --- Rows the runner needs, made through the agents api ------------------------------------

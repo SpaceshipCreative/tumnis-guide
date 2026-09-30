@@ -925,3 +925,13 @@ async def run_log(s: AsyncSession, run_id: UUID) -> list[RunEvent]:
     for slot, line in zip(slots, lines, strict=True):
         events[slot] = line
     return events
+
+
+# --- Enrichment (P1-08): red-phase seam; the spec tests turn it green ----------------------
+
+
+def configure_enrichment(
+    *, clock: Any = None, label_wait_s: float = 10.0, run_timeout_s: int = 120
+) -> None:
+    """The enrichment's clock and timeouts (R-30); called with nothing, the defaults."""
+    raise NotImplementedError("P1-08")
