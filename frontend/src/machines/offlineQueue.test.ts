@@ -477,3 +477,40 @@ test("[P0-25][FR-3.10] a capture made while the queue loads survives a load that
     early.idempotencyKey,
   ]);
 });
+
+test("[P0-25][FR-3.10] a discard or edit IndexedDB refuses to delete is tried again", async () => {
+  const conflict: SendResult = {
+    outcome: "conflict",
+    problem: makeProblem({ status: 422 }) as Problem,
+  };
+  const discarded = queueItem("Discard me");
+  const edited = queueItem("Edit me");
+  await idbQueue.put(discarded);
+  await idbQueue.put(edited);
+  const send = scriptedSend([conflict, conflict, new Promise(() => undefined)]);
+  const { actor, state } = start(provided([discarded, edited], send), true);
+  const refuse = vi
+    .spyOn(idbQueue, "delete")
+    .mockRejectedValueOnce(new Error("refused"));
+
+  await vi.waitFor(() => {
+    expect(state()).toBe("conflict");
+  });
+  actor.send({ type: "DISCARD" });
+  await vi.waitFor(() => {
+    expect(state()).toBe("conflict");
+  });
+  refuse.mockRejectedValueOnce(new Error("refused"));
+  actor.send({ type: "EDIT", body: { project_id: PROJECT, title: "Edited" } });
+
+  // Both refused deletes are retried: neither old row comes back on the next load.
+  await vi.waitFor(
+    async () => {
+      const keys = await storedKeys();
+      expect(keys).not.toContain(discarded.idempotencyKey);
+      expect(keys).not.toContain(edited.idempotencyKey);
+    },
+    { timeout: 5_000 },
+  );
+  refuse.mockRestore();
+});

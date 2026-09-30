@@ -45,6 +45,23 @@ export function backoffMs(attempts: number): number {
   return attempts === 0 ? 0 : Math.min(BACKOFF_CAP_MS, 1_000 * 2 ** attempts);
 }
 
+const FORGET_TRIES = 5;
+const FORGET_RETRY_MS = 500;
+
+/** Deletes a stored item, trying again if IndexedDB refuses, so it does not come back
+ * on the next load. */
+async function forget(key: string): Promise<void> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await idbQueue.delete(key);
+      return;
+    } catch {
+      if (attempt >= FORGET_TRIES) return;
+      await new Promise((resolve) => setTimeout(resolve, FORGET_RETRY_MS));
+    }
+  }
+}
+
 /** The queue's head with `change` applied; the rest untouched. */
 function withHead(
   items: readonly QueueItem[],
@@ -90,7 +107,7 @@ export const offlineQueueMachine = setup({
     dropHead: assign({ items: ({ context }) => context.items.slice(1) }),
     forgetHead: ({ context }) => {
       const head = context.items[0];
-      if (head) void idbQueue.delete(head.idempotencyKey);
+      if (head) void forget(head.idempotencyKey);
     },
     bumpAttempts: assign({
       items: ({ context }) =>
@@ -135,7 +152,7 @@ export const offlineQueueMachine = setup({
       // The new row is written first, and the send that follows finds it there; the old
       // row goes only once the new one is safely stored.
       enqueue(() => {
-        void idbQueue.put(next).then(() => idbQueue.delete(old.idempotencyKey));
+        void idbQueue.put(next).then(() => forget(old.idempotencyKey));
       });
     }),
     announceSynced: () => {
