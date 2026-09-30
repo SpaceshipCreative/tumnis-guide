@@ -7,7 +7,9 @@ through its routes and apis:
 - `project(name)`: `POST /v1/projects`, relayed (the project's folder is made).
 - `folder(project_id)`: the project's folder on disk; `write(root, files)` writes files
   there as someone outside Tumnis would; `sync()` runs one `knowledge_folder_sync` of the
-  location, as the worker does (so the files get their `folder_files` records).
+  location, as the worker does (so the files get their `folder_files` records; the
+  folder sync extracts nothing here), then `settle()`s: the outbox relayed and every
+  delivery run, so what earlier events do (a seed task's label) is done before a snapshot.
 - `add_runs(project_id, ...)`: a daemon profile of the project (on `runner_id` when given)
   with finished runs and their `run_events` (owner SQL: runs are the agents module's).
 - `add_context_items(project_id, n)`: context items owned by the project.
@@ -63,19 +65,27 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+async def _no_extraction(_workspace_id: uuid.UUID, _version_id: uuid.UUID, _path: str) -> None:
+    """The folder sync's extraction, off: what an archive moves is the index as the test
+    builds it, not what P1-16's pipeline would add to it meanwhile."""
+
+
 def use_real_folders() -> Callable[[], None]:
-    """Every location opens as a `ServerPathStorage` on its root, and the folder sync and
-    the archive steps use the self-hosted net policy; returns the undo."""
+    """Every location opens as a `ServerPathStorage` on its root, the folder sync and the
+    archive steps use the self-hosted net policy, and the folder sync extracts nothing;
+    returns the undo."""
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
     from tumnis.modules.knowledge import sync  # noqa: PLC0415
     from tumnis.modules.knowledge.adapters.server_path import ServerPathStorage  # noqa: PLC0415
 
     knowledge.use_backend_hook(lambda row, _built: ServerPathStorage(row["root"]))
     sync.configure(net=SELF_HOSTED)
+    clock, extraction = sync.use(clock=None, extraction=_no_extraction)
 
     def undo() -> None:
         knowledge.use_backend_hook(None)
         sync.configure(net=None)
+        sync.use(clock=clock, extraction=extraction)
 
     return undo
 
@@ -131,6 +141,26 @@ class ArchiveWorld:
         while await relay_once():
             pass
 
+    async def settle(self) -> None:
+        """Relay until the outbox is empty and every delivery has run, twice in a row: what
+        the events so far do (a seed task's label, say) is done before the test looks."""
+        from dbos import DBOS  # noqa: PLC0415
+
+        from tumnis.core.events import relay_once  # noqa: PLC0415
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + SETTLE_S
+        calm = 0
+        while calm < 2:
+            sent = await relay_once()
+            busy = await DBOS.list_workflows_async(
+                status=["ENQUEUED", "PENDING"], name="deliver_event", load_input=False
+            )
+            calm = calm + 1 if not sent and not busy else 0
+            if loop.time() > deadline:
+                raise AssertionError(f"deliveries still running after {SETTLE_S} s")
+            await asyncio.sleep(0.1)
+
     async def project(self, name: str) -> uuid.UUID:
         created = await self.client.post("/v1/projects", json={"name": name})
         created.raise_for_status()
@@ -163,6 +193,7 @@ class ArchiveWorld:
             folder_sync, str(self.ws.id), str(self.location_id)
         )
         await handle.get_result()
+        await self.settle()
 
     def add_runs(
         self,
@@ -330,9 +361,9 @@ class ArchiveWorld:
         on its current version, or its latest one while the folder sync extracts nothing."""
         [(document_id, version_id)] = owner_rows(
             self.db,
-            "SELECT d.id, coalesce(d.current_version_id, (SELECT v.id FROM document_versions v"
-            " WHERE v.document_id = d.id ORDER BY v.id DESC LIMIT 1)) FROM documents d"
-            " WHERE d.project_id = %s AND d.deleted_at IS NULL ORDER BY d.id LIMIT 1",
+            "SELECT d.id, coalesce(d.current_version_id, v.id) FROM documents d"
+            " JOIN document_versions v ON v.document_id = d.id WHERE d.project_id = %s"
+            " AND d.kind = 'file' AND d.deleted_at IS NULL ORDER BY d.id, v.id DESC LIMIT 1",
             (project_id,),
         )
         for i in range(n):
