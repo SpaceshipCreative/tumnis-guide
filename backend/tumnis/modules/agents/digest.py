@@ -256,14 +256,14 @@ async def _entry_out(ctx: WorkspaceContext, s: AsyncSession, row: RowMapping) ->
     data: dict[str, Any] = dict(row["data"])
     body: str | None = None
     if row["kind"] == "task_commented":
-        trusted = bool(data.get("trusted"))
-        said = str(data.get("text") or "")
-        if not trusted:
-            data.pop("text", None)  # outside words travel only inside the block
-        attrs = {"author_kind": str(data.get("author_kind") or "")}
-        body = rules.render_block(
-            said, nonce=_nonce(), source="comment", item=None, attrs=attrs, trusted=trusted
-        )
+        # A person's comment stays in `data["text"]` only; anyone else's words travel only
+        # inside the untrusted block in `text`.
+        if not data.get("trusted"):
+            said = str(data.pop("text", None) or "")
+            attrs = {"author_kind": str(data.get("author_kind") or "")}
+            body = rules.render_block(
+                said, nonce=_nonce(), source="comment", item=None, attrs=attrs, trusted=False
+            )
     elif row["kind"] == "context_linked" and data.get("context_item_id"):
         linked = await integrations.context_item_text(
             ctx, UUID(str(data["context_item_id"])), session=s
