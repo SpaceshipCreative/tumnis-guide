@@ -1,7 +1,9 @@
 // Settings > Storage (P1-14, FR-15.7): where knowledge-base files live. Lists the
-// workspace's locations with their status in plain words, adds a server folder or an S3
-// bucket (the keys go to the server once and never come back), tests a connection and
-// makes a location the default for new projects.
+// workspace's locations with their status in plain words, adds a server folder, a
+// mounted share, an S3 bucket or an SFTP folder (keys go to the server once and never
+// come back), tests a connection and makes a location the default for new projects. An
+// SFTP server's host key is trusted only after the user compares its fingerprint
+// (P3-14, `storage/HostKey`); a changed key needs the comparison again, with a reason.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type SyntheticEvent, useId, useState } from "react";
 
@@ -20,12 +22,15 @@ import {
   SECTION,
 } from "./styles";
 import { badge } from "../common/ui";
+import { HostKey } from "./storage/HostKey";
 
-type Kind = "server_path" | "s3";
+type Kind = "server_path" | "share" | "s3" | "sftp";
 
 const KIND_LABELS: Record<Kind, string> = {
   server_path: "Folder on the server",
+  share: "Mounted share (SMB or NFS)",
   s3: "S3 bucket",
+  sftp: "SFTP server",
 };
 
 // Why a location is offline, as the Settings screen says it (status_reason codes).
@@ -35,6 +40,8 @@ const OFFLINE_REASONS: Record<string, string> = {
   access_denied: "Offline: the keys were refused",
   unreachable: "Offline: the endpoint does not answer",
   ssrf_blocked: "Offline: that endpoint is not allowed",
+  auth_failed: "Offline: the server refused the key",
+  root_missing: "Offline: the folder is not on the server",
 };
 
 const FIXES: Record<string, string> = {
@@ -44,11 +51,15 @@ const FIXES: Record<string, string> = {
 
 function statusText(location: LocationOut): string {
   if (location.status === "online") return "Online";
+  if (location.status === "pending_host_key")
+    return "Waiting: confirm the server's host key";
+  if (location.status === "host_key_changed")
+    return "Stopped: the server's host key changed";
   return OFFLINE_REASONS[location.status_reason ?? ""] ?? "Offline";
 }
 
 function isKind(value: string): value is Kind {
-  return value === "server_path" || value === "s3";
+  return Object.hasOwn(KIND_LABELS, value);
 }
 
 function problemText(error: Error): string {
@@ -70,6 +81,10 @@ interface Draft {
   region: string;
   accessKey: string;
   secretKey: string;
+  host: string;
+  port: string;
+  username: string;
+  privateKey: string;
 }
 
 const EMPTY: Draft = {
@@ -80,6 +95,10 @@ const EMPTY: Draft = {
   region: "",
   accessKey: "",
   secretKey: "",
+  host: "",
+  port: "22",
+  username: "",
+  privateKey: "",
 };
 
 function requestBody(draft: Draft): Record<string, unknown> {
@@ -89,7 +108,17 @@ function requestBody(draft: Draft): Record<string, unknown> {
     root: draft.root.trim(),
     is_default: false,
   };
-  if (draft.kind === "server_path") return base;
+  if (draft.kind === "server_path" || draft.kind === "share") return base;
+  if (draft.kind === "sftp")
+    return {
+      ...base,
+      sftp: {
+        host: draft.host.trim(),
+        port: Number(draft.port) || 22,
+        username: draft.username.trim(),
+        private_key: draft.privateKey,
+      },
+    };
   return {
     ...base,
     s3: {
@@ -111,7 +140,13 @@ export function StorageSection() {
     region: useId(),
     accessKey: useId(),
     secretKey: useId(),
+    host: useId(),
+    port: useId(),
+    username: useId(),
+    privateKey: useId(),
+    reason: useId(),
   };
+  const [reason, setReason] = useState("");
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [message, setMessage] = useState<string | null>(null);
   const list = useQuery(storageQuery());
@@ -185,11 +220,38 @@ export function StorageSection() {
     onSettled: () => void refresh(),
   });
 
+  const pin = useWrite<
+    {
+      location: LocationOut;
+      sha256: string;
+      reason: string | null;
+      idempotencyKey?: string;
+    },
+    LocationOut
+  >({
+    mutationFn: ({ location, sha256, reason: why, idempotencyKey }) =>
+      apiWrite<LocationOut>({
+        kind: "create",
+        method: "POST",
+        path: `/knowledge/locations/${encodeURIComponent(location.id)}/host-key`,
+        body: { sha256, reason: why },
+        idempotencyKey,
+      }),
+    onSuccess: (location) => {
+      setReason("");
+      setMessage(`${location.name}: ${statusText(location)}.`);
+    },
+    onError: (error) => {
+      setMessage(problemText(error));
+    },
+    onSettled: () => void refresh(),
+  });
+
   const submit = (event: SyntheticEvent) => {
     event.preventDefault();
     setMessage(null);
     add.mutate({ body: requestBody(draft) });
-    setDraft((current) => ({ ...current, secretKey: "" }));
+    setDraft((current) => ({ ...current, secretKey: "", privateKey: "" }));
   };
 
   const set =
@@ -201,6 +263,7 @@ export function StorageSection() {
 
   const locations = list.data ?? [];
   const s3 = draft.kind === "s3";
+  const sftp = draft.kind === "sftp";
   return (
     <section aria-labelledby="storage-title" className={SECTION}>
       <h2 id="storage-title" className={HEADING}>
@@ -249,6 +312,48 @@ export function StorageSection() {
             {location.status === "offline" &&
               FIXES[location.status_reason ?? ""] !== undefined && (
                 <p className={HINT}>{FIXES[location.status_reason ?? ""]}</p>
+              )}
+            {location.status === "host_key_changed" && (
+              <p className="text-sm text-danger">
+                Nothing is read or written until you compare the new key on the
+                server itself. If you did not rebuild the server, stop here.
+              </p>
+            )}
+            {location.status === "host_key_changed" &&
+              location.pending_host_key_sha256 && (
+                <div className="flex flex-col gap-1">
+                  <label htmlFor={ids.reason} className={LABEL}>
+                    Why did the key change?
+                  </label>
+                  <input
+                    id={ids.reason}
+                    className={INPUT}
+                    maxLength={500}
+                    value={reason}
+                    onChange={(event) => {
+                      setReason(event.target.value);
+                    }}
+                  />
+                </div>
+              )}
+            {(location.status === "pending_host_key" ||
+              location.status === "host_key_changed") &&
+              location.pending_host_key_sha256 && (
+                <HostKey
+                  fingerprint={location.pending_host_key_sha256}
+                  busy={
+                    pin.isPending ||
+                    (location.status === "host_key_changed" && !reason.trim())
+                  }
+                  onConfirm={(sha256) => {
+                    setMessage(null);
+                    pin.mutate({
+                      location,
+                      sha256,
+                      reason: reason.trim() || null,
+                    });
+                  }}
+                />
               )}
             <div className="flex flex-wrap gap-2">
               <button
@@ -323,7 +428,9 @@ export function StorageSection() {
             id={ids.root}
             className={INPUT}
             required
-            placeholder={s3 ? "bucket/tumnis" : "/srv/tumnis"}
+            placeholder={
+              s3 ? "bucket/tumnis" : sftp ? "upload/tumnis" : "/srv/tumnis"
+            }
             value={draft.root}
             onChange={set("root")}
           />
@@ -382,6 +489,76 @@ export function StorageSection() {
                 autoComplete="new-password"
                 value={draft.secretKey}
                 onChange={set("secretKey")}
+              />
+            </div>
+          </>
+        )}
+        {draft.kind === "share" && (
+          <p className={HINT}>
+            Mount the share first, then put an empty file named .tumnis-root in
+            its top folder. Tumnis writes only while that file is there, so a
+            dropped mount never fills the server's own disk.
+          </p>
+        )}
+        {sftp && (
+          <>
+            <p className={HINT}>
+              Best: a user chrooted to this folder that logs in with a key only.
+              Tumnis never sends a password.
+            </p>
+            <div className="flex flex-col gap-1">
+              <label htmlFor={ids.host} className={LABEL}>
+                Host
+              </label>
+              <input
+                id={ids.host}
+                className={INPUT}
+                required
+                autoComplete="off"
+                placeholder="nas.local"
+                value={draft.host}
+                onChange={set("host")}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor={ids.port} className={LABEL}>
+                Port
+              </label>
+              <input
+                id={ids.port}
+                className={INPUT}
+                inputMode="numeric"
+                required
+                value={draft.port}
+                onChange={set("port")}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor={ids.username} className={LABEL}>
+                User
+              </label>
+              <input
+                id={ids.username}
+                className={INPUT}
+                required
+                autoComplete="off"
+                value={draft.username}
+                onChange={set("username")}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor={ids.privateKey} className={LABEL}>
+                Private key (without a passphrase)
+              </label>
+              <textarea
+                id={ids.privateKey}
+                className={INPUT}
+                required
+                rows={4}
+                autoComplete="off"
+                spellCheck={false}
+                value={draft.privateKey}
+                onChange={set("privateKey")}
               />
             </div>
           </>
