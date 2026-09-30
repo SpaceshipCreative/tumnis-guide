@@ -91,7 +91,6 @@ async def test_shim_forwards_with_callers_key(app: FastAPI, key_client: Any) -> 
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 def test_shim_without_key_exits_2_on_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
     """T-P2-01-13
     `tumnis mcp-stdio` with no `TUMNIS_API_KEY` exits 2 with the reason on stderr and

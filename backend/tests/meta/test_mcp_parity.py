@@ -188,7 +188,6 @@ async def test_same_call_same_result_on_both_doors(
 @pytest.mark.contract
 @pytest.mark.req("FR-14.9")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 def test_catalogue_is_committed() -> None:
     """T-P2-01-20
     `schemas/mcp/v1/tools.json` (name, scope, input and output schema per tool; the mock
