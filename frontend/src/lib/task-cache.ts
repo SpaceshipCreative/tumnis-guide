@@ -14,6 +14,7 @@ const TASK_VIEWS = new Set([
   "projectsGetProject",
   "tasksListRecurrence",
   "tasksGetRecurrence",
+  "planningGetProjectWeek", // due dates and the tasks to schedule (P1-12)
 ]);
 
 /** The `_id` of a generated (or hand-made, same-shaped) query key. */

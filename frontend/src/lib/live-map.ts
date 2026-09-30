@@ -28,6 +28,7 @@ export const LIVE_MAP: Record<
       "tasksListRecurrence",
       "searchSearch",
       "searchTypeaheadTasks",
+      "planningGetProjectWeek", // due dates and the tasks to schedule (P1-12)
     ],
   },
   // A project's board and columns carry its id in their path: column edits and a new card
@@ -54,6 +55,7 @@ export const LIVE_MAP: Record<
       "settingsListModules",
       "settingsGetWorkingHours",
       "planningGetDayCalendar",
+      "planningGetProjectWeek",
     ],
   },
   // Created, rotated and revoked keys (P0-14): the Settings list refreshes.
@@ -63,7 +65,11 @@ export const LIVE_MAP: Record<
   // the day's events and free blocks (P1-10) come from the same synced events.
   calendar_account: {
     details: [],
-    lists: ["calendarListAccounts", "planningGetDayCalendar"],
+    lists: [
+      "calendarListAccounts",
+      "planningGetDayCalendar",
+      "planningGetProjectWeek",
+    ],
   },
   // Runners register, heartbeat, go offline and get new tokens; profiles get health
   // checks (P1-04): the Settings agents section refreshes.

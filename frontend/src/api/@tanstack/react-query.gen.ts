@@ -53,6 +53,8 @@ import {
   knowledgeUpdateDocument,
   type Options,
   planningGetDayCalendar,
+  planningGetProjectWeek,
+  planningSchedulePlanItem,
   projectsArchiveProject,
   projectsCreateProject,
   projectsGetProject,
@@ -215,6 +217,12 @@ import type {
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarError,
   PlanningGetDayCalendarResponse,
+  PlanningGetProjectWeekData,
+  PlanningGetProjectWeekError,
+  PlanningGetProjectWeekResponse,
+  PlanningSchedulePlanItemData,
+  PlanningSchedulePlanItemError,
+  PlanningSchedulePlanItemResponse,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectError,
   ProjectsArchiveProjectResponse,
@@ -1672,6 +1680,34 @@ export const knowledgeSetProjectFolderMutation = (
   return mutationOptions;
 };
 
+export const planningGetProjectWeekQueryKey = (
+  options: Options<PlanningGetProjectWeekData>,
+) => createQueryKey("planningGetProjectWeek", options);
+
+/**
+ * Get Project Week
+ */
+export const planningGetProjectWeekOptions = (
+  options: Options<PlanningGetProjectWeekData>,
+) =>
+  queryOptions<
+    PlanningGetProjectWeekResponse,
+    PlanningGetProjectWeekError,
+    PlanningGetProjectWeekResponse,
+    ReturnType<typeof planningGetProjectWeekQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await planningGetProjectWeek({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: planningGetProjectWeekQueryKey(options),
+  });
+
 export const planningGetDayCalendarQueryKey = (
   options: Options<PlanningGetDayCalendarData>,
 ) => createQueryKey("planningGetDayCalendar", options);
@@ -1699,6 +1735,33 @@ export const planningGetDayCalendarOptions = (
     },
     queryKey: planningGetDayCalendarQueryKey(options),
   });
+
+/**
+ * Schedule Plan Item
+ */
+export const planningSchedulePlanItemMutation = (
+  options?: Partial<Options<PlanningSchedulePlanItemData>>,
+): UseMutationOptions<
+  PlanningSchedulePlanItemResponse,
+  PlanningSchedulePlanItemError,
+  Options<PlanningSchedulePlanItemData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningSchedulePlanItemResponse,
+    PlanningSchedulePlanItemError,
+    Options<PlanningSchedulePlanItemData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningSchedulePlanItem({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const projectsListProjectsQueryKey = (
   options?: Options<ProjectsListProjectsData>,
