@@ -93,29 +93,26 @@ function declared(machine: AnyStateMachine, kind: Kind): string[] {
   return Object.keys(implementations[kind]).sort();
 }
 
-test.fails(
-  "[P0-25][FR-3.10] T-P0-25-14 every machine declares the guards, actions, actors and delays it names",
-  () => {
-    const found = machines();
-    expect(found.map((m) => m.id)).toContain("offlineQueue");
-    for (const machine of found) {
-      const refs: Refs = {
-        named: {
-          guards: new Set(),
-          actions: new Set(),
-          actors: new Set(),
-          delays: new Set(),
-        },
-        inline: [],
-      };
-      walk(refs, machine.config as Json, machine.id);
-      expect(refs.inline, `${machine.id}: inline implementations`).toEqual([]);
-      for (const kind of ["guards", "actions", "actors", "delays"] as const) {
-        expect(
-          [...refs.named[kind]].sort(),
-          `${machine.id}: ${kind} named in the config and declared in setup`,
-        ).toEqual(declared(machine, kind));
-      }
+test("[P0-25][FR-3.10] T-P0-25-14 every machine declares the guards, actions, actors and delays it names", () => {
+  const found = machines();
+  expect(found.map((m) => m.id)).toContain("offlineQueue");
+  for (const machine of found) {
+    const refs: Refs = {
+      named: {
+        guards: new Set(),
+        actions: new Set(),
+        actors: new Set(),
+        delays: new Set(),
+      },
+      inline: [],
+    };
+    walk(refs, machine.config as Json, machine.id);
+    expect(refs.inline, `${machine.id}: inline implementations`).toEqual([]);
+    for (const kind of ["guards", "actions", "actors", "delays"] as const) {
+      expect(
+        [...refs.named[kind]].sort(),
+        `${machine.id}: ${kind} named in the config and declared in setup`,
+      ).toEqual(declared(machine, kind));
     }
-  },
-);
+  }
+});
