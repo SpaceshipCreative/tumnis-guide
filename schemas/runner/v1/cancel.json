@@ -1,7 +1,8 @@
 {
-  "$id": "https://tumnis.dev/schemas/runner/v1/heartbeat.json",
+  "$id": "https://tumnis.dev/schemas/runner/v1/cancel.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "description": "Protocol 2: stop a run; the daemon acks, sends `status{cancelling}`, then a\n`result` with status `cancelled`.",
   "properties": {
     "correlation_id": {
       "maxLength": 128,
@@ -13,28 +14,15 @@
       "title": "Message Id",
       "type": "string"
     },
-    "outbox_depth": {
-      "anyOf": [
-        {
-          "minimum": 0,
-          "type": "integer"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Outbox Depth"
+    "reason": {
+      "maxLength": 4096,
+      "title": "Reason",
+      "type": "string"
     },
-    "running_run_ids": {
-      "default": [],
-      "items": {
-        "format": "uuid",
-        "type": "string"
-      },
-      "maxItems": 500,
-      "title": "Running Run Ids",
-      "type": "array"
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
     },
     "schema_version": {
       "const": 1,
@@ -47,14 +35,9 @@
       "title": "Sent At",
       "type": "string"
     },
-    "seq": {
-      "minimum": 0,
-      "title": "Seq",
-      "type": "integer"
-    },
     "type": {
-      "const": "heartbeat",
-      "default": "heartbeat",
+      "const": "cancel",
+      "default": "cancel",
       "title": "Type",
       "type": "string"
     }
@@ -64,8 +47,9 @@
     "message_id",
     "correlation_id",
     "sent_at",
-    "seq"
+    "run_id",
+    "reason"
   ],
-  "title": "Heartbeat",
+  "title": "Cancel",
   "type": "object"
 }

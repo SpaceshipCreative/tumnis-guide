@@ -1,7 +1,8 @@
 {
-  "$id": "https://tumnis.dev/schemas/runner/v1/heartbeat.json",
+  "$id": "https://tumnis.dev/schemas/runner/v2/ack.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "description": "Protocol 2: one ack for up to 50 messages, in either direction.",
   "properties": {
     "correlation_id": {
       "maxLength": 128,
@@ -13,32 +14,19 @@
       "title": "Message Id",
       "type": "string"
     },
-    "outbox_depth": {
-      "anyOf": [
-        {
-          "minimum": 0,
-          "type": "integer"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Outbox Depth"
-    },
-    "running_run_ids": {
-      "default": [],
+    "message_ids": {
       "items": {
         "format": "uuid",
         "type": "string"
       },
-      "maxItems": 500,
-      "title": "Running Run Ids",
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Message Ids",
       "type": "array"
     },
     "schema_version": {
-      "const": 1,
-      "default": 1,
+      "const": 2,
+      "default": 2,
       "title": "Schema Version",
       "type": "integer"
     },
@@ -47,14 +35,9 @@
       "title": "Sent At",
       "type": "string"
     },
-    "seq": {
-      "minimum": 0,
-      "title": "Seq",
-      "type": "integer"
-    },
     "type": {
-      "const": "heartbeat",
-      "default": "heartbeat",
+      "const": "ack",
+      "default": "ack",
       "title": "Type",
       "type": "string"
     }
@@ -64,8 +47,8 @@
     "message_id",
     "correlation_id",
     "sent_at",
-    "seq"
+    "message_ids"
   ],
-  "title": "Heartbeat",
+  "title": "AckBatch",
   "type": "object"
 }

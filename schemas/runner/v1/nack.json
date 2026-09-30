@@ -1,40 +1,47 @@
 {
-  "$id": "https://tumnis.dev/schemas/runner/v1/heartbeat.json",
+  "$id": "https://tumnis.dev/schemas/runner/v1/nack.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "description": "Protocol 2: the server refuses a message for good; the daemon drops it.",
   "properties": {
+    "code": {
+      "enum": [
+        "too_large",
+        "bad_media_type",
+        "not_utf8",
+        "sha_mismatch",
+        "unknown_run"
+      ],
+      "title": "Code",
+      "type": "string"
+    },
     "correlation_id": {
       "maxLength": 128,
       "title": "Correlation Id",
       "type": "string"
     },
-    "message_id": {
-      "format": "uuid",
-      "title": "Message Id",
-      "type": "string"
-    },
-    "outbox_depth": {
+    "detail": {
       "anyOf": [
         {
-          "minimum": 0,
-          "type": "integer"
+          "maxLength": 4096,
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "title": "Outbox Depth"
+      "title": "Detail"
     },
-    "running_run_ids": {
-      "default": [],
-      "items": {
-        "format": "uuid",
-        "type": "string"
-      },
-      "maxItems": 500,
-      "title": "Running Run Ids",
-      "type": "array"
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "nack_of": {
+      "format": "uuid",
+      "title": "Nack Of",
+      "type": "string"
     },
     "schema_version": {
       "const": 1,
@@ -47,14 +54,9 @@
       "title": "Sent At",
       "type": "string"
     },
-    "seq": {
-      "minimum": 0,
-      "title": "Seq",
-      "type": "integer"
-    },
     "type": {
-      "const": "heartbeat",
-      "default": "heartbeat",
+      "const": "nack",
+      "default": "nack",
       "title": "Type",
       "type": "string"
     }
@@ -64,8 +66,9 @@
     "message_id",
     "correlation_id",
     "sent_at",
-    "seq"
+    "nack_of",
+    "code"
   ],
-  "title": "Heartbeat",
+  "title": "Nack",
   "type": "object"
 }

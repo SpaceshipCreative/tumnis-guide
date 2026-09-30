@@ -309,7 +309,7 @@ class _RunnerSocket:
         if not isinstance(message, Register):
             await self._refuse("not_registered", "The first message must be register")
             return
-        version = negotiate(message.protocol_versions)
+        version = negotiate(message.protocol_versions, message.capabilities)
         if version is None:
             await self._refuse(
                 "unsupported_protocol_version",
@@ -381,7 +381,8 @@ class _RunnerSocket:
         if isinstance(message, Heartbeat):
             await self._heartbeat()
         elif isinstance(message, Register):
-            await self._register(message, negotiate(message.protocol_versions) or 1)
+            version = negotiate(message.protocol_versions, message.capabilities)
+            await self._register(message, version or 1)
         elif isinstance(message, Result):
             return await self._result(message)
         elif isinstance(message, HealthReport):

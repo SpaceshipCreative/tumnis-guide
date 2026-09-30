@@ -51,7 +51,6 @@ def _validator(repo_root: Path, type_: str, version: int) -> Draft202012Validato
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 @pytest.mark.parametrize("case", list(CASES))
 def test_protocol2_messages_validate(case: str, repo_root: Path) -> None:
     """T-P2-07-01
@@ -78,7 +77,6 @@ def test_protocol2_messages_validate(case: str, repo_root: Path) -> None:
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 def test_previous_release_daemon_accepted(repo_root: Path) -> None:
     """T-P2-07-11
     The recorded `register`, `heartbeat` and `result` frames of the previous daemon release
@@ -106,7 +104,7 @@ def test_previous_release_daemon_accepted(repo_root: Path) -> None:
     assert tuple(SERVER_PROTOCOL_VERSIONS) == (1, 2)
     old = parsed["register"]
     assert isinstance(old, Register)
-    assert negotiate(old.protocol_versions, old.capabilities) == 1  # type: ignore[call-arg]
+    assert negotiate(old.protocol_versions, old.capabilities) == 1
 
     new = _example(repo_root, "register", 1)
     new["protocol_versions"] = [1, 2]
@@ -114,4 +112,4 @@ def test_previous_release_daemon_accepted(repo_root: Path) -> None:
     _validator(repo_root, "register", 1).validate(new)
     current = parse_daemon(json.dumps(new))
     assert isinstance(current, Register)
-    assert negotiate(current.protocol_versions, current.capabilities) == 2  # type: ignore[call-arg]
+    assert negotiate(current.protocol_versions, current.capabilities) == 2

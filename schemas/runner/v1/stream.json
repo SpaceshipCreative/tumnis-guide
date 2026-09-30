@@ -1,11 +1,21 @@
 {
-  "$id": "https://tumnis.dev/schemas/runner/v1/heartbeat.json",
+  "$id": "https://tumnis.dev/schemas/runner/v1/stream.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "description": "Protocol 2: one line of a run's output, numbered per run from 1.",
   "properties": {
     "correlation_id": {
       "maxLength": 128,
       "title": "Correlation Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "log",
+        "tool_call",
+        "file_touched"
+      ],
+      "title": "Kind",
       "type": "string"
     },
     "message_id": {
@@ -13,28 +23,10 @@
       "title": "Message Id",
       "type": "string"
     },
-    "outbox_depth": {
-      "anyOf": [
-        {
-          "minimum": 0,
-          "type": "integer"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Outbox Depth"
-    },
-    "running_run_ids": {
-      "default": [],
-      "items": {
-        "format": "uuid",
-        "type": "string"
-      },
-      "maxItems": 500,
-      "title": "Running Run Ids",
-      "type": "array"
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
     },
     "schema_version": {
       "const": 1,
@@ -48,13 +40,23 @@
       "type": "string"
     },
     "seq": {
-      "minimum": 0,
+      "minimum": 1,
       "title": "Seq",
       "type": "integer"
     },
+    "text": {
+      "maxLength": 8192,
+      "title": "Text",
+      "type": "string"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    },
     "type": {
-      "const": "heartbeat",
-      "default": "heartbeat",
+      "const": "stream",
+      "default": "stream",
       "title": "Type",
       "type": "string"
     }
@@ -64,8 +66,12 @@
     "message_id",
     "correlation_id",
     "sent_at",
-    "seq"
+    "run_id",
+    "seq",
+    "kind",
+    "text",
+    "ts"
   ],
-  "title": "Heartbeat",
+  "title": "Stream",
   "type": "object"
 }
