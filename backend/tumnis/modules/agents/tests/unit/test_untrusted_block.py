@@ -116,7 +116,6 @@ def test_attribute_injection_is_escaped() -> None:
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 def test_external_text_never_outside_a_block() -> None:
     """T-P2-02-07
     Rendering a packet built from hostile fixtures (a tainted task, an agent's comment,

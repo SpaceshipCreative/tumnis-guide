@@ -65,7 +65,6 @@ def _inputs(
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 @settings(max_examples=300, deadline=None)
 @given(
     blocks=st.lists(
@@ -122,7 +121,6 @@ def test_packet_tainted_is_or_of_blocks(
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 def test_tainted_task_text_is_an_untrusted_block() -> None:
     """T-P2-02-09
     A tainted task's own title and criteria are rendered as an untrusted block (source
