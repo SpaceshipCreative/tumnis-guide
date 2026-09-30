@@ -42,6 +42,9 @@ export const runnersQuery = () =>
   agentsListRunnersOptions({ query: { limit: 100 } });
 export const profilesQuery = () =>
   agentsListProfilesOptions({ query: { limit: 100 } });
+// The project's own agent (P1-06, the project header): the list filtered on the server.
+export const projectProfileQuery = (projectId: string) =>
+  agentsListProfilesOptions({ query: { project_id: projectId, limit: 1 } });
 // Settings > Agents > a profile's tools (P2-10, FR-5.12): read-only.
 export const profileToolsQuery = (profileId: string) =>
   agentsGetProfileToolsOptions({ path: { id: profileId } });

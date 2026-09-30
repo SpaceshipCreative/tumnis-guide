@@ -2,7 +2,8 @@
 
 - `project.created`: a new project, emitted with its row. It carries the brief
   (`brief_md`, capped at 64 KB, plan default) for knowledge to store as the pinned first
-  document, so projects never imports knowledge.
+  document, so projects never imports knowledge, and the agent choice (`profile`: create
+  or link, P1-06) for agents to provision.
 - `project.updated`: fields changed (`changed_fields`), including `archived_at` on
   unarchive and `sort_key` on reorder.
 - `project.archived`: archived; data kept.
@@ -17,11 +18,13 @@ is archived.
 from typing import Annotated, ClassVar, Final, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from tumnis.core.events import EventPayload, event_type
 
 BRIEF_MAX_CHARS: Final = 65_536  # plan default: 64 KB
+# A Hermes profile name (agents' NAME_RE, repeated here: projects cannot import agents).
+PROFILE_NAME_PATTERN: Final = r"^[a-z0-9][a-z0-9-]{0,62}$"
 
 
 class PolicyDoc(BaseModel):
@@ -33,6 +36,19 @@ class PolicyDoc(BaseModel):
     max_tasks_per_run: int
 
 
+class AgentProfileChoice(BaseModel):
+    """The project's agent (P1-06): a new Hermes profile from the project template
+    (`create`, the default; named after the project, so `name` is ignored), or an existing
+    profile on the agent server, by `name` (`link`; `create_project` answers 422
+    `invalid_profile_choice` without one). The agents module provisions it on
+    `project.created`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["create", "link"] = "create"
+    name: Annotated[str, StringConstraints(pattern=PROFILE_NAME_PATTERN)] | None = None
+
+
 @event_type("project.created", 1)
 class ProjectCreatedV1(EventPayload):
     event_name: ClassVar[str] = "project.created"
@@ -41,6 +57,7 @@ class ProjectCreatedV1(EventPayload):
     name: str
     brief_md: Annotated[str, StringConstraints(max_length=BRIEF_MAX_CHARS)] = ""
     goal: str | None = None  # P0-20
+    profile: AgentProfileChoice = AgentProfileChoice()  # P1-06: the agent to provision
 
 
 @event_type("project.updated", 1)

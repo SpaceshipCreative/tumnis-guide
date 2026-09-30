@@ -72,6 +72,16 @@ class GenerationSettings(BaseModel):
     spoken_timeout_ms: int = Field(default=2000, gt=0)  # plan default (P2-16's caller)
 
 
+class AgentsSettings(BaseModel):
+    """The agents module (P1-06): how long a project's profile provisioning waits for the
+    runner's answer before it counts as failed (R-30: tests shorten it). Env:
+    `AGENTS__PROVISION_TIMEOUT_S`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provision_timeout_s: int = Field(default=300, gt=0)  # plan default
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", extra="ignore", env_nested_delimiter="__")
 
@@ -97,6 +107,7 @@ class Settings(BaseSettings):
     # though they are private (P0-16, SEC-5); self-hosted mode allows the LAN anyway.
     outbound_allowlist: str = ""
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
+    agents: AgentsSettings = Field(default_factory=AgentsSettings)
 
     @model_validator(mode="after")
     def _preview_guard(self) -> Self:
