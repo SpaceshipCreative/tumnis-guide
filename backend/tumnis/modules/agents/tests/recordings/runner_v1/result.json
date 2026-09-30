@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "message_id": "758c6fb4-3156-496d-88e0-bb099ea1d1e5",
+  "correlation_id": "run:1a0539ca-b63f-4fb8-a9a1-6942dd0d9a54",
+  "sent_at": "2026-09-30T02:25:16.691369Z",
+  "type": "result",
+  "run_id": "1a0539ca-b63f-4fb8-a9a1-6942dd0d9a54",
+  "status": "succeeded",
+  "exit_code": 0,
+  "output_json": {
+    "first_action": "Open last month's invoice in Wave and duplicate it",
+    "estimate_minutes": 20,
+    "acceptance_criteria": [
+      "The March invoice is sent to Acme"
+    ]
+  },
+  "text": "```json\n{\"first_action\": \"Open last month's invoice in Wave and duplicate it\", \"estimate_minutes\": 20, \"acceptance_criteria\": [\"The March invoice is sent to Acme\"]}\n```",
+  "error": null,
+  "duration_ms": 8123,
+  "tokens": {
+    "input": 1520,
+    "output": 210
+  },
+  "hermes_session_id": "sess-enrich-0001"
+}
