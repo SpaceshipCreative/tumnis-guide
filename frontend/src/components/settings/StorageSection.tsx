@@ -146,7 +146,8 @@ export function StorageSection() {
     privateKey: useId(),
     reason: useId(),
   };
-  const [reason, setReason] = useState("");
+  // One re-pin reason per location: two changed keys never share the text.
+  const [reasons, setReasons] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [message, setMessage] = useState<string | null>(null);
   const list = useQuery(storageQuery());
@@ -238,7 +239,11 @@ export function StorageSection() {
         idempotencyKey,
       }),
     onSuccess: (location) => {
-      setReason("");
+      setReasons((held) =>
+        Object.fromEntries(
+          Object.entries(held).filter(([id]) => id !== location.id),
+        ),
+      );
       setMessage(`${location.name}: ${statusText(location)}.`);
     },
     onError: (error) => {
@@ -322,16 +327,20 @@ export function StorageSection() {
             {location.status === "host_key_changed" &&
               location.pending_host_key_sha256 && (
                 <div className="flex flex-col gap-1">
-                  <label htmlFor={ids.reason} className={LABEL}>
+                  <label
+                    htmlFor={`${ids.reason}-${location.id}`}
+                    className={LABEL}
+                  >
                     Why did the key change?
                   </label>
                   <input
-                    id={ids.reason}
+                    id={`${ids.reason}-${location.id}`}
                     className={INPUT}
                     maxLength={500}
-                    value={reason}
+                    value={reasons[location.id] ?? ""}
                     onChange={(event) => {
-                      setReason(event.target.value);
+                      const text = event.target.value;
+                      setReasons((held) => ({ ...held, [location.id]: text }));
                     }}
                   />
                 </div>
@@ -343,14 +352,15 @@ export function StorageSection() {
                   fingerprint={location.pending_host_key_sha256}
                   busy={
                     pin.isPending ||
-                    (location.status === "host_key_changed" && !reason.trim())
+                    (location.status === "host_key_changed" &&
+                      !(reasons[location.id] ?? "").trim())
                   }
                   onConfirm={(sha256) => {
                     setMessage(null);
                     pin.mutate({
                       location,
                       sha256,
-                      reason: reason.trim() || null,
+                      reason: (reasons[location.id] ?? "").trim() || null,
                     });
                   }}
                 />
