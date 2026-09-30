@@ -120,9 +120,9 @@ class FakeStorage:
 # --- Extraction pipeline fakes (P1-16) ----------------------------------------------------
 
 EXTRACTION_FIXTURES = Path(__file__).resolve().parents[4] / "fixtures" / "extraction"
-_PAGE_PNG = bytes.fromhex(  # a 1x1 PNG: what FakeDocling shows the vision fake
+_PAGE_PNG = bytes.fromhex(  # a 1x1 transparent RGBA PNG: what FakeDocling shows the vision fake
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
-    "0000000d49444154789c6360f8cfc0f01f0005000201a5f645400000000049454e44ae426082"
+    "0000000b49444154789c6360000200000500017a5eab3f0000000049454e44ae426082"
 )
 
 
