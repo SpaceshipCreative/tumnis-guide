@@ -64,9 +64,7 @@ async def test_linking_tainted_item_taints_task_and_unlinking_keeps_it(
         assert (await tasks.get_task(s, task.id)).tainted is True
 
     async with tenant_session(ctx) as s:
-        await tasks.unlink_context_item(  # type: ignore[attr-defined]
-            s, actor, task.id, dirty, now=clock.now()
-        )
+        await tasks.unlink_context_item(s, actor, task.id, dirty, now=clock.now())
         assert dirty not in await tasks.context_item_ids(s, task.id)
     assert taint_of(db, "tasks", task.id) is True
 
