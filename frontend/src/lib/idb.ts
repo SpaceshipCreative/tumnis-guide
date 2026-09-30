@@ -39,34 +39,42 @@ function open(): Promise<Db | null> {
   return opening;
 }
 
+// `memory` also holds any item whose IndexedDB write was refused (quota, a value that
+// cannot be cloned): it stays queued for this page's life, and reads see it.
 export const idbQueue = {
   all: async (): Promise<QueueItem[]> => {
     const db = await open();
-    if (!db) {
-      return [...memory.values()].sort((a, b) => a.createdAt - b.createdAt);
+    const items = new Map<string, QueueItem>();
+    if (db) {
+      for (const item of await db.getAllFromIndex(STORE, "createdAt")) {
+        items.set(item.idempotencyKey, item);
+      }
     }
-    return db.getAllFromIndex(STORE, "createdAt");
+    for (const [key, item] of memory) items.set(key, item);
+    return [...items.values()].sort((a, b) => a.createdAt - b.createdAt);
   },
   put: async (item: QueueItem): Promise<void> => {
     const db = await open();
-    if (!db) {
-      memory.set(item.idempotencyKey, item);
-      return;
+    if (db) {
+      try {
+        await db.put(STORE, item);
+        memory.delete(item.idempotencyKey);
+        return;
+      } catch {
+        // Refused: keep it in memory below.
+      }
     }
-    await db.put(STORE, item);
+    memory.set(item.idempotencyKey, item);
   },
   delete: async (key: string): Promise<void> => {
+    memory.delete(key);
     const db = await open();
-    if (!db) {
-      memory.delete(key);
-      return;
-    }
-    await db.delete(STORE, key);
+    if (db) await db.delete(STORE, key);
   },
   has: async (key: string): Promise<boolean> => {
+    if (memory.has(key)) return true;
     const db = await open();
-    if (!db) return memory.has(key);
-    return (await db.count(STORE, key)) > 0;
+    return db ? (await db.count(STORE, key)) > 0 : false;
   },
 };
 
