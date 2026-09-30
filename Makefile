@@ -1,5 +1,5 @@
 # Entry points. Bodies marked "not yet" are filled by the named work package.
-.PHONY: check test test-int e2e gen seed up down guards
+.PHONY: check test test-int e2e gen seed up down guards perf-baseline
 
 BACKEND := cd backend &&
 
@@ -26,7 +26,7 @@ check:
 		npm --prefix frontend run typecheck & typecheck=$$!; \
 		npm --prefix frontend run lint && wait $$typecheck \
 			&& npm --prefix frontend run test --if-present -- --run --maxWorkers=$(VITEST_MAX_WORKERS) \
-			&& node --test scripts/ci/check_bundle.test.mjs; \
+			&& node --test scripts/ci/check_bundle.test.mjs perf/thresholds.test.mjs; \
 	else \
 		echo "skip frontend: frontend/node_modules absent (run npm ci in frontend/)"; \
 	fi
@@ -65,3 +65,9 @@ down:
 guards:
 	$(BACKEND) uv run python ../scripts/ci/spec_guard.py --base origin/main --head HEAD --repo .. --labels ""
 	$(BACKEND) uv run python ../scripts/ci/traceability.py --out ../trace.md
+
+## perf/baseline.json from k6 summaries (P0-29): the `performance` artifact of CI runs, the
+## highest p95 of each request across them. A new baseline goes in a PR labeled perf-baseline.
+##   make perf-baseline SUMMARIES="run-1/*.json run-2/*.json" RUNNER=<runner> COMMIT=<sha>
+perf-baseline:
+	node perf/write_baseline.mjs --measured-on "$(RUNNER)" --commit "$(COMMIT)" $(SUMMARIES)

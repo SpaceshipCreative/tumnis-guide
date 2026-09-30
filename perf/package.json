@@ -1,0 +1,6 @@
+{
+  "name": "tumnis-perf",
+  "private": true,
+  "type": "module",
+  "description": "k6 scenarios, the committed latency baseline and its scripts (P0-29). No dependencies: k6 runs from its container image, the scripts on plain Node."
+}
