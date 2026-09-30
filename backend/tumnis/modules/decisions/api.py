@@ -946,8 +946,8 @@ def _log_row(row: DecisionLog) -> DecisionLogRow | None:
     """The row as labeling reads it; None without a usable main answer."""
     if row.answer is None:
         return None
-    spec = CATALOGUE[DecisionPoint(row.decision_point)]
-    try:
+    try:  # a point the catalogue no longer knows is skipped, like an unusable answer
+        spec = CATALOGUE[DecisionPoint(row.decision_point)]
         main = main_answer(spec.main_question, _ANSWERS.validate_python(row.answer))
     except (KeyError, ValueError):
         return None
