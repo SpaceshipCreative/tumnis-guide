@@ -163,7 +163,7 @@ def _tool_calls(events: list[dict[str, Any]]) -> tuple[ToolCall, ...]:
 
 
 @cache
-def _validator(schema_path: str) -> Draft202012Validator:
+def validator(schema_path: str) -> Draft202012Validator:
     schema = json.loads((REPO / schema_path).read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
@@ -171,7 +171,7 @@ def _validator(schema_path: str) -> Draft202012Validator:
 
 def _schema_failures(case: Case, output: dict[str, Any]) -> list[str]:
     errors = sorted(
-        _validator(case.output_schema.path).iter_errors(output), key=lambda e: e.json_path
+        validator(case.output_schema.path).iter_errors(output), key=lambda e: e.json_path
     )
     return [f"schema {e.json_path}: {e.message}" for e in errors]
 
@@ -282,13 +282,17 @@ class HermesRunner:
             timeout=self.config.timeout_s,
         )
 
-    def install(self, profile: str) -> str:
-        name = self.installed_name(profile)
-        source = REPO / "profiles" / profile
+    def install(self, profile: str, *, source: Path | None = None, slot: str | None = None) -> str:
+        """Install `profile` from the repo (or from `source`, a prepared copy of it); a
+        `slot` installs one more copy under its own name (`...-<slot>`), keyed the same
+        way in `installed`."""
+        key = profile if slot is None else f"{profile}-{slot}"
+        name = self.installed_name(key)
+        source = source or REPO / "profiles" / profile
         done = self._hermes("profile", "install", str(source), "--name", name, "-y")
         if done.returncode != 0:
             raise HarnessError(f"hermes profile install {profile} failed: {done.stderr[-500:]}")
-        self.installed[profile] = name
+        self.installed[key] = name
         return name
 
     def delete_all(self) -> None:
@@ -307,9 +311,10 @@ class HermesRunner:
         finally:
             self.delete_all()
 
-    def attempt(self, case: Case, number: int) -> Attempt:
-        msg = _run_message(case).model_copy(update={"profile": self.installed[case.profile]})
-        run_dir = self._work / "runs" / f"{case.id}-{number}"
+    def attempt(self, case: Case, number: int, *, slot: str | None = None) -> Attempt:
+        key = case.profile if slot is None else f"{case.profile}-{slot}"
+        msg = _run_message(case).model_copy(update={"profile": self.installed[key]})
+        run_dir = self._work / "runs" / f"{case.id}-{number}" / (slot or "")
         query = write_query_file(run_dir, str(case.packet["prompt_text"]))
         argv = [
             *hermes_argv(self._daemon, msg, query),

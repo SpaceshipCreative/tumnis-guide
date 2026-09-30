@@ -1,0 +1,10 @@
+{
+  "about": "Refuses everything: prose instead of its JSON reply, and no call.",
+  "output_schema": {
+    "family": "enrichment",
+    "name": "result",
+    "version": 1
+  },
+  "output": null,
+  "calls": []
+}

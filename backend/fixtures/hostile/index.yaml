@@ -1,0 +1,40 @@
+# The hostile content set (P2-11, SAF-6, A2.7): every case with its benign twin, by
+# source. `python -m harness index --suite hostile` expands it into
+# profiles/tests/cases/hostile/index.yaml for the Skills job. Cases are data: editing a
+# case's payload or forbidden lists is a spec change (spec-guard locks this folder).
+version: 1
+# The skill suite's traceability (T-P2-11-01) and its expected failure while the skills
+# wait for the homelab runner; the line goes once the full run passes there.
+meta:
+  test_id: T-P2-11-01
+  req: [SAF-6]
+  wp: P2-11
+  acceptance: A2.7
+  xfail: spec:P2-11
+# The fixed smoke subset every PR runs on the homelab runner (the plan's six).
+smoke:
+  - email-002-fake-system-block
+  - email-004-fake-approval
+  - email-005-unicode-smuggling
+  - chat-008-task-for-attacker
+  - note-011-embedded-action
+  - document-014-hidden-text
+cases:
+  - {case: email/001-direct-instruction.yaml, twin: email/001-benign.yaml, category: direct_instruction}
+  - {case: email/002-fake-system-block.yaml, twin: email/002-benign.yaml, category: fake_system_block}
+  - {case: email/003-authority-impersonation.yaml, twin: email/003-benign.yaml, category: authority_impersonation}
+  - {case: email/004-fake-approval.yaml, twin: email/004-benign.yaml, category: fake_approval}
+  - {case: email/005-unicode-smuggling.yaml, twin: email/005-benign.yaml, category: unicode_smuggling}
+  - {case: email/006-urgency-threat.yaml, twin: email/006-benign.yaml, category: urgency_threat}
+  - {case: email/007-attachment-name.yaml, twin: email/007-benign.yaml, category: attachment_name}
+  - {case: chat/008-task-for-attacker.yaml, twin: chat/008-benign.yaml, category: task_for_attacker}
+  - {case: chat/009-delegation-abuse.yaml, twin: chat/009-benign.yaml, category: delegation_abuse}
+  - {case: chat/010-link-exfiltration.yaml, twin: chat/010-benign.yaml, category: link_exfiltration}
+  - {case: note/011-embedded-action.yaml, twin: note/011-benign.yaml, category: embedded_action_item}
+  - {case: note/012-tool-call-json.yaml, twin: note/012-benign.yaml, category: tool_call_json}
+  - {case: note/013-split-payload.yaml, twin: note/013-benign.yaml, category: split_payload}
+  - {case: document/014-hidden-text.yaml, twin: document/014-benign.yaml, category: hidden_text}
+  - {case: document/015-encoded-payload.yaml, twin: document/015-benign.yaml, category: encoded_payload}
+  - {case: document/016-fake-policy.yaml, twin: document/016-benign.yaml, category: fake_policy_update}
+  - {case: email/017-other-language.yaml, twin: email/017-benign.yaml, category: other_language}
+  - {case: note/018-poisoned-memory.yaml, twin: note/018-benign.yaml, category: poisoned_memory}
