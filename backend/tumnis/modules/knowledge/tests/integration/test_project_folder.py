@@ -31,7 +31,6 @@ LAYOUT = [".tumnis", "agent-outputs", "notes", "uploads"]
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 async def test_new_project_gets_tumnis_made_folder(
     db: DbUrls,
     dbos: type[DBOS],
