@@ -48,7 +48,6 @@ def _steps(log: Path) -> list[str]:
 
 @pytest.mark.req("FR-15.2")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 async def test_kill_mid_pipeline_resumes_at_failed_step(
     extract_env: ExtractEnv,
     worker_killer: WorkerKillerFactory,
@@ -100,7 +99,6 @@ async def test_kill_mid_pipeline_resumes_at_failed_step(
 
 @pytest.mark.req("FR-15.2")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 async def test_low_confidence_pages_go_to_vlm_fake(
     extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient, db: DbUrls
 ) -> None:
@@ -157,7 +155,6 @@ async def _wait_terminal(db: DbUrls, document_id: object, timeout_s: float = 60)
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 async def test_folder_file_extracted_through_same_pipeline(
     extract_env: ExtractEnv, dbos: type[DBOS], db: DbUrls
 ) -> None:
@@ -222,7 +219,6 @@ async def _until_success(worker: Any, ids: list[str], timeout_s: float = 60) -> 
 
 @pytest.mark.req("ADR-0007")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 async def test_extract_queue_only_on_worker_extract(worker_killer: WorkerKillerFactory) -> None:
     """T-P1-16-12
     Two workers share one system database. The main worker dequeues every queue but

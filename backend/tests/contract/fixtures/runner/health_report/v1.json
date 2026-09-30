@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "message_id": "01950000-0000-7000-8000-000000001007",
+  "correlation_id": "req:01950000-0000-7000-8000-000000000401",
+  "sent_at": "2026-03-09T12:00:00Z",
+  "type": "health_report",
+  "request_id": "01950000-0000-7000-8000-000000000401",
+  "profile": "acme-site",
+  "profile_exists": true,
+  "reachable": true,
+  "authenticated": true,
+  "hermes_version": "0.9.0",
+  "mcp_servers": [
+    "tumnis"
+  ],
+  "error": null
+}

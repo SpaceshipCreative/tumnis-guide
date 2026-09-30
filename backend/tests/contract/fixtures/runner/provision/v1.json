@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "message_id": "01950000-0000-7000-8000-000000001009",
+  "correlation_id": "req:01950000-0000-7000-8000-000000000401",
+  "sent_at": "2026-03-09T12:00:00Z",
+  "type": "provision",
+  "request_id": "01950000-0000-7000-8000-000000000401",
+  "profile": "acme-site",
+  "mode": "create",
+  "template": "project-template",
+  "template_version": "1.0.0"
+}

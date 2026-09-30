@@ -234,7 +234,7 @@ def chunks_of(db: DbUrls, document_id: str) -> list[Json]:
     return rows(
         db,
         "SELECT c.id::text AS id, c.page_from, c.page_to, c.heading_path, c.text "
-        "FROM chunks c JOIN document_versions v ON v.id = c.version_id "
-        "WHERE v.document_id = %s AND c.deleted_at IS NULL ORDER BY c.ordinal",
+        "FROM chunks c JOIN documents d ON d.current_version_id = c.document_version_id "
+        "WHERE d.id = %s AND c.deleted_at IS NULL ORDER BY c.ordinal",
         document_id,
     )

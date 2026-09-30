@@ -78,6 +78,9 @@ def upgrade() -> None:
         "CREATE FUNCTION chunk_tsv(h text[], t text) RETURNS tsvector"
         f" LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT {CHUNK_TSV} $$"
     )
+    # Functions are private by default (02-database.sql); the app role writes `chunks`,
+    # whose generated column calls this.
+    op.execute("GRANT EXECUTE ON FUNCTION chunk_tsv(text[], text) TO tumnis_app")
     create_tenant_table(
         "chunks",
         sa.Column("document_id", UUID(as_uuid=True), sa.ForeignKey("documents.id"), nullable=False),
@@ -118,6 +121,8 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION chunk_tsv(text[], text)")
     drop_tenant_table("extraction_artifacts")
     op.drop_constraint("ck_document_versions_status", "document_versions", type_="check")
+    # An upload's version has no Markdown until extraction; the old schema needs one.
+    op.execute("UPDATE document_versions SET body_md = '' WHERE body_md IS NULL")
     op.alter_column("document_versions", "body_md", existing_type=sa.Text, nullable=False)
     for column in ("docling_json", "mime", "source_name", "status_reason", "status"):
         op.drop_column("document_versions", column)

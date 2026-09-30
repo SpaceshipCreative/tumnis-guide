@@ -40,6 +40,14 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("review_items", "kind"): "row_factory",  # ck_review_items_kind
     ("calendar_accounts", "status"): "connected",  # ck_calendar_accounts_status
     ("storage_locations", "kind"): "server_path",  # ck_storage_locations_kind
+    ("runners", "name"): "row-factory",  # ck_runners_name
+    ("agent_profiles", "name"): "row-factory",  # ck_agent_profiles_name
+    ("agent_profiles", "role"): "project",
+    ("agent_profiles", "transport"): "daemon",
+    ("runs", "kind"): "enrich",
+    ("runs", "status"): "queued",
+    ("run_events", "kind"): "dispatched",
+    ("runner_messages", "direction"): "out",
     ("recurrence_rules", "preset"): "daily",  # ck_recurrence_rules_preset_or_cron
     ("recurrence_rules", "task_template"): Jsonb({"title": "x"}),  # RecurrenceOut.title
     ("search_index", "entity_type"): "task",  # ck_search_index_entity_type

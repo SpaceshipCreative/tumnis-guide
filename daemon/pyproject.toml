@@ -1,7 +1,69 @@
 [project]
 name = "tumnis-daemon"
-version = "0.0.0"
+version = "0.1.0"
 description = "Tumnis runner daemon: runs agent work on the agent server and dials in to Tumnis over WebSocket."
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
-dependencies = []
+# The daemon never imports backend/: its protocol models are its own copies, checked
+# against the committed JSON Schemas in ../schemas/runner/v1 (T-P1-04-03).
+dependencies = [
+  "pydantic==2.13.5",
+  "websockets==17.1",
+]
+
+[project.scripts]
+tumnis-daemon = "tumnis_daemon.main:cli"
+
+[dependency-groups]
+dev = [
+  "jsonschema==4.26.0",
+  "mypy==2.3.1",
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "ruff==0.16.9",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "tumnis_daemon"
+module-root = ""
+
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -ra"
+xfail_strict = true
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error"]
+markers = [
+  "req(*ids): PRD requirement IDs this test proves",
+  "wp(id): work package that introduced the test",
+  "integration: runs the stub hermes as a subprocess",
+  "contract: checked against the committed JSON Schemas",
+  "slow: over 5 seconds",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["tumnis_daemon", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S", "DTZ", "PT", "N", "C4", "RET", "PL"]
+ignore = ["PLR0913"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tumnis_daemon", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "PLR2004"]
+"tests/stubs/*" = ["INP001", "S101", "T201"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["tumnis_daemon"]

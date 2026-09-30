@@ -1,0 +1,21 @@
+[Unit]
+Description=Tumnis runner daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tumnis-agent
+Group=tumnis-agent
+ExecStart=/opt/tumnis-daemon/bin/tumnis-daemon run --config /etc/tumnis/daemon.toml
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tumnis-daemon /home/tumnis-agent
+CapabilityBoundingSet=
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

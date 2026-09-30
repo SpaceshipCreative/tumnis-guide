@@ -1,0 +1,167 @@
+{
+  "$defs": {
+    "ProfileInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "distribution_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Distribution Name"
+        },
+        "distribution_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Distribution Version"
+        },
+        "name": {
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ProfileInfo",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/runner/v1/register.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "items": {
+        "enum": [
+          "run",
+          "provision",
+          "health"
+        ],
+        "type": "string"
+      },
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "daemon_version": {
+      "maxLength": 64,
+      "title": "Daemon Version",
+      "type": "string"
+    },
+    "hermes_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Hermes Version"
+    },
+    "host": {
+      "maxLength": 253,
+      "title": "Host",
+      "type": "string"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "os": {
+      "enum": [
+        "linux",
+        "darwin"
+      ],
+      "title": "Os",
+      "type": "string"
+    },
+    "profiles": {
+      "items": {
+        "$ref": "#/$defs/ProfileInfo"
+      },
+      "maxItems": 500,
+      "title": "Profiles",
+      "type": "array"
+    },
+    "protocol_versions": {
+      "items": {
+        "type": "integer"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Protocol Versions",
+      "type": "array"
+    },
+    "runner_name": {
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "title": "Runner Name",
+      "type": "string"
+    },
+    "running_run_ids": {
+      "default": [],
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "maxItems": 500,
+      "title": "Running Run Ids",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "type": {
+      "const": "register",
+      "default": "register",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "protocol_versions",
+    "runner_name",
+    "host",
+    "os",
+    "daemon_version",
+    "hermes_version",
+    "profiles",
+    "capabilities"
+  ],
+  "title": "Register",
+  "type": "object"
+}
