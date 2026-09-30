@@ -67,7 +67,7 @@ export function DashboardPage() {
   }, [ready]);
 
   return (
-    <div className="flex flex-col gap-4 md:h-[calc(100dvh-3rem)]">
+    <div className="flex flex-col gap-4 md:h-[calc(100dvh-3rem-var(--tg-header-h))]">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
