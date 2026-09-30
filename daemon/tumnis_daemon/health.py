@@ -10,10 +10,11 @@ that owns the profile, so the profile's tokens never leave it.
   `GITHUB_PERSONAL_ACCESS_TOKEN`); `GET https://api.github.com/repos/{owner}/{repo}` for
   each own and foreign repo. Any token may read a public repo, so a repo counts as
   reachable only when `permissions.push` or `permissions.admin` is true.
-- Coolify: the token from `.env` (`COOLIFY_TOKEN` or `COOLIFY_API_TOKEN`);
-  `GET {base}/api/v1/applications/{uuid}` for each own and foreign app; 200 is reachable.
-  A token only ever goes to the profile's own Coolify: when the profile's `.env` names one
-  (`COOLIFY_BASE_URL` or `COOLIFY_URL`), the server's base URL must have the same origin.
+- Coolify: the token and base URL from `.env` (`COOLIFY_TOKEN` or `COOLIFY_API_TOKEN`, and
+  `COOLIFY_BASE_URL`); `GET {base}/api/v1/applications/{uuid}` for each own and foreign
+  app; 200 is reachable. A token only ever goes to the Coolify its own profile names
+  (Scott, decision 18): without `COOLIFY_BASE_URL` the probe reports "not configured" and
+  sends nothing, and the server's Coolify URL is only compared with it, never used.
 
 Each probe has a 5-second timeout and looks at no more than 50 targets per kind (plan
 defaults). Answers go back as booleans and target names only; no error text from a
@@ -40,7 +41,7 @@ GITHUB_API: Final = "https://api.github.com"
 GITHUB_API_VERSION: Final = "2022-11-28"  # as P2-13's GitHub adapter
 GITHUB_TOKEN_VARS: Final = ("GITHUB_TOKEN", "GITHUB_PERSONAL_ACCESS_TOKEN")
 COOLIFY_TOKEN_VARS: Final = ("COOLIFY_TOKEN", "COOLIFY_API_TOKEN")
-COOLIFY_URL_VARS: Final = ("COOLIFY_BASE_URL", "COOLIFY_URL")
+COOLIFY_URL_VARS: Final = ("COOLIFY_BASE_URL",)
 
 _SERVER_NAME: Final = re.compile(r"[^A-Za-z0-9_.-]")
 _REPO: Final = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}")
@@ -239,21 +240,27 @@ async def probe_coolify(
     *,
     own: Sequence[str],
     foreign: Sequence[str],
-    profile_base_url: str | None = None,
+    server_base_url: str | None = None,
 ) -> TokenReach:
-    """Each application's reach for the token: 200 is reachable, 401, 403 and 404 are
-    not. Nothing is sent when the base URL is missing, not http(s), or (when the profile
-    names its Coolify) at another origin."""
+    """Each application's reach for the token at the profile's own Coolify (`base_url`,
+    from its `.env`): 200 is reachable, 401, 403 and 404 are not. Nothing is sent when
+    that URL is missing ("not configured") or not http(s), or when the server's Coolify
+    (`server_base_url`, whose app uuids these are) is at another origin."""
     if not token:
         return TokenReach(token_present=False)
-    origin = _origin(base_url) if base_url else None
-    if origin is None:
-        return TokenReach(token_present=True, errors=["coolify: no usable base URL"])
-    if profile_base_url is not None and _origin(profile_base_url) != origin:
+    if not base_url or not base_url.strip():
         return TokenReach(
-            token_present=True, errors=["coolify: base URL is not the profile's own Coolify"]
+            token_present=True,
+            errors=["coolify: not configured (no COOLIFY_BASE_URL in the profile's .env)"],
         )
-    base = str(base_url).strip().rstrip("/")
+    origin = _origin(base_url)
+    if origin is None:
+        return TokenReach(token_present=True, errors=["coolify: COOLIFY_BASE_URL is not usable"])
+    if server_base_url is not None and _origin(server_base_url) != origin:
+        return TokenReach(
+            token_present=True, errors=["coolify: the profile's Coolify is not Tumnis's Coolify"]
+        )
+    base = base_url.strip().rstrip("/")
     own, foreign = _targets(own), _targets(foreign)
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
@@ -309,10 +316,10 @@ async def token_reach(
         if own_apps or foreign_apps:
             coolify = await probe_coolify(
                 client,
-                coolify_base_url,
+                _first(env, COOLIFY_URL_VARS),
                 _first(env, COOLIFY_TOKEN_VARS),
                 own=own_apps,
                 foreign=foreign_apps,
-                profile_base_url=_first(env, COOLIFY_URL_VARS),
+                server_base_url=coolify_base_url,
             )
     return github, coolify

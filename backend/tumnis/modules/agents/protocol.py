@@ -208,6 +208,7 @@ class HealthCheck(Envelope):
     foreign_repos: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)
     own_apps: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)  # Coolify UUIDs
     foreign_apps: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)
+    # compared with the profile's own COOLIFY_BASE_URL; never a token destination (decision 18)
     coolify_base_url: str | None = Field(default=None, max_length=2048)
 
 

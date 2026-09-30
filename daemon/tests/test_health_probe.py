@@ -192,7 +192,9 @@ async def _report_frames(token: str, root: Path) -> list[str]:
         }
     }
     (profile / "config.yaml").write_text(yaml.safe_dump(config))
-    (profile / ".env").write_text(f"GITHUB_TOKEN={token}\nCOOLIFY_TOKEN={token}\n")
+    (profile / ".env").write_text(
+        f"GITHUB_TOKEN={token}\nCOOLIFY_TOKEN={token}\nCOOLIFY_BASE_URL={COOLIFY}\n"
+    )
     (root / "runner.token").write_text("tmd_abcdefgh_DEVICE\n")
     cfg = DaemonConfig(
         server_url="wss://tumnis.example.org",
@@ -245,3 +247,76 @@ def test_token_never_leaves_host(token: str) -> None:
     assert report["github"]["own_reachable"] == {"acme/site": True}
     assert report["github"]["foreign_reachable"] == []
     assert report["coolify"]["own_reachable"] == {"app-own": True}
+
+
+@pytest.mark.req("SAF-3")
+@pytest.mark.wp("P2-10")
+async def test_coolify_without_base_url_in_profile_sends_nothing(profile_dir: Path) -> None:
+    """Scott, decision 18: a profile's Coolify token only ever goes to the Coolify its own
+    `.env` names. The fixture `.env` has a Coolify token and no `COOLIFY_BASE_URL`, so even
+    with the server supplying a URL no request is made, and the reach says "not
+    configured"."""
+    from tumnis_daemon.health import token_reach  # noqa: PLC0415
+
+    with respx.mock(assert_all_called=False) as fake:
+        route = fake.route().respond(200, json={})
+        github, coolify = await token_reach(
+            profile_dir,
+            own_repos=[],
+            foreign_repos=[],
+            own_apps=["app-own"],
+            foreign_apps=["app-beta"],
+            coolify_base_url=COOLIFY,
+        )
+
+    assert not route.called
+    assert github is None
+    assert coolify is not None
+    assert coolify.token_present is True
+    assert coolify.own_reachable == {}
+    assert coolify.foreign_reachable == []
+    assert coolify.errors == ["coolify: not configured (no COOLIFY_BASE_URL in the profile's .env)"]
+
+
+@pytest.mark.req("SAF-3")
+@pytest.mark.wp("P2-10")
+async def test_coolify_probes_only_the_profiles_own_url(profile_dir: Path) -> None:
+    """Scott, decision 18: the token goes to the profile's `COOLIFY_BASE_URL`; a server URL
+    at another origin is never contacted, and the mismatch is reported without a probe."""
+    from tumnis_daemon.health import token_reach  # noqa: PLC0415
+
+    env = profile_dir / ".env"
+    env.write_text(env.read_text() + f"COOLIFY_BASE_URL={COOLIFY}/\n")
+    with respx.mock(assert_all_called=False) as fake:
+        own = fake.get(f"{COOLIFY}/api/v1/applications/app-own").respond(200, json={})
+        fake.get(f"{COOLIFY}/api/v1/applications/app-beta").respond(404, json={})
+        other = fake.route(host="coolify.attacker.example").respond(200, json={})
+
+        _, same = await token_reach(
+            profile_dir,
+            own_repos=[],
+            foreign_repos=[],
+            own_apps=["app-own"],
+            foreign_apps=["app-beta"],
+            coolify_base_url=COOLIFY,
+        )
+        _, moved = await token_reach(
+            profile_dir,
+            own_repos=[],
+            foreign_repos=[],
+            own_apps=["app-own"],
+            foreign_apps=["app-beta"],
+            coolify_base_url="https://coolify.attacker.example",
+        )
+
+    assert same is not None
+    assert same.own_reachable == {"app-own": True}
+    assert same.foreign_reachable == []
+    assert own.calls.last.request.headers["Authorization"] == (
+        "Bearer 3|fake-coolify-token-for-tests"
+    )
+    assert not other.called
+    assert moved is not None
+    assert moved.own_reachable == {}
+    assert moved.errors == ["coolify: the profile's Coolify is not Tumnis's Coolify"]
+    assert own.call_count == 1

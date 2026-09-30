@@ -286,7 +286,9 @@ async def runner_sweep(scheduled_at: datetime, context: Any) -> list[str]:
 
 
 async def _coolify_base_url(ctx: WorkspaceContext) -> str | None:
-    """The workspace's Coolify base URL (Settings > Coolify, P2-14), when it has one."""
+    """The workspace's Coolify base URL (Settings > Coolify, P2-14), when it has one. The
+    daemon only compares it with the profile's own `COOLIFY_BASE_URL` and never sends a
+    token to it (Scott, decision 18)."""
     coolify = importlib.import_module("tumnis.modules.coolify.api")
     get_settings = getattr(coolify, "get_settings", None)
     if get_settings is None:  # before P2-14's settings exist
