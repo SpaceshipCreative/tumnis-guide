@@ -57,3 +57,30 @@ async def test_issue_56_brief_upserts_work_under_a_generic_plan(
             (project.id,),
         ).fetchall()
     assert rows == [("Acme seed brief", "# Seeded")]
+
+
+@pytest.mark.req("FR-2.3")
+@pytest.mark.wp("P0-17")
+async def test_issue_56_brief_upsert_survives_the_prepare_threshold(
+    db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock
+) -> None:
+    """The path the reset took: the same upsert, many times on one connection (psycopg
+    prepares it after 5 runs; Postgres tries a generic plan 5 runs after that)."""
+    from tumnis.core import db as core_db  # noqa: PLC0415
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+    from tumnis.modules.projects import api as projects  # noqa: PLC0415
+
+    core_db.configure(app_url=db.app, direct_url=db.app, owner_url=db.owner, pooled=False)
+    async with tenant_session(workspace.ctx) as s:
+        for n in range(15):
+            project = await projects.create_project(
+                s, workspace.ctx.actor, projects.ProjectCreate(name=f"P{n}"), now=clock.now()
+            )
+            await knowledge.put_text_document(
+                s, project.id, title=f"P{n} brief", body_md="# Goal", role="brief"
+            )
+
+    with psycopg.connect(db.libpq(OWNER)) as conn:
+        briefs = conn.execute("SELECT count(*) FROM documents WHERE role = 'brief'").fetchone()
+    assert briefs == (15,)
