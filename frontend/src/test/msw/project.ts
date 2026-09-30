@@ -13,6 +13,7 @@ import { http, HttpResponse, type RequestHandler } from "msw";
 import type * as z from "zod";
 
 import type {
+  AppDeployStatus,
   BoardOut,
   ColumnOut,
   CommentOut,
@@ -78,6 +79,8 @@ export interface ProjectFakeInit {
   recurrences?: readonly RecurrenceStub[];
   brief?: string;
   timezone?: string;
+  /** `GET /v1/coolify/status`'s apps for this project (P2-14). */
+  deployApps?: readonly AppDeployStatus[];
 }
 
 function without<T extends object>(value: T, key: string): Partial<T> {
@@ -103,6 +106,7 @@ export class ProjectFake {
   recurrences: RecurrenceStub[];
   brief: BriefStub;
   timezone: string;
+  deployApps: readonly AppDeployStatus[];
   readonly recorder = new Recorder();
   /** Answer the next move with 409 `transition_not_allowed` (T-P0-24-06). */
   refuseMoves = false;
@@ -134,6 +138,7 @@ export class ProjectFake {
       version: 1,
     };
     this.timezone = init.timezone ?? "America/New_York";
+    this.deployApps = init.deployApps ?? [];
   }
 
   /** The first column holding `status`. */
@@ -237,6 +242,13 @@ export class ProjectFake {
       }),
       http.get("/v1/settings/workspace", () =>
         HttpResponse.json(workspaceSettings({ timezone: this.timezone })),
+      ),
+      http.get("/v1/coolify/status", () =>
+        HttpResponse.json(
+          this.deployApps.length === 0
+            ? []
+            : [{ project_id: pid, apps: this.deployApps }],
+        ),
       ),
       http.get("/v1/tasks", ({ request }) => {
         const query = new URL(request.url).searchParams;
