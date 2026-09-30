@@ -47,6 +47,9 @@ LINE_LIMIT: Final = 8 * 1024 * 1024  # one stream-json record
 log = logging.getLogger(__name__)
 
 HEALTH_TIMEOUT_S: Final = 30.0  # each health subcommand (plan default)
+# The server waits 30 s for a health report; the token probes get only what is left of
+# this budget, counted from the check's start with Hermes's own checks included (P2-10).
+REPORT_BUDGET_S: Final = 25.0
 _FENCE: Final = re.compile(r"```(?:json)?[ \t]*\n(.*)\n[ \t]*```", re.DOTALL)
 _VERSION: Final = re.compile(r"\d+(?:\.\d+)+[0-9A-Za-z.+-]*")
 _MCP_NAME: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
@@ -558,6 +561,7 @@ async def check_health(msg: HealthCheck, state: "StateStore", cfg: DaemonConfig)
 
 
 async def health_report(msg: HealthCheck, cfg: DaemonConfig) -> HealthReport:
+    started = asyncio.get_running_loop().time()
     if not re.fullmatch(NAME_RE, msg.profile):
         return _report(msg, exists=False, reachable=False, error="invalid profile name")
     version = await _hermes(cfg, "version")
@@ -574,7 +578,8 @@ async def health_report(msg: HealthCheck, cfg: DaemonConfig) -> HealthReport:
             mcp = parse_mcp_list(listed[1])
         status = await _hermes(cfg, "-p", msg.profile, "status")
         authenticated = None if status is None else status[0] == 0
-        probed = await _probe(msg, cfg)
+        left = REPORT_BUDGET_S - (asyncio.get_running_loop().time() - started)
+        probed = await _probe(msg, cfg, deadline_s=max(0.0, min(health.PROBE_DEADLINE_S, left)))
         if not mcp:
             mcp = [server.name for server in probed["mcp_server_details"]]
     return _report(
@@ -589,7 +594,7 @@ async def health_report(msg: HealthCheck, cfg: DaemonConfig) -> HealthReport:
     )
 
 
-async def _probe(msg: HealthCheck, cfg: DaemonConfig) -> dict[str, Any]:
+async def _probe(msg: HealthCheck, cfg: DaemonConfig, *, deadline_s: float) -> dict[str, Any]:
     """P2-10: the profile's MCP servers, its version stamp and its tokens' reach, read and
     probed from this host (each token goes only to its own provider, never to Tumnis)."""
     profile = health.profile_dir(cfg.hermes_home, msg.profile)
@@ -600,6 +605,7 @@ async def _probe(msg: HealthCheck, cfg: DaemonConfig) -> dict[str, Any]:
         own_apps=msg.own_apps,
         foreign_apps=msg.foreign_apps,
         coolify_base_url=msg.coolify_base_url,
+        deadline_s=deadline_s,
     )
     return {
         "mcp_server_details": health.mcp_servers(profile),

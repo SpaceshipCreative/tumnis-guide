@@ -361,6 +361,51 @@ def test_run_and_health_read_the_same_profile_version(profile_dir: Path, tmp_pat
     assert profile_version(cfg, "Not-A-Name") is None
 
 
+@pytest.mark.wp("P2-10")
+async def test_probe_deadline_counts_the_hermes_checks(
+    profile_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The token probes get only what is left of the report's budget after Hermes's own
+    checks, so slow Hermes calls plus slow providers never push the report past the
+    server's 30-second wait."""
+    from tumnis_daemon import health, runner  # noqa: PLC0415
+    from tumnis_daemon.config import DaemonConfig  # noqa: PLC0415
+    from tumnis_daemon.protocol import HealthCheck, envelope  # noqa: PLC0415
+
+    async def slow_hermes(_cfg: DaemonConfig, *_args: str) -> tuple[int, str]:
+        await asyncio.sleep(0.1)  # four calls: version, profile show, mcp list, status
+        return 0, ""
+
+    deadlines: list[float] = []
+
+    async def reach(_profile: Path, **kwargs: Any) -> tuple[None, None]:
+        deadlines.append(kwargs["deadline_s"])
+        return None, None
+
+    monkeypatch.setattr(runner, "_hermes", slow_hermes)
+    monkeypatch.setattr(runner, "REPORT_BUDGET_S", 0.5)
+    monkeypatch.setattr(health, "token_reach", reach)
+    cfg = DaemonConfig(
+        server_url="ws://127.0.0.1:1",
+        runner_name="homelab-hermes",
+        token_file=tmp_path / "token",
+        state_dir=tmp_path / "state",
+        hermes_home=profile_dir.parent.parent,
+    )
+    request_id = uuid.uuid4()
+    check = HealthCheck(
+        **envelope(f"req:{request_id}"),
+        request_id=request_id,
+        profile="acme-site",
+        own_repos=["acme/site"],
+    )
+
+    await runner.health_report(check, cfg)
+
+    assert len(deadlines) == 1
+    assert 0.0 <= deadlines[0] <= 0.5 - 0.4 + 0.05
+
+
 @pytest.mark.req("SAF-3")
 @pytest.mark.wp("P2-10")
 async def test_coolify_cleartext_only_on_the_lan(profile_dir: Path) -> None:
