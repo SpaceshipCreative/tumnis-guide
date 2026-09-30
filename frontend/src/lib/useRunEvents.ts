@@ -4,8 +4,7 @@
 // `agentsListRunEvents` one, which LIVE_MAP lists under `run`: a live notice for the run
 // (/ws) marks it stale and the next pages come in; while the run is active it also polls,
 // so a lost notice only delays a line.
-import { useQuery } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { agentsListRunEventsQueryKey } from "../api/@tanstack/react-query.gen";
 import { agentsListRunEvents } from "../api/sdk.gen";
@@ -18,42 +17,37 @@ export const RUN_EVENTS_POLL_MS = 2_000;
 /** At most this many pages in one fetch, so a flood never blocks the view. */
 const MAX_PAGES = 20;
 
-interface Held {
-  runId: string;
-  after: number | undefined;
-  events: RunEventOut[];
-}
-
 export function useRunEvents(runId: string, { active }: { active: boolean }) {
-  const held = useRef<Held>({ runId, after: undefined, events: [] });
-  if (held.current.runId !== runId) {
-    held.current = { runId, after: undefined, events: [] };
-  }
+  const queryClient = useQueryClient();
+  const queryKey = agentsListRunEventsQueryKey({ path: { run_id: runId } });
   return useQuery({
-    queryKey: agentsListRunEventsQueryKey({ path: { run_id: runId } }),
+    queryKey,
+    // The events held so far live in the query's own cache entry (the cursor is the last
+    // one's seq), so every view of the run, and a remount, pages on from the same place.
     queryFn: async ({ signal }) => {
-      const state = held.current;
+      let events = queryClient.getQueryData<RunEventOut[]>(queryKey) ?? [];
+      let after = events.at(-1)?.seq;
       for (let page = 0; page < MAX_PAGES; page += 1) {
         const { data } = await agentsListRunEvents({
           path: { run_id: runId },
           query:
-            state.after === undefined
+            after === undefined
               ? { limit: RUN_EVENTS_PAGE }
-              : { limit: RUN_EVENTS_PAGE, after_seq: state.after },
+              : { limit: RUN_EVENTS_PAGE, after_seq: after },
           signal,
           throwOnError: true,
         });
-        if (state !== held.current) break; // another run's view took over
+        const since = after;
         const fresh = data.items.filter(
-          (event) => state.after === undefined || event.seq > state.after,
+          (event) => since === undefined || event.seq > since,
         );
         if (fresh.length > 0) {
-          state.events = [...state.events, ...fresh];
-          state.after = fresh.at(-1)?.seq ?? state.after;
+          events = [...events, ...fresh];
+          after = fresh.at(-1)?.seq ?? after;
         }
         if (data.items.length < RUN_EVENTS_PAGE) break;
       }
-      return state.events;
+      return events;
     },
     refetchInterval: active ? RUN_EVENTS_POLL_MS : false,
     staleTime: 0,
