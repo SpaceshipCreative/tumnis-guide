@@ -196,14 +196,17 @@ jobs:
           uv sync
           # Pull the service images while xdist starts, so no worker's first test waits on one.
           uv run python -c "from tests._services import CLAMD_IMAGE, MINIO_IMAGE, SFTP_IMAGE; from tests.fixtures import PG_IMAGE, PGBOUNCER_IMAGE; print(PG_IMAGE, PGBOUNCER_IMAGE, MINIO_IMAGE, SFTP_IMAGE, CLAMD_IMAGE)" | xargs -n1 -P5 docker pull -q > /dev/null &
-          uv run pytest -m "integration and not contract and not serial" -n auto --dist worksteal --durations=40
+          uv run pytest -m "integration and not contract and not serial" -n auto --dist worksteal --durations=0
       # Timing budgets measured in one process (T-P1-07-01's label p95): alone, so they
       # measure the product rather than xdist workers sharing the runner's CPUs. Runs even
       # when the parallel step failed; either failing fails this required job.
       - name: Serial integration tests (timing budgets, -n 0)
         if: ${{ !cancelled() }}
         working-directory: backend
-        run: uv run pytest -m "integration and not contract and serial" -n 0 --durations=10
+        run: |
+          date -u +%T.%N; docker ps --format '{{.Image}} {{.Status}}'; uptime
+          uv run pytest -m "integration and not contract and serial" -n 0 --durations=10 -p tests._diag_t01 -s -p no:randomly
+
 
   e2e:
     runs-on: ubuntu-latest
