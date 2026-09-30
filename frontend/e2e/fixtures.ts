@@ -30,6 +30,7 @@ import {
   expect,
   type APIRequestContext,
   type APIResponse,
+  type BrowserContext,
   type Locator,
   type Page,
   type Request,
@@ -196,11 +197,17 @@ export const test = base.extend<E2EFixtures>({
     // The next test starts on the real clock even if it never resets the stack.
     if (follower.synced()) await request.post("/v1/test/reset");
   },
-  seededApp: async ({ baseURL, request }, use) => {
+  seededApp: async ({ baseURL, request, context }, use) => {
     // Mounted only with fake adapters (compose.test and previews).
     const reset = async (set: SeedSetName = "seed"): Promise<void> => {
+      // A reset empties every table, sessions and users included (P0-29): a browser
+      // that was signed in signs in again, as the user of the set it now holds.
+      const signedIn = (await context.cookies()).some(
+        (cookie) => cookie.name === SESSION_COOKIE,
+      );
       const response = await postReset(request, set);
       expect(response.status(), `POST /v1/test/reset (${set})`).toBe(204);
+      if (signedIn) await signInAs(context.request, seedSetUser(set));
     };
     await reset();
     await use({ baseURL: baseURL ?? "", reset });
@@ -229,8 +236,15 @@ export const test = base.extend<E2EFixtures>({
 
 // --- Seed user and TOTP ------------------------------------------------------
 
+/** The session cookie a sign-in sets (backend `tumnis.modules.auth.csrf`). */
+export const SESSION_COOKIE = "__Host-tumnis_session";
+
 const SEED_WORKSPACE = new URL(
   "../../backend/fixtures/seed/workspace.yaml",
+  import.meta.url,
+);
+const LOAD_SET = new URL(
+  "../../backend/fixtures/load/load.yaml",
   import.meta.url,
 );
 
@@ -240,21 +254,54 @@ export interface SeedUser {
   readonly totpSecret: string;
 }
 
-/** The seed user from backend/fixtures/seed/workspace.yaml (the only user). */
-export function seedUser(): SeedUser {
-  const text = readFileSync(SEED_WORKSPACE, "utf8");
+/** The first user of a seed file (its `users:` come before its projects). */
+function firstUser(file: URL): SeedUser {
+  const text = readFileSync(file, "utf8");
   const field = (pattern: RegExp): string => {
     const value = pattern.exec(text)?.[1];
     if (value === undefined) {
-      throw new Error(`seed workspace.yaml has no ${pattern.source}`);
+      throw new Error(`${file.pathname} has no ${pattern.source}`);
     }
     return value;
   };
   return {
     email: field(/email:\s*([^\s,}]+)/),
-    password: field(/password:\s*"([^"]+)"/),
+    password: field(/password:\s*"?([^"\s,}]+)"?/),
     totpSecret: field(/totp_secret:\s*([A-Z2-7]+)/),
   };
+}
+
+/** The seed user from backend/fixtures/seed/workspace.yaml (the only user). */
+export function seedUser(): SeedUser {
+  return firstUser(SEED_WORKSPACE);
+}
+
+/**
+ * The user a seed set signs in as: the load set (backend/fixtures/load/load.yaml) has its
+ * own workspace and user; the other sets build on the seed workspace.
+ */
+export function seedSetUser(set: SeedSetName): SeedUser {
+  return set === "load" ? firstUser(LOAD_SET) : seedUser();
+}
+
+/** Password, then the TOTP code at the real time; the session lands in `request`'s cookies. */
+async function signInAs(
+  request: APIRequestContext,
+  user: SeedUser,
+): Promise<void> {
+  const login = await request.post("/v1/auth/login", {
+    data: { email: user.email, password: user.password },
+  });
+  if (!login.ok()) {
+    throw new Error(`POST /v1/auth/login -> ${String(login.status())}`);
+  }
+  const { preauth } = (await login.json()) as { preauth: string };
+  const code = await request.post("/v1/auth/totp", {
+    data: { preauth, code: totp(user.totpSecret, new Date()) },
+  });
+  if (!code.ok()) {
+    throw new Error(`POST /v1/auth/totp -> ${String(code.status())}`);
+  }
 }
 
 function base32(secret: string): Buffer {
@@ -485,20 +532,7 @@ export async function signIn(
   if (reset.status() !== 204) {
     throw new Error(`POST /v1/test/reset -> ${String(reset.status())}`);
   }
-  const user = seedUser();
-  const login = await request.post("/v1/auth/login", {
-    data: { email: user.email, password: user.password },
-  });
-  if (!login.ok()) {
-    throw new Error(`POST /v1/auth/login -> ${String(login.status())}`);
-  }
-  const { preauth } = (await login.json()) as { preauth: string };
-  const code = await request.post("/v1/auth/totp", {
-    data: { preauth, code: totp(user.totpSecret, new Date()) },
-  });
-  if (!code.ok()) {
-    throw new Error(`POST /v1/auth/totp -> ${String(code.status())}`);
-  }
+  await signInAs(request, seedSetUser(set));
 }
 
 /**
@@ -640,4 +674,65 @@ export function recordWrites(page: Page, pattern: RegExp): Request[] {
     if (request.method() !== "GET" && pattern.test(path)) writes.push(request);
   });
   return writes;
+}
+
+// --- Performance timings (P0-29) ---------------------------------------------------
+
+/** Waits until the page's service worker is active (the PWA is installed). */
+export async function serviceWorkerActive(page: Page): Promise<boolean> {
+  return page.evaluate(() =>
+    navigator.serviceWorker.ready.then((r) => r.active !== null),
+  );
+}
+
+/**
+ * A fresh page in `context` (a cold PWA open once the service worker is installed) with
+ * `latencyMs` of network latency through CDP (`Network.emulateNetworkConditions`,
+ * Chromium only; 50 ms is the plan default for the VPN).
+ */
+export async function coldPage(
+  context: BrowserContext,
+  latencyMs = 50,
+): Promise<Page> {
+  const page = await context.newPage();
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Network.enable");
+  await cdp.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: latencyMs,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+  });
+  return page;
+}
+
+/** The median of a non-empty list of numbers. */
+export function median(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? (sorted[mid] ?? NaN)
+    : ((sorted[mid - 1] ?? NaN) + (sorted[mid] ?? NaN)) / 2;
+}
+
+/**
+ * Presses `/` every 100 ms until the quick-add title field has the focus (or `timeoutMs`
+ * passes), then types "x". Answers whether the field reads "x".
+ */
+export async function quickAddUsable(
+  page: Page,
+  timeoutMs = 10_000,
+): Promise<boolean> {
+  const title = quickAddDialog(page).getByRole("textbox", { name: "Title" });
+  const focused = async (): Promise<boolean> =>
+    (await title.count()) > 0 &&
+    (await title.evaluate((el) => el === document.activeElement));
+  const deadline = Date.now() + timeoutMs;
+  while (!(await focused())) {
+    if (Date.now() > deadline) return false;
+    await page.keyboard.press("/");
+    await page.waitForTimeout(100);
+  }
+  await page.keyboard.type("x");
+  return (await title.inputValue()) === "x";
 }
