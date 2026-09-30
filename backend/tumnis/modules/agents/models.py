@@ -1,8 +1,9 @@
 """agents SQLAlchemy tables owned by this module (mirrors of revisions agents_0001, P1-04,
-agents_0002, P2-07, and agents_0003, P1-06).
+agents_0002, P2-07, agents_0003, P1-06, and agents_0004, P2-02).
 
 - runners: one per runner daemon; its device token lives in auth's `device_tokens`.
-- agent_profiles: the Hermes profiles Tumnis may run (one master, one per project).
+- agent_profiles: the Hermes profiles Tumnis may run (one master, one per project);
+  `api_key_id` is the key its runs' task tokens are issued from (P2-02).
 - runs: every agent run; `kind` and `status` hold the whole R-22 vocabulary.
 - run_events: what happened in a run, unique per (run, message) so a replayed message
   lands once.
@@ -54,6 +55,7 @@ class AgentProfile(TenantBase, Base):
     health_checked_at: Mapped[datetime | None]
     provision_mode: Mapped[str] = mapped_column(server_default=text("'create'"))  # P1-06
     provision_attempts: Mapped[int] = mapped_column(server_default=text("0"))  # P1-06
+    api_key_id: Mapped[UUID | None]  # P2-02: auth's api_keys row (no cross-module FK)
 
 
 class RunRow(TenantBase, Base):

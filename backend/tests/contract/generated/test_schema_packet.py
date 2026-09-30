@@ -17,6 +17,12 @@ CASES = [
         1,
         "backend/tests/contract/fixtures/packet/task_packet/v1.json",
     ),
+    (
+        "packet",
+        "task_run_request",
+        1,
+        "backend/tests/contract/fixtures/packet/task_run_request/v1.json",
+    ),
 ]
 
 

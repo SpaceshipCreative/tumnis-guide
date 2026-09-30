@@ -112,6 +112,9 @@ ignore_imports =
     tumnis.modules.github.tests.** -> tumnis.modules.tasks.events
 # knowledge builds on projects; the archive tests (P2-18) drive knowledge's folders.
     tumnis.modules.projects.tests.** -> tumnis.modules.knowledge.**
+# agents builds on auth (P2-02: a task token per dispatch); auth's task-token tests issue
+# tokens the way a dispatch does, through agents' api.
+    tumnis.modules.auth.tests.** -> tumnis.modules.agents.api
 unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:search-usage-subscribe-only]

@@ -300,6 +300,31 @@ export type CalendarsIn = {
 };
 
 /**
+ * Callback
+ *
+ * Where the agent calls back, and with what: the run's task token, valid until the
+ * run ends (null when the packet is read outside a run, `get_task_packet`).
+ */
+export type Callback = {
+  /**
+   * Mcp Url
+   */
+  mcp_url: string;
+  /**
+   * Rest Base Url
+   */
+  rest_base_url: string;
+  /**
+   * Task Token
+   */
+  task_token?: string | null;
+  /**
+   * Token Valid Until
+   */
+  token_valid_until?: "run_end";
+};
+
+/**
  * CardOut
  */
 export type CardOut = {
@@ -1313,6 +1338,43 @@ export type PlannedBlockOut = {
 };
 
 /**
+ * PolicySection
+ *
+ * What the agent may do without asking, and its run limits (FR-5.6, SAF-5). The action
+ * classes are the project policy's own vocabulary (projects.rules.GATED_DEFAULT).
+ */
+export type PolicySection = {
+  /**
+   * Allowed
+   */
+  allowed: Array<string>;
+  /**
+   * Gated
+   */
+  gated: Array<string>;
+  /**
+   * Max Delegation Depth
+   */
+  max_delegation_depth?: number | null;
+  /**
+   * Max Tasks Per Run
+   */
+  max_tasks_per_run?: number | null;
+  /**
+   * Tainted Run All Gated
+   */
+  tainted_run_all_gated?: boolean;
+  /**
+   * Time Cap Minutes
+   */
+  time_cap_minutes: number;
+  /**
+   * Tool Allowlist
+   */
+  tool_allowlist?: Array<string>;
+};
+
+/**
  * PolicySummary
  *
  * What an agent may do in the project without asking, and its run limits (FR-5.6).
@@ -2242,6 +2304,12 @@ export type RotateIn = {
 };
 
 /**
+ * RunKind
+ */
+export type RunKind =
+  "enrich" | "plan" | "task" | "proposal" | "stuck" | "notify";
+
+/**
  * RunnerCreated
  */
 export type RunnerCreated = {
@@ -2383,6 +2451,26 @@ export type S3ConfigIn = {
    * Sse
    */
   sse?: "AES256" | null;
+};
+
+/**
+ * SchemaRef
+ *
+ * Names a @versioned model, e.g. ("enrichment", "result", 1).
+ */
+export type SchemaRef = {
+  /**
+   * Family
+   */
+  family: string;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -2776,6 +2864,58 @@ export type TaskOut = {
    * Version
    */
   version: number;
+};
+
+/**
+ * TaskPacket
+ */
+export type TaskPacket = {
+  /**
+   * Block Nonce
+   */
+  block_nonce?: string | null;
+  /**
+   * Body
+   */
+  body: {
+    [key: string]: unknown;
+  };
+  callback?: Callback | null;
+  /**
+   * Correlation Id
+   */
+  correlation_id: string;
+  kind: RunKind;
+  output_schema: SchemaRef;
+  policy?: PolicySection | null;
+  /**
+   * Profile Id
+   */
+  profile_id: string;
+  /**
+   * Prompt Text
+   */
+  prompt_text: string;
+  /**
+   * Run Id
+   */
+  run_id: string;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Skill
+   */
+  skill: string;
+  /**
+   * Tainted
+   */
+  tainted?: boolean;
+  /**
+   * Timeout S
+   */
+  timeout_s: number;
 };
 
 /**
@@ -8510,6 +8650,75 @@ export type TasksMoveTaskResponses = {
 
 export type TasksMoveTaskResponse =
   TasksMoveTaskResponses[keyof TasksMoveTaskResponses];
+
+export type AgentsGetTaskPacketData = {
+  body?: never;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: {
+    /**
+     * Schema Version
+     */
+    schema_version?: number | null;
+    /**
+     * Kind
+     */
+    kind?: "task" | "proposal" | "stuck";
+  };
+  url: "/v1/tasks/{task_id}/packet";
+};
+
+export type AgentsGetTaskPacketErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsGetTaskPacketError =
+  AgentsGetTaskPacketErrors[keyof AgentsGetTaskPacketErrors];
+
+export type AgentsGetTaskPacketResponses = {
+  /**
+   * Successful Response
+   */
+  200: TaskPacket;
+};
+
+export type AgentsGetTaskPacketResponse =
+  AgentsGetTaskPacketResponses[keyof AgentsGetTaskPacketResponses];
 
 export type TasksListPullRequestsData = {
   body?: never;

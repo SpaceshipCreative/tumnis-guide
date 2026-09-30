@@ -19,9 +19,10 @@
   a reply (P1-08, P1-11). They read the skill models of `skill_io.py` structurally.
 """
 
+import functools
 import re
 import unicodedata
-from collections.abc import Iterable, Sequence, Set
+from collections.abc import Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -464,3 +465,201 @@ def reach_targets(
         )
     )
     return ReachTargets(own_repos, foreign_repos, own_apps, foreign_apps, owners)
+
+
+# --- Untrusted blocks and task tokens (P2-02, SAF-1, R-24, R-27) --------------------------
+#
+# Every piece of text in a task packet is a `Block`. Trusted text (the user's brief, a human
+# comment, a task the user wrote) is rendered plainly; everything else is an untrusted block:
+#
+#     <untrusted-data id="u-7f3a9c2e5b10d4aa" source="email" item="..." from="...">
+#     ...escaped text...
+#     </untrusted-data id="u-7f3a9c2e5b10d4aa">
+#
+# After escaping, the text holds no `<` or `>` at all (nor a character whose compatibility
+# form holds one), so it can neither open nor close a tag; the per-packet nonce stops a
+# forged closer written into one block from matching another block's id.
+
+# Look-alikes of < and > (Unicode UTS #39 confusables, https://www.unicode.org/reports/tr39/),
+# written as numeric entities. A character whose NFKD form holds < or > is escaped too,
+# listed here or not (`_folds_to_bracket`).
+CONFUSABLE_BRACKETS: Final = frozenset(
+    "\uff1c\uff1e"  # fullwidth less-than and greater-than signs
+    "\ufe64\ufe65"  # small less-than and greater-than signs
+    "\u2039\u203a"  # single angle quotation marks
+    "\u27e8\u27e9"  # mathematical angle brackets
+    "\u2329\u232a"  # left and right-pointing angle brackets
+    "\u3008\u3009"  # CJK angle brackets
+    "\u02c2\u02c3"  # modifier letter arrowheads
+    "\u1438\u1433"  # Canadian syllabics pa and po
+    "\u276e\u276f"  # heavy angle quotation mark ornaments
+    "\u226e\u226f"  # not less-than, not greater-than (a bracket and a combining slash)
+)
+INVISIBLE_CONTROLS: Final = frozenset(
+    {chr(c) for c in range(0xE0000, 0xE0080)}  # tag characters ("ASCII smuggling")
+    | set("\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")  # bidi controls
+    | set("\u200b\u200c\u200d\u200e\u200f\u2060\u2061\u2062\u2063\u2064\ufeff\u180e")  # zero width
+)
+NONCE_RE: Final = r"^u-[0-9a-f]{16}$"
+ATTR_NAME_RE: Final = r"^[a-z][a-z_-]{0,31}$"
+ATTR_LIMIT: Final = 200  # characters of an attribute value kept (plan default)
+CONTEXT_ITEM_MAX_BYTES: Final = 32 * 1024  # each context item's text (plan default)
+PACKET_MAX_BYTES: Final = 256 * 1024  # a task packet's prompt text (plan default)
+
+_NAMED: Final[dict[str, str]] = {"&": "&amp;", "<": "&lt;", ">": "&gt;"}
+_UNNAMED: Final[dict[str, str]] = {"amp": "&", "lt": "<", "gt": ">", "quot": '"'}
+_ENTITY: Final = re.compile(r"&(?:(amp|lt|gt|quot)|#x([0-9A-F]{1,6}));")
+_NONCE: Final = re.compile(NONCE_RE)
+_ATTR_NAME: Final = re.compile(ATTR_NAME_RE)
+
+BlockSource = Literal[
+    "user",
+    "task",
+    "comment",
+    "brief",
+    "document",
+    "email",
+    "chat",
+    "note",
+    "event",
+    "artifact",
+    "file",
+    "url",
+    "agent",
+]
+
+
+class Block(BaseModel):
+    """One piece of text in a packet: how far it is trusted, whether it is tainted, where
+    it came from, and how the prompt renders it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trust: Literal["trusted", "untrusted"]
+    tainted: bool
+    source: BlockSource
+    item: str | None = None
+    rendered: str
+    truncated: bool = False
+
+
+@functools.cache
+def _folds_to_bracket(ch: str) -> bool:
+    """Whether a non-ASCII character's compatibility decomposition holds < or >."""
+    return not ch.isascii() and any(c in "<>" for c in unicodedata.normalize("NFKD", ch))
+
+
+def _escape_char(ch: str) -> str:
+    named = _NAMED.get(ch)
+    if named is not None:
+        return named
+    if ch == "\r" or ch in CONFUSABLE_BRACKETS or ch in INVISIBLE_CONTROLS or _folds_to_bracket(ch):
+        return f"&#x{ord(ch):X};"
+    return ch
+
+
+def escape_untrusted(text: str) -> str:
+    """Outside text made safe for an untrusted block: `&` first (so an entity in the input
+    stays literal text), `<` and `>` as named entities; look-alike brackets, invisible
+    controls and carriage returns as numeric ones. `unescape_untrusted` inverts it."""
+    return "".join(_escape_char(ch) for ch in text)
+
+
+def escape_attr(value: str, limit: int = ATTR_LIMIT) -> str:
+    """An attribute value: its first `limit` characters escaped, quotes as `&quot;` and
+    newlines as spaces, so it can neither end its attribute nor add another."""
+    return escape_untrusted(value[:limit]).replace('"', "&quot;").replace("\n", " ")
+
+
+def unescape_untrusted(text: str) -> str:
+    """The inverse of `escape_untrusted` (tests and previews; agents read the escaped form)."""
+
+    def one(match: re.Match[str]) -> str:
+        named = match.group(1)
+        return _UNNAMED[named] if named else chr(int(match.group(2), 16))
+
+    return _ENTITY.sub(one, text)
+
+
+def render_block(
+    text: str,
+    *,
+    nonce: str,
+    source: str,
+    item: str | None,
+    attrs: Mapping[str, str],
+    trusted: bool,
+) -> str:
+    """Trusted text as it is; anything else inside an `<untrusted-data>` block whose open
+    and close tags both carry the packet's nonce."""
+    if trusted:
+        return text
+    if not _NONCE.fullmatch(nonce):
+        raise ValueError(f"a block nonce matches {NONCE_RE}")
+    bad = sorted(name for name in attrs if not _ATTR_NAME.fullmatch(name))
+    if bad:
+        raise ValueError(f"attribute names match {ATTR_NAME_RE}: {bad}")
+    head = " ".join(
+        [f'id="{nonce}"', f'source="{escape_attr(source)}"']
+        + ([f'item="{escape_attr(item)}"'] if item else [])
+        + [f'{name}="{escape_attr(value)}"' for name, value in sorted(attrs.items())]
+    )
+    return f'<untrusted-data {head}>\n{escape_untrusted(text)}\n</untrusted-data id="{nonce}">'
+
+
+def packet_tainted(blocks: Iterable[Block]) -> bool:
+    """A packet is tainted when any of its blocks is: computed, never remembered."""
+    return any(block.tainted for block in blocks)
+
+
+def comment_tainted(author: str) -> bool:
+    """Whether a task comment is tainted, from its author (comments keep no taint column):
+    a write by an API key, never bound to a run, is tainted (R-31, as
+    `agent_surface._taint`). A person's comment is not; a task token's follows its run's
+    taint, which P2-08 propagates."""
+    return author.startswith("api_key:")
+
+
+def truncate_utf8(text: str, max_bytes: int) -> tuple[str, bool]:
+    """The longest prefix of `text` within `max_bytes` UTF-8 bytes, and whether it was cut.
+    Truncation comes before escaping, so an escape is never cut in half."""
+    raw = text.encode("utf-8", errors="surrogatepass")
+    if len(raw) <= max_bytes:
+        return text, False
+    return raw[:max_bytes].decode("utf-8", errors="ignore"), True
+
+
+def render_task_prompt(
+    preamble: str,
+    instruction: str,
+    sections: Sequence[tuple[str, Sequence[str]]],
+    data_json: str,
+) -> str:
+    """A task packet's `prompt_text` (the daemon never builds prompts, R-25): the fixed
+    preamble (trusted), the run's instruction, each non-empty section of rendered blocks
+    under its heading, then the structured fields as JSON between `<packet>` markers. The
+    JSON carries no outside text (all of it is in the blocks above); the caller writes its
+    `<` characters as `\\u003c`."""
+    parts = [preamble.strip(), instruction.strip()]
+    parts += [f"## {heading}\n\n" + "\n\n".join(blocks) for heading, blocks in sections if blocks]
+    parts.append(f"<packet>\n{data_json}\n</packet>")
+    return "\n\n".join(parts) + "\n"
+
+
+# The scopes a run's task token may hold, per kind (plan defaults; every RunKind, R-22):
+# never `delegate` or `ingest`, and always cut to the issuing profile key's scopes (P0-14).
+RUN_TOKEN_SCOPES: Final[dict[RunKind, frozenset[str]]] = {
+    RunKind.ENRICH: frozenset({"tasks:read", "tasks:write", "context:read"}),
+    RunKind.PLAN: frozenset({"tasks:read", "context:read"}),
+    RunKind.TASK: frozenset(
+        {"tasks:read", "tasks:write", "context:read", "knowledge:write", "drafts:write"}
+    ),
+    RunKind.PROPOSAL: frozenset({"tasks:read", "tasks:write", "context:read"}),
+    RunKind.STUCK: frozenset({"tasks:read", "tasks:write", "context:read"}),
+    RunKind.NOTIFY: frozenset({"tasks:read"}),
+}
+
+
+def run_token_scopes(kind: RunKind, key_scopes: frozenset[str]) -> frozenset[str]:
+    """The kind's token scopes that the issuing key also holds."""
+    return RUN_TOKEN_SCOPES[kind] & frozenset(key_scopes)

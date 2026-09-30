@@ -1,0 +1,577 @@
+{
+  "$defs": {
+    "Block": {
+      "additionalProperties": false,
+      "description": "One piece of text in a packet: how far it is trusted, whether it is tainted, where\nit came from, and how the prompt renders it.",
+      "properties": {
+        "item": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Item"
+        },
+        "rendered": {
+          "title": "Rendered",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "user",
+            "task",
+            "comment",
+            "brief",
+            "document",
+            "email",
+            "chat",
+            "note",
+            "event",
+            "artifact",
+            "file",
+            "url",
+            "agent"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "tainted": {
+          "title": "Tainted",
+          "type": "boolean"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "trust": {
+          "enum": [
+            "trusted",
+            "untrusted"
+          ],
+          "title": "Trust",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trust",
+        "tainted",
+        "source",
+        "rendered"
+      ],
+      "title": "Block",
+      "type": "object"
+    },
+    "ContextBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Item"
+        },
+        "provider_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Url"
+        },
+        "rendered": {
+          "title": "Rendered",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "user",
+            "task",
+            "comment",
+            "brief",
+            "document",
+            "email",
+            "chat",
+            "note",
+            "event",
+            "artifact",
+            "file",
+            "url",
+            "agent"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "tainted": {
+          "title": "Tainted",
+          "type": "boolean"
+        },
+        "target_type": {
+          "title": "Target Type",
+          "type": "string"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "trust": {
+          "enum": [
+            "trusted",
+            "untrusted"
+          ],
+          "title": "Trust",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trust",
+        "tainted",
+        "source",
+        "rendered",
+        "target_type"
+      ],
+      "title": "ContextBlock",
+      "type": "object"
+    },
+    "EstimateSample": {
+      "properties": {
+        "actual_minutes": {
+          "title": "Actual Minutes",
+          "type": "integer"
+        },
+        "estimate_minutes": {
+          "title": "Estimate Minutes",
+          "type": "integer"
+        },
+        "label": {
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "label",
+        "estimate_minutes",
+        "actual_minutes"
+      ],
+      "title": "EstimateSample",
+      "type": "object"
+    },
+    "Passage": {
+      "additionalProperties": false,
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "heading_path": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Heading Path",
+          "type": "array"
+        },
+        "item": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Item"
+        },
+        "page_from": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page From"
+        },
+        "page_to": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page To"
+        },
+        "rendered": {
+          "title": "Rendered",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "user",
+            "task",
+            "comment",
+            "brief",
+            "document",
+            "email",
+            "chat",
+            "note",
+            "event",
+            "artifact",
+            "file",
+            "url",
+            "agent"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "tainted": {
+          "title": "Tainted",
+          "type": "boolean"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "trust": {
+          "enum": [
+            "trusted",
+            "untrusted"
+          ],
+          "title": "Trust",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trust",
+        "tainted",
+        "source",
+        "rendered",
+        "document_id"
+      ],
+      "title": "Passage",
+      "type": "object"
+    },
+    "PathLocation": {
+      "additionalProperties": false,
+      "description": "A project's code in a directory on the agent server.",
+      "properties": {
+        "kind": {
+          "const": "path",
+          "default": "path",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "PathLocation",
+      "type": "object"
+    },
+    "ProjectSection": {
+      "additionalProperties": false,
+      "properties": {
+        "brief": {
+          "$ref": "#/$defs/Block"
+        },
+        "client": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client"
+        },
+        "code_location": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "path": "#/$defs/PathLocation",
+                  "repo": "#/$defs/RepoLocation"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PathLocation"
+                },
+                {
+                  "$ref": "#/$defs/RepoLocation"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code Location"
+        },
+        "domains": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Domains",
+          "type": "array"
+        },
+        "folder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Folder"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "passages": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Passage"
+          },
+          "title": "Passages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "brief"
+      ],
+      "title": "ProjectSection",
+      "type": "object"
+    },
+    "RepoLocation": {
+      "additionalProperties": false,
+      "description": "A project's code in a repository the daemon mirrors, at its default branch.",
+      "properties": {
+        "clone_url": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Clone Url",
+          "type": "string"
+        },
+        "default_branch": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Branch"
+        },
+        "kind": {
+          "const": "repo",
+          "default": "repo",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "clone_url"
+      ],
+      "title": "RepoLocation",
+      "type": "object"
+    },
+    "TaskMetadata": {
+      "properties": {
+        "capability_hints": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Capability Hints",
+          "type": "array"
+        },
+        "declared_workers": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Declared Workers",
+          "type": "array"
+        },
+        "estimate_history": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EstimateSample"
+          },
+          "title": "Estimate History",
+          "type": "array"
+        }
+      },
+      "title": "TaskMetadata",
+      "type": "object"
+    },
+    "TaskSection": {
+      "additionalProperties": false,
+      "properties": {
+        "comments": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Block"
+          },
+          "title": "Comments",
+          "type": "array"
+        },
+        "estimate_minutes": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimate Minutes"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "enum": [
+                "human",
+                "ai",
+                "hybrid"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "text": {
+          "$ref": "#/$defs/Block"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "text"
+      ],
+      "title": "TaskSection",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/packet/v1/task_run_request.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The body of a task, proposal or stuck packet (P2-02).",
+  "properties": {
+    "context_items": {
+      "items": {
+        "$ref": "#/$defs/ContextBlock"
+      },
+      "title": "Context Items",
+      "type": "array"
+    },
+    "metadata": {
+      "$ref": "#/$defs/TaskMetadata"
+    },
+    "project": {
+      "$ref": "#/$defs/ProjectSection"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task": {
+      "$ref": "#/$defs/TaskSection"
+    }
+  },
+  "required": [
+    "schema_version",
+    "task",
+    "project"
+  ],
+  "title": "TaskRunRequest",
+  "type": "object"
+}

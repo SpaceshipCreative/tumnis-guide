@@ -27,6 +27,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, Field, StringConstraints
 from sqlalchemy import ColumnElement, Table, and_, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import ScalarResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core.adapters.registry import Health, current_mode, register_adapter, resolve
@@ -581,6 +582,107 @@ async def get_context_item_ref(
             )
         ).first()
     return None if row is None else ContextItemOut.model_validate(row._mapping)
+
+
+class ContextItemText(BaseModel):
+    """A context item as a task packet shows it (P2-02): what it is, where it came from,
+    its text and the attributes its block names (for example `from`). The text is outside
+    content: the packet builder renders it in an untrusted block."""
+
+    id: UUID
+    target_type: TargetType
+    source: str  # the canonical record's source kind ("email", "chat", "note", ...)
+    text: str
+    tainted: bool
+    provider_url: str | None
+    attrs: dict[str, str]
+
+
+def _kind_of(source: str | None, default: str) -> str:
+    """ "email:inbox_zero" -> "email"; the target's own kind when the record names none."""
+    return (source or "").split(":", 1)[0] or default
+
+
+def _lines(*parts: str | None) -> str:
+    return "\n".join(p for p in parts if p)
+
+
+def _record_text(target_type: str, row: Any) -> tuple[str, dict[str, str], str]:
+    """(text, attrs, default source) of one canonical record."""
+    if target_type == "message":
+        attrs = {"from": row.from_addr} if row.from_addr else {}
+        return _lines(row.subject, row.body_text), attrs, "email"
+    if target_type == "thread":
+        return _lines(row.subject), {}, "email"
+    if target_type == "note":
+        return _lines(row.title, row.body_text), {}, "note"
+    if target_type == "person":
+        return _lines(row.display_name, row.primary_email), {}, "email"
+    return _lines(row.kind, row.url, row.state), {}, "artifact"  # artifact
+
+
+async def owned_context_item_ids(
+    s: AsyncSession, owner_type: OwnerType, owner_id: UUID
+) -> list[UUID]:
+    """The live context items an owner (a task, a project, a proposal) holds, oldest first."""
+    rows: ScalarResult[UUID] = await s.scalars(
+        select(_context.c.id)
+        .where(
+            _context.c.owner_type == owner_type,
+            _context.c.owner_id == owner_id,
+            _context.c.deleted_at.is_(None),
+        )
+        .order_by(_context.c.created_at, _context.c.id)
+    )
+    return list(rows)
+
+
+async def context_item_texts(s: AsyncSession, ids: Sequence[UUID]) -> list[ContextItemText]:
+    """The live context items among `ids`, in that order, each with the text of what it
+    points at: a message's subject and body, a note's title and body, a person, an
+    artifact, a thread's subject; a URL's address. An event or a document (owned by
+    calendar and knowledge) is named by its type and id here: its content reaches the
+    packet through its own module (passages, P1-17)."""
+    wanted = list(dict.fromkeys(ids))
+    if not wanted:
+        return []
+    items = {
+        row.id: row
+        for row in await s.execute(
+            select(_context).where(_context.c.id.in_(wanted), _context.c.deleted_at.is_(None))
+        )
+    }
+    out: list[ContextItemText] = []
+    for item_id in wanted:
+        item = items.get(item_id)
+        if item is None:
+            continue
+        attrs: dict[str, str] = {}
+        text, source = item.target_url or "", str(item.target_type)
+        table = _TABLES.get(item.target_type)
+        if table is not None and item.target_id is not None:
+            row = (
+                await s.execute(
+                    select(table).where(table.c.id == item.target_id, table.c.deleted_at.is_(None))
+                )
+            ).first()
+            if row is not None:
+                text, attrs, default = _record_text(item.target_type, row)
+                source = _kind_of(row.source, default)
+        elif item.target_id is not None:
+            text = f"{item.target_type} {item.target_id}"
+        out.append(
+            ContextItemText(
+                id=item.id,
+                target_type=item.target_type,
+                source=source,
+                text=text,
+                tainted=item.tainted,
+                provider_url=item.target_url,
+                attrs=attrs,
+            )
+        )
+    return out
 
 
 async def _target_taint(s: AsyncSession, target_type: str, target_id: UUID) -> bool:
