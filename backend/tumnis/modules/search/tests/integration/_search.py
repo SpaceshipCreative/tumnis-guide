@@ -7,7 +7,8 @@ test bodies, and this module is where later work packages plug in their shapes.
 - `corpus_rows(ctx, corpus, now)`: the corpus's rows inserted in ctx's workspace; returns
   entity id -> document key.
 - `drain(db)`: the relay run until the outbox is empty, then every search delivery of the
-  rows it sent awaited (the other modules' subscribers run too, unawaited).
+  rows it sent awaited, and any other workflow still running for those rows (P1-07's
+  quick-add label writes the task, so a test reads it after the label lands).
 - `index_outbox(db)`: every outbox row applied to the index through `search.api`, one
   transaction per workspace, without DBOS (the seed and load sets write thousands).
 - `trash_task(ctx, task_id, at)`: the task trashed through `tasks.api.trash_task`, the
@@ -20,6 +21,7 @@ test bodies, and this module is where later work packages plug in their shapes.
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from collections import defaultdict
 from datetime import timedelta
@@ -130,6 +132,18 @@ async def drain(db: DbUrls) -> None:
                     delivery_id(row["event_id"], sub.name)
                 )
                 await handle.get_result()
+    # Looked for again after each round: a queued delivery may itself start a workflow
+    # (the label's fallback path), which the earlier listing could not see.
+    events = {str(row["event_id"]) for row in pending}
+    while running := [
+        status.workflow_id
+        for status in await DBOS.list_workflows_async(status=["ENQUEUED", "PENDING"])
+        if any(event in status.workflow_id for event in events)
+    ]:
+        for workflow_id in running:
+            other: WorkflowHandleAsync[Any] = await DBOS.retrieve_workflow_async(workflow_id)
+            with contextlib.suppress(Exception):  # its outcome is its own tests' concern
+                await other.get_result()
 
 
 async def index_outbox(db: DbUrls) -> int:
