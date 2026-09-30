@@ -118,6 +118,20 @@ def test_an_answer_that_is_not_an_option_fails_loudly() -> None:
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P0-04")
+@pytest.mark.parametrize("answer", ["yes", 2, -0.1, "1.5"])
+def test_noul_shorthand_must_be_a_probability(answer: Any) -> None:
+    """T-P0-04-29
+    A Noul point's shorthand answer is a probability of yes: anything that is not a
+    number from 0 to 1 is refused when posted (422), not stored to fail at ask time.
+    """
+    with pytest.raises(ValidationError, match="probability"):
+        parse_decisions_script({"question": "actionability", "answer": answer})
+    _, stored = parse_decisions_script({"question": "actionability", "answer": "0.4"})
+    assert stored["answer"] == "0.4"
+
+
+@pytest.mark.req("REL-7")
+@pytest.mark.wp("P0-04")
 def test_generation_script_sets_the_first_action() -> None:
     """T-P0-04-25
     `generation` takes `{first_action, delay_ms}` under one key; an empty first action or an

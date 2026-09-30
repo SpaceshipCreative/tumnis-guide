@@ -14,11 +14,12 @@ enabled; a stored script replaces the in-memory one. `parse_decisions_script` an
 """
 
 import asyncio
+import math
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from tumnis.core import fake_scripts
 from tumnis.core.adapters.errors import AdapterError, AdapterTimeout
@@ -103,6 +104,22 @@ class StoredDecisionsScript(_Stored):
     confidence: float | None = Field(default=None, gt=0, le=1)
     answers: dict[str, TypedAnswer] = Field(default_factory=dict)
     latency_ms: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _noul_answer_is_a_probability(self) -> Self:
+        """A Noul point's primitive is fixed in the catalogue, so its shorthand is checked
+        when posted: a number from 0 to 1."""
+        if self.answer is None or CATALOGUE[self.question].primitive != "noul":
+            return self
+        try:
+            value = float(self.answer)
+        except ValueError:
+            value = math.nan
+        if not 0 <= value <= 1:
+            raise ValueError(
+                f"{self.question.value} answers a probability from 0 to 1, not {self.answer!r}"
+            )
+        return self
 
 
 def parse_decisions_script(body: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
