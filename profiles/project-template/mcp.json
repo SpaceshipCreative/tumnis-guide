@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "jev": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/SpaceshipCreative/tumnis-guide@jev-mcp-v0.1.0#subdirectory=profiles/shared/jev-mcp",
+        "tumnis-jev-mcp"
+      ],
+      "env": {
+        "TYPESAFE_API_KEY": "${TYPESAFE_API_KEY}"
+      }
+    }
+  }
+}

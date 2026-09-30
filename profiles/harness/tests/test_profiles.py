@@ -35,7 +35,6 @@ def _frontmatter(text: str) -> dict[str, Any]:
 
 @pytest.mark.req("FR-5.10", "FR-11.6")
 @pytest.mark.wp("P1-05")
-@pytest.mark.xfail(strict=True, reason="spec:P1-05")
 def test_distribution_layout() -> None:
     """T-P1-05-12
     Both profiles have a distribution.yaml whose version equals VERSION, a SOUL, a config,
