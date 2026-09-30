@@ -4,10 +4,10 @@
 // length as its accessible name (times in the zone the server computed the window in), so
 // the bar reads the same on a phone, where it is too narrow for text, as on a laptop.
 import { useQuery } from "@tanstack/react-query";
-import { useId } from "react";
 
 import { planningGetDayCalendarOptions } from "../../api/@tanstack/react-query.gen";
 import type { DayCalendarOut } from "../../api/types.gen";
+import { Card } from "../common/Card";
 import { formatMinutes } from "./format";
 
 /** `GET /v1/plan/{day}/calendar`: the day's window, events and free blocks. */
@@ -20,24 +20,21 @@ export interface CalendarStripProps {
 }
 
 export function CalendarStrip({ day }: CalendarStripProps) {
-  const headingId = useId();
   const calendar = useQuery(dayCalendarQuery(day));
-  // Until the first answer, a placeholder of the strip's height holds the layout.
-  if (calendar.isPending) return <div aria-hidden="true" className="h-24" />;
+  // Until the first answer, a placeholder of the card's height holds the layout.
+  if (calendar.isPending) return <div aria-hidden="true" className="h-36" />;
   return (
-    <section
-      aria-labelledby={headingId}
-      className="flex shrink-0 flex-col gap-2"
+    <Card
+      title="Calendar and free blocks"
+      className="shrink-0"
+      bodyClassName="flex min-w-0 flex-col gap-2 px-4 py-3"
     >
-      <h2 id={headingId} className="text-lg font-semibold">
-        Calendar and free blocks
-      </h2>
       {calendar.data ? (
         <Strip calendar={calendar.data} now={new Date()} />
       ) : (
         <p className="text-sm text-muted">The calendar could not be loaded.</p>
       )}
-    </section>
+    </Card>
   );
 }
 

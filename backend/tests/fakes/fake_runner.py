@@ -7,7 +7,10 @@ over `/ws/runner`, through Starlette's WebSocket test transport.
 
 It registers with its profiles, acks every server message (protocol 1), answers `run`
 from its script `{(profile, skill): (output_json, delay_ms, status)}` (an unscripted skill
-is acked and never answered) and `health_check` from `script_health`. The clock is fixed,
+is acked and never answered), `health_check` from `script_health` and `provision` from
+`script_provision(profile, status, error_code, delay_ms)` (P1-06; unscripted, a create
+answers `created`, or `exists` for a profile it has, and a link `linked` or `failed`
+with `not_found`; a profile it created or linked joins its profiles). The clock is fixed,
 so nothing beats on its own: `heartbeat()` sends one beat, stamped by the server's clock.
 `offline(profile)` stops answering for the profile and re-registers without it (the
 server then refuses to dispatch to it); `disconnect()` drops the socket.
@@ -35,6 +38,7 @@ if TYPE_CHECKING:
     from tumnis.core.clock import FixedClock
     from tumnis.modules.agents.protocol import (
         DaemonMessage,
+        Provision,
         Registered,
         Run,
         ServerMessage,
@@ -42,6 +46,8 @@ if TYPE_CHECKING:
 
 WAIT_S = 10.0
 ResultStatus = Literal["succeeded", "failed", "timed_out"]
+ProvisionStatus = Literal["created", "exists", "linked", "failed"]
+ProvisionError = Literal["template_version_mismatch", "not_found", "hermes_error", "invalid_name"]
 
 
 def make_test_client(app: FastAPI) -> TestClient:
@@ -64,6 +70,13 @@ class Scripted:
     delay_ms: int = 0
     status: ResultStatus = "succeeded"
     repeat: int = 1  # send the same result (same message_id) this many times
+
+
+@dataclass(frozen=True)
+class ScriptedProvision:
+    status: ProvisionStatus = "created"
+    error_code: ProvisionError | None = None
+    delay_ms: int = 0
 
 
 class FakeRunner:
@@ -94,7 +107,7 @@ class FakeRunner:
         self.ack_frames: list[Any] = []  # the ack frames themselves (per-message or batched)
         self.nacked: dict[uuid.UUID, str] = {}  # protocol 2: refused message id -> code
         self.protocol_version = 1  # the session's, from `registered`
-        self.capabilities: list[str] = ["run", "health"]
+        self.capabilities: list[str] = ["run", "provision", "health"]
         self.protocol_versions: list[int] = [1]
         self.errors: list[BaseException] = []
         self.registered: Registered | None = None
@@ -102,6 +115,7 @@ class FakeRunner:
         self._offline: set[str] = set()
         self._scripts: dict[tuple[str, str], Scripted] = {}
         self._health: dict[str, dict[str, Any]] = {}
+        self._provisions: dict[str, ScriptedProvision] = {}
         self._seq = 0
         self._ws: WebSocketTestSession | None = None
         self._ws_cm: Any = None
@@ -128,6 +142,17 @@ class FakeRunner:
         """Fields of the `health_report` for the profile (reachable, authenticated,
         hermes_version, mcp_servers, error, profile_exists)."""
         self._health[profile] = fields
+
+    def script_provision(
+        self,
+        profile: str,
+        status: ProvisionStatus = "created",
+        error_code: ProvisionError | None = None,
+        delay_ms: int = 0,
+    ) -> None:
+        """What a `provision` of `profile` answers from now on (P1-06); a long `delay_ms`
+        is a runner that does not answer in time."""
+        self._provisions[profile] = ScriptedProvision(status, error_code, delay_ms)
 
     def offline(self, profile: str) -> None:
         self._offline.add(profile)
@@ -303,6 +328,7 @@ class FakeRunner:
     def _read(self, ws: WebSocketTestSession) -> None:
         from tumnis.modules.agents.protocol import (  # noqa: PLC0415
             HealthCheck,
+            Provision,
             Run,
             parse_server,
         )
@@ -324,6 +350,8 @@ class FakeRunner:
                     self._answer_run(message)
                 elif isinstance(message, HealthCheck):
                     self._answer_health(message)
+                elif isinstance(message, Provision):
+                    self._answer_provision(message)
             except Exception as exc:  # kept for the test to inspect
                 self.errors.append(exc)
 
@@ -382,6 +410,45 @@ class FakeRunner:
             )
         )
 
+    def _answer_provision(self, provision: Any) -> None:
+        from tumnis.modules.agents.protocol import ProvisionResult  # noqa: PLC0415
+
+        has = provision.profile in self.profiles
+        scripted = self._provisions.get(provision.profile)
+        if scripted is None:
+            if provision.mode == "link":
+                scripted = ScriptedProvision(
+                    "linked" if has else "failed", None if has else "not_found"
+                )
+            else:
+                scripted = ScriptedProvision("exists" if has else "created")
+        ok = scripted.status != "failed"
+        result = ProvisionResult(
+            **self._envelope(provision.correlation_id),
+            request_id=provision.request_id,
+            profile=provision.profile,
+            status=scripted.status,
+            distribution_version=provision.template_version if ok else None,
+            error_code=None if ok else scripted.error_code or "hermes_error",
+            error=None if ok else f"scripted {scripted.error_code or 'failure'}",
+        )
+
+        def answer() -> None:
+            try:
+                if ok and provision.profile not in self.profiles:
+                    self.profiles.append(provision.profile)
+                self.send(result)
+            except Exception as exc:  # the socket went away meanwhile
+                self.errors.append(exc)
+
+        if scripted.delay_ms <= 0:
+            answer()
+            return
+        timer = threading.Timer(scripted.delay_ms / 1000, answer)
+        timer.daemon = True
+        self._timers.append(timer)
+        timer.start()
+
     # --- waiting -------------------------------------------------------------------------
 
     def wait_for(self, predicate: Callable[[FakeRunner], bool], timeout: float = WAIT_S) -> None:
@@ -397,6 +464,11 @@ class FakeRunner:
         from tumnis.modules.agents.protocol import Run  # noqa: PLC0415
 
         return [m for m in self.received if isinstance(m, Run)]
+
+    def provisions(self) -> list[Provision]:
+        from tumnis.modules.agents.protocol import Provision  # noqa: PLC0415
+
+        return [m for m in self.received if isinstance(m, Provision)]
 
 
 # --- Rows the runner needs, made through the agents api ------------------------------------

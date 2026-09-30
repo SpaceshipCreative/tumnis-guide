@@ -72,6 +72,37 @@ class GenerationSettings(BaseModel):
     spoken_timeout_ms: int = Field(default=2000, gt=0)  # plan default (P2-16's caller)
 
 
+class KnowledgeSettings(BaseModel):
+    """Upload safety and extraction (P1-16, SEC-10, ADR-0007). Env: `KNOWLEDGE__SPOOL_DIR`
+    and so on.
+
+    `spool_dir` holds uploads between the api (which writes them) and `worker-extract`
+    (which reads them); `scratch_dir` is the extract worker's own working space. clamd is
+    operator-configured infrastructure, like Postgres: the worker connects to
+    `clamd_host:clamd_port` directly, not through the SSRF guard. The vision model
+    (`vision_base_url`, `vision_model`) is unset until impl-2 wires it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    spool_dir: str = "/var/lib/tumnis/spool"
+    scratch_dir: str = "/scratch"
+    clamd_host: str = "clamd"
+    clamd_port: int = Field(default=3310, gt=0, lt=65536)
+    chunk_tokenizer: str = "sentence-transformers/all-MiniLM-L6-v2"  # plan default
+    vision_base_url: str | None = None
+    vision_model: str | None = None
+
+
+class AgentsSettings(BaseModel):
+    """The agents module (P1-06): how long a project's profile provisioning waits for the
+    runner's answer before it counts as failed (R-30: tests shorten it). Env:
+    `AGENTS__PROVISION_TIMEOUT_S`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provision_timeout_s: int = Field(default=300, gt=0)  # plan default
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", extra="ignore", env_nested_delimiter="__")
 
@@ -97,6 +128,8 @@ class Settings(BaseSettings):
     # though they are private (P0-16, SEC-5); self-hosted mode allows the LAN anyway.
     outbound_allowlist: str = ""
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
+    knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
+    agents: AgentsSettings = Field(default_factory=AgentsSettings)
 
     @model_validator(mode="after")
     def _preview_guard(self) -> Self:

@@ -19,11 +19,11 @@ from typing import Any, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from sqlalchemy import RowMapping, Table, delete, func, insert, select, text, update
+from sqlalchemy import RowMapping, Table, and_, delete, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import settings_store, tenancy
+from tumnis.core import deadletter, settings_store, tenancy
 from tumnis.core.adapters.errors import AdapterError, AdapterRejected, AdapterUnavailable
 from tumnis.core.adapters.registry import current_mode
 from tumnis.core.canonical import CanonicalRecord, UpsertStats, upsert_records
@@ -37,6 +37,7 @@ from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.core.versioning import NotFound, StaleVersion, update_versioned
 from tumnis.modules.integrations import api as integrations
+from tumnis.modules.knowledge import store
 from tumnis.modules.knowledge.adapters.fake import FakeStorage
 from tumnis.modules.knowledge.adapters.s3 import (
     S3Config,
@@ -54,7 +55,7 @@ from tumnis.modules.knowledge.models import (
     ProjectFolder,
     StorageLocation,
 )
-from tumnis.modules.knowledge.rules import is_network_fs, safe_rel_path
+from tumnis.modules.knowledge.rules import is_network_fs, safe_rel_path, sanitize_filename
 from tumnis.modules.knowledge.storage import (
     FileStat,
     Health,
@@ -68,7 +69,7 @@ from tumnis.modules.knowledge.storage import (
     spool,
 )
 from tumnis.modules.knowledge.storage import NotFound as FileMissing
-from tumnis.modules.knowledge.sync_rules import dedupe_name, render_note, sanitize_filename
+from tumnis.modules.knowledge.sync_rules import dedupe_name, render_note
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
 from tumnis.seed import DocumentSeed, register_seed_writer
@@ -1498,3 +1499,295 @@ async def backup_manifest(workspace_ids: Sequence[UUID]) -> list[BackupSource]:
         async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
             found += await backup_sources(s)
     return found
+
+
+# --- Uploads and files found in a folder (P1-16, SEC-10, FR-15.2, FR-15.12) --------------
+#
+# An upload is spooled by the route to `<spool>/<version_id>` (untrusted bytes never reach a
+# location before the scan), `begin_upload` writes its rows (`pending_scan`, tainted,
+# untrusted) and `enqueue_extract` starts the `knowledge_extract_document` workflow on the
+# `extract` queue, which `worker-extract` alone dequeues. A file found in a project folder
+# takes the same path with `source = "storage"`. Files are served back only through
+# `download_info` and `stream_file`, once the document is `ready` (decision 10: the api
+# process may read storage to serve them).
+
+EXTRACT_QUEUE: Final = "extract"
+EXTRACT_WORKFLOW: Final = "knowledge_extract_document"
+WORKSPACE_FOLDER: Final = "workspace"  # folder root of workspace knowledge-base uploads
+
+
+class UploadAccepted(BaseModel):
+    id: UUID  # the document
+    version_id: UUID
+    status: Literal["pending_scan"]
+
+
+class DocumentStatusOut(BaseModel):
+    """A document's state as the upload flow polls it (P1-17 owns the full read)."""
+
+    id: UUID
+    project_id: UUID | None
+    title: str
+    kind: str
+    path: str | None
+    status: Literal["pending_scan", "extracting", "ready", "quarantined", "failed"]
+    status_reason: str | None
+    trust: Literal["trusted", "untrusted"]
+    tainted: bool
+    current_version_id: UUID | None
+    version: int
+
+
+async def file_location(
+    s: AsyncSession, project_id: UUID | None, *, require_online: bool = False
+) -> tuple[UUID, str]:
+    """(location id, folder root) where a project's files live: its folder, or for the
+    workspace knowledge base (no project) the `workspace` folder on the default location.
+    409 `no_location` without one; with `require_online`, 409 `location_offline` too."""
+    row: Row | None
+    root = WORKSPACE_FOLDER
+    if project_id is None:
+        row = (
+            (
+                await s.execute(
+                    select(_locations).where(
+                        _locations.c.is_default, _locations.c.deleted_at.is_(None)
+                    )
+                )
+            )
+            .mappings()
+            .first()
+        )
+    else:
+        try:
+            folder = await _folder_row(s, project_id)
+        except NotFound:
+            row = None
+        else:
+            row = await _location_row(s, folder["location_id"])
+            root = folder["root_path"]
+    if row is None:
+        raise ProblemError(409, "no_location", "There is no storage location for these files yet")
+    if require_online:
+        _require_online(row)
+    return row["id"], root
+
+
+async def storage_path(s: AsyncSession, project_id: UUID | None, rel: str) -> str:
+    """`rel` (relative to the project's folder) as a path on its location; "" gives the
+    folder with a trailing slash."""
+    _, root = await file_location(s, project_id)
+    return f"{root}/{rel}"
+
+
+async def check_upload_target(ctx: WorkspaceContext, project_id: UUID | None) -> None:
+    """Before the body is read: the project exists (404) and its location is online (409)."""
+    async with tenant_session(ctx) as s:
+        if project_id is not None and not await projects.project_exists(s, project_id):
+            raise NotFound("projects", project_id)
+        await file_location(s, project_id, require_online=True)
+
+
+async def begin_upload(
+    ctx: WorkspaceContext,
+    *,
+    project_id: UUID | None,
+    name: str,
+    title: str | None,
+    sha256: str,
+    size: int,
+    version_id: UUID,
+) -> UploadAccepted:
+    """The rows for an upload the route has spooled to `<spool>/<version_id>`: an untrusted,
+    tainted document and its first version, both `pending_scan`."""
+    digest = bytes.fromhex(sha256)
+    async with tenant_session(ctx) as s:
+        location_id, _ = await file_location(s, project_id)
+        document_id = await store.new_document(
+            s,
+            project_id=project_id,
+            title=title or name,
+            digest=digest,
+            location_id=location_id,
+            path=None,
+            source="upload",
+        )
+        await store.add_version(
+            s, document_id, version_id, digest=digest, size=size, source_name=name
+        )
+    return UploadAccepted(id=document_id, version_id=version_id, status="pending_scan")
+
+
+async def enqueue_extract(ctx: WorkspaceContext, version_id: UUID, source: str) -> None:
+    """Start the version's extraction on the `extract` queue; the workflow id makes a
+    repeated call return the same workflow."""
+    await deadletter.dbos_client().enqueue_async(
+        {
+            "queue_name": EXTRACT_QUEUE,
+            "workflow_name": EXTRACT_WORKFLOW,
+            "workflow_id": f"extract:{version_id}",
+        },
+        str(ctx.workspace_id),
+        str(version_id),
+        source,
+    )
+
+
+async def ingest_folder_file(
+    ctx: WorkspaceContext, *, project_id: UUID, path: str, size: int
+) -> UploadAccepted:
+    """The rows for a file found in the project's folder (`path` relative to the folder),
+    and its extraction enqueued with `source = "storage"`. A file already known at that
+    path gets a new version."""
+    try:
+        rel = safe_rel_path(path)
+    except PathRejected as exc:
+        raise _storage_problem(exc) from exc
+    version_id = uuid7()
+    name = PurePosixPath(rel).name
+    async with tenant_session(ctx) as s:
+        location_id, _ = await file_location(s, project_id)
+        document_id = await store.find_by_path(s, project_id, rel)
+        if document_id is None:
+            document_id = await store.new_document(
+                s,
+                project_id=project_id,
+                title=name,
+                digest=store.NO_HASH,
+                location_id=location_id,
+                path=rel,
+                source="folder",
+            )
+        await store.add_version(
+            s, document_id, version_id, digest=store.NO_HASH, size=size, source_name=name
+        )
+    await enqueue_extract(ctx, version_id, "storage")
+    return UploadAccepted(id=document_id, version_id=version_id, status="pending_scan")
+
+
+async def get_document(s: AsyncSession, document_id: UUID) -> DocumentStatusOut:
+    row = (
+        (
+            await s.execute(
+                select(_documents).where(
+                    _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+                )
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise NotFound("documents", document_id)
+    return DocumentStatusOut.model_validate(dict(row))
+
+
+@dataclasses.dataclass(frozen=True)
+class DownloadInfo:
+    """What the file route needs to answer: the name to offer, the path on its location and
+    the size the location reports."""
+
+    name: str
+    project_id: UUID | None
+    location_id: UUID
+    path: str
+    size: int
+
+
+async def _newer_version_unreleased(
+    s: AsyncSession, document_id: UUID, current_version_id: UUID | None
+) -> bool:
+    """Whether a version after the current one is not `ready` (scanning, quarantined,
+    failed). A folder replacement is written in place before it is scanned, so the file at
+    the document's path may already be that version's bytes."""
+    newer = _versions.c.status != "ready"
+    if current_version_id is not None:
+        current_no = (
+            select(_versions.c.version_no)
+            .where(_versions.c.id == current_version_id)
+            .scalar_subquery()
+        )
+        newer = and_(newer, _versions.c.version_no > current_no)
+    found = await s.scalar(
+        select(_versions.c.id).where(_versions.c.document_id == document_id, newer).limit(1)
+    )
+    return found is not None
+
+
+async def download_info(
+    ctx: WorkspaceContext, document_id: UUID, *, version_no: int | None, net: NetPolicy
+) -> DownloadInfo:
+    """The document's file if it may be served: 404 for a document or version that does
+    not exist, 409 `not_available` unless it is `ready` (still scanning, quarantined,
+    failed), unless a requested version is the current one (the folder keeps one file per
+    document) and unless no later version is still unreleased."""
+    async with tenant_session(ctx) as s:
+        doc = (
+            (
+                await s.execute(
+                    select(_documents).where(
+                        _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+                    )
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if doc is None:
+            raise NotFound("documents", document_id)
+        status, source_name = doc["status"], None
+        if version_no is not None:
+            ver = (
+                (
+                    await s.execute(
+                        select(_versions).where(
+                            _versions.c.document_id == document_id,
+                            _versions.c.version_no == version_no,
+                        )
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if ver is None:
+                raise NotFound("document_versions", document_id)
+            status, source_name = ver["status"], ver["source_name"]
+            current = doc["current_version_id"]
+            if current is not None and ver["id"] != current:
+                status = "replaced"  # the folder keeps the current version's bytes only
+        if status != "ready" or doc["path"] is None or doc["storage_location_id"] is None:
+            raise ProblemError(409, "not_available", "The file is not available yet")
+        if await _newer_version_unreleased(s, document_id, doc["current_version_id"]):
+            raise ProblemError(409, "not_available", "The file is not available yet")
+        if source_name is None:
+            source_name = await s.scalar(
+                select(_versions.c.source_name).where(_versions.c.id == doc["current_version_id"])
+            )
+        full = await storage_path(s, doc["project_id"], doc["path"])
+        async with open_backend(s, doc["storage_location_id"], net=net) as backend:
+            try:
+                stat = await backend.stat(full)
+            except (StorageError, AdapterError) as exc:
+                raise _storage_problem(exc) from exc
+    if stat is None:
+        raise ProblemError(404, "not_found", "No file at that path.")
+    return DownloadInfo(
+        name=source_name or PurePosixPath(doc["path"]).name,
+        project_id=doc["project_id"],
+        location_id=doc["storage_location_id"],
+        path=full,
+        size=stat.size,
+    )
+
+
+async def stream_file(
+    ctx: WorkspaceContext, info: DownloadInfo, *, net: NetPolicy
+) -> AsyncIterator[bytes]:
+    """The file's bytes from its location, the storage connection open for as long as the
+    response streams."""
+    async with (
+        tenant_session(ctx) as s,
+        open_backend(s, info.location_id, net=net) as backend,
+    ):
+        async for chunk in backend.read(info.path):
+            yield chunk

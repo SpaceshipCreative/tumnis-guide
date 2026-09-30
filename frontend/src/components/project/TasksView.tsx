@@ -44,7 +44,7 @@ export function TasksView({
 }) {
   const groups = groupTasks(tasks, now, timezone);
   return (
-    <div className="flex flex-col gap-6" onKeyDown={onShortcut}>
+    <div className="flex flex-col gap-4" onKeyDown={onShortcut}>
       {GROUPS.map((group) => (
         <TaskGroup
           key={group}

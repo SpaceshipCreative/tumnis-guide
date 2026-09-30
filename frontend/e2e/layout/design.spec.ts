@@ -5,7 +5,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
-import { expect, openShell, test } from "../fixtures";
+import {
+  expect,
+  openSettingsSection,
+  openShell,
+  SETTINGS_SECTIONS,
+  test,
+} from "../fixtures";
 
 const DARK_BG = "rgb(17, 24, 39)";
 const LIGHT_BG = "rgb(243, 244, 246)";
@@ -155,5 +161,30 @@ test(
     await expect(page.locator("html")).not.toHaveAttribute("data-theme");
     expect(await bodyBackground(page)).toBe(DARK_BG);
     expect(await seriousViolations(page)).toEqual([]);
+  },
+);
+
+test(
+  "T-DS-01-15 the restyled forms, tables and dialogs stay accessible in both themes",
+  { tag: ["@DS-01", "@UX-11"] },
+  async ({ page }) => {
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await openShell(page, "/settings/account");
+      for (const [label, primaryControl] of SETTINGS_SECTIONS) {
+        await openSettingsSection(page, label);
+        await expect(primaryControl(page), label).toBeVisible();
+        expect(await seriousViolations(page), `${scheme} ${label}`).toEqual([]);
+      }
+      // A confirmation dialog over the page.
+      await openSettingsSection(page, "Sessions");
+      await page
+        .getByRole("button", { name: "Sign out other devices" })
+        .click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      expect(await seriousViolations(page), `${scheme} dialog`).toEqual([]);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+    }
   },
 );

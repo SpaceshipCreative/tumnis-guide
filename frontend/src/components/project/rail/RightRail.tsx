@@ -12,7 +12,7 @@ export function RightRail({
   return (
     <aside
       aria-label="Context"
-      className="sticky top-4 flex max-h-[calc(100dvh-2rem)] w-72 shrink-0 flex-col gap-2 self-start overflow-y-auto rounded-lg border border-border bg-surface px-4 py-3"
+      className="sticky top-[calc(var(--tg-header-h)+1rem)] flex max-h-[calc(100dvh-var(--tg-header-h)-2rem)] w-72 shrink-0 flex-col gap-2 self-start overflow-y-auto rounded-xl border border-border bg-surface px-4 py-3 shadow-card"
     >
       <h2 className="text-sm font-semibold tracking-wide text-muted uppercase">
         Context

@@ -1,0 +1,5 @@
+<!DOCTYPE html>
+<html>
+<head><title>Invoice</title></head>
+<body><h1>Invoice</h1><p>This is an HTML page saved with a .pdf name.</p><script>alert(1)</script></body>
+</html>
