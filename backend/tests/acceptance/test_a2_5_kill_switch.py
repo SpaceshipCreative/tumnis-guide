@@ -72,8 +72,8 @@ async def test_kill_switch_cancels_running_holds_queued_and_resume_releases(  # 
     async with relay(db):
         # Two runs start (two per project, SAF-5); the third waits in the queue.
         first, second = [await run_task(session_client, t) for t in tasks[:2]]
-        world.delivered(first)
-        world.delivered(second)
+        await world.delivered(first)
+        await world.delivered(second)
         streamers = [Streamer(world, run).start() for run in (first, second)]
         queued = await run_task(session_client, tasks[2])
         try:

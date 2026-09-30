@@ -124,9 +124,16 @@ class World:
         token: str = packet["callback"]["task_token"]
         return token
 
-    def delivered(self, run_id: uuid.UUID, timeout: float = 15) -> None:
-        """Waits until the runner received the run's `run` message."""
-        self.runner.wait_for(lambda r: any(m.run_id == run_id for m in r.runs()), timeout)
+    async def delivered(
+        self,
+        run_id: uuid.UUID,
+        timeout: float = 15,  # noqa: ASYNC109  # a polling deadline, not a cancel scope
+    ) -> None:
+        """Waits until the runner received the run's `run` message; the wait runs on a
+        thread, so the test's loop keeps serving the relay."""
+        await asyncio.to_thread(
+            self.runner.wait_for, lambda r: any(m.run_id == run_id for m in r.runs()), timeout
+        )
 
     def cancels(self, run_id: uuid.UUID) -> list[Any]:
         """The `cancel` messages the runner received for the run."""

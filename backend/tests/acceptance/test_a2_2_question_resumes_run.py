@@ -81,7 +81,7 @@ async def test_question_mid_run_waits_on_human_and_answer_resumes_run(  # noqa: 
     async with relay(db):
         # 1. Run the task.
         run_id = await run_task(session_client, task)
-        world.delivered(run_id)
+        await world.delivered(run_id)
         token = world.token(run_id)
 
         # 2. One log line, then the question; the call long-polls and returns pending.

@@ -52,8 +52,10 @@ test(
 
     // The runner received exactly one `run`: a valid packet with a task token and the
     // email inside one untrusted block.
-    const { packet, runMessages } = await fakes.runner.lastPacket();
-    expect(runMessages).toBe(1);
+    await expect
+      .poll(async () => (await fakes.runner.lastPacket()).runMessages)
+      .toBe(1);
+    const { packet } = await fakes.runner.lastPacket();
     expect(packetErrors(packet)).toEqual([]);
     expect(packet.run_id).toBe(firstRun);
     const callback = packet.callback as { task_token?: string } | null;

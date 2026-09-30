@@ -74,7 +74,7 @@ async def test_gated_action_waits_for_approval_and_tainted_run_gates_everything(
     async with relay(db):
         # 1. Run T1: a feature-branch push, then a merge to main.
         run1 = await run_task(session_client, t1)
-        world.delivered(run1)
+        await world.delivered(run1)
         token1 = world.token(run1)
         push = await tool(
             world.runner,
@@ -125,7 +125,7 @@ async def test_gated_action_waits_for_approval_and_tainted_run_gates_everything(
 
         # 3. Run T2 (tainted): even an allowed action needs approval.
         run2 = await run_task(session_client, t2)
-        world.delivered(run2)
+        await world.delivered(run2)
         token2 = world.token(run2)
         pr = await tool(
             world.runner,

@@ -85,7 +85,7 @@ async def test_master_delegates_and_wait_for_task_never_parks_on_a_human(  # noq
         delegated = await tool(world.runner, master_key, "delegate_task", {"task_id": str(task)})
         assert delegated.ok, delegated
         delegation_id = uuid.UUID(delegated.data["delegation_id"])
-        world.delivered(delegation_id)
+        await world.delivered(delegation_id)
         child_token = world.token(delegation_id)
         assert rows(db, "SELECT workflow_id FROM runs WHERE id = %s", delegation_id) == [
             {"workflow_id": str(delegation_id)}
