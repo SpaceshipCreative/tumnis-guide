@@ -62,7 +62,6 @@ CASES = [
 
 @pytest.mark.req("SEC-10")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 @pytest.mark.parametrize(
     ("mime", "filename", "expected"),
     CASES,

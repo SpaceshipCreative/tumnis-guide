@@ -126,7 +126,44 @@ def classify_type(sniffed_mime: str, filename: str) -> DocKind | Refusal:
     """Refusal('type_not_allowed') if the MIME is not listed; Refusal('type_mismatch') if the
     extension (the last suffix, any case) is not allowed for the sniffed MIME; else the kind
     (pdf, docx, xlsx, pptx, markdown, text, csv, html, image)."""
-    raise NotImplementedError
+    allowed = ALLOWED_TYPES.get(sniffed_mime)
+    if allowed is None:
+        return Refusal("type_not_allowed")
+    suffix = _suffix(filename)
+    if suffix not in allowed:
+        return Refusal("type_mismatch")
+    if sniffed_mime == "text/plain":
+        return _TEXT_KIND[suffix]
+    return _KIND_BY_MIME[sniffed_mime]
+
+
+_KIND_BY_MIME: Final[Mapping[str, DocKind]] = {
+    "application/pdf": "pdf",
+    _OOXML + "wordprocessingml.document": "docx",
+    _OOXML + "spreadsheetml.sheet": "xlsx",
+    _OOXML + "presentationml.presentation": "pptx",
+    "text/markdown": "markdown",
+    "text/csv": "csv",
+    "application/csv": "csv",
+    "text/html": "html",
+    "image/png": "image",
+    "image/jpeg": "image",
+    "image/tiff": "image",
+    "image/webp": "image",
+}
+_TEXT_KIND: Final[Mapping[str, DocKind]] = {
+    ".txt": "text",
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".csv": "csv",
+}
+
+
+def _suffix(filename: str) -> str:
+    """The last suffix of the name, lower-cased: '.pdf' for 'a.tar.PDF'; '' without one."""
+    base = re.split(r"[\\/]", filename)[-1]
+    dot = base.rfind(".")
+    return base[dot:].lower() if dot >= 0 else ""
 
 
 def low_confidence_pages(
@@ -135,12 +172,19 @@ def low_confidence_pages(
     """Pages whose Docling mean or low grade is POOR (any case; a grade is one value or a
     (mean, low) pair), or with no text items at all (a page missing from `text_items` has
     none); sorted, once each."""
-    raise NotImplementedError
+    pages: list[int] = []
+    for page in sorted({*grades, *text_items}):
+        grade = grades.get(page, ())
+        given = (grade,) if isinstance(grade, str) else grade
+        if any(g.lower() == "poor" for g in given) or text_items.get(page, 0) == 0:
+            pages.append(page)
+    return pages
 
 
 def chunk_pages(prov_pages: Iterable[int]) -> tuple[int | None, int | None]:
     """(lowest, highest) page a chunk's items came from, or (None, None) without any."""
-    raise NotImplementedError
+    found = list(prov_pages)
+    return (min(found), max(found)) if found else (None, None)
 
 
 def upload_file_name(name: str) -> str:
@@ -148,10 +192,50 @@ def upload_file_name(name: str) -> str:
     `/ \\ : * ? " < > |` replaced with '-', spaces and dots trimmed at both ends, a Windows
     reserved name (CON, PRN, AUX, NUL, COM1-9, LPT1-9) given a trailing '_', cut to 200
     bytes keeping the extension, empty -> 'untitled'. The result passes `safe_rel_path`."""
-    raise NotImplementedError
+    base = re.split(r"[\\/]", unicodedata.normalize("NFC", name))[-1]
+    cleaned = "".join(_clean_char(ch) for ch in base).strip(" .")
+    if reserved := _RESERVED.match(cleaned):
+        cleaned = f"{cleaned[: reserved.end(1)]}_{cleaned[reserved.end(1) :]}"
+    cleaned = _cut(cleaned, MAX_NAME_BYTES)
+    return cleaned or "untitled"
+
+
+MAX_NAME_BYTES: Final = 200  # plan default; the segment limit is 255 and a number is added
+_FORBIDDEN_IN_NAME: Final = frozenset('/\\:*?"<>|')
+_RESERVED: Final = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)", re.IGNORECASE)
+
+
+def _clean_char(ch: str) -> str:
+    """A name's character as it is stored: control and unwanted format characters dropped,
+    what a path or a look-alike could turn into a separator or a dot replaced by '-'."""
+    category = unicodedata.category(ch)
+    if category in {"Cc", "Cs"} or (category == "Cf" and ch not in _ALLOWED_FORMAT):
+        return ""
+    if ch in _FORBIDDEN_IN_NAME or ch in LOOKALIKE_SEPARATORS or ch in LOOKALIKE_DOTS:
+        return "-"
+    if ch not in _SPECIAL and _SPECIAL & set(unicodedata.normalize("NFKC", ch)):
+        return "-"
+    return ch
+
+
+def _cut(name: str, limit: int) -> str:
+    """`name` within `limit` bytes of UTF-8, shortening the stem and keeping the last
+    suffix (whole characters only)."""
+    if len(name.encode()) <= limit:
+        return name
+    dot = name.rfind(".")
+    stem, ext = (name[:dot], name[dot:]) if dot > 0 else (name, "")
+    if len(ext.encode()) > limit // 4:  # not a real extension: cut the whole name
+        stem, ext = name, ""
+    room = limit - len(ext.encode())
+    return stem.encode()[:room].decode(errors="ignore").rstrip(" .") + ext
 
 
 def numbered_name(name: str, attempt: int) -> str:
     """The `attempt`-th candidate for a taken name: 1 is the name itself, then 'stem 2.ext',
     'stem 3.ext' (the extension is the last suffix; none: the number goes at the end)."""
-    raise NotImplementedError
+    if attempt <= 1:
+        return name
+    dot = name.rfind(".")
+    stem, ext = (name[:dot], name[dot:]) if dot > 0 else (name, "")
+    return f"{stem} {attempt}{ext}"

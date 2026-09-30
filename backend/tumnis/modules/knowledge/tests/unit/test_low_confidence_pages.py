@@ -29,7 +29,6 @@ CASES: list[tuple[str, Grades, Mapping[int, int], list[int]]] = [
 
 @pytest.mark.req("FR-15.2")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 @pytest.mark.parametrize(
     ("grades", "text_items", "expected"),
     [case[1:] for case in CASES],
@@ -46,7 +45,6 @@ def test_rule(grades: Grades, text_items: Mapping[int, int], expected: list[int]
 
 @pytest.mark.req("FR-15.2")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 @pytest.mark.parametrize(
     ("pages", "expected"),
     [([], (None, None)), ([2], (2, 2)), ([3, 1, 2, 3], (1, 3))],
