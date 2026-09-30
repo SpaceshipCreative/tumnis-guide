@@ -9,7 +9,7 @@ tasks), aggregated to `HealthFacts`.
 """
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
@@ -159,3 +159,11 @@ MAX_CONCURRENT_RUNS_DEFAULT: Final = 2
 MAX_RUN_MINUTES_DEFAULT: Final = 60
 MAX_TASKS_PER_RUN_DEFAULT: Final = 20
 SUBTASK_THRESHOLD_DEFAULT: Final = 30  # minutes, when neither project nor workspace sets one
+# The project template's MCP servers (P2-10, plan default names; P2-12 ships the template).
+TOOL_ALLOWLIST_DEFAULT: Final = ("tumnis", "jev", "github", "coolify")
+
+
+def effective_tool_allowlist(stored: Sequence[str]) -> tuple[str, ...]:
+    """The MCP servers a project's agent may have (SAF-2): the policy's own list, or the
+    template's while the policy names none (a new project's row stores an empty list)."""
+    return tuple(dict.fromkeys(stored)) if stored else TOOL_ALLOWLIST_DEFAULT

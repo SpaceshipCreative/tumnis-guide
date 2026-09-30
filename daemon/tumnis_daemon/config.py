@@ -13,6 +13,7 @@ agent_home = "/home/tumnis-agent"          # a `path` code location must sit und
 paths_dropin = "/etc/systemd/system/tumnis-daemon.service.d/paths.conf"  # ...or be listed
 kill_grace_s = 10.0                        # SIGTERM to SIGKILL on cancel
 outbox_max_bytes = 52428800                # 50 MiB; past it, old log lines give way
+hermes_home = "/home/tumnis-agent/.hermes"  # P2-10; default: ~/.hermes of the daemon's user
 ```
 """
 
@@ -40,6 +41,8 @@ class DaemonConfig:
     paths_dropin: Path = PATHS_DROPIN
     kill_grace_s: float = KILL_GRACE_S
     outbox_max_bytes: int = OUTBOX_MAX_BYTES
+    # Hermes's home; a profile lives in <hermes_home>/profiles/<name> (P2-10's probes)
+    hermes_home: Path = field(default_factory=lambda: Path.home() / ".hermes")
 
     def read_token(self) -> str:
         return self.token_file.read_text(encoding="utf-8").strip()
@@ -59,4 +62,5 @@ def load_config(path: Path) -> DaemonConfig:
         paths_dropin=Path(data.get("paths_dropin", PATHS_DROPIN)),
         kill_grace_s=float(data.get("kill_grace_s", KILL_GRACE_S)),
         outbox_max_bytes=int(data.get("outbox_max_bytes", OUTBOX_MAX_BYTES)),
+        hermes_home=Path(data.get("hermes_home", Path.home() / ".hermes")),
     )
