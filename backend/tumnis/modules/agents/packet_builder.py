@@ -20,7 +20,7 @@ import functools
 import hashlib
 import json
 import secrets
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, cast, get_args
 from uuid import UUID, uuid5
@@ -49,6 +49,15 @@ from tumnis.modules.agents.rules import (
     render_task_prompt,
     truncate_utf8,
 )
+from tumnis.modules.agents.skill_io import (
+    BRIEF_MAX,
+    MAX_HISTORY,
+    EnrichmentRequest,
+    EnrichProject,
+    EnrichTask,
+    EstimateHistoryItem,
+    MissingField,
+)
 from tumnis.modules.auth import api as auth
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.knowledge import api as knowledge
@@ -71,6 +80,7 @@ __all__ = [
     "build_packet",
     "code_location",
     "code_location_of",
+    "enrichment_request",
     "packet_blocks",
     "packet_for_caller",
     "render_prompt",
@@ -744,6 +754,77 @@ async def build_packet(
         profile_id=profile_id,
         nonce=nonce or new_nonce(),
         token=token,
+    )
+
+
+# --- The enrichment request (P1-08, FR-4.4, R-13) -------------------------------------------
+
+
+# EnrichmentRequest's limits (skill_io): outside text is cut to them, never refused.
+TITLE_MAX: Final = 500
+LABEL_REASON_MAX: Final = 200
+LONG_TEXT_MAX: Final = 8_000
+PROJECT_TEXT_MAX: Final = 120
+GOAL_MAX: Final = 280
+
+
+def _cut(text: str | None, limit: int) -> str | None:
+    return None if text is None else text[:limit]
+
+
+async def enrichment_request(
+    s: AsyncSession, task_id: UUID, *, missing: Sequence[str]
+) -> EnrichmentRequest:
+    """The `enrich` packet's body (P1-05's schema): the task as it is now, the fields to
+    fill, the project, its brief (`knowledge.api.get_brief`, R-13; "" before it has one)
+    and its 10 most recently finished Human or Hybrid tasks with estimate and actual time.
+    P1-17 adds the passages here. 404 for a task the caller cannot see; ValueError for no
+    missing field (a request always asks for one)."""
+    if not missing:
+        raise ValueError("an enrichment request names at least one missing field")
+    task = await tasks.get_task(s, task_id)
+    parent_title = None
+    if task.parent_id is not None:
+        try:
+            parent_title = (await tasks.get_task(s, task.parent_id)).title
+        except NotFound:
+            parent_title = None
+    context = await projects.project_context(s, task.project_id)
+    try:
+        brief = (await knowledge.get_brief(task.project_id, session=s)).body_md or ""
+    except NotFound:
+        brief = ""
+    history = await tasks.estimate_history(s, task.project_id, limit=MAX_HISTORY)
+    return EnrichmentRequest(
+        task=EnrichTask(
+            id=task.id,
+            title=task.title[:TITLE_MAX],
+            label=task.label.value if task.label is not None else None,
+            label_reason=_cut(task.label_reason, LABEL_REASON_MAX),
+            parent_title=_cut(parent_title, TITLE_MAX),
+            due_on=task.due_on,
+            priority=task.priority,
+            first_action=_cut(task.first_action, LONG_TEXT_MAX),
+            acceptance_criteria=_cut(task.acceptance_criteria, LONG_TEXT_MAX),
+            estimate_minutes=task.estimate_minutes,
+        ),
+        missing=[cast("MissingField", field) for field in missing],
+        project=EnrichProject(
+            name=context.name[:PROJECT_TEXT_MAX],
+            client=_cut(context.client, PROJECT_TEXT_MAX),
+            goal=_cut(context.goal, GOAL_MAX),
+        ),
+        brief=brief[:BRIEF_MAX],
+        passages=[],
+        estimate_history=[
+            EstimateHistoryItem(
+                title=h.title or "(untitled)",
+                label=h.label.value,
+                estimate_minutes=h.estimate_minutes,
+                actual_minutes=h.actual_minutes,
+            )
+            for h in history
+        ],
     )
 
 

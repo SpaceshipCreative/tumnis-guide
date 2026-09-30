@@ -8,8 +8,9 @@ through its routes and apis:
 - `folder(project_id)`: the project's folder on disk; `write(root, files)` writes files
   there as someone outside Tumnis would; `sync()` runs one `knowledge_folder_sync` of the
   location, as the worker does (so the files get their `folder_files` records; the
-  folder sync extracts nothing here), then `settle()`s: the outbox relayed and every
-  delivery run, so what earlier events do (a seed task's label) is done before a snapshot.
+  folder sync extracts nothing here), then `settle()`s: the outbox relayed, every
+  delivery run and the project agents' enrichments (P1-08) quiet, so what earlier events
+  do (a seed task's label, its enrichment's status) is done before a snapshot.
 - `add_runs(project_id, ...)`: a daemon profile of the project (on `runner_id` when given)
   with finished runs and their `run_events` (owner SQL: runs are the agents module's).
 - `add_context_items(project_id, n)`: context items owned by the project.
@@ -49,6 +50,9 @@ if TYPE_CHECKING:
 SELF_HOSTED = NetPolicy(mode="self-hosted")
 MARKER = ".tumnis-root"
 SETTLE_S = 30.0
+# How long queued enrichments must wait unchanged behind the started ones before `settle`
+# takes the partition as full: longer than DBOS's queue polling, even on a loaded runner.
+ENRICH_CALM_S = 3.0
 
 
 def owner_rows(db: DbUrls, query: str, params: tuple[Any, ...] = ()) -> list[tuple[Any, ...]]:
@@ -109,6 +113,8 @@ class ArchiveWorld:
     root: Path  # the location's root on disk
     location_id: uuid.UUID | None = None
     _undo: list[Callable[[], None]] = field(default_factory=list)
+    _enrich_started: frozenset[str] = frozenset()  # started enrichments, as last seen
+    _enrich_since: float = 0.0  # the loop time they were first seen so
 
     async def start(self) -> None:
         from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
@@ -142,8 +148,9 @@ class ArchiveWorld:
             pass
 
     async def settle(self) -> None:
-        """Relay until the outbox is empty and every delivery has run, twice in a row: what
-        the events so far do (a seed task's label, say) is done before the test looks."""
+        """Relay until the outbox is empty and every delivery has run, and the project
+        agents' enrichments have stopped writing, twice in a row: what the events so far do
+        (a seed task's label, say) is done before the test looks."""
         from dbos import DBOS  # noqa: PLC0415
 
         from tumnis.core.events import relay_once  # noqa: PLC0415
@@ -156,10 +163,40 @@ class ArchiveWorld:
             busy = await DBOS.list_workflows_async(
                 status=["ENQUEUED", "PENDING"], name="deliver_event", load_input=False
             )
-            calm = calm + 1 if not sent and not busy else 0
+            quiet = not sent and not busy and await self._enrichments_quiet()
+            calm = calm + 1 if quiet else 0
             if loop.time() > deadline:
                 raise AssertionError(f"deliveries still running after {SETTLE_S} s")
             await asyncio.sleep(0.1)
+
+    async def _enrichments_quiet(self) -> bool:
+        """Whether P1-08's enrichments (`enrich_task`, started by direct subscribers, so no
+        `deliver_event` shows them) have stopped writing tasks for now: every started one
+        has reached `running` or ended (a run out on the fake runner waits for an answer
+        well past any test here), and the ones still queued have waited behind a full
+        partition, the started set unchanged, for `ENRICH_CALM_S`."""
+        from dbos import DBOS  # noqa: PLC0415
+
+        flows = await DBOS.list_workflows_async(
+            status=["ENQUEUED", "PENDING"], name="enrich_task", load_input=False
+        )
+        started = frozenset(f.workflow_id for f in flows if f.status == "PENDING")
+        queued = any(f.status == "ENQUEUED" for f in flows)
+        now = asyncio.get_running_loop().time()
+        if started != self._enrich_started:
+            self._enrich_started, self._enrich_since = started, now
+        if queued and now - self._enrich_since < ENRICH_CALM_S:
+            return False
+        tasks = [uuid.UUID(wid.split(":")[1]) for wid in started]  # enrich:<task>:<key>
+        if not tasks:
+            return True
+        busy = owner_rows(
+            self.db,
+            "SELECT count(*) FROM tasks WHERE id = ANY(%s)"
+            " AND (enrichment_status IS NULL OR enrichment_status = 'pending')",
+            (tasks,),
+        )
+        return int(busy[0][0]) == 0
 
     async def project(self, name: str) -> uuid.UUID:
         created = await self.client.post("/v1/projects", json={"name": name})

@@ -1,5 +1,5 @@
 """tasks SQLAlchemy tables owned by this module (mirrors of revisions tasks_0001,
-tasks_0003, tasks_0004, tasks_0005 and tasks_0006).
+tasks_0003, tasks_0004, tasks_0005, tasks_0006, tasks_0007 and tasks_0008).
 
 `board_rank` and `sort_key` compare bytewise (`COLLATE "C"`), so Postgres orders the
 fractional keys as Python and TypeScript do (core/rank.py)."""
@@ -56,7 +56,11 @@ class Task(TenantBase, Base):
     due_on: Mapped[date | None]
     estimate_minutes: Mapped[int | None]
     first_action: Mapped[str | None]
+    # P1-08: `placeholder` (the Generation slot's stand-in) or `agent` (the enrichment);
+    # NULL for a first action a person or an API client wrote.
+    first_action_source: Mapped[str | None]
     acceptance_criteria: Mapped[str | None]
+    enrichment_status: Mapped[str | None]  # P1-08: pending ... done, failed; NULL before one
     assigned_agent_id: Mapped[UUID | None]
     board_rank: Mapped[str] = mapped_column(Text(collation="C"))
     column_id: Mapped[UUID | None] = mapped_column(ForeignKey("board_columns.id"))

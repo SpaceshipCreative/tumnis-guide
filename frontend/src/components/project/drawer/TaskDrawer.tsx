@@ -1,10 +1,17 @@
 // The task drawer (P0-24, FR-3.5, UX 9): `?task=<id>` opens it; the title, the status
 // action, the repeat rule, comments, and Move to trash (undoable). A side panel on a
 // laptop, a full sheet on the phone; Escape or Close shuts it.
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { taskQueryOptions, useUpdateTask } from "../../../lib/optimistic";
+import {
+  taskQueryKey,
+  taskQueryOptions,
+  useUpdateTask,
+} from "../../../lib/optimistic";
+import { invalidateTaskViews } from "../../../lib/task-cache";
+import { undo } from "../../../lib/undo";
+import { FirstActionLine } from "../../common/FirstAction";
 import { TaintBadge } from "../../common/TaintBadge";
 import { formatDay, formatMinutes } from "../../dashboard/format";
 import { STATUS_WORDS, useChangeStatus, useTrashTask } from "../mutations";
@@ -53,6 +60,102 @@ function TitleForm({ task }: { task: Task }) {
   );
 }
 
+// The acceptance criteria in their own order: each run of `- ` lines as a list, any
+// other line (a Hybrid task's `AI part:` and `Your part:`, P1-08) as text where it stands.
+type CriteriaBlock =
+  { kind: "list"; items: string[] } | { kind: "text"; text: string };
+
+function criteriaBlocks(text: string | null): CriteriaBlock[] {
+  const blocks: CriteriaBlock[] = [];
+  for (const line of (text ?? "").split("\n")) {
+    if (line.trim() === "") continue;
+    const last = blocks.at(-1);
+    if (!line.startsWith("- ")) blocks.push({ kind: "text", text: line });
+    else if (last?.kind === "list") last.items.push(line.slice(2));
+    else blocks.push({ kind: "list", items: [line.slice(2)] });
+  }
+  return blocks;
+}
+
+function Criteria({ text }: { text: string | null }) {
+  const blocks = criteriaBlocks(text);
+  if (blocks.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      <h3 className="text-muted">Acceptance criteria</h3>
+      {blocks.map((block, index) =>
+        block.kind === "list" ? (
+          <ul
+            key={index}
+            aria-label="Acceptance criteria"
+            className="list-disc pl-5 marker:text-muted"
+          >
+            {block.items.map((item, at) => (
+              <li key={at}>{item}</li>
+            ))}
+          </ul>
+        ) : (
+          <p key={index}>{block.text}</p>
+        ),
+      )}
+    </div>
+  );
+}
+
+// `Enriched by agent · Undo` (P1-08, UX 9): shown while the task's latest write is the
+// project agent's enrichment; Undo puts back what it replaced (R-09). A read names the
+// enrichment's change only at the version it wrote, but a later write's own answer (a
+// title edit) carries that write's change id until the read comes back: the change first
+// seen is kept, and a different one hides the line (the read then names none, which
+// forgets it, so a later enrichment shows again).
+function Enriched({ task }: { task: Task }) {
+  const queryClient = useQueryClient();
+  const [failed, setFailed] = useState(false);
+  const [seen, setSeen] = useState<string | null>(null);
+  const undoing = useMutation({
+    mutationFn: (changeId: string) =>
+      undo({
+        changeId,
+        label: "Enrichment",
+        taskId: task.id,
+        afterVersion: task.version,
+        at: Date.now(),
+      }),
+    onSuccess: (restored) => {
+      queryClient.setQueryData(taskQueryKey(task.id), restored);
+      void invalidateTaskViews(queryClient);
+    },
+    onError: () => {
+      setFailed(true);
+    },
+  });
+  // Whatever it filled (criteria or an estimate alone too), a finished enrichment's
+  // change is the one the read names.
+  const eligible = task.enrichment_status === "done" ? task.change_id : null;
+  if (eligible === null && seen !== null) setSeen(null);
+  if (eligible !== null && seen === null) setSeen(eligible);
+  if (eligible === null || (seen !== null && seen !== eligible)) return null;
+  const changeId = eligible;
+  return (
+    <p className="flex items-center gap-2 text-sm text-muted">
+      <span>Enriched by agent</span>
+      <span aria-hidden="true">·</span>
+      <button
+        type="button"
+        disabled={undoing.isPending}
+        onClick={() => {
+          setFailed(false);
+          undoing.mutate(changeId);
+        }}
+        className="min-h-11 font-medium text-accent md:min-h-8"
+      >
+        Undo
+      </button>
+      {failed && <span role="status">Could not undo; try again.</span>}
+    </p>
+  );
+}
+
 function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
   const change = useChangeStatus();
   const trash = useTrashTask();
@@ -77,9 +180,9 @@ function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
         <dt className="text-muted">Due</dt>
         <dd>{task.due_on ? formatDay(task.due_on) : "No due date"}</dd>
       </dl>
-      {task.first_action && (
-        <p className="text-sm">First action: {task.first_action}</p>
-      )}
+      <FirstActionLine task={task} />
+      <Criteria text={task.acceptance_criteria} />
+      <Enriched task={task} />
       <div className="flex flex-wrap gap-2">
         {action && (
           <button
