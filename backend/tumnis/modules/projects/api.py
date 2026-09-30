@@ -212,6 +212,7 @@ class _Row(BaseModel):
     repo_url: str | None
     profile_name: str | None
     archived_at: datetime | None
+    archive_state: ArchiveState | None = None  # from project_archives (_ARCHIVE_STATE)
     subtask_threshold_min: int | None
     local_decisions_only: bool = False
 
@@ -255,14 +256,12 @@ async def _outs(s: AsyncSession, rows: Sequence[_Row], now: datetime | None) -> 
     today = await _today(now)
     stats = await stats_source().stats(s, ids, today)
     links = await _links_of(s, ids)
-    states = await _archive_states(s, ids)
     out = []
     for row in rows:
         st = stats.get(row.id, ZERO_STATS)
         out.append(
             ProjectOut(
                 **row.model_dump(),
-                archive_state=states.get(row.id),
                 links=links[row.id],
                 health=project_health(st.health_facts),
                 open_count=st.open_count,
@@ -276,8 +275,17 @@ def _live() -> Any:
     return _projects.c.deleted_at.is_(None)
 
 
+# The project's archive state (P2-18) read with its row, so a read costs no query more.
+_ARCHIVE_STATE: Final = (
+    select(_archives.c.state)
+    .where(_archives.c.project_id == _projects.c.id, _archives.c.deleted_at.is_(None))
+    .scalar_subquery()
+    .label("archive_state")
+)
+
+
 async def _row(s: AsyncSession, project_id: UUID, *, lock: bool = False) -> _Row:
-    stmt = select(_projects).where(_projects.c.id == project_id, _live())
+    stmt = select(_projects, _ARCHIVE_STATE).where(_projects.c.id == project_id, _live())
     if lock:
         stmt = stmt.with_for_update()
     found = (await s.execute(stmt)).mappings().first()
@@ -305,7 +313,7 @@ async def list_projects(
 ) -> Page[ProjectOut]:
     """Projects in board order (`sort_key`, then id); archived ones only when asked.
     `project_ids` limits the list (a project-limited key, R-28)."""
-    stmt = select(_projects).where(_live())
+    stmt = select(_projects, _ARCHIVE_STATE).where(_live())
     if not include_archived:
         stmt = stmt.where(_projects.c.archived_at.is_(None))
     if project_ids is not None:
@@ -650,7 +658,7 @@ async def _versioned(
         raise StaleVersion(current=current.model_dump(mode="json")) from None
     except IntegrityError as exc:
         raise _name_taken(exc) from None
-    return _Row.model_validate(dict(row))
+    return _Row.model_validate(dict(row) | {"archive_state": await _archive_state(s, project_id)})
 
 
 async def _changed(
@@ -717,6 +725,7 @@ async def archive_project(
     workflow has compressed the project's data, then `archived`."""
     row = await _versioned(s, project_id, version, {"archived_at": _now(now)}, now)
     await _set_archive_state(s, project_id, "archiving")
+    row = row.model_copy(update={"archive_state": "archiving"})
     await emit(s, ProjectArchivedV1(project_id=project_id), occurred_at=_now(now))
     mark_changed(s, LIVE_ENTITY, project_id)
     [out] = await _outs(s, [row], now)
@@ -735,11 +744,13 @@ async def unarchive_project(
     moved data (P2-18) turns `unarchiving`; `unarchive_project` then brings the data back
     and clears `archive_state`."""
     row = await _versioned(s, project_id, version, {"archived_at": None}, now)
-    await s.execute(
-        update(_archives)
-        .where(_archives.c.project_id == project_id, _archives.c.deleted_at.is_(None))
-        .values(state="unarchiving")
-    )
+    if row.archive_state is not None:
+        await s.execute(
+            update(_archives)
+            .where(_archives.c.project_id == project_id, _archives.c.deleted_at.is_(None))
+            .values(state="unarchiving")
+        )
+        row = row.model_copy(update={"archive_state": "unarchiving"})
     return await _changed(s, row, ["archived_at"], now)
 
 
@@ -749,17 +760,13 @@ async def unarchive_project(
 # workflow's doing, not an edit, so it leaves the project's version alone (T-P0-20-13).
 
 
-async def _archive_states(s: AsyncSession, ids: Sequence[UUID]) -> dict[UUID, ArchiveState]:
-    rows = await s.execute(
-        select(_archives.c.project_id, _archives.c.state).where(
-            _archives.c.project_id.in_(ids), _archives.c.deleted_at.is_(None)
+async def _archive_state(s: AsyncSession, project_id: UUID) -> ArchiveState | None:
+    state: ArchiveState | None = await s.scalar(
+        select(_archives.c.state).where(
+            _archives.c.project_id == project_id, _archives.c.deleted_at.is_(None)
         )
     )
-    return {row.project_id: row.state for row in rows}
-
-
-async def _archive_state(s: AsyncSession, project_id: UUID) -> ArchiveState | None:
-    return (await _archive_states(s, [project_id])).get(project_id)
+    return state
 
 
 async def _set_archive_state(s: AsyncSession, project_id: UUID, state: ArchiveState) -> None:
