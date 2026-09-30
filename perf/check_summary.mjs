@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // The latency gate (P0-29, PERF-2): every tagged request p95 in the k6 summaries must stay
-// under min(NFR, 1.2 x its perf/baseline.json p95). The k6 thresholds apply the same
-// rule inside each run; this check reads the exported summaries, so the job fails with
-// one table of every latency against its limit.
+// under min(NFR, max(1.2 x, 50 ms over) its perf/baseline.json p95) (decision 27). The k6
+// thresholds apply the same rule inside each run; this check reads the exported
+// summaries, so the job fails with one table of every latency against its limit.
 //
 //   node perf/check_summary.mjs [--baseline perf/baseline.json] <summary.json>...
 //

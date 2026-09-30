@@ -11,10 +11,16 @@ export const NFR_MS = {
   typeahead: 100,
 };
 
-// PERF-2: a latency more than 20% worse than the committed baseline fails.
+// PERF-2 and Scott decision 27: a latency fails only when it is more than 20% worse AND
+// at least 50 ms worse than the committed baseline, so small latencies don't fail on noise.
 export const REGRESSION = 1.2;
+export const REGRESSION_FLOOR_MS = 50;
 
-/** The p95 limit in ms for `name`: 1.2 x its baseline p95, never above its NFR. */
+/**
+ * The p95 limit in ms for `name`: max(1.2 x its baseline p95, its baseline p95 + 50 ms),
+ * never above its NFR. A p95 at or over the limit fails. Below a 250 ms baseline the
+ * 50 ms floor is the larger; above it the 20%.
+ */
 export function limitMs(name, baseline) {
   const nfr = NFR_MS[name];
   if (nfr === undefined) throw new Error(`no NFR for ${name}`);
@@ -22,7 +28,8 @@ export function limitMs(name, baseline) {
   if (typeof p95 !== "number" || !(p95 > 0)) {
     throw new Error(`the baseline has no p95_ms for ${name}`);
   }
-  return Math.min(nfr, Math.round(p95 * REGRESSION));
+  const regression = Math.max(Math.round(p95 * REGRESSION), Math.round(p95 + REGRESSION_FLOOR_MS));
+  return Math.min(nfr, regression);
 }
 
 /** The k6 threshold expression for `name`, for example `p(95)<120`. */

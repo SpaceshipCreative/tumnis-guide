@@ -5,7 +5,7 @@ import { threshold } from "./limits.js";
 // open() works only in the init context; the path is relative to this file.
 const baseline = JSON.parse(open("../baseline.json"));
 
-/** `p(95)<limit` for the requests tagged `name` (PERF-2: a 20% regression fails). */
+/** `p(95)<limit` for the requests tagged `name` (PERF-2, decision 27: more than 20% and at least 50 ms worse fails). */
 export function p95Threshold(name) {
   return threshold(name, baseline);
 }

@@ -1,6 +1,7 @@
 // Quick-add round trip (P0-29, T-P0-29-04; NFR Performance, PERF-2): the project
 // typeahead, then POST /v1/tasks with an API key, at 5 captures a second for 30 s on the
-// load set (the plan says 60 s; 30 s keeps the Performance job inside its 5 minutes). The p95 of each stays under min(NFR, 1.2 x perf/baseline.json).
+// load set (the plan says 60 s; 30 s keeps the Performance job inside its 5 minutes). The p95 of each stays under min(NFR, the
+// regression limit of perf/k6/limits.js: 20% and at least 50 ms over perf/baseline.json).
 //
 //   k6 run -e BASE_URL=http://localhost:8080 -e TUMNIS_KEY=... -e PROJECT_ID=... \
 //     --summary-export quickadd.json perf/k6/quickadd.js

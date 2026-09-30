@@ -1,7 +1,7 @@
 // The dashboard's reads and the typeahead (P0-29, T-P0-29-05; PERF-2): the project list,
 // Today's first five tasks and the project typeahead, on the load set, 2 rounds a second
-// for 20 s (the Performance job has 5 minutes). Each p95 stays under min(NFR, 1.2 x
-// perf/baseline.json).
+// for 20 s (the Performance job has 5 minutes). Each p95 stays under min(NFR, the
+// regression limit of perf/k6/limits.js: 20% and at least 50 ms over perf/baseline.json).
 //
 //   k6 run -e BASE_URL=http://localhost:8080 -e TUMNIS_KEY=... \
 //     --summary-export dashboard.json perf/k6/dashboard.js
