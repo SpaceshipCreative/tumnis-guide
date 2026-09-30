@@ -61,7 +61,6 @@ CASES = [
 
 @pytest.mark.req("FR-6.1")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 @pytest.mark.parametrize(("target", "scope", "ids", "expected"), CASES)
 def test_downstream_scopes(
     target: uuid.UUID | None, scope: str, ids: set[uuid.UUID], expected: tuple[int, int]

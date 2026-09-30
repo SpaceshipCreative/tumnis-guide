@@ -42,7 +42,6 @@ def _row(tasks: int, minutes: int, factor: float, created_at: datetime) -> Any:
 
 @pytest.mark.req("FR-6.1")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 @given(a=st.tuples(TASKS, MINUTES), b=st.tuples(TASKS, MINUTES), factor=FACTORS)
 def test_dominating_item_ranks_higher(
     a: tuple[int, int], b: tuple[int, int], factor: float
@@ -65,7 +64,6 @@ def test_dominating_item_ranks_higher(
 
 @pytest.mark.req("FR-6.1")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 @given(
     offsets=st.lists(st.integers(min_value=0, max_value=5), min_size=1, max_size=12),
     tasks=TASKS,
@@ -100,7 +98,6 @@ class _Score:
 
 @pytest.mark.req("FR-11.4")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 def test_jev_factor_only_when_applied() -> None:
     """T-P1-13-03
     Factor 1.0 for REVIEW, DETERMINISTIC, approval required or no answer; when applied,
