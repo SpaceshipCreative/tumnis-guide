@@ -57,9 +57,11 @@ export function badge(tone: BadgeTone): string {
 export const TABLE = "relative w-full text-left text-sm";
 export const TABLE_HEAD =
   "bg-surface-muted text-xs font-semibold tracking-wide text-muted uppercase";
-export const TABLE_HEADER_CELL = "px-3 py-2 whitespace-nowrap";
+/** Cells are tighter on the phone, and header labels may wrap there, so a table fits a
+ * 375 px screen where it can instead of scrolling sideways. */
+export const TABLE_HEADER_CELL = "px-2 py-2 md:px-3 md:whitespace-nowrap";
 export const TABLE_BODY = "divide-y divide-border";
-export const TABLE_CELL = "px-3 py-3 align-top";
+export const TABLE_CELL = "px-2 py-3 align-top md:px-3";
 
 /** The dimmed page behind a modal dialog; bottom sheet on the phone, centred above. */
 export const DIALOG_BACKDROP =
