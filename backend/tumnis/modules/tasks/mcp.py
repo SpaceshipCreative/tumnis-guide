@@ -39,7 +39,10 @@ class ListTasksIn(surface.SurfaceInput):
     order: api.TaskOrder = "created"
 
 
-class CreateTaskBody(surface.SurfaceInput):
+class TaskCreate(surface.SurfaceInput):
+    """The REST twin's body. Named `TaskCreate` so the published OpenAPI schema (and the
+    generated `TaskCreate` the frontend's quick-add queue uses) keeps its P0-18 name."""
+
     project_id: UUID
     parent_id: UUID | None = None  # a subtask; the server lays it out against the threshold
     title: api.Title
@@ -53,7 +56,7 @@ class CreateTaskBody(surface.SurfaceInput):
     status: Literal["backlog", "today"] = "backlog"
 
 
-class CreateTaskIn(surface.WriteInput, CreateTaskBody):
+class CreateTaskIn(surface.WriteInput, TaskCreate):
     pass
 
 

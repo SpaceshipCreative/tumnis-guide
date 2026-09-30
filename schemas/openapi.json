@@ -744,129 +744,6 @@
         "title": "ContextItemIn",
         "type": "object"
       },
-      "CreateTaskBody": {
-        "properties": {
-          "acceptance_criteria": {
-            "anyOf": [
-              {
-                "maxLength": 8000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Acceptance Criteria"
-          },
-          "due_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Due On"
-          },
-          "estimate_minutes": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "maximum": 960.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Estimate Minutes"
-          },
-          "first_action": {
-            "anyOf": [
-              {
-                "maxLength": 8000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Action"
-          },
-          "label": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Label"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "parent_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Id"
-          },
-          "priority": {
-            "default": "normal",
-            "enum": [
-              "low",
-              "normal",
-              "high",
-              "urgent"
-            ],
-            "title": "Priority",
-            "type": "string"
-          },
-          "project_id": {
-            "format": "uuid",
-            "title": "Project Id",
-            "type": "string"
-          },
-          "schema_version": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Schema Version"
-          },
-          "status": {
-            "default": "backlog",
-            "enum": [
-              "backlog",
-              "today"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "title": {
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_id",
-          "title"
-        ],
-        "title": "CreateTaskBody",
-        "type": "object"
-      },
       "DayCalendarOut": {
         "properties": {
           "events": {
@@ -4214,6 +4091,130 @@
           "tainted"
         ],
         "title": "TaskContextItemOut",
+        "type": "object"
+      },
+      "TaskCreate": {
+        "description": "The REST twin's body. Named `TaskCreate` so the published OpenAPI schema (and the\ngenerated `TaskCreate` the frontend's quick-add queue uses) keeps its P0-18 name.",
+        "properties": {
+          "acceptance_criteria": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acceptance Criteria"
+          },
+          "due_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due On"
+          },
+          "estimate_minutes": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 960.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate Minutes"
+          },
+          "first_action": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Action"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "priority": {
+            "default": "normal",
+            "enum": [
+              "low",
+              "normal",
+              "high",
+              "urgent"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
+          },
+          "status": {
+            "default": "backlog",
+            "enum": [
+              "backlog",
+              "today"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "title"
+        ],
+        "title": "TaskCreate",
         "type": "object"
       },
       "TaskOut": {
@@ -13433,7 +13434,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateTaskBody"
+                "$ref": "#/components/schemas/TaskCreate"
               }
             }
           },

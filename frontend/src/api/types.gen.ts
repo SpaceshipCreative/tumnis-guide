@@ -403,53 +403,6 @@ export type ContextItemIn = {
 };
 
 /**
- * CreateTaskBody
- */
-export type CreateTaskBody = {
-  /**
-   * Acceptance Criteria
-   */
-  acceptance_criteria?: string | null;
-  /**
-   * Due On
-   */
-  due_on?: string | null;
-  /**
-   * Estimate Minutes
-   */
-  estimate_minutes?: number | null;
-  /**
-   * First Action
-   */
-  first_action?: string | null;
-  label?: Label | null;
-  /**
-   * Parent Id
-   */
-  parent_id?: string | null;
-  /**
-   * Priority
-   */
-  priority?: "low" | "normal" | "high" | "urgent";
-  /**
-   * Project Id
-   */
-  project_id: string;
-  /**
-   * Schema Version
-   */
-  schema_version?: number | null;
-  /**
-   * Status
-   */
-  status?: "backlog" | "today";
-  /**
-   * Title
-   */
-  title: string;
-};
-
-/**
  * DayCalendarOut
  */
 export type DayCalendarOut = {
@@ -2205,6 +2158,56 @@ export type TaskContextItemOut = {
    * Task Id
    */
   task_id: string;
+};
+
+/**
+ * TaskCreate
+ *
+ * The REST twin's body. Named `TaskCreate` so the published OpenAPI schema (and the
+ * generated `TaskCreate` the frontend's quick-add queue uses) keeps its P0-18 name.
+ */
+export type TaskCreate = {
+  /**
+   * Acceptance Criteria
+   */
+  acceptance_criteria?: string | null;
+  /**
+   * Due On
+   */
+  due_on?: string | null;
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes?: number | null;
+  /**
+   * First Action
+   */
+  first_action?: string | null;
+  label?: Label | null;
+  /**
+   * Parent Id
+   */
+  parent_id?: string | null;
+  /**
+   * Priority
+   */
+  priority?: "low" | "normal" | "high" | "urgent";
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+  /**
+   * Status
+   */
+  status?: "backlog" | "today";
+  /**
+   * Title
+   */
+  title: string;
 };
 
 /**
@@ -6766,7 +6769,7 @@ export type TasksListTasksResponse =
   TasksListTasksResponses[keyof TasksListTasksResponses];
 
 export type TasksCreateTaskData = {
-  body: CreateTaskBody;
+  body: TaskCreate;
   path?: never;
   query?: never;
   url: "/v1/tasks";
