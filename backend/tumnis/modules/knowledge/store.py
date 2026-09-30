@@ -156,6 +156,7 @@ async def add_version(
             size=size,
             status="pending_scan",
             source_name=source_name,
+            body_md="",  # NOT NULL; the Markdown export replaces it once extracted
         )
     )
     return number

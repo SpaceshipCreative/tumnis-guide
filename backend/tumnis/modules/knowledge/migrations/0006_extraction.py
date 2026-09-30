@@ -4,8 +4,9 @@
   and text entries are `ready`), `status_reason` (a refusal code such as `type_mismatch`, or
   the signature scanners named) and `current_version_id` (the version search reads).
 - document_versions: the same status pair, the name a file arrived under (`source_name`),
-  its sniffed `mime`, and the compressed Docling document (`docling_json`). `body_md` is
-  nullable now: an upload's Markdown export arrives once extraction finishes.
+  its sniffed `mime`, and the compressed Docling document (`docling_json`). `body_md` stays
+  NOT NULL: an upload's version holds '' until its Markdown export arrives (dropping NOT NULL
+  would hand the previous release NULLs it never expected; squawk's ban-drop-not-null).
 - extraction_artifacts: what each pipeline step hands the next (the converted document, its
   Markdown, the vision pages, the chunks), one row per (version, stage). Large outputs never
   pass through DBOS step results.
@@ -14,7 +15,10 @@
   wrapper (array_to_string is only stable, and a generated column needs an immutable
   expression); P1-17's search reads it.
 
-`documents.current_version_id` gets its foreign key NOT VALID, like knowledge_0003's keys.
+`documents.current_version_id` gets its foreign key NOT VALID, like knowledge_0003's keys, and
+both status checks are added NOT VALID too (squawk's constraint-missing-not-valid): no scan
+runs inside the migration's transaction, every new or changed row is checked, and every
+existing row already holds the new columns' default `ready`.
 
 Chained after P1-15's knowledge_0005 (it was knowledge_0004 on knowledge_0003 until both
 work packages landed).
@@ -36,6 +40,12 @@ STATUSES = "'pending_scan', 'extracting', 'ready', 'quarantined', 'failed'"
 CHUNK_TSV = "to_tsvector('english', coalesce(array_to_string(h, ' '), '') || ' ' || t)"
 
 
+def _check_not_valid(table: str, name: str) -> None:
+    op.execute(
+        f"ALTER TABLE {table} ADD CONSTRAINT {name} CHECK (status IN ({STATUSES})) NOT VALID"
+    )
+
+
 def upgrade() -> None:
     op.add_column(
         "documents",
@@ -43,7 +53,7 @@ def upgrade() -> None:
     )
     op.add_column("documents", sa.Column("status_reason", sa.Text, nullable=True))
     op.add_column("documents", sa.Column("current_version_id", UUID(as_uuid=True), nullable=True))
-    op.create_check_constraint("ck_documents_status", "documents", f"status IN ({STATUSES})")
+    _check_not_valid("documents", "ck_documents_status")
     op.execute(
         "ALTER TABLE documents ADD CONSTRAINT fk_documents_current_version_id"
         " FOREIGN KEY (current_version_id) REFERENCES document_versions (id) NOT VALID"
@@ -56,10 +66,7 @@ def upgrade() -> None:
     op.add_column("document_versions", sa.Column("source_name", sa.Text, nullable=True))
     op.add_column("document_versions", sa.Column("mime", sa.Text, nullable=True))
     op.add_column("document_versions", sa.Column("docling_json", sa.LargeBinary, nullable=True))
-    op.alter_column("document_versions", "body_md", existing_type=sa.Text, nullable=True)
-    op.create_check_constraint(
-        "ck_document_versions_status", "document_versions", f"status IN ({STATUSES})"
-    )
+    _check_not_valid("document_versions", "ck_document_versions_status")
 
     create_tenant_table(
         "extraction_artifacts",
@@ -124,9 +131,6 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION chunk_tsv(text[], text)")
     drop_tenant_table("extraction_artifacts")
     op.drop_constraint("ck_document_versions_status", "document_versions", type_="check")
-    # An upload's version has no Markdown until extraction; the old schema needs one.
-    op.execute("UPDATE document_versions SET body_md = '' WHERE body_md IS NULL")
-    op.alter_column("document_versions", "body_md", existing_type=sa.Text, nullable=False)
     for column in ("docling_json", "mime", "source_name", "status_reason", "status"):
         op.drop_column("document_versions", column)
     op.drop_constraint("fk_documents_current_version_id", "documents", type_="foreignkey")
