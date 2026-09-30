@@ -56,7 +56,12 @@ export default defineConfig({
       },
       workbox: {
         // Precache the shell and its assets; nothing under /v1 is cached at run time.
-        globPatterns: ["**/*.{js,css,html,png,svg,webmanifest}"],
+        // Inter's Latin file too (DS-01), so the offline shell keeps its font; other
+        // scripts load on first use.
+        globPatterns: [
+          "**/*.{js,css,html,png,svg,webmanifest}",
+          "**/inter-latin-wght-normal-*.woff2",
+        ],
         navigateFallback: "/index.html",
         navigateFallbackDenylist: NOT_THE_SHELL,
         cleanupOutdatedCaches: true,

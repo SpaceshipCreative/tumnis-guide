@@ -987,6 +987,46 @@
         "title": "DocumentDTO",
         "type": "object"
       },
+      "EstimateBody": {
+        "properties": {
+          "estimate_minutes": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 960.0,
+            "title": "Estimate Minutes",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "schema_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
+          },
+          "version": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "estimate_minutes",
+          "reason",
+          "version"
+        ],
+        "title": "EstimateBody",
+        "type": "object"
+      },
       "FolderIn": {
         "properties": {
           "location_id": {
@@ -999,6 +1039,53 @@
           "location_id"
         ],
         "title": "FolderIn",
+        "type": "object"
+      },
+      "ForeignReach": {
+        "description": "A token reaching another project's repo (`github`) or app (`coolify`).",
+        "properties": {
+          "kind": {
+            "enum": [
+              "github",
+              "coolify"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "target": {
+            "maxLength": 200,
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target"
+        ],
+        "title": "ForeignReach",
         "type": "object"
       },
       "FreeBlockOut": {
@@ -1568,6 +1655,43 @@
         "title": "ManualBlockIn",
         "type": "object"
       },
+      "McpServerInfo": {
+        "additionalProperties": false,
+        "description": "One MCP server of a profile (P2-10): its name, transport and a redacted target (the\ncommand's name, or the URL's host); never its arguments, env or headers (FR-5.12).",
+        "properties": {
+          "name": {
+            "maxLength": 128,
+            "title": "Name",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "maxLength": 253,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "transport": {
+            "enum": [
+              "stdio",
+              "http"
+            ],
+            "title": "Transport",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "transport"
+        ],
+        "title": "McpServerInfo",
+        "type": "object"
+      },
       "ModuleFlagIn": {
         "additionalProperties": false,
         "properties": {
@@ -2061,6 +2185,54 @@
         "title": "PlannedBlockOut",
         "type": "object"
       },
+      "PolicySummary": {
+        "description": "What an agent may do in the project without asking, and its run limits (FR-5.6).",
+        "properties": {
+          "allowed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed",
+            "type": "array"
+          },
+          "gated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gated",
+            "type": "array"
+          },
+          "max_concurrent_runs": {
+            "title": "Max Concurrent Runs",
+            "type": "integer"
+          },
+          "max_run_minutes": {
+            "title": "Max Run Minutes",
+            "type": "integer"
+          },
+          "max_tasks_per_run": {
+            "title": "Max Tasks Per Run",
+            "type": "integer"
+          },
+          "tool_allowlist": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tool Allowlist",
+            "type": "array"
+          }
+        },
+        "required": [
+          "gated",
+          "allowed",
+          "tool_allowlist",
+          "max_concurrent_runs",
+          "max_run_minutes",
+          "max_tasks_per_run"
+        ],
+        "title": "PolicySummary",
+        "type": "object"
+      },
       "Preset": {
         "enum": [
           "daily",
@@ -2188,6 +2360,16 @@
             ],
             "title": "Authenticated"
           },
+          "coolify": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenReach"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "error": {
             "anyOf": [
               {
@@ -2199,12 +2381,54 @@
             ],
             "title": "Error"
           },
+          "extra": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Extra",
+            "type": "array"
+          },
+          "foreign": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ForeignReach"
+            },
+            "title": "Foreign",
+            "type": "array"
+          },
+          "github": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenReach"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mcp_server_details": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/McpServerInfo"
+            },
+            "title": "Mcp Server Details",
+            "type": "array"
+          },
           "mcp_servers": {
             "default": [],
             "items": {
               "type": "string"
             },
             "title": "Mcp Servers",
+            "type": "array"
+          },
+          "missing": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
             "type": "array"
           },
           "profile_exists": {
@@ -2218,6 +2442,17 @@
             ],
             "title": "Profile Exists"
           },
+          "profile_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Version"
+          },
           "reachable": {
             "title": "Reachable",
             "type": "boolean"
@@ -2226,6 +2461,8 @@
             "default": "ok",
             "enum": [
               "ok",
+              "warning",
+              "degraded",
               "offline",
               "unsupported",
               "error"
@@ -2243,6 +2480,14 @@
               }
             ],
             "title": "Version"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -2371,6 +2616,307 @@
           "version"
         ],
         "title": "ProfilePatch",
+        "type": "object"
+      },
+      "ProfileToolsOut": {
+        "description": "Settings > Agents, one profile's tools, read-only (FR-5.12): the MCP servers it\nreported at its last health check, each matched against its project's allowlist\nnow, and its tokens' reach.",
+        "properties": {
+          "allowlist": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowlist",
+            "type": "array"
+          },
+          "authenticated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authenticated"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "coolify": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenReach"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extra": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Extra",
+            "type": "array"
+          },
+          "foreign": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ForeignReach"
+            },
+            "title": "Foreign",
+            "type": "array"
+          },
+          "github": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenReach"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hermes_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hermes Version"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_name": {
+            "title": "Profile Name",
+            "type": "string"
+          },
+          "profile_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Version"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "reachable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reachable"
+          },
+          "servers": {
+            "items": {
+              "$ref": "#/components/schemas/ToolServerOut"
+            },
+            "title": "Servers",
+            "type": "array"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ok",
+                  "warning",
+                  "degraded",
+                  "offline",
+                  "unsupported",
+                  "error"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "profile_id",
+          "profile_name",
+          "project_id",
+          "checked_at",
+          "status",
+          "reachable",
+          "authenticated",
+          "hermes_version",
+          "profile_version",
+          "allowlist",
+          "servers",
+          "extra",
+          "missing",
+          "github",
+          "coolify"
+        ],
+        "title": "ProfileToolsOut",
+        "type": "object"
+      },
+      "ProjectContextOut": {
+        "description": "A project as an agent starts work in it: who it is for, what it aims at, where its\ncode and domains are, the brief, the card threshold and the approval policy.",
+        "properties": {
+          "archived": {
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "brief_md": {
+            "title": "Brief Md",
+            "type": "string"
+          },
+          "client": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client"
+          },
+          "code_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Path"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Domains",
+            "type": "array"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "repo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Url"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "on_hold",
+              "completed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subtask_threshold_min": {
+            "title": "Subtask Threshold Min",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "client",
+          "goal",
+          "deadline",
+          "status",
+          "archived",
+          "domains",
+          "code_path",
+          "repo_url",
+          "subtask_threshold_min",
+          "brief_md",
+          "policy"
+        ],
+        "title": "ProjectContextOut",
         "type": "object"
       },
       "ProjectCreate": {
@@ -3934,8 +4480,19 @@
         "title": "Status",
         "type": "string"
       },
-      "StatusIn": {
+      "StatusBody": {
         "properties": {
+          "schema_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
+          },
           "to": {
             "$ref": "#/components/schemas/Status"
           },
@@ -3950,7 +4507,7 @@
           "to",
           "version"
         ],
-        "title": "StatusIn",
+        "title": "StatusBody",
         "type": "object"
       },
       "TaskContextItemOut": {
@@ -4016,6 +4573,7 @@
         "type": "object"
       },
       "TaskCreate": {
+        "description": "The REST twin's body. Named `TaskCreate` so the published OpenAPI schema (and the\ngenerated `TaskCreate` the frontend's quick-add queue uses) keeps its P0-18 name.",
         "properties": {
           "acceptance_criteria": {
             "anyOf": [
@@ -4105,10 +4663,15 @@
             "type": "string"
           },
           "schema_version": {
-            "const": 1,
-            "default": 1,
-            "title": "Schema Version",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
           },
           "status": {
             "default": "backlog",
@@ -4737,6 +5300,276 @@
         "title": "TaskRefOut",
         "type": "object"
       },
+      "TaskWithLayoutOut": {
+        "description": "A task as the agent surface answers it (P2-01): where a subtask shows against its\nproject's card threshold (`card`, a `checklist` item on its parent's card, or\n`nested_ai` for AI work); null for a root task.",
+        "properties": {
+          "acceptance_criteria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acceptance Criteria"
+          },
+          "actual_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Minutes"
+          },
+          "assigned_agent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Agent Id"
+          },
+          "board_rank": {
+            "title": "Board Rank",
+            "type": "string"
+          },
+          "change_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Id"
+          },
+          "column_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "due_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due On"
+          },
+          "estimate_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate Minutes"
+          },
+          "first_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Action"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user",
+                  "jev",
+                  "agent",
+                  "fallback"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Source"
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "enum": [
+                  "card",
+                  "checklist",
+                  "nested_ai"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layout"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "priority": {
+            "enum": [
+              "low",
+              "normal",
+              "high",
+              "urgent"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "rollover_count": {
+            "title": "Rollover Count",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "tainted": {
+            "title": "Tainted",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "project_id",
+          "parent_id",
+          "title",
+          "label",
+          "label_source",
+          "status",
+          "priority",
+          "due_on",
+          "estimate_minutes",
+          "first_action",
+          "acceptance_criteria",
+          "assigned_agent_id",
+          "column_id",
+          "board_rank",
+          "rollover_count",
+          "started_at",
+          "completed_at",
+          "actual_minutes",
+          "tainted",
+          "source",
+          "version",
+          "created_at",
+          "updated_at",
+          "change_id",
+          "layout"
+        ],
+        "title": "TaskWithLayoutOut",
+        "type": "object"
+      },
       "TextDocumentPatch": {
         "properties": {
           "body_md": {
@@ -4756,6 +5589,102 @@
           "version"
         ],
         "title": "TextDocumentPatch",
+        "type": "object"
+      },
+      "TokenReach": {
+        "additionalProperties": false,
+        "description": "What one token reaches, as the daemon probed it on the host (the token itself never\nleaves the host). GitHub: a repo is reachable only with `permissions.push` or `admin`;\nCoolify: an application is reachable when the token may read it.",
+        "properties": {
+          "errors": {
+            "default": [],
+            "items": {
+              "maxLength": 300,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Errors",
+            "type": "array"
+          },
+          "foreign_reachable": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Foreign Reachable",
+            "type": "array"
+          },
+          "own_reachable": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "default": {},
+            "maxProperties": 50,
+            "title": "Own Reachable",
+            "type": "object"
+          },
+          "token_present": {
+            "title": "Token Present",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "token_present"
+        ],
+        "title": "TokenReach",
+        "type": "object"
+      },
+      "ToolServerOut": {
+        "properties": {
+          "allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "transport": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stdio",
+                  "http"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transport"
+          }
+        },
+        "required": [
+          "name",
+          "transport",
+          "target",
+          "allowed"
+        ],
+        "title": "ToolServerOut",
         "type": "object"
       },
       "TotpEnrolConfirmIn": {
@@ -5769,6 +6698,120 @@
           }
         },
         "summary": "Check Profile Health",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/profiles/{id}/tools": {
+      "get": {
+        "description": "The profile's MCP servers from its last health check, read-only (FR-5.12): each\nmatched against its project's allowlist, and its GitHub and Coolify tokens' reach.",
+        "operationId": "agents_get_profile_tools",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileToolsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Profile Tools",
         "tags": [
           "agents"
         ]
@@ -10945,6 +11988,136 @@
         ]
       }
     },
+    "/v1/projects/{project_id}/context": {
+      "get": {
+        "description": "The project as an agent starts work in it (brief, code location, policy); the\n`get_project_context` tool's twin (P2-01).",
+        "operationId": "projects_get_project_context",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "schema_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schema Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Project Context",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
     "/v1/projects/{project_id}/reorder": {
       "post": {
         "description": "Moves the project between two neighbours (either may be null: an open end).",
@@ -11905,7 +13078,7 @@
     },
     "/v1/search": {
       "get": {
-        "description": "Tasks and projects matching `q`, best first: text match, recency, project match.",
+        "description": "Tasks and projects matching `q`, best first: text match, recency, project match.\nThe `search` tool's twin (P2-01).",
         "operationId": "search_search",
         "parameters": [
           {
@@ -11953,6 +13126,22 @@
               ],
               "description": "Boosts this project's rows",
               "title": "Project Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "schema_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schema Version"
             }
           },
           {
@@ -13175,7 +14364,7 @@
     },
     "/v1/tasks": {
       "get": {
-        "description": "Tasks, optionally of one project and one status, and how many match (`total`).\n`order=created` (default) is creation order; `order=today` is the Today order\n(priority, then due date, then created time; P0-23).",
+        "description": "Tasks, optionally of one project, status, label or parent, and how many match\n(`total`). `order=created` (default) is creation order; `order=today` is the Today\norder (priority, then due date, then created time; P0-23). The `list_tasks` tool's\ntwin (P2-01).",
         "operationId": "tasks_list_tasks",
         "parameters": [
           {
@@ -13213,6 +14402,39 @@
           },
           {
             "in": "query",
+            "name": "label",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Label"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Label"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Id"
+            }
+          },
+          {
+            "in": "query",
             "name": "order",
             "required": false,
             "schema": {
@@ -13223,6 +14445,22 @@
               ],
               "title": "Order",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "schema_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schema Version"
             }
           },
           {
@@ -13353,6 +14591,7 @@
         ]
       },
       "post": {
+        "description": "A task or subtask; the `create_task` tool's twin (P2-01).",
         "operationId": "tasks_create_task",
         "requestBody": {
           "content": {
@@ -13369,7 +14608,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskOut"
+                  "$ref": "#/components/schemas/TaskWithLayoutOut"
                 }
               }
             },
@@ -14206,6 +15445,130 @@
         ]
       }
     },
+    "/v1/tasks/{task_id}/estimate": {
+      "post": {
+        "description": "Re-estimates a Human or Hybrid task with a reason (422 `estimate_not_applicable`\notherwise); the `update_estimate` tool's twin (P2-01).",
+        "operationId": "tasks_update_estimate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EstimateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskWithLayoutOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Update Estimate",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/v1/tasks/{task_id}/move": {
       "post": {
         "description": "One board drag: column, rank and version in one request (R-20).",
@@ -14924,7 +16287,7 @@
     },
     "/v1/tasks/{task_id}/status": {
       "post": {
-        "description": "Moves the task through the state machine (FR-3.2).",
+        "description": "Moves the task through the state machine (FR-3.2); the `update_task_status` tool's\ntwin (P2-01).",
         "operationId": "tasks_change_status",
         "parameters": [
           {
@@ -14942,7 +16305,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/StatusIn"
+                "$ref": "#/components/schemas/StatusBody"
               }
             }
           },
@@ -14953,7 +16316,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskOut"
+                  "$ref": "#/components/schemas/TaskWithLayoutOut"
                 }
               }
             },

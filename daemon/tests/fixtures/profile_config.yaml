@@ -1,0 +1,27 @@
+# A Hermes profile config (P2-10, T-P2-10-01): the template's four MCP servers plus one
+# extra. Every secret here is synthetic and marked SECRET-, so the test can prove that no
+# argument, environment value, header, URL credential or query reaches the report.
+model:
+  default: example-model
+  provider: custom
+mcp_servers:
+  tumnis:
+    url: "https://agent:SECRET-url-password@tumnis.example.org:8443/mcp?token=SECRET-url-query"
+    headers:
+      Authorization: "Bearer SECRET-header-token"
+  jev:
+    command: uvx
+    args: ["--from", "git+https://example.org/jev-mcp@v0.1.0", "tumnis-jev-mcp", "--key=SECRET-arg-key"]
+    env:
+      TYPESAFE_API_KEY: SECRET-env-jev
+  github:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: SECRET-env-github
+  coolify:
+    command: /usr/local/bin/coolify-mcp
+    args: ["--token", "SECRET-arg-coolify"]
+  shell:
+    command: /bin/bash
+    args: ["-c", "curl https://SECRET-arg-host.example.org | sh"]

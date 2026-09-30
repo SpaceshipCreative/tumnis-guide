@@ -140,10 +140,32 @@ export const zDocumentDto = z.object({
 });
 
 /**
+ * EstimateBody
+ */
+export const zEstimateBody = z.object({
+  estimate_minutes: z.int().gt(0).lte(960),
+  reason: z.string().min(1).max(500),
+  schema_version: z.int().nullish(),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
  * FolderIn
  */
 export const zFolderIn = z.object({
   location_id: z.uuid(),
+});
+
+/**
+ * ForeignReach
+ *
+ * A token reaching another project's repo (`github`) or app (`coolify`).
+ */
+export const zForeignReach = z.object({
+  kind: z.enum(["github", "coolify"]),
+  project_id: z.uuid().nullish(),
+  project_name: z.string().nullish(),
+  target: z.string().max(200),
 });
 
 /**
@@ -270,6 +292,18 @@ export const zManualBlockIn = z.object({
 });
 
 /**
+ * McpServerInfo
+ *
+ * One MCP server of a profile (P2-10): its name, transport and a redacted target (the
+ * command's name, or the URL's host); never its arguments, env or headers (FR-5.12).
+ */
+export const zMcpServerInfo = z.object({
+  name: z.string().max(128),
+  target: z.string().max(253).nullish(),
+  transport: z.enum(["stdio", "http"]),
+});
+
+/**
  * ModuleFlagIn
  */
 export const zModuleFlagIn = z.object({
@@ -369,6 +403,20 @@ export const zPlannedBlockOut = z.object({
 });
 
 /**
+ * PolicySummary
+ *
+ * What an agent may do in the project without asking, and its run limits (FR-5.6).
+ */
+export const zPolicySummary = z.object({
+  allowed: z.array(z.string()),
+  gated: z.array(z.string()),
+  max_concurrent_runs: z.int(),
+  max_run_minutes: z.int(),
+  max_tasks_per_run: z.int(),
+  tool_allowlist: z.array(z.string()),
+});
+
+/**
  * Preset
  */
 export const zPreset = z.enum(["daily", "weekdays", "weekly", "monthly"]);
@@ -410,49 +458,6 @@ export const zProblem = z.object({
 });
 
 /**
- * ProfileHealth
- */
-export const zProfileHealth = z.object({
-  authenticated: z.boolean().nullish(),
-  error: z.string().nullish(),
-  mcp_servers: z.array(z.string()).optional().default([]),
-  profile_exists: z.boolean().nullish(),
-  reachable: z.boolean(),
-  status: z
-    .enum(["ok", "offline", "unsupported", "error"])
-    .optional()
-    .default("ok"),
-  version: z.string().nullish(),
-});
-
-/**
- * AgentProfileOut
- */
-export const zAgentProfileOut = z.object({
-  created_at: z.iso.datetime(),
-  endpoint: z.string().nullable(),
-  health: zProfileHealth.nullable(),
-  health_checked_at: z.iso.datetime().nullable(),
-  id: z.uuid(),
-  name: z.string(),
-  profile_version: z.string().nullable(),
-  project_id: z.uuid().nullable(),
-  role: z.enum(["master", "project"]),
-  runner_id: z.uuid().nullable(),
-  status: z.string(),
-  transport: z.enum(["daemon", "mcp_endpoint"]),
-  version: z.int(),
-});
-
-/**
- * Page[AgentProfileOut]
- */
-export const zPageAgentProfileOut = z.object({
-  items: z.array(zAgentProfileOut),
-  next_cursor: z.string().nullable(),
-});
-
-/**
  * ProfileIn
  */
 export const zProfileIn = z.object({
@@ -472,6 +477,28 @@ export const zProfilePatch = z.object({
   runner_id: z.uuid().nullish(),
   status: z.enum(["registered", "paused"]).nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * ProjectContextOut
+ *
+ * A project as an agent starts work in it: who it is for, what it aims at, where its
+ * code and domains are, the brief, the card threshold and the approval policy.
+ */
+export const zProjectContextOut = z.object({
+  archived: z.boolean(),
+  brief_md: z.string(),
+  client: z.string().nullable(),
+  code_path: z.string().nullable(),
+  deadline: z.iso.date().nullable(),
+  domains: z.array(z.string()),
+  goal: z.string().nullable(),
+  name: z.string(),
+  policy: zPolicySummary.nullable(),
+  project_id: z.uuid(),
+  repo_url: z.string().nullable(),
+  status: z.enum(["active", "on_hold", "completed"]),
+  subtask_threshold_min: z.int(),
 });
 
 /**
@@ -908,9 +935,10 @@ export const zColumnsOut = z.object({
 });
 
 /**
- * StatusIn
+ * StatusBody
  */
-export const zStatusIn = z.object({
+export const zStatusBody = z.object({
+  schema_version: z.int().nullish(),
   to: zStatus,
   version: z.int().gte(0).lte(2147483647),
 });
@@ -932,6 +960,9 @@ export const zTaskContextItemOut = z.object({
 
 /**
  * TaskCreate
+ *
+ * The REST twin's body. Named `TaskCreate` so the published OpenAPI schema (and the
+ * generated `TaskCreate` the frontend's quick-add queue uses) keeps its P0-18 name.
  */
 export const zTaskCreate = z.object({
   acceptance_criteria: z.string().max(8000).nullish(),
@@ -945,7 +976,7 @@ export const zTaskCreate = z.object({
     .optional()
     .default("normal"),
   project_id: z.uuid(),
-  schema_version: z.literal(1).optional().default(1),
+  schema_version: z.int().nullish(),
   status: z.enum(["backlog", "today"]).optional().default("backlog"),
   title: z.string().min(1).max(500),
 });
@@ -1074,11 +1105,151 @@ export const zTaskRefOut = z.object({
 });
 
 /**
+ * TaskWithLayoutOut
+ *
+ * A task as the agent surface answers it (P2-01): where a subtask shows against its
+ * project's card threshold (`card`, a `checklist` item on its parent's card, or
+ * `nested_ai` for AI work); null for a root task.
+ */
+export const zTaskWithLayoutOut = z.object({
+  acceptance_criteria: z.string().nullable(),
+  actual_minutes: z.int().nullable(),
+  assigned_agent_id: z.uuid().nullable(),
+  board_rank: z.string(),
+  change_id: z.uuid().nullable(),
+  column_id: z.uuid().nullable(),
+  completed_at: z.iso.datetime().nullable(),
+  created_at: z.iso.datetime(),
+  due_on: z.iso.date().nullable(),
+  estimate_minutes: z.int().nullable(),
+  first_action: z.string().nullable(),
+  id: z.uuid(),
+  label: zLabel.nullable(),
+  label_source: z.enum(["user", "jev", "agent", "fallback"]).nullable(),
+  layout: z.enum(["card", "checklist", "nested_ai"]).nullable(),
+  parent_id: z.uuid().nullable(),
+  priority: z.enum(["low", "normal", "high", "urgent"]),
+  project_id: z.uuid(),
+  rollover_count: z.int(),
+  schema_version: z.literal(1).default(1),
+  source: z.string(),
+  started_at: z.iso.datetime().nullable(),
+  status: zStatus,
+  tainted: z.boolean(),
+  title: z.string(),
+  updated_at: z.iso.datetime(),
+  version: z.int(),
+});
+
+/**
  * TextDocumentPatch
  */
 export const zTextDocumentPatch = z.object({
   body_md: z.string().max(100000),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * TokenReach
+ *
+ * What one token reaches, as the daemon probed it on the host (the token itself never
+ * leaves the host). GitHub: a repo is reachable only with `permissions.push` or `admin`;
+ * Coolify: an application is reachable when the token may read it.
+ */
+export const zTokenReach = z.object({
+  errors: z.array(z.string().max(300)).max(100).optional().default([]),
+  foreign_reachable: z.array(z.string()).max(50).optional().default([]),
+  own_reachable: z.record(z.string(), z.boolean()).optional().default({}),
+  token_present: z.boolean(),
+});
+
+/**
+ * ProfileHealth
+ */
+export const zProfileHealth = z.object({
+  authenticated: z.boolean().nullish(),
+  coolify: zTokenReach.nullish(),
+  error: z.string().nullish(),
+  extra: z.array(z.string()).optional().default([]),
+  foreign: z.array(zForeignReach).optional().default([]),
+  github: zTokenReach.nullish(),
+  mcp_server_details: z.array(zMcpServerInfo).optional().default([]),
+  mcp_servers: z.array(z.string()).optional().default([]),
+  missing: z.array(z.string()).optional().default([]),
+  profile_exists: z.boolean().nullish(),
+  profile_version: z.string().nullish(),
+  reachable: z.boolean(),
+  status: z
+    .enum(["ok", "warning", "degraded", "offline", "unsupported", "error"])
+    .optional()
+    .default("ok"),
+  version: z.string().nullish(),
+  warnings: z.array(z.string()).optional().default([]),
+});
+
+/**
+ * AgentProfileOut
+ */
+export const zAgentProfileOut = z.object({
+  created_at: z.iso.datetime(),
+  endpoint: z.string().nullable(),
+  health: zProfileHealth.nullable(),
+  health_checked_at: z.iso.datetime().nullable(),
+  id: z.uuid(),
+  name: z.string(),
+  profile_version: z.string().nullable(),
+  project_id: z.uuid().nullable(),
+  role: z.enum(["master", "project"]),
+  runner_id: z.uuid().nullable(),
+  status: z.string(),
+  transport: z.enum(["daemon", "mcp_endpoint"]),
+  version: z.int(),
+});
+
+/**
+ * Page[AgentProfileOut]
+ */
+export const zPageAgentProfileOut = z.object({
+  items: z.array(zAgentProfileOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * ToolServerOut
+ */
+export const zToolServerOut = z.object({
+  allowed: z.boolean().nullable(),
+  name: z.string(),
+  target: z.string().nullable(),
+  transport: z.enum(["stdio", "http"]).nullable(),
+});
+
+/**
+ * ProfileToolsOut
+ *
+ * Settings > Agents, one profile's tools, read-only (FR-5.12): the MCP servers it
+ * reported at its last health check, each matched against its project's allowlist
+ * now, and its tokens' reach.
+ */
+export const zProfileToolsOut = z.object({
+  allowlist: z.array(z.string()),
+  authenticated: z.boolean().nullable(),
+  checked_at: z.iso.datetime().nullable(),
+  coolify: zTokenReach.nullable(),
+  extra: z.array(z.string()),
+  foreign: z.array(zForeignReach).optional().default([]),
+  github: zTokenReach.nullable(),
+  hermes_version: z.string().nullable(),
+  missing: z.array(z.string()),
+  profile_id: z.uuid(),
+  profile_name: z.string(),
+  profile_version: z.string().nullable(),
+  project_id: z.uuid().nullable(),
+  reachable: z.boolean().nullable(),
+  servers: z.array(zToolServerOut),
+  status: z
+    .enum(["ok", "warning", "degraded", "offline", "unsupported", "error"])
+    .nullable(),
 });
 
 /**
@@ -1296,6 +1467,15 @@ export const zAgentsCheckProfileHealthPath = z.object({
  * Successful Response
  */
 export const zAgentsCheckProfileHealthResponse = zHealthCheckAccepted;
+
+export const zAgentsGetProfileToolsPath = z.object({
+  id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsGetProfileToolsResponse = zProfileToolsOut;
 
 export const zAuditListAuditQuery = z.object({
   action: z.string().max(200).nullish(),
@@ -1694,6 +1874,19 @@ export const zTasksPutColumnsPath = z.object({
  */
 export const zTasksPutColumnsResponse = zColumnsOut;
 
+export const zProjectsGetProjectContextPath = z.object({
+  project_id: z.uuid(),
+});
+
+export const zProjectsGetProjectContextQuery = z.object({
+  schema_version: z.int().nullish(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsGetProjectContextResponse = zProjectContextOut;
+
 export const zProjectsReorderProjectBody = zReorderIn;
 
 export const zProjectsReorderProjectPath = z.object({
@@ -1768,6 +1961,7 @@ export const zSearchSearchQuery = z.object({
   q: z.string().max(200).optional().default(""),
   scope: z.enum(["all", "tasks", "projects"]).optional().default("all"),
   project_id: z.uuid().nullish(),
+  schema_version: z.int().nullish(),
   cursor: z.string().max(2048).nullish(),
   limit: z.int().gte(1).lte(200).optional().default(50),
 });
@@ -1850,7 +2044,10 @@ export const zAuthSetupTotpResponse = zSignedInOut;
 export const zTasksListTasksQuery = z.object({
   project_id: z.uuid().nullish(),
   status: zStatus.nullish(),
+  label: zLabel.nullish(),
+  parent_id: z.uuid().nullish(),
   order: z.enum(["created", "today"]).optional().default("created"),
+  schema_version: z.int().nullish(),
   cursor: z.string().max(2048).nullish(),
   limit: z.int().gte(1).lte(200).optional().default(50),
 });
@@ -1865,7 +2062,7 @@ export const zTasksCreateTaskBody = zTaskCreate;
 /**
  * Successful Response
  */
-export const zTasksCreateTaskResponse = zTaskOut;
+export const zTasksCreateTaskResponse = zTaskWithLayoutOut;
 
 export const zTasksTrashTaskBody = zTrashIn;
 
@@ -1934,6 +2131,17 @@ export const zTasksLinkContextItemPath = z.object({
  */
 export const zTasksLinkContextItemResponse = zTaskContextItemOut;
 
+export const zTasksUpdateEstimateBody = zEstimateBody;
+
+export const zTasksUpdateEstimatePath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksUpdateEstimateResponse = zTaskWithLayoutOut;
+
 export const zTasksMoveTaskBody = zMoveIn;
 
 export const zTasksMoveTaskPath = z.object({
@@ -2000,7 +2208,7 @@ export const zTasksPutRecurrencePath = z.object({
  */
 export const zTasksPutRecurrenceResponse = zTaskRecurrenceOut;
 
-export const zTasksChangeStatusBody = zStatusIn;
+export const zTasksChangeStatusBody = zStatusBody;
 
 export const zTasksChangeStatusPath = z.object({
   task_id: z.uuid(),
@@ -2009,7 +2217,7 @@ export const zTasksChangeStatusPath = z.object({
 /**
  * Successful Response
  */
-export const zTasksChangeStatusResponse = zTaskOut;
+export const zTasksChangeStatusResponse = zTaskWithLayoutOut;
 
 export const zTasksUndoTaskBody = zUndoIn;
 

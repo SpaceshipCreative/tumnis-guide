@@ -33,6 +33,7 @@ from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+import structlog
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from sqlalchemy import (
     RowMapping,
@@ -136,6 +137,7 @@ _columns: Table = BoardColumn.__table__  # type: ignore[assignment]
 _comments: Table = TaskComment.__table__  # type: ignore[assignment]
 _links: Table = TaskContextItem.__table__  # type: ignore[assignment]
 _changes: Table = TaskChange.__table__  # type: ignore[assignment]
+_log = structlog.get_logger(__name__)
 
 LIVE_ENTITY: Final = "task"
 PROJECT_ENTITY: Final = "project"  # column edits refresh the project's views
@@ -230,6 +232,17 @@ class TaskPage(Page[TaskOut]):
     panel shows five and says "+N more"."""
 
     total: int
+
+
+Layout = Literal["card", "checklist", "nested_ai"]
+
+
+class TaskWithLayoutOut(TaskOut):
+    """A task as the agent surface answers it (P2-01): where a subtask shows against its
+    project's card threshold (`card`, a `checklist` item on its parent's card, or
+    `nested_ai` for AI work); null for a root task."""
+
+    layout: Layout | None = None
 
 
 class TaskPatch(BaseModel):
@@ -435,8 +448,11 @@ async def list_tasks(
     cursor: str | None = None,
     limit: int = 50,
     project_ids: frozenset[UUID] | None = None,
+    label: Label | None = None,
+    parent_id: UUID | None = None,
 ) -> TaskPage:
     """Live tasks, optionally of one project or one status, with the filter's `total`.
+    `label` and `parent_id` narrow further (the `list_tasks` tool, P2-01).
     `order="created"` is creation order; `order="today"` is `rules.today_order` (priority,
     then due date with undated last, then oldest, then id) as keyset keys, so the pages
     walk the same order. `project_ids` limits them (a project-limited key, R-28)."""
@@ -445,6 +461,10 @@ async def list_tasks(
         stmt = stmt.where(_tasks.c.project_id == project_id)
     if status is not None:
         stmt = stmt.where(_tasks.c.status == status)
+    if label is not None:
+        stmt = stmt.where(_tasks.c.label == label)
+    if parent_id is not None:
+        stmt = stmt.where(_tasks.c.parent_id == parent_id)
     if project_ids is not None:
         stmt = stmt.where(_tasks.c.project_id.in_(project_ids))
     total = await s.scalar(select(func.count()).select_from(stmt.subquery()))
@@ -755,12 +775,14 @@ async def create_task(
     now: datetime | None = None,
     source: str | None = None,
     label_source: LabelSource | None = None,
+    tainted: bool = False,
 ) -> TaskOut:
     """A task in Backlog or Today, last in its column; emits `task.created`. 404 for a
     project (or parent) the caller cannot see; 422 `estimate_required` (an agent's Human or
     Hybrid task without an estimate), `parent_project_mismatch`, `parent_not_root`. An AI
     task's estimate is dropped. `label_source` defaults from the actor (user, agent,
-    fallback); `source` says where the task came from (default: user, agent or system)."""
+    fallback); `source` says where the task came from (default: user, agent or system).
+    `tainted` marks what a key with no run creates (R-31, P2-01)."""
     await _require_project(s, data.project_id)
     if data.parent_id is not None:
         await _check_parent(s, data.parent_id, data.project_id)
@@ -768,6 +790,8 @@ async def create_task(
     values = data.model_dump(exclude={"schema_version"})
     values["estimate_minutes"] = _estimate(data.label, data.estimate_minutes, kind)
     values["label_source"] = None if data.label is None else (label_source or _LABEL_SOURCE[kind])
+    if tainted:
+        values["tainted"] = True
     return await _insert(s, actor, values, now=now, source=source or _SOURCE[kind])
 
 
@@ -1051,6 +1075,59 @@ async def change_status(
     outbox row, in the caller's transaction."""
     row = await _row(s, task_id, lock=True)
     return await _transition(s, actor, row, Status(to), version, now=now)
+
+
+async def subtask_layout(s: AsyncSession, task: TaskOut) -> Layout | None:
+    """Where the subtask shows (FR-3.4, FR-3.8): `rules.subtask_placement` against the
+    project's effective threshold; AI work always nests. None for a root task."""
+    if task.parent_id is None:
+        return None
+    label = _label(task.label)
+    if label is Label.AI:
+        return "nested_ai"
+    threshold = await projects.effective_subtask_threshold(s, task.project_id)
+    placement = rules.subtask_placement(label, task.estimate_minutes, threshold)
+    return "card" if placement is rules.Placement.CARD else "checklist"
+
+
+async def with_layout(s: AsyncSession, task: TaskOut) -> TaskWithLayoutOut:
+    return TaskWithLayoutOut(**task.model_dump(), layout=await subtask_layout(s, task))
+
+
+async def update_estimate(  # noqa: PLR0917  # the tool's input, plus who and when
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    estimate_minutes: int,
+    reason: str,
+    version: int,
+    *,
+    now: datetime | None = None,
+) -> TaskOut:
+    """Re-estimates a Human or Hybrid task at `version` (the `update_estimate` tool,
+    P2-01): 422 `estimate_not_applicable` for AI work or a pending label, which carry no
+    estimate of human time. The reason is logged beside the change, once it is made."""
+    row = await _row(s, task_id)  # 404 before any body rule (A0.3, #28)
+    label = _label(row["label"])
+    if label not in (Label.HUMAN, Label.HYBRID):
+        raise ProblemError(
+            422,
+            "estimate_not_applicable",
+            "Only Human and Hybrid tasks carry an estimate of human time",
+        )
+    patch = TaskPatch(estimate_minutes=estimate_minutes, version=version)
+    updated = await update_task(s, actor, task_id, patch, version, now=now)
+    _log.info(
+        "tasks.estimate_updated",
+        task_id=str(task_id),
+        before=row["estimate_minutes"],
+        after=updated.estimate_minutes,
+        reason=reason,
+        actor=str(actor),
+        version=updated.version,
+        change_id=str(updated.change_id) if updated.change_id else None,
+    )
+    return updated
 
 
 async def move_task(  # noqa: PLR0917  # R-20's body, plus who and when

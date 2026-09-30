@@ -9,12 +9,13 @@ current task, a refused transition 409 `transition_not_allowed`. The review badg
 kind registry are for the signed-in app only.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, Query, Request, Response
 from pydantic import BaseModel, Field, StringConstraints
 
+from tumnis.core import agent_surface as surface
 from tumnis.core.clock import Clock
 from tumnis.core.idempotency import SessionDep
 from tumnis.core.pagination import Page, PageParams, page_params
@@ -22,6 +23,7 @@ from tumnis.core.principal import principal_of
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.versioning import Version
 from tumnis.modules.tasks import api
+from tumnis.modules.tasks import mcp as tools
 
 router = v1_router("tasks", tags=["tasks"])
 
@@ -53,11 +55,6 @@ LIST_OF_TASK = RoutePolicy(
 )
 # Undo is for people (R-09): a key or token gets 403 `session_required`.
 UNDO = RoutePolicy(auth="session", idempotent=True)
-
-
-class StatusIn(BaseModel):
-    to: api.Status
-    version: Version
 
 
 class MoveIn(BaseModel):
@@ -112,6 +109,14 @@ class ReviewKindsOut(BaseModel):
     items: list[ReviewKindOut]
 
 
+async def _written(
+    request: Request, session: SessionDep, op: surface.SurfaceOp, raw: dict[str, Any]
+) -> api.TaskWithLayoutOut:
+    written = await surface.rest_twin(request, session, op, raw)
+    assert isinstance(written, api.TaskWithLayoutOut)  # noqa: S101  # the op's output model
+    return written
+
+
 def _clock(request: Request) -> Clock:
     clock: Clock = request.app.state.clock
     return clock
@@ -122,35 +127,44 @@ def _clock(request: Request) -> Clock:
 
 @router.get("/tasks")
 @route_policy(LIST)
-async def list_tasks(
+async def list_tasks(  # the list_tasks tool's input as query parameters
     request: Request,
     session: SessionDep,
     *,
     page: Annotated[PageParams, Depends(page_params)],
     project_id: Annotated[UUID | None, Query()] = None,
     status: Annotated[api.Status | None, Query()] = None,
+    label: Annotated[api.Label | None, Query()] = None,
+    parent_id: Annotated[UUID | None, Query()] = None,
     order: Annotated[api.TaskOrder, Query()] = "created",
+    schema_version: Annotated[int | None, Query()] = None,
 ) -> api.TaskPage:
-    """Tasks, optionally of one project and one status, and how many match (`total`).
-    `order=created` (default) is creation order; `order=today` is the Today order
-    (priority, then due date, then created time; P0-23)."""
-    return await api.list_tasks(
-        session,
-        project_id=project_id,
-        status=status,
-        order=order,
-        cursor=page.cursor,
-        limit=page.limit,
-        project_ids=principal_of(request).project_ids,
-    )
+    """Tasks, optionally of one project, status, label or parent, and how many match
+    (`total`). `order=created` (default) is creation order; `order=today` is the Today
+    order (priority, then due date, then created time; P0-23). The `list_tasks` tool's
+    twin (P2-01)."""
+    raw = {
+        "cursor": page.cursor,
+        "limit": page.limit,
+        "project_id": project_id,
+        "status": status,
+        "label": label,
+        "parent_id": parent_id,
+        "order": order,
+        "schema_version": schema_version,
+    }
+    found = await surface.rest_twin(request, session, tools.LIST_TASKS, raw)
+    assert isinstance(found, api.TaskPage)  # noqa: S101  # the op's output model
+    return found
 
 
 @router.post("/tasks", status_code=201)
 @route_policy(CREATE)
-async def create_task(body: api.TaskCreate, request: Request, session: SessionDep) -> api.TaskOut:
-    return await api.create_task(
-        session, principal_of(request).actor, body, now=_clock(request).now()
-    )
+async def create_task(
+    body: tools.TaskCreate, request: Request, session: SessionDep
+) -> api.TaskWithLayoutOut:
+    """A task or subtask; the `create_task` tool's twin (P2-01)."""
+    return await _written(request, session, tools.CREATE_TASK, body.model_dump())
 
 
 @router.get("/tasks/{task_id}")
@@ -172,17 +186,23 @@ async def update_task(
 @router.post("/tasks/{task_id}/status")
 @route_policy(WRITE_TASK)
 async def change_status(
-    task_id: UUID, body: StatusIn, request: Request, session: SessionDep
-) -> api.TaskOut:
-    """Moves the task through the state machine (FR-3.2)."""
-    return await api.change_status(
-        session,
-        principal_of(request).actor,
-        task_id,
-        body.to,
-        body.version,
-        now=_clock(request).now(),
-    )
+    task_id: UUID, body: tools.StatusBody, request: Request, session: SessionDep
+) -> api.TaskWithLayoutOut:
+    """Moves the task through the state machine (FR-3.2); the `update_task_status` tool's
+    twin (P2-01)."""
+    raw = {**body.model_dump(), "task_id": task_id}
+    return await _written(request, session, tools.UPDATE_TASK_STATUS, raw)
+
+
+@router.post("/tasks/{task_id}/estimate")
+@route_policy(WRITE_TASK)
+async def update_estimate(
+    task_id: UUID, body: tools.EstimateBody, request: Request, session: SessionDep
+) -> api.TaskWithLayoutOut:
+    """Re-estimates a Human or Hybrid task with a reason (422 `estimate_not_applicable`
+    otherwise); the `update_estimate` tool's twin (P2-01)."""
+    raw = {**body.model_dump(), "task_id": task_id}
+    return await _written(request, session, tools.UPDATE_ESTIMATE, raw)
 
 
 @router.post("/tasks/{task_id}/move")

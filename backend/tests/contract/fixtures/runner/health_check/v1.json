@@ -5,5 +5,18 @@
   "sent_at": "2026-03-09T12:00:00Z",
   "type": "health_check",
   "request_id": "01950000-0000-7000-8000-000000000401",
-  "profile": "acme-site"
+  "profile": "acme-site",
+  "own_repos": [
+    "acme/site"
+  ],
+  "foreign_repos": [
+    "beta/app"
+  ],
+  "own_apps": [
+    "app-acme"
+  ],
+  "foreign_apps": [
+    "app-beta"
+  ],
+  "coolify_base_url": "https://coolify.example.org"
 }

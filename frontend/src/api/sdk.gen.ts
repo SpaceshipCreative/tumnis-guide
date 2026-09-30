@@ -15,6 +15,9 @@ import type {
   AgentsCreateRunnerData,
   AgentsCreateRunnerErrors,
   AgentsCreateRunnerResponses,
+  AgentsGetProfileToolsData,
+  AgentsGetProfileToolsErrors,
+  AgentsGetProfileToolsResponses,
   AgentsListProfilesData,
   AgentsListProfilesErrors,
   AgentsListProfilesResponses,
@@ -151,6 +154,9 @@ import type {
   ProjectsCreateProjectData,
   ProjectsCreateProjectErrors,
   ProjectsCreateProjectResponses,
+  ProjectsGetProjectContextData,
+  ProjectsGetProjectContextErrors,
+  ProjectsGetProjectContextResponses,
   ProjectsGetProjectData,
   ProjectsGetProjectErrors,
   ProjectsGetProjectResponses,
@@ -262,6 +268,9 @@ import type {
   TasksUndoTaskData,
   TasksUndoTaskErrors,
   TasksUndoTaskResponses,
+  TasksUpdateEstimateData,
+  TasksUpdateEstimateErrors,
+  TasksUpdateEstimateResponses,
   TasksUpdateTaskData,
   TasksUpdateTaskErrors,
   TasksUpdateTaskResponses,
@@ -272,6 +281,7 @@ import type {
 import {
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
+  zAgentsGetProfileToolsResponse,
   zAgentsListProfilesResponse,
   zAgentsListRunnersResponse,
   zAgentsRegisterProfileResponse,
@@ -315,6 +325,7 @@ import {
   zPlanningSchedulePlanItemResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
+  zProjectsGetProjectContextResponse,
   zProjectsGetProjectResponse,
   zProjectsListProjectsResponse,
   zProjectsReorderProjectResponse,
@@ -352,6 +363,7 @@ import {
   zTasksPutRecurrenceResponse,
   zTasksTrashTaskResponse,
   zTasksUndoTaskResponse,
+  zTasksUpdateEstimateResponse,
   zTasksUpdateTaskResponse,
   zUsageGetUsageResponse,
 } from "./zod.gen";
@@ -499,6 +511,30 @@ export const agentsCheckProfileHealth = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zAgentsCheckProfileHealthResponse.parseAsync(data),
     url: "/v1/agents/profiles/{id}/health-check",
+    ...options,
+  });
+
+/**
+ * Get Profile Tools
+ *
+ * The profile's MCP servers from its last health check, read-only (FR-5.12): each
+ * matched against its project's allowlist, and its GitHub and Coolify tokens' reach.
+ */
+export const agentsGetProfileTools = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsGetProfileToolsData, ThrowOnError>,
+): RequestResult<
+  AgentsGetProfileToolsResponses,
+  AgentsGetProfileToolsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    AgentsGetProfileToolsResponses,
+    AgentsGetProfileToolsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsGetProfileToolsResponse.parseAsync(data),
+    url: "/v1/agents/profiles/{id}/tools",
     ...options,
   });
 
@@ -1468,6 +1504,30 @@ export const tasksPutColumns = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Project Context
+ *
+ * The project as an agent starts work in it (brief, code location, policy); the
+ * `get_project_context` tool's twin (P2-01).
+ */
+export const projectsGetProjectContext = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsGetProjectContextData, ThrowOnError>,
+): RequestResult<
+  ProjectsGetProjectContextResponses,
+  ProjectsGetProjectContextErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ProjectsGetProjectContextResponses,
+    ProjectsGetProjectContextErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsGetProjectContextResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/context",
+    ...options,
+  });
+
+/**
  * Reorder Project
  *
  * Moves the project between two neighbours (either may be null: an open end).
@@ -1666,6 +1726,7 @@ export const agentsRotateRunnerToken = <ThrowOnError extends boolean = false>(
  * Search
  *
  * Tasks and projects matching `q`, best first: text match, recency, project match.
+ * The `search` tool's twin (P2-01).
  */
 export const searchSearch = <ThrowOnError extends boolean = false>(
   options?: Options<SearchSearchData, ThrowOnError>,
@@ -1928,9 +1989,10 @@ export const authSetupTotp = <ThrowOnError extends boolean = false>(
 /**
  * List Tasks
  *
- * Tasks, optionally of one project and one status, and how many match (`total`).
- * `order=created` (default) is creation order; `order=today` is the Today order
- * (priority, then due date, then created time; P0-23).
+ * Tasks, optionally of one project, status, label or parent, and how many match
+ * (`total`). `order=created` (default) is creation order; `order=today` is the Today
+ * order (priority, then due date, then created time; P0-23). The `list_tasks` tool's
+ * twin (P2-01).
  */
 export const tasksListTasks = <ThrowOnError extends boolean = false>(
   options?: Options<TasksListTasksData, ThrowOnError>,
@@ -1948,6 +2010,8 @@ export const tasksListTasks = <ThrowOnError extends boolean = false>(
 
 /**
  * Create Task
+ *
+ * A task or subtask; the `create_task` tool's twin (P2-01).
  */
 export const tasksCreateTask = <ThrowOnError extends boolean = false>(
   options: Options<TasksCreateTaskData, ThrowOnError>,
@@ -2113,6 +2177,34 @@ export const tasksLinkContextItem = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Update Estimate
+ *
+ * Re-estimates a Human or Hybrid task with a reason (422 `estimate_not_applicable`
+ * otherwise); the `update_estimate` tool's twin (P2-01).
+ */
+export const tasksUpdateEstimate = <ThrowOnError extends boolean = false>(
+  options: Options<TasksUpdateEstimateData, ThrowOnError>,
+): RequestResult<
+  TasksUpdateEstimateResponses,
+  TasksUpdateEstimateErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TasksUpdateEstimateResponses,
+    TasksUpdateEstimateErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksUpdateEstimateResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/estimate",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Move Task
  *
  * One board drag: column, rank and version in one request (R-20).
@@ -2264,7 +2356,8 @@ export const tasksPutRecurrence = <ThrowOnError extends boolean = false>(
 /**
  * Change Status
  *
- * Moves the task through the state machine (FR-3.2).
+ * Moves the task through the state machine (FR-3.2); the `update_task_status` tool's
+ * twin (P2-01).
  */
 export const tasksChangeStatus = <ThrowOnError extends boolean = false>(
   options: Options<TasksChangeStatusData, ThrowOnError>,
