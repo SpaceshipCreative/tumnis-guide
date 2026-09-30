@@ -12,6 +12,7 @@ import { mondayOf } from "../../lib/time";
 import type { ProjectView } from "../../lib/views";
 import { uiStore } from "../../stores/uiStore";
 import { BoardView } from "../board/BoardView";
+import { Card } from "../common/Card";
 import { CalendarView } from "./CalendarView";
 import { pendingRow, usePendingTasks } from "../quickadd/queue";
 import { projectProfileQuery, workspaceQuery } from "../settings/queries";
@@ -41,11 +42,8 @@ export interface ProjectPageProps {
 function PendingList({ rows }: { rows: readonly TaskLite[] }) {
   if (rows.length === 0) return null;
   return (
-    <section aria-label="Waiting to sync" className="mt-4 flex flex-col gap-2">
-      <h2 className="text-sm font-semibold tracking-wide text-muted uppercase">
-        Waiting to sync
-      </h2>
-      <ul className="flex flex-col gap-2">
+    <Card title="Waiting to sync" className="mt-4" bodyClassName="px-4 py-1">
+      <ul className="flex flex-col divide-y divide-border">
         {rows.map((row) => (
           <TaskRow
             key={row.id}
@@ -55,7 +53,7 @@ function PendingList({ rows }: { rows: readonly TaskLite[] }) {
           />
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }
 

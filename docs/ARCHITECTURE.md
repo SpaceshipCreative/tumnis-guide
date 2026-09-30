@@ -583,7 +583,7 @@ This is the one place that names libraries; the PRD states requirements and poin
 | Editor | Tiptap (MIT core) with its Markdown extension | Brief, notes, descriptions, draft review | Scott | 0008 |
 | Drag and drop | dnd-kit with fractional ordering keys | Kanban on mouse, touch, keyboard | Proposed |  |
 | PWA | vite-plugin-pwa (Workbox), Web Push with VAPID | Offline shell, push | Proposed |  |
-| Components and styling | Not decided | Buttons, dialogs, layout | Open question |  |
+| Components and styling | Tailwind CSS v4 on our own tokens (Mosaic-style look), self-hosted Inter, hand-written menus and drawer (Radix primitives when needed), Chart.js through a lazy import | Buttons, dialogs, layout, charts | Scott | 0012 |
 | Desktop (v1.1) | Tauri | Thin client | PRD |  |
 
 **Tooling and operations**

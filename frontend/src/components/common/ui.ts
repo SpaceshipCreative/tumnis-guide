@@ -46,9 +46,14 @@ const BADGE_TONE: Record<BadgeTone, string> = {
   info: "bg-info-soft text-info",
 };
 
-/** A small rounded status label; every tone keeps 4.5:1 contrast in both themes. */
-export function badge(tone: BadgeTone): string {
-  return `inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${BADGE_TONE[tone]}`;
+/** A small rounded status label; every tone keeps 4.5:1 contrast in both themes. A
+ * short label stays on one line; `wrap` lets a longer one (a status with a time) wrap
+ * within its container instead of overflowing a narrow card. */
+export function badge(tone: BadgeTone, { wrap = false } = {}): string {
+  const fit = wrap
+    ? "max-w-full rounded-xl"
+    : "shrink-0 rounded-full whitespace-nowrap";
+  return `inline-flex items-center px-2.5 py-0.5 text-xs font-medium ${fit} ${BADGE_TONE[tone]}`;
 }
 
 /** Tables: a muted header row, rows divided by the border colour. `relative` makes the

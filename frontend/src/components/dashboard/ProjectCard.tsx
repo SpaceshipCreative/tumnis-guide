@@ -4,6 +4,7 @@
 import { Link } from "@tanstack/react-router";
 import { useId } from "react";
 
+import { CARD } from "../common/ui";
 import { type AppDeployStatus, DeployStatus } from "../project/DeployStatus";
 import { formatDay, formatInstant } from "./format";
 import { HealthBadge } from "./HealthBadge";
@@ -25,7 +26,7 @@ export function ProjectCard({
     <article
       aria-labelledby={nameId}
       data-project-id={project.id}
-      className="flex h-full flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2"
+      className={`${CARD} h-full gap-1 px-3 py-2 transition-colors hover:border-border-strong`}
     >
       <h3 id={nameId} className="min-w-0 text-sm font-semibold">
         <Link

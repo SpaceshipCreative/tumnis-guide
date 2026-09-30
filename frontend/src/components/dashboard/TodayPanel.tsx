@@ -1,8 +1,9 @@
 // The Today panel (P0-23, FR-1.2): at most five tasks in the server's today order, then
-// "+N more" to the full list on /tasks.
+// "+N more" to the full list on /tasks. A card (DS-01): the "+N more" link sits in its
+// header row, and on a laptop the list scrolls inside the card, never the page.
 import { Link } from "@tanstack/react-router";
-import { useId } from "react";
 
+import { Card } from "../common/Card";
 import { TodayItem } from "./TodayItem";
 import type { TodayTask } from "./types";
 
@@ -25,23 +26,31 @@ export function TodayPanel({
   pending?: boolean;
   className?: string;
 }) {
-  const headingId = useId();
   const shown = items.slice(0, TODAY_LIMIT);
   const more = Math.max(0, total - shown.length);
   return (
-    <section
-      aria-labelledby={headingId}
-      className={`flex min-h-0 flex-col gap-2 ${className}`}
+    <Card
+      title="Today"
+      className={`min-h-0 ${className}`}
+      bodyClassName="flex min-h-0 min-w-0 flex-1 flex-col px-4 py-2 md:overflow-y-auto"
+      action={
+        more > 0 && (
+          <Link
+            to="/tasks"
+            search={{ status: "today" }}
+            className="shrink-0 text-sm font-medium text-accent hover:underline"
+          >
+            +{more} more
+          </Link>
+        )
+      }
     >
-      <h2 id={headingId} className="text-lg font-semibold">
-        Today
-      </h2>
       {pending ? null : unavailable ? (
         <p className="text-sm text-muted">Today's tasks could not be loaded.</p>
       ) : shown.length === 0 ? (
         <p className="text-sm text-muted">Nothing planned for today.</p>
       ) : (
-        <ol className="flex flex-col gap-2">
+        <ol className="flex flex-col divide-y divide-border">
           {shown.map((task) => (
             <TodayItem
               key={task.id}
@@ -51,15 +60,6 @@ export function TodayPanel({
           ))}
         </ol>
       )}
-      {more > 0 && (
-        <Link
-          to="/tasks"
-          search={{ status: "today" }}
-          className="self-start text-sm font-medium text-accent hover:underline"
-        >
-          +{more} more
-        </Link>
-      )}
-    </section>
+    </Card>
   );
 }
