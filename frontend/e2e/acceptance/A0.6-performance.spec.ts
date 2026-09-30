@@ -12,7 +12,6 @@ test(
     tag: ["@A0.6", "@PERF-2", "@NFR-Performance", "@NFR-Responsive", "@P0-05"],
   },
   async ({ seededApp, signedInPage: page, context }, testInfo) => {
-    test.fail();
     await seededApp.reset("load"); // 10 projects, 2,000 tasks
 
     if (testInfo.project.name === "laptop") {

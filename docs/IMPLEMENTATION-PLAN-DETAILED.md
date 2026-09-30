@@ -817,7 +817,7 @@ Steps and assertions:
 
 1. Laptop project, signed in, on the load set: navigate to `/`, reload, then wait for the `tumnis:dashboard-ready` performance mark (fired by the dashboard once project cards and Today render with data, P0-23). Assert its `startTime` is under 1,000 ms.
 2. Phone project, cold PWA open (service worker installed, fresh page): the `tumnis:quickadd-ready` mark (dialog focused and accepting input) and the `tumnis:review-ready` mark each arrive under 3,000 ms.
-3. k6 (`perf/k6/quickadd.js`): the `quick_add` scenario uses a `constant-arrival-rate` executor (5 requests per second for 60 s (plan default, set in P0-29)) posting `POST /v1/tasks` with a key; its threshold is p95 under `min(500 ms, 1.2 x perf/baseline.json quick_add.p95_ms)`, so a 20% regression fails.
+3. k6 (`perf/k6/quickadd.js`): the `quick_add` scenario uses a `constant-arrival-rate` executor (5 requests per second for 60 s (plan default, set in P0-29)) posting `POST /v1/tasks` with a key; its threshold is p95 under `min(500 ms, max(1.2 x, 50 ms over) perf/baseline.json quick_add.p95_ms)`, so a regression more than 20% and at least 50 ms worse fails (Scott decision 27).
 4. `node scripts/ci/check_bundle.mjs frontend/dist`: sum of gzip sizes of the entry chunk and its static imports under 200 KB.
 
 Turns green: P0-22 (bundle), P0-23 (dashboard ready mark), P0-25 (quick-add path), P0-29 (timing harness, k6 scripts and baseline).
@@ -7557,7 +7557,7 @@ cd backend && uv run pytest tumnis/core/tests/unit/test_backups.py tests/meta/te
 | Unblocks | none (A0.6 is its outer loop) |
 | Traces | PERF-1, PERF-2, NFR Performance, NFR Responsive |
 
-**Goal.** The PRD's latency, cold-open and bundle budgets become failing tests on stable homelab hardware: browser timings on the 2,000-task load fixture, k6 thresholds tied to a committed baseline (fail when more than 20% worse), fixed query counts per endpoint, and Lighthouse CI at phone width.
+**Goal.** The PRD's latency, cold-open and bundle budgets become failing tests on stable homelab hardware: browser timings on the 2,000-task load fixture, k6 thresholds tied to a committed baseline (fail when more than 20% AND at least 50 ms worse; Scott decision 27), fixed query counts per endpoint, and Lighthouse CI at phone width.
 
 **Scope.** In: `perf/k6/*.js`, `perf/baseline.json`, Playwright timing specs, query-count tests, `frontend/lighthouserc.json`, the Performance CI job on the homelab runner. Out: agent and enrichment latency (P1), load beyond one workspace.
 
@@ -7580,7 +7580,8 @@ const baseline = JSON.parse(open('../baseline.json'))       // init context only
 export const NFR_MS = { quick_add: 500, dashboard_projects: 300, dashboard_today: 300, typeahead: 100 }
 // NFR: quick-add 500 ms (PRD); the others are (plan default) API shares of the 1 s first paint
 export function limitMs(name) {
-  return Math.min(NFR_MS[name], Math.round(baseline[name].p95_ms * 1.2))   // PERF-2: 20% regression fails
+  const b = baseline[name].p95_ms   // PERF-2, decision 27: fail when more than 20% AND at least 50 ms worse
+  return Math.min(NFR_MS[name], Math.max(Math.round(b * 1.2), Math.round(b + 50)))
 }
 export const headers = () => ({ Authorization: `Bearer ${__ENV.TUMNIS_KEY}`, 'Content-Type': 'application/json' })
 
@@ -7670,15 +7671,15 @@ test('dashboard first paint under 1 s on LAN', { tag: ['@P0-29', '@NFR-Performan
 | T-P0-29-01 | `frontend/e2e/perf/timing.spec.ts` `dashboard first paint under 1 s on LAN` | e2e (perf) | Ready mark under 1,000 ms on the load fixture | NFR Performance, PERF-2 |
 | T-P0-29-02 | same file `quick-add usable within 3 s of a cold PWA open at phone width` | e2e (perf) | Dialog focused and typing accepted | NFR Responsive |
 | T-P0-29-03 | same file `review queue usable within 3 s of a cold PWA open at phone width` | e2e (perf) | Review route ready mark | NFR Responsive |
-| T-P0-29-04 | `perf/k6/quickadd.js` threshold `quick_add` | perf | p95 under min(500 ms, 1.2 x baseline) | NFR Performance, PERF-2 |
-| T-P0-29-05 | `perf/k6/dashboard.js` thresholds `dashboard_projects`, `dashboard_today`, `typeahead` | perf | 20% regression rule | PERF-2 |
+| T-P0-29-04 | `perf/k6/quickadd.js` threshold `quick_add` | perf | p95 under min(500 ms, max(1.2 x baseline, baseline + 50 ms)) | NFR Performance, PERF-2 |
+| T-P0-29-05 | `perf/k6/dashboard.js` thresholds `dashboard_projects`, `dashboard_today`, `typeahead` | perf | regression rule: more than 20% and at least 50 ms worse fails | PERF-2 |
 | T-P0-29-06 | `perf/thresholds.test.mjs` `a 25% slower summary fails the build` | unit (node:test) | Threshold builder | PERF-2 |
 | T-P0-29-07 | `backend/tests/perf/test_query_counts.py::test_query_count_is_constant` | integration | 5 endpoints, seed vs load | PERF-1 |
 | T-P0-29-08 | Lighthouse CI `lhci autorun` in the Performance job | perf | CWV budget at 375 px | PERF-2 |
 | T-P0-29-09 | Performance job step `node scripts/ci/check_bundle.mjs frontend/dist` | perf | Initial JS under 200 KB | PERF-2 |
 
 - **T-P0-29-02.** Phone project. First visit installs the service worker; close the page. Open a new page in the same context with network emulation (CDP `Network.emulateNetworkConditions`, 50 ms latency (plan default for the VPN), Chromium only). Start the timer at `goto('/')`; press `/` every 100 ms until the quick-add input is focused; type "x" and read it back. Elapsed under 3,000 ms.
-- **T-P0-29-06.** With `baseline.quick_add.p95_ms = 100`, the builder gives `p(95)<120`; a synthetic k6 summary with p95 125 fails the check script, 118 passes; an NFR lower than 1.2 x baseline wins.
+- **T-P0-29-06.** (Scott decision 27) With `baseline.quick_add.p95_ms = 300`, the builder gives `p(95)<360`; a synthetic k6 summary with p95 375 (25% and 75 ms worse) fails the check script, 355 passes. With a 100 ms baseline the limit is 150 ms: 125 ms (25% but 25 ms worse) passes, 150 ms fails. An NFR lower than the regression limit wins.
 - **T-P0-29-07.** Parametrized over `GET /v1/projects`, `GET /v1/tasks?status=today&order=today&limit=5`, `GET /v1/tasks?project_id={p}`, `GET /v1/projects/{p}/board`, `GET /v1/typeahead/projects?q=ac`. Fixtures `seed`, `load_fixture`, `query_counter`. Count at seed size equals count at load size, and each is at most its ceiling in a dict in the test (projects list 3: `set_config`, projects, stats aggregate).
 
 **TDD sequence**
@@ -7692,7 +7693,7 @@ test('dashboard first paint under 1 s on LAN', { tag: ['@P0-29', '@NFR-Performan
 
 **Implementation notes**
 
-- The Performance job runs on the homelab self-hosted runner (A4) so numbers are comparable run to run; GitHub-hosted runners vary too much for a 20% rule.
+- The Performance job runs on the homelab self-hosted runner (A4) so numbers are comparable run to run; GitHub-hosted runners vary too much for a 20% rule (decision 27 adds the 50 ms floor so small latencies don't fail on noise).
 - p95 is the plan's reading of "round trip under 500 ms"; the PRD gives no percentile.
 - The load fixture must match A0.6 exactly: 10 projects and 2,000 tasks with realistic titles.
 - Lighthouse needs a signed-in page: `lhci-login.cjs` signs in with the seed password and TOTP secret through Puppeteer before collection.
