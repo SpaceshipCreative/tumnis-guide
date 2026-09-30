@@ -1,0 +1,13 @@
+id: outside_edit
+proves: An outside edit makes a new version, re-extracted
+backends: [server_path, s3]
+steps:
+  - outside_write: {path: "uploads/rates.csv", content: "role,rate\ndesign,100\n"}
+  - sync
+  - outside_write: {path: "uploads/rates.csv", content: "role,rate\ndesign,120\n"}
+  - sync
+  - expect:
+      documents: {count: 1}
+      document: {path: "uploads/rates.csv", versions: 2, body: "role,rate\ndesign,120\n"}
+      extraction_requested: ["uploads/rates.csv", "uploads/rates.csv"]
+      review_items: []

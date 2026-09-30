@@ -1,0 +1,16 @@
+id: new_outside_file
+proves: A file dropped in uploads/ becomes a tainted Document and is extracted
+backends: [server_path, s3]
+steps:
+  - outside_write: {path: "uploads/Brief.txt", content: "brief from a client"}
+  - sync
+  - expect:
+      documents: {count: 1}
+      document: {path: "uploads/Brief.txt", tainted: true, trust: untrusted, versions: 1}
+      extraction_requested: ["uploads/Brief.txt"]
+      listing: ["uploads/Brief.txt"]
+      review_items: []
+  - sync
+  - expect:
+      documents: {count: 1}
+      extraction_requested: ["uploads/Brief.txt"]
