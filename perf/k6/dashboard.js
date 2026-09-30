@@ -1,6 +1,7 @@
 // The dashboard's reads and the typeahead (P0-29, T-P0-29-05; PERF-2): the project list,
 // Today's first five tasks and the project typeahead, on the load set, 2 rounds a second
-// for 30 s (plan default). Each p95 stays under min(NFR, 1.2 x perf/baseline.json).
+// for 20 s (the Performance job has 5 minutes). Each p95 stays under min(NFR, 1.2 x
+// perf/baseline.json).
 //
 //   k6 run -e BASE_URL=http://localhost:8080 -e TUMNIS_KEY=... \
 //     --summary-export dashboard.json perf/k6/dashboard.js
@@ -17,7 +18,7 @@ export const options = {
       executor: "constant-arrival-rate",
       rate: 2,
       timeUnit: "1s",
-      duration: "30s",
+      duration: "20s",
       preAllocatedVUs: 6,
     },
   },
