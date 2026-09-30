@@ -59,6 +59,9 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("daily_plans", "source"): "manual",  # ck_daily_plans_source
     ("daily_plans", "trigger"): "manual",  # ck_daily_plans_trigger
     ("daily_plans", "status"): "superseded",  # ck_daily_plans_status
+    ("digest_entries", "kind"): "focus_setting_changed",  # ck_digest_entries_kind
+    ("digest_entries", "scope"): "workspace",  # ck_digest_entries_scope (no project)
+    ("digest_cursors", "scope_key"): "workspace",  # ck_digest_cursors_scope_key
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
