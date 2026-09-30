@@ -1332,6 +1332,7 @@ async def task_token_run(principal: Principal) -> UUID | None:
     async with tenant_session(principal.workspace_context()) as s:
         run_id: UUID | None = await s.scalar(
             select(tokens.TASK_TOKENS.c.run_id).where(
+                # nosemgrep: tumnis-secret-eq  # a filter on the token row's id, not a secret
                 tokens.TASK_TOKENS.c.id == principal.subject_id
             )
         )
