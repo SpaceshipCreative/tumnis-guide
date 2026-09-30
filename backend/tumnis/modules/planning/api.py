@@ -435,6 +435,9 @@ async def project_week(ctx: WorkspaceContext, monday: date, project_id: UUID) ->
         events = await calendar.events_between(ctx, week.start, week.end, session=s)
         project_tasks = await tasks.project_tasks(s, project_id)
         blocks = await _planned_blocks(s, days[0], days[-1])
+        # A trashed or purged task's item stays (no foreign key): its block is not planned.
+        live_ids = await tasks.live_task_ids(s, {row.task_id for row in blocks})
+    blocks = [row for row in blocks if row.task_id in live_ids]
     mine = {task.id: task for task in project_tasks}
     open_tasks = [task for task in project_tasks if task.status != "done"]
     out: list[WeekDayOut] = []
@@ -565,10 +568,15 @@ async def schedule_block(
             raise StaleVersion(
                 current={} if current is None else _item_out(current, day).model_dump(mode="json")
             )
-        planned = [
-            Interval(row.block_start, row.block_end)
+        others = [
+            row
             for row in items
             if row.task_id != task_id and row.block_start is not None and row.removed_at is None
+        ]
+        # A trashed or purged task's item stays (no foreign key): its time is free again.
+        live_ids = await tasks.live_task_ids(s, {row.task_id for row in others})
+        planned = [
+            Interval(row.block_start, row.block_end) for row in others if row.task_id in live_ids
         ]
         violations = validate_manual_block(_plan_task(task), block, free, planned, now)
         if violations:
