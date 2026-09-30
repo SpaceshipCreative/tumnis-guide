@@ -1396,6 +1396,11 @@ async def finish_run_in(
     current = RunStatus(row.status)
     if current in TERMINAL_STATUSES:
         return Finished(status=current, seq=row.state_seq, changed=False)
+    if current is RunStatus.WAITING_ON_HUMAN and status is RunStatus.SUCCEEDED:
+        # A result posted while the run waited on a human: the wait ends first (waiting ->
+        # running), then the run succeeds; the state table has no direct edge.
+        run_transition(current, RunStatus.RUNNING)
+        current = RunStatus.RUNNING
     run_transition(current, status)
     seq = row.state_seq + 1
     await s.execute(
