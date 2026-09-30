@@ -1,0 +1,98 @@
+// One task in the Tasks view (P0-24, FR-2.6, UX 7): its title opens the drawer; one status
+// action (Start, or Done for a Human task in progress); subtasks indented underneath.
+import { formatDay, formatMinutes } from "../dashboard/format";
+import type { TaskLite } from "./grouping";
+import { useChangeStatus, type Status } from "./mutations";
+
+const LABEL_TEXT = { human: "Human", ai: "AI", hybrid: "Hybrid" } as const;
+
+/** The row's one status action (P0-18's human edges). */
+export function statusAction(
+  task: TaskLite,
+): { to: Status; text: "Start" | "Done"; key: "s" | "d" } | null {
+  if (task.status === "today" || task.status === "backlog") {
+    return { to: "in_progress", text: "Start", key: "s" };
+  }
+  if (task.status === "in_progress" && task.label === "human") {
+    return { to: "done", text: "Done", key: "d" };
+  }
+  return null;
+}
+
+export function TaskRow({
+  task,
+  subtasksOf,
+  onOpen,
+}: {
+  task: TaskLite;
+  /** The task's subtasks shown with it (nested ones included, recursively). */
+  subtasksOf: (taskId: string) => readonly TaskLite[];
+  onOpen: (taskId: string) => void;
+}) {
+  const subtasks = subtasksOf(task.id);
+  const change = useChangeStatus();
+  const draft = task.id.startsWith("draft-");
+  const action = draft ? null : statusAction(task);
+  const estimate =
+    task.label === "ai" || task.estimate_minutes === null
+      ? null
+      : formatMinutes(task.estimate_minutes);
+  return (
+    <li
+      data-task-title={task.title}
+      data-task-id={task.id}
+      className="rounded-lg border border-border bg-surface px-3 py-2"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            data-task-open
+            disabled={draft}
+            title="Open (Enter)"
+            onClick={() => {
+              onOpen(task.id);
+            }}
+            className="max-w-full truncate text-left font-medium hover:underline disabled:no-underline"
+          >
+            {task.title}
+          </button>
+          <p className="flex flex-wrap gap-x-2 text-xs text-muted">
+            <span>
+              {task.label === null ? "No label yet" : LABEL_TEXT[task.label]}
+            </span>
+            {estimate && <span>{estimate}</span>}
+            {task.due_on && <span>Due {formatDay(task.due_on)}</span>}
+          </p>
+        </div>
+        {action && (
+          <button
+            type="button"
+            data-status-action={action.key}
+            aria-label={`${action.text} ${task.title}`}
+            title={`${action.text} (${action.key})`}
+            disabled={change.isPending}
+            onClick={() => {
+              change.mutate({ task, to: action.to });
+            }}
+            className="min-h-11 shrink-0 rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-muted disabled:opacity-60 md:min-h-8"
+          >
+            {action.text}
+          </button>
+        )}
+      </div>
+      {subtasks.length > 0 && (
+        <ul className="mt-2 ml-4 flex flex-col gap-1 border-l border-border pl-3">
+          {subtasks.map((sub) => (
+            <TaskRow
+              key={sub.id}
+              task={sub}
+              subtasksOf={subtasksOf}
+              onOpen={onOpen}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}

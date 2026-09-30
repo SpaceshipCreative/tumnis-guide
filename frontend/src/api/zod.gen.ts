@@ -113,6 +113,22 @@ export const zDefaultIn = z.object({
 });
 
 /**
+ * DocumentDTO
+ */
+export const zDocumentDto = z.object({
+  body_md: z.string().nullable(),
+  id: z.uuid(),
+  kind: z.string(),
+  pinned: z.boolean(),
+  project_id: z.uuid().nullable(),
+  role: z.string().nullable(),
+  tainted: z.boolean(),
+  title: z.string(),
+  trust: z.enum(["trusted", "untrusted"]),
+  version: z.int(),
+});
+
+/**
  * FolderIn
  */
 export const zFolderIn = z.object({
@@ -254,6 +270,14 @@ export const zOAuthStartOut = z.object({
  */
 export const zPageAuditEntry = z.object({
   items: z.array(zAuditEntry),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * Page[CommentOut]
+ */
+export const zPageCommentOut = z.object({
+  items: z.array(zCommentOut),
   next_cursor: z.string().nullable(),
 });
 
@@ -687,6 +711,7 @@ export const zTaskOut = z.object({
   actual_minutes: z.int().nullable(),
   assigned_agent_id: z.uuid().nullable(),
   board_rank: z.string(),
+  change_id: z.uuid().nullable(),
   column_id: z.uuid().nullable(),
   completed_at: z.iso.datetime().nullable(),
   created_at: z.iso.datetime(),
@@ -700,7 +725,7 @@ export const zTaskOut = z.object({
   priority: z.enum(["low", "normal", "high", "urgent"]),
   project_id: z.uuid(),
   rollover_count: z.int(),
-  schema_version: z.literal(1).optional().default(1),
+  schema_version: z.literal(1).default(1),
   source: z.string(),
   started_at: z.iso.datetime().nullable(),
   status: zStatus,
@@ -788,6 +813,14 @@ export const zTaskRecurrenceOut = z.object({
 });
 
 /**
+ * TextDocumentPatch
+ */
+export const zTextDocumentPatch = z.object({
+  body_md: z.string().max(100000),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
  * TotpEnrolConfirmIn
  */
 export const zTotpEnrolConfirmIn = z.object({
@@ -816,6 +849,23 @@ export const zTotpEnrolOut = z.object({
 export const zTotpIn = z.object({
   code: z.string().max(16),
   preauth: z.string().max(2048),
+});
+
+/**
+ * TrashIn
+ */
+export const zTrashIn = z.object({
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * UndoIn
+ *
+ * The change a write answered (`change_id`) and the version it left (R-09).
+ */
+export const zUndoIn = z.object({
+  change_id: z.uuid(),
+  version: z.int().gte(0).lte(2147483647),
 });
 
 /**
@@ -1065,6 +1115,17 @@ export const zAuthRotateKeyPath = z.object({
  */
 export const zAuthRotateKeyResponse = zKeyCreated;
 
+export const zKnowledgeUpdateDocumentBody = zTextDocumentPatch;
+
+export const zKnowledgeUpdateDocumentPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeUpdateDocumentResponse = zDocumentDto;
+
 /**
  * Response Knowledge List Locations
  *
@@ -1168,6 +1229,15 @@ export const zTasksGetBoardPath = z.object({
  * Successful Response
  */
 export const zTasksGetBoardResponse = zBoardOut;
+
+export const zKnowledgeGetBriefPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeGetBriefResponse = zDocumentDto;
 
 export const zTasksGetColumnsPath = z.object({
   project_id: z.uuid(),
@@ -1324,6 +1394,17 @@ export const zTasksCreateTaskBody = zTaskCreate;
  */
 export const zTasksCreateTaskResponse = zTaskOut;
 
+export const zTasksTrashTaskBody = zTrashIn;
+
+export const zTasksTrashTaskPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksTrashTaskResponse = zTaskOut;
+
 export const zTasksGetTaskPath = z.object({
   task_id: z.uuid(),
 });
@@ -1343,6 +1424,20 @@ export const zTasksUpdateTaskPath = z.object({
  * Successful Response
  */
 export const zTasksUpdateTaskResponse = zTaskOut;
+
+export const zTasksListCommentsPath = z.object({
+  task_id: z.uuid(),
+});
+
+export const zTasksListCommentsQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksListCommentsResponse = zPageCommentOut;
 
 export const zTasksAddCommentBody = zCommentIn;
 
@@ -1420,6 +1515,17 @@ export const zTasksChangeStatusPath = z.object({
  * Successful Response
  */
 export const zTasksChangeStatusResponse = zTaskOut;
+
+export const zTasksUndoTaskBody = zUndoIn;
+
+export const zTasksUndoTaskPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksUndoTaskResponse = zTaskOut;
 
 export const zSearchTypeaheadProjectsQuery = z.object({
   q: z.string().max(200).optional().default(""),

@@ -23,7 +23,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime
 from enum import StrEnum
 from math import ceil
-from typing import Final
+from typing import Any, Final
 from uuid import UUID
 
 
@@ -311,3 +311,78 @@ def today_order(tasks: Sequence[TodayTask]) -> list[TodayTask]:
             t.id,
         ),
     )
+
+
+# --- Undo (R-09, UX 9) ---------------------------------------------------------------------------
+
+UNDO_FIELDS: Final = frozenset(
+    {
+        "status",
+        "column_id",
+        "board_rank",
+        "title",
+        "label",
+        "priority",
+        "due_on",
+        "estimate_minutes",
+        "first_action",
+        "acceptance_criteria",
+        "parent_id",
+        "deleted",
+    }
+)
+# Never undone: rollover_count, started_at, completed_at, actual_minutes (derived or
+# history), so undo cannot make the rollover count fall (P0-18's invariant).
+_UUID_FIELDS: Final = frozenset({"column_id", "parent_id"})
+
+
+def _json(value: object) -> object:
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, StrEnum):
+        return value.value
+    return value
+
+
+def undo_snapshot(row: Mapping[Any, Any]) -> dict[str, object]:
+    """A task row's undoable fields as JSON values; `deleted` says whether it is in the
+    trash (`deleted_at` set)."""
+    return {
+        field: row["deleted_at"] is not None if field == "deleted" else _json(row[field])
+        for field in UNDO_FIELDS
+    }
+
+
+def change_between(
+    before: Mapping[Any, Any], after: Mapping[Any, Any]
+) -> tuple[dict[str, object], dict[str, object]]:
+    """The undoable fields a write changed: (before, after), each holding only those."""
+    old, new = undo_snapshot(before), undo_snapshot(after)
+    changed = sorted(field for field in UNDO_FIELDS if old[field] != new[field])
+    return {f: old[f] for f in changed}, {f: new[f] for f in changed}
+
+
+def restore_values(
+    before: Mapping[str, Any], completed_at: datetime | None, now: datetime
+) -> dict[str, Any]:
+    """The row values that put a change's `before` back: ids and dates parsed, `deleted`
+    as `deleted_at`, and `completed_at` recomputed when the status comes back (kept for
+    Done, set to `now` if missing; cleared for any other status)."""
+    values: dict[str, Any] = {}
+    for field, value in before.items():
+        if field not in UNDO_FIELDS:
+            continue
+        if field == "deleted":
+            values["deleted_at"] = now if value else None
+        elif field in _UUID_FIELDS and isinstance(value, str):
+            values[field] = UUID(value)
+        elif field == "due_on" and isinstance(value, str):
+            values[field] = date.fromisoformat(value)
+        else:
+            values[field] = value
+    if "status" in values:
+        done = values["status"] == Status.DONE
+        values["completed_at"] = (completed_at or now) if done else None
+    return values

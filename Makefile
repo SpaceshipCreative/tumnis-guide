@@ -3,6 +3,10 @@
 
 BACKEND := cd backend &&
 
+# `-n auto` here means the CPU count, capped at 8: several local runs share one machine, and
+# each integration worker starts its own Postgres. CI calls pytest directly, so it's unaffected.
+export PYTEST_XDIST_AUTO_NUM_WORKERS ?= $(shell n=$$(nproc); [ $$n -gt 8 ] && echo 8 || echo $$n)
+
 ## Lint, typecheck, boundaries and unit tests; must finish under 60 s (P0-01).
 check:
 	$(BACKEND) uv run ruff check .

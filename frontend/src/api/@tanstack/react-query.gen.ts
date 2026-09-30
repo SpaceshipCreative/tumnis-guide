@@ -38,10 +38,12 @@ import {
   healthLive,
   healthReady,
   knowledgeCreateLocation,
+  knowledgeGetBrief,
   knowledgeListLocations,
   knowledgeSetDefaultLocation,
   knowledgeSetProjectFolder,
   knowledgeTestLocation,
+  knowledgeUpdateDocument,
   type Options,
   projectsArchiveProject,
   projectsCreateProject,
@@ -69,12 +71,15 @@ import {
   tasksGetReviewCount,
   tasksGetTask,
   tasksLinkContextItem,
+  tasksListComments,
   tasksListRecurrence,
   tasksListReviewKinds,
   tasksListTasks,
   tasksMoveTask,
   tasksPutColumns,
   tasksPutRecurrence,
+  tasksTrashTask,
+  tasksUndoTask,
   tasksUpdateTask,
   usageGetUsage,
 } from "../sdk.gen";
@@ -158,6 +163,9 @@ import type {
   KnowledgeCreateLocationData,
   KnowledgeCreateLocationError,
   KnowledgeCreateLocationResponse,
+  KnowledgeGetBriefData,
+  KnowledgeGetBriefError,
+  KnowledgeGetBriefResponse,
   KnowledgeListLocationsData,
   KnowledgeListLocationsError,
   KnowledgeListLocationsResponse,
@@ -170,6 +178,9 @@ import type {
   KnowledgeTestLocationData,
   KnowledgeTestLocationError,
   KnowledgeTestLocationResponse,
+  KnowledgeUpdateDocumentData,
+  KnowledgeUpdateDocumentError,
+  KnowledgeUpdateDocumentResponse,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectError,
   ProjectsArchiveProjectResponse,
@@ -248,6 +259,9 @@ import type {
   TasksLinkContextItemData,
   TasksLinkContextItemError,
   TasksLinkContextItemResponse,
+  TasksListCommentsData,
+  TasksListCommentsError,
+  TasksListCommentsResponse,
   TasksListRecurrenceData,
   TasksListRecurrenceError,
   TasksListRecurrenceResponse,
@@ -266,6 +280,12 @@ import type {
   TasksPutRecurrenceData,
   TasksPutRecurrenceError,
   TasksPutRecurrenceResponse,
+  TasksTrashTaskData,
+  TasksTrashTaskError,
+  TasksTrashTaskResponse,
+  TasksUndoTaskData,
+  TasksUndoTaskError,
+  TasksUndoTaskResponse,
   TasksUpdateTaskData,
   TasksUpdateTaskError,
   TasksUpdateTaskResponse,
@@ -1272,6 +1292,35 @@ export const authRotateKeyMutation = (
   return mutationOptions;
 };
 
+/**
+ * Update Document
+ *
+ * Replace a text entry's Markdown body; 409 `stale_version` with the current entry.
+ */
+export const knowledgeUpdateDocumentMutation = (
+  options?: Partial<Options<KnowledgeUpdateDocumentData>>,
+): UseMutationOptions<
+  KnowledgeUpdateDocumentResponse,
+  KnowledgeUpdateDocumentError,
+  Options<KnowledgeUpdateDocumentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeUpdateDocumentResponse,
+    KnowledgeUpdateDocumentError,
+    Options<KnowledgeUpdateDocumentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeUpdateDocument({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const knowledgeListLocationsQueryKey = (
   options?: Options<KnowledgeListLocationsData>,
 ) => createQueryKey("knowledgeListLocations", options);
@@ -1627,6 +1676,36 @@ export const tasksGetBoardOptions = (options: Options<TasksGetBoardData>) =>
       return data;
     },
     queryKey: tasksGetBoardQueryKey(options),
+  });
+
+export const knowledgeGetBriefQueryKey = (
+  options: Options<KnowledgeGetBriefData>,
+) => createQueryKey("knowledgeGetBrief", options);
+
+/**
+ * Get Brief
+ *
+ * The project's pinned brief (a text entry); 404 until the project's subscriber ran.
+ */
+export const knowledgeGetBriefOptions = (
+  options: Options<KnowledgeGetBriefData>,
+) =>
+  queryOptions<
+    KnowledgeGetBriefResponse,
+    KnowledgeGetBriefError,
+    KnowledgeGetBriefResponse,
+    ReturnType<typeof knowledgeGetBriefQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetBrief({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetBriefQueryKey(options),
   });
 
 export const tasksGetColumnsQueryKey = (
@@ -2314,6 +2393,36 @@ export const tasksCreateTaskMutation = (
   return mutationOptions;
 };
 
+/**
+ * Trash Task
+ *
+ * Moves the task to the trash (UX 9); `POST /undo` with the answered `change_id`
+ * brings it back.
+ */
+export const tasksTrashTaskMutation = (
+  options?: Partial<Options<TasksTrashTaskData>>,
+): UseMutationOptions<
+  TasksTrashTaskResponse,
+  TasksTrashTaskError,
+  Options<TasksTrashTaskData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksTrashTaskResponse,
+    TasksTrashTaskError,
+    Options<TasksTrashTaskData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksTrashTask({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const tasksGetTaskQueryKey = (options: Options<TasksGetTaskData>) =>
   createQueryKey("tasksGetTask", options);
 
@@ -2364,6 +2473,91 @@ export const tasksUpdateTaskMutation = (
     },
   };
   return mutationOptions;
+};
+
+export const tasksListCommentsQueryKey = (
+  options: Options<TasksListCommentsData>,
+) => createQueryKey("tasksListComments", options);
+
+/**
+ * List Comments
+ *
+ * The task's comments, oldest first.
+ */
+export const tasksListCommentsOptions = (
+  options: Options<TasksListCommentsData>,
+) =>
+  queryOptions<
+    TasksListCommentsResponse,
+    TasksListCommentsError,
+    TasksListCommentsResponse,
+    ReturnType<typeof tasksListCommentsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListComments({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListCommentsQueryKey(options),
+  });
+
+export const tasksListCommentsInfiniteQueryKey = (
+  options: Options<TasksListCommentsData>,
+): QueryKey<Options<TasksListCommentsData>> =>
+  createQueryKey("tasksListComments", options, true);
+
+/**
+ * List Comments
+ *
+ * The task's comments, oldest first.
+ */
+export const tasksListCommentsInfiniteOptions = (
+  options: Options<TasksListCommentsData>,
+) => {
+  const opts = infiniteQueryOptions<
+    TasksListCommentsResponse,
+    TasksListCommentsError,
+    InfiniteData<TasksListCommentsResponse>,
+    QueryKey<Options<TasksListCommentsData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<TasksListCommentsData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<TasksListCommentsData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await tasksListComments({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: tasksListCommentsInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
 };
 
 /**
@@ -2559,6 +2753,36 @@ export const tasksChangeStatusMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await tasksChangeStatus({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Undo Task
+ *
+ * Puts back what one change did (R-09, UX 9): 409 `already_undone`, or
+ * `stale_version` when the task changed since.
+ */
+export const tasksUndoTaskMutation = (
+  options?: Partial<Options<TasksUndoTaskData>>,
+): UseMutationOptions<
+  TasksUndoTaskResponse,
+  TasksUndoTaskError,
+  Options<TasksUndoTaskData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksUndoTaskResponse,
+    TasksUndoTaskError,
+    Options<TasksUndoTaskData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksUndoTask({
         ...options,
         ...fnOptions,
         throwOnError: true,

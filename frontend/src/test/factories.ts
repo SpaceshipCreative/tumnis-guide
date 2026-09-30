@@ -7,7 +7,8 @@
 // makeProject is generated from ProjectOut (P0-17), makeTask from TaskOut (P0-18).
 import * as z from "zod";
 
-import { zProblem, zProjectOut, zTaskOut } from "../api/zod.gen";
+import { zBoardOut, zProblem, zProjectOut, zTaskOut } from "../api/zod.gen";
+import { nKeys } from "../lib/rank";
 
 // The backend's FixedClock start (A5): factories are deterministic but for ids.
 const SAMPLE_DATETIME = "2026-03-09T12:00:00Z";
@@ -87,3 +88,53 @@ export const makeProblem = factoryFor(zProblem);
 export const makeProject = factoryFor(zProjectOut);
 
 export const makeTask = factoryFor(zTaskOut);
+
+// --- Boards (P0-24) -----------------------------------------------------------
+
+type TaskOverrides = Parameters<typeof makeTask>[0];
+
+export interface BoardColumnSpec {
+  name: string;
+  status: z.output<typeof zTaskOut>["status"];
+  id?: string;
+  /** The column's cards, top to bottom; ranks follow `nKeys` (lib/rank.ts). */
+  cards?: TaskOverrides[];
+}
+
+/**
+ * A board (`BoardOut`, `GET /v1/projects/{id}/board`): each column's cards get the
+ * column's id and status and the ranks `nKeys(n)` gives, in order.
+ */
+export function makeBoard({
+  columns,
+  projectId = crypto.randomUUID(),
+}: {
+  columns: BoardColumnSpec[];
+  projectId?: string;
+}): z.output<typeof zBoardOut> {
+  return zBoardOut.parse({
+    project_id: projectId,
+    threshold_min: 30,
+    columns: columns.map((column) => {
+      const id = column.id ?? crypto.randomUUID();
+      const specs = column.cards ?? [];
+      const ranks = nKeys(specs.length);
+      return {
+        id,
+        name: column.name,
+        status: column.status,
+        cards: specs.map((spec, i) => ({
+          task: makeTask({
+            project_id: projectId,
+            parent_id: null,
+            ...spec,
+            status: column.status,
+            column_id: id,
+            board_rank: ranks[i] ?? "a0",
+          }),
+          checklist: [],
+        })),
+      };
+    }),
+  });
+}

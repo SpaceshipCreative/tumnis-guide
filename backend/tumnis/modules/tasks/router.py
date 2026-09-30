@@ -42,6 +42,11 @@ WRITE_PROJECT = RoutePolicy(
     auth="session_or_key", scopes=WRITE_SCOPE, idempotent=True, project_param="path:project_id"
 )
 SESSION_READ = RoutePolicy(auth="session")
+LIST_OF_TASK = RoutePolicy(
+    auth="session_or_key", scopes=READ, paginated=True, project_param="lookup:tasks"
+)
+# Undo is for people (R-09): a key or token gets 403 `session_required`.
+UNDO = RoutePolicy(auth="session", idempotent=True)
 
 
 class StatusIn(BaseModel):
@@ -55,6 +60,17 @@ class MoveIn(BaseModel):
 
     column_id: UUID
     board_rank: api.BoardRank
+    version: Version
+
+
+class TrashIn(BaseModel):
+    version: Version
+
+
+class UndoIn(BaseModel):
+    """The change a write answered (`change_id`) and the version it left (R-09)."""
+
+    change_id: UUID
     version: Version
 
 
@@ -174,6 +190,46 @@ async def move_task(
         body.version,
         now=_clock(request).now(),
     )
+
+
+@router.delete("/tasks/{task_id}")
+@route_policy(WRITE_TASK)
+async def trash_task(
+    task_id: UUID, body: TrashIn, request: Request, session: SessionDep
+) -> api.TaskOut:
+    """Moves the task to the trash (UX 9); `POST /undo` with the answered `change_id`
+    brings it back."""
+    return await api.trash_task(
+        session, principal_of(request).actor, task_id, body.version, now=_clock(request).now()
+    )
+
+
+@router.post("/tasks/{task_id}/undo")
+@route_policy(UNDO)
+async def undo_task(
+    task_id: UUID, body: UndoIn, request: Request, session: SessionDep
+) -> api.TaskOut:
+    """Puts back what one change did (R-09, UX 9): 409 `already_undone`, or
+    `stale_version` when the task changed since."""
+    return await api.undo_task(
+        session,
+        principal_of(request).actor,
+        task_id,
+        body.change_id,
+        body.version,
+        now=_clock(request).now(),
+    )
+
+
+@router.get("/tasks/{task_id}/comments")
+@route_policy(LIST_OF_TASK)
+async def list_comments(
+    task_id: UUID,
+    session: SessionDep,
+    page: Annotated[PageParams, Depends(page_params)],
+) -> Page[api.CommentOut]:
+    """The task's comments, oldest first."""
+    return await api.list_comments(session, task_id, cursor=page.cursor, limit=page.limit)
 
 
 @router.post("/tasks/{task_id}/comments", status_code=201)
