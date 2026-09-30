@@ -4,7 +4,7 @@ planning_0002)."""
 from datetime import date, datetime, time
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Integer, SmallInteger
+from sqlalchemy import ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tumnis.core.base import Base, TenantBase
@@ -39,7 +39,7 @@ class PlanItem(TenantBase, Base):
 
     plan_id: Mapped[UUID] = mapped_column(ForeignKey("daily_plans.id"))
     task_id: Mapped[UUID]  # no foreign key: see planning_0002
-    position: Mapped[int] = mapped_column(SmallInteger)
+    position: Mapped[int] = mapped_column(Integer)
     reason: Mapped[str]
     block_start: Mapped[datetime | None]
     block_end: Mapped[datetime | None]

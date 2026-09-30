@@ -58,7 +58,7 @@ def upgrade() -> None:
         "plan_items",
         sa.Column("plan_id", UUID(as_uuid=True), sa.ForeignKey("daily_plans.id"), nullable=False),
         sa.Column("task_id", UUID(as_uuid=True), nullable=False),
-        sa.Column("position", sa.SmallInteger, nullable=False),
+        sa.Column("position", sa.Integer, nullable=False),
         sa.Column("reason", sa.Text, nullable=False),
         sa.Column("block_start", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("block_end", sa.TIMESTAMP(timezone=True), nullable=True),
