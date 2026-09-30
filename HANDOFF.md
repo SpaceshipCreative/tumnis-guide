@@ -1,217 +1,218 @@
-# HANDOFF: P1-16 Upload safety and extraction
+# HANDOFF: P1-16 Upload safety and extraction (second handoff)
 
-Stopped on the coordinator's "HANDOFF NOW" (context watcher) before the red spec commit.
-No PR is open yet. No CodeRabbit threads, no CI runs.
+Stopped on the coordinator's "HANDOFF NOW" (context watcher, 358k). No PR is open yet. No
+CodeRabbit threads, no CI runs (only the red commit has been pushed).
 
-## State of branch `wp/P1-16`
+Start: worktree on a throwaway branch at main; `/usr/bin/git fetch origin`,
+`/usr/bin/git merge origin/main` (no-op), `/usr/bin/git merge origin/wp/P1-16`; push only with
+`/usr/bin/git push origin HEAD:wp/P1-16`. Read `~/tumnis-coordinator/vm-agent-rules.md`,
+`scott-decisions.md` (10 and 11 are new, see below) and the original prompt
+`~/tumnis-coordinator/prompts/P1-16.md`. Tool gotcha in this sandbox: heredocs and
+`cd X && git ...` compounds are refused; use the Write/Edit tools for files, `sed -i` for
+one-liners, and `/usr/bin/git` from the worktree root.
 
-Base: `main` at e5e5d36 (P1-14 merged). One commit on top: `chore: P1-16 handoff` (this
-file plus the pieces below). Nothing of P1-16 is implemented yet.
+## Commits on `wp/P1-16` (after the first handoff `d4ea654`)
 
-Committed in place (safe for `make check`):
-- `backend/pyproject.toml`, `backend/uv.lock`: new pinned runtime deps `python-magic==0.4.27`
-  (libmagic sniffing in the extract worker; ships type hints) and `python-multipart==0.0.26`
-  (streaming multipart parser for the upload route). Shared-file edits: report them.
-- `backend/fixtures/extraction/`: the fixture set, generated (see the script below):
-  `text-2p.pdf`, `rate-card-table.pdf` (3 pages; page 2 heading "Rates" and a gridded table
-  with the row `Senior designer | 160`), `two-column.pdf`, `scanned-1p.pdf` (image only, no
-  text layer), `handwriting.pdf` (page 1 typed, page 2 scribble image), `brief.docx`,
-  `budget.xlsx` (sheets Summary, Details), `kickoff.pptx` (3 slides), `notes.md`,
-  `rates.csv`, `receipt.png`, `html-named.pdf` (HTML saved as .pdf). `file --mime-type`
-  sniffs every one correctly (docx/xlsx/pptx as their OOXML types, notes.md as text/plain,
-  rates.csv as text/csv). `eicar.txt` is never committed; it is built at test time.
-  No `*.expected.yaml` yet (impl-2, once real Docling output can be checked).
-- `backend/tumnis/modules/knowledge/tests/_samples.py`: `eicar()` (built from two halves),
-  `fixture_bytes(name)`, `stream(data)`.
+- `402220b` test(knowledge): P1-16 spec tests (red): every spec test T-01..T-14 except T-13
+  (needs impl-2), strict xfail; stubs raise NotImplementedError.
+- `9f34944` docs(agents): AGENTS.md records Scott decisions 10 and 11 (file serving from the
+  api process; ClamAV connects to clamd without resolve_and_check). Done; do not redo.
+- `97d2165` feat(knowledge): rules (classify_type, low_confidence_pages, chunk_pages,
+  upload_file_name, numbered_name), markers off for T-04, T-09; `test_upload_file_name.py`.
+- `f35c5ce` feat(knowledge): ClamAV INSTREAM client + FakeClamAV, markers off for T-05;
+  `tests/integration/test_clamav_protocol.py` (scripted loopback server, runs without Docker).
+- One more commit `chore: P1-16 handoff` (this file) also carries UNVERIFIED WIP: migration
+  `knowledge_0004_extraction` and the `models.py` mirror (Document/DocumentVersion columns,
+  `ExtractionArtifact`, `Chunk`). Nothing has applied the migration yet: check it first
+  (`make test-int` builds the template DB from it; `chunk_tsv` is an IMMUTABLE SQL wrapper
+  because `array_to_string` is only STABLE and a generated column needs immutable). If it is
+  wrong, fix it before anything else: it breaks every integration test.
 
-Parked (NOT in place: they import names that do not exist yet and would break collection,
-the registry test T-P0-09-13 and every knowledge integration test). Move each back to the
-same path under `backend/` when the matching stubs land:
-- `handoff/P1-16/backend/tumnis/modules/knowledge/tests/unit/test_classify_type.py` (T-04)
-- `handoff/P1-16/backend/tumnis/modules/knowledge/tests/unit/test_low_confidence_pages.py` (T-09, plus `test_chunk_pages`)
-- `handoff/P1-16/backend/tumnis/modules/knowledge/tests/contract/test_clamav_contract.py` (T-05: `TestFakeClamAV`, `TestClamAV`)
-- `handoff/P1-16/backend/tumnis/modules/knowledge/tests/contract/test_vision_contract.py` (T-13: `TestFakeVision`, `TestVllmVision`; recordings dir `tests/recordings/vllm_vision/`, none written yet)
-- `handoff/P1-16/backend/tumnis/modules/knowledge/tests/integration/conftest.py`: replaces
-  the current conftest (keeps `knowledge_ws`; adds autouse `extract_dirs` and
-  `extract_env`, `log_steps`). Its autouse fixture imports `pipeline.configure` and
-  `KnowledgeSettings`, so those must work for real (not stubs) in the red commit.
-- `handoff/P1-16/scripts/make_extraction_fixtures.py`: the generator (needs reportlab,
-  python-docx, openpyxl, python-pptx, pillow in a scratch venv:
-  `uv venv $TMPDIR/gen/.venv && uv pip install --python $TMPDIR/gen/.venv/bin/python reportlab python-docx openpyxl python-pptx pillow`,
-  then `$TMPDIR/gen/.venv/bin/python handoff/P1-16/scripts/make_extraction_fixtures.py backend/fixtures/extraction`).
-  Decide whether to keep it in the repo (e.g. `scripts/fixtures/`) or drop it; delete
-  `handoff/` before opening the PR.
+Green so far (local): rules unit tests (109 pass in `tumnis/modules/knowledge/tests/unit`),
+`TestFakeClamAV` (contract), `test_clamav_protocol.py`. `make check` was clean before the
+migration (ruff, format, mypy, lint-imports pass now too); the semgrep meta test fails locally
+only (read-only `~/.semgrep`; set `SEMGREP_SETTINGS_FILE`, `SEMGREP_LOG_FILE`,
+`SEMGREP_VERSION_CACHE_PATH` under `$TMPDIR`).
 
-## PR split (plan: spec + impl + impl-2 (Docling); prompt: spec+impl in one PR)
+## Still red (strict xfail; remove each marker only after the test passes)
 
-- PR 1 on `wp/P1-16` (`[P1-16] impl: Upload safety and extraction`): every spec test red
-  first (T-01..T-14, commit `test(knowledge): P1-16 spec tests (red)`), then green TDD
-  steps 1 to 5 (T-04, 09, 05, 03, 02, 01, 10, 07, 11, 12) plus step 8 (T-14 compose; small,
-  and the main worker must stop listening to `extract` as soon as the queue exists).
-  A1.5 `test_eicar_upload_is_quarantined` too if `knowledge_app` is wired (see below).
-- PR 2 on `wp/P1-16-impl-2` from PR 1: T-06 (real Docling, `*.expected.yaml`), T-08, T-13
-  (VLM), A1.5 `test_pdf_is_scanned_extracted_and_filed`, step 9 refactor.
+T-01, T-02, T-03 (`test_upload_safety.py`), T-10 (`test_file_serving.py`), T-07, T-08, T-11,
+T-12 (`test_extract_workflow.py`), T-14 (`tests/meta/test_compose.py`), T-06
+(`test_extraction_set.py`, impl-2: needs real Docling + `*.expected.yaml`). T-13 waits for
+impl-2: `handoff/P1-16/.../tests/contract/test_vision_contract.py` stays parked there.
 
-## Remaining TDD steps (exact)
+## What exists (stubs marked S must be implemented)
 
-1. Stubs so the parked tests import and type-check (P1-14 precedent: "interfaces only",
-   bodies `raise NotImplementedError`), then move the parked tests back, write the other
-   spec tests below, run them red, commit red.
-   - `rules.py`: `MAX_UPLOAD_BYTES = 50 * 1024 * 1024`, `ALLOWED_TYPES` (plan table),
-     `DocKind = Literal["pdf","docx","xlsx","pptx","markdown","text","csv","html","image"]`,
-     `@dataclass(frozen=True) class Refusal: code: Literal["type_not_allowed","type_mismatch","too_large"]`,
-     `classify_type`, `low_confidence_pages(grades: Mapping[int, str | tuple[str, str]], text_items)`
-     (a grade is one value or a (mean, low) pair; POOR in any case, or 0 / missing text
-     items, selects; sorted), `chunk_pages`, `upload_file_name(name)` (basename only,
-     `/ \ : * ? " < > |` and control chars -> `-`, keeps the extension, passes
-     `safe_rel_path`; collisions `stem 2.ext`, `stem 3.ext`, matching P1-15's
-     `names_sanitized` scenario).
-   - `adapters/port.py`: `ScanResult(infected: bool, signature: str | None)`,
-     `Scanner.scan(stream) -> ScanResult`; `Vision.page_markdown(image: bytes, *, page: int) -> str`
-     and `health()`; the extractor port (`convert(path, kind) -> Conversion`,
-     `chunk(doc_json) -> list[ChunkRow]`, `chunk_markdown(md) -> list[ChunkRow]`,
-     `page_image(path, page) -> bytes`), `Conversion(doc_json: bytes, markdown: str,
-     grades, text_items)`, `ChunkRow(ordinal, text, context_text, heading_path, page_from,
-     page_to, extractor="docling")`.
-   - `adapters/clamav.py` `ClamAV(Adapter)` name `knowledge.clamav`, ctor
-     `(host, port, *, clock, policy=...)`; `adapters/vision.py` `VllmVision(Adapter)` name
-     `knowledge.vision`, ctor `(base_url, model, *, clock, net_policy, resolver, transport)`;
-     `adapters/fake.py` `FakeClamAV` (flags EICAR only, `calls`), `FakeVision`
-     (`script(pages={n: md})`, `calls` = pages), `FakeDocling` (stored conversions keyed by
-     sha256 of fixture files with a `<name>.conversion.json` sibling; unknown content -> one
-     chunk of decoded text). Register `knowledge.clamav` and `knowledge.vision` in
-     `adapters/__init__.py` (both need fake + real/recorded contract classes, which the
-     parked contract tests provide). Do NOT register `knowledge.docling` in PR 1 (it would
-     need a real contract class); PR 2 registers it with a docling contract suite.
-   - `settings.py`: `KnowledgeSettings(BaseModel)` (`spool_dir="/var/lib/tumnis/spool"`,
-     `scratch_dir="/scratch"`, `clamd_host="clamd"`, `clamd_port=3310`,
-     `chunk_tokenizer="sentence-transformers/all-MiniLM-L6-v2"`, vision base_url/model for
-     PR 2), `Settings.knowledge` (env `KNOWLEDGE__*`).
-   - `knowledge/pipeline.py` (new; step bodies live here so a probe can wrap them):
-     `STEPS = ("read","scan","quarantine","sniff","place","convert","vlm","store","chunk","index","emit","fail")`,
-     `configure(KnowledgeSettings) -> previous`, `use(scanner=, extractor=, vision=) -> previous dict`.
-2. Spec tests still to write (names from the plan table; my design in brackets):
-   - `tests/integration/test_upload_safety.py`: T-01 `test_eicar_quarantined_never_extracted`
-     [upload eicar via `session_client` + `dbos` + `extract_env`; 202 `pending_scan`; ends
-     `quarantined`; no chunks; `extractor.calls == []`; nothing under the project folder
-     (`open_backend` list); one `audit_log` row `upload.quarantined` targeting the document;
-     spool file gone]; T-02 `test_type_sniffed_from_content[case]` [html-named.pdf as
-     `invoice.pdf` with client Content-Type application/pdf -> failed `type_mismatch`, never
-     placed or extracted; rate-card bytes as `rate-card.bin` -> failed `type_mismatch`;
-     brief.docx -> ready, kind docx, path `uploads/brief.docx`]; T-03
-     `test_51_mb_refused_50_mb_accepted` [hand-built multipart body from an async
-     generator counting bytes; 51 MiB -> 413 `too_large`, no document row, spool empty,
-     bytes consumed <= MAX + 1 MiB; exactly MAX -> 202; request `dbos` so the enqueue has
-     system tables].
-   - `tests/integration/test_file_serving.py`: T-10 `test_attachment_and_nosniff`
-     [ready docx -> 200, `Content-Disposition: attachment; filename*=UTF-8''<pct basename>`,
-     `application/octet-stream`, nosniff, P0-16 headers (reuse
-     `tests.meta.test_headers_sweep.security_header_problems`), body == original bytes;
-     `pending_scan`, `extracting`, `quarantined` -> 409 `not_available`, headers still set].
-   - `tests/integration/test_extract_workflow.py`: T-07 kill test [`worker_killer("extract.vlm_step", events=0, imports=(step-log probe,), queues=("extract",))`,
-     `enqueue_until_killed(queue_name="extract", workflow_name="knowledge_extract_document", args=(ws, version_id, "spool"))`
-     -> 137 with log `read,scan,sniff,place,convert`; `restart_until_done` -> SUCCESS,
-     full log each step once, one `document.added` in outbox, doc ready, chunks];
-     T-08 (PR 2) VLM fake page 2 only; T-11 folder file [`api.ingest_folder_file` on a file
-     written through `open_backend`; steps without `place`; path unchanged; tainted; an
-     EICAR file in the folder ends quarantined and stays in the folder]; T-12 queue
-     isolation [two harness workers on one system DB, probe workflow
-     `knowledge_queue_probe` in `tests/integration/_queue_probe.py`; extract worker runs
-     only the `extract` probe; main worker runs the others and leaves `extract` ENQUEUED].
-     Probes: `tests/integration/_step_log.py` (wraps `pipeline.<step>` to append to
-     `$KNOWLEDGE_STEP_LOG`), imported by the subprocess with `--import`.
-   - `tests/integration/test_extraction_set.py`: T-06 `test_expected_chunks[fixture]`,
-     explicit list of the 10 fixtures, `slow` + `integration`, tolerant matching per plan.
-   - `backend/tests/meta/test_compose.py`: add T-14
-     `test_worker_extract_has_memory_limit_and_clamd` (new function only; the file is
-     locked for existing assertions).
-3. Green, one marker at a time, in plan order.
+- `knowledge/rules.py`: done.
+- `knowledge/adapters/port.py`: `ScanResult`, `Scanner`, `Vision`, `ChunkRow`, `Conversion`,
+  `Extractor` (done). `adapters/clamav.py` done. `adapters/fake.py`: `FakeClamAV` done,
+  `FakeVision` and `FakeDocling` done (FakeDocling reads `backend/fixtures/extraction/
+  <file>.conversion.json`, written for `rate-card-table.pdf` (3 chunks, table on page 2 under
+  heading `Rates`) and `handwriting.pdf` (page 2 graded poor, 0 text items); unknown content
+  becomes one chunk of decoded text). `adapters/__init__.py` registers only
+  `knowledge.clamav` (vision and docling register in impl-2 with their contract suites).
+  `adapters/docling.py` (S, `DoclingExtractor`, impl-2).
+- `tumnis/settings.py`: `KnowledgeSettings`, `Settings.knowledge` (done).
+- `knowledge/pipeline.py`: `STEPS`, `Ref`, `configure`, `use` real; every step body (S):
+  `read, scan, quarantine, sniff, place, convert, vlm, store, chunk, index, emit, fail`.
+  The workflow must call `pipeline.<step>(...)` by attribute at call time (the conftest
+  step log and `_step_log.py` wrap them).
+- `knowledge/api.py`: `UploadAccepted`, `begin_upload`, `ingest_folder_file` (S).
+- `worker.py`: `main(..., queues=None)` accepts the new param but ignores it (S);
+  `testing/run_worker.py --queues A,B` and `WorkerKiller(queues=...)` /
+  `worker_killer(..., queues=...)` in `tests/fixtures/__init__.py` done (log names now
+  `worker-<queues|main>-<n>.log`).
+- Tests written: see the red list above plus helpers `_upload.py`, `_step_log.py`,
+  `_queue_probe.py`, and `integration/conftest.py` (autouse `extract_dirs`, `extract_env`).
 
-## Design decisions (so far; keep or revise, but report every deviation)
+## Remaining work, in order
 
-- Tables (revision `knowledge_0004` after `knowledge_0003`, `phase = "expand"`):
-  `documents` + `status` (pending_scan|extracting|ready|quarantined|failed, default
-  'ready'), `status_reason`, `current_version_id`; `document_versions` + `status`,
-  `status_reason`, `source_name`, `mime`, `docling_json bytea`; new tenant tables
-  `extraction_artifacts(version_id, stage, data bytea)` unique (workspace_id, version_id,
-  stage) and `chunks(document_id, document_version_id, ordinal, text, context_text,
-  heading_path text[], page_from, page_to, extractor, tsv)` with `tsv` generated as
-  `to_tsvector('english', coalesce(array_to_string(heading_path,' '),'') || ' ' || text)`
-  and a GIN index (P1-17's search SQL uses `c.document_version_id`,
-  `d.current_version_id`, `d.status`). Update `tests/acceptance/_phase1.py` `chunks_of`
-  from `c.version_id` to `c.document_version_id` (helpers are not locked).
-- Workflow `knowledge_extract_document(workspace_id, version_id, source)` on queue
-  `extract`: deviation, the plan's signature has no workspace_id, but steps need a
-  workspace context for RLS (calendar workflows take it the same way). Workflow id
-  `extract:<version_id>`. Kill point `extract.vlm_step` at the start of the VLM step.
-  Large outputs go to `extraction_artifacts`, never step return values.
-- Upload route `POST /v1/knowledge/documents`: `session_or_key`, scope `knowledge:write`,
-  `idempotent=False` (reason: the idempotency layer buffers the whole body to hash it,
-  and a retry is a new document), `max_body_bytes=MAX_UPLOAD_BYTES + 1 MiB` (the
-  middleware is a backstop; the handler's own counter answers 413 `too_large` first), no
-  `project_param` (multipart body; the handler checks `principal.project_ids` itself and
-  answers 404). Stream-parse with `python_multipart` into `spool/<tmp>`, rename to
-  `spool/<version_id>` after the rows exist; commit, then enqueue with
-  `deadletter.dbos_client()`; the client's Content-Type is ignored. Needs the project
-  folder's location online (409 `location_offline`), 409 `no_location` without one.
-  Router: make `router` unprefixed (`v1_router("knowledge", tags=["knowledge"])`) and
-  prefix the existing paths with `/knowledge`, so `/files/{document_id}` fits the same
-  router (paths and operation ids unchanged).
-- `GET /v1/knowledge/documents/{document_id}` (deviation: minimal read, P1-17 owns CRUD, but
-  A1.5 steps 1-2 poll it) and `GET /v1/files/{document_id}?version=`: `session_or_key`,
-  `context:read`, `project_param="lookup:knowledge"` with
-  `register_project_lookup("knowledge", project_of_document)` and a `LOOKUP_TARGETS`
-  entry in `backend/tests/meta/_authz.py`. Serving reads storage in the api process:
-  NOT covered by Scott's decision 1 (location save/test, folder checks, note writes):
-  add it to the AGENTS.md exception and flag it for Scott.
-- Placement: `uploads/<upload_file_name>` under the project folder (workspace KB uploads
-  under a `workspace` folder on the default location), create-only; a precondition
-  failure whose file already holds the same sha256 counts as placed (a retried step).
-  `documents.path` is relative to the project folder (A1.5 expects
-  `uploads/rate-card-table.pdf`). Spool deleted after placement or refusal.
-- Sniff: libmagic on the first 8 KiB; `application/zip` refined to the OOXML type by
-  reading `[Content_Types].xml` from the scratch copy; size > MAX refused `too_large`
-  (folder files can exceed it). Refusals end `failed` with the code in `status_reason`.
-- Quarantine: version+document `quarantined`, audit `upload.quarantined` (system actor,
-  details: signature, source), spool/scratch removed; a folder file is never touched.
-  Not added to `tests/audit_cases.py` (not a route action; SEC-3 does not list it).
-- Worker: `tumnis worker --queues extract` -> `DBOS.listen_queues(["extract"])` before
-  launch, `executor_id` `worker-extract` (DBOS recovers pending workflows per executor id;
-  two workers sharing "local" would re-enqueue each other's running workflows); the extract
-  worker runs no relay and applies no schedules. The main worker listens to every queue
-  but `extract` (explicit list in `worker.py`). Register `extract` with
-  `worker_concurrency=1`. `worker.main` also calls `deadletter.configure(settings.dbos_system_url)`
-  and `knowledge.api.configure_extraction(settings.knowledge, net=...)`.
-  `WorkerKiller` / `worker_killer` get an additive `queues=()` parameter and
-  `tumnis.testing.run_worker` a `--queues` flag.
-- ClamAV is operator-configured infrastructure (like Postgres): it connects to
-  `KNOWLEDGE__CLAMD_HOST:PORT` directly, not through `resolve_and_check` (tests reach it on
-  loopback, which the guard always blocks). Flag for Scott. clamd's default
-  StreamMaxLength (25M) is below 50 MiB: ship `deploy/clamd/clamd.conf` (or env) raising it
-  to 60M; an over-limit reply is a scan failure, never "clean".
-- Compose: `clamd` (the digest in `tests/_services.py`), `worker-extract`
-  (`["tumnis","worker","--queues","extract"]`, `mem_limit: 4g`, spool rw + `scratch`
-  named volume, depends on clamd), `spool` volume also on the api; preview/test keep
-  fakes, so gate clamd with a profile there and use `required: false` on the dependency.
-  Dockerfile: `apt-get install libmagic1`.
-- VLM (PR 2): our own `VllmVision` adapter over `guarded_client` (page PNG in, Markdown
-  out), not Docling's `ApiVlmEngineOptions` (Docling would make the HTTP call itself,
-  outside `tumnis.core.net`): deviation to report.
-- A1.5 `knowledge_app` helper: in fakes mode every location is a `FakeStorage`, so wire a
-  server-path default location plus folders for the seed projects, the real `ClamAV` on
-  the `clamd` fixture, and (PR 2) the real Docling extractor. P1-14's plan note says the
-  seed has a default location `homelab-minio`; P1-14 did not add it.
+1. Verify/fix migration 0004 and models (see above).
+2. `knowledge/store.py` (new, SQL for the pipeline: create document+version rows, statuses,
+   hash/mime/kind/path setters, artifacts get/put upsert, `replace_chunks`, `mark_ready`
+   which sets statuses + `current_version_id` and emits in one transaction, idempotent when
+   the version is already `ready`). Event payloads `DocumentAddedV1`/`DocumentChangedV1` in
+   `knowledge/events.py` (`document_id, version_id, version_no, project_id|None, title,
+   trust, size`), fixtures `backend/tests/contract/fixtures/events/document.{added,changed}/
+   v1.json`, then `make gen` (needs `npm ci --prefix frontend`; commit schemas/, openapi,
+   frontend/src/api, generated contract tests).
+3. Pipeline step bodies (design below), `workflows.py`: workflow `knowledge_extract_document`
+   `(workspace_id: str, version_id: str, source: str)` on queue `extract`, workflow id
+   `extract:<version_id>`, steps wrap `pipeline.*` with retries (clamd may be down: 5 attempts,
+   5 s, backoff 2); `faults.killpoint("extract.vlm_step")` in the WORKFLOW body right before
+   `vlm_step` (so the step log does not yet contain `vlm` at the kill); vlm failures after
+   retries continue without the vision pass; any other final failure calls `fail` and returns
+   "failed"; infected -> `quarantine`, refusal from `sniff` -> `fail(code)`.
+4. `api.py`: `begin_upload`, `ingest_folder_file`, `enqueue_extract` (via
+   `deadletter.dbos_client().enqueue_async({"queue_name": "extract", "workflow_name":
+   "knowledge_extract_document", "workflow_id": f"extract:{version_id}", ...}, ws, vid,
+   source)`), `get_document`, `project_of_document` (+ `register_project_lookup("knowledge",
+   ...)` and a `LOOKUP_TARGETS["knowledge"]` entry in `backend/tests/meta/_authz.py`),
+   `open_document_file` for serving, `configure_extraction(settings, net)` (imports
+   `pipeline` lazily: pipeline imports api for `open_backend`).
+5. Router: make `router = v1_router("knowledge", tags=["knowledge"])` unprefixed and prefix the
+   existing paths with `/knowledge` (paths and operation ids unchanged); add
+   `POST /v1/knowledge/documents` (202; multipart streamed with `python_multipart` into
+   `<spool>/<version_id>` with a byte counter, 413 `too_large` the moment it passes
+   `MAX_UPLOAD_BYTES`, sha256 while streaming, client Content-Type ignored, `session_or_key`,
+   `knowledge:write`, `idempotent=False` reason: the idempotency layer buffers the body and a
+   retry is a new document, `max_body_bytes=MAX_UPLOAD_BYTES + 1 MiB`, no `project_param`: the
+   handler checks `principal.project_ids` and answers 404; needs the folder's location online
+   (409 `location_offline`), 409 `no_location` without one; workspace KB uploads use folder
+   root `workspace` on the default location), `GET /v1/knowledge/documents/{document_id}`
+   (minimal read A1.5 polls; deviation), `GET /v1/files/{document_id}?version=` (`context:read`,
+   `project_param="lookup:knowledge"`; attachment + `filename*=UTF-8''<pct-encoded>`,
+   octet-stream, nosniff; 409 `not_available` unless `ready`; the 409 also carries the
+   headers, check how the P0-16 header middleware treats problem responses).
+6. Worker: `register_queues` adds `extract` (`worker_concurrency=1`);
+   `main(queues=...)`: `DBOS.listen_queues(list(queues))` before launch with
+   `executor_id="worker-extract"` in `dbos_config`; with no `queues`, `listen_queues` every
+   queue except `extract` (explicit list); the extract worker runs no relay and applies no
+   schedules; call `deadletter.configure(settings.dbos_system_url)` (or not needed in the
+   worker) and `knowledge.api.configure_extraction(settings.knowledge, net=settings.net_policy())`.
+   `tumnis worker --queues` flag in `cli.py`.
+7. Compose (T-14): `clamd` service (digest in `backend/tests/_services.py`; ship
+   `deploy/clamd/clamd.conf` raising StreamMaxLength to 60M, mount it), `worker-extract`
+   (`["tumnis","worker","--queues","extract"]`, `mem_limit: 4g`, `spool` rw + `scratch` named
+   volume, `KNOWLEDGE__CLAMD_HOST: clamd`, depends on clamd, migrate), `spool` volume also on
+   the api; preview/test compose: fakes, gate clamd with a profile (`required: false`
+   dependency). Dockerfile: `apt-get install libmagic1` (CI backend jobs too if libmagic is
+   missing on the runner: check `.github/workflows`).
+8. A1.5 (`tests/acceptance/_phase1.py`): `chunks_of` join `c.version_id` -> `c.document_version_id`
+   via `documents.current_version_id`; wire `knowledge_app` (server-path default location +
+   folders for the seed projects, real ClamAV on the `clamd` fixture; impl-2 adds real
+   Docling). `test_eicar_upload_is_quarantined` (A1.5) belongs in PR 1 if `knowledge_app` is
+   wired; `test_pdf_is_scanned_extracted_and_filed` is impl-2.
+9. Remove each spec marker as its test passes; run `make check`, `make test`, `make test-int`
+   (bare, from the worktree root; or rely on CI). Delete `handoff/` (`/usr/bin/git rm -r
+   handoff`), decide whether to keep `handoff/P1-16/scripts/make_extraction_fixtures.py` (move
+   to `scripts/fixtures/` if kept). Add a P1-16 row to the "Schema, files and names" list in
+   Part A of `docs/IMPLEMENTATION-PLAN-DETAILED.md` (new shared names: settings, tables,
+   ports, fakes, events, routes, codes `too_large`, `type_mismatch`, `type_not_allowed`,
+   `not_available`, `no_location`).
+10. Open the PR `[P1-16] impl: Upload safety and extraction` (body: summary, per-layer results,
+    shared-file edits, deviations, "Decided by Scott: decisions 10 and 11", no open Scott items
+    except the CI budget/Docling one for impl-2), comment `@coderabbitai review`, run the review
+    loop. Then PR 2 on `wp/P1-16-impl-2`: T-06 (real Docling, expected files), T-13 (vision
+    adapter + recordings + registration), A1.5 `test_pdf_is_scanned_extracted_and_filed`.
+    Do NOT pull Docling/torch into the default CI install in PR 1 (coordinator instruction).
+11. Finish: delete HANDOFF.md in a `chore:` commit.
 
-## Scott items (so far)
+## Pipeline design (implement as written unless it fails)
 
-- File serving reads storage from the api process (plan requires it); needs the AGENTS.md
-  exception widened.
-- ClamAV connects outside `resolve_and_check` (operator-configured, internal service).
-- Docling in CI (PR 2): torch CPU wheels and prefetched models; may need the homelab
-  runner if the integration budget breaks (plan's own fallback).
+- Paths: spool `<spool_dir>/<version_id>`; scratch `<scratch_dir>/<version_id>`.
+- `read`: copy spool -> scratch hashing (or, for `source="storage"`, the document's file via
+  `open_backend` at `<folder root>/<documents.path>`, at most `MAX_UPLOAD_BYTES + 1` bytes,
+  size from `stat`); writes hash/size to the rows; returns `Ref`. A helper re-creates scratch
+  in later steps if it was lost (from the spool, else from the placed file).
+- `scan`: stream scratch through the scanner; clean -> version and document `extracting`.
+- `quarantine`: statuses `quarantined` (reason = signature), `audit.record(session,
+  "upload.quarantined", target=("documents", doc_id), details={"signature","source"},
+  occurred_at=SystemClock().now())` under `WorkspaceContext(ws, SYSTEM_ACTOR)`, remove spool
+  and scratch; a folder file is never touched. Not added to `tests/audit_cases.py`.
+- `sniff`: `magic.from_buffer(first 8 KiB, mime=True)`; `application/zip` refined by reading
+  `[Content_Types].xml` (docx/xlsx/pptx); size > `MAX_UPLOAD_BYTES` -> `too_large`;
+  `classify_type(mime, ref["name"])`; sets `mime` on the version and `kind` on the document;
+  returns `{kind, mime, refusal}`.
+- `place` (uploads): `uploads/<upload_file_name(name)>` under the folder, create-only,
+  `numbered_name` on collision; a precondition failure whose file has the same sha256 counts
+  as placed (retried step); sets `documents.path` (relative to the folder), deletes the spool.
+- `convert`: `await asyncio.to_thread(extractor.convert, ...)`; artifacts `docling`,
+  `markdown`; `low_pages = low_confidence_pages(...)` for `pdf` only.
+- `vlm`: per low page, `extractor.page_image` -> `vision.page_markdown`; artifact
+  `vlm_pages` (JSON `{page: markdown}`); no vision configured (real mode, PR 1): skip.
+- `store`: gzip docling JSON + Markdown onto the version. `chunk`: `extractor.chunk`, then each
+  vlm page replaces the chunks whose range is exactly that page (`chunk_markdown`, page
+  range set, `extractor="vlm"`), ordinals renumbered; artifact `chunks`. `index`: replace the
+  version's `chunks` rows from the artifact. `emit`: statuses `ready`, `current_version_id`,
+  `document.changed` if the document already had a current version else `document.added`,
+  one transaction, no-op when already `ready`; removes scratch. `fail`: statuses `failed`,
+  reason = code; removes spool and scratch.
+- Pipeline defaults: fakes mode (`TUMNIS_ADAPTERS=fake`) -> `FakeClamAV`, `FakeDocling`,
+  `FakeVision` (constructed directly for docling/vision, registry for clamav); real mode ->
+  `ClamAV(settings.clamd_host, port, clock=SystemClock())`; the real extractor and vision
+  arrive with impl-2 (until then real mode raises a clear error in `convert`).
+- The kill test worker (`TUMNIS_ADAPTERS=fake`) places into its own in-process
+  `FakeStorage`; the test only checks rows and the step log.
+
+## Decisions and deviations so far (report every one in the PR body)
+
+- Workflow signature has `workspace_id` first (plan: `(version_id, source)`): steps need a
+  workspace context for RLS (calendar workflows do the same). Workflow name
+  `knowledge_extract_document`, id `extract:<version_id>`.
+- Kill point `extract.vlm_step` sits in the workflow body before `vlm_step`.
+- `GET /v1/knowledge/documents/{id}` added (minimal; P1-17 owns CRUD).
+- Router made unprefixed with explicit `/knowledge` paths so `/v1/files/{id}` fits.
+- Upload route `idempotent=False`, no `project_param` (reasons above).
+- Migration `knowledge_0004`: `chunk_tsv` immutable wrapper instead of the plan's raw
+  expression (generated columns need immutability); `document_versions.body_md` nullable;
+  `chunks.document_version_id` (P1-17's SQL) while `extraction_artifacts.version_id` follows
+  the plan.
+- Upload-name rules are `upload_file_name`/`numbered_name` in `knowledge/rules.py`, not
+  P1-15's `sanitize_filename`/`dedupe_name` (P1-15 is not merged; merge them when it lands).
+- `handwriting.pdf` scenario T-08 runs in PR 1 (it uses only the vision fake); T-13 and the
+  real Docling path are impl-2.
+- Shared-file edits so far: `backend/tests/fixtures/__init__.py` (additive `queues`
+  parameter, log file names), `backend/tumnis/testing/run_worker.py` (`--queues`),
+  `backend/tumnis/worker.py`, `backend/tumnis/settings.py`, `AGENTS.md`,
+  `backend/pyproject.toml` and `backend/uv.lock` (python-magic 0.4.27, python-multipart
+  0.0.26, from the first handoff), `backend/tests/meta/test_compose.py` (new T-14 function
+  only). Still to come: `deploy/compose.yaml`, `deploy/Dockerfile`, `.github` if libmagic is
+  needed, `docs/IMPLEMENTATION-PLAN-DETAILED.md` Part A.
+
+## Scott items
+
+- Decided (cite in the PR body): decision 10 (api process reads storage to serve files) and
+  decision 11 (ClamAV connects to clamd directly, isolated to `adapters/clamav.py`); AGENTS.md
+  already records both.
+- Open: Docling in CI for impl-2 (torch CPU wheels, prefetched models; may need the homelab
+  runner if the integration budget breaks; decision 8 covers raising the budget by a
+  spec-change PR only if speed-ups cannot keep it under 10 minutes).
 
 ## Verify commands
 
-- `make check` (root); unit: `cd backend && uv run pytest -q -n 3 -m "not integration and not contract" tumnis/modules/knowledge`
-- Docker layers (bare, from the worktree root): `make test`, `make test-int`
-- Before the PR: `rm -r handoff/`, regenerate nothing else.
+- `make check` (root); unit: `cd backend && uv run pytest -q -n 3 -m "not integration and not
+  contract" tumnis/modules/knowledge`; the Docker-free integration test:
+  `cd backend && uv run pytest -q -m integration tumnis/modules/knowledge/tests/integration/
+  test_clamav_protocol.py`.
+- Docker layers (bare, from the worktree root): `make test`, `make test-int`.
