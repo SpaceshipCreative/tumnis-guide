@@ -22,36 +22,30 @@ const sources = import.meta.glob<string>(
   { query: "?raw", import: "default", eager: true },
 );
 
-test.fails(
-  "[DS-01][UX 11] T-DS-01-13 components colour only through the design tokens",
-  () => {
-    expect(Object.keys(sources).length).toBeGreaterThan(50);
-    const raw = Object.entries(sources).flatMap(([path, text]) =>
-      [...text.matchAll(RAW_COLOUR)].map((match) => `${path}: ${match[0]}`),
-    );
-    expect(raw).toEqual([]);
-  },
-);
+test("[DS-01][UX 11] T-DS-01-13 components colour only through the design tokens", () => {
+  expect(Object.keys(sources).length).toBeGreaterThan(50);
+  const raw = Object.entries(sources).flatMap(([path, text]) =>
+    [...text.matchAll(RAW_COLOUR)].map((match) => `${path}: ${match[0]}`),
+  );
+  expect(raw).toEqual([]);
+});
 
-test.fails(
-  "[DS-01][UX 11] T-DS-01-14 a card is a labelled region with a header row",
-  () => {
-    render(
-      <Card
-        title="Today"
-        headingLevel={2}
-        action={<button type="button">Plan</button>}
-      >
-        <p>Three tasks</p>
-      </Card>,
-    );
-    const card = screen.getByRole("region", { name: "Today" });
-    expect(
-      within(card).getByRole("heading", { level: 2, name: "Today" }),
-    ).toBeInTheDocument();
-    expect(
-      within(card).getByRole("button", { name: "Plan" }),
-    ).toBeInTheDocument();
-    expect(within(card).getByText("Three tasks")).toBeInTheDocument();
-  },
-);
+test("[DS-01][UX 11] T-DS-01-14 a card is a labelled region with a header row", () => {
+  render(
+    <Card
+      title="Today"
+      headingLevel={2}
+      action={<button type="button">Plan</button>}
+    >
+      <p>Three tasks</p>
+    </Card>,
+  );
+  const card = screen.getByRole("region", { name: "Today" });
+  expect(
+    within(card).getByRole("heading", { level: 2, name: "Today" }),
+  ).toBeInTheDocument();
+  expect(
+    within(card).getByRole("button", { name: "Plan" }),
+  ).toBeInTheDocument();
+  expect(within(card).getByText("Three tasks")).toBeInTheDocument();
+});

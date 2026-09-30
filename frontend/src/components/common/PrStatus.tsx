@@ -1,5 +1,7 @@
 // The pull request chip (P2-13, FR-12.1): state, combined checks and review, in words and
 // in the link's accessible name, so a red build is not told by colour alone.
+import { badge } from "./ui";
+
 export interface PullRequest {
   artifact_id: string;
   url: string;
@@ -33,8 +35,8 @@ const REVIEW_WORDS = {
   none: ["No review", "no review"],
 } as const;
 
-const CHIP =
-  "rounded-full border border-border px-2 py-0.5 text-xs whitespace-nowrap";
+// Quiet by default (UX 3): neutral chips, and only failing checks in the danger tone.
+const CHIP = badge("neutral");
 
 export function PrStatus({ pr }: { pr: PullRequest }) {
   const ref = `${pr.repo}#${String(pr.number)}`;
@@ -67,14 +69,16 @@ export function PrStatus({ pr }: { pr: PullRequest }) {
           <>
             <span className={CHIP}>{words.state[0]}</span>
             <span
-              className={`${CHIP} ${pr.checks === "red" ? "border-danger font-semibold text-danger" : ""}`}
+              className={
+                pr.checks === "red" ? `${badge("danger")} font-semibold` : CHIP
+              }
             >
               {words.checks[0]}
             </span>
             <span className={CHIP}>{words.review[0]}</span>
           </>
         ) : (
-          <span className={`${CHIP} text-muted`}>Checking…</span>
+          <span className={CHIP}>Checking…</span>
         )}
       </a>
     </span>
