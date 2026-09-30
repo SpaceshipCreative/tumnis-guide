@@ -46,7 +46,6 @@ def _calls(log: Path) -> list[list[str]]:
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_create_is_idempotent_and_version_checked(
     cfg: DaemonConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

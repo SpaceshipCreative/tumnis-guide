@@ -7,6 +7,9 @@ HERMES_STUB_SLEEP it first starts a child sharing its process group (both pids g
 HERMES_STUB_PIDFILE), and sleeps that many seconds, so a timeout must kill the group.
 HERMES_STUB_STDERR_FILE gets the path the stub's stderr points at (Linux /proc).
 `profile show`, `version`, `mcp list` and `status` answer for the health check.
+P1-06: every call's argv is appended, tab-joined, to HERMES_STUB_LOG when set. With
+HERMES_STUB_PROFILES_DIR, `profile show <n>` succeeds when that directory has <n> and
+`profile install <dir> --name <n> --yes` creates it; unset, only `acme-site` exists.
 """
 
 import os
@@ -39,14 +42,35 @@ def chat(args: list[str]) -> int:
     return 0
 
 
+def profile(argv: list[str]) -> int:
+    profiles_dir = os.environ.get("HERMES_STUB_PROFILES_DIR")
+    if argv[1] == "show":
+        if profiles_dir is None:
+            return 0 if argv[2:3] == ["acme-site"] else 1
+        return 0 if (Path(profiles_dir) / argv[2]).is_dir() else 1
+    if argv[1] == "install" and profiles_dir is not None and "--name" in argv:
+        if not Path(argv[2], "distribution.yaml").is_file():
+            print(f"no distribution at {argv[2]}", file=sys.stderr)
+            return 1
+        name = argv[argv.index("--name") + 1]
+        (Path(profiles_dir) / name).mkdir(parents=True)
+        return 0
+    print(f"stub hermes: unknown command {argv}", file=sys.stderr)
+    return 2
+
+
 def main(argv: list[str]) -> int:
+    log = os.environ.get("HERMES_STUB_LOG")
+    if log:
+        with Path(log).open("a", encoding="utf-8") as f:
+            f.write("\t".join(argv) + "\n")
     if "chat" in argv:
         return chat(argv)
     if argv[:1] == ["version"]:
         print("hermes 0.9.0")
         return 0
-    if argv[:2] == ["profile", "show"]:
-        return 0 if argv[2:3] == ["acme-site"] else 1
+    if argv[:1] == ["profile"] and len(argv) >= 3:
+        return profile(argv)
     if "mcp" in argv and "list" in argv:
         print("tumnis  http://tumnis.example.org/mcp  enabled")
         return 0
