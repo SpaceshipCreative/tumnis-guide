@@ -1,0 +1,55 @@
+{
+  "$id": "https://tumnis.dev/schemas/runner/v1/archive.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Protocol 2: the schema only; the behavior and its companions arrive in P2-18.",
+  "properties": {
+    "archive_id": {
+      "maxLength": 128,
+      "title": "Archive Id",
+      "type": "string"
+    },
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "profile": {
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "title": "Profile",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "type": {
+      "const": "archive",
+      "default": "archive",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "profile",
+    "archive_id"
+  ],
+  "title": "Archive",
+  "type": "object"
+}

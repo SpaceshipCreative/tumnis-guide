@@ -1,4 +1,4 @@
-"""The daemon's configuration (`/etc/tumnis/daemon.toml`, P1-04).
+"""The daemon's configuration (`/etc/tumnis/daemon.toml`, P1-04, P2-07).
 
 ```toml
 server_url = "wss://tumnis.example.org"   # /ws/runner is appended
@@ -12,13 +12,23 @@ max_concurrent_runs = 2
 template_dir = "/opt/tumnis-daemon/share/profiles/project-template"
 hermes_profiles_dir = "/home/tumnis-agent/.hermes/profiles"
 profile_env_file = "/etc/tumnis/profile.env"   # copied to each new profile's .env, 0600
+# P2-07 (defaults shown)
+agent_home = "/home/tumnis-agent"          # a `path` code location must sit under it...
+paths_dropin = "/etc/systemd/system/tumnis-daemon.service.d/paths.conf"  # ...or be listed
+kill_grace_s = 10.0                        # SIGTERM to SIGKILL on cancel
+outbox_max_bytes = 52428800                # 50 MiB; past it, old log lines give way
 ```
 """
 
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
+
+AGENT_HOME: Final = Path("/home/tumnis-agent")  # R-26
+PATHS_DROPIN: Final = Path("/etc/systemd/system/tumnis-daemon.service.d/paths.conf")
+KILL_GRACE_S: Final = 10.0  # plan default
+OUTBOX_MAX_BYTES: Final = 50 * 1024 * 1024  # plan default
 
 TEMPLATE_DIR = Path("/opt/tumnis-daemon/share/profiles/project-template")
 PROFILE_ENV_FILE = Path("/etc/tumnis/profile.env")
@@ -36,6 +46,10 @@ class DaemonConfig:
     template_dir: Path = TEMPLATE_DIR  # the project template of this release (P1-06)
     hermes_profiles_dir: Path = field(default_factory=lambda: Path.home() / ".hermes" / "profiles")
     profile_env_file: Path | None = PROFILE_ENV_FILE
+    agent_home: Path = AGENT_HOME
+    paths_dropin: Path = PATHS_DROPIN
+    kill_grace_s: float = KILL_GRACE_S
+    outbox_max_bytes: int = OUTBOX_MAX_BYTES
 
     def read_token(self) -> str:
         return self.token_file.read_text(encoding="utf-8").strip()
@@ -64,4 +78,8 @@ def load_config(path: Path) -> DaemonConfig:
             data.get("hermes_profiles_dir", Path.home() / ".hermes" / "profiles")
         ),
         profile_env_file=Path(data.get("profile_env_file", PROFILE_ENV_FILE)),
+        agent_home=Path(data.get("agent_home", AGENT_HOME)),
+        paths_dropin=Path(data.get("paths_dropin", PATHS_DROPIN)),
+        kill_grace_s=float(data.get("kill_grace_s", KILL_GRACE_S)),
+        outbox_max_bytes=int(data.get("outbox_max_bytes", OUTBOX_MAX_BYTES)),
     )

@@ -11,6 +11,9 @@
   project, and `provision_outcome` turns the runner's answer into the profile's status.
 - `select_runner`: the runner a daemon-transport profile runs on, when it is online and
   lists the profile in its inventory.
+- Artifacts (P2-07): `artifact_refusal`, the `nack` code for an `upload_artifact` the
+  server will not store (small UTF-8 text of a few media types only); the sha256 is
+  computed by the caller, since hashing is not a rule.
 - Skill replies (P1-05): `enrichment_errors` and `planning_errors`, the cross-field checks
   a JSON Schema cannot express, shared by the skill harness and the workflows that apply
   a reply (P1-08, P1-11). They read the skill models of `skill_io.py` structurally.
@@ -175,6 +178,46 @@ def select_runner(
             continue
         online = runner_status(runner.last_heartbeat_at, now) == "online"
         return runner if online and profile.name in runner.inventory else None
+    return None
+
+
+# --- artifacts (P2-07) --------------------------------------------------------------------
+
+ARTIFACT_MAX_BYTES: Final = 256 * 1024  # plan default
+ARTIFACT_MEDIA_TYPES: Final = frozenset(
+    {"text/plain", "text/markdown", "text/x-diff", "application/json"}
+)
+ArtifactRefusal = Literal["too_large", "bad_media_type", "not_utf8", "sha_mismatch"]
+
+
+def artifact_bytes(content: str) -> bytes | None:
+    """The content as UTF-8, None when it cannot be (a lone surrogate from a JSON escape)."""
+    try:
+        return content.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+
+
+def artifact_refusal(
+    media_type: str, content: str, size: int, sha256: str, computed_sha256: str | None
+) -> ArtifactRefusal | None:
+    """Why the server refuses an artifact, checked in this order; None to store it.
+
+    - media type not text/plain, text/markdown, text/x-diff or application/json
+                                                                  -> 'bad_media_type'
+    - content not UTF-8 text (a NUL byte, or a lone surrogate)    -> 'not_utf8'
+    - more than ARTIFACT_MAX_BYTES of UTF-8, declared or actual   -> 'too_large'
+    - declared size or sha256 not those of the content            -> 'sha_mismatch'
+    """
+    if media_type not in ARTIFACT_MEDIA_TYPES:
+        return "bad_media_type"
+    raw = artifact_bytes(content)
+    if raw is None or "\x00" in content:
+        return "not_utf8"
+    if len(raw) > ARTIFACT_MAX_BYTES or size > ARTIFACT_MAX_BYTES:
+        return "too_large"
+    if size != len(raw) or computed_sha256 is None or sha256.lower() != computed_sha256:
+        return "sha_mismatch"
     return None
 
 

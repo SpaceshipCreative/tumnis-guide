@@ -1,5 +1,5 @@
 """agents SQLAlchemy tables owned by this module (mirrors of revisions agents_0001, P1-04,
-and agents_0002, P1-06).
+agents_0002, P2-07, and agents_0003, P1-06).
 
 - runners: one per runner daemon; its device token lives in auth's `device_tokens`.
 - agent_profiles: the Hermes profiles Tumnis may run (one master, one per project).
@@ -71,6 +71,7 @@ class RunRow(TenantBase, Base):
     delegation_id: Mapped[UUID | None]
     output: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     error: Mapped[str | None]
+    profile_version: Mapped[str | None]  # the profile's VERSION when the run started (P2-07)
 
 
 class RunEventRow(TenantBase, Base):

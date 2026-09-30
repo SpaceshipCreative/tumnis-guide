@@ -14,8 +14,8 @@ constraint-missing-not-valid). Existing rows take the default, `create`, which i
 import sqlalchemy as sa
 from alembic import op
 
-revision = "agents_0002"
-down_revision = "agents_0001"
+revision = "agents_0003"
+down_revision = "agents_0002"
 branch_labels = None
 depends_on = None
 phase = "expand"

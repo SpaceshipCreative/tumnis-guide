@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "message_id": "01950000-0000-7000-8000-000000002007",
+  "correlation_id": "run:01950000-0000-7000-8000-000000000101",
+  "sent_at": "2026-03-09T12:00:00Z",
+  "type": "nack",
+  "nack_of": "01950000-0000-7000-8000-000000002004",
+  "code": "sha_mismatch",
+  "detail": "sha256 does not match the content"
+}

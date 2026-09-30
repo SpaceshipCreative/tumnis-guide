@@ -103,6 +103,12 @@ class FakeRunner:
         self.received: list[ServerMessage] = []
         self.sent: list[DaemonMessage] = []
         self.acked: set[uuid.UUID] = set()  # ids of this runner's messages the server acked
+        self.ack_log: list[uuid.UUID] = []  # every id the server acked, repeats included
+        self.ack_frames: list[Any] = []  # the ack frames themselves (per-message or batched)
+        self.nacked: dict[uuid.UUID, str] = {}  # protocol 2: refused message id -> code
+        self.protocol_version = 1  # the session's, from `registered`
+        self.capabilities: list[str] = ["run", "provision", "health"]
+        self.protocol_versions: list[int] = [1]
         self.errors: list[BaseException] = []
         self.registered: Registered | None = None
         self.ack_server_messages = True
@@ -202,20 +208,32 @@ class FakeRunner:
             daemon_version=self.daemon_version,
             hermes_version=self.hermes_version,
             profiles=[ProfileInfo(name=p) for p in self.profiles if p not in self._offline],
-            capabilities=["run", "provision", "health"],
+            capabilities=list(self.capabilities),  # type: ignore[arg-type]
         )
 
-    def connect(self, *, protocol_versions: Sequence[int] = (1,)) -> Registered:
-        """Open the socket, register, wait for `registered`, then read in the background."""
+    def connect(
+        self,
+        *,
+        protocol_versions: Sequence[int] | None = None,
+        capabilities: Sequence[str] | None = None,
+    ) -> Registered:
+        """Open the socket, register, wait for `registered`, then read in the background.
+        The versions and capabilities stick: `reconnect` registers with them again
+        (protocol 2 needs `[1, 2]` with `PROTOCOL_2_CAPABILITIES`)."""
         from tumnis.modules.agents.protocol import Registered, parse_server  # noqa: PLC0415
 
+        if protocol_versions is not None:
+            self.protocol_versions = list(protocol_versions)
+        if capabilities is not None:
+            self.capabilities = list(capabilities)
         ws = self.open()
-        self.send(self.register_message(protocol_versions))
+        self.send(self.register_message(self.protocol_versions))
         first = parse_server(ws.receive_text())
         self._record(first)
         if not isinstance(first, Registered):
             raise AssertionError(f"expected registered, got {first!r}")
         self.registered = first
+        self.protocol_version = first.protocol_version
         self.ack(first)
         self._reader = threading.Thread(target=self._read, args=(ws,), daemon=True)
         self._reader.start()
@@ -271,14 +289,44 @@ class FakeRunner:
             self._changed.notify_all()
 
     def ack(self, message: ServerMessage) -> None:
+        """Ack a server message the way the session's protocol does: `ack{ack_of}` on
+        protocol 1, `ack{message_ids}` (version 2) on protocol 2."""
         from tumnis.modules.agents.protocol import Ack  # noqa: PLC0415
 
-        if self.ack_server_messages:
-            self.send(Ack(**self._envelope(message.correlation_id), ack_of=message.message_id))
+        if not self.ack_server_messages:
+            return
+        if self.protocol_version >= 2:
+            from tumnis.modules.agents.protocol import AckBatch  # noqa: PLC0415
+
+            self.send(
+                AckBatch(  # type: ignore[arg-type]
+                    **self._envelope(message.correlation_id), message_ids=[message.message_id]
+                )
+            )
+            return
+        self.send(Ack(**self._envelope(message.correlation_id), ack_of=message.message_id))
+
+    def _note_ack(self, message: Any) -> bool:
+        """Record an ack or nack from the server; True when the frame was one."""
+        ids: list[uuid.UUID] = []
+        if message.type == "ack":
+            ids = [message.ack_of] if hasattr(message, "ack_of") else list(message.message_ids)
+        elif message.type == "nack":
+            with self._changed:
+                self.nacked[message.nack_of] = message.code
+                self._changed.notify_all()
+            return True
+        else:
+            return False
+        with self._changed:
+            self.ack_frames.append(message)
+            self.acked.update(ids)
+            self.ack_log.extend(ids)
+            self._changed.notify_all()
+        return True
 
     def _read(self, ws: WebSocketTestSession) -> None:
         from tumnis.modules.agents.protocol import (  # noqa: PLC0415
-            Ack,
             HealthCheck,
             Provision,
             Run,
@@ -293,12 +341,10 @@ class FakeRunner:
                     self._changed.notify_all()
                 return
             try:
-                if isinstance(message, Ack):
-                    with self._changed:
-                        self.acked.add(message.ack_of)
-                self._record(message)
-                if isinstance(message, Ack):
+                if self._note_ack(message):
+                    self._record(message)
                     continue
+                self._record(message)
                 self.ack(message)
                 if isinstance(message, Run):
                     self._answer_run(message)

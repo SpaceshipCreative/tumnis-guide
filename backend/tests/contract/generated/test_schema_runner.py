@@ -19,6 +19,24 @@ CASES = [
     ),
     (
         "runner",
+        "ack",
+        2,
+        "backend/tests/contract/fixtures/runner/ack/v2.json",
+    ),
+    (
+        "runner",
+        "archive",
+        1,
+        "backend/tests/contract/fixtures/runner/archive/v1.json",
+    ),
+    (
+        "runner",
+        "cancel",
+        1,
+        "backend/tests/contract/fixtures/runner/cancel/v1.json",
+    ),
+    (
+        "runner",
         "error",
         1,
         "backend/tests/contract/fixtures/runner/error/v1.json",
@@ -40,6 +58,12 @@ CASES = [
         "heartbeat",
         1,
         "backend/tests/contract/fixtures/runner/heartbeat/v1.json",
+    ),
+    (
+        "runner",
+        "nack",
+        1,
+        "backend/tests/contract/fixtures/runner/nack/v1.json",
     ),
     (
         "runner",
@@ -73,9 +97,39 @@ CASES = [
     ),
     (
         "runner",
+        "result",
+        2,
+        "backend/tests/contract/fixtures/runner/result/v2.json",
+    ),
+    (
+        "runner",
         "run",
         1,
         "backend/tests/contract/fixtures/runner/run/v1.json",
+    ),
+    (
+        "runner",
+        "run",
+        2,
+        "backend/tests/contract/fixtures/runner/run/v2.json",
+    ),
+    (
+        "runner",
+        "status",
+        1,
+        "backend/tests/contract/fixtures/runner/status/v1.json",
+    ),
+    (
+        "runner",
+        "stream",
+        1,
+        "backend/tests/contract/fixtures/runner/stream/v1.json",
+    ),
+    (
+        "runner",
+        "upload_artifact",
+        1,
+        "backend/tests/contract/fixtures/runner/upload_artifact/v1.json",
     ),
 ]
 

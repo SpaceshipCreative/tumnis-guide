@@ -29,7 +29,7 @@ from tumnis.modules.agents.adapters.port import (
     RunEvent,
     RunHandle,
 )
-from tumnis.modules.agents.models import AgentProfile, Runner
+from tumnis.modules.agents.models import AgentProfile, RunEventRow, Runner
 from tumnis.modules.agents.packet_builder import TaskPacket
 from tumnis.modules.agents.protocol import SchemaRef
 from tumnis.modules.agents.rules import (
@@ -81,6 +81,7 @@ __all__ = [
     "RunnerOut",
     "SchemaRef",
     "TaskPacket",
+    "run_log",
 ]
 
 RUNNER_CHANNEL: Final = "runner_mailbox"  # NOTIFY {"runner": id, "close": bool}
@@ -169,7 +170,7 @@ class RunOutcome(BaseModel):
     error when it failed."""
 
     run_id: UUID
-    status: Literal["succeeded", "failed", "timed_out", "runner_lost"]
+    status: Literal["succeeded", "failed", "timed_out", "runner_lost", "cancelled"]
     output_json: dict[str, Any] | None = None
     error: str | None = None
 
@@ -178,6 +179,8 @@ class RunOutcome(BaseModel):
 
 _runners: Table = Runner.__table__  # type: ignore[assignment]
 _profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
+_events: Table = RunEventRow.__table__  # type: ignore[assignment]
+STREAM_KINDS: Final = frozenset({"log", "tool_call", "file"})
 
 _NOTIFY = text("SELECT pg_notify(:channel, :payload)")
 
@@ -790,3 +793,39 @@ async def master_registry(*, ctx: WorkspaceContext | None = None) -> list[Projec
         if row.project_id in names
     ]
     return sorted(entries, key=lambda e: (e.project_name.casefold(), str(e.project_id)))
+
+
+# --- The run log (P2-07) -------------------------------------------------------------------
+
+
+async def run_log(s: AsyncSession, run_id: UUID) -> list[RunEvent]:
+    """A run's events as the run view shows them: in the order they arrived, with the
+    stream lines (`log`, `tool_call`, `file`) in `seq` order among themselves, so a line
+    the daemon replayed late still takes its place. P2-04 serves it at
+    `GET /v1/runs/{id}/events`."""
+    rows = (
+        (
+            await s.execute(
+                select(_events)
+                .where(_events.c.run_id == run_id, _events.c.deleted_at.is_(None))
+                .order_by(_events.c.created_at, _events.c.id)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    events = [
+        RunEvent(
+            run_id=row["run_id"],
+            message_id=row["message_id"],
+            kind=row["kind"],
+            payload=row["payload"],
+            at=row["created_at"],
+        )
+        for row in rows
+    ]
+    slots = [i for i, event in enumerate(events) if event.kind in STREAM_KINDS]
+    lines = sorted((events[i] for i in slots), key=lambda e: int(e.payload.get("seq") or 0))
+    for slot, line in zip(slots, lines, strict=True):
+        events[slot] = line
+    return events
