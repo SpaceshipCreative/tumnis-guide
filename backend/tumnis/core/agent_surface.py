@@ -10,12 +10,15 @@ is covered without anyone remembering.
 
 `invoke(op, caller, raw, door=...)` is the one path both doors take:
 
-1. `schema_version`: missing or current passes; current - 1 goes through the op's
-   `previous_version_adapter`; anything else is 422 `unsupported_schema_version`.
-2. Scope, then project (P0-14's `authorize`, R-28): 403 `insufficient_scope`, then 404
-   `not_found` for a project-limited key or task token aiming at another project; then
-   403 `master_only` for an op only the master key may call (checked here, never at key
-   creation, R-34). The order matches the REST twin's `TumnisRoute`.
+1. Scope, then project (P0-14's `authorize`, R-28): 403 `insufficient_scope`, then 404
+   `not_found` for a project-limited key or task token aiming at another project, or for
+   a write aimed at a project or row the workspace does not have; then 403 `master_only`
+   for an op only the master key may call (checked here, never at key creation, R-34).
+   The order matches the REST twin's `TumnisRoute`.
+2. `schema_version`: missing or current passes; current - 1 goes through the op's
+   `previous_version_adapter`; anything else is 422 `unsupported_schema_version`. It is
+   judged after step 1, so a write at another workspace's row is 404 whatever it says
+   (A0.3).
 3. Write rules: an MCP write needs `idempotency_key` (400 `idempotency_key_required`,
    REST sends the header); the input model is validated (422 `validation_error`; an
    update without `version` fails here). MCP writes run through
@@ -42,7 +45,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
-from tumnis.core import idempotency
+from tumnis.core import idempotency, routing
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.principal import Principal, principal_of
@@ -307,19 +310,33 @@ def _uuid(value: Any) -> UUID | None:
         return None
 
 
+PROJECTS_LOOKUP: Final = "projects"  # the lookup projects registers: a live project, or None
+
+
+def _not_found() -> ProblemError:
+    return ProblemError(404, "not_found", "Not found")
+
+
 async def _project(op: SurfaceOp, caller: Caller, raw: Mapping[str, Any]) -> UUID | None:
-    """The project the call names; only looked up for a project-limited caller. A row the
-    resolver cannot place is 404 for such a caller, as its REST twin would say."""
+    """The project the call names. A read looks it up only for a project-limited caller
+    (the others may read every project). A write always locates its project or row, so a
+    write aimed at a row the caller cannot see is 404 before anything in its body is
+    judged (A0.3), as its REST twin would say."""
     principal = caller.principal
-    if principal.project_ids is None:
+    if principal.project_ids is None and not op.write:
         return None
+    ctx = principal.workspace_context()
     if op.project_arg is not None:
-        return _uuid(raw.get(op.project_arg))
+        project_id = _uuid(raw.get(op.project_arg))
+        exists = routing.project_lookup(PROJECTS_LOOKUP)
+        if project_id is not None and exists is not None and await exists(ctx, project_id) is None:
+            raise _not_found()
+        return project_id
     if op.project_resolver is None:
         return None
-    found = await op.project_resolver(principal.workspace_context(), raw)
+    found = await op.project_resolver(ctx, raw)
     if found is None:
-        raise ProblemError(404, "not_found", "Not found")
+        raise _not_found()
     return found
 
 
@@ -370,8 +387,15 @@ async def invoke(
     """Runs one call of `op` for `caller` (see the module docstring). The REST twin
     passes its idempotent request's session and the Idempotency-Key header as
     `idempotency_key`; MCP passes neither and gets its own transaction here."""
-    data = _upgrade(op, dict(raw))
+    # Who may call, and whether the target exists, come before the version is judged: a
+    # write aimed at a row the caller cannot see is 404 whatever its schema_version says.
+    try:
+        data, unsupported = _upgrade(op, dict(raw)), None
+    except ProblemError as exc:
+        data, unsupported = dict(raw), exc
     await authorize_call(op, caller, data)
+    if unsupported is not None:
+        raise unsupported
     if door == "rest" and caller.principal.kind == "session" and not op.session_twin_allowed:
         raise ProblemError(403, "key_required", "Only an API key or a task token can do this")
     if op.write:

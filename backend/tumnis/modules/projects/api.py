@@ -10,7 +10,7 @@ tasks module registers a `ProjectStatsSource` at import (P0-18). Until then ever
 counts zero tasks and is on track. Reads ask the source once per page for every id on it.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Annotated, Any, Final, Literal, Protocol
 from uuid import UUID
@@ -31,6 +31,7 @@ from tumnis.core.limits import MAX_ESTIMATE_MINUTES
 from tumnis.core.live import mark_changed
 from tumnis.core.outbox import emit
 from tumnis.core.pagination import Page, SortKey, paginate
+from tumnis.core.routing import register_project_lookup
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR, ActorRef
 from tumnis.core.versioning import NotFound, StaleVersion, Version, update_versioned
@@ -358,6 +359,88 @@ async def project_exists(s: AsyncSession, project_id: UUID) -> bool:
     """A live project (archived or not) of the caller's workspace."""
     found = await s.scalar(select(_projects.c.id).where(_projects.c.id == project_id, _live()))
     return found is not None
+
+
+async def _project_itself(ctx: WorkspaceContext, project_id: UUID) -> UUID | None:
+    """The `projects` project lookup: the project when it is live in the workspace (the
+    agent surface locates a write's project with it, P2-01)."""
+    async with tenant_session(ctx) as s:
+        return project_id if await project_exists(s, project_id) else None
+
+
+register_project_lookup("projects", _project_itself)
+
+
+# --- Project context (the get_project_context tool, P2-01) ------------------------------------
+
+
+class PolicySummary(BaseModel):
+    """What an agent may do in the project without asking, and its run limits (FR-5.6)."""
+
+    gated: list[str]
+    allowed: list[str]
+    tool_allowlist: list[str]
+    max_concurrent_runs: int
+    max_run_minutes: int
+    max_tasks_per_run: int
+
+
+class ProjectContextOut(BaseModel):
+    """A project as an agent starts work in it: who it is for, what it aims at, where its
+    code and domains are, the brief, the card threshold and the approval policy."""
+
+    project_id: UUID
+    name: str
+    client: str | None
+    goal: str | None
+    deadline: date | None
+    status: ProjectStatus
+    archived: bool
+    domains: list[str]
+    code_path: str | None
+    repo_url: str | None
+    subtask_threshold_min: int  # the effective one: the project's, else the workspace's
+    brief_md: str
+    policy: PolicySummary | None
+
+
+# The brief lives in knowledge, which imports projects; knowledge registers its reader here.
+BriefSource = Callable[[AsyncSession, UUID], Awaitable[str | None]]
+_brief_source: list[BriefSource] = []
+
+
+def register_brief_source(src: BriefSource) -> None:
+    """knowledge registers the reader of a project's brief (the last one wins)."""
+    _brief_source[:] = [src]
+
+
+async def project_context(s: AsyncSession, project_id: UUID) -> ProjectContextOut:
+    """The project's context for an agent; NotFound (404) for a project that is not live.
+    The brief is "" until knowledge has it; the policy is None if the project has none."""
+    row = await _row(s, project_id)
+    links = (await _links_of(s, [project_id]))[project_id]
+    try:
+        policy: PolicySummary | None = PolicySummary.model_validate(
+            (await get_policy(s, project_id)).model_dump()
+        )
+    except NotFound:
+        policy = None
+    brief = await _brief_source[0](s, project_id) if _brief_source else None
+    return ProjectContextOut(
+        project_id=row.id,
+        name=row.name,
+        client=row.client,
+        goal=row.goal,
+        deadline=row.deadline,
+        status=row.status,
+        archived=row.archived_at is not None,
+        domains=[link.value for link in links if link.kind == "domain"],
+        code_path=row.code_path,
+        repo_url=row.repo_url,
+        subtask_threshold_min=await effective_subtask_threshold(s, project_id),
+        brief_md=brief or "",
+        policy=policy,
+    )
 
 
 # --- Writing -------------------------------------------------------------------------------

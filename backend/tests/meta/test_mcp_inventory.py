@@ -49,7 +49,6 @@ def _registry() -> tuple[dict[str, Any], dict[str, str]]:
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 def test_prd_tools_registered_or_pending() -> None:
     """T-P2-01-16
     Every PRD tool is registered or listed in `PENDING_TOOLS` with the WP that brings it
@@ -72,7 +71,6 @@ def test_prd_tools_registered_or_pending() -> None:
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 def test_no_hermes_specific_names() -> None:
     """T-P2-01-17
     No tool name, description, input or output field name or field description mentions

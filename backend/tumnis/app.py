@@ -164,6 +164,25 @@ def _document_problems(app: FastAPI) -> None:
     app.openapi = openapi  # type: ignore[method-assign]  # FastAPI's documented override
 
 
+def _mount_agent_doors(app: FastAPI, settings: Settings) -> None:
+    """The doors beside /v1: the live socket, the runner socket and /mcp."""
+    app.state.live_hub = live.LiveHub(settings.database_direct_url)
+    # WS /ws (P0-22). Added on the app itself: FastAPI's walker loses the path of a
+    # WebSocket route inside an included router, and the route sweeps read it.
+    app.add_api_websocket_route("/ws", live.live_socket, name="live_socket")
+    # WS /ws/runner (P1-04): runner daemons dial in with a device token. Imported by name,
+    # as module_routers does, so no module's tests import agents through this root.
+    agents_ws = importlib.import_module("tumnis.modules.agents.ws")
+    app.state.runner_hub = agents_ws.RunnerHub(
+        settings.database_direct_url, settings.dbos_system_url
+    )
+    app.add_api_websocket_route("/ws/runner", agents_ws.runner_socket, name="runner_socket")
+    # /mcp (P2-01): every module's ops as tools; a raw route, so POST /mcp is not redirected.
+    wiring.load_mcp()
+    app.state.mcp_session_manager = mcp_server.session_manager()
+    app.router.routes.append(mcp_server.mcp_route())
+
+
 def create_app(
     settings: Settings | None = None,
     clock: Clock | None = None,
@@ -237,21 +256,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(metrics.router)  # GET /metrics, bearer (P0-27)
     app.include_router(v1_routes(settings, extra_routers))
-    app.state.live_hub = live.LiveHub(settings.database_direct_url)
-    # WS /ws (P0-22). Added on the app itself: FastAPI's walker loses the path of a
-    # WebSocket route inside an included router, and the route sweeps read it.
-    app.add_api_websocket_route("/ws", live.live_socket, name="live_socket")
-    # WS /ws/runner (P1-04): runner daemons dial in with a device token. Imported by name,
-    # as module_routers does, so no module's tests import agents through this root.
-    agents_ws = importlib.import_module("tumnis.modules.agents.ws")
-    app.state.runner_hub = agents_ws.RunnerHub(
-        settings.database_direct_url, settings.dbos_system_url
-    )
-    app.add_api_websocket_route("/ws/runner", agents_ws.runner_socket, name="runner_socket")
-    # /mcp (P2-01): every module's ops as tools; a raw route, so POST /mcp is not redirected.
-    wiring.load_mcp()
-    app.state.mcp_session_manager = mcp_server.session_manager()
-    app.router.routes.append(mcp_server.mcp_route())
+    _mount_agent_doors(app, settings)
     shell = shell_dir or SHELL_DIR
     if shell.is_dir():
         app.mount("/", ShellFiles(directory=shell, html=True), name="shell")

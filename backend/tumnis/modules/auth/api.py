@@ -1324,6 +1324,20 @@ async def revoke_task_tokens_for_run(ctx: WorkspaceContext, run_id: UUID, *, now
     return await tokens.revoke_task_tokens_for_run(ctx, run_id, now=now)
 
 
+async def task_token_run(principal: Principal) -> UUID | None:
+    """The run a task token belongs to (the agent surface's caller, R-31); None for any
+    other principal."""
+    if principal.kind != "task_token" or principal.subject_id is None:
+        return None
+    async with tenant_session(principal.workspace_context()) as s:
+        run_id: UUID | None = await s.scalar(
+            select(tokens.TASK_TOKENS.c.run_id).where(
+                tokens.TASK_TOKENS.c.id == principal.subject_id
+            )
+        )
+    return run_id
+
+
 async def issue_device_token(ctx: WorkspaceContext, *, runner_id: UUID, now: datetime) -> str:
     """A `tmd_` token for the runner (shown once); the previous one stops."""
     new = await tokens.issue_device_token(ctx, runner_id=runner_id, now=now)

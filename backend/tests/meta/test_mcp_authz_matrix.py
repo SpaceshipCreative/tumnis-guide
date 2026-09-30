@@ -124,7 +124,6 @@ async def test_scope_matrix(surface_app: FastAPI, world: World, callers: Callers
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_project_limited_key_outside_project_is_not_found(
     surface_app: FastAPI, world: World, callers: Callers
 ) -> None:
