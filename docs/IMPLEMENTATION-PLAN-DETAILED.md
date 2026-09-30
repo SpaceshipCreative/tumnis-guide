@@ -348,6 +348,7 @@ All events use `EventEnvelope{event_id, name, schema_version, workspace_id, occu
 | `result.posted` | tasks (P2-04) | task_id, run_id, summary, links | notifications, planning, digest |
 | `task.updated` | tasks (P0-18) | task_id, changed_fields, doc | search, planning, live |
 | `human.decided` | tasks (P1-07, P2-05) | item_kind, item_id, target_type, target_id, decision, reason?, previous?, payload?, decision_id? | agents (resume), digest, decisions (outcomes) |
+| `review_item.added` | tasks (P1-13) | item_id, kind, project_id, target_type, target_id | decisions (blocking impact, P1-13) |
 | `run.started`, `run.finished` | agents (P2-04) | run_id, status, duration_s | tasks, usage, notifications, focus |
 | `approval.requested`, `question.asked` | agents (P2-05) | run_id, prompt, action_class | tasks (review), notifications |
 | `items.ingested` | integrations (P3-02) | connection_id, item_ids | decisions triage (P3-06), search |

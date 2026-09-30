@@ -408,6 +408,7 @@ class GraphTask:
     status: Status
     label: Label | None
     estimate_minutes: int | None
+    due_on: date | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -424,15 +425,14 @@ def _counts(tasks: Iterable[GraphTask]) -> tuple[int, int]:
     return len(open_tasks), minutes
 
 
-def downstream(
+def scope_tasks(
     target_task_id: UUID | None, scope: ImpactScope, graph: TaskGraph
-) -> tuple[int, int]:
-    """(open task count, sum of estimate_minutes of open Human/Hybrid tasks) over the kind's
-    impact scope: "task" = the target task plus its open descendants (nothing without a
-    target task in `graph`); "project" and "workspace" = every open task in `graph`. AI and
-    pending tasks add to the count, never to the minutes."""
+) -> list[GraphTask]:
+    """The tasks an item's impact reads, Done ones included: "task" = the target task and
+    its descendants (none without a target task in `graph`); "project" and "workspace" =
+    every task in `graph`."""
     if scope != "task":
-        return _counts(graph.tasks)
+        return list(graph.tasks)
     children: dict[UUID | None, list[GraphTask]] = {}
     by_id: dict[UUID, GraphTask] = {}
     for task in graph.tasks:
@@ -440,13 +440,33 @@ def downstream(
         by_id[task.id] = task
     root = by_id.get(target_task_id) if target_task_id is not None else None
     if root is None:
-        return 0, 0
+        return []
     subtree, stack = [], [root]
     while stack:
         task = stack.pop()
         subtree.append(task)
         stack.extend(children.get(task.id, ()))
-    return _counts(subtree)
+    return subtree
+
+
+def downstream(
+    target_task_id: UUID | None, scope: ImpactScope, graph: TaskGraph
+) -> tuple[int, int]:
+    """(open task count, sum of estimate_minutes of open Human/Hybrid tasks) over the kind's
+    impact scope (`scope_tasks`). AI and pending tasks add to the count, never to the
+    minutes."""
+    return _counts(scope_tasks(target_task_id, scope, graph))
+
+
+def nearest_due(target_task_id: UUID | None, scope: ImpactScope, graph: TaskGraph) -> date | None:
+    """The earliest due date among the open tasks of the scope (Jev's `nearest_due_in_days`
+    input); None when none of them is dated."""
+    dates = [
+        task.due_on
+        for task in scope_tasks(target_task_id, scope, graph)
+        if task.status is not Status.DONE and task.due_on is not None
+    ]
+    return min(dates, default=None)
 
 
 def deterministic_impact(tasks: int, minutes: int) -> float:

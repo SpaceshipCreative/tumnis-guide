@@ -5,15 +5,15 @@ Tasks, board and columns take a session or a key (`tasks:read` to read, `tasks:w
 write; agents write tasks, A10). A project-limited key reaches only its projects: routes on
 a task resolve the task's project (`lookup:tasks`), the others name it in the path, query
 or body (R-28). Writes are idempotent; versioned ones answer 409 `stale_version` with the
-current task, a refused transition 409 `transition_not_allowed`. The review badge and the
-kind registry are for the signed-in app only.
+current task, a refused transition 409 `transition_not_allowed`. The review queue, its
+decisions, the badge and the kind registry are for the signed-in app only (P1-13).
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, Query, Request, Response
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, Field, StringConstraints
 
 from tumnis.core.clock import Clock
 from tumnis.core.idempotency import SessionDep
@@ -42,6 +42,9 @@ WRITE_PROJECT = RoutePolicy(
     auth="session_or_key", scopes=WRITE_SCOPE, idempotent=True, project_param="path:project_id"
 )
 SESSION_READ = RoutePolicy(auth="session")
+SESSION_LIST = RoutePolicy(auth="session", paginated=True)
+# Review decisions are for people (UX 2): a key or token gets 403 `session_required`.
+DECIDE = RoutePolicy(auth="session", idempotent=True)
 LIST_OF_TASK = RoutePolicy(
     auth="session_or_key", scopes=READ, paginated=True, project_param="lookup:tasks"
 )
@@ -84,6 +87,16 @@ class ContextItemIn(BaseModel):
 
 class ColumnsIn(BaseModel):
     columns: Annotated[list[api.ColumnIn], Field(min_length=1, max_length=30)]
+
+
+class DecideIn(BaseModel):
+    """R-04: the action, its payload when the action takes one, the snooze end for a
+    snooze, and the version read."""
+
+    action: api.ReviewAction
+    payload: dict[str, Any] | None = None
+    snooze_until: AwareDatetime | None = None
+    version: Version
 
 
 class ReviewCountOut(BaseModel):
@@ -343,6 +356,43 @@ async def put_columns(
 
 
 # --- Review ----------------------------------------------------------------------------------
+
+
+@router.get("/review")
+@route_policy(SESSION_LIST)
+async def list_review(
+    request: Request,
+    session: SessionDep,
+    *,
+    page: Annotated[PageParams, Depends(page_params)],
+    kind: Annotated[str | None, Query(max_length=41)] = None,
+) -> Page[api.ReviewItemOut]:
+    """The review queue (FR-6.1): open, unsnoozed items by blocking impact (downstream
+    tasks and human minutes, times Jev's factor when it applied), then age; `kind` keeps
+    one registered kind."""
+    return await api.list_review_items(
+        session, now=_clock(request).now(), kind=kind, cursor=page.cursor, limit=page.limit
+    )
+
+
+@router.post("/review/{item_id}/decide")
+@route_policy(DECIDE)
+async def decide_review(
+    item_id: UUID, body: DecideIn, request: Request, session: SessionDep
+) -> api.ReviewItemOut:
+    """Decides one item (R-04): 422 `action_not_allowed` for an action its kind lacks,
+    `invalid_review_payload` or `invalid_snooze`; 409 `already_decided` or
+    `stale_version`. Emits `human.decided`; the owning module applies the effect."""
+    return await api.decide_review_item(
+        item_id,
+        action=body.action,
+        payload=body.payload,
+        snooze_until=body.snooze_until,
+        version=body.version,
+        actor=principal_of(request).actor,
+        now=_clock(request).now(),
+        session=session,
+    )
 
 
 @router.get("/review/count")

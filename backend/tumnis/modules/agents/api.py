@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING, Annotated, Any, Final, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, StringConstraints
-from sqlalchemy import Table, insert, select, text
+from sqlalchemy import Table, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import audit
+from tumnis.core import audit, tenancy
 from tumnis.core.errors import ProblemError
 from tumnis.core.live import mark_changed
 from tumnis.core.pagination import Page, SortKey, paginate
@@ -50,6 +50,7 @@ from tumnis.modules.agents.skill_io import (
 )
 from tumnis.modules.auth import api as auth
 from tumnis.modules.projects import api as projects
+from tumnis.modules.tasks import api as tasks
 
 if TYPE_CHECKING:
     from dbos import DBOSClient
@@ -78,6 +79,7 @@ __all__ = [
     "RunnerOut",
     "SchemaRef",
     "TaskPacket",
+    "retry_provision",
 ]
 
 RUNNER_CHANNEL: Final = "runner_mailbox"  # NOTIFY {"runner": id, "close": bool}
@@ -551,3 +553,54 @@ async def agent_for_project(
     online = runner_status(runner.last_heartbeat_at, now) == "online"
     listed = row.name in {str(p.get("name")) for p in runner.inventory}
     return "ready" if online and listed else "offline"
+
+
+# --- Review: provisioning failures (P1-13) ------------------------------------------------------
+
+
+class ProvisioningFailedPayload(BaseModel):
+    """A project agent that could not be provisioned (P1-06 queues it): accept retries."""
+
+    project_id: UUID
+    error: Annotated[str, StringConstraints(max_length=2_000)]
+    mode: Annotated[str, StringConstraints(min_length=1, max_length=40)]
+
+
+PROVISIONING_FAILED: Final = tasks.ReviewKindSpec(
+    kind="provisioning_failed",
+    owner_module="agents",
+    payload_schema=ProvisioningFailedPayload,
+    actions=("accept", "reject", "snooze"),  # accept retries the provisioning
+    impact_scope="project",  # it blocks the whole project (FR-6.1)
+)
+tasks.register_review_kind(PROVISIONING_FAILED)
+
+
+async def retry_provision(project_id: UUID, *, session: AsyncSession | None = None) -> bool:
+    """Starts provisioning the project's agent again: its profile goes from
+    `not_provisioned` to `provisioning`; False when there is no such profile (already
+    retried, ready or gone). The seam P1-06 extends with the provisioning workflow."""
+
+    async def retry(s: AsyncSession) -> bool:
+        found: UUID | None = await s.scalar(
+            update(_profiles)
+            .where(
+                _profiles.c.role == "project",
+                _profiles.c.project_id == project_id,
+                _profiles.c.status == "not_provisioned",
+                _live_profiles(),
+            )
+            .values(status="provisioning")
+            .returning(_profiles.c.id)
+        )
+        if found is not None:
+            mark_changed(s, LIVE_PROFILE, found)
+        return found is not None
+
+    if session is not None:
+        return await retry(session)
+    ctx = tenancy.current()
+    if ctx is None:
+        raise RuntimeError("retry_provision needs a workspace context")
+    async with tenant_session(ctx) as s:
+        return await retry(s)

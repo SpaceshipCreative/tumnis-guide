@@ -54,7 +54,6 @@ def _spec() -> Any:
 
 @pytest.mark.req("FR-6.1")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 def test_new_kind_needs_no_migration() -> None:
     """T-P1-13-11
     Registering a test kind with its payload model allows add, list and decide against
