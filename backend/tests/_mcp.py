@@ -307,6 +307,14 @@ async def _search(world: World, project: str) -> dict[str, Any]:
     return {"q": "surface", "project_id": str(world.projects[project]), "limit": 20}
 
 
+async def _get_project_digest(world: World, project: str) -> dict[str, Any]:
+    return {"project_id": str(world.projects[project]), "limit": 50}
+
+
+async def _get_workspace_digest(world: World, project: str) -> dict[str, Any]:
+    return {"limit": 50}
+
+
 # One entry per registered op; the sweeps fail on an op without one ("add a sample").
 SAMPLES: Final[dict[str, Sample]] = {
     "list_tasks": _list_tasks,
@@ -315,6 +323,8 @@ SAMPLES: Final[dict[str, Sample]] = {
     "update_estimate": _update_estimate,
     "get_project_context": _get_project_context,
     "search": _search,
+    "get_project_digest": _get_project_digest,
+    "get_workspace_digest": _get_workspace_digest,
 }
 
 

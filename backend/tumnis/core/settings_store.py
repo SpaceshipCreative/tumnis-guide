@@ -113,6 +113,15 @@ async def _sealing_key(session: AsyncSession, workspace_id: UUID) -> tuple[int, 
     return key_version, _unwrap(workspace_id, key_version, row.master_key_version, row.wrapped_key)
 
 
+async def purpose_key(session: AsyncSession, workspace_id: UUID, purpose: str) -> bytes:
+    """A 32-byte key for one purpose, derived from the workspace's active data key (HKDF,
+    `info` "tumnis:<purpose>"), for a MAC bound to the workspace (P2-03's digest cursors).
+    `session` is in the workspace's context; the data key is created on first use. A data
+    key rotation changes it, so what it signed must be re-issued."""
+    _version, data_key = await _sealing_key(session, workspace_id)
+    return crypto.derive_key(data_key, f"tumnis:{purpose}")
+
+
 async def get_setting[M: BaseModel](
     ctx: WorkspaceContext, key: str, model: type[M]
 ) -> Versioned[M] | None:

@@ -13,6 +13,8 @@ import {
   agentsCheckProfileHealth,
   agentsCreateRunner,
   agentsGetProfileTools,
+  agentsGetProjectDigest,
+  agentsGetWorkspaceDigest,
   agentsListProfiles,
   agentsListRunners,
   agentsRegisterProfile,
@@ -115,6 +117,12 @@ import type {
   AgentsGetProfileToolsData,
   AgentsGetProfileToolsError,
   AgentsGetProfileToolsResponse,
+  AgentsGetProjectDigestData,
+  AgentsGetProjectDigestError,
+  AgentsGetProjectDigestResponse,
+  AgentsGetWorkspaceDigestData,
+  AgentsGetWorkspaceDigestError,
+  AgentsGetWorkspaceDigestResponse,
   AgentsListProfilesData,
   AgentsListProfilesError,
   AgentsListProfilesResponse,
@@ -1445,6 +1453,69 @@ export const deadLettersPostRetryMutation = (
   };
   return mutationOptions;
 };
+
+export const agentsGetProjectDigestQueryKey = (
+  options: Options<AgentsGetProjectDigestData>,
+) => createQueryKey("agentsGetProjectDigest", options);
+
+/**
+ * Get Project Digest
+ *
+ * What changed in the project since the caller's last acknowledged digest (the
+ * `get_project_digest` tool's twin); 400 `invalid_cursor` for a cursor issued to another
+ * caller or digest.
+ */
+export const agentsGetProjectDigestOptions = (
+  options: Options<AgentsGetProjectDigestData>,
+) =>
+  queryOptions<
+    AgentsGetProjectDigestResponse,
+    AgentsGetProjectDigestError,
+    AgentsGetProjectDigestResponse,
+    ReturnType<typeof agentsGetProjectDigestQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsGetProjectDigest({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsGetProjectDigestQueryKey(options),
+  });
+
+export const agentsGetWorkspaceDigestQueryKey = (
+  options?: Options<AgentsGetWorkspaceDigestData>,
+) => createQueryKey("agentsGetWorkspaceDigest", options);
+
+/**
+ * Get Workspace Digest
+ *
+ * The workspace-wide signals since the caller's last acknowledged digest (the
+ * `get_workspace_digest` tool's twin).
+ */
+export const agentsGetWorkspaceDigestOptions = (
+  options?: Options<AgentsGetWorkspaceDigestData>,
+) =>
+  queryOptions<
+    AgentsGetWorkspaceDigestResponse,
+    AgentsGetWorkspaceDigestError,
+    AgentsGetWorkspaceDigestResponse,
+    ReturnType<typeof agentsGetWorkspaceDigestQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsGetWorkspaceDigest({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsGetWorkspaceDigestQueryKey(options),
+  });
 
 export const knowledgeGetFileQueryKey = (
   options: Options<KnowledgeGetFileData>,

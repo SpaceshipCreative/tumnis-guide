@@ -114,4 +114,8 @@ export const NOT_LIVE = [
   // yet), and a file is a download, never a cached query.
   "knowledgeGetDocument",
   "knowledgeGetFile",
+  // The digests are an agent's read-once feed (P2-03): each read moves the caller's
+  // cursor, so the UI never caches or refetches them.
+  "agentsGetProjectDigest",
+  "agentsGetWorkspaceDigest",
 ] as const;

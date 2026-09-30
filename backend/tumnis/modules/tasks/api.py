@@ -80,6 +80,8 @@ from tumnis.modules.tasks.models import (
 )
 from tumnis.modules.tasks.payloads import (
     DOC_BODY_MAX_BYTES,
+    ContextItemLinkedV1,
+    TaskCommentedV1,
     TaskCreatedV1,
     TaskDoc,
     TaskStatusChangedV1,
@@ -1085,7 +1087,8 @@ async def undo_task(
 async def add_comment(
     s: AsyncSession, actor: ActorRef, task_id: UUID, body_md: str, *, now: datetime | None = None
 ) -> CommentOut:
-    """A markdown comment on the task; `task.updated` carries `comments` and the new doc."""
+    """A markdown comment on the task; `task.updated` carries `comments` and the new doc,
+    and `task.commented` the comment itself (P2-03)."""
     row = await _row(s, task_id)
     created = (
         (
@@ -1099,6 +1102,17 @@ async def add_comment(
         .one()
     )
     await _changed(s, row, ["comments"], now)
+    await emit(
+        s,
+        TaskCommentedV1(
+            task_id=task_id,
+            project_id=row["project_id"],
+            comment_id=created["id"],
+            author=str(actor),
+            text=body_md,
+        ),
+        occurred_at=_now(now),
+    )
     return CommentOut.model_validate(dict(created))
 
 
@@ -1123,11 +1137,19 @@ async def link_context_item(
 ) -> TaskContextItemOut:
     """Links the task to outside content through a ContextItem (FR-14.2), the only way a
     task reaches a message, note, event, artifact, file or URL. Linking again keeps one
-    link. 404 for a task or context item the caller cannot see."""
-    await _row(s, task_id)
+    link; a new (or restored) link emits `context_item.linked` (P2-03). 404 for a task or
+    context item the caller cannot see."""
+    row = await _row(s, task_id)
     item = await integrations.get_context_item_ref(_context(), context_item_id, session=s)
     if item is None:
         raise NotFound("context_items", context_item_id)
+    already: UUID | None = await s.scalar(
+        select(_links.c.id).where(
+            _links.c.task_id == task_id,
+            _links.c.context_item_id == context_item_id,
+            _links.c.deleted_at.is_(None),
+        )
+    )
     await s.execute(
         pg_insert(_links)
         .values(task_id=task_id, context_item_id=context_item_id, created_by=actor)
@@ -1143,6 +1165,18 @@ async def link_context_item(
         )
     )
     assert link_id is not None  # noqa: S101  # the upsert left one live link
+    if already is None:  # a new (or restored) link: the digest carries the item (P2-03)
+        await emit(
+            s,
+            ContextItemLinkedV1(
+                context_item_id=item.id,
+                task_id=task_id,
+                project_id=row["project_id"],
+                target_type=item.target_type,
+                target_id=item.target_id,
+            ),
+            occurred_at=_now(now),
+        )
     mark_changed(s, LIVE_ENTITY, task_id)
     return TaskContextItemOut(
         id=link_id,

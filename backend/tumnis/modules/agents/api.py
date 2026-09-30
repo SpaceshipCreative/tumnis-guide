@@ -10,14 +10,16 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Protocol
 from uuid import UUID, uuid4, uuid5
 
+from prometheus_client import Gauge
 from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import Table, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from tumnis.core import audit
 from tumnis.core.errors import ProblemError
 from tumnis.core.live import mark_changed
+from tumnis.core.metrics import REGISTRY
 from tumnis.core.pagination import Page, SortKey, paginate
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.versioning import NotFound, Version, update_versioned
@@ -28,6 +30,14 @@ from tumnis.modules.agents.adapters.port import (
     AgentUnavailable,
     RunEvent,
     RunHandle,
+)
+from tumnis.modules.agents.digest import (
+    DigestEntryOut,
+    DigestOut,
+    append_entry,
+    horizon_lag_seconds,
+    read_digest,
+    record_event,
 )
 from tumnis.modules.agents.models import AgentProfile, RunEventRow, Runner
 from tumnis.modules.agents.packet_builder import TaskPacket
@@ -66,6 +76,8 @@ __all__ = [
     "AgentHealth",
     "AgentProfileOut",
     "AgentUnavailable",
+    "DigestEntryOut",
+    "DigestOut",
     "EnrichmentRequest",
     "EnrichmentResult",
     "ForeignReach",
@@ -89,8 +101,25 @@ __all__ = [
     "TaskPacket",
     "TokenReach",
     "ToolServerOut",
+    "append_entry",
+    "read_digest",
+    "record_event",
     "run_log",
 ]
+
+DIGEST_HORIZON_LAG = Gauge(
+    "tumnis_digest_horizon_lag_seconds",
+    "Age of the oldest running app transaction, which holds the digest horizon back",
+    registry=REGISTRY,
+)
+
+
+async def export_metrics(conn: AsyncConnection) -> None:
+    """tumnis_digest_horizon_lag_seconds on every /metrics scrape (P2-03): a long
+    transaction delays digests, never loses an entry. tumnis.wiring registers it."""
+    async with AsyncSession(bind=conn) as s:
+        DIGEST_HORIZON_LAG.set(await horizon_lag_seconds(s))
+
 
 RUNNER_CHANNEL: Final = "runner_mailbox"  # NOTIFY {"runner": id, "close": bool}
 RUN_EVENTS_CHANNEL: Final = "agents_run_events"  # NOTIFY {"run": id}
