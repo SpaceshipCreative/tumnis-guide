@@ -800,6 +800,20 @@ export type Evaluation = {
 };
 
 /**
+ * FileTouched
+ */
+export type FileTouched = {
+  /**
+   * Change
+   */
+  change: "added" | "modified" | "deleted";
+  /**
+   * Path
+   */
+  path: string;
+};
+
+/**
  * FolderIn
  */
 export type FolderIn = {
@@ -1536,6 +1550,38 @@ export type PolicySummary = {
 };
 
 /**
+ * PostResultBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export type PostResultBody = {
+  /**
+   * Files Touched
+   */
+  files_touched?: Array<FileTouched>;
+  /**
+   * Links
+   */
+  links?: Array<ResultLink>;
+  /**
+   * Outcome
+   */
+  outcome: "done" | "partial" | "blocked";
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+  /**
+   * Summary
+   */
+  summary: string;
+  /**
+   * Tests Summary
+   */
+  tests_summary?: string | null;
+};
+
+/**
  * Preset
  */
 export type Preset = "daily" | "weekdays" | "weekly" | "monthly";
@@ -2253,6 +2299,66 @@ export type ReorderIn = {
 };
 
 /**
+ * ResultLink
+ */
+export type ResultLink = {
+  /**
+   * Kind
+   */
+  kind: "branch" | "pull_request" | "document" | "draft" | "url";
+  /**
+   * Label
+   */
+  label?: string | null;
+  /**
+   * Url
+   */
+  url: string;
+};
+
+/**
+ * ResultOut
+ */
+export type ResultOut = {
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Files Touched
+   */
+  files_touched?: Array<FileTouched>;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Links
+   */
+  links?: Array<ResultLink>;
+  /**
+   * Outcome
+   */
+  outcome: "done" | "partial" | "blocked";
+  /**
+   * Run Id
+   */
+  run_id: string;
+  /**
+   * Summary
+   */
+  summary: string;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Tests Summary
+   */
+  tests_summary?: string | null;
+};
+
+/**
  * ReviewCountOut
  */
 export type ReviewCountOut = {
@@ -2390,10 +2496,151 @@ export type RotateIn = {
 };
 
 /**
+ * RunEventOut
+ */
+export type RunEventOut = {
+  /**
+   * At
+   */
+  at: string;
+  /**
+   * Kind
+   */
+  kind: string;
+  /**
+   * Message Id
+   */
+  message_id: string;
+  /**
+   * Payload
+   */
+  payload: {
+    [key: string]: unknown;
+  };
+  /**
+   * Seq
+   */
+  seq: number;
+};
+
+/**
+ * RunEventsPage
+ *
+ * One page of a run's events by `seq` (a cursor, not `Page`): the next page asks
+ * `after_seq=next_after_seq`; an empty page means the client has everything so far.
+ */
+export type RunEventsPage = {
+  /**
+   * Items
+   */
+  items: Array<RunEventOut>;
+  /**
+   * Next After Seq
+   */
+  next_after_seq: number | null;
+};
+
+/**
  * RunKind
  */
 export type RunKind =
   "enrich" | "plan" | "task" | "proposal" | "stuck" | "notify";
+
+/**
+ * RunOut
+ */
+export type RunOut = {
+  /**
+   * Active Seconds Used
+   */
+  active_seconds_used: number;
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Error
+   */
+  error: string | null;
+  /**
+   * Finished At
+   */
+  finished_at: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  kind: RunKind;
+  /**
+   * Profile Id
+   */
+  profile_id: string;
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Rerun Of
+   */
+  rerun_of: string | null;
+  /**
+   * Started At
+   */
+  started_at: string | null;
+  status: RunStatus;
+  /**
+   * Stop Reason
+   */
+  stop_reason: string | null;
+  /**
+   * Tainted
+   */
+  tainted: boolean;
+  /**
+   * Task Id
+   */
+  task_id: string | null;
+};
+
+/**
+ * RunRequestIn
+ */
+export type RunRequestIn = {
+  /**
+   * Kind
+   */
+  kind?: "task" | "stuck";
+};
+
+/**
+ * RunRequested
+ *
+ * `POST /v1/tasks/{task_id}/run`'s answer (202).
+ */
+export type RunRequested = {
+  /**
+   * Run Id
+   */
+  run_id: string;
+  /**
+   * Status
+   */
+  status?: "queued";
+};
+
+/**
+ * RunStatus
+ */
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "waiting_on_human"
+  | "held"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "timed_out"
+  | "runner_lost";
 
 /**
  * RunnerCreated
@@ -7634,6 +7881,254 @@ export type AgentsRotateRunnerTokenResponses = {
 export type AgentsRotateRunnerTokenResponse =
   AgentsRotateRunnerTokenResponses[keyof AgentsRotateRunnerTokenResponses];
 
+export type AgentsGetRunData = {
+  body?: never;
+  path: {
+    /**
+     * Run Id
+     */
+    run_id: string;
+  };
+  query?: never;
+  url: "/v1/runs/{run_id}";
+};
+
+export type AgentsGetRunErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsGetRunError = AgentsGetRunErrors[keyof AgentsGetRunErrors];
+
+export type AgentsGetRunResponses = {
+  /**
+   * Successful Response
+   */
+  200: RunOut;
+};
+
+export type AgentsGetRunResponse =
+  AgentsGetRunResponses[keyof AgentsGetRunResponses];
+
+export type AgentsCancelRunData = {
+  body?: never;
+  path: {
+    /**
+     * Run Id
+     */
+    run_id: string;
+  };
+  query?: never;
+  url: "/v1/runs/{run_id}/cancel";
+};
+
+export type AgentsCancelRunErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsCancelRunError =
+  AgentsCancelRunErrors[keyof AgentsCancelRunErrors];
+
+export type AgentsCancelRunResponses = {
+  /**
+   * Successful Response
+   */
+  202: RunOut;
+};
+
+export type AgentsCancelRunResponse =
+  AgentsCancelRunResponses[keyof AgentsCancelRunResponses];
+
+export type AgentsListRunEventsData = {
+  body?: never;
+  path: {
+    /**
+     * Run Id
+     */
+    run_id: string;
+  };
+  query?: {
+    /**
+     * After Seq
+     */
+    after_seq?: number | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/runs/{run_id}/events";
+};
+
+export type AgentsListRunEventsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsListRunEventsError =
+  AgentsListRunEventsErrors[keyof AgentsListRunEventsErrors];
+
+export type AgentsListRunEventsResponses = {
+  /**
+   * Successful Response
+   */
+  200: RunEventsPage;
+};
+
+export type AgentsListRunEventsResponse =
+  AgentsListRunEventsResponses[keyof AgentsListRunEventsResponses];
+
+export type AgentsPostResultData = {
+  body: PostResultBody;
+  path: {
+    /**
+     * Run Id
+     */
+    run_id: string;
+  };
+  query?: never;
+  url: "/v1/runs/{run_id}/result";
+};
+
+export type AgentsPostResultErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsPostResultError =
+  AgentsPostResultErrors[keyof AgentsPostResultErrors];
+
+export type AgentsPostResultResponses = {
+  /**
+   * Successful Response
+   */
+  200: ResultOut;
+};
+
+export type AgentsPostResultResponse =
+  AgentsPostResultResponses[keyof AgentsPostResultResponses];
+
 export type SearchSearchData = {
   body?: never;
   path?: never;
@@ -9279,6 +9774,66 @@ export type TasksPutRecurrenceResponses = {
 
 export type TasksPutRecurrenceResponse =
   TasksPutRecurrenceResponses[keyof TasksPutRecurrenceResponses];
+
+export type AgentsRequestRunData = {
+  body: RunRequestIn;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/run";
+};
+
+export type AgentsRequestRunErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsRequestRunError =
+  AgentsRequestRunErrors[keyof AgentsRequestRunErrors];
+
+export type AgentsRequestRunResponses = {
+  /**
+   * Successful Response
+   */
+  202: RunRequested;
+};
+
+export type AgentsRequestRunResponse =
+  AgentsRequestRunResponses[keyof AgentsRequestRunResponses];
 
 export type TasksChangeStatusData = {
   body: StatusBody;

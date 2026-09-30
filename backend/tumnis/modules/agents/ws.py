@@ -46,12 +46,14 @@ from uuid import UUID, uuid4, uuid5
 import psycopg
 from fastapi import WebSocket
 from psycopg import sql
+from pydantic import ValidationError
 from sqlalchemy import Table, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 from tumnis.core import audit, db
 from tumnis.core.cache import libpq_url
+from tumnis.core.errors import ProblemError
 from tumnis.core.live import mark_changed
 from tumnis.core.principal import Principal
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
@@ -597,7 +599,12 @@ class _RunnerSocket:
         workflow; acked only once the workflow has it. A result counts only from the runner
         the run was dispatched to (its `run` message, uuid5(run_id, "run")); from any other
         runner it is acked and dropped. The result also acks that `run` message: the runner
-        got it even if its ack was lost, and a resent run would execute the skill again."""
+        got it even if its ack was lost, and a resent run would execute the skill again.
+
+        A `dispatch_run` run (P2-04; its workflow id is its run id) takes the one
+        result path instead of a send: `_dispatched_run_result`, in the same transaction, so
+        this handler never calls DBOS for it. Once such a run has ended, the runner's
+        `cancelled` answer to our `cancel` is acked and dropped."""
         async with tenant_session(self.ctx) as s:
             dispatched_here = await s.scalar(
                 update(_messages)
@@ -618,11 +625,23 @@ class _RunnerSocket:
                     extra={"run": str(message.run_id), "runner": str(self.runner_id)},
                 )
                 return True
-            run_status = await s.scalar(select(_runs.c.status).where(_runs.c.id == message.run_id))
+            run = (
+                await s.execute(
+                    select(_runs.c.status, _runs.c.workflow_id)
+                    .where(_runs.c.id == message.run_id)
+                    .with_for_update()
+                )
+            ).first()
+            run_status = None if run is None else run.status
+            workflow_id = None if run is None else run.workflow_id
             cancelled = isinstance(message, ResultV2) and message.status == "cancelled"
-            if run_status == "cancelled" and not cancelled:
-                # The protocol-1 fallback: the server cancelled the run itself, and the old
-                # daemon ran it to the end anyway. Acked, and ignored.
+            dispatched_run = workflow_id == api.dispatch_workflow_id(message.run_id)
+            # Acked and ignored: after the protocol-1 fallback (the server cancelled the run
+            # itself, and the old daemon ran it to the end anyway), and a dispatch_run
+            # run's answer to our own stop (its log is closed).
+            if (run_status == "cancelled" and not cancelled) or (
+                dispatched_run and cancelled and run_status in api.TERMINAL
+            ):
                 return True
             await s.execute(
                 insert(_events)
@@ -641,9 +660,10 @@ class _RunnerSocket:
                     "payload": json.dumps({"run": str(message.run_id)}),
                 },
             )
-            workflow_id = await s.scalar(
-                select(_runs.c.workflow_id).where(_runs.c.id == message.run_id)
-            )
+            if dispatched_run:
+                if run_status in api.ACTIVE_RUN:
+                    await self._dispatched_run_result(s, message)
+                return True
         if workflow_id is None:
             return True
         try:
@@ -657,6 +677,36 @@ class _RunnerSocket:
             _log.exception("could not hand a result to its workflow")
             return False
         return True
+
+    async def _dispatched_run_result(self, s: Any, message: Result) -> None:
+        """A `dispatch_run` run's result from its runner, in the caller's transaction: a
+        succeeded one through `api.accept_result`, anything else `run.signal{agent_failed}`
+        (as is output that is not a result)."""
+        now = self.now()
+        if message.status != "succeeded":
+            reason = (message.error or message.status)[:200]
+            await api.signal_run(
+                self.ctx, message.run_id, "agent_failed", reason=reason, session=s, now=now
+            )
+            return
+        try:
+            inp = api.PostResultIn.model_validate(
+                {**(message.output_json or {}), "run_id": str(message.run_id)}
+            )
+        except ValidationError as exc:
+            reason = f"invalid_output: {exc.error_count()} errors"
+            await api.signal_run(
+                self.ctx, message.run_id, "agent_failed", reason=reason, session=s, now=now
+            )
+            return
+        try:
+            async with s.begin_nested():
+                await api.accept_result(s, self.ctx.actor, message.run_id, inp, now=now)
+        except ProblemError as exc:  # the run ended meanwhile: its result event keeps it
+            _log.warning(
+                "a runner's result was not accepted",
+                extra={"run": str(message.run_id), "code": exc.code},
+            )
 
     async def _health_report(self, message: HealthReport) -> None:
         try:
@@ -764,6 +814,8 @@ class _RunnerSocket:
         else:
             kind = "artifact"
         payload = message.model_dump(mode="json", exclude={"schema_version", "sent_at"})
+        if isinstance(message, Stream):  # redacted and cut before storage (P2-04)
+            payload["text"] = api.log_text(message.text)
         await s.execute(
             insert(_events)
             .values(run_id=run_id, message_id=message.message_id, kind=kind, payload=payload)

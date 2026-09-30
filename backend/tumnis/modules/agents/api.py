@@ -1084,6 +1084,11 @@ _limits: dict[str, float | None] = {
 }
 
 
+def dispatch_workflow_id(run_id: UUID) -> str:
+    """A `dispatch_run` workflow's id is its run's id: enqueueing it twice runs it once."""
+    return str(run_id)
+
+
 def configure_runs(
     active_cap_seconds: float | None = None, wall_clock_ceiling_seconds: float | None = None
 ) -> None:
@@ -1375,7 +1380,13 @@ async def finish_run_in(
     seq come back and nothing is emitted twice."""
     row = (
         await s.execute(
-            select(_runs.c.status, _runs.c.state_seq, _runs.c.task_id, _runs.c.kind)
+            select(
+                _runs.c.status,
+                _runs.c.state_seq,
+                _runs.c.task_id,
+                _runs.c.kind,
+                _runs.c.started_at,
+            )
             .where(_runs.c.id == run_id)
             .with_for_update()
         )
@@ -1406,6 +1417,9 @@ async def finish_run_in(
             kind=RunKind(row.kind),
             status=status.value,
             stop_reason=reason,
+            duration_s=(
+                None if row.started_at is None else max((now - row.started_at).total_seconds(), 0.0)
+            ),
         ),
         occurred_at=now,
     )
@@ -1494,6 +1508,7 @@ class PostResultIn(tasks.ResultFields):
 
 
 ResultOut = tasks.ResultOut
+ResultFields = tasks.ResultFields
 
 
 async def accept_result(

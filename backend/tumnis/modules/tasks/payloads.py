@@ -11,6 +11,8 @@ calls `api.py` (no import cycle inside the module).
   `api_key:<id>`, `system`, ...); `via` is `undo` when an undo put the status back (P0-24).
 - `human.decided`: a decision on a review item (R-07's superset). The payload is fixed here;
   P1-13 and P2-05 emit it.
+- `result.posted` (P2-04): an agent's result for its run is stored and the task is In
+  review: the result's id, run, task, project, outcome, summary and links.
 - `review_item.added` (P1-13): a new review item, by id, kind and target only (never the
   payload); decisions asks Jev how much it blocks.
 
@@ -104,6 +106,14 @@ class ReviewItemAddedV1(EventPayload):
     target_id: UUID
 
 
+class PostedLink(BaseModel):
+    """A link an agent's result names (branch, pull request, document, draft or url)."""
+
+    kind: str = Field(max_length=40)
+    url: str = Field(max_length=2048)
+    label: str | None = Field(default=None, max_length=200)
+
+
 @event_type("result.posted", 1)
 class ResultPostedV1(EventPayload):
     """An agent's result for its run is stored and its task is In review (P2-04, FR-5.8)."""
@@ -115,3 +125,5 @@ class ResultPostedV1(EventPayload):
     task_id: UUID
     project_id: UUID | None
     outcome: Literal["done", "partial", "blocked"]
+    summary: str = Field(max_length=20_000)
+    links: list[PostedLink] = Field(default=[], max_length=50)

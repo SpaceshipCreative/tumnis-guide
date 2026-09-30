@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "run_id": "01a0ec82-72d7-7f23-8be6-203712702a01",
+  "kind": "cancel",
+  "reason": "stopped_by_user"
+}

@@ -33,7 +33,7 @@ from uuid import UUID, uuid5
 from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
 from dbos._error import DBOSNonExistentWorkflowError  # dbos 3.1.0: not re-exported
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import Table, select, update
+from sqlalchemy import Table, Text, cast, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,7 +62,7 @@ from tumnis.modules.agents.packet_builder import (
     TaskPacket,
     build_packet,
 )
-from tumnis.modules.agents.payloads import RunStartedV1
+from tumnis.modules.agents.payloads import RunSignalV1, RunStartedV1
 from tumnis.modules.agents.protocol import Provision, ProvisionResult
 from tumnis.modules.agents.review_kinds import DRIFT, DriftPayload, ForeignReach
 from tumnis.modules.agents.rules import (
@@ -100,7 +100,8 @@ _log = logging.getLogger(__name__)
 
 RECV_GRACE_S: Final = 30  # the run's timeout plus this, then timed_out (plan default)
 HEALTH_TIMEOUT_S: Final = 30
-RUNS_PARTITION_CONCURRENCY: Final = 2  # runs at once per profile (plan default)
+RUNS_PARTITION_CONCURRENCY: Final = 2  # runs at once per partition (plan default, SAF-5)
+RUNS_QUEUE_POLL_S: Final = 0.5  # a freed slot is taken within half a second
 RUNNER_SWEEP_SCHEDULE: Final = "* * * * *"
 RUNNER_SWEEP_NAME: Final = "runner-sweep"
 # Its own queue, not maintenance: a long audit or housekeeping run must not delay the
@@ -362,9 +363,7 @@ class RunHandleData(BaseModel):
     refused: str | None = None  # the agent was unavailable: nothing was dispatched
 
 
-def dispatch_workflow_id(run_id: UUID) -> str:
-    """A `dispatch_run` workflow's id is its run's id: enqueueing it twice runs it once."""
-    return str(run_id)
+dispatch_workflow_id = api.dispatch_workflow_id
 
 
 def _requester(created_by: str) -> ActorRef | None:
@@ -763,10 +762,32 @@ async def sweep_workspace_step(workspace_id: str, now: datetime) -> list[tuple[s
         if not offline:
             return []
         profiles = select(_profiles.c.id).where(_profiles.c.runner_id.in_(offline))
+        # A dispatch_run run (its workflow id is its run id) is ended by its workflow, told
+        # through run.signal in this transaction (P2-04): the log, tokens and run.finished
+        # follow its one end path.
+        dispatched = (
+            await s.execute(
+                select(_runs.c.id).where(
+                    _runs.c.status.in_((RunStatus.RUNNING.value, RunStatus.WAITING_ON_HUMAN.value)),
+                    _runs.c.profile_id.in_(profiles),
+                    _runs.c.workflow_id == cast(_runs.c.id, Text),
+                )
+            )
+        ).all()
+        for (run_id,) in dispatched:
+            await emit(
+                s,
+                RunSignalV1(run_id=run_id, kind="runner_lost", reason=api.RUNNER_LOST),
+                occurred_at=now,
+            )
         lost = (
             await s.execute(
                 update(_runs)
-                .where(_runs.c.status == "running", _runs.c.profile_id.in_(profiles))
+                .where(
+                    _runs.c.status == "running",
+                    _runs.c.profile_id.in_(profiles),
+                    _runs.c.workflow_id.is_distinct_from(cast(_runs.c.id, Text)),
+                )
                 .values(status="runner_lost", finished_at=now, error="runner_lost")
                 .returning(_runs.c.id, _runs.c.workflow_id)
             )

@@ -97,9 +97,39 @@ CASES = [
     ),
     (
         "events",
+        "result.posted",
+        1,
+        "backend/tests/contract/fixtures/events/result.posted/v1.json",
+    ),
+    (
+        "events",
         "review_item.added",
         1,
         "backend/tests/contract/fixtures/events/review_item.added/v1.json",
+    ),
+    (
+        "events",
+        "run.finished",
+        1,
+        "backend/tests/contract/fixtures/events/run.finished/v1.json",
+    ),
+    (
+        "events",
+        "run.requested",
+        1,
+        "backend/tests/contract/fixtures/events/run.requested/v1.json",
+    ),
+    (
+        "events",
+        "run.signal",
+        1,
+        "backend/tests/contract/fixtures/events/run.signal/v1.json",
+    ),
+    (
+        "events",
+        "run.started",
+        1,
+        "backend/tests/contract/fixtures/events/run.started/v1.json",
     ),
     (
         "events",

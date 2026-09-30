@@ -10,6 +10,9 @@ import {
 } from "./client";
 import { client } from "./client.gen";
 import type {
+  AgentsCancelRunData,
+  AgentsCancelRunErrors,
+  AgentsCancelRunResponses,
   AgentsCheckProfileHealthData,
   AgentsCheckProfileHealthErrors,
   AgentsCheckProfileHealthResponses,
@@ -19,18 +22,30 @@ import type {
   AgentsGetProfileToolsData,
   AgentsGetProfileToolsErrors,
   AgentsGetProfileToolsResponses,
+  AgentsGetRunData,
+  AgentsGetRunErrors,
+  AgentsGetRunResponses,
   AgentsGetTaskPacketData,
   AgentsGetTaskPacketErrors,
   AgentsGetTaskPacketResponses,
   AgentsListProfilesData,
   AgentsListProfilesErrors,
   AgentsListProfilesResponses,
+  AgentsListRunEventsData,
+  AgentsListRunEventsErrors,
+  AgentsListRunEventsResponses,
   AgentsListRunnersData,
   AgentsListRunnersErrors,
   AgentsListRunnersResponses,
+  AgentsPostResultData,
+  AgentsPostResultErrors,
+  AgentsPostResultResponses,
   AgentsRegisterProfileData,
   AgentsRegisterProfileErrors,
   AgentsRegisterProfileResponses,
+  AgentsRequestRunData,
+  AgentsRequestRunErrors,
+  AgentsRequestRunResponses,
   AgentsRotateRunnerTokenData,
   AgentsRotateRunnerTokenErrors,
   AgentsRotateRunnerTokenResponses,
@@ -304,13 +319,18 @@ import type {
   UsageGetUsageResponses,
 } from "./types.gen";
 import {
+  zAgentsCancelRunResponse,
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
   zAgentsGetProfileToolsResponse,
+  zAgentsGetRunResponse,
   zAgentsGetTaskPacketResponse,
   zAgentsListProfilesResponse,
+  zAgentsListRunEventsResponse,
   zAgentsListRunnersResponse,
+  zAgentsPostResultResponse,
   zAgentsRegisterProfileResponse,
+  zAgentsRequestRunResponse,
   zAgentsRotateRunnerTokenResponse,
   zAgentsUpdateProfileResponse,
   zAuditListAuditResponse,
@@ -1940,6 +1960,102 @@ export const agentsRotateRunnerToken = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Run
+ *
+ * The run: its status, stop reason and times (the run view's header).
+ */
+export const agentsGetRun = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsGetRunData, ThrowOnError>,
+): RequestResult<AgentsGetRunResponses, AgentsGetRunErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    AgentsGetRunResponses,
+    AgentsGetRunErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsGetRunResponse.parseAsync(data),
+    url: "/v1/runs/{run_id}",
+    ...options,
+  });
+
+/**
+ * Cancel Run
+ *
+ * Stop (FR-5.5): a queued run ends at once; a running one is stopped by its workflow
+ * through the agent's adapter (the api never calls out). An ended run is left as it is.
+ */
+export const agentsCancelRun = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsCancelRunData, ThrowOnError>,
+): RequestResult<
+  AgentsCancelRunResponses,
+  AgentsCancelRunErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsCancelRunResponses,
+    AgentsCancelRunErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsCancelRunResponse.parseAsync(data),
+    url: "/v1/runs/{run_id}/cancel",
+    ...options,
+  });
+
+/**
+ * List Run Events
+ *
+ * The run's log and events after `after_seq`, in the order they were stored (FR-5.5);
+ * the next page asks `after_seq=next_after_seq`.
+ */
+export const agentsListRunEvents = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsListRunEventsData, ThrowOnError>,
+): RequestResult<
+  AgentsListRunEventsResponses,
+  AgentsListRunEventsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    AgentsListRunEventsResponses,
+    AgentsListRunEventsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsListRunEventsResponse.parseAsync(data),
+    url: "/v1/runs/{run_id}/events",
+    ...options,
+  });
+
+/**
+ * Post Result
+ *
+ * The run's result, posted with its task token; the `post_result` tool's twin. 403
+ * `run_mismatch` for another run's token; 409 `run_not_active` once the run ended. A
+ * second post answers the first result.
+ */
+export const agentsPostResult = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsPostResultData, ThrowOnError>,
+): RequestResult<
+  AgentsPostResultResponses,
+  AgentsPostResultErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsPostResultResponses,
+    AgentsPostResultErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsPostResultResponse.parseAsync(data),
+    url: "/v1/runs/{run_id}/result",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Search
  *
  * Tasks and projects matching `q`, best first: text match, recency, project match.
@@ -2587,6 +2703,36 @@ export const tasksPutRecurrence = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zTasksPutRecurrenceResponse.parseAsync(data),
     url: "/v1/tasks/{task_id}/recurrence",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Request Run
+ *
+ * Run the task's agent (the Run button): the run is queued and its `dispatch_run`
+ * starts as soon as the project has a free slot (two at a time per project). 409
+ * `run_already_active`, `status_not_runnable`, `no_ready_profile`; 422
+ * `label_not_runnable`.
+ */
+export const agentsRequestRun = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsRequestRunData, ThrowOnError>,
+): RequestResult<
+  AgentsRequestRunResponses,
+  AgentsRequestRunErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsRequestRunResponses,
+    AgentsRequestRunErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsRequestRunResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/run",
     ...options,
     headers: {
       "Content-Type": "application/json",

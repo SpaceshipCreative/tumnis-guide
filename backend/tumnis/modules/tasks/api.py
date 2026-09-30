@@ -83,6 +83,7 @@ from tumnis.modules.tasks.models import (
 from tumnis.modules.tasks.payloads import (
     DOC_BODY_MAX_BYTES,
     HumanDecidedV1,
+    PostedLink,
     ResultPostedV1,
     TaskCreatedV1,
     TaskDoc,
@@ -1465,6 +1466,10 @@ async def post_result(  # the result, plus who and when
             task_id=task_id,
             project_id=row["project_id"],
             outcome=fields.outcome,
+            summary=fields.summary,
+            links=[
+                PostedLink.model_validate(link.model_dump(mode="json")) for link in fields.links
+            ],
         ),
         occurred_at=at,
     )

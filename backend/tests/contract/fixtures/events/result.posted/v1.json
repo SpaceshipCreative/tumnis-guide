@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "result_id": "01a0ec82-72d7-7f23-8be6-203712702b01",
+  "run_id": "01a0ec82-72d7-7f23-8be6-203712702a01",
+  "task_id": "01a0ec82-72d7-7f23-8be6-203712701f41",
+  "project_id": "01a0ec82-72d7-7f23-8be6-203712701f10",
+  "outcome": "done",
+  "summary": "Fixed the footer link",
+  "links": [
+    {
+      "kind": "pull_request",
+      "url": "https://github.com/acme/site/pull/7",
+      "label": "PR"
+    }
+  ]
+}

@@ -56,6 +56,7 @@ class RunStartedV1(EventPayload):
     task_id: UUID | None
     project_id: UUID | None
     kind: RunKind
+    status: Literal["running"] = "running"
 
 
 @event_type("run.finished", 1)
@@ -67,3 +68,6 @@ class RunFinishedV1(EventPayload):
     kind: RunKind
     status: TerminalStatus
     stop_reason: str | None = Field(default=None, max_length=REASON_MAX)
+    duration_s: float | None = Field(
+        default=None, ge=0
+    )  # started to finished; None if never started
