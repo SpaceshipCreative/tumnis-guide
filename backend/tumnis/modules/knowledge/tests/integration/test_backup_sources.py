@@ -24,7 +24,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("REL-1")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 async def test_manifest_includes_tumnis_made_and_opted_in_only(
     db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, tmp_location: Path
 ) -> None:
