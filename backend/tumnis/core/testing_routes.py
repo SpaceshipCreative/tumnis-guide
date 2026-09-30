@@ -23,6 +23,9 @@ router = v1_router("core", prefix="/test", tags=["test"])
 
 # Deployment-level tables a reset keeps: the marker says which deployment this database is.
 KEEP_TABLES = frozenset({"deployment_marker"})
+# The relay's claim table, locked before every other table (issue #51).
+OUTBOX = "outbox"
+_LOCK_OUTBOX = text("LOCK TABLE outbox IN ACCESS EXCLUSIVE MODE")
 # The statement-level guards of the append-only tables (pg_trigger.tgtype bit 32).
 _TRUNCATE_GUARDS = text(
     "SELECT c.relname, t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid"
@@ -46,6 +49,13 @@ async def truncate_tables(owner_url: str) -> list[str]:
             if names:
                 quote = conn.dialect.identifier_preparer.quote
                 listed = ", ".join(quote(name) for name in sorted(names))
+                # Issue #51: `outbox` first, before any other lock. A relay pass holds its
+                # claim on `outbox` while it reads `module_flags` on another connection;
+                # a TRUNCATE that took `module_flags` first and then waited for the claim
+                # deadlocked with it, unseen by Postgres. Waiting here holds nothing the
+                # relay needs, and a claim that starts later waits for the reset.
+                if OUTBOX in names:
+                    await conn.execute(_LOCK_OUTBOX)
                 # The append-only tables (P0-15) refuse TRUNCATE by trigger, the owner's
                 # included; a reset empties their chains with everything else, the guards
                 # off only inside this transaction.
