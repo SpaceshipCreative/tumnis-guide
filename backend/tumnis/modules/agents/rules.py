@@ -184,6 +184,116 @@ def select_runner(
     return None
 
 
+# --- runs (P2-04, SAF-5, FR-5.4, R-22, R-29) ----------------------------------------------
+
+RUN_TRANSITIONS: Final[Mapping[RunStatus, frozenset[RunStatus]]] = {
+    RunStatus.QUEUED: frozenset(
+        {RunStatus.RUNNING, RunStatus.HELD, RunStatus.CANCELLED, RunStatus.FAILED}
+    ),
+    RunStatus.HELD: frozenset({RunStatus.RUNNING, RunStatus.CANCELLED}),
+    RunStatus.RUNNING: frozenset(
+        {
+            RunStatus.WAITING_ON_HUMAN,
+            RunStatus.SUCCEEDED,
+            RunStatus.FAILED,
+            RunStatus.CANCELLED,
+            RunStatus.TIMED_OUT,
+            RunStatus.RUNNER_LOST,
+        }
+    ),
+    RunStatus.WAITING_ON_HUMAN: frozenset(
+        {
+            RunStatus.RUNNING,
+            RunStatus.FAILED,
+            RunStatus.CANCELLED,
+            RunStatus.TIMED_OUT,
+            RunStatus.RUNNER_LOST,
+        }
+    ),
+}
+ACTIVE_RUN_STATUSES: Final = frozenset(RUN_TRANSITIONS)  # queued, held, running, waiting
+RUNNABLE_TASK_STATUSES: Final = frozenset({"backlog", "today", "in_progress"})
+RUNNABLE_LABELS: Final = frozenset({"ai", "hybrid"})  # kind `task`; `stuck` takes any (R-23)
+UNREADY_PROFILE_STATUSES: Final = frozenset({"provisioning", "not_provisioned", "paused"})
+
+
+class TransitionNotAllowed(Exception):  # noqa: N818  # the plan's name
+    """A run status change `RUN_TRANSITIONS` does not allow."""
+
+    code = "run_transition_not_allowed"
+
+    def __init__(self, current: RunStatus, target: RunStatus) -> None:
+        super().__init__(f"a run cannot go from {current.value} to {target.value}")
+        self.current = current
+        self.target = target
+
+
+def run_transition(current: RunStatus, target: RunStatus) -> RunStatus:
+    """`target` when `RUN_TRANSITIONS` allows current -> target; TransitionNotAllowed
+    otherwise (a terminal status goes nowhere)."""
+    if target not in RUN_TRANSITIONS.get(current, frozenset()):
+        raise TransitionNotAllowed(current, target)
+    return target
+
+
+def active_seconds(intervals: Sequence[tuple[datetime, datetime, bool]]) -> float:
+    """The summed length of the (start, end, waiting) intervals where waiting is False: time
+    spent waiting on a human does not count against the run's active-time cap (SAF-5)."""
+    return sum((end - start).total_seconds() for start, end, waiting in intervals if not waiting)
+
+
+def over_ceiling(started_at: datetime, now: datetime, ceiling: timedelta) -> bool:
+    """The run has been going for `ceiling` or longer on the wall clock (R-29), waiting
+    included. The ceiling is the caller's (core.limits.RUN_WALL_CLOCK_CEILING by default)."""
+    return now - started_at >= ceiling
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchTask:
+    """What `can_dispatch` reads of a task: its label (None while pending), its status and
+    the kinds of its runs still active."""
+
+    label: str | None
+    status: str
+    active_kinds: frozenset[RunKind]
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchProfile:
+    """What `can_dispatch` reads of the project's agent profile."""
+
+    status: str
+
+
+RefusalCode = Literal[
+    "label_not_runnable", "status_not_runnable", "no_ready_profile", "run_already_active"
+]
+
+
+@dataclass(frozen=True, slots=True)
+class Refusal:
+    code: RefusalCode
+    detail: str
+
+
+def can_dispatch(
+    task: DispatchTask, kind: RunKind, profile: DispatchProfile | None
+) -> Refusal | None:
+    """None when a run of `kind` may start for the task: kind `task` needs an AI or Hybrid
+    label (`stuck` takes any label, R-23); the task is in backlog, today or in progress; the
+    project has a ready profile; no run of the same kind is active for the task. The
+    Refusal names the first rule that fails."""
+    if kind is not RunKind.STUCK and task.label not in RUNNABLE_LABELS:
+        return Refusal("label_not_runnable", "Only AI and Hybrid tasks can be run")
+    if task.status not in RUNNABLE_TASK_STATUSES:
+        return Refusal("status_not_runnable", f"A task in {task.status} cannot be run")
+    if profile is None or profile.status in UNREADY_PROFILE_STATUSES:
+        return Refusal("no_ready_profile", "The project has no ready agent")
+    if kind in task.active_kinds:
+        return Refusal("run_already_active", "The task already has an active run of this kind")
+    return None
+
+
 # --- artifacts (P2-07) --------------------------------------------------------------------
 
 ARTIFACT_MAX_BYTES: Final = 256 * 1024  # plan default

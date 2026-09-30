@@ -17,7 +17,6 @@ def _at(minutes: float) -> datetime:
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 def test_active_seconds_excludes_waiting() -> None:
     """T-P2-04-03
     The 60-minute cap counts active time only: on a fixed clock, 20 minutes running, 45
@@ -46,7 +45,6 @@ def test_active_seconds_excludes_waiting() -> None:
 
 @pytest.mark.req("FR-5.4")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 def test_can_dispatch_stuck_any_label() -> None:
     """T-P2-04-19
     `stuck` may be dispatched for a Human, AI or Hybrid task (R-23); `task` only for AI and
@@ -61,8 +59,8 @@ def test_can_dispatch_stuck_any_label() -> None:
     )
 
     ready = DispatchProfile(status="ready")
-    for label in ("human", "ai", "hybrid"):
-        task = DispatchTask(label=label, status="today", active_kinds=frozenset())
+    for any_label in ("human", "ai", "hybrid"):
+        task = DispatchTask(label=any_label, status="today", active_kinds=frozenset())
         assert can_dispatch(task, RunKind.STUCK, ready) is None
 
     cases: list[tuple[str | None, bool]] = [
@@ -112,7 +110,6 @@ EXPECTED = {
 
 @pytest.mark.req("FR-5.4")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 def test_run_transition_table() -> None:
     """T-P2-04-17
     Every (current, target) pair of run statuses is allowed or refused exactly as

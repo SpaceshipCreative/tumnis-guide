@@ -89,8 +89,7 @@ async def wait_until(
 async def relay(db: DbUrls, *, poll_s: float = 0.1) -> AsyncIterator[None]:
     """The outbox relay on this test's event loop, as the worker runs it; its deliveries
     run on the `dbos` fixture's executor. Events already in the outbox are skipped."""
-    import tumnis.modules.agents.events  # noqa: PLC0415  # the run subscribers
-    import tumnis.modules.tasks.events  # noqa: F401, PLC0415
+    import tumnis.wiring  # noqa: F401, PLC0415  # registers every module's subscribers
     from tumnis.core import events  # noqa: PLC0415
 
     mark_outbox_sent(db)
