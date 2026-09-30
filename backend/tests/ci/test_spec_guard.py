@@ -315,3 +315,38 @@ def test_spec_change_label_only_counts_from_owner(
 
     monkeypatch.setenv("GH_API_STUB", str(_events_stub(tmp_path, "bot-user")))
     assert _guard(repo, head, labels="wp:P0-18,spec-change") == (1, ["edited_test"])
+
+
+SKILL_CASE = dedent(
+    """\
+    id: enrich-ai-only-report
+    profile: project-template
+    skill: enrich
+    input: ../../recordings/enrich/ai_only_report.packet.json
+    output_schema: {family: enrichment, name: result, version: 1}
+    meta:
+      test_id: T-P1-05-02
+      req: [FR-4.4]
+      wp: P1-05
+      xfail: spec:P1-05
+    expect:
+      json:
+        - {path: "$.estimate_minutes", absent: true}
+    """
+)
+
+
+@pytest.mark.req("Quality rule 1")
+@pytest.mark.wp("P1-05")
+def test_skill_case_may_drop_only_its_spec_marker(tmp_path: Path) -> None:
+    """A skill case whose only change is dropping `xfail: spec:<WP>` passes, as a spec
+    xfail's removal does in Python; dropping it along with an edit is still edited_test."""
+    path = "profiles/tests/cases/enrich/ai_only_report.yaml"
+    unmarked = SKILL_CASE.replace("  xfail: spec:P1-05\n", "")
+    repo = make_repo(tmp_path, {path: SKILL_CASE})
+    assert _guard(repo, commit(repo, {path: unmarked})) == (0, [])
+
+    (tmp_path / "edited").mkdir()
+    repo = make_repo(tmp_path / "edited", {path: SKILL_CASE})
+    weakened = unmarked.replace("absent: true", "type: integer")
+    assert _guard(repo, commit(repo, {path: weakened})) == (1, ["edited_test"])
