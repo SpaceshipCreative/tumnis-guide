@@ -360,10 +360,15 @@ def _listed_entries(scan: _Scan, roots: Mapping[UUID, str]) -> list[_Entry]:
         for path, stat in scan.files.items()
         if path not in prevs
     ]
+    # Renames pair within one project folder: a candidate in another folder never hides
+    # (or ambiguates) one in the record's own folder.
     pairs = [
-        (old, moved)
-        for old, moved in pair_renames(missing, new)
-        if _same_folder(old, moved, roots.values())
+        pair
+        for root in roots.values()
+        for pair in pair_renames(
+            [prev for prev in missing if _inside(prev.path, root)],
+            [entry for entry in new if _inside(entry[0], root)],
+        )
     ]
     renamed = {moved: old for old, moved in pairs}
     gone = {old for old, _moved in pairs}
@@ -462,8 +467,8 @@ def _decide(
     return items
 
 
-def _same_folder(old: str, moved: str, roots: Iterable[str]) -> bool:
-    return any(old.startswith(r + "/") and moved.startswith(r + "/") for r in roots)
+def _inside(path: str, root: str) -> bool:
+    return path.startswith(root + "/")
 
 
 def _project_of(
@@ -638,8 +643,9 @@ class _Apply:
         if doc["kind"] != "text":
             return
         body = (doc["body_md"] or "").encode()
-        latest = await api.latest_version_hash(self.s, doc["id"])
-        if latest != hashlib.sha256(body).digest():
+        held = await api.latest_version_hash(self.s, doc["id"])  # a content hash, no secret
+        wanted = hashlib.sha256(body).digest()
+        if held != wanted:
             await api.add_version(self.s, doc["id"], body, doc["body_md"] or "")
 
     # Actions ---------------------------------------------------------------------------------
@@ -766,7 +772,9 @@ class _Apply:
             await self.new_document(self.path, await _read(self.backend, self.path))
         elif self.local is not None and self.local.origin == "tumnis" and self.decision.if_match:
             # Row 10: the outside copy is kept under the conflict name, Tumnis's written.
-            outside = await _read(self.backend, self.path)
+            # Only the copy the plan saw: changed since, the next sync decides again (no
+            # orphan conflict copy is left behind by a precondition failing later).
+            outside = await self.planned_bytes()
             await _write(self.backend, target, outside, None)
             await self.new_document(target, outside)
             written = await _write(self.backend, self.path, tumnis_bytes, self.decision.if_match)
@@ -816,6 +824,19 @@ class _Apply:
         )
         await self.drop_record()
         await self.review(doc["id"])
+
+    async def planned_bytes(self) -> bytes:
+        """The file at the path, as long as it still holds what the plan saw (its etag, and
+        its hash when the plan hashed it); else the decision is stale."""
+        stat = await self.backend.stat(self.path)
+        if stat is None or not etag_equal(stat.etag, self.decision.if_match):
+            raise _Stale
+        data = await _read(self.backend, self.path)
+        planned = self.remote.content_hash if self.remote is not None else None
+        held = hashlib.sha256(data).hexdigest()  # a content hash, no secret
+        if planned is not None and held != planned:
+            raise _Stale
+        return data
 
     async def move_to_trash(self) -> None:
         stat = await self.backend.stat(self.path)

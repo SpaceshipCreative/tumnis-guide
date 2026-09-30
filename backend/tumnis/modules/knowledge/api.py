@@ -770,6 +770,9 @@ def _folder_out(row: Row) -> ProjectFolderOut:
     return ProjectFolderOut.model_validate(dict(row))
 
 
+_FOLDER_NAME_LOCK: Final = text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+
+
 async def assign_project_folder(s: AsyncSession, project_id: UUID) -> ProjectFolderOut | None:
     """The project's folder on the workspace default location, named after the project
     (sanitized, and numbered when the location already has a folder of that name; P1-15),
@@ -782,6 +785,9 @@ async def assign_project_folder(s: AsyncSession, project_id: UUID) -> ProjectFol
         return None
     existing = await s.scalar(select(_folders.c.id).where(_folders.c.project_id == project_id))
     if existing is None:
+        # One naming at a time per location: a concurrent project.created waits here, then
+        # sees this folder's name as taken (the unique key covers the project, not the name).
+        await s.execute(_FOLDER_NAME_LOCK, {"key": f"project-folder-name:{default}"})
         await s.execute(
             pg_insert(_folders)
             .values(
