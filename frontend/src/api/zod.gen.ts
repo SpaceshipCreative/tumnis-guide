@@ -1387,6 +1387,12 @@ export const zAuthRotateKeyPath = z.object({
  */
 export const zAuthRotateKeyResponse = zKeyCreated;
 
+export const zKnowledgeUploadDocumentBody = z.object({
+  file: z.string(),
+  project_id: z.uuid().optional(),
+  title: z.string().optional(),
+});
+
 /**
  * Successful Response
  */

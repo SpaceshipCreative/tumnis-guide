@@ -176,7 +176,28 @@ def _upload_ctx(request: Request, project_id: UUID | None) -> WorkspaceContext:
     return principal.workspace_context()
 
 
-@router.post("/knowledge/documents", status_code=202)
+# The body is streamed by hand (uploads.spool_upload), so FastAPI cannot infer it: the
+# schema is declared through `openapi_extra` (FastAPI, "Custom OpenAPI path operation
+# schema"), which gives the generated client a typed multipart body.
+UPLOAD_BODY: Final[dict[str, Any]] = {
+    "required": True,
+    "content": {
+        "multipart/form-data": {
+            "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                    "file": FILE_SCHEMA,
+                    "project_id": {"type": "string", "format": "uuid"},
+                    "title": {"type": "string"},
+                },
+            }
+        }
+    },
+}
+
+
+@router.post("/knowledge/documents", status_code=202, openapi_extra={"requestBody": UPLOAD_BODY})
 @route_policy(UPLOAD_POLICY)
 async def upload_document(request: Request) -> api.UploadAccepted:
     """Upload a file (multipart: `file`, and optionally `project_id` and `title`). The

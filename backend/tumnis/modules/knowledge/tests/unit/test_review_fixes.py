@@ -86,6 +86,22 @@ async def test_malformed_body_is_invalid_upload(tmp_path: Path) -> None:
 
 @pytest.mark.req("SEC-10")
 @pytest.mark.wp("P1-16")
+async def test_truncated_body_is_invalid_upload(tmp_path: Path) -> None:
+    """A body that stops before its closing boundary: python-multipart 0.0.32's
+    `MultipartParser.finalize` checks nothing (a TODO in its source), so the route itself
+    refuses it (422 `invalid_upload`) instead of keeping a partial file."""
+    body = _file_part("a.txt", b"first")  # no `--boundary--`
+    dest = tmp_path / "spool" / "v1"
+
+    with pytest.raises(ProblemError) as caught:
+        await spool_upload(_request(body), dest, on_file=_no_check)
+
+    assert caught.value.problem.code == "invalid_upload"
+    assert not dest.exists()
+
+
+@pytest.mark.req("SEC-10")
+@pytest.mark.wp("P1-16")
 async def test_one_file_part_is_spooled(tmp_path: Path) -> None:
     """The ordinary case still works: one file part lands at `dest`."""
     body = _file_part("a.txt", b"first") + f"--{BOUNDARY}--\r\n".encode()

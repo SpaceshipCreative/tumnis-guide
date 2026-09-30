@@ -43,6 +43,7 @@ class _Collector:
 
     def __init__(self) -> None:
         self.events: list[tuple[str, Any]] = []
+        self.ended = False  # the closing boundary was seen
         self._headers: dict[bytes, bytes] = {}
         self._field = b""
         self._value = b""
@@ -69,8 +70,12 @@ class _Collector:
     def on_part_end(self) -> None:
         self.events.append(("end", None))
 
+    def on_end(self) -> None:
+        self.ended = True
+
     def callbacks(self) -> dict[str, Callable[..., None]]:
         return {
+            "on_end": self.on_end,
             "on_part_begin": self.on_part_begin,
             "on_header_field": self.on_header_field,
             "on_header_value": self.on_header_value,
@@ -182,6 +187,10 @@ async def spool_upload(
             parser.finalize()
         except MultipartParseError:
             raise _bad("The body is not valid multipart/form-data") from None
+        # python-multipart 0.0.32's finalize() checks nothing (a TODO in its source): a body
+        # cut off before its closing boundary is refused here, not kept as a partial file.
+        if not collector.ended:
+            raise _bad("The body ends before its closing boundary")
         if result.name is None:
             raise _bad("The body has no file part")
     except BaseException:

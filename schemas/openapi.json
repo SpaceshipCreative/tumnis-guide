@@ -8147,6 +8147,32 @@
       "post": {
         "description": "Upload a file (multipart: `file`, and optionally `project_id` and `title`). The\nanswer is 202 with the document in `pending_scan`: it is scanned, its type read from its\ncontent and its text extracted by the extract worker. 413 `too_large` past 50 MiB.",
         "operationId": "knowledge_upload_document",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "202": {
             "content": {

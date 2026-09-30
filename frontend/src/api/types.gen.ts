@@ -4170,7 +4170,11 @@ export type AuthRotateKeyResponse =
   AuthRotateKeyResponses[keyof AuthRotateKeyResponses];
 
 export type KnowledgeUploadDocumentData = {
-  body?: never;
+  body: {
+    file: Blob | File;
+    project_id?: string;
+    title?: string;
+  };
   path?: never;
   query?: never;
   url: "/v1/knowledge/documents";
