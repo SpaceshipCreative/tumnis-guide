@@ -5,9 +5,12 @@ import { createStore } from "@xstate/store";
 import * as z from "zod";
 
 import { safeGetItem, safeSetItem } from "../lib/storage";
+import type { ThemeChoice } from "../lib/theme";
 import { projectViews, type ProjectView } from "../lib/views";
 
 export const LAST_VIEW_KEY = "tumnis.lastView";
+/** Whether the laptop sidebar shows icons only (DS-01), remembered per device. */
+export const SIDEBAR_KEY = "tumnis.sidebarCollapsed";
 
 export type RailSection =
   "dashboard" | "tasks" | "review" | "search" | "settings";
@@ -22,6 +25,12 @@ export interface UiContext {
   conflict: null | { entity: string };
   /** A plain-words notice, e.g. why a board move was refused (P0-24). */
   notice: string | null;
+  /** The colour theme on this device (DS-01). */
+  theme: ThemeChoice;
+  /** The laptop sidebar shows icons only (DS-01). */
+  sidebarCollapsed: boolean;
+  /** The phone's navigation drawer is open (DS-01). */
+  navOpen: boolean;
 }
 
 const viewSchema = z.enum(projectViews);
@@ -53,6 +62,9 @@ export function createUiStore() {
     lastView: loadLastViews(),
     conflict: null,
     notice: null,
+    theme: "system",
+    sidebarCollapsed: false,
+    navOpen: false,
   };
   const store = createStore({
     context: initial,
@@ -82,6 +94,12 @@ export function createUiStore() {
       }),
       showNotice: (c, e: { text: string }) => ({ ...c, notice: e.text }),
       clearNotice: (c) => ({ ...c, notice: null }),
+      setTheme: (c, e: { theme: ThemeChoice }) => ({ ...c, theme: e.theme }),
+      setSidebarCollapsed: (c, e: { collapsed: boolean }) => ({
+        ...c,
+        sidebarCollapsed: e.collapsed,
+      }),
+      setNavOpen: (c, e: { open: boolean }) => ({ ...c, navOpen: e.open }),
     },
   });
   // Persist what changed on top of what storage holds now (another tab may have written
