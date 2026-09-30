@@ -68,7 +68,6 @@ async def _existing(db: DbUrls, ws: WorkspaceHandle, clock: FixedClock, root: Pa
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_outside_files_never_renamed_moved_or_overwritten(  # one script
     db: DbUrls,
     dbos: type[DBOS],
