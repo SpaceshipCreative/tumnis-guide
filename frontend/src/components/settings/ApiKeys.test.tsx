@@ -136,4 +136,25 @@ describe("ApiKeys", () => {
       expect(request.idempotencyKey).toBeTruthy();
     }
   });
+
+  // axe's scrollable-region-focusable: a table wider than the phone scrolls sideways
+  // inside its wrapper, so the wrapper must take keyboard focus, and as a region it needs
+  // a name of its own (the section around it is already "API keys").
+  test.fails(
+    "[DS-01][UX 11] T-DS-01-19 the keys table scrolls in a named region the keyboard can reach",
+    async () => {
+      server.use(
+        http.get("*/v1/keys", () =>
+          HttpResponse.json({ items: [keyRow()], next_cursor: null }),
+        ),
+      );
+      renderWithProviders(<ApiKeys />);
+
+      const table = await screen.findByRole("table");
+      const region = screen.getByRole("region", { name: "API keys table" });
+      expect(region).toContainElement(table);
+      expect(region).toHaveAttribute("tabindex", "0");
+      expect(region.className).toContain("overflow-x-auto");
+    },
+  );
 });
