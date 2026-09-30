@@ -64,7 +64,12 @@ def register_queues() -> None:
     DBOS.register_queue(SYNC_QUEUE, worker_concurrency=SYNC_WORKER_CONCURRENCY)
     # Agent runs and profile health checks (P1-04), partitioned by profile.
     agents = _agents()
-    DBOS.register_queue(agents.RUNS_QUEUE, partition_concurrency=agents.RUNS_PARTITION_CONCURRENCY)
+    # dispatch_run (P2-04) is partitioned by project, two at a time per project (SAF-5).
+    DBOS.register_queue(
+        agents.RUNS_QUEUE,
+        partition_concurrency=agents.RUNS_PARTITION_CONCURRENCY,
+        polling_interval_sec=agents.RUNS_QUEUE_POLL_S,
+    )
     DBOS.register_queue(agents.RUNNER_SWEEP_QUEUE, worker_concurrency=1)
     DBOS.register_queue(
         GITHUB_QUEUE,

@@ -26,10 +26,12 @@ import {
   reviewCountQuery,
   reviewQueueQuery,
 } from "./queries";
+import { ResultItem } from "./ResultItem";
 import {
   canOpen,
   editorFor,
   ReviewItemCard,
+  SnoozeChoices,
   type DecideAction,
   type Mode,
   type SnoozeKey,
@@ -301,32 +303,73 @@ export function ReviewQueue({
       >
         {items.map((item) => (
           <li key={item.id}>
-            <ReviewItemCard
-              item={item}
-              current={item.id === chosen && item.id === focusedId}
-              mode={item.id === focusedId ? mode : "idle"}
-              busy={decide.isPending}
-              articleRef={(node) => {
-                if (node === null) cards.current.delete(item.id);
-                else cards.current.set(item.id, node);
-              }}
-              onFocus={() => {
-                if (item.id !== focusedId) {
+            {item.kind === "result" ? (
+              <ResultItem
+                item={item}
+                confirmReject
+                current={item.id === chosen && item.id === focusedId}
+                busy={decide.isPending}
+                articleRef={(node) => {
+                  if (node === null) cards.current.delete(item.id);
+                  else cards.current.set(item.id, node);
+                }}
+                onFocus={() => {
+                  if (item.id !== focusedId) {
+                    setFocusedId(item.id);
+                    setMode("idle");
+                  }
+                }}
+                onDecide={(action, payload) => {
+                  run(
+                    item,
+                    payload === undefined ? { action } : { action, payload },
+                  );
+                }}
+                onSnooze={() => {
                   setFocusedId(item.id);
-                  setMode("idle");
-                }
-              }}
-              onMode={(next) => {
-                setFocusedId(item.id);
-                setMode(next);
-              }}
-              onDecide={(decision) => {
-                run(item, decision);
-              }}
-              onOpen={() => {
-                open(item);
-              }}
-            />
+                  setMode("snooze");
+                }}
+              >
+                {item.id === focusedId && mode === "snooze" && (
+                  <SnoozeChoices
+                    busy={decide.isPending}
+                    onPick={(key) => {
+                      run(item, { action: "snooze", snooze: key });
+                    }}
+                    onCancel={() => {
+                      setMode("idle");
+                    }}
+                  />
+                )}
+              </ResultItem>
+            ) : (
+              <ReviewItemCard
+                item={item}
+                current={item.id === chosen && item.id === focusedId}
+                mode={item.id === focusedId ? mode : "idle"}
+                busy={decide.isPending}
+                articleRef={(node) => {
+                  if (node === null) cards.current.delete(item.id);
+                  else cards.current.set(item.id, node);
+                }}
+                onFocus={() => {
+                  if (item.id !== focusedId) {
+                    setFocusedId(item.id);
+                    setMode("idle");
+                  }
+                }}
+                onMode={(next) => {
+                  setFocusedId(item.id);
+                  setMode(next);
+                }}
+                onDecide={(decision) => {
+                  run(item, decision);
+                }}
+                onOpen={() => {
+                  open(item);
+                }}
+              />
+            )}
           </li>
         ))}
       </ul>

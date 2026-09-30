@@ -222,10 +222,58 @@ async def document_row(project_id: uuid.UUID) -> uuid.UUID:
         )
 
 
+async def run_row(project_id: uuid.UUID) -> uuid.UUID:
+    """A queued run of a task in project `project_id`, on the project's agent profile (made
+    when there is none), in the newest API key's workspace, written as the owner (P2-04's
+    `lookup:runs` routes)."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from tumnis.core import db  # noqa: PLC0415
+
+    task_id = await task_row(project_id)
+    async with db.owner_sessionmaker()() as s, s.begin():
+        workspace_id = await s.scalar(
+            text("SELECT workspace_id FROM tasks WHERE id = :t"), {"t": task_id}
+        )
+        profile_id = await s.scalar(
+            text(
+                "SELECT id FROM agent_profiles WHERE project_id = :p AND role = 'project'"
+                " AND deleted_at IS NULL"
+            ),
+            {"p": project_id},
+        )
+        if profile_id is None:
+            profile_id = await s.scalar(
+                text(
+                    "INSERT INTO agent_profiles"
+                    " (workspace_id, name, role, project_id, transport, created_by)"
+                    " VALUES (:ws, :name, 'project', :p, 'daemon', 'system') RETURNING id"
+                ),
+                {"ws": workspace_id, "name": f"authz-{project_id.hex[:12]}", "p": project_id},
+            )
+        run_id = uuid.uuid4()
+        await s.execute(
+            text(
+                "INSERT INTO runs (id, workspace_id, task_id, profile_id, kind, status,"
+                " correlation_id, created_by)"
+                " VALUES (:id, :ws, :t, :profile, 'task', 'queued', :corr, 'system')"
+            ),
+            {
+                "id": run_id,
+                "ws": workspace_id,
+                "t": task_id,
+                "profile": profile_id,
+                "corr": f"run:{run_id}",
+            },
+        )
+    return run_id
+
+
 # module -> make a row of that module in the project; returns its id (lookup:<module>).
 LOOKUP_TARGETS: dict[str, Callable[[uuid.UUID], Awaitable[uuid.UUID]]] = {
     "authz_canary": canary_row,
     "knowledge": document_row,
+    "runs": run_row,
     "tasks": task_row,
 }
 

@@ -244,6 +244,14 @@ export const zEstimateBody = z.object({
 });
 
 /**
+ * FileTouched
+ */
+export const zFileTouched = z.object({
+  change: z.enum(["added", "modified", "deleted"]),
+  path: z.string().min(1).max(1024),
+});
+
+/**
  * FolderIn
  */
 export const zFolderIn = z.object({
@@ -837,6 +845,47 @@ export const zReorderIn = z.object({
 });
 
 /**
+ * ResultLink
+ */
+export const zResultLink = z.object({
+  kind: z.enum(["branch", "pull_request", "document", "draft", "url"]),
+  label: z.string().max(200).nullish(),
+  url: z
+    .string()
+    .max(2048)
+    .regex(/^https?:\/\/\S+$/),
+});
+
+/**
+ * PostResultBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export const zPostResultBody = z.object({
+  files_touched: z.array(zFileTouched).max(500).optional().default([]),
+  links: z.array(zResultLink).max(50).optional().default([]),
+  outcome: z.enum(["done", "partial", "blocked"]),
+  schema_version: z.int().nullish(),
+  summary: z.string().min(1).max(20000),
+  tests_summary: z.string().max(20000).nullish(),
+});
+
+/**
+ * ResultOut
+ */
+export const zResultOut = z.object({
+  created_at: z.iso.datetime(),
+  files_touched: z.array(zFileTouched).max(500).optional().default([]),
+  id: z.uuid(),
+  links: z.array(zResultLink).max(50).optional().default([]),
+  outcome: z.enum(["done", "partial", "blocked"]),
+  run_id: z.uuid(),
+  summary: z.string().min(1).max(20000),
+  task_id: z.uuid(),
+  tests_summary: z.string().max(20000).nullish(),
+});
+
+/**
  * ReviewCountOut
  */
 export const zReviewCountOut = z.object({
@@ -903,6 +952,28 @@ export const zRotateIn = z.object({
 });
 
 /**
+ * RunEventOut
+ */
+export const zRunEventOut = z.object({
+  at: z.iso.datetime(),
+  kind: z.string(),
+  message_id: z.uuid(),
+  payload: z.record(z.string(), z.unknown()),
+  seq: z.int(),
+});
+
+/**
+ * RunEventsPage
+ *
+ * One page of a run's events by `seq` (a cursor, not `Page`): the next page asks
+ * `after_seq=next_after_seq`; an empty page means the client has everything so far.
+ */
+export const zRunEventsPage = z.object({
+  items: z.array(zRunEventOut),
+  next_after_seq: z.int().nullable(),
+});
+
+/**
  * RunKind
  */
 export const zRunKind = z.enum([
@@ -913,6 +984,58 @@ export const zRunKind = z.enum([
   "stuck",
   "notify",
 ]);
+
+/**
+ * RunRequestIn
+ */
+export const zRunRequestIn = z.object({
+  kind: z.enum(["task", "stuck"]).optional().default("task"),
+});
+
+/**
+ * RunRequested
+ *
+ * `POST /v1/tasks/{task_id}/run`'s answer (202).
+ */
+export const zRunRequested = z.object({
+  run_id: z.uuid(),
+  status: z.literal("queued").optional().default("queued"),
+});
+
+/**
+ * RunStatus
+ */
+export const zRunStatus = z.enum([
+  "queued",
+  "running",
+  "waiting_on_human",
+  "held",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "runner_lost",
+]);
+
+/**
+ * RunOut
+ *
+ * A run as the run view shows it.
+ */
+export const zRunOut = z.object({
+  active_seconds_used: z.number().optional().default(0),
+  created_at: z.iso.datetime(),
+  error: z.string().nullish(),
+  finished_at: z.iso.datetime().nullable(),
+  id: z.uuid(),
+  kind: zRunKind,
+  project_id: z.uuid().nullable(),
+  rerun_of: z.uuid().nullable(),
+  started_at: z.iso.datetime().nullable(),
+  status: zRunStatus,
+  stop_reason: z.string().nullable(),
+  task_id: z.uuid().nullable(),
+});
 
 /**
  * RunnerCreated
@@ -2371,6 +2494,49 @@ export const zAgentsRotateRunnerTokenPath = z.object({
  */
 export const zAgentsRotateRunnerTokenResponse = zRunnerCreated;
 
+export const zAgentsGetRunPath = z.object({
+  run_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsGetRunResponse = zRunOut;
+
+export const zAgentsCancelRunPath = z.object({
+  run_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsCancelRunResponse = zRunOut;
+
+export const zAgentsListRunEventsPath = z.object({
+  run_id: z.uuid(),
+});
+
+export const zAgentsListRunEventsQuery = z.object({
+  after_seq: z.int().gte(0).nullish(),
+  limit: z.int().gte(1).lte(500).optional().default(100),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsListRunEventsResponse = zRunEventsPage;
+
+export const zAgentsPostResultBody = zPostResultBody;
+
+export const zAgentsPostResultPath = z.object({
+  run_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsPostResultResponse = zResultOut;
+
 export const zSearchSearchQuery = z.object({
   q: z.string().max(200).optional().default(""),
   scope: z.enum(["all", "tasks", "projects"]).optional().default("all"),
@@ -2635,6 +2801,17 @@ export const zTasksPutRecurrencePath = z.object({
  * Successful Response
  */
 export const zTasksPutRecurrenceResponse = zTaskRecurrenceOut;
+
+export const zAgentsRequestRunBody = zRunRequestIn;
+
+export const zAgentsRequestRunPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsRequestRunResponse = zRunRequested;
 
 export const zTasksChangeStatusBody = zStatusBody;
 

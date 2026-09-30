@@ -15,6 +15,7 @@ from tumnis.core.audit_router import require_session
 from tumnis.core.clock import Clock
 from tumnis.core.idempotency import SessionDep
 from tumnis.core.pagination import Page, PageParams, page_params
+from tumnis.core.principal import principal_of
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.modules.agents import api
@@ -143,3 +144,89 @@ async def get_task_packet(
     found = await surface.rest_twin(request, session, tools.GET_TASK_PACKET, raw)
     assert isinstance(found, TaskPacket)  # noqa: S101  # the op's output model
     return found
+
+
+# --- Runs (P2-04, FR-5.4, FR-5.5, FR-5.8) --------------------------------------------------
+
+_READ_RUN = RoutePolicy(
+    auth="session_or_key", scopes=frozenset({"tasks:read"}), project_param="lookup:runs"
+)
+_WRITE_RUN = RoutePolicy(
+    auth="session_or_key",
+    scopes=frozenset({"tasks:write"}),
+    idempotent=True,
+    project_param="lookup:runs",
+)
+
+
+@router.post("/tasks/{task_id}/run", status_code=202)
+@route_policy(
+    RoutePolicy(
+        auth="session_or_key",
+        scopes=frozenset({"tasks:write"}),
+        idempotent=True,
+        project_param="lookup:tasks",
+    )
+)
+async def request_run(
+    task_id: UUID, body: api.RunRequestIn, request: Request, session: SessionDep
+) -> api.RunRequested:
+    """Run the task's agent (the Run button): the run is queued and its `dispatch_run`
+    starts as soon as the project has a free slot (two at a time per project). 409
+    `run_already_active`, `status_not_runnable`, `no_ready_profile`; 422
+    `label_not_runnable`."""
+    run_id = await api.request_run(
+        task_id,
+        api.RunKind(body.kind),
+        ctx=principal_of(request).workspace_context(),
+        session=session,
+        now=_clock(request).now(),
+    )
+    return api.RunRequested(run_id=run_id)
+
+
+@router.get("/runs/{run_id}")
+@route_policy(_READ_RUN)
+async def get_run(run_id: UUID, session: SessionDep) -> api.RunOut:
+    """The run: its status, stop reason and times (the run view's header)."""
+    return await api.get_run(session, run_id)
+
+
+@router.get("/runs/{run_id}/events")
+@route_policy(_READ_RUN)
+async def list_run_events(
+    run_id: UUID,
+    session: SessionDep,
+    after_seq: Annotated[int | None, Query(ge=0)] = None,
+    limit: Annotated[int, Query(ge=1, le=api.RUN_EVENTS_LIMIT_MAX)] = api.RUN_EVENTS_LIMIT_DEFAULT,
+) -> api.RunEventsPage:
+    """The run's log and events after `after_seq`, in the order they were stored (FR-5.5);
+    the next page asks `after_seq=next_after_seq`."""
+    return await api.run_events_page(session, run_id, after_seq=after_seq, limit=limit)
+
+
+@router.post("/runs/{run_id}/cancel", status_code=202)
+@route_policy(_WRITE_RUN)
+async def cancel_run(run_id: UUID, request: Request, session: SessionDep) -> api.RunOut:
+    """Stop (FR-5.5): a queued run ends at once; a running one is stopped by its workflow
+    through the agent's adapter (the api never calls out). An ended run is left as it is."""
+    return await api.cancel_run(
+        principal_of(request).workspace_context(),
+        run_id,
+        now=_clock(request).now(),
+        session=session,
+    )
+
+
+@router.post("/runs/{run_id}/result")
+@route_policy(_WRITE_RUN)
+async def post_result(
+    run_id: UUID, body: tools.PostResultBody, request: Request, session: SessionDep
+) -> api.ResultOut:
+    """The run's result, posted with its task token; the `post_result` tool's twin. 403
+    `run_mismatch` for another run's token; 409 `run_not_active` once the run ended. A
+    second post answers the first result."""
+    raw = {**body.model_dump(), "run_id": run_id}
+    posted = await surface.rest_twin(request, session, tools.POST_RESULT, raw)
+    assert isinstance(posted, api.ResultOut)  # noqa: S101  # the op's output model
+    return posted

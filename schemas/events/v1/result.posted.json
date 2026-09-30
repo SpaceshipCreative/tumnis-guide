@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "PostedLink": {
+      "description": "A link an agent's result names (branch, pull request, document, draft or url).",
+      "properties": {
+        "kind": {
+          "maxLength": 40,
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "url": {
+          "maxLength": 2048,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "url"
+      ],
+      "title": "PostedLink",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/events/v1/result.posted.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "An agent's result for its run is stored and its task is In review (P2-04, FR-5.8).",
+  "properties": {
+    "links": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PostedLink"
+      },
+      "maxItems": 50,
+      "title": "Links",
+      "type": "array"
+    },
+    "outcome": {
+      "enum": [
+        "done",
+        "partial",
+        "blocked"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "project_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Project Id"
+    },
+    "result_id": {
+      "format": "uuid",
+      "title": "Result Id",
+      "type": "string"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "summary": {
+      "maxLength": 20000,
+      "title": "Summary",
+      "type": "string"
+    },
+    "task_id": {
+      "format": "uuid",
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "result_id",
+    "run_id",
+    "task_id",
+    "project_id",
+    "outcome",
+    "summary"
+  ],
+  "title": "ResultPostedV1",
+  "type": "object"
+}

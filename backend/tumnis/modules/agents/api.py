@@ -11,15 +11,22 @@ from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Protocol
 from uuid import UUID, uuid4, uuid5
 
 from pydantic import BaseModel, Field, StringConstraints
-from sqlalchemy import Table, insert, select, text, update
+from sqlalchemy import RowMapping, Table, insert, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import audit
 from tumnis.core.errors import ProblemError
+from tumnis.core.ids import uuid7
+from tumnis.core.limits import RUN_WALL_CLOCK_CEILING
 from tumnis.core.live import mark_changed
+from tumnis.core.logging import scrub_text
+from tumnis.core.outbox import emit
 from tumnis.core.pagination import Page, SortKey, paginate
-from tumnis.core.tenancy import WorkspaceContext, tenant_session
+from tumnis.core.routing import register_project_lookup
+from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
+from tumnis.core.types import ActorRef
 from tumnis.core.versioning import NotFound, Version, update_versioned
 from tumnis.modules.agents.adapters.port import (
     AgentAdapter,
@@ -29,20 +36,44 @@ from tumnis.modules.agents.adapters.port import (
     RunEvent,
     RunHandle,
 )
-from tumnis.modules.agents.models import AgentProfile, RunEventRow, Runner, RunnerMessage
+from tumnis.modules.agents.models import (
+    AgentProfile,
+    RunEventRow,
+    Runner,
+    RunnerMessage,
+    RunRow,
+)
 from tumnis.modules.agents.packet_builder import TaskPacket
+from tumnis.modules.agents.payloads import (
+    RunFinishedV1,
+    RunRequestedV1,
+    RunSignalV1,
+    SignalKind,
+)
 from tumnis.modules.agents.protocol import McpServerInfo, SchemaRef
-from tumnis.modules.agents.review_kinds import ForeignReach
+from tumnis.modules.agents.review_kinds import (
+    RESULT,
+    RUN_LIMIT,
+    ForeignReach,
+    ResultPayload,
+    RunLimitPayload,
+)
 from tumnis.modules.agents.rules import (
+    ACTIVE_RUN_STATUSES,
     NAME_RE,
     TERMINAL_STATUSES,
+    DispatchProfile,
+    DispatchTask,
     InvalidProfileName,
+    Refusal,
     RunKind,
     RunnerStatus,
     RunStatus,
     TokenReach,
     allowlist_drift,
+    can_dispatch,
     run_token_scopes,
+    run_transition,
     runner_status,
     validate_profile_name,
 )
@@ -1022,3 +1053,507 @@ async def profile_key(s: AsyncSession, profile_id: UUID) -> UUID | None:
     return await s.scalar(
         select(_profiles.c.api_key_id).where(_profiles.c.id == profile_id, _live_profiles())
     )
+
+
+# --- Runs (P2-04, FR-5.4, FR-5.5, FR-5.8, SAF-5, R-23, R-29) ---------------------------------
+
+LIVE_RUN: Final = "run"
+RUN_EVENTS_LIMIT_DEFAULT: Final = 100
+RUN_EVENTS_LIMIT_MAX: Final = 500
+LOG_LINE_MAX_BYTES: Final = 8 * 1024  # a longer line is cut with a marker (plan default)
+CUT_MARKER: Final = " [cut]"
+ACTIVE_RUN: Final = frozenset(s.value for s in ACTIVE_RUN_STATUSES)
+TIME_LIMIT: Final = "time_limit"
+WALL_CLOCK_CEILING: Final = "wall_clock_ceiling"
+RUNNER_LOST: Final = "runner_lost"
+STOPPED_BY_USER: Final = "stopped_by_user"
+# The system line that closes a run's log, by stop reason (or status when none names one).
+CLOSING_LINES: Final[dict[str, str]] = {
+    TIME_LIMIT: "Stopped at the time limit",
+    WALL_CLOCK_CEILING: "Stopped at the wall-clock limit",
+    RUNNER_LOST: "Stopped: the runner stopped answering",
+    STOPPED_BY_USER: "Stopped by you",
+    "cancelled": "Stopped",
+    "failed": "Stopped: the run failed",
+    "timed_out": "Stopped at the time limit",
+}
+_runs: Table = RunRow.__table__  # type: ignore[assignment]
+_limits: dict[str, float | None] = {
+    "active_cap_s": None,  # None: the project policy's max_run_minutes
+    "ceiling_s": RUN_WALL_CLOCK_CEILING.total_seconds(),
+}
+
+
+def dispatch_workflow_id(run_id: UUID) -> str:
+    """A `dispatch_run` workflow's id is its run's id: enqueueing it twice runs it once."""
+    return str(run_id)
+
+
+def configure_runs(
+    active_cap_seconds: float | None = None, wall_clock_ceiling_seconds: float | None = None
+) -> None:
+    """The run time caps (R-30): tests shorten them on the real clock; no arguments puts
+    the plan defaults back (the project's max_run_minutes, and 24 hours)."""
+    for value in (active_cap_seconds, wall_clock_ceiling_seconds):
+        if value is not None and value <= 0:
+            raise ValueError("a run time cap must be positive")
+    _limits["active_cap_s"] = active_cap_seconds
+    _limits["ceiling_s"] = (
+        wall_clock_ceiling_seconds
+        if wall_clock_ceiling_seconds is not None
+        else RUN_WALL_CLOCK_CEILING.total_seconds()
+    )
+
+
+def run_caps(max_run_minutes: int) -> tuple[float, float]:
+    """(active-time cap, wall-clock ceiling) in seconds for a run of a project whose
+    policy allows `max_run_minutes`."""
+    active = _limits["active_cap_s"]
+    ceiling = _limits["ceiling_s"]
+    assert ceiling is not None  # noqa: S101  # configure_runs always sets it
+    return (active if active is not None else max_run_minutes * 60.0), ceiling
+
+
+class RunRequested(BaseModel):
+    """`POST /v1/tasks/{task_id}/run`'s answer (202)."""
+
+    run_id: UUID
+    status: Literal["queued"] = "queued"
+
+
+class RunRequestIn(BaseModel):
+    kind: Literal["task", "stuck"] = "task"
+
+
+class RunOut(BaseModel):
+    """A run as the run view shows it."""
+
+    id: UUID
+    task_id: UUID | None
+    project_id: UUID | None
+    kind: RunKind
+    status: RunStatus
+    stop_reason: str | None
+    rerun_of: UUID | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    error: str | None = None
+    active_seconds_used: float = 0.0
+
+
+class RunEventOut(BaseModel):
+    seq: int
+    message_id: UUID
+    kind: str
+    payload: dict[str, Any]
+    at: datetime
+
+
+class RunEventsPage(BaseModel):
+    """One page of a run's events by `seq` (a cursor, not `Page`): the next page asks
+    `after_seq=next_after_seq`; an empty page means the client has everything so far."""
+
+    items: list[RunEventOut]
+    next_after_seq: int | None
+
+
+def _refusal(refusal: Refusal) -> ProblemError:
+    status = 422 if refusal.code == "label_not_runnable" else 409
+    return ProblemError(status, refusal.code, refusal.detail)
+
+
+def _already_active() -> ProblemError:
+    return ProblemError(409, "run_already_active", "The task already has an active run")
+
+
+async def _project_profile(s: AsyncSession, project_id: UUID) -> RowMapping | None:
+    return (
+        (
+            await s.execute(
+                select(_profiles.c.id, _profiles.c.status).where(
+                    _profiles.c.role == "project",
+                    _profiles.c.project_id == project_id,
+                    _live_profiles(),
+                )
+            )
+        )
+        .mappings()
+        .first()
+    )
+
+
+async def request_run(  # the plan's signature, plus the context and session
+    task_id: UUID,
+    kind: RunKind,
+    *,
+    unattended: bool = False,
+    priority: int | None = None,
+    rerun_of: UUID | None = None,
+    ctx: WorkspaceContext | None = None,
+    session: AsyncSession | None = None,
+    now: datetime | None = None,
+) -> UUID:
+    """Makes the run (status queued, tainted from the task, `created_by` the requester)
+    and, in the same transaction, `run.requested`, whose subscriber enqueues `dispatch_run`
+    on the runs queue (R-23: the Run button, reject-and-rerun and every later caller come
+    here). 409 `run_already_active` (also when a concurrent request won the partial unique
+    index), `status_not_runnable` or `no_ready_profile`, 422 `label_not_runnable`, 404 for
+    a task the caller cannot see."""
+    from tumnis.core import tenancy  # noqa: PLC0415
+    from tumnis.core.clock import SystemClock  # noqa: PLC0415
+
+    ctx = ctx or tenancy.current()
+    if ctx is None:
+        raise RuntimeError("request_run needs a workspace context")
+    at = now or SystemClock().now()
+    async with session_for(ctx, session) as s:
+        task = await tasks.get_task(s, task_id)
+        profile = await _project_profile(s, task.project_id)
+        kinds: list[str] = list(
+            await s.scalars(
+                select(_runs.c.kind).where(
+                    _runs.c.task_id == task_id, _runs.c.status.in_(ACTIVE_RUN)
+                )
+            )
+        )
+        active = frozenset(RunKind(k) for k in kinds)
+        refusal = can_dispatch(
+            DispatchTask(label=task.label, status=task.status, active_kinds=active),
+            kind,
+            None if profile is None else DispatchProfile(status=profile["status"]),
+        )
+        if refusal is not None:
+            raise _refusal(refusal)
+        assert profile is not None  # noqa: S101  # can_dispatch refused a missing one
+        run_id = uuid7()
+        try:
+            async with s.begin_nested():
+                await s.execute(
+                    insert(_runs).values(
+                        id=run_id,
+                        task_id=task_id,
+                        profile_id=profile["id"],
+                        kind=kind.value,
+                        status=RunStatus.QUEUED.value,
+                        correlation_id=f"run:{run_id}",
+                        tainted=task.tainted,
+                        rerun_of=rerun_of,
+                    )
+                )
+        except IntegrityError:
+            raise _already_active() from None
+        await emit(
+            s,
+            RunRequestedV1(
+                run_id=run_id,
+                task_id=task_id,
+                project_id=task.project_id,
+                kind=kind,
+                priority=priority,
+                unattended=unattended,
+                rerun_of=rerun_of,
+            ),
+            occurred_at=at,
+        )
+        mark_changed(s, LIVE_RUN, run_id)
+    return run_id
+
+
+def _run_select() -> Any:
+    return select(*_runs.c, _profiles.c.project_id).select_from(
+        _runs.join(_profiles, _profiles.c.id == _runs.c.profile_id)
+    )
+
+
+async def get_run(s: AsyncSession, run_id: UUID) -> RunOut:
+    """The run (404 when the caller cannot see it)."""
+    row = (
+        (await s.execute(_run_select().where(_runs.c.id == run_id, _runs.c.deleted_at.is_(None))))
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise NotFound("runs", run_id)
+    return RunOut.model_validate(dict(row))
+
+
+async def _run_project_id(s: AsyncSession, run_id: UUID) -> UUID | None:
+    found: UUID | None = await s.scalar(
+        select(_profiles.c.project_id)
+        .select_from(_runs.join(_profiles, _profiles.c.id == _runs.c.profile_id))
+        .where(_runs.c.id == run_id, _runs.c.deleted_at.is_(None))
+    )
+    return found
+
+
+async def run_project(ctx: WorkspaceContext, run_id: UUID) -> UUID | None:
+    """The project of a run's profile; None for a run the caller cannot see (or a master
+    run, which names no project). Registered as the `lookup:runs` project lookup."""
+    async with tenant_session(ctx) as s:
+        return await _run_project_id(s, run_id)
+
+
+register_project_lookup("runs", run_project)
+
+
+async def run_events_page(
+    s: AsyncSession, run_id: UUID, *, after_seq: int | None = None, limit: int = 100
+) -> RunEventsPage:
+    """The run's events after `after_seq`, in the order they were stored, at most `limit`
+    (FR-5.5). 404 for a run the caller cannot see."""
+    await get_run(s, run_id)
+    stmt = (
+        select(_events)
+        .where(
+            _events.c.run_id == run_id,
+            _events.c.deleted_at.is_(None),
+            _events.c.seq.is_not(None),
+        )
+        .order_by(_events.c.seq)
+        .limit(limit)
+    )
+    if after_seq is not None:
+        stmt = stmt.where(_events.c.seq > after_seq)
+    rows = (await s.execute(stmt)).mappings().all()
+    items = [
+        RunEventOut(
+            seq=row["seq"],
+            message_id=row["message_id"],
+            kind=row["kind"],
+            payload=row["payload"],
+            at=row["created_at"],
+        )
+        for row in rows
+    ]
+    return RunEventsPage(items=items, next_after_seq=items[-1].seq if items else after_seq)
+
+
+def log_text(line: str) -> str:
+    """A log line as it is stored: redacted (P0-16) before storage, never after, and cut at
+    LOG_LINE_MAX_BYTES with a marker."""
+    clean = scrub_text(line)
+    raw = clean.encode("utf-8")
+    if len(raw) <= LOG_LINE_MAX_BYTES:
+        return clean
+    keep = LOG_LINE_MAX_BYTES - len(CUT_MARKER.encode())
+    return raw[:keep].decode("utf-8", errors="ignore") + CUT_MARKER
+
+
+async def add_system_line(s: AsyncSession, run_id: UUID, line: str, *, name: str) -> None:
+    """A system `log` line in the run's log, once per `name` (message id uuid5(run, name))."""
+    await s.execute(
+        pg_insert(_events)
+        .values(
+            run_id=run_id,
+            message_id=uuid5(run_id, name),
+            kind="log",
+            payload={"kind": "log", "text": log_text(line), "source": "system"},
+        )
+        .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
+    )
+    await s.execute(
+        _NOTIFY, {"channel": RUN_EVENTS_CHANNEL, "payload": json.dumps({"run": str(run_id)})}
+    )
+
+
+class Finished(BaseModel):
+    status: RunStatus
+    seq: int
+    changed: bool  # False: the run had already ended (nothing was written)
+
+
+async def finish_run_in(
+    s: AsyncSession,
+    ctx: WorkspaceContext,
+    run_id: UUID,
+    status: RunStatus,
+    reason: str | None,
+    *,
+    now: datetime,
+) -> Finished:
+    """Ends the run in the caller's transaction, once: status, finished_at and stop_reason;
+    its task tokens revoked and redacted from what is stored (R-27, decision 31); a closing
+    system line in its log for anything but success; `run.finished`; a `run_limit` review
+    item for a time limit. The task keeps its status. A run already ended (the sweep, the
+    protocol-1 cancel fallback, a replayed step) is left as it is: its stored status and
+    seq come back and nothing is emitted twice."""
+    row = (
+        await s.execute(
+            select(
+                _runs.c.status,
+                _runs.c.state_seq,
+                _runs.c.task_id,
+                _runs.c.kind,
+                _runs.c.started_at,
+            )
+            .where(_runs.c.id == run_id)
+            .with_for_update()
+        )
+    ).first()
+    if row is None:
+        raise NotFound("runs", run_id)
+    current = RunStatus(row.status)
+    if current in TERMINAL_STATUSES:
+        return Finished(status=current, seq=row.state_seq, changed=False)
+    run_transition(current, status)
+    seq = row.state_seq + 1
+    await s.execute(
+        update(_runs)
+        .where(_runs.c.id == run_id)
+        .values(status=status.value, finished_at=now, stop_reason=reason, state_seq=seq)
+    )
+    await auth.revoke_task_tokens_for_run(ctx, run_id, now=now, session=s)
+    await _redact_run_message(s, run_id)
+    await _redact_stored_packet(s, run_id)
+    if status is not RunStatus.SUCCEEDED:
+        line = CLOSING_LINES.get(reason or "", CLOSING_LINES.get(status.value, "Stopped"))
+        await add_system_line(s, run_id, line, name="closed")
+    await emit(
+        s,
+        RunFinishedV1(
+            run_id=run_id,
+            task_id=row.task_id,
+            kind=RunKind(row.kind),
+            status=status.value,
+            stop_reason=reason,
+            duration_s=(
+                None if row.started_at is None else max((now - row.started_at).total_seconds(), 0.0)
+            ),
+        ),
+        occurred_at=now,
+    )
+    if status is RunStatus.TIMED_OUT:
+        await tasks.add_review_item(
+            RUN_LIMIT,
+            target=tasks.TargetRef(type="run", id=run_id),
+            project_id=await _run_project_id(s, run_id),
+            payload=RunLimitPayload(
+                run_id=run_id, task_id=row.task_id, reason=reason or TIME_LIMIT
+            ).model_dump(mode="json"),
+            dedupe_key=f"run_limit:{run_id}",
+            session=s,
+        )
+    mark_changed(s, LIVE_RUN, run_id)
+    return Finished(status=status, seq=seq, changed=True)
+
+
+async def _redact_stored_packet(s: AsyncSession, run_id: UUID) -> None:
+    packet: dict[str, Any] | None = await s.scalar(
+        select(_runs.c.packet).where(_runs.c.id == run_id)
+    )
+    if packet is None:
+        return
+    callback = packet.get("callback")
+    if not isinstance(callback, dict) or callback.get("task_token") in (None, REDACTED):
+        return
+    redacted = {**packet, "callback": {**callback, "task_token": REDACTED}}
+    await s.execute(update(_runs).where(_runs.c.id == run_id).values(packet=redacted))
+
+
+async def signal_run(  # the signal, plus the context, session and time
+    ctx: WorkspaceContext,
+    run_id: UUID,
+    kind: SignalKind,
+    *,
+    reason: str | None = None,
+    session: AsyncSession | None = None,
+    now: datetime | None = None,
+) -> None:
+    """Tells the run's workflow something (`run.signal`, which `agents.deliver_run_signal`
+    sends with the event id as the idempotency key): neither the api nor the runner
+    handler calls DBOS itself. 404 for a run the caller cannot see."""
+    from tumnis.core.clock import SystemClock  # noqa: PLC0415
+
+    async with session_for(ctx, session) as s:
+        await get_run(s, run_id)
+        await emit(
+            s,
+            RunSignalV1(run_id=run_id, kind=kind, reason=reason),
+            occurred_at=now or SystemClock().now(),
+        )
+
+
+async def cancel_run(
+    ctx: WorkspaceContext,
+    run_id: UUID,
+    *,
+    now: datetime,
+    reason: str = STOPPED_BY_USER,
+    session: AsyncSession | None = None,
+) -> RunOut:
+    """Stop (FR-5.5): a queued or held run ends `cancelled` here (its workflow then finds
+    it ended and stops); a running or waiting one gets `run.signal{cancel}`, and its
+    workflow stops the agent through the adapter (the api never calls out); an ended run
+    is left as it is. 404 for a run the caller cannot see."""
+    async with session_for(ctx, session) as s:
+        status = await s.scalar(
+            select(_runs.c.status)
+            .where(_runs.c.id == run_id, _runs.c.deleted_at.is_(None))
+            .with_for_update()
+        )
+        if status is None:
+            raise NotFound("runs", run_id)
+        if status in (RunStatus.QUEUED.value, RunStatus.HELD.value):
+            await finish_run_in(s, ctx, run_id, RunStatus.CANCELLED, reason, now=now)
+        elif status in ACTIVE_RUN:
+            await emit(s, RunSignalV1(run_id=run_id, kind="cancel", reason=reason), occurred_at=now)
+        return await get_run(s, run_id)
+
+
+class PostResultIn(tasks.ResultFields):
+    """A run's result, from the `post_result` tool, its REST twin or the runner."""
+
+    run_id: UUID
+
+
+ResultOut = tasks.ResultOut
+ResultFields = tasks.ResultFields
+
+
+async def accept_result(
+    s: AsyncSession,
+    actor: ActorRef,
+    caller_run: UUID | None,
+    inp: PostResultIn,
+    *,
+    now: datetime,
+) -> ResultOut:
+    """Result intake, one path for the tool, its REST twin and the runner (FR-5.8). A
+    caller holding a task token (`caller_run`, R-31) posts only for that token's run (403
+    `run_mismatch`); a key with no run may post for any run it can reach (the surface's
+    write rules, P2-01). A second result for the run answers the first. Otherwise the run
+    must be running or waiting (409 `run_not_active`), and in the caller's transaction:
+    `tasks.post_result` (the results row, the task In review, `result.posted`), the
+    `result` review item and `run.signal{result}`, which ends the run `succeeded`."""
+    if caller_run is not None and caller_run != inp.run_id:
+        raise ProblemError(403, "run_mismatch", "This token belongs to another run")
+    run = (
+        await s.execute(
+            select(_runs.c.status, _runs.c.task_id)
+            .where(_runs.c.id == inp.run_id, _runs.c.deleted_at.is_(None))
+            .with_for_update()
+        )
+    ).first()
+    if run is None:
+        raise NotFound("runs", inp.run_id)
+    existing = await tasks.result_of_run(s, inp.run_id)
+    if existing is not None:
+        return existing
+    if run.status not in (RunStatus.RUNNING.value, RunStatus.WAITING_ON_HUMAN.value):
+        raise ProblemError(409, "run_not_active", f"The run is {run.status}")
+    if run.task_id is None:
+        raise ProblemError(422, "run_has_no_task", "Only a task's run posts a result")
+    fields = tasks.ResultFields.model_validate(inp.model_dump(exclude={"run_id"}))
+    result, created = await tasks.post_result(s, actor, run.task_id, inp.run_id, fields, now=now)
+    if created:
+        await tasks.add_review_item(
+            RESULT,
+            target=tasks.TargetRef(type="task", id=run.task_id),
+            project_id=None,
+            payload=ResultPayload(run_id=inp.run_id, **fields.model_dump()).model_dump(mode="json"),
+            dedupe_key=f"result:{inp.run_id}",
+            session=s,
+        )
+        await emit(s, RunSignalV1(run_id=inp.run_id, kind="result"), occurred_at=now)
+    return result
