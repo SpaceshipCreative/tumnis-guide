@@ -22,9 +22,11 @@
 Subscriber names are part of every delivery's workflow id, so they never change.
 """
 
+import logging
 from typing import Final
 from uuid import UUID
 
+from tumnis.core.errors import ProblemError
 from tumnis.core.events import EventEnvelope, subscribe
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR, ActorRef
@@ -47,6 +49,8 @@ __all__ = [
     "provision_project",
     "start_dispatch",
 ]
+
+_log = logging.getLogger(__name__)
 
 PROVISION_SUBSCRIBER: Final = "agents.provision_project"
 REVIEW_SUBSCRIBER: Final = "agents.apply_review_decision"
@@ -132,11 +136,20 @@ async def _apply_result_decision(envelope: EventEnvelope) -> None:
             s, actor, task.id, tasks.Status.IN_PROGRESS, task.version, now=envelope.occurred_at
         )
         rerun_of = item.payload.get("run_id")
-        await api.request_run(
-            task.id,
-            api.RunKind.TASK,
-            rerun_of=None if rerun_of is None else UUID(str(rerun_of)),
-            ctx=ctx,
-            session=s,
-            now=envelope.occurred_at,
-        )
+        try:
+            async with s.begin_nested():
+                await api.request_run(
+                    task.id,
+                    api.RunKind.TASK,
+                    rerun_of=None if rerun_of is None else UUID(str(rerun_of)),
+                    ctx=ctx,
+                    session=s,
+                    now=envelope.occurred_at,
+                )
+        except ProblemError as exc:
+            if exc.code == "run_already_active":
+                raise  # the rejected run has not ended yet: the delivery is retried
+            # The task can no longer run (its label or its project's agent changed): the
+            # rejection, its comment and the move back to In progress stand; the human
+            # runs it again when it can.
+            _log.warning("no rerun after a rejected result: %s", exc.code)
