@@ -161,6 +161,9 @@ export const test = base.extend<E2EFixtures>({
       data: { preauth, code: totp(user.totpSecret, new Date()) },
     });
     expect(signedIn.status(), "POST /v1/auth/totp").toBe(200);
+    // On the app, not about:blank: a spec may ask the page for `navigator.serviceWorker`
+    // (A0.2) before it navigates, and that exists only on the app's origin.
+    await page.goto("/");
     await use(page);
   },
 });
@@ -294,11 +297,15 @@ export async function boardColumns(
 export interface RecordedWrite {
   readonly method: string;
   readonly path: string;
+  readonly route: string;
   readonly idempotency_key: string | null;
   readonly replayed: boolean;
 }
 
-/** `GET /v1/test/requests` (fakes only, P0-10): the last 500 write requests. */
+/**
+ * `GET /v1/test/requests` (fakes only, P0-10): the write requests of `filter`'s method and
+ * path since the stack was last reset (the server answers its last 500 of everything).
+ */
 export async function recordedWrites(
   request: APIRequestContext,
   filter: { path: string; method: string },
@@ -309,7 +316,11 @@ export async function recordedWrites(
   }
   const body = (await response.json()) as Json | Json[];
   const rows = Array.isArray(body) ? body : (body.items as Json[]);
-  return rows as unknown as RecordedWrite[];
+  const all = rows as unknown as RecordedWrite[];
+  const reset = all.map((w) => w.route).lastIndexOf("/v1/test/reset");
+  return all
+    .slice(reset + 1)
+    .filter((w) => w.method === filter.method && w.path === filter.path);
 }
 
 // --- UI locators and flows -----------------------------------------------------
