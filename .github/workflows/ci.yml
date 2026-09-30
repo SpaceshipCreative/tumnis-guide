@@ -406,14 +406,14 @@ jobs:
           exit "$status"
       # Decision 26: the Core Web Vitals budget gates on a LAN/VPN profile (lighthouserc.json:
       # 50 ms RTT, 10 Mbps, 2x CPU for a current phone). Lighthouse's default slow phone
-      # (slow 4G, 4x CPU) only warns (lighthouserc.slow-phone.json, one run); Phase 4 works
-      # on those numbers. It runs first because each collect clears .lighthouseci/.
+      # (slow 4G, 4x CPU) only warns (lighthouserc.slow-phone.json, one run of the
+      # dashboard, which keeps the job inside its 5 minutes); Phase 4 works on those
+      # numbers. It runs first because each collect clears .lighthouseci/.
       - name: Lighthouse on the default slow phone, warnings only (decision 26)
         working-directory: frontend
         run: |
           npx --yes "$LHCI_CLI" autorun --config=lighthouserc.slow-phone.json \
             --collect.url="$E2E_BASE_URL/" \
-            --collect.url="$E2E_BASE_URL/projects/$PROJECT_ID?view=board" \
             --collect.settings.extraHeaders="$LHCI_EXTRA_HEADERS"
           mkdir -p "$RUNNER_TEMP/lhci/slow-phone"
           for lhr in .lighthouseci/lhr-*.json; do
