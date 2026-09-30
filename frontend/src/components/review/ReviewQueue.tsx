@@ -208,6 +208,7 @@ export function ReviewQueue({
   );
 
   const run = (item: ReviewItemOut, decision: DecideAction) => {
+    if (decide.isPending) return; // the buttons are disabled too; keys land here
     if (!item.actions.includes(decision.action)) return;
     decide.mutate({ ...decision, item });
   };

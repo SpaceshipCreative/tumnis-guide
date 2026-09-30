@@ -65,10 +65,13 @@ function ValueForm({
       onSubmit={(event) => {
         event.preventDefault();
         if (value.trim() === "") return;
-        onSubmit({
-          [editor.field]:
-            editor.type === "number" ? Number(value) : value.trim(),
-        });
+        if (editor.type === "number") {
+          const n = Number(value);
+          if (!Number.isSafeInteger(n) || n < 1) return;
+          onSubmit({ [editor.field]: n });
+          return;
+        }
+        onSubmit({ [editor.field]: value.trim() });
       }}
       className="flex flex-wrap items-end gap-2"
     >
