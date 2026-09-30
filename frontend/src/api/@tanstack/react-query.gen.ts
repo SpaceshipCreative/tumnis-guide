@@ -45,6 +45,8 @@ import {
   deadLettersGetDeadLetters,
   deadLettersPostDiscard,
   deadLettersPostRetry,
+  decisionsEditThreshold,
+  decisionsGetCalibration,
   githubWebhook,
   healthLive,
   healthReady,
@@ -212,6 +214,12 @@ import type {
   DeadLettersPostRetryData,
   DeadLettersPostRetryError,
   DeadLettersPostRetryResponse,
+  DecisionsEditThresholdData,
+  DecisionsEditThresholdError,
+  DecisionsEditThresholdResponse,
+  DecisionsGetCalibrationData,
+  DecisionsGetCalibrationError,
+  DecisionsGetCalibrationResponse,
   GithubWebhookData,
   GithubWebhookError,
   GithubWebhookResponse,
@@ -1448,6 +1456,66 @@ export const deadLettersPostRetryMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await deadLettersPostRetry({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const decisionsGetCalibrationQueryKey = (
+  options?: Options<DecisionsGetCalibrationData>,
+) => createQueryKey("decisionsGetCalibration", options);
+
+/**
+ * Get Calibration
+ *
+ * Per decision point: the threshold in force, the recheck flag, and accuracy once 100
+ * labeled outcomes exist (until then, how many more are needed).
+ */
+export const decisionsGetCalibrationOptions = (
+  options?: Options<DecisionsGetCalibrationData>,
+) =>
+  queryOptions<
+    DecisionsGetCalibrationResponse,
+    DecisionsGetCalibrationError,
+    DecisionsGetCalibrationResponse,
+    ReturnType<typeof decisionsGetCalibrationQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await decisionsGetCalibration({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: decisionsGetCalibrationQueryKey(options),
+  });
+
+/**
+ * Edit Threshold
+ *
+ * Set the point's threshold with a reason; it clears the recheck flag.
+ */
+export const decisionsEditThresholdMutation = (
+  options?: Partial<Options<DecisionsEditThresholdData>>,
+): UseMutationOptions<
+  DecisionsEditThresholdResponse,
+  DecisionsEditThresholdError,
+  Options<DecisionsEditThresholdData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    DecisionsEditThresholdResponse,
+    DecisionsEditThresholdError,
+    Options<DecisionsEditThresholdData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await decisionsEditThreshold({
         ...options,
         ...fnOptions,
         throwOnError: true,

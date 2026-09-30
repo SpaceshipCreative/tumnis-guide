@@ -171,6 +171,21 @@ export const zDecideIn = z.object({
 });
 
 /**
+ * DecisionPoint
+ */
+export const zDecisionPoint = z.enum([
+  "quick_add_label",
+  "project_match",
+  "actionability",
+  "duplicate",
+  "approval_need",
+  "blocking_impact",
+  "focus_on_task",
+  "nudge_warranted",
+  "estimate_plausibility",
+]);
+
+/**
  * DefaultIn
  */
 export const zDefaultIn = z.object({
@@ -380,6 +395,17 @@ export const zMcpServerInfo = z.object({
   name: z.string().max(128),
   target: z.string().max(253).nullish(),
   transport: z.enum(["stdio", "http"]),
+});
+
+/**
+ * Metrics
+ */
+export const zMetrics = z.object({
+  auto_precision: z.number().nullable(),
+  auto_rate: z.number(),
+  n: z.int(),
+  overall_accuracy: z.number(),
+  review_rate: z.number(),
 });
 
 /**
@@ -1101,6 +1127,36 @@ export const zStatusBody = z.object({
 });
 
 /**
+ * SweepRow
+ */
+export const zSweepRow = z.object({
+  auto_precision: z.number().nullable(),
+  auto_rate: z.number(),
+  n: z.int(),
+  overall_accuracy: z.number(),
+  review_rate: z.number(),
+  threshold: z.number(),
+});
+
+/**
+ * Evaluation
+ *
+ * One point, provider and model: what the threshold in force did with its labeled
+ * decisions. `metrics`, `explicit_metrics` and `sweep` stay empty under 100 labeled.
+ */
+export const zEvaluation = z.object({
+  decision_point: z.string(),
+  explicit_metrics: zMetrics.nullable(),
+  labeled: z.int(),
+  metrics: zMetrics.nullable(),
+  model_version: z.string(),
+  needed: z.int(),
+  provider: z.string(),
+  sweep: z.array(zSweepRow),
+  threshold: z.number(),
+});
+
+/**
  * TaskContextItemOut
  *
  * A task's link to outside content: the ContextItem and what it points at.
@@ -1329,6 +1385,72 @@ export const zTaskWithLayoutOut = z.object({
 export const zTextDocumentPatch = z.object({
   body_md: z.string().max(100000),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * Threshold
+ */
+export const zThreshold = z.object({
+  fallback_margin: z.number().optional().default(0.1),
+  min_confidence: z.number().nullish(),
+  t_no: z.number().nullish(),
+  t_yes: z.number().nullish(),
+});
+
+/**
+ * CalibrationPoint
+ */
+export const zCalibrationPoint = z.object({
+  bar: z.number(),
+  decision_point: zDecisionPoint,
+  evaluations: z.array(zEvaluation),
+  model_version: z.string(),
+  needs_recheck: z.boolean(),
+  primitive: z.enum(["choice", "score", "noul"]),
+  source: z.enum(["default", "user"]),
+  threshold: zThreshold,
+});
+
+/**
+ * CalibrationOut
+ */
+export const zCalibrationOut = z.object({
+  min_labeled: z.int(),
+  model_version: z.string(),
+  points: z.array(zCalibrationPoint),
+});
+
+/**
+ * ThresholdIn
+ *
+ * A threshold a human sets: `min_confidence` for a Choice or Score point, the yes and
+ * no bands for a Noul point (no yes band for `approval_need`). The fallback margin is
+ * kept as it is.
+ */
+export const zThresholdIn = z.object({
+  min_confidence: z.number().gte(0).lte(1).nullish(),
+  t_no: z.number().gte(0).lte(1).nullish(),
+  t_yes: z.number().gte(0).lte(1).nullish(),
+});
+
+/**
+ * ThresholdEdit
+ */
+export const zThresholdEdit = z.object({
+  reason: z.string().min(1).max(500),
+  threshold: zThresholdIn,
+});
+
+/**
+ * ThresholdOut
+ */
+export const zThresholdOut = z.object({
+  bar: z.number(),
+  decision_point: zDecisionPoint,
+  model_version: z.string(),
+  needs_recheck: z.boolean(),
+  source: z.enum(["default", "user"]),
+  threshold: zThreshold,
 });
 
 /**
@@ -1841,6 +1963,22 @@ export const zDeadLettersPostRetryPath = z.object({
  * Successful Response
  */
 export const zDeadLettersPostRetryResponse = zDeadLetterOut;
+
+/**
+ * Successful Response
+ */
+export const zDecisionsGetCalibrationResponse = zCalibrationOut;
+
+export const zDecisionsEditThresholdBody = zThresholdEdit;
+
+export const zDecisionsEditThresholdPath = z.object({
+  point: zDecisionPoint,
+});
+
+/**
+ * Successful Response
+ */
+export const zDecisionsEditThresholdResponse = zThresholdOut;
 
 export const zKnowledgeGetFilePath = z.object({
   document_id: z.uuid(),
