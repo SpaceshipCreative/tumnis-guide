@@ -17,7 +17,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-5.4")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 async def test_get_task_packet_has_no_token(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:

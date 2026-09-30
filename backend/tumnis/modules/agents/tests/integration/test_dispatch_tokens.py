@@ -72,7 +72,6 @@ async def _packet(
 
 @pytest.mark.req("FR-5.4")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 @pytest.mark.parametrize("kind", list(DISPATCHES))
 async def test_every_dispatch_carries_a_valid_token(
     dbos: type[DBOS],
@@ -129,3 +128,115 @@ async def test_every_dispatch_carries_a_valid_token(
     bare = packet.model_dump(mode="json")
     bare["callback"] = None
     assert runner.check_packet(bare) is not None
+
+
+@pytest.mark.req("SAF-1")
+@pytest.mark.wp("P2-02")
+async def test_run_end_erases_the_token_from_the_stored_message(
+    dbos: type[DBOS],
+    fake_runner: FakeRunnerFactory,
+    workspace: WorkspaceHandle,
+    clock: FixedClock,
+) -> None:
+    """Scott decision 31 (P2-02): once the run ends, the `run` mailbox message stored for it
+    no longer holds the task token (it reads `[redacted]`), so no database backup or dump
+    holds a live or recent token.
+    """
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from tests._mcp import make_world  # noqa: PLC0415
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+    from tumnis.modules.agents import workflows  # noqa: PLC0415
+    from tumnis.modules.agents.models import RunnerMessage  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth  # noqa: PLC0415
+
+    name, role, skill, out, output = DISPATCHES["task"]
+    world = await make_world(workspace, clock)
+    runner = fake_runner(profiles=[name], strict=True)
+    runner.script(name, skill, output)
+    profile_id = fake_runner.register_profile(
+        name,
+        runner=runner,
+        role=role,  # type: ignore[arg-type]
+        project_id=world.projects["A"],
+    )
+    key = await auth.create_key(
+        workspace.ctx,
+        auth.KeyIn(name=f"{name} key", scopes=["tasks:read", "tasks:write", "context:read"]),
+        now=clock.now(),
+    )
+    await agents.set_profile_key(workspace.ctx, profile_id, key.id, now=clock.now())
+    task = await world.task("A", title="Tidy the Acme footer", label="ai", estimate_minutes=None)
+
+    packet = await _packet("task", profile_id, task, skill, out)
+    handle = await workflows.start_run_skill(workspace.id, packet)
+    outcome = await asyncio.wait_for(handle.get_result(), 30)
+    assert outcome["status"] == "succeeded", outcome
+    sent = [run for run in runner.runs() if run.run_id == packet.run_id]
+    token = sent[0].packet["callback"]["task_token"]
+    assert token.startswith("tmt_")
+
+    messages = RunnerMessage.__table__
+    async with tenant_session(workspace.ctx) as s:
+        payload = await s.scalar(
+            select(messages.c.payload).where(
+                messages.c.message_id == uuid.uuid5(packet.run_id, "run")
+            )
+        )
+    assert payload is not None
+    assert payload["packet"]["callback"]["task_token"] == agents.REDACTED
+    assert token not in json.dumps(payload)
+
+
+@pytest.mark.req("SAF-1")
+@pytest.mark.wp("P2-02")
+async def test_master_run_token_reaches_no_project(
+    app: Any, workspace: WorkspaceHandle, clock: FixedClock
+) -> None:
+    """Scott decision 30 (P2-02): a plan or notify run on the master profile gets a
+    workspace-scoped token with no project: its scopes are a subset of the master key's,
+    it lists no project's tasks and is 404 on a project; any other run kind must name its
+    project.
+    """
+    from tests._mcp import http_for, make_world  # noqa: PLC0415
+    from tumnis.core.principal import Principal  # noqa: PLC0415
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth  # noqa: PLC0415
+
+    world = await make_world(workspace, clock)
+    await world.task("A", title="A task of project A", label="ai", estimate_minutes=None)
+    held = frozenset({"tasks:read", "tasks:write", "context:read"})
+    master = await auth.create_key(
+        workspace.ctx, auth.KeyIn(name="master key", scopes=sorted(held)), now=clock.now()
+    )
+    for kind in (agents.RunKind.PLAN, agents.RunKind.NOTIFY):
+        token = await agents.issue_run_token(
+            workspace.ctx,
+            run_id=uuid.uuid4(),
+            kind=kind,
+            project_id=None,
+            api_key_id=master.id,
+            now=clock.now(),
+        )
+        principal = await auth.authenticate_bearer(token, now=clock.now())
+        assert isinstance(principal, Principal)
+        assert principal.project_ids == frozenset()
+        assert set(principal.scopes) == set(agents.run_token_scopes(kind, held))
+        project_a = {"project_id": str(world.projects["A"])}
+        async with http_for(app, token) as http:
+            everything = await http.get("/v1/tasks")
+            in_project_a = await http.get("/v1/tasks", params=project_a)
+        assert everything.status_code == 200, everything.text
+        assert everything.json()["items"] == []
+        assert in_project_a.status_code == 404, in_project_a.text
+
+    with pytest.raises(ValueError, match="names its project"):
+        await agents.issue_run_token(
+            workspace.ctx,
+            run_id=uuid.uuid4(),
+            kind=agents.RunKind.TASK,
+            project_id=None,
+            api_key_id=master.id,
+            now=clock.now(),
+        )

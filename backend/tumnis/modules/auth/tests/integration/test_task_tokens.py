@@ -71,7 +71,6 @@ async def _token(
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 async def test_token_limited_to_its_project(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -121,7 +120,6 @@ async def test_token_limited_to_its_project(
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 @pytest.mark.parametrize("kind", RUN_KINDS)
 async def test_token_scopes_are_subset_of_key(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock, kind: str
@@ -214,7 +212,6 @@ async def test_token_fails_after_run_ends(
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 async def test_token_never_carries_delegate_or_ingest(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
