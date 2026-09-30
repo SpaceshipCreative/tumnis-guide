@@ -187,7 +187,8 @@ async def move_project_folder(
     RoutePolicy(
         auth="session_or_key",
         scopes=frozenset({"knowledge:write"}),
-        idempotent=True,
+        idempotent=False,
+        not_idempotent_reason="a repeated delete finds no document (404); nothing to replay",
         project_param="lookup:knowledge",
     )
 )
