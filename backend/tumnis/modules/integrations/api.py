@@ -504,6 +504,17 @@ def register_target_taint(target_type: TargetType, lookup: TaintLookup) -> None:
     _TAINT_LOOKUPS[target_type] = lookup
 
 
+OwnerTaint = Callable[[AsyncSession, UUID], Awaitable[None]]
+_OWNER_TAINT: dict[str, OwnerTaint] = {}
+
+
+def register_owner_taint(owner_type: OwnerType, raise_taint: OwnerTaint) -> None:
+    """A module that owns an owner type (tasks: task) tells `link_context` how to raise an
+    owner's taint when a tainted item is attached to it (P2-08, SAF-1: linking only adds
+    taint, never clears it). It runs in `link_context`'s transaction."""
+    _OWNER_TAINT[owner_type] = raise_taint
+
+
 async def link_context(
     ctx: WorkspaceContext,
     *,
@@ -515,7 +526,9 @@ async def link_context(
     added_by: str,
     session: AsyncSession | None = None,
 ) -> ContextItemOut:
-    """Idempotent on (owner, target). tainted = target.tainted (rules.propagate_taint).
+    """Idempotent on (owner, target). tainted = target.tainted (rules.propagate_taint); a
+    tainted item raises its owner's taint through the owner module's
+    `register_owner_taint` hook (P2-08).
     A record target needs `target_id` (NotFound when no such row is visible); a bare
     `url` target needs `target_url` and is tainted (outside content). Linking again
     returns the existing item (restoring it if it was deleted)."""
@@ -565,6 +578,9 @@ async def link_context(
                 )
             )
         ).one()
+        raise_taint = _OWNER_TAINT.get(owner_type)
+        if row.tainted and raise_taint is not None:
+            await raise_taint(s, owner_id)  # P2-08: the owner is now made from it too
     return ContextItemOut.model_validate(row._mapping)
 
 
@@ -582,6 +598,24 @@ async def get_context_item_ref(
             )
         ).first()
     return None if row is None else ContextItemOut.model_validate(row._mapping)
+
+
+async def proposal_taint(s: AsyncSession, context_item_ids: Collection[UUID]) -> bool:
+    """The taint a proposal made from these context items carries (P2-08, SAF-1): the OR
+    of the items' stored taint (`rules.propagate_taint`). P3-07's `create_proposal` writes
+    it on the create path. NotFound for an id that is not a live item of the workspace."""
+    wanted = set(context_item_ids)
+    rows = (
+        await s.execute(
+            select(_context.c.id, _context.c.tainted).where(
+                _context.c.id.in_(sorted(wanted, key=str)), _context.c.deleted_at.is_(None)
+            )
+        )
+    ).all()
+    missing = wanted - {row.id for row in rows}
+    if missing:
+        raise NotFound("context_items", min(missing, key=str))
+    return rules.propagate_taint(*(row.tainted for row in rows))
 
 
 class ContextItemText(BaseModel):
