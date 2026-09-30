@@ -121,7 +121,6 @@ def _request(snapshot: Any, missing: list[str]) -> Any:
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 @pytest.mark.parametrize("case", sorted(CASES))
 def test_missing_fields_table(case: str) -> None:
     """T-P1-08-01
@@ -174,7 +173,6 @@ def test_missing_fields_table(case: str) -> None:
 
 @pytest.mark.req("FR-4.4", "UX 9")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 def test_merge_keeps_what_the_user_wrote_meanwhile() -> None:
     """A field requested at the start but filled by the user before the result arrived is
     left alone; the other requested fields are still filled (UX 9)."""
@@ -192,7 +190,6 @@ def test_merge_keeps_what_the_user_wrote_meanwhile() -> None:
 
 @pytest.mark.req("FR-4.1", "FR-4.4")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 @pytest.mark.parametrize(
     ("label", "label_source", "applies"),
     [
@@ -222,7 +219,6 @@ def test_merge_revises_only_an_ai_or_pending_label(
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 def test_merge_never_estimates_an_ai_task_or_out_of_range() -> None:
     """No estimate for an AI task even when a result carries one, and none outside
     `ESTIMATE_RANGE` (R-11)."""
@@ -247,7 +243,6 @@ class _Score:
 
 @pytest.mark.req("FR-4.4", "FR-11.4")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 @pytest.mark.parametrize(
     ("score", "route", "flag"),
     [

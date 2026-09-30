@@ -105,13 +105,20 @@
           "type": "string"
         },
         "label": {
-          "enum": [
-            "human",
-            "ai",
-            "hybrid"
+          "anyOf": [
+            {
+              "enum": [
+                "human",
+                "ai",
+                "hybrid"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Label",
-          "type": "string"
+          "title": "Label"
         },
         "label_reason": {
           "anyOf": [
