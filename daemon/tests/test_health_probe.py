@@ -681,6 +681,7 @@ async def test_a_probe_that_raises_degrades_only_its_own_kind(profile_dir: Path)
         fake.get(f"{COOLIFY}/api/v1/applications/app-own").mock(
             side_effect=UnicodeError("3|fake-coolify-token-for-tests")
         )
+        other = fake.route().respond(200, json={})
         github, coolify = await token_reach(
             profile_dir,
             own_repos=["acme/site"],
@@ -690,6 +691,7 @@ async def test_a_probe_that_raises_degrades_only_its_own_kind(profile_dir: Path)
             coolify_base_url=COOLIFY,
         )
 
+    assert not other.called  # decision 18: nothing went anywhere else
     assert github is not None
     assert github.own_reachable == {"acme/site": True}
     assert github.errors == []
