@@ -58,11 +58,12 @@ def test_legacy_unacked_files_move_into_the_outbox(tmp_path: Path) -> None:
     _legacy(unacked, report, 2_000_000_000)
     _legacy(unacked, result, 1_000_000_000)
     (unacked / "broken.json").write_text("{not json", encoding="utf-8")
+    (unacked / "gone.json").symlink_to(tmp_path / "missing.json")  # stat fails
 
     store = StateStore(tmp_path)
     kept = [json.loads(frame) for frame in store.unacked()]
     assert kept == [result, report]  # oldest first, byte-for-byte the same messages
-    assert sorted(p.name for p in unacked.iterdir()) == ["broken.json"]  # kept for a human
+    assert sorted(p.name for p in unacked.iterdir()) == ["broken.json", "gone.json"]  # kept
     store.close()
 
     again = StateStore(tmp_path)  # a second start imports nothing twice

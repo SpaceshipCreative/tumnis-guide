@@ -14,6 +14,7 @@ import contextlib
 import json
 import logging
 import shutil
+import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Protocol
@@ -68,16 +69,21 @@ class StateStore:
         that does not parse is left for a human."""
         if not unacked_dir.is_dir():
             return
-        for path in sorted(unacked_dir.glob("*.json"), key=lambda p: p.stat().st_mtime_ns):
+        found: list[tuple[int, Path]] = []
+        for path in unacked_dir.glob("*.json"):
+            try:
+                found.append((path.stat().st_mtime_ns, path))
+            except OSError:  # gone since the listing, or a dangling link
+                log.warning("legacy_unacked_unreadable", extra={"file": path.name})
+        for _, path in sorted(found):
             try:
                 message = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
+                if not isinstance(message, dict) or not message.get("message_id"):
+                    raise ValueError("not a kept message")
+                self.outbox.put(message)
+            except (OSError, ValueError, sqlite3.Error):
                 log.warning("legacy_unacked_unreadable", extra={"file": path.name})
                 continue
-            if not isinstance(message, dict) or not message.get("message_id"):
-                log.warning("legacy_unacked_unreadable", extra={"file": path.name})
-                continue
-            self.outbox.put(message)
             path.unlink(missing_ok=True)
         with contextlib.suppress(OSError):
             unacked_dir.rmdir()  # only when nothing was left behind
