@@ -124,4 +124,53 @@ describe("DeleteAtSourceDialog", () => {
       `POST /v1/knowledge/documents/${DOC_ID}/delete-confirmation`,
     ]);
   });
+
+  test("[P3-14][FR-15.12] a delete on its way cannot be cancelled", async () => {
+    const recorder = new Recorder();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(
+        "*/v1/knowledge/documents/:id/delete-confirmation",
+        async ({ request }) => {
+          await recorder.record(request);
+          await gate;
+          return HttpResponse.json({
+            confirm_token: TOKEN,
+            expires_at: "2026-09-30T12:10:00Z",
+          });
+        },
+      ),
+      ...handlers(recorder).slice(1),
+    );
+    const onDone = vi.fn();
+    const onCancel = vi.fn();
+    const { user } = renderWithProviders(
+      <DeleteAtSourceDialog
+        documentId={DOC_ID}
+        fileName="SOW.pdf"
+        onDone={onDone}
+        onCancel={onCancel}
+      />,
+    );
+    await user.type(
+      screen.getByLabelText("Type the file name to confirm"),
+      "SOW.pdf",
+    );
+    await user.type(screen.getByLabelText("Why delete it?"), "Old draft");
+    await user.click(screen.getByRole("button", { name: "Delete at source" }));
+
+    // While the token request is pending, Cancel and Escape do nothing.
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.keyboard("{Escape}");
+    expect(onCancel).not.toHaveBeenCalled();
+
+    release();
+    await waitFor(() => {
+      expect(onDone).toHaveBeenCalledWith("delete_at_source");
+    });
+    expect(onCancel).not.toHaveBeenCalled();
+  });
 });

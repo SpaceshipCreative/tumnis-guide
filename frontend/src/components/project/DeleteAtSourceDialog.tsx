@@ -64,7 +64,11 @@ export function DeleteAtSourceDialog({
       title="Delete this file at its source?"
       confirmLabel="Delete at source"
       busy={!ready || remove.isPending}
-      onCancel={onCancel}
+      onCancel={() => {
+        // Once the delete is on its way it cannot be called back: Cancel and Escape
+        // wait for it rather than claim to stop it.
+        if (!remove.isPending) onCancel();
+      }}
       onConfirm={() => {
         if (!ready) return;
         setError(null);

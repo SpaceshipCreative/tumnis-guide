@@ -35,6 +35,7 @@ from tumnis.core.live import mark_changed
 from tumnis.core.net import NetPolicy
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.core.versioning import NotFound
 from tumnis.modules.knowledge import api, sync
 from tumnis.modules.knowledge.models import (
     Document,
@@ -116,37 +117,67 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()  # a content hash, no secret
 
 
+async def _check(
+    s: AsyncSession, project: UUID, target_id: UUID, to_path: str
+) -> tuple[api.ProjectFolderOut, str] | str:
+    """The project's folder and the target root, or the code of why the target cannot
+    take the folder (`path_rejected`, `location_offline`, `same_folder`, `folder_taken`)."""
+    folder = await api.get_project_folder(s, project)
+    try:
+        to_root = safe_rel_path(to_path.strip("/"))
+    except PathRejected:
+        return "path_rejected"
+    target = await s.scalar(
+        select(_locations.c.status).where(
+            _locations.c.id == target_id, _locations.c.deleted_at.is_(None)
+        )
+    )
+    if target != "online":
+        return "location_offline"
+    if (folder.location_id, folder.root_path) == (target_id, to_root):
+        return "same_folder"
+    others: list[str] = list(
+        await s.scalars(
+            select(_folders.c.root_path).where(
+                _folders.c.location_id == target_id,
+                _folders.c.project_id != project,
+                _folders.c.deleted_at.is_(None),
+            )
+        )
+    )
+    if any(_overlaps(other, to_root) for other in others):
+        return "folder_taken"
+    return folder, to_root
+
+
+async def precheck(s: AsyncSession, project_id: UUID, to_location: UUID, to_path: str) -> None:
+    """The route's check before it queues a move: the problem `begin` would end the move
+    with (409, or 422 for an unsafe path), so a refused move never answers 202. The rows
+    are found first: 404 for a project without a folder or a location not in view."""
+    found = await s.scalar(
+        select(_locations.c.id).where(
+            _locations.c.id == to_location, _locations.c.deleted_at.is_(None)
+        )
+    )
+    await api.get_project_folder(s, project_id)
+    if found is None:
+        raise NotFound("storage_locations", to_location)
+    checked = await _check(s, project_id, to_location, to_path)
+    if isinstance(checked, str):
+        raise refuse(checked)
+
+
 async def begin(
     workspace_id: str, project_id: str, to_location: str, to_path: str
 ) -> dict[str, Any]:
-    """The move's record, or {"error": code} when the target cannot take the folder."""
+    """The move's record, or {"error": code} when the target cannot take the folder
+    (checked again here: the location may have gone offline since the route's check)."""
     project, target_id = UUID(project_id), UUID(to_location)
     async with tenant_session(_ctx(workspace_id)) as s:
-        folder = await api.get_project_folder(s, project)
-        try:
-            to_root = safe_rel_path(to_path.strip("/"))
-        except PathRejected:
-            return {"error": "path_rejected"}
-        target = await s.scalar(
-            select(_locations.c.status).where(
-                _locations.c.id == target_id, _locations.c.deleted_at.is_(None)
-            )
-        )
-        if target != "online":
-            return {"error": "location_offline"}
-        if (folder.location_id, folder.root_path) == (target_id, to_root):
-            return {"error": "same_folder"}
-        others: list[str] = list(
-            await s.scalars(
-                select(_folders.c.root_path).where(
-                    _folders.c.location_id == target_id,
-                    _folders.c.project_id != project,
-                    _folders.c.deleted_at.is_(None),
-                )
-            )
-        )
-        if any(_overlaps(other, to_root) for other in others):
-            return {"error": "folder_taken"}
+        checked = await _check(s, project, target_id, to_path)
+        if isinstance(checked, str):
+            return {"error": checked}
+        folder, to_root = checked
         move_id = await s.scalar(
             insert(_moves)
             .values(
