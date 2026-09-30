@@ -7,7 +7,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { taskQueryOptions, useUpdateTask } from "../../../lib/optimistic";
 import { formatDay, formatMinutes } from "../../dashboard/format";
 import { STATUS_WORDS, useChangeStatus, useTrashTask } from "../mutations";
-import { fieldClass, saveClass } from "../rail/RailSection";
+import { deleteClass, fieldClass, saveClass } from "../rail/RailSection";
 import { statusAction } from "../TaskRow";
 import type { Task } from "../types";
 import { CommentList } from "./CommentList";
@@ -94,7 +94,7 @@ function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
             trash.mutate({ task });
             onClose();
           }}
-          className={`${saveClass} text-danger`}
+          className={deleteClass}
         >
           Move to trash
         </button>

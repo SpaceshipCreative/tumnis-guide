@@ -39,6 +39,11 @@
   --tg-success: #15773a;
   --tg-warning: #816316;
   --tg-info: #1c71ae;
+  /* Badge backgrounds: each status colour on its soft tint stays above 4.5:1. */
+  --tg-success-soft: #e3f4e8;
+  --tg-warning-soft: #fcf3d7;
+  --tg-danger-soft: #fde8e8;
+  --tg-info-soft: #ebf4fc;
   --tg-focus: #755ff8;
   --tg-shadow: 0 1px 1px 0 rgb(0 0 0 / 0.05), 0 1px 2px 0 rgb(0 0 0 / 0.02);
   /* The shell's header height; pages that fill the screen subtract it. */
@@ -61,6 +66,10 @@
     --tg-success: #4bd37d;
     --tg-warning: #f7cd4c;
     --tg-info: #7bc8ff;
+    --tg-success-soft: #1e3a2e;
+    --tg-warning-soft: #3a3320;
+    --tg-danger-soft: #442528;
+    --tg-info-soft: #1d3548;
     --tg-focus: #9c8cff;
     --tg-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.3);
     color-scheme: dark;
@@ -108,6 +117,10 @@
   --color-success: var(--tg-success);
   --color-warning: var(--tg-warning);
   --color-info: var(--tg-info);
+  --color-success-soft: var(--tg-success-soft);
+  --color-warning-soft: var(--tg-warning-soft);
+  --color-danger-soft: var(--tg-danger-soft);
+  --color-info-soft: var(--tg-info-soft);
   --color-focus: var(--tg-focus);
   --shadow-card: var(--tg-shadow);
 }
@@ -125,6 +138,12 @@
   ::backdrop,
   ::file-selector-button {
     border-color: var(--tg-border);
+  }
+  /* Checkboxes, radios and range inputs take the accent (DS-01). */
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="range"] {
+    accent-color: var(--tg-accent);
   }
   /* One visible focus ring for every keyboard focus (UX 11). */
   :focus-visible {

@@ -19,6 +19,7 @@ import {
   SECONDARY,
   SECTION,
 } from "./styles";
+import { DIALOG_BACKDROP, DIALOG_PANEL, DIALOG_TITLE } from "../common/ui";
 
 const TITLE = "Set up a new authenticator";
 
@@ -179,17 +180,17 @@ function EnrolDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+    <div className={DIALOG_BACKDROP}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={ids.title}
-        className="flex max-h-full w-full max-w-md flex-col gap-3 overflow-y-auto rounded-lg bg-surface p-4 shadow-lg"
+        className={DIALOG_PANEL}
         onKeyDown={(event) => {
           if (event.key === "Escape") close(onClose);
         }}
       >
-        <h3 id={ids.title} className="text-lg font-semibold">
+        <h3 id={ids.title} className={DIALOG_TITLE}>
           {TITLE}
         </h3>
         <form onSubmit={submit} className="flex flex-col gap-3">
