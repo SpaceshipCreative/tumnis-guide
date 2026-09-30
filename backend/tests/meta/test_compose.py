@@ -130,3 +130,39 @@ def test_compose_order_and_pooling() -> None:
     assert base_image is not None
     assert base_image.group(1).split("@")[0] == "pgvector/pgvector:pg18"
     assert re.search(r"\bpgbackrest\b", dockerfile)
+
+
+def _mem_limit_bytes(service: dict[str, Any]) -> int:
+    """`mem_limit` (or the deploy limit) as bytes: '4g', '512m' or a plain byte count."""
+    raw = service.get("mem_limit") or (
+        ((service.get("deploy") or {}).get("resources") or {}).get("limits") or {}
+    ).get("memory")
+    assert raw, "no memory limit"
+    match = re.fullmatch(r"(\d+)\s*([kmg]?)b?", str(raw).strip().lower())
+    assert match is not None, raw
+    return int(match.group(1)) * {"": 1, "k": 1 << 10, "m": 1 << 20, "g": 1 << 30}[match.group(2)]
+
+
+@pytest.mark.req("ADR-0007")
+@pytest.mark.wp("P1-16")
+def test_worker_extract_has_memory_limit_and_clamd() -> None:
+    """T-P1-16-14
+    compose.yaml defines `clamd` and `worker-extract`: the extract worker runs
+    `tumnis worker --queues extract` under a memory limit, mounts the shared `spool` volume
+    read-write and its own `scratch` volume, and waits for clamd; the main worker does not
+    listen to `extract`, and the api shares the spool.
+    """
+    compose = load_compose("compose.yaml")
+    services = compose["services"]
+    assert {"clamd", "worker-extract"} <= services.keys()
+    extract = services["worker-extract"]
+    assert extract["command"] == ["tumnis", "worker", "--queues", "extract"]
+    assert 0 < _mem_limit_bytes(extract) <= 8 << 30
+    volumes = [str(v) for v in extract.get("volumes") or []]
+    assert any(v.startswith("spool:") and not v.endswith(":ro") for v in volumes), volumes
+    assert any(v.startswith("scratch:") for v in volumes), volumes
+    assert "clamd" in _depends_on(extract)
+    assert _environment(extract)["KNOWLEDGE__CLAMD_HOST"] == "clamd"
+    assert "--queues" not in services["worker"]["command"]
+    assert any(str(v).startswith("spool:") for v in services["api"].get("volumes") or [])
+    assert {"spool", "scratch"} <= compose["volumes"].keys()

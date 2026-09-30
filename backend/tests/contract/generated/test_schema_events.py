@@ -37,6 +37,18 @@ CASES = [
     ),
     (
         "events",
+        "document.added",
+        1,
+        "backend/tests/contract/fixtures/events/document.added/v1.json",
+    ),
+    (
+        "events",
+        "document.changed",
+        1,
+        "backend/tests/contract/fixtures/events/document.changed/v1.json",
+    ),
+    (
+        "events",
         "github.fetched",
         1,
         "backend/tests/contract/fixtures/events/github.fetched/v1.json",

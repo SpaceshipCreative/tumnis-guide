@@ -1,0 +1,67 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/document.added.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "document_id": {
+      "format": "uuid",
+      "title": "Document Id",
+      "type": "string"
+    },
+    "project_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Project Id"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "size": {
+      "title": "Size",
+      "type": "integer"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "trust": {
+      "enum": [
+        "trusted",
+        "untrusted"
+      ],
+      "title": "Trust",
+      "type": "string"
+    },
+    "version_id": {
+      "format": "uuid",
+      "title": "Version Id",
+      "type": "string"
+    },
+    "version_no": {
+      "title": "Version No",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "document_id",
+    "version_id",
+    "version_no",
+    "project_id",
+    "title",
+    "trust",
+    "size"
+  ],
+  "title": "DocumentAddedV1",
+  "type": "object"
+}
