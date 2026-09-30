@@ -1,12 +1,16 @@
 // Harness self tests for the render helper and the factories (P0-02).
 import { useQuery } from "@tanstack/react-query";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 
 import { makeProject, makeTask } from "./factories";
 import { server } from "./msw/server";
-import { createTestQueryClient, renderWithProviders } from "./render";
+import {
+  createTestQueryClient,
+  renderRoute,
+  renderWithProviders,
+} from "./render";
 
 function ProjectName() {
   const { data } = useQuery({
@@ -50,4 +54,20 @@ test("[P0-02][Quality-rule-5] factories give unique ids and accept overrides", (
   expect(first.title).toBe("Send drafts");
   expect(second.project_id).toBe(project.id);
   expect(first.status).toBe("backlog");
+});
+
+// An unknown path lands on the dashboard, whose route shows its pending state at once
+// (`pendingMs: 0`). The test ends as soon as the URL changes, with that load still
+// running. The load must be finished by the time the test is torn down: one that commits
+// later lands in an unmounted tree, or once the file is done, after jsdom is gone
+// ("window is not defined", issue #76).
+test("[P0-02][Quality-rule-5] issue #76 a route load still running when its test ends finishes before teardown", async () => {
+  const { router } = await renderRoute("/no/such/place");
+  await waitFor(() => {
+    expect(router.state.location.pathname).toBe("/");
+  });
+
+  onTestFinished(() => {
+    expect(router.state.status).toBe("idle");
+  });
 });
