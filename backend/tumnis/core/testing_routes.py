@@ -3,7 +3,9 @@ preview guard guarantees previews always run with fakes, so real deployments nev
 them. `POST /v1/test/reset` empties the database, reloads a seed set and clears a test
 clock; `GET /v1/test/requests` lists the last write requests (P0-10); `POST
 /v1/test/clock` sets the server clock (A10; issue #6: A0.1 signs in with the TOTP code at
-the browser's installed clock, so the server must check it at the same instant)."""
+the browser's installed clock, so the server must check it at the same instant); `POST
+/v1/test/fakes/{adapter}/script` scripts a fake in every process (R-37, through
+tumnis.core.fake_scripts)."""
 
 import asyncio
 from collections.abc import Callable
@@ -11,13 +13,15 @@ from datetime import datetime, timedelta
 from typing import Annotated, Any, Self
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
 from pydantic import AwareDatetime, BaseModel, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from tumnis.core import fake_scripts
 from tumnis.core.clock import OverridableClock
+from tumnis.core.errors import ProblemError
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.seed import SEED_PATHS, DatabaseSink, SeedSet, load_seed, writers_registered
@@ -205,3 +209,25 @@ async def set_clock(request: Request, body: ClockIn) -> ClockOut:
     if body.time is not None:
         return ClockOut(now=clock.set(body.time))
     return ClockOut(now=clock.advance(timedelta(seconds=body.advance_seconds or 0)))
+
+
+@router.post("/fakes/{adapter}/script", status_code=204)
+@route_policy(
+    RoutePolicy(
+        auth="none", idempotent=False, not_idempotent_reason="test-only scripting of a fake"
+    )
+)
+async def script_fake(adapter: str, body: Annotated[dict[str, Any], Body()]) -> Response:
+    """Stores a script for the fake registered under `adapter` (`decisions.jev`,
+    `decisions.vllm`, `generation`), which the fakes of the api and the worker answer from
+    until the next `POST /v1/test/reset`. 404 `unknown_fake` for a name with no scriptable
+    fake; 422 `invalid_fake_script` for a body that fake cannot read."""
+    parse = fake_scripts.parser(adapter)
+    if parse is None:
+        raise ProblemError(404, "unknown_fake", f"no scriptable fake is named {adapter!r}")
+    try:
+        key, script = parse(body)
+    except ValueError as exc:
+        raise ProblemError(422, "invalid_fake_script", str(exc)) from None
+    await fake_scripts.put(adapter, key, script)
+    return Response(status_code=204)
