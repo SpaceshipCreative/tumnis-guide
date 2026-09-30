@@ -1,23 +1,117 @@
-# P1-15 handoff (Project folders and the sync engine)
+# P1-15 handoff (Project folders and the sync engine), continuation 2
 
-Stopped on the coordinator's "HANDOFF NOW". Branch `wp/P1-15` (pushed with
-`/usr/bin/git push origin HEAD:wp/P1-15`). No PR yet, so there are no review threads and no CI
-runs.
+Stopped on the context watcher's "HANDOFF NOW" (second agent). Branch `wp/P1-15`, pushed with
+`/usr/bin/git push origin HEAD:wp/P1-15`. No implementation PR yet (no review threads, no CI).
+Setup for the next agent: throwaway branch at main, `/usr/bin/git fetch origin`,
+`/usr/bin/git merge origin/main`, `/usr/bin/git merge origin/wp/P1-15`,
+`cd backend && uv sync --frozen --all-extras`.
 
-## State
+## PRs
+
+- **#71** `[P1-15] spec: notes written by save_note carry tumnis_id frontmatter`, branch
+  `wp/P1-15-spec-note-frontmatter` (commits `d855a5c`, `9b3d931`, built with plumbing on
+  origin/main), open. It changes the expected bytes of T-P1-14-08 **and** of
+  `test_pr52_two_offline_saves_of_one_note_both_drain_and_the_newest_lands` (it locked the same
+  raw bytes; the PR body explains) to `f"---\ntumnis_id: {note_id}\n---\n..."`, and marks both
+  `xfail(strict=True, reason="spec:P1-15")` so main stays green. The coordinator adds
+  `spec-change` (decision 14). Still to do: `@coderabbitai review` comment and its review loop.
+- #71 is merged into wp/P1-15. **Remove those two markers** once save_note/drain are verified
+  (both now write frontmatter; unverified WIP).
+- The P1-15 PR body must say it depends on #71.
+
+## State (commits on wp/P1-15)
 
 | Commit | What |
 | --- | --- |
-| `9066bad` | `test(knowledge): P1-15 spec tests (red)`: all 13 spec tests as `xfail(strict=True, reason="spec:P1-15")` |
-| (this one) | `chore: P1-15 handoff` |
+| `9066bad` | spec tests (red) |
+| merge of `origin/wp/P1-15-spec-note-frontmatter` | #71's test change |
+| `a0f8c37` | `feat(knowledge)`: `sync_rules.py`; T-P1-15-01..07 green, markers removed; 100% line coverage (plus new `tests/unit/test_sync_rules_edges.py`); `.importlinter` rules-are-pure lists `tumnis.modules.knowledge.sync_rules`. `make check` green. |
+| (this one) | `chore: P1-15 handoff`, **including WIP that has never run; `make check` is NOT green on it** |
 
-Verified on `9066bad`: `make check` is green (1018 passed, 60 xfailed; the frontend was skipped
-because node_modules is absent, and the WP has no frontend change). The unit spec tests are red
-(60 xfailed), and the 29 integration spec tests collect. The integration layer has not been run
-yet.
+### WIP in the handoff commit (unverified)
 
-Nothing is implemented yet: no `sync_rules.py`, `sync.py`, migration, workflow, api additions,
-CLI command or `scripts/backup/folders.sh`.
+- `migrations/0005_folder_files.py` (`knowledge_0005`, down_revision `knowledge_0003`):
+  `folder_files` and `storage_locations.last_sync_at`. `models.py`: `FolderFile`, `last_sync_at`.
+  `tumnis/core/tests/integration/row_factory.py`: `("folder_files","origin"): "tumnis"`.
+- Storage port `ensure_folder`: ServerPath (mkdir -p by fd, marker required), S3 (no-op), Fake
+  (`folders` set). New contract case `test_ensure_folder_writes_no_file_and_repeats_harmlessly`
+  (fake and server_path pass locally; S3 not run).
+- `api.py`: `use_backend_hook` (applied in `_opened` only; `aclose` on the built S3Storage);
+  `assign_project_folder` names the folder `dedupe_name(sanitize_filename(project name))`
+  (`_folder_name`, via `projects.get_project`); `_drain` writes `render_note` bytes and records
+  `folder_files` (synced_version = doc version if body unchanged, else 0); `save_note` rewritten
+  (record path or `note_path`, frontmatter bytes, record etag as if_match, records the file);
+  new section at the end: review kinds registered on import (`tasks.register_review_kind`,
+  payload `SyncReviewPayload`), `record_file`, `file_record_of`, `taken_paths`, `free_path`,
+  `note_path`, `ensure_project_folder`, `make_layout`, `trash_document`, `text_of`,
+  `add_version`, `create_file_document`, `place_upload`/`UploadPlaced`, `DocumentVersionOut`,
+  `list_document_versions`, `get_document_version`, `BackupSource`, `backup_sources`,
+  `backup_manifest(workspace_ids)`. api.py passed ruff and mypy.
+- `sync.py` (new, first draft): `configure`, `use`, `net`, `clock`, `ignored`, `begin` (uses
+  `api.check_location`: health, status and drain), `plan` (list, hash, pair, decide -> JSON
+  items; skips NOOP unless a rename, and a repeated UNINDEX_ONLY), `apply` (checks the record and
+  doc still match the plan, then `_Apply.run` per action; stale -> rollback, skip),
+  `request_extraction`, `finish`, `locations`. Left to fix: mypy RowMapping vs
+  `Mapping[str, Any]` (type the helper params as `Mapping[Any, Any]`), `_unchanged` returns Any,
+  `ids` annotation in `locations`; ruff PLR0915 in `plan` (split it), PLR0917 on
+  `_Apply.__init__` (make args keyword-only), PT018; delete the leftover `root_of_path`;
+  `snapshot` reaches `api._versions` (add a public helper instead).
+
+## Remaining steps
+
+1. Fix sync.py as above; remove the now-unused `# type: ignore[attr-defined]` comments in the
+   integration test helpers (mypy lists them); at `_folder_runner.py:352` the ignore becomes
+   `# type: ignore[arg-type]` (project_id is `UUID | None`). Never touch assertions.
+2. `events.py`: the `knowledge.assign_project_folder` subscriber (name unchanged) calls
+   `api.ensure_project_folder(s, pid, net=sync.net())`.
+3. `workflows.py`: steps `knowledge_folder_sync_begin/plan/apply/extract/finish` (STEP_RETRY as
+   in calendar) and `@DBOS.workflow(name="knowledge_folder_sync") folder_sync(workspace_id,
+   location_id)`: begin -> return unless online; plan; for n, item: apply, then
+   `faults.killpoint(f"knowledge.folder_sync.applied_{n}")`; extract; finish. Plus `schedules()`
+   with a `*/15 * * * *` `knowledge-folder-sync-tick` on the `sync` queue that enqueues one sync
+   per `sync.locations()` with `SetEnqueueOptions(deduplication_id=f"folder-sync:{loc}",
+   duplication_policy="return-existing")` (DBOS 3.1; Context7 /dbos-inc/dbos-docs "Singleton
+   Workflows") and workflow id `folder-sync:{loc}:{tick}`. Check that wiring imports
+   knowledge.workflows.
+4. `worker.py` (small additive edit; P1-16 also edits `main` and `_serve`): `configure_folder_sync
+   (settings)` -> `importlib.import_module("tumnis.modules.knowledge.sync").configure(settings.net_policy())`.
+   Then `local_watch` (watchfiles is not installed: add `watchfiles==<pin>` to pyproject and
+   uv.lock after checking its Context7 docs), started from `_serve`.
+5. `make check` via `bash /tmp/claude-1002/-home-claude-Projects-Tumnis-Guide/9f3b07ec-b982-420c-89db-ecef45097e2c/scratchpad/p115/check.sh`
+   (the scratchpad root is SHARED with other agents; keep to the `p115/` subfolder), then
+   `make test-int` bare. Remove markers one at a time: T-13, T-08 (server path), T-09, T-10,
+   T-08 MinIO, the two #71 markers in test_locations.py, T-11, then T-12.
+6. T-12: `tumnis knowledge backup-sources --json` in `tumnis/cli.py` (typer sub-app; uses
+   `core.audit.workspace_ids` and `api.backup_manifest`) and `scripts/backup/folders.sh`
+   (python3 parses the JSON; `rclone copy --checksum SRC REMOTE/DEST` per source, via
+   `deploy/rclone/folders-backup.sh` or directly; the test stubs `rclone` on PATH and checks
+   argv[0] == "copy", `--checksum`, and the last two args; no line may contain `rclone`
+   followed by sync, move or delete, T-P0-28-05). Check rclone's `copy` docs in Context7 first.
+7. Open the PR; CodeRabbit loop; when P1-16 (#69) lands merge origin/main, re-chain
+   `knowledge_0005` after `knowledge_0004`, wire the extraction hook to P1-16's
+   `extract_document` (source `storage`), and move `sanitize_filename`'s helpers onto P1-16's
+   `rules._clean_char/_cut/_RESERVED/numbered_name` (coordinator: do not duplicate
+   `upload_file_name`; say so in the PR body).
+
+## New binding rule (Scott, 2026-09-30)
+
+Check current docs in Context7 for every third-party library touched (done for DBOS
+deduplication; still to do: watchfiles, rclone, aioboto3/S3 ETag behaviour) and cite them in
+the PR body.
+
+## Further deviations (add to the PR body with the list below)
+
+- The spec PR #71 also changes the PR #52 regression test's expected bytes (same behaviour).
+- `documents.path` is set when a folder Document is created and is not updated on renames
+  (each update bumps the row version and would make an open editor stale); `folder_files`
+  holds the live path.
+- The planner lists per project folder (`<root_path>/`), not the whole location tree, and does
+  not persist a listing cursor between pages (one DBOS step lists everything).
+- `sync.net()` falls back to `NetPolicy("self-hosted")` when deployment settings cannot load
+  (in-process tests); the worker configures it explicitly.
+- Upload and folder Documents are `kind='file'` with `source` `folder` or `upload`, and body_md
+  is their UTF-8 text as a stand-in until P1-16's extraction.
+- Decision 1 below is superseded: `save_note` now writes frontmatter too (Scott's decision 15).
 
 ## Spec tests written (all red)
 
