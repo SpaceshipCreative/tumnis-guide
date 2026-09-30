@@ -50,7 +50,7 @@ from tumnis.modules.knowledge.rules import (
     numbered_name,
     upload_file_name,
 )
-from tumnis.modules.knowledge.storage import PreconditionFailed, StorageBackend
+from tumnis.modules.knowledge.storage import FileStat, PreconditionFailed, StorageBackend
 from tumnis.settings import KnowledgeSettings
 
 STEPS: Final = (
@@ -325,7 +325,9 @@ async def _same_file(backend: StorageBackend, path: str, sha256: str) -> bool:
 async def place(workspace_id: str, version_id: str, ref: Ref) -> str:
     """3b. (uploads) Write the scratch copy to `uploads/<name>` in the document's folder,
     create-only (a taken name gets a number; a file already there with the same content is
-    this upload, placed by an earlier attempt); returns the path relative to the folder."""
+    this upload, placed by an earlier attempt); returns the path relative to the folder.
+    The file is recorded in `folder_files` as Tumnis's own, so the folder sync does not
+    take it for an outside file (#99)."""
     ctx, vid = _ctx(workspace_id), UUID(version_id)
     path = await _scratch(workspace_id, version_id, ref)
     name = upload_file_name(ref["name"])
@@ -334,23 +336,26 @@ async def place(workspace_id: str, version_id: str, ref: Ref) -> str:
         if info.location_id is None:
             raise RuntimeError(f"document {info.document_id} has no location")
         root = await api.storage_path(s, info.project_id, "")
-        placed: str | None = None
+        found: tuple[str, FileStat] | None = None
         async with api.open_backend(s, info.location_id, net=_net) as backend:
             for attempt in count(1):
                 rel = f"uploads/{numbered_name(name, attempt)}"
                 try:
-                    await backend.write(f"{root}{rel}", _file_chunks(path), None)
+                    found = (rel, await backend.write(f"{root}{rel}", _file_chunks(path), None))
                 except PreconditionFailed as taken:
                     if taken.current is not None and await _same_file(
                         backend, f"{root}{rel}", ref["sha256"]
                     ):
-                        placed = rel
+                        found = (rel, taken.current)
                         break
                     continue
-                placed = rel
                 break
-        assert placed is not None  # noqa: S101  # the loop only leaves by placing
+        assert found is not None  # noqa: S101  # the loop only leaves by placing
+        placed, stat = found
         await records.set_path(s, info.document_id, placed)
+        await api.record_placed(
+            s, info.location_id, stat, document_id=info.document_id, sha256=ref["sha256"]
+        )
     await asyncio.to_thread(_spool_file(version_id).unlink, missing_ok=True)
     return placed
 

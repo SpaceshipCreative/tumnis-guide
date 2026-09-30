@@ -152,6 +152,12 @@ class DocumentDTO(BaseModel):
     version: int
 
 
+def is_note(doc: Mapping[Any, Any]) -> bool:
+    """A text entry written in the app (a note, the brief): kind `text` from the app
+    (`source = "text"`). A file whose sniffed kind is `text` (P1-16) is not one (#99)."""
+    return bool(doc["kind"] == "text" and doc["source"] == TEXT_SOURCE)
+
+
 def _text_row(
     project_id: UUID | None, title: str, body_md: str, role: str | None
 ) -> dict[str, Any]:
@@ -1032,15 +1038,21 @@ async def update_text_document(
     s: AsyncSession, document_id: UUID, *, body_md: str, version: int
 ) -> DocumentDTO:
     """Replace a text entry's Markdown body (versioned). Synced files and uploads are not
-    edited here: anything but `kind == "text"` is 409 `not_text`."""
-    kind = await s.scalar(
-        select(_documents.c.kind).where(
-            _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+    edited here: anything but a text entry (`is_note`) is 409 `not_text`."""
+    found = (
+        (
+            await s.execute(
+                select(_documents.c.kind, _documents.c.source).where(
+                    _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+                )
+            )
         )
+        .mappings()
+        .first()
     )
-    if kind is None:
+    if found is None:
         raise NotFound("documents", document_id)
-    if kind != "text":
+    if not is_note(found):
         raise ProblemError(409, "not_text", "Only text entries can be edited here")
     values = {"body_md": body_md, "content_hash": hashlib.sha256(body_md.encode()).digest()}
     try:
@@ -1125,6 +1137,24 @@ async def record_file(  # one keyword per column
             index_elements=[_files.c.workspace_id, _files.c.location_id, _files.c.path],
             set_=values,
         )
+    )
+
+
+async def record_placed(
+    s: AsyncSession, location_id: UUID, stat: FileStat, *, document_id: UUID, sha256: str
+) -> None:
+    """Record a file P1-16's pipeline placed (step 3b) as Tumnis's own, synced at the
+    document's version, so the folder sync never takes it for an outside file (#99)."""
+    version = await s.scalar(select(_documents.c.version).where(_documents.c.id == document_id))
+    await record_file(
+        s,
+        location_id,
+        stat,
+        content_hash=sha256,
+        origin="tumnis",
+        document_id=document_id,
+        synced_version=version,
+        last_op="place_upload",
     )
 
 
@@ -1261,8 +1291,18 @@ def text_of(data: bytes) -> str | None:
     return None if "\x00" in text_body else text_body
 
 
-async def add_version(s: AsyncSession, document_id: UUID, data: bytes, body_md: str | None) -> UUID:
-    """The Document's next version: `data`'s hash and size, and its text."""
+async def add_version(  # the version's columns
+    s: AsyncSession,
+    document_id: UUID,
+    data: bytes,
+    body_md: str | None,
+    *,
+    status: Literal["pending_scan", "ready"] = "pending_scan",
+    source_name: str | None = None,
+) -> UUID:
+    """The Document's next version: `data`'s hash and size, and its text. A file's version
+    starts `pending_scan` and is released by P1-16's pipeline only (#99); `status="ready"`
+    is for a note's own text, which is never served as a file."""
     last = await s.scalar(
         select(func.max(_versions.c.version_no)).where(_versions.c.document_id == document_id)
     )
@@ -1274,6 +1314,8 @@ async def add_version(s: AsyncSession, document_id: UUID, data: bytes, body_md: 
             content_hash=hashlib.sha256(data).digest(),
             body_md=body_md or "",
             size=len(data),
+            status=status,
+            source_name=source_name,
         )
         .returning(_versions.c.id)
     )
@@ -1301,34 +1343,50 @@ async def create_file_document(  # the Document's columns
     source: str,
     tainted: bool = True,
 ) -> tuple[UUID, int, UUID]:
-    """A Document for a file in a project folder: (id, version, first version id). Files
-    are untrusted; outside ones tainted (FR-15.5)."""
+    """A Document for the file at `path` on the location, in the project's folder: (id,
+    version, first version id). Files are untrusted; outside ones tainted (FR-15.5). The
+    document and its version start `pending_scan` (#99): nothing is served until P1-16's
+    pipeline has scanned the file, so the caller requests its extraction with
+    `source = "storage"` once this commits. `documents.path` is relative to the project
+    folder, as the pipeline and `download_info` read it."""
     body = text_of(data)
+    name = PurePosixPath(path).name
     row = (
         await s.execute(
             insert(_documents)
             .values(
                 project_id=project_id,
-                title=PurePosixPath(path).name,
+                title=name,
                 kind="file",
                 trust="untrusted",
                 tainted=tainted,
                 storage_location_id=location_id,
-                path=path,
+                path=await folder_rel_path(s, project_id, path),
                 body_md=body,
                 content_hash=hashlib.sha256(data).digest(),
                 source=source,
+                status="pending_scan",
             )
             .returning(_documents.c.id, _documents.c.version)
         )
     ).one()
-    version_id = await add_version(s, row.id, data, body)
+    version_id = await add_version(s, row.id, data, body, source_name=name)
     mark_changed(s, "project", project_id)
     return row.id, row.version, version_id
 
 
+async def folder_rel_path(s: AsyncSession, project_id: UUID, path: str) -> str:
+    """`path` on the location, relative to the project's folder (how `documents.path`
+    holds a file's place)."""
+    _, root = await file_location(s, project_id)
+    if not path.startswith(root + "/"):
+        raise ValueError(f"{path!r} is not inside the project folder {root!r}")
+    return path[len(root) + 1 :]
+
+
 class UploadPlaced(BaseModel):
     document_id: UUID
+    version_id: UUID  # `pending_scan`: its extraction releases it (#99)
     location_id: UUID
     path: str  # relative to the location's root
 
@@ -1345,7 +1403,13 @@ async def place_upload(  # the upload and where it goes
     """Place an upload at `uploads/<sanitized name>` in the project's folder (numbered when
     the name is taken, ignoring case), create-only, as a Document with its first version,
     recorded so the folder sync takes it for Tumnis's own. 409 `location_offline` while
-    the location is offline."""
+    the location is offline.
+
+    The document is `pending_scan` and never served until P1-16's pipeline releases it
+    (#99): once the caller's transaction commits, it enqueues the extraction with
+    `enqueue_extract(ctx, placed.version_id, "storage")` (scanned where it lies, never
+    placed again). The file is written before the scan, unlike the upload route's
+    spool-first path, so an infected file stays in the folder, quarantined."""
     folder = await _folder_row(s, project_id)
     location = await _location_row(s, folder["location_id"])
     _require_online(location)
@@ -1367,7 +1431,7 @@ async def place_upload(  # the upload and where it goes
                 continue  # made since the stat: take the next name
             except (StorageError, AdapterError) as exc:
                 raise _storage_problem(exc) from exc
-    document_id, version, _version_id = await create_file_document(
+    document_id, version, version_id = await create_file_document(
         s, project_id, location["id"], placed.path, body, source=UPLOAD_SOURCE
     )
     await record_file(
@@ -1380,7 +1444,9 @@ async def place_upload(  # the upload and where it goes
         synced_version=version,
         last_op="place_upload",
     )
-    return UploadPlaced(document_id=document_id, location_id=location["id"], path=placed.path)
+    return UploadPlaced(
+        document_id=document_id, version_id=version_id, location_id=location["id"], path=placed.path
+    )
 
 
 class DocumentVersionOut(BaseModel):

@@ -8,7 +8,8 @@
   action applied. Unique per (workspace, location, path).
 - storage_locations.last_sync_at: when the location's last folder sync finished.
 
-Chained after knowledge_0003; re-chained after P1-16's knowledge_0004 when that lands.
+Chained after knowledge_0003. P1-16's extraction revision, knowledge_0006, chains after this
+one (it was planned as knowledge_0004 on knowledge_0003; there is no knowledge_0004).
 """
 
 import sqlalchemy as sa
