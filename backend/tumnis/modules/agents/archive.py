@@ -15,6 +15,7 @@ the same transaction as the blob is written and put back, ids and times included
 unarchive.
 """
 
+import hmac
 import json
 from typing import Any, Final
 from uuid import UUID, uuid5
@@ -209,7 +210,10 @@ async def finish_restore(workspace_id: UUID, project_id: UUID, done: dict[str, A
         facts = await _archived_profile(s, project_id)
         if facts is None:  # a replayed step: dropped already
             return bool(done.get("ok"))
-        if not done.get("ok") or done.get("manifest_digest") != facts["manifest_digest"]:
+        reported = str(done.get("manifest_digest") or "")
+        if not done.get("ok") or not hmac.compare_digest(
+            reported.encode(), str(facts["manifest_digest"]).encode()
+        ):
             _log.warning("profile_restore_mismatch", project_id=str(project_id), reply=done)
             return False
         await blobs.delete_blobs(s, module=MODULE, kind=PROFILE_ARCHIVE, project_id=project_id)

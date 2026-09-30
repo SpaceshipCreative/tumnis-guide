@@ -19,6 +19,7 @@ writes the content size into the frame, so `ZstdDecompressor.decompress` needs n
 """
 
 import hashlib
+import hmac
 import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -210,7 +211,7 @@ async def put_blob(
             _t.c.ref == ref,
         )
     )
-    if held != digest:
+    if held is None or not hmac.compare_digest(held.encode(), digest.encode()):
         raise BlobCorrupt(f"blob {module}/{kind}/{ref} of {project_id} holds other content")
 
 
