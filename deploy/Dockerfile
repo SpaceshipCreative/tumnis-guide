@@ -22,6 +22,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     PATH=/app/.venv/bin:$PATH
+
+# Debian's OpenSSL security update (DSA-6531-1: CVE-2026-75804, CVE-2026-84782; fixed in
+# 3.5.7-1~deb13u3) is not in a python:3.13-slim digest yet, so take it from trixie-security.
+# --only-upgrade installs nothing new. Unpinned on purpose: the security suite keeps only the
+# current version, so a pin would break the build at the next DSA. Once Renovate bumps the
+# digest above to one that ships deb13u3 or later, this layer is a no-op: delete it then.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade \
+        libssl3t64 \
+        openssl \
+        openssl-provider-legacy \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/backend
 
 # Dependencies first (cached until uv.lock changes), then the project itself. The source
