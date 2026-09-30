@@ -10,13 +10,18 @@ import {
 
 import { client } from "../client.gen";
 import {
+  agentsCancelRun,
   agentsCheckProfileHealth,
   agentsCreateRunner,
   agentsGetProfileTools,
+  agentsGetRun,
   agentsGetTaskPacket,
   agentsListProfiles,
+  agentsListRunEvents,
   agentsListRunners,
+  agentsPostResult,
   agentsRegisterProfile,
+  agentsRequestRun,
   agentsRotateRunnerToken,
   agentsUpdateProfile,
   auditExportAuditCsv,
@@ -112,6 +117,9 @@ import {
   usageGetUsage,
 } from "../sdk.gen";
 import type {
+  AgentsCancelRunData,
+  AgentsCancelRunError,
+  AgentsCancelRunResponse,
   AgentsCheckProfileHealthData,
   AgentsCheckProfileHealthError,
   AgentsCheckProfileHealthResponse,
@@ -121,18 +129,30 @@ import type {
   AgentsGetProfileToolsData,
   AgentsGetProfileToolsError,
   AgentsGetProfileToolsResponse,
+  AgentsGetRunData,
+  AgentsGetRunError,
+  AgentsGetRunResponse,
   AgentsGetTaskPacketData,
   AgentsGetTaskPacketError,
   AgentsGetTaskPacketResponse,
   AgentsListProfilesData,
   AgentsListProfilesError,
   AgentsListProfilesResponse,
+  AgentsListRunEventsData,
+  AgentsListRunEventsError,
+  AgentsListRunEventsResponse,
   AgentsListRunnersData,
   AgentsListRunnersError,
   AgentsListRunnersResponse,
+  AgentsPostResultData,
+  AgentsPostResultError,
+  AgentsPostResultResponse,
   AgentsRegisterProfileData,
   AgentsRegisterProfileError,
   AgentsRegisterProfileResponse,
+  AgentsRequestRunData,
+  AgentsRequestRunError,
+  AgentsRequestRunResponse,
   AgentsRotateRunnerTokenData,
   AgentsRotateRunnerTokenError,
   AgentsRotateRunnerTokenResponse,
@@ -2901,6 +2921,125 @@ export const agentsRotateRunnerTokenMutation = (
   return mutationOptions;
 };
 
+export const agentsGetRunQueryKey = (options: Options<AgentsGetRunData>) =>
+  createQueryKey("agentsGetRun", options);
+
+/**
+ * Get Run
+ *
+ * The run: its status, stop reason and times (the run view's header).
+ */
+export const agentsGetRunOptions = (options: Options<AgentsGetRunData>) =>
+  queryOptions<
+    AgentsGetRunResponse,
+    AgentsGetRunError,
+    AgentsGetRunResponse,
+    ReturnType<typeof agentsGetRunQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsGetRun({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsGetRunQueryKey(options),
+  });
+
+/**
+ * Cancel Run
+ *
+ * Stop (FR-5.5): a queued run ends at once; a running one is stopped by its workflow
+ * through the agent's adapter (the api never calls out). An ended run is left as it is.
+ */
+export const agentsCancelRunMutation = (
+  options?: Partial<Options<AgentsCancelRunData>>,
+): UseMutationOptions<
+  AgentsCancelRunResponse,
+  AgentsCancelRunError,
+  Options<AgentsCancelRunData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsCancelRunResponse,
+    AgentsCancelRunError,
+    Options<AgentsCancelRunData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsCancelRun({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const agentsListRunEventsQueryKey = (
+  options: Options<AgentsListRunEventsData>,
+) => createQueryKey("agentsListRunEvents", options);
+
+/**
+ * List Run Events
+ *
+ * The run's log and events after `after_seq`, in the order they were stored (FR-5.5);
+ * the next page asks `after_seq=next_after_seq`.
+ */
+export const agentsListRunEventsOptions = (
+  options: Options<AgentsListRunEventsData>,
+) =>
+  queryOptions<
+    AgentsListRunEventsResponse,
+    AgentsListRunEventsError,
+    AgentsListRunEventsResponse,
+    ReturnType<typeof agentsListRunEventsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsListRunEvents({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsListRunEventsQueryKey(options),
+  });
+
+/**
+ * Post Result
+ *
+ * The run's result, posted with its task token; the `post_result` tool's twin. 403
+ * `run_mismatch` for another run's token; 409 `run_not_active` once the run ended. A
+ * second post answers the first result.
+ */
+export const agentsPostResultMutation = (
+  options?: Partial<Options<AgentsPostResultData>>,
+): UseMutationOptions<
+  AgentsPostResultResponse,
+  AgentsPostResultError,
+  Options<AgentsPostResultData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsPostResultResponse,
+    AgentsPostResultError,
+    Options<AgentsPostResultData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsPostResult({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const searchSearchQueryKey = (options?: Options<SearchSearchData>) =>
   createQueryKey("searchSearch", options);
 
@@ -3843,6 +3982,38 @@ export const tasksPutRecurrenceMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await tasksPutRecurrence({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Request Run
+ *
+ * Run the task's agent (the Run button): the run is queued and its `dispatch_run`
+ * starts as soon as the project has a free slot (two at a time per project). 409
+ * `run_already_active`, `status_not_runnable`, `no_ready_profile`; 422
+ * `label_not_runnable`.
+ */
+export const agentsRequestRunMutation = (
+  options?: Partial<Options<AgentsRequestRunData>>,
+): UseMutationOptions<
+  AgentsRequestRunResponse,
+  AgentsRequestRunError,
+  Options<AgentsRequestRunData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsRequestRunResponse,
+    AgentsRequestRunError,
+    Options<AgentsRequestRunData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsRequestRun({
         ...options,
         ...fnOptions,
         throwOnError: true,
