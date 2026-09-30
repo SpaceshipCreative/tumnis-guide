@@ -132,7 +132,6 @@ def _subscribers() -> None:
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_project_created_provisions_once(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -175,7 +174,6 @@ async def test_project_created_provisions_once(
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_duplicate_event_delivery_provisions_once(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -237,7 +235,6 @@ async def test_duplicate_event_delivery_provisions_once(
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_killed_worker_resumes_without_second_install(
     worker_killer: WorkerKillerFactory,
     app_factory: AppFactory,
@@ -287,7 +284,6 @@ async def test_killed_worker_resumes_without_second_install(
 
 @pytest.mark.req("FR-2.1")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_link_existing_profile_checks_existence(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -320,7 +316,6 @@ async def test_link_existing_profile_checks_existence(
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_master_registry_updated(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -373,7 +368,6 @@ async def test_master_registry_updated(
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_failed_provision_leaves_project_usable(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -424,7 +418,6 @@ async def test_failed_provision_leaves_project_usable(
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P1-06")
-@pytest.mark.xfail(strict=True, reason="spec:P1-06")
 async def test_timeout_counts_as_failure_and_retry_works(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
