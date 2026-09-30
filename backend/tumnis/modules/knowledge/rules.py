@@ -258,7 +258,7 @@ def numbered_name(name: str, n: int) -> str:
     return f"{stem} {n}{ext}"
 
 
-# --- Existing folders (P3-14, FR-15.12): red-phase seams; the spec tests turn them green --
+# --- Existing folders (P3-14, FR-15.12) ------------------------------------------------
 
 
 class ActorKind(StrEnum):
@@ -275,13 +275,23 @@ class WritePolicy:
 
 def may_write(p: WritePolicy, path: str, origin: Literal["tumnis", "external"] | None) -> bool:
     """existing mode: only paths under Tumnis/, and never over a file whose origin is
-    external. tumnis_made: anywhere in the root, never over an external file."""
-    raise NotImplementedError("P3-14")
+    external. tumnis_made: anywhere in the root, never over an external file. A path that
+    `safe_rel_path` refuses or would change is never written."""
+    if origin == "external":
+        return False
+    try:
+        if safe_rel_path(path) != path:
+            return False
+    except PathRejected:
+        return False
+    if p.mode == "tumnis_made":
+        return True
+    return path.startswith(p.tumnis_subdir) and len(path) > len(p.tumnis_subdir)
 
 
 def may_rename(p: WritePolicy, src_origin: str) -> bool:
-    """External files: never."""
-    raise NotImplementedError("P3-14")
+    """External files: never (a rename in the app changes the title only)."""
+    return src_origin != "external"
 
 
 def may_delete(
@@ -289,9 +299,13 @@ def may_delete(
 ) -> Literal["trash", "delete_at_source", "index_only", "refuse"]:
     """tumnis origin: trash. external origin: agent -> refuse; otherwise index_only without
     the user's confirmation, delete_at_source with it."""
-    raise NotImplementedError("P3-14")
+    if origin != "external":
+        return "trash"
+    if actor is ActorKind.agent:
+        return "refuse"
+    return "delete_at_source" if confirmed_by_user else "index_only"
 
 
 def trash_dir(p: WritePolicy) -> str:
     """`.tumnis/trash/` in a Tumnis-made folder; `Tumnis/.trash/` in an existing one."""
-    raise NotImplementedError("P3-14")
+    return ".tumnis/trash/" if p.mode == "tumnis_made" else f"{p.tumnis_subdir}.trash/"
