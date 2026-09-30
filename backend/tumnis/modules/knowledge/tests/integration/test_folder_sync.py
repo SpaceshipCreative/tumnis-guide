@@ -33,7 +33,6 @@ NOTES = ["Plan", "Budget", "Kickoff", "Risks", "Contacts"]  # with the brief: si
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-15")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 async def test_killed_mid_apply_finishes_once(  # noqa: PLR0917  # fixtures
     db: DbUrls,
     knowledge_ws: WorkspaceHandle,
@@ -95,7 +94,6 @@ async def test_killed_mid_apply_finishes_once(  # noqa: PLR0917  # fixtures
 
 @pytest.mark.req("FR-15.6")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 async def test_versions_kept_on_outside_edit(
     db: DbUrls,
     dbos: type[DBOS],
