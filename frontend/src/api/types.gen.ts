@@ -2741,9 +2741,14 @@ export type TaskWithLayoutOut = {
   id: string;
   label: Label | null;
   /**
+   * Label Reason
+   */
+  label_reason: string | null;
+  /**
    * Label Source
    */
   label_source: "user" | "jev" | "agent" | "fallback" | null;
+  label_suggestion: Label | null;
   /**
    * Layout
    */
