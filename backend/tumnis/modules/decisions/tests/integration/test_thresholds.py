@@ -33,7 +33,6 @@ def _points(page: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 @pytest.mark.req("FR-11.5", "SEC-3")
 @pytest.mark.wp("P3-08")
-@pytest.mark.xfail(strict=True, reason="spec:P3-08")
 async def test_threshold_edit_is_logged_and_audited(
     app: FastAPI,
     session_client: SessionClient,
@@ -108,7 +107,6 @@ async def test_threshold_edit_is_logged_and_audited(
 
 @pytest.mark.req("FR-11.5")
 @pytest.mark.wp("P3-08")
-@pytest.mark.xfail(strict=True, reason="spec:P3-08")
 async def test_model_version_change_flags_recheck(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,

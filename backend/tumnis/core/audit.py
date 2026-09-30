@@ -105,9 +105,10 @@ class NoWorkspaceError(RuntimeError):
     """`record` outside a workspace context: an audit row always belongs to a workspace."""
 
 
-# Actions that must carry a reason (approvals, rejections, purges; P2-05, P3-09).
+# Actions that must carry a reason (approvals, rejections, purges, threshold edits; P2-05,
+# P3-09, P3-08).
 REASON_REQUIRED: Final[frozenset[str]] = frozenset(
-    {"approval.granted", "approval.denied", "data.purged"}
+    {"approval.granted", "approval.denied", "data.purged", "threshold.changed"}
 )
 VERIFY_PAGE: Final = 1_000  # plan default
 

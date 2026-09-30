@@ -300,6 +300,56 @@ export type CalendarsIn = {
 };
 
 /**
+ * CalibrationOut
+ */
+export type CalibrationOut = {
+  /**
+   * Min Labeled
+   */
+  min_labeled: number;
+  /**
+   * Model Version
+   */
+  model_version: string;
+  /**
+   * Points
+   */
+  points: Array<CalibrationPoint>;
+};
+
+/**
+ * CalibrationPoint
+ */
+export type CalibrationPoint = {
+  /**
+   * Bar
+   */
+  bar: number;
+  decision_point: DecisionPoint;
+  /**
+   * Evaluations
+   */
+  evaluations: Array<Evaluation>;
+  /**
+   * Model Version
+   */
+  model_version: string;
+  /**
+   * Needs Recheck
+   */
+  needs_recheck: boolean;
+  /**
+   * Primitive
+   */
+  primitive: "choice" | "score" | "noul";
+  /**
+   * Source
+   */
+  source: "default" | "user";
+  threshold: Threshold;
+};
+
+/**
  * CardOut
  */
 export type CardOut = {
@@ -542,6 +592,20 @@ export type DecideIn = {
 };
 
 /**
+ * DecisionPoint
+ */
+export type DecisionPoint =
+  | "quick_add_label"
+  | "project_match"
+  | "actionability"
+  | "duplicate"
+  | "approval_need"
+  | "blocking_impact"
+  | "focus_on_task"
+  | "nudge_warranted"
+  | "estimate_plausibility";
+
+/**
  * DefaultIn
  */
 export type DefaultIn = {
@@ -669,6 +733,45 @@ export type EstimateBody = {
    * Version
    */
   version: number;
+};
+
+/**
+ * Evaluation
+ *
+ * One point, provider and model: what the threshold in force did with its labeled
+ * decisions. `metrics`, `explicit_metrics` and `sweep` stay empty under 100 labeled.
+ */
+export type Evaluation = {
+  /**
+   * Decision Point
+   */
+  decision_point: string;
+  explicit_metrics: Metrics | null;
+  /**
+   * Labeled
+   */
+  labeled: number;
+  metrics: Metrics | null;
+  /**
+   * Model Version
+   */
+  model_version: string;
+  /**
+   * Needed
+   */
+  needed: number;
+  /**
+   * Provider
+   */
+  provider: string;
+  /**
+   * Sweep
+   */
+  sweep: Array<SweepRow>;
+  /**
+   * Threshold
+   */
+  threshold: number;
 };
 
 /**
@@ -1023,6 +1126,32 @@ export type McpServerInfo = {
    * Transport
    */
   transport: "stdio" | "http";
+};
+
+/**
+ * Metrics
+ */
+export type Metrics = {
+  /**
+   * Auto Precision
+   */
+  auto_precision: number | null;
+  /**
+   * Auto Rate
+   */
+  auto_rate: number;
+  /**
+   * N
+   */
+  n: number;
+  /**
+   * Overall Accuracy
+   */
+  overall_accuracy: number;
+  /**
+   * Review Rate
+   */
+  review_rate: number;
 };
 
 /**
@@ -2541,6 +2670,36 @@ export type StatusBody = {
 };
 
 /**
+ * SweepRow
+ */
+export type SweepRow = {
+  /**
+   * Auto Precision
+   */
+  auto_precision: number | null;
+  /**
+   * Auto Rate
+   */
+  auto_rate: number;
+  /**
+   * N
+   */
+  n: number;
+  /**
+   * Overall Accuracy
+   */
+  overall_accuracy: number;
+  /**
+   * Review Rate
+   */
+  review_rate: number;
+  /**
+   * Threshold
+   */
+  threshold: number;
+};
+
+/**
  * TaskContextItemOut
  *
  * A task's link to outside content: the ContextItem and what it points at.
@@ -3000,6 +3159,85 @@ export type TextDocumentPatch = {
    * Version
    */
   version: number;
+};
+
+/**
+ * Threshold
+ */
+export type Threshold = {
+  /**
+   * Fallback Margin
+   */
+  fallback_margin?: number;
+  /**
+   * Min Confidence
+   */
+  min_confidence?: number | null;
+  /**
+   * T No
+   */
+  t_no?: number | null;
+  /**
+   * T Yes
+   */
+  t_yes?: number | null;
+};
+
+/**
+ * ThresholdEdit
+ */
+export type ThresholdEdit = {
+  /**
+   * Reason
+   */
+  reason: string;
+  threshold: ThresholdIn;
+};
+
+/**
+ * ThresholdIn
+ *
+ * A threshold a human sets: `min_confidence` for a Choice or Score point, the yes and
+ * no bands for a Noul point (no yes band for `approval_need`). The fallback margin is
+ * kept as it is.
+ */
+export type ThresholdIn = {
+  /**
+   * Min Confidence
+   */
+  min_confidence?: number | null;
+  /**
+   * T No
+   */
+  t_no?: number | null;
+  /**
+   * T Yes
+   */
+  t_yes?: number | null;
+};
+
+/**
+ * ThresholdOut
+ */
+export type ThresholdOut = {
+  /**
+   * Bar
+   */
+  bar: number;
+  decision_point: DecisionPoint;
+  /**
+   * Model Version
+   */
+  model_version: string;
+  /**
+   * Needs Recheck
+   */
+  needs_recheck: boolean;
+  /**
+   * Source
+   */
+  source: "default" | "user";
+  threshold: Threshold;
 };
 
 /**
@@ -4902,6 +5140,118 @@ export type DeadLettersPostRetryResponses = {
 
 export type DeadLettersPostRetryResponse =
   DeadLettersPostRetryResponses[keyof DeadLettersPostRetryResponses];
+
+export type DecisionsGetCalibrationData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/decisions/calibration";
+};
+
+export type DecisionsGetCalibrationErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type DecisionsGetCalibrationError =
+  DecisionsGetCalibrationErrors[keyof DecisionsGetCalibrationErrors];
+
+export type DecisionsGetCalibrationResponses = {
+  /**
+   * Successful Response
+   */
+  200: CalibrationOut;
+};
+
+export type DecisionsGetCalibrationResponse =
+  DecisionsGetCalibrationResponses[keyof DecisionsGetCalibrationResponses];
+
+export type DecisionsEditThresholdData = {
+  body: ThresholdEdit;
+  path: {
+    point: DecisionPoint;
+  };
+  query?: never;
+  url: "/v1/decisions/thresholds/{point}";
+};
+
+export type DecisionsEditThresholdErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type DecisionsEditThresholdError =
+  DecisionsEditThresholdErrors[keyof DecisionsEditThresholdErrors];
+
+export type DecisionsEditThresholdResponses = {
+  /**
+   * Successful Response
+   */
+  200: ThresholdOut;
+};
+
+export type DecisionsEditThresholdResponse =
+  DecisionsEditThresholdResponses[keyof DecisionsEditThresholdResponses];
 
 export type KnowledgeGetFileData = {
   body?: never;
