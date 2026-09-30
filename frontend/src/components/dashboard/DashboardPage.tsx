@@ -10,7 +10,6 @@ import { ActivityFeed } from "./ActivityFeed";
 import { CalendarStrip } from "./CalendarStrip";
 import { formatToday, localDay } from "./format";
 import { ProjectCardGrid } from "./ProjectCardGrid";
-import { QuickAddFab } from "./QuickAddFab";
 import {
   deployStatusQuery,
   projectsQuery,
@@ -103,7 +102,6 @@ export function DashboardPage() {
           className="md:col-span-7"
         />
       </div>
-      <QuickAddFab />
     </div>
   );
 }
