@@ -44,6 +44,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Rows with the new values would fail every later update under the old constraints:
+    # a share becomes the server path it is, an SFTP key state becomes offline.
+    op.execute("UPDATE storage_locations SET kind = 'server_path' WHERE kind = 'share'")
+    op.execute(
+        "UPDATE storage_locations SET status = 'offline'"
+        " WHERE status IN ('pending_host_key', 'host_key_changed')"
+    )
     _check("ck_storage_locations_status", "status", STATUSES_V1)
     _check("ck_storage_locations_kind", "kind", KINDS_V1)
     op.drop_column("storage_locations", "host_key_pending")

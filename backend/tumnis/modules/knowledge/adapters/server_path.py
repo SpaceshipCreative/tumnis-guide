@@ -23,6 +23,7 @@ import hashlib
 import os
 import posixpath
 import stat
+import threading
 import time
 import uuid
 from collections import OrderedDict
@@ -61,7 +62,10 @@ _CREATE_FLAGS: Final = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
 _DIR_FLAGS: Final = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 RACY_S: Final = 2.0  # SMB keeps mtimes to 2 s; a file changed this recently is not cached
 _HASH_CACHE_MAX: Final = 200_000
+# (dev, inode, size, mtime_ns) -> sha256 hex, shared by every instance in the process, so a
+# scan does not rehash unchanged files; a replace always hashes afresh.
 _HASHES: "OrderedDict[tuple[int, int, int, int], str]" = OrderedDict()
+_HASH_LOCK: Final = threading.Lock()  # stats run in worker threads (asyncio.to_thread)
 
 
 class ServerPathStorage(AdapterBase):
@@ -82,9 +86,6 @@ class ServerPathStorage(AdapterBase):
         self.kind = kind
         # A share (P3-14) is a mounted SMB or NFS folder: no hard links assumed.
         self.network_fs = network_fs or kind == "share"
-        # (dev, inode, size, mtime_ns) -> sha256 hex, shared by every instance in the
-        # process, so a scan does not rehash unchanged files; a replace always hashes afresh.
-        self._hashes = _HASHES
 
     # --- Paths ---------------------------------------------------------------------------
 
@@ -197,12 +198,10 @@ class ServerPathStorage(AdapterBase):
         fd, st = opened
         try:
             key = (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
-            etag = None if fresh else self._hashes.get(key)
+            etag = None if fresh else _cached(key)
             if etag is None:
                 etag = self._hash_fd(fd)
                 _remember(key, etag, st.st_mtime)
-            else:
-                self._hashes.move_to_end(key)
         finally:
             os.close(fd)
         mtime = datetime.fromtimestamp(st.st_mtime, UTC)
@@ -477,10 +476,21 @@ def _remember(key: tuple[int, int, int, int], etag: str, mtime: float) -> None:
     would look unchanged ("racy" entries are hashed again next time)."""
     if time.time() - mtime < RACY_S:
         return
-    _HASHES[key] = etag
-    _HASHES.move_to_end(key)
-    while len(_HASHES) > _HASH_CACHE_MAX:
-        _HASHES.popitem(last=False)
+    with _HASH_LOCK:
+        _HASHES[key] = etag
+        _HASHES.move_to_end(key)
+        while len(_HASHES) > _HASH_CACHE_MAX:
+            _HASHES.popitem(last=False)
+
+
+def _cached(key: tuple[int, int, int, int]) -> str | None:
+    """The cached hash, marked recently used; the lookup and the move are one step under
+    the lock, so another thread's eviction cannot come between them."""
+    with _HASH_LOCK:
+        etag = _HASHES.get(key)
+        if etag is not None:
+            _HASHES.move_to_end(key)
+        return etag
 
 
 def _write_all(fd: int, chunk: bytes) -> None:

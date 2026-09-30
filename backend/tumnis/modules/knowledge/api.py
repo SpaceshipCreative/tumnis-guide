@@ -1038,11 +1038,19 @@ async def confirm_host_key(  # the confirm form, the net policy
     config = await _sftp_config(s, row)
     probed = await _probe(config, net, resolver)
     if not hmac.compare_digest(sha256.strip().encode(), probed.sha256.encode()):
-        await s.execute(
+        # The key shown now is kept for the form even though the request fails: in its own
+        # transaction, as the caller's rolls back with the 422.
+        pending = (
             update(_locations)
             .where(_locations.c.id == location_id)
             .values(host_key_pending=probed.openssh)
         )
+        ctx = tenancy.current()
+        if ctx is None:
+            await s.execute(pending)
+        else:
+            async with tenant_session(ctx) as own:
+                await own.execute(pending)
         raise ProblemError(
             422, "fingerprint_mismatch", "That fingerprint is not the server's host key."
         )
@@ -2372,6 +2380,9 @@ async def use_existing_folder(
         )
         if held:
             raise ProblemError(409, "folder_not_empty", "The project folder already holds files.")
+    # One claim at a time per location (as `assign_project_folder` names folders), so
+    # two setups cannot both pass the overlap check.
+    await s.execute(_FOLDER_NAME_LOCK, {"key": f"project-folder-name:{location_id}"})
     others: list[str] = list(
         await s.scalars(
             select(_folders.c.root_path).where(
@@ -2381,7 +2392,7 @@ async def use_existing_folder(
             )
         )
     )
-    for other in others:
+    for other in others:  # under the lock taken above, held to the upsert
         if other == root or other.startswith(root + "/") or root.startswith(other + "/"):
             raise ProblemError(409, "folder_taken", "Another project uses that folder.")
     async with _opened(s, location, net=net, resolver=resolver) as backend:
