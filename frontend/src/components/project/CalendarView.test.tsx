@@ -62,61 +62,58 @@ function sentBlock(fake: WeekFake): { start: number; end: number } {
   };
 }
 
-test.fails(
-  "[P1-12][FR-2.6] T-P1-12-01 week shows meetings, due dates and planned blocks",
-  async () => {
-    const { fake } = setUp("laptop");
-    const calendar = await screen.findByRole("region", { name: "Calendar" });
-    expect(
-      fake.recorder.sent.map((s) => `${s.method} ${s.path}${s.search}`),
-    ).toEqual([`GET /v1/plan/week/${MONDAY}?project_id=${PROJECT_ID}`]);
-    for (const name of DAYS) {
-      expect(within(calendar).getByRole("region", { name })).toBeVisible();
-    }
+test("[P1-12][FR-2.6] T-P1-12-01 week shows meetings, due dates and planned blocks", async () => {
+  const { fake } = setUp("laptop");
+  const calendar = await screen.findByRole("region", { name: "Calendar" });
+  expect(
+    fake.recorder.sent.map((s) => `${s.method} ${s.path}${s.search}`),
+  ).toEqual([`GET /v1/plan/week/${MONDAY}?project_id=${PROJECT_ID}`]);
+  for (const name of DAYS) {
+    expect(within(calendar).getByRole("region", { name })).toBeVisible();
+  }
 
-    const monday = within(calendar).getByRole("region", { name: DAYS[0] });
-    expect(
-      labels(within(monday).getByRole("list", { name: "Events" })),
-    ).toEqual(["Kickoff with Acme, 11:00 to 12:00"]);
+  const monday = within(calendar).getByRole("region", { name: DAYS[0] });
+  expect(labels(within(monday).getByRole("list", { name: "Events" }))).toEqual([
+    "Kickoff with Acme, 11:00 to 12:00",
+  ]);
 
-    const tuesday = within(calendar).getByRole("region", { name: DAYS[1] });
-    // The project's meeting by title; someone else's is only busy time.
-    expect(
-      labels(within(tuesday).getByRole("list", { name: "Events" })),
-    ).toEqual(["Acme standup, 09:00 to 10:00", "Busy, 12:00 to 13:00"]);
-    expect(labels(within(tuesday).getByRole("list", { name: "Due" }))).toEqual([
-      "Due: Send logo drafts",
-    ]);
-    expect(
-      labels(within(tuesday).getByRole("list", { name: "Planned" })),
-    ).toEqual(["Review the palette, 15:00 to 15:30"]);
-    // Free time left after the planned block.
-    expect(
-      labels(within(tuesday).getByRole("list", { name: "Free time" })),
-    ).toEqual([
-      "Free 10:00 to 12:00",
-      "Free 13:00 to 15:00",
-      "Free 15:30 to 18:00",
-    ]);
+  const tuesday = within(calendar).getByRole("region", { name: DAYS[1] });
+  // The project's meeting by title; someone else's is only busy time.
+  expect(labels(within(tuesday).getByRole("list", { name: "Events" }))).toEqual(
+    ["Acme standup, 09:00 to 10:00", "Busy, 12:00 to 13:00"],
+  );
+  expect(labels(within(tuesday).getByRole("list", { name: "Due" }))).toEqual([
+    "Due: Send logo drafts",
+  ]);
+  expect(
+    labels(within(tuesday).getByRole("list", { name: "Planned" })),
+  ).toEqual(["Review the palette, 15:00 to 15:30"]);
+  // Free time left after the planned block.
+  expect(
+    labels(within(tuesday).getByRole("list", { name: "Free time" })),
+  ).toEqual([
+    "Free 10:00 to 12:00",
+    "Free 13:00 to 15:00",
+    "Free 15:30 to 18:00",
+  ]);
 
-    const saturday = within(calendar).getByRole("region", { name: DAYS[5] });
-    expect(within(saturday).getByText("No working hours")).toBeVisible();
+  const saturday = within(calendar).getByRole("region", { name: DAYS[5] });
+  expect(within(saturday).getByText("No working hours")).toBeVisible();
 
-    const toSchedule = within(calendar).getByRole("list", {
-      name: "To schedule",
-    });
-    expect(
-      within(toSchedule).getByRole("button", {
-        name: "Draft the brand guide, 45 minutes",
-      }),
-    ).toBeVisible();
-    expect(
-      within(toSchedule).getByRole("button", {
-        name: "Pick the type scale, 30 minutes",
-      }),
-    ).toBeVisible();
-  },
-);
+  const toSchedule = within(calendar).getByRole("list", {
+    name: "To schedule",
+  });
+  expect(
+    within(toSchedule).getByRole("button", {
+      name: "Draft the brand guide, 45 minutes",
+    }),
+  ).toBeVisible();
+  expect(
+    within(toSchedule).getByRole("button", {
+      name: "Pick the type scale, 30 minutes",
+    }),
+  ).toBeVisible();
+});
 
 test.fails(
   "[P1-12][FR-2.6] T-P1-12-02 drop on free block sends one PATCH",

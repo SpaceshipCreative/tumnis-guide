@@ -22,7 +22,11 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useQuery,
+  type QueryClient,
+} from "@tanstack/react-query";
 import {
   useEffect,
   useId,
@@ -173,7 +177,12 @@ function refreshWeeks(client: QueryClient): Promise<void> {
 export function CalendarView({ projectId, week, onWeek }: CalendarViewProps) {
   const headingId = useId();
   const laptop = useIsLaptop();
-  const query = useQuery(weekQuery(projectId, week));
+  // Another week keeps the one on screen as a placeholder while it loads, so the header
+  // (and focus on Previous or Next week) stays put.
+  const query = useQuery({
+    ...weekQuery(projectId, week),
+    placeholderData: keepPreviousData,
+  });
   const [message, setMessage] = useState("");
   const timeZone = query.data?.timezone ?? "UTC";
   const schedule = useScheduleBlock(projectId, week, setMessage, timeZone);
@@ -192,6 +201,11 @@ export function CalendarView({ projectId, week, onWeek }: CalendarViewProps) {
     }
     schedule.mutate({ task, day, block });
   };
+
+  // The Calendar region appears with its week: nothing to show before the first load.
+  if (query.isPending) {
+    return <p className="text-muted">Loading the week…</p>;
+  }
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
@@ -229,7 +243,7 @@ export function CalendarView({ projectId, week, onWeek }: CalendarViewProps) {
       >
         {message}
       </p>
-      {query.isPending ? (
+      {query.isPlaceholderData ? (
         <p className="text-muted">Loading the week…</p>
       ) : query.isError ? (
         <p role="alert" className="text-danger">
@@ -246,7 +260,7 @@ export function CalendarView({ projectId, week, onWeek }: CalendarViewProps) {
       ) : (
         <DayList week={query.data} onSchedule={setPicking} />
       )}
-      {picking && query.data && (
+      {picking && query.data && !query.isPlaceholderData && (
         <SlotPicker
           task={picking}
           week={query.data}
@@ -583,7 +597,7 @@ function WeekGrid({
     }
     const current = slots[picked.index];
     if (!current) return;
-    let next = picked.index;
+    let next: number;
     if (key === "ArrowDown")
       next = Math.min(picked.index + 1, slots.length - 1);
     else if (key === "ArrowUp") next = Math.max(picked.index - 1, 0);
