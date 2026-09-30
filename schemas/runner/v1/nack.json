@@ -1,0 +1,74 @@
+{
+  "$id": "https://tumnis.dev/schemas/runner/v1/nack.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Protocol 2: the server refuses a message for good; the daemon drops it.",
+  "properties": {
+    "code": {
+      "enum": [
+        "too_large",
+        "bad_media_type",
+        "not_utf8",
+        "sha_mismatch",
+        "unknown_run"
+      ],
+      "title": "Code",
+      "type": "string"
+    },
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "detail": {
+      "anyOf": [
+        {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detail"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "nack_of": {
+      "format": "uuid",
+      "title": "Nack Of",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "type": {
+      "const": "nack",
+      "default": "nack",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "nack_of",
+    "code"
+  ],
+  "title": "Nack",
+  "type": "object"
+}

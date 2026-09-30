@@ -44,7 +44,10 @@ class RunHandle(BaseModel):
 class RunEvent(BaseModel):
     run_id: UUID
     message_id: UUID
-    kind: Literal["dispatched", "result", "failed"]  # "log", "tool_call", "file": P2-07
+    # P2-07 adds the protocol-2 run events: stream lines, statuses and artifacts.
+    kind: Literal[
+        "dispatched", "result", "failed", "log", "tool_call", "file", "artifact", "status"
+    ]
     payload: dict[str, Any]
     at: datetime
 

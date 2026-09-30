@@ -393,6 +393,12 @@ async def project_links(s: AsyncSession, project_id: UUID) -> list[ProjectLinkIn
     return (await _links_of(s, [project_id]))[project_id]
 
 
+def check_code_location(code_path: str | None, repo_url: str | None) -> None:
+    """The FR-2.1 code location rule for other modules (the task packet, P2-07): raises a
+    ValueError with `code` (`code_location_conflict` for both, `invalid_code_location`)."""
+    validate_code_location(code_path, repo_url)
+
+
 # --- Writing -------------------------------------------------------------------------------
 
 
