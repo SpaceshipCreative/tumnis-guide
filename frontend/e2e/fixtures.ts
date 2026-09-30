@@ -165,6 +165,7 @@ function followPageClock(
 }
 
 const RESET_ATTEMPTS = 3;
+const RESET_TIMEOUT_MS = 120_000;
 
 /**
  * `POST /v1/test/reset`, retried after a 409 (issue #56): a later reset superseded this
@@ -175,8 +176,12 @@ async function postReset(
   request: APIRequestContext,
   set: SeedSetName,
 ): Promise<APIResponse> {
+  // The load set (2,000 tasks) outlasts the 10 s action timeout on a busy host (P0-29).
   const send = () =>
-    request.post("/v1/test/reset", { params: set === "seed" ? {} : { set } });
+    request.post("/v1/test/reset", {
+      params: set === "seed" ? {} : { set },
+      timeout: RESET_TIMEOUT_MS,
+    });
   let response = await send();
   for (
     let attempt = 1;
