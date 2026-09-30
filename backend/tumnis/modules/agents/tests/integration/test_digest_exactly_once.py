@@ -16,6 +16,7 @@ fresh workspace.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import uuid
 from collections import Counter
 from datetime import UTC, datetime
@@ -56,7 +57,10 @@ class DigestMachine(RuleBasedStateMachine):
         self.ctx = WorkspaceContext(self.workspace_id, SYSTEM_ACTOR)
         self._scope = use_workspace(self.ctx)
         self._scope.__enter__()
-        self.project_id = uuid.uuid4()
+        # The runner outlives this example; its default context is the one it saw first, so
+        # each rule runs in this machine's own copy, which holds this example's workspace.
+        self._context = contextvars.copy_context()
+        self.project_id = self._run(self._make_project())
         self.op = get_op("get_project_digest")
         self.callers = [
             Caller(
@@ -77,7 +81,22 @@ class DigestMachine(RuleBasedStateMachine):
         self.kept: list[list[uuid.UUID]] = [[] for _ in range(CONSUMERS)]
 
     def _run(self, coro: Any) -> Any:
-        return self.runner.run(coro)
+        return self.runner.run(coro, context=self._context)
+
+    async def _make_project(self) -> uuid.UUID:
+        """The project whose digest the consumers read (a digest of a project the
+        workspace does not have is 404)."""
+        from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+        from tumnis.modules.projects import api as projects  # noqa: PLC0415
+
+        async with tenant_session(self.ctx) as s:
+            made = await projects.create_project(
+                s,
+                self.ctx.actor,
+                projects.ProjectCreate(name=f"Digest machine {uuid.uuid4().hex[:6]}"),
+                now=AT,
+            )
+        return made.id
 
     # --- writers -------------------------------------------------------------------------
 
@@ -168,8 +187,11 @@ class DigestMachine(RuleBasedStateMachine):
 
     def teardown(self) -> None:
         try:
+            from tumnis.modules.agents.tests.integration._digest import settle  # noqa: PLC0415
+
             for w in range(WRITERS):
                 self._finish(w, commit=True)
+            self._run(settle())  # another worker's open transaction only delays the horizon
             for c in range(CONSUMERS):
                 for _ in range(10_000):
                     out = self._read(c)
@@ -187,7 +209,6 @@ class DigestMachine(RuleBasedStateMachine):
 class TestDigestMachine:
     """T-P2-03-01"""
 
-    @pytest.mark.xfail(strict=True, reason="spec:P2-03")
     def test_each_committed_entry_once_per_consumer(
         self, db: DbUrls, master_key_file: MasterKeyFile
     ) -> None:
@@ -204,7 +225,6 @@ class TestDigestMachine:
                 settings=settings(max_examples=60, stateful_step_count=40, deadline=None),
             )
 
-    @pytest.mark.xfail(strict=True, reason="spec:P2-03")
     def test_out_of_order_commit_is_not_skipped(
         self, db: DbUrls, master_key_file: MasterKeyFile
     ) -> None:

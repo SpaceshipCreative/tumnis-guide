@@ -27,7 +27,6 @@ READ = frozenset({"tasks:read"})
 
 @pytest.mark.req("FR-13.1")
 @pytest.mark.wp("P2-03")
-@pytest.mark.xfail(strict=True, reason="spec:P2-03")
 async def test_project_digest_carries_every_kind(
     db: DbUrls,
     dbos: type[DBOS],
@@ -128,7 +127,6 @@ async def test_project_digest_carries_every_kind(
 
 @pytest.mark.req("FR-13.3")
 @pytest.mark.wp("P2-03")
-@pytest.mark.xfail(strict=True, reason="spec:P2-03")
 async def test_linked_item_full_text_in_untrusted_block(
     db: DbUrls,
     dbos: type[DBOS],
@@ -168,7 +166,6 @@ async def test_linked_item_full_text_in_untrusted_block(
 
 @pytest.mark.req("FR-13.4")
 @pytest.mark.wp("P2-03")
-@pytest.mark.xfail(strict=True, reason="spec:P2-03")
 async def test_workspace_digest_only_workspace_signals(
     db: DbUrls,
     dbos: type[DBOS],
@@ -229,7 +226,6 @@ async def test_workspace_digest_only_workspace_signals(
 
 @pytest.mark.req("FR-13.1")
 @pytest.mark.wp("P2-03")
-@pytest.mark.xfail(strict=True, reason="spec:P2-03")
 async def test_two_profiles_have_independent_cursors(
     db: DbUrls,
     dbos: type[DBOS],
@@ -271,7 +267,6 @@ async def test_two_profiles_have_independent_cursors(
 
 @pytest.mark.req("FR-13.1")
 @pytest.mark.wp("P2-03")
-@pytest.mark.xfail(strict=True, reason="spec:P2-03")
 async def test_cursor_from_other_consumer_rejected(
     db: DbUrls,
     dbos: type[DBOS],

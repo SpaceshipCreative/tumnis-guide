@@ -21,13 +21,17 @@ event itself; when it lands, only the helper changes.
 - `drain(db)`: the relay run until the outbox is empty, then every agents delivery of the
   rows it sent awaited.
 - `digest_subscriber(event)`: the agents subscriber of an event.
+- `settle()`: waits until the digest horizon has passed every commit so far (another
+  worker's open transaction holds it back for a moment).
 - `DigestConsumer`: reads a digest like the digest skill does: passes the previous
-  `next_cursor` as `since` (which acknowledges it) and pages while `has_more`.
+  `next_cursor` as `since` (which acknowledges it) and pages while `has_more`, after
+  `settle()`.
 - `blocks(text)`: the untrusted blocks in a text, as (open tag attributes, raw content).
 """
 
 from __future__ import annotations
 
+import asyncio
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -173,25 +177,27 @@ def document_payload(
 
 
 async def finish_hybrid(world: DigestWorld, project: str, title: str) -> Any:
-    """A Hybrid task (estimate 60) started now and done 75 minutes later."""
-    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    """A Hybrid task (estimate 60) started now by the person; 75 minutes later its agent
+    posts the result (in review) and the person accepts it (done), as R-10 has Hybrid
+    work end."""
+    from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+    from tumnis.core.types import ActorRef  # noqa: PLC0415
     from tumnis.modules.tasks import api as tasks  # noqa: PLC0415
 
     task = await world.task(project, title=title, label="hybrid", estimate_minutes=60)
-    async with tenant_session(world.ctx) as s:
-        task = await tasks.change_status(
-            s,
-            world.ctx.actor,
-            task.id,
-            tasks.Status.IN_PROGRESS,
-            task.version,
-            now=world.clock.now(),
-        )
-    world.clock.advance(timedelta(minutes=75))
-    async with tenant_session(world.ctx) as s:
-        return await tasks.change_status(
-            s, world.ctx.actor, task.id, tasks.Status.DONE, task.version, now=world.clock.now()
-        )
+    agent = WorkspaceContext(world.workspace.id, ActorRef(f"api_key:{uuid.uuid4()}"))
+    steps = (
+        (world.ctx, tasks.Status.IN_PROGRESS, timedelta(0)),
+        (agent, tasks.Status.IN_REVIEW, timedelta(minutes=75)),
+        (world.ctx, tasks.Status.DONE, timedelta(0)),
+    )
+    for ctx, to, after in steps:
+        world.clock.advance(after)
+        async with tenant_session(ctx) as s:
+            task = await tasks.change_status(
+                s, ctx.actor, task.id, to, task.version, now=world.clock.now()
+            )
+    return task
 
 
 async def comment(
@@ -282,6 +288,33 @@ def _owner_rows(db: DbUrls, query: str) -> list[dict[str, Any]]:
         return conn.execute(query.encode()).fetchall()
 
 
+_XACT = "SELECT pg_current_xact_id()::text::numeric"
+_HORIZON = "SELECT pg_snapshot_xmin(pg_current_snapshot())::text::numeric"
+
+
+async def settle(timeout_s: float = 60.0) -> None:
+    """Waits until the digest horizon has passed every transaction committed so far.
+
+    The horizon is cluster-wide: a transaction still open in another database (another
+    test worker's) holds it back, and a read in that moment hands out nothing new. That is
+    a delay, never a loss (the next read has it); a test that reads once waits here first.
+    """
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from tumnis.core import db  # noqa: PLC0415
+
+    async with db.app_sessionmaker()() as s, s.begin():
+        mark = await s.scalar(text(_XACT))  # above every transaction committed before now
+    deadline = asyncio.get_running_loop().time() + timeout_s
+    while True:
+        async with db.app_sessionmaker()() as s, s.begin():
+            if await s.scalar(text(_HORIZON)) > mark:
+                return
+        if asyncio.get_running_loop().time() > deadline:
+            raise TimeoutError("the digest horizon did not pass the last commit")
+        await asyncio.sleep(0.05)
+
+
 async def drain(db: DbUrls) -> None:
     """Relays every pending outbox row and waits for the agents deliveries."""
     from dbos import DBOS  # noqa: PLC0415
@@ -322,7 +355,9 @@ class DigestConsumer:
         return await self.client.get(self.path, params=params)
 
     async def read(self) -> list[dict[str, Any]]:
-        """Every entry since the last acknowledged read (acknowledging it), page by page."""
+        """Every entry since the last acknowledged read (acknowledging it), page by page,
+        once the horizon has passed everything committed before the call."""
+        await settle()
         entries: list[dict[str, Any]] = []
         while True:
             response = await self.page(self.cursor)

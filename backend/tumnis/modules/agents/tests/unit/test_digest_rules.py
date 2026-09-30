@@ -450,3 +450,30 @@ def test_classify_event_data() -> None:
     assert by_agent.data["trusted"] is False
     assert by_person.data["author_kind"] == "user"
     assert by_person.data["trusted"] is True
+
+
+@pytest.mark.req("FR-13.1")
+@pytest.mark.wp("P2-03")
+def test_digest_task_id_and_malformed_ids() -> None:
+    """The subscriber looks up the task a decision targets (or its payload names) and the
+    task of a status change; other events need no lookup. A missing or malformed id makes
+    no entry rather than an error: an entry whose project is unknown is dropped."""
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
+        DigestEvent,
+        classify_event,
+        digest_task_id,
+    )
+
+    decided = _decided("result", "accept")
+    assert digest_task_id("human.decided", decided) == TASK
+    by_payload = {**decided, "target_type": "review_item", "payload": {"task_id": TASK}}
+    assert digest_task_id("human.decided", by_payload) == TASK
+    assert digest_task_id("human.decided", {**by_payload, "payload": None}) is None
+    assert digest_task_id("task.status_changed", {"task_id": str(TASK)}) == TASK
+    assert digest_task_id("focus.responded", {"task_id": "not-a-uuid"}) is None
+    assert digest_task_id("task.commented", {"task_id": str(TASK)}) is None
+
+    comment = {"task_id": str(TASK), "project_id": "", "author": "user:x", "text": "Hi"}
+    assert classify_event(DigestEvent("task.commented", comment, "user:x")) == []
+    malformed = {**comment, "project_id": "0192a000-not-a-uuid"}
+    assert classify_event(DigestEvent("task.commented", malformed, "user:x")) == []
