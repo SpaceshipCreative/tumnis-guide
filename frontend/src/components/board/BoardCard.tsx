@@ -81,9 +81,13 @@ function MoveMenu({
               setOpen(false);
               toggle.current?.focus();
             }
-            if (event.key === "ArrowDown")
+            // Arrows move focus between items; the page must not scroll too.
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
               items[(at + 1) % items.length]?.focus();
+            }
             if (event.key === "ArrowUp") {
+              event.preventDefault();
               items[(at - 1 + items.length) % items.length]?.focus();
             }
           }}
