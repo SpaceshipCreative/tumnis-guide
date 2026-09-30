@@ -12,7 +12,9 @@ agents api, the fake runner and the outbox.
   on the test's event loop, which the fake runner's sync `wait_for` blocks: so while it
   runs, `world.request(...)` and `wait_until(...)` return only once the relay has claimed
   every event committed so far (`settle()`), and a `wait_for` that follows never waits
-  on an event the blocked relay would have had to deliver.
+  on an event the blocked relay would have had to deliver. `settle()` also waits until
+  the world's fake runner holds the `run` message of every running run of its profiles
+  (a run is `running` from `prepare_run`, a moment before its packet reaches the runner).
 - `finish(runner, run_id, output)`, `stream(runner, run_id, seq, text)`: what a daemon
   sends for a run (protocol-2 frames), with their message ids.
 - `wait_until(check)`, `owner_rows(db, sql, params)`, `workflow_status(run_id)`.
@@ -56,6 +58,7 @@ RESULT_OUTPUT: Final[dict[str, Any]] = {
 }
 _ids = itertools.count(1)
 _relaying: list[DbUrls] = []  # the database of the relay running beside the test, if any
+_runner: list[FakeRunner] = []  # the fake runner of the latest run_world
 SETTLE_S: Final = 15.0
 
 
@@ -81,10 +84,28 @@ async def settle(*, every: float = 0.05) -> None:
     db = _relaying[-1]
     loop = asyncio.get_running_loop()
     deadline = loop.time() + SETTLE_S
-    while owner_rows(db, "SELECT count(*) FROM outbox WHERE sent_at IS NULL") != [(0,)]:
+    while not _settled(db):
         if loop.time() > deadline:
             return
         await asyncio.sleep(every)
+
+
+def _settled(db: DbUrls) -> bool:
+    """No outbox row waits for the relay, and the fake runner holds every running run of
+    its profiles."""
+    if owner_rows(db, "SELECT count(*) FROM outbox WHERE sent_at IS NULL") != [(0,)]:
+        return False
+    if not _runner:
+        return True
+    runner = _runner[-1]
+    active = owner_rows(
+        db,
+        "SELECT r.id FROM runs r JOIN agent_profiles p ON p.id = r.profile_id"
+        " WHERE r.status IN ('running', 'waiting_on_human') AND p.runner_id = %s",
+        (runner.runner_id,),
+    )
+    received = {run.run_id for run in runner.runs()}
+    return all(run_id in received for (run_id,) in active)
 
 
 async def wait_until(
@@ -249,6 +270,7 @@ async def run_world(
         fake_runner, workspace, clock, runner, project_name=project_name, profile=profile, key=key
     )
     world = RunWorld(workspace, clock, runner, profile_id, project_id, profile)
+    _runner[:] = [runner]
     world.projects[project_name] = project_id
     for other_project, other_profile in others:
         other_id, _ = await add_project_agent(
