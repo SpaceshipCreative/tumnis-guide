@@ -13,6 +13,7 @@ export interface ReviewItemFixture {
   target_type: string;
   target_id: string;
   target_title: string | null;
+  target_tainted?: boolean; // P2-08: the target task is made from outside content
   payload: Record<string, unknown>;
   blocking_impact: number;
   jev_factor: number;

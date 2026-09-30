@@ -1,5 +1,5 @@
 """tasks SQLAlchemy tables owned by this module (mirrors of revisions tasks_0001,
-tasks_0003, tasks_0004, tasks_0005, tasks_0006 and tasks_0007).
+tasks_0003, tasks_0004, tasks_0005, tasks_0006, tasks_0007 and tasks_0008).
 
 `board_rank` and `sort_key` compare bytewise (`COLLATE "C"`), so Postgres orders the
 fractional keys as Python and TypeScript do (core/rank.py)."""

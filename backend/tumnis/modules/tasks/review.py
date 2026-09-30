@@ -178,7 +178,8 @@ class TargetRef(BaseModel):
 
 class ReviewItemOut(BaseModel):
     """One item as the queue shows it: its kind's actions and primary action (Enter, R-04),
-    its target's title when the target is a task or a project, and its impact."""
+    its target's title when the target is a task or a project, whether that task is
+    tainted (P2-08: the queue shows the taint mark), and its impact."""
 
     id: UUID
     kind: str
@@ -186,6 +187,7 @@ class ReviewItemOut(BaseModel):
     target_type: str
     target_id: UUID
     target_title: str | None
+    target_tainted: bool = False  # a task target made from outside content (P2-08, SAF-1)
     payload: dict[str, Any]
     blocking_impact: float  # the deterministic impact (rules.deterministic_impact)
     jev_factor: float  # 1.0 until Jev's blocking-impact decision applied
@@ -206,6 +208,7 @@ class ReviewItemOut(BaseModel):
         row = dict(data)
         spec = _KINDS.get(str(row.get("kind")))
         row.setdefault("target_title", None)
+        row["target_tainted"] = bool(row.get("target_tainted"))
         row.setdefault("actions", list(spec.actions) if spec is not None else [])
         row.setdefault("primary_action", rules.primary_action(spec) if spec is not None else None)
         row["blocking_impact"] = float(row.get("blocking_impact") or 0)
@@ -471,8 +474,10 @@ WEIGHTED: Final = -(
 
 
 def _select() -> Select[Any]:
-    """Items with their task target's title (a project's is filled in after)."""
+    """Items with their task target's title and taint (a project's title is filled in
+    after)."""
     title = _tasks.c.title.label("target_title")
+    tainted = func.coalesce(_tasks.c.tainted, False).label("target_tainted")
     joined = _review.outerjoin(
         _tasks,
         and_(
@@ -481,7 +486,7 @@ def _select() -> Select[Any]:
             _tasks.c.deleted_at.is_(None),
         ),
     )
-    return select(_review, title).select_from(joined)
+    return select(_review, title, tainted).select_from(joined)
 
 
 async def _with_project_titles(s: AsyncSession, items: list[ReviewItemOut]) -> list[ReviewItemOut]:

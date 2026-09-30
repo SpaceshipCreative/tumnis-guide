@@ -773,10 +773,10 @@ def _estimate(label: Label | None, estimate: int | None, kind: ActorKind) -> int
         raise ProblemError(422, exc.code, str(exc)) from None
 
 
-async def _check_parent(s: AsyncSession, parent_id: UUID, project_id: UUID) -> None:
+async def _check_parent(s: AsyncSession, parent_id: UUID, project_id: UUID) -> RowMapping:
     """A subtask's parent is a live root task of the same project (depth one, plan
     default): 404 when there is no such task, 422 `parent_project_mismatch` or
-    `parent_not_root` otherwise."""
+    `parent_not_root` otherwise. Answers the parent's row."""
     parent = await _row(s, parent_id)
     if parent["project_id"] != project_id:
         raise ProblemError(
@@ -784,6 +784,7 @@ async def _check_parent(s: AsyncSession, parent_id: UUID, project_id: UUID) -> N
         )
     if parent["parent_id"] is not None:
         raise ProblemError(422, "parent_not_root", "A subtask cannot have subtasks")
+    return parent
 
 
 async def _insert(
@@ -847,23 +848,36 @@ async def create_task(
     source: str | None = None,
     label_source: LabelSource | None = None,
     tainted: bool = False,
+    context_item_ids: Sequence[UUID] = (),
 ) -> TaskOut:
     """A task in Backlog or Today, last in its column; emits `task.created`. 404 for a
-    project (or parent) the caller cannot see; 422 `estimate_required` (an agent's Human or
-    Hybrid task without an estimate), `parent_project_mismatch`, `parent_not_root`. An AI
-    task's estimate is dropped. `label_source` defaults from the actor (user, agent,
-    fallback); `source` says where the task came from (default: user, agent or system).
-    `tainted` marks what a key with no run creates (R-31, P2-01)."""
+    project, parent or context item the caller cannot see; 422 `estimate_required` (an
+    agent's Human or Hybrid task without an estimate), `parent_project_mismatch`,
+    `parent_not_root`. An AI task's estimate is dropped. `label_source` defaults from the
+    actor (user, agent, fallback); `source` says where the task came from (default: user,
+    agent or system). `context_item_ids` are linked in the same transaction.
+
+    Taint (P2-08, SAF-1) is derived once and stored: the OR of the linked context items,
+    the parent task and the caller (`tainted`: a tainted run's token, or a key with no run,
+    R-31)."""
     await _require_project(s, data.project_id)
+    sources = [rules.TaintSource("user", None, tainted=False)]
+    if tainted:
+        sources.append(rules.TaintSource("run", None, tainted=True))
     if data.parent_id is not None:
-        await _check_parent(s, data.parent_id, data.project_id)
+        parent = await _check_parent(s, data.parent_id, data.project_id)
+        sources.append(rules.TaintSource("parent_task", parent["id"], tainted=parent["tainted"]))
+    items = [await _context_item(s, item_id) for item_id in dict.fromkeys(context_item_ids)]
+    sources += [rules.TaintSource("context_item", i.id, tainted=i.tainted) for i in items]
     kind = actor_kind(actor)
     values = data.model_dump(exclude={"schema_version"})
     values["estimate_minutes"] = _estimate(data.label, data.estimate_minutes, kind)
     values["label_source"] = None if data.label is None else (label_source or _LABEL_SOURCE[kind])
-    if tainted:
-        values["tainted"] = True
-    return await _insert(s, actor, values, now=now, source=source or _SOURCE[kind])
+    values["tainted"] = rules.derive_taint(sources)
+    created = await _insert(s, actor, values, now=now, source=source or _SOURCE[kind])
+    for item in items:
+        await _link(s, actor, created.id, item.id)
+    return created
 
 
 async def _changed(
@@ -1515,21 +1529,45 @@ async def list_comments(
     )
 
 
-async def link_context_item(
-    s: AsyncSession,
-    actor: ActorRef,
-    task_id: UUID,
-    context_item_id: UUID,
-    *,
-    now: datetime | None = None,
-) -> TaskContextItemOut:
-    """Links the task to outside content through a ContextItem (FR-14.2), the only way a
-    task reaches a message, note, event, artifact, file or URL. Linking again keeps one
-    link. 404 for a task or context item the caller cannot see."""
-    await _row(s, task_id)
+async def _context_item(s: AsyncSession, context_item_id: UUID) -> integrations.ContextItemOut:
     item = await integrations.get_context_item_ref(_context(), context_item_id, session=s)
     if item is None:
         raise NotFound("context_items", context_item_id)
+    return item
+
+
+async def raise_taint(s: AsyncSession, task_id: UUID, *, now: datetime | None = None) -> bool:
+    """Taints the task if it is not tainted yet (`rules.raise_only`: taint only rises);
+    True when it changed. The change is not undoable: `tainted` is not an undo field, so
+    `undo_task` never lowers it. Emits `task.updated` (`tainted`) for the projections."""
+    raised = (
+        (
+            await s.execute(
+                update(_tasks)
+                .where(_tasks.c.id == task_id, _tasks.c.tainted.is_(False))
+                .values(tainted=True)
+                .returning(*_tasks.c)
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if raised is None:
+        return False
+    await _changed(s, raised, ["tainted"], now)
+    return True
+
+
+async def _raise_owner_taint(s: AsyncSession, task_id: UUID) -> None:
+    """integrations' hook: a tainted item was attached to the task (owner `task`)."""
+    await raise_taint(s, task_id)
+
+
+integrations.register_owner_taint("task", _raise_owner_taint)
+
+
+async def _link(s: AsyncSession, actor: ActorRef, task_id: UUID, context_item_id: UUID) -> UUID:
+    """The live link row (made, or restored from a deleted one); its id."""
     await s.execute(
         pg_insert(_links)
         .values(task_id=task_id, context_item_id=context_item_id, created_by=actor)
@@ -1545,6 +1583,26 @@ async def link_context_item(
         )
     )
     assert link_id is not None  # noqa: S101  # the upsert left one live link
+    return link_id
+
+
+async def link_context_item(
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    context_item_id: UUID,
+    *,
+    now: datetime | None = None,
+) -> TaskContextItemOut:
+    """Links the task to outside content through a ContextItem (FR-14.2), the only way a
+    task reaches a message, note, event, artifact, file or URL. Linking again keeps one
+    link. 404 for a task or context item the caller cannot see. A tainted item taints the
+    task (`rules.raise_only`, P2-08)."""
+    row = await _row(s, task_id)
+    item = await _context_item(s, context_item_id)
+    link_id = await _link(s, actor, task_id, context_item_id)
+    if rules.raise_only(row["tainted"], item.tainted) != row["tainted"]:
+        await raise_taint(s, task_id, now=now)
     mark_changed(s, LIVE_ENTITY, task_id)
     return TaskContextItemOut(
         id=link_id,
@@ -1555,6 +1613,31 @@ async def link_context_item(
         target_url=item.target_url,
         tainted=item.tainted,
     )
+
+
+async def unlink_context_item(
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    context_item_id: UUID,
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Removes the task's link to the item (a no-op when there is none). The task keeps
+    its taint: unlinking never lowers it (P2-08, SAF-1). 404 for a task the caller
+    cannot see."""
+    del actor  # who unlinked is the row's updater (app.current_actor)
+    await _row(s, task_id)
+    await s.execute(
+        update(_links)
+        .where(
+            _links.c.task_id == task_id,
+            _links.c.context_item_id == context_item_id,
+            _live(_links),
+        )
+        .values(deleted_at=_now(now))
+    )
+    mark_changed(s, LIVE_ENTITY, task_id)
 
 
 async def context_item_ids(s: AsyncSession, task_id: UUID) -> list[UUID]:

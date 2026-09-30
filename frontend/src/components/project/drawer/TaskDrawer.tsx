@@ -12,6 +12,7 @@ import {
 import { invalidateTaskViews } from "../../../lib/task-cache";
 import { undo } from "../../../lib/undo";
 import { FirstActionLine } from "../../common/FirstAction";
+import { TaintBadge } from "../../common/TaintBadge";
 import { formatDay, formatMinutes } from "../../dashboard/format";
 import { STATUS_WORDS, useChangeStatus, useTrashTask } from "../mutations";
 import { deleteClass, fieldClass, saveClass } from "../rail/RailSection";
@@ -161,6 +162,11 @@ function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
   const action = statusAction(task);
   return (
     <div className="flex flex-col gap-5">
+      {task.tainted && (
+        <div>
+          <TaintBadge />
+        </div>
+      )}
       <TitleForm key={task.version} task={task} />
       <dl className="grid grid-cols-2 gap-2 text-sm">
         <dt className="text-muted">Status</dt>

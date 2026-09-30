@@ -9,14 +9,15 @@
 Both nullable additions with CHECKs (expand). The checks are added NOT VALID: every new
 or changed row is checked, and no scan of `tasks` runs inside the migration's transaction
 (squawk's constraint-missing-not-valid); existing rows hold NULL, which they allow.
-Chained after P1-07's label columns (tasks_0006).
+Chained after P2-08's taint trigger (tasks_0007), which follows P1-07's label columns
+(tasks_0006).
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "tasks_0007"
-down_revision = "tasks_0006"
+revision = "tasks_0008"
+down_revision = "tasks_0007"
 branch_labels = None
 depends_on = None
 phase = "expand"

@@ -17,6 +17,19 @@ if TYPE_CHECKING:
     from tests.fixtures import WorkspaceHandle
 
 
+@pytest.fixture(autouse=True)
+def _core_db_on_the_test_database(request: pytest.FixtureRequest) -> None:
+    """A test that asks only for `workspace` (or `db`) still reaches tumnis.core.db on its
+    own database, not on an earlier test's dropped one. `app_db`, `app` or `dbos` point it
+    at the same database again after this runs (autouse goes first)."""
+    if "db" not in request.fixturenames:
+        return
+    from tumnis.core import db as core_db  # noqa: PLC0415
+
+    db: DbUrls = request.getfixturevalue("db")
+    core_db.configure(app_url=db.app, direct_url=db.app, owner_url=db.owner, pooled=False)
+
+
 @pytest.fixture
 async def app_db(db: DbUrls) -> AsyncIterator[DbUrls]:
     async with _integrations.configured(db):

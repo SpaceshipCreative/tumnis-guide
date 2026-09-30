@@ -180,23 +180,32 @@ class DaemonTransport:
     async def dispatch(self, packet: TaskPacket) -> RunHandle:
         """In one transaction: the `runs` row, the `run` mailbox row (message id
         uuid5(run_id, "run"), so a replayed step queues nothing new), the `dispatched` run
-        event and the NOTIFY that wakes the runner's socket."""
+        event and the NOTIFY that wakes the runner's socket.
+
+        The run is tainted when its packet is (P2-08, SAF-1: `runs.tainted` from the
+        packet, the OR of its blocks). A row made before (a replayed step, or a run made
+        when it was requested) keeps everything else and only gains the packet's taint,
+        never loses its own, before the runner can see the packet or use its token."""
         now = self.clock.now()
         async with tenant_session(self.ctx) as s:
             profile, runner_id = await self._runner_for(s, packet.profile_id)
+            made = insert(_runs).values(
+                id=packet.run_id,
+                profile_id=packet.profile_id,
+                task_id=_packet_task(packet),
+                kind=packet.kind.value,
+                status="running",
+                workflow_id=_workflow_id(),
+                started_at=now,
+                correlation_id=packet.correlation_id,
+                tainted=packet.tainted,
+            )
             await s.execute(
-                insert(_runs)
-                .values(
-                    id=packet.run_id,
-                    profile_id=packet.profile_id,
-                    task_id=_packet_task(packet),
-                    kind=packet.kind.value,
-                    status="running",
-                    workflow_id=_workflow_id(),
-                    started_at=now,
-                    correlation_id=packet.correlation_id,
+                made.on_conflict_do_update(
+                    index_elements=["id"],
+                    set_={"tainted": _runs.c.tainted | made.excluded.tainted},
+                    where=made.excluded.tainted & ~_runs.c.tainted,
                 )
-                .on_conflict_do_nothing(index_elements=["id"])
             )
             run = RunV2(
                 message_id=uuid5(packet.run_id, "run"),

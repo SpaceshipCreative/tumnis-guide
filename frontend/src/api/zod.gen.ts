@@ -847,7 +847,8 @@ export const zReviewCountOut = z.object({
  * ReviewItemOut
  *
  * One item as the queue shows it: its kind's actions and primary action (Enter, R-04),
- * its target's title when the target is a task or a project, and its impact.
+ * its target's title when the target is a task or a project, whether that task is
+ * tainted (P2-08: the queue shows the taint mark), and its impact.
  */
 export const zReviewItemOut = z.object({
   actions: z.array(z.string()),
@@ -863,6 +864,7 @@ export const zReviewItemOut = z.object({
   project_id: z.uuid().nullable(),
   snoozed_until: z.iso.datetime().nullable(),
   target_id: z.uuid(),
+  target_tainted: z.boolean().optional().default(false),
   target_title: z.string().nullable(),
   target_type: z.string(),
   updated_at: z.iso.datetime(),
