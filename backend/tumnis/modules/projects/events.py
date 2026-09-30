@@ -15,10 +15,10 @@ since search may not call projects): the name and goal, and on updates whether t
 is archived.
 """
 
-from typing import Annotated, ClassVar, Final, Literal, Self
+from typing import Annotated, ClassVar, Final, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from tumnis.core.events import EventPayload, event_type
 
@@ -38,21 +38,15 @@ class PolicyDoc(BaseModel):
 
 class AgentProfileChoice(BaseModel):
     """The project's agent (P1-06): a new Hermes profile from the project template
-    (`create`, the default), or an existing profile on the agent server, by `name`
-    (`link`). The agents module provisions it on `project.created`."""
+    (`create`, the default; named after the project, so `name` is ignored), or an existing
+    profile on the agent server, by `name` (`link`; `create_project` answers 422
+    `invalid_profile_choice` without one). The agents module provisions it on
+    `project.created`."""
 
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["create", "link"] = "create"
     name: Annotated[str, StringConstraints(pattern=PROFILE_NAME_PATTERN)] | None = None
-
-    @model_validator(mode="after")
-    def _link_names_a_profile(self) -> Self:
-        if self.mode == "link" and self.name is None:
-            raise ValueError("linking an existing profile needs its name")
-        if self.mode == "create" and self.name is not None:
-            raise ValueError("a new profile is named after the project")
-        return self
 
 
 @event_type("project.created", 1)

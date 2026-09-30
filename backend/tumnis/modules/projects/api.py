@@ -37,6 +37,7 @@ from tumnis.core.versioning import NotFound, StaleVersion, Version, update_versi
 from tumnis.modules.auth import api as auth
 from tumnis.modules.projects.events import (
     BRIEF_MAX_CHARS,
+    AgentProfileChoice,
     ProjectArchivedV1,
     ProjectCreatedV1,
     ProjectUpdatedV1,
@@ -57,6 +58,8 @@ from tumnis.modules.projects.rules import (
     validate_code_location,
 )
 from tumnis.seed import ProjectSeed, register_seed_writer
+
+__all__ = ["AgentProfileChoice"]  # re-exported: the create body's agent choice (P1-06)
 
 _log = structlog.get_logger(__name__)
 
@@ -91,6 +94,14 @@ class ProjectCreate(BaseModel):
     links: list[ProjectLinkIn] = []
     profile_name: str | None = None
     brief_md: Brief = ""  # carried to knowledge through project.created; reads return ""
+
+
+class ProjectCreateIn(ProjectCreate):
+    """The body of `POST /v1/projects`: a project and the agent to give it (P1-06), a new
+    profile from the template (the default, also when `profile` is absent) or an existing
+    one. Reads never carry it: the agent is the agents module's."""
+
+    profile: AgentProfileChoice | None = None
 
 
 class ProjectOut(ProjectCreate):
@@ -354,6 +365,18 @@ async def local_decisions_only(project_id: UUID, *, session: AsyncSession | None
     return flag
 
 
+async def project_names(s: AsyncSession, project_ids: Sequence[UUID]) -> dict[UUID, str]:
+    """The names of the live projects (archived or not) among `project_ids`."""
+    if not project_ids:
+        return {}
+    rows = await s.execute(
+        select(_projects.c.id, _projects.c.name).where(
+            _projects.c.id.in_(list(project_ids)), _live()
+        )
+    )
+    return {row.id: row.name for row in rows}
+
+
 async def project_exists(s: AsyncSession, project_id: UUID) -> bool:
     """A live project (archived or not) of the caller's workspace."""
     found = await s.scalar(select(_projects.c.id).where(_projects.c.id == project_id, _live()))
@@ -404,12 +427,20 @@ async def create_project(
 ) -> ProjectOut:
     """Inserts the project (last in board order unless `sort_key` is given), its links
     and its default policy, and emits `project.created` carrying the brief, in the
-    caller's transaction. 422 `code_location_conflict` / `invalid_code_location`; 409
-    `project_name_taken`."""
+    caller's transaction, with the agent to give the project (`ProjectCreateIn.profile`,
+    P1-06). 422 `code_location_conflict` / `invalid_code_location` /
+    `invalid_profile_choice` (a link without a name); 409 `project_name_taken`."""
     _check_location(data.code_path, data.repo_url)
     if sort_key is None:
         sort_key = rank.between(await _last_key(s), None)
-    values = data.model_dump(exclude={"schema_version", "links", "brief_md"})
+    values = data.model_dump(exclude={"schema_version", "links", "brief_md", "profile"})
+    profile = getattr(data, "profile", None) or AgentProfileChoice()
+    if profile.mode == "link" and profile.name is None:
+        raise ProblemError(
+            422, "invalid_profile_choice", "Linking an existing profile needs its name"
+        )
+    if profile.mode == "create":
+        profile = AgentProfileChoice()  # a new profile is named after the project
     try:
         created = (
             (
@@ -441,7 +472,11 @@ async def create_project(
     await emit(
         s,
         ProjectCreatedV1(
-            project_id=project_id, name=data.name, brief_md=data.brief_md, goal=data.goal
+            project_id=project_id,
+            name=data.name,
+            brief_md=data.brief_md,
+            goal=data.goal,
+            profile=profile,
         ),
         occurred_at=_now(now),
     )

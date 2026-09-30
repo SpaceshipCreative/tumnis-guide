@@ -39,6 +39,35 @@
         "title": "AccountOut",
         "type": "object"
       },
+      "AgentProfileChoice": {
+        "additionalProperties": false,
+        "description": "The project's agent (P1-06): a new Hermes profile from the project template\n(`create`, the default), or an existing profile on the agent server, by `name`\n(`link`). The agents module provisions it on `project.created`.",
+        "properties": {
+          "mode": {
+            "default": "create",
+            "enum": [
+              "create",
+              "link"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "AgentProfileChoice",
+        "type": "object"
+      },
       "AgentProfileOut": {
         "properties": {
           "created_at": {
@@ -2064,7 +2093,8 @@
         "title": "ProfilePatch",
         "type": "object"
       },
-      "ProjectCreate": {
+      "ProjectCreateIn": {
+        "description": "The body of `POST /v1/projects`: a project and the agent to give it (P1-06), a new\nprofile from the template (the default, also when `profile` is absent) or an existing\none. Reads never carry it: the agent is the agents module's.",
         "properties": {
           "brief_md": {
             "default": "",
@@ -2132,6 +2162,16 @@
             "title": "Name",
             "type": "string"
           },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentProfileChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "profile_name": {
             "anyOf": [
               {
@@ -2174,7 +2214,7 @@
         "required": [
           "name"
         ],
-        "title": "ProjectCreate",
+        "title": "ProjectCreateIn",
         "type": "object"
       },
       "ProjectFolderOut": {
@@ -8838,7 +8878,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectCreate"
+                "$ref": "#/components/schemas/ProjectCreateIn"
               }
             }
           },
