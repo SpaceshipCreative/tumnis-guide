@@ -13,5 +13,29 @@
   "mcp_servers": [
     "tumnis"
   ],
-  "error": null
+  "error": null,
+  "mcp_server_details": [
+    {
+      "name": "tumnis",
+      "transport": "http",
+      "target": "tumnis.example.org"
+    }
+  ],
+  "profile_version": "1.0.0",
+  "github": {
+    "token_present": true,
+    "own_reachable": {
+      "acme/site": true
+    },
+    "foreign_reachable": [],
+    "errors": []
+  },
+  "coolify": {
+    "token_present": true,
+    "own_reachable": {
+      "app-acme": true
+    },
+    "foreign_reachable": [],
+    "errors": []
+  }
 }

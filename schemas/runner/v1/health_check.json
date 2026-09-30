@@ -3,15 +3,64 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "coolify_base_url": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Coolify Base Url"
+    },
     "correlation_id": {
       "maxLength": 128,
       "title": "Correlation Id",
       "type": "string"
     },
+    "foreign_apps": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Foreign Apps",
+      "type": "array"
+    },
+    "foreign_repos": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Foreign Repos",
+      "type": "array"
+    },
     "message_id": {
       "format": "uuid",
       "title": "Message Id",
       "type": "string"
+    },
+    "own_apps": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Own Apps",
+      "type": "array"
+    },
+    "own_repos": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Own Repos",
+      "type": "array"
     },
     "profile": {
       "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",

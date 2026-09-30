@@ -31,7 +31,8 @@ from tumnis.modules.agents.adapters.port import (
 )
 from tumnis.modules.agents.models import AgentProfile, Runner
 from tumnis.modules.agents.packet_builder import TaskPacket
-from tumnis.modules.agents.protocol import SchemaRef
+from tumnis.modules.agents.protocol import McpServerInfo, SchemaRef
+from tumnis.modules.agents.review_kinds import ForeignReach
 from tumnis.modules.agents.rules import (
     NAME_RE,
     TERMINAL_STATUSES,
@@ -39,6 +40,8 @@ from tumnis.modules.agents.rules import (
     RunKind,
     RunnerStatus,
     RunStatus,
+    TokenReach,
+    allowlist_drift,
     runner_status,
     validate_profile_name,
 )
@@ -63,11 +66,14 @@ __all__ = [
     "AgentUnavailable",
     "EnrichmentRequest",
     "EnrichmentResult",
+    "ForeignReach",
     "HealthCheckAccepted",
+    "McpServerInfo",
     "PlanningRequest",
     "PlanningResult",
     "ProfileIn",
     "ProfilePatch",
+    "ProfileToolsOut",
     "RunEvent",
     "RunHandle",
     "RunKind",
@@ -78,6 +84,8 @@ __all__ = [
     "RunnerOut",
     "SchemaRef",
     "TaskPacket",
+    "TokenReach",
+    "ToolServerOut",
 ]
 
 RUNNER_CHANNEL: Final = "runner_mailbox"  # NOTIFY {"runner": id, "close": bool}
@@ -130,14 +138,56 @@ class ProfilePatch(BaseModel):
     version: Version
 
 
+HealthState = Literal["ok", "warning", "degraded", "offline", "unsupported", "error"]
+
+
 class ProfileHealth(BaseModel):
     reachable: bool
     authenticated: bool | None = None
-    version: str | None = None
+    version: str | None = None  # Hermes's
     profile_exists: bool | None = None
     mcp_servers: list[str] = []
     error: str | None = None
-    status: Literal["ok", "offline", "unsupported", "error"] = "ok"
+    # degraded: a server outside the allowlist or a token reaching another project (P2-10)
+    status: HealthState = "ok"
+    profile_version: str | None = None  # the profile's VERSION stamp (P2-10)
+    mcp_server_details: list[McpServerInfo] = []
+    github: TokenReach | None = None
+    coolify: TokenReach | None = None
+    extra: list[str] = []  # servers the project's allowlist does not name
+    missing: list[str] = []  # allowed servers the profile lacks
+    foreign: list[ForeignReach] = []
+    warnings: list[str] = []
+
+
+class ToolServerOut(BaseModel):
+    name: str
+    transport: Literal["stdio", "http"] | None  # None: only the name was reported
+    target: str | None  # the command's name or the URL's host, never arguments
+    allowed: bool | None  # None: no allowlist applies (the master profile)
+
+
+class ProfileToolsOut(BaseModel):
+    """Settings > Agents, one profile's tools, read-only (FR-5.12): the MCP servers it
+    reported at its last health check, each matched against its project's allowlist
+    now, and its tokens' reach."""
+
+    profile_id: UUID
+    profile_name: str
+    project_id: UUID | None
+    checked_at: datetime | None
+    status: HealthState | None  # None before the first check
+    reachable: bool | None
+    authenticated: bool | None
+    hermes_version: str | None
+    profile_version: str | None
+    allowlist: list[str]
+    servers: list[ToolServerOut]
+    extra: list[str]
+    missing: list[str]
+    github: TokenReach | None
+    coolify: TokenReach | None
+    foreign: list[ForeignReach]
 
 
 class AgentProfileOut(BaseModel):
@@ -469,6 +519,46 @@ def health_workflow_id(request_id: UUID) -> str:
 def run_topic(run_id: UUID) -> str:
     """The DBOS topic a `run_skill` workflow receives its result (or runner_lost) on."""
     return f"run:{run_id}"
+
+
+async def profile_tools(s: AsyncSession, profile_id: UUID) -> ProfileToolsOut:
+    """The profile's MCP servers from its last health check, each matched against its
+    project's allowlist as it stands now (the master names no project: no allowlist
+    applies), with its tokens' reach."""
+    row = await _profile_row(s, profile_id)
+    health = row.health
+    allowlist = list(await projects.tool_allowlist(s, row.project_id)) if row.project_id else None
+    details = health.mcp_server_details if health else []
+    reported = [d.name for d in details] or (health.mcp_servers if health else [])
+    known = {d.name: d for d in details}
+    servers = [
+        ToolServerOut(
+            name=name,
+            transport=known[name].transport if name in known else None,
+            target=known[name].target if name in known else None,
+            allowed=None if allowlist is None else name in allowlist,
+        )
+        for name in dict.fromkeys(reported)
+    ]
+    drift = allowlist_drift(reported, allowlist) if allowlist is not None and health else None
+    return ProfileToolsOut(
+        profile_id=row.id,
+        profile_name=row.name,
+        project_id=row.project_id,
+        checked_at=row.health_checked_at,
+        status=health.status if health else None,
+        reachable=health.reachable if health else None,
+        authenticated=health.authenticated if health else None,
+        hermes_version=health.version if health else None,
+        profile_version=(health.profile_version if health else None) or row.profile_version,
+        allowlist=allowlist or [],
+        servers=servers,
+        extra=sorted(drift.extra) if drift else [],
+        missing=sorted(drift.missing) if drift else [],
+        github=health.github if health else None,
+        coolify=health.coolify if health else None,
+        foreign=health.foreign if health else [],
+    )
 
 
 async def profile_health(ctx: WorkspaceContext, profile_id: UUID) -> ProfileHealth | None:

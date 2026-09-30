@@ -147,6 +147,18 @@ export const zFolderIn = z.object({
 });
 
 /**
+ * ForeignReach
+ *
+ * A token reaching another project's repo (`github`) or app (`coolify`).
+ */
+export const zForeignReach = z.object({
+  kind: z.enum(["github", "coolify"]),
+  project_id: z.uuid().nullish(),
+  project_name: z.string().nullish(),
+  target: z.string().max(200),
+});
+
+/**
  * FreeBlockOut
  */
 export const zFreeBlockOut = z.object({
@@ -251,6 +263,18 @@ export const zLoginOut = z.object({
 });
 
 /**
+ * McpServerInfo
+ *
+ * One MCP server of a profile (P2-10): its name, transport and a redacted target (the
+ * command's name, or the URL's host); never its arguments, env or headers (FR-5.12).
+ */
+export const zMcpServerInfo = z.object({
+  name: z.string().max(128),
+  target: z.string().max(253).nullish(),
+  transport: z.enum(["stdio", "http"]),
+});
+
+/**
  * ModuleFlagIn
  */
 export const zModuleFlagIn = z.object({
@@ -341,49 +365,6 @@ export const zProblem = z.object({
   status: z.int(),
   title: z.string(),
   type: z.string(),
-});
-
-/**
- * ProfileHealth
- */
-export const zProfileHealth = z.object({
-  authenticated: z.boolean().nullish(),
-  error: z.string().nullish(),
-  mcp_servers: z.array(z.string()).optional().default([]),
-  profile_exists: z.boolean().nullish(),
-  reachable: z.boolean(),
-  status: z
-    .enum(["ok", "offline", "unsupported", "error"])
-    .optional()
-    .default("ok"),
-  version: z.string().nullish(),
-});
-
-/**
- * AgentProfileOut
- */
-export const zAgentProfileOut = z.object({
-  created_at: z.iso.datetime(),
-  endpoint: z.string().nullable(),
-  health: zProfileHealth.nullable(),
-  health_checked_at: z.iso.datetime().nullable(),
-  id: z.uuid(),
-  name: z.string(),
-  profile_version: z.string().nullable(),
-  project_id: z.uuid().nullable(),
-  role: z.enum(["master", "project"]),
-  runner_id: z.uuid().nullable(),
-  status: z.string(),
-  transport: z.enum(["daemon", "mcp_endpoint"]),
-  version: z.int(),
-});
-
-/**
- * Page[AgentProfileOut]
- */
-export const zPageAgentProfileOut = z.object({
-  items: z.array(zAgentProfileOut),
-  next_cursor: z.string().nullable(),
 });
 
 /**
@@ -966,6 +947,109 @@ export const zTextDocumentPatch = z.object({
 });
 
 /**
+ * TokenReach
+ *
+ * What one token reaches, as the daemon probed it on the host (the token itself never
+ * leaves the host). GitHub: a repo is reachable only with `permissions.push` or `admin`;
+ * Coolify: an application is reachable when the token may read it.
+ */
+export const zTokenReach = z.object({
+  errors: z.array(z.string().max(300)).max(100).optional().default([]),
+  foreign_reachable: z.array(z.string()).max(50).optional().default([]),
+  own_reachable: z.record(z.string(), z.boolean()).optional().default({}),
+  token_present: z.boolean(),
+});
+
+/**
+ * ProfileHealth
+ */
+export const zProfileHealth = z.object({
+  authenticated: z.boolean().nullish(),
+  coolify: zTokenReach.nullish(),
+  error: z.string().nullish(),
+  extra: z.array(z.string()).optional().default([]),
+  foreign: z.array(zForeignReach).optional().default([]),
+  github: zTokenReach.nullish(),
+  mcp_server_details: z.array(zMcpServerInfo).optional().default([]),
+  mcp_servers: z.array(z.string()).optional().default([]),
+  missing: z.array(z.string()).optional().default([]),
+  profile_exists: z.boolean().nullish(),
+  profile_version: z.string().nullish(),
+  reachable: z.boolean(),
+  status: z
+    .enum(["ok", "warning", "degraded", "offline", "unsupported", "error"])
+    .optional()
+    .default("ok"),
+  version: z.string().nullish(),
+  warnings: z.array(z.string()).optional().default([]),
+});
+
+/**
+ * AgentProfileOut
+ */
+export const zAgentProfileOut = z.object({
+  created_at: z.iso.datetime(),
+  endpoint: z.string().nullable(),
+  health: zProfileHealth.nullable(),
+  health_checked_at: z.iso.datetime().nullable(),
+  id: z.uuid(),
+  name: z.string(),
+  profile_version: z.string().nullable(),
+  project_id: z.uuid().nullable(),
+  role: z.enum(["master", "project"]),
+  runner_id: z.uuid().nullable(),
+  status: z.string(),
+  transport: z.enum(["daemon", "mcp_endpoint"]),
+  version: z.int(),
+});
+
+/**
+ * Page[AgentProfileOut]
+ */
+export const zPageAgentProfileOut = z.object({
+  items: z.array(zAgentProfileOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * ToolServerOut
+ */
+export const zToolServerOut = z.object({
+  allowed: z.boolean().nullable(),
+  name: z.string(),
+  target: z.string().nullable(),
+  transport: z.enum(["stdio", "http"]).nullable(),
+});
+
+/**
+ * ProfileToolsOut
+ *
+ * Settings > Agents, one profile's tools, read-only (FR-5.12): the MCP servers it
+ * reported at its last health check, each matched against its project's allowlist
+ * now, and its tokens' reach.
+ */
+export const zProfileToolsOut = z.object({
+  allowlist: z.array(z.string()),
+  authenticated: z.boolean().nullable(),
+  checked_at: z.iso.datetime().nullable(),
+  coolify: zTokenReach.nullable(),
+  extra: z.array(z.string()),
+  foreign: z.array(zForeignReach),
+  github: zTokenReach.nullable(),
+  hermes_version: z.string().nullable(),
+  missing: z.array(z.string()),
+  profile_id: z.uuid(),
+  profile_name: z.string(),
+  profile_version: z.string().nullable(),
+  project_id: z.uuid().nullable(),
+  reachable: z.boolean().nullable(),
+  servers: z.array(zToolServerOut),
+  status: z
+    .enum(["ok", "warning", "degraded", "offline", "unsupported", "error"])
+    .nullable(),
+});
+
+/**
  * TotpEnrolConfirmIn
  */
 export const zTotpEnrolConfirmIn = z.object({
@@ -1140,6 +1224,15 @@ export const zAgentsCheckProfileHealthPath = z.object({
  * Successful Response
  */
 export const zAgentsCheckProfileHealthResponse = zHealthCheckAccepted;
+
+export const zAgentsGetProfileToolsPath = z.object({
+  profile_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsGetProfileToolsResponse = zProfileToolsOut;
 
 export const zAuditListAuditQuery = z.object({
   action: z.string().max(200).nullish(),

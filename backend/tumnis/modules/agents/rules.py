@@ -15,19 +15,21 @@
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Final, Literal, Protocol
+from typing import Annotated, Final, Literal, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 NAME_RE: Final = r"^[a-z0-9][a-z0-9-]{0,62}$"  # profile and runner names; blocks shell tricks
 SKILL_RE: Final = r"^[a-z][a-z0-9-]{0,40}$"
 HEARTBEAT_S: Final = 15  # architecture: every 15 seconds
 MISSED_BEATS: Final = 3
 RESERVED_PROFILE_NAMES: Final = frozenset({"default", "root", "hermes", "tumnis"})
+MAX_REACH_TARGETS: Final = 50  # repos or apps probed per kind (plan default)
 
 Label = Literal["human", "ai", "hybrid"]  # the task labels (FR-4.1)
 ESTIMATED_LABELS: Final[frozenset[str]] = frozenset({"human", "hybrid"})
@@ -237,3 +239,138 @@ def planning_errors(req: PlanningRequestView, res: PlanningResultView) -> list[s
     if any(task_id not in offered for task_id in res.alternates):
         errors.append("unknown_alternate")
     return errors
+
+
+# --- Tool allowlists and token reach (P2-10, SAF-2, SAF-3) -------------------------------
+
+
+@dataclass(frozen=True)
+class Drift:
+    extra: frozenset[str]  # present in the profile, not allowed: degraded
+    missing: frozenset[str]  # allowed, not present: warning only
+
+
+def allowlist_drift(reported: Iterable[str], allowlist: Iterable[str]) -> Drift:
+    """The servers a profile has beyond its project's allowlist (`extra`), and the allowed
+    ones it lacks (`missing`); order and repetition do not matter."""
+    have, allowed = frozenset(reported), frozenset(allowlist)
+    return Drift(extra=have - allowed, missing=allowed - have)
+
+
+class TokenReach(BaseModel):
+    """What one token reaches, as the daemon probed it on the host (the token itself never
+    leaves the host). GitHub: a repo is reachable only with `permissions.push` or `admin`;
+    Coolify: an application is reachable when the token may read it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    token_present: bool
+    own_reachable: dict[str, bool] = Field(default={}, max_length=MAX_REACH_TARGETS)
+    foreign_reachable: list[str] = Field(default=[], max_length=MAX_REACH_TARGETS)
+    errors: list[Annotated[str, Field(max_length=300)]] = Field(default=[], max_length=100)
+
+
+ReachLevel = Literal["ok", "warning", "degraded"]
+HealthStatus = Literal["ok", "warning", "degraded", "offline"]
+
+
+@dataclass(frozen=True)
+class ReachVerdict:
+    level: ReachLevel
+    foreign: tuple[str, ...] = ()  # "github:owner/repo", "coolify:<app uuid>"
+    reasons: tuple[str, ...] = ()  # why a warning, in words
+
+
+def reach_verdict(github: TokenReach | None, coolify: TokenReach | None) -> ReachVerdict:
+    """degraded if any foreign_reachable; warning if a token is missing or cannot reach its
+    own repo or app (or a probe failed); ok otherwise. A kind the daemon did not probe
+    (None: nothing linked) says nothing."""
+    foreign: list[str] = []
+    reasons: list[str] = []
+    for kind, reach in (("github", github), ("coolify", coolify)):
+        if reach is None:
+            continue
+        foreign += [f"{kind}:{target}" for target in reach.foreign_reachable]
+        if not reach.token_present:
+            reasons.append(f"{kind}: no token in the profile")
+            continue
+        reasons += [
+            f"{kind}: cannot reach its own {target}"
+            for target, ok in sorted(reach.own_reachable.items())
+            if not ok
+        ]
+        reasons += [f"{kind}: {error}" for error in reach.errors]
+    level: ReachLevel = "degraded" if foreign else "warning" if reasons else "ok"
+    return ReachVerdict(level, tuple(foreign), tuple(reasons))
+
+
+def profile_health(
+    reachable: bool, authenticated: bool | None, drift: Drift, reach: ReachVerdict
+) -> HealthStatus:
+    """offline when the runner cannot reach the profile; degraded on a server outside the
+    allowlist or a token reaching another project; warning when not signed in, an allowed
+    server is missing, or a token falls short; ok otherwise. A degraded profile still runs
+    tasks: the human decides."""
+    if not reachable:
+        return "offline"
+    if drift.extra or reach.level == "degraded":
+        return "degraded"
+    if authenticated is False or drift.missing or reach.level == "warning":
+        return "warning"
+    return "ok"
+
+
+_GITHUB_REPO: Final = re.compile(
+    r"^(?:(?:https?://|ssh://git@)github\.com/|git@github\.com:)?"
+    r"([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/([A-Za-z0-9._-]{1,100}?)(?:\.git)?/?$"
+)
+
+
+def github_repo(value: str) -> str | None:
+    """`owner/name` (lower case) of a GitHub repo link: `owner/name`, a github.com https
+    or ssh URL; None for anything else (another host, a path)."""
+    found = _GITHUB_REPO.fullmatch(value.strip())
+    if found is None or found.group(2) in {".", ".."}:
+        return None
+    return f"{found.group(1)}/{found.group(2)}".lower()
+
+
+@dataclass(frozen=True)
+class ReachTargets:
+    """What the health check asks the daemon to probe for one project's profile."""
+
+    own_repos: tuple[str, ...] = ()
+    foreign_repos: tuple[str, ...] = ()
+    own_apps: tuple[str, ...] = ()
+    foreign_apps: tuple[str, ...] = ()
+    owners: tuple[tuple[str, UUID], ...] = ()  # (target, project) for naming foreign reach
+
+
+def reach_targets(
+    project_id: UUID | None,
+    repos: Sequence[tuple[UUID, str]],
+    apps: Sequence[tuple[UUID, str]],
+    *,
+    limit: int = MAX_REACH_TARGETS,
+) -> ReachTargets:
+    """Own and foreign repos and apps for a profile of `project_id` (None: the master,
+    which owns none), from every project's (project, repo link or URL) and (project, app
+    uuid); each list deduplicated in order and cut at `limit` (plan default 50). A target
+    two projects share counts as own."""
+
+    def split(pairs: Iterable[tuple[UUID, str]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        own = list(dict.fromkeys(t for p, t in pairs if p == project_id))
+        foreign = list(dict.fromkeys(t for p, t in pairs if p != project_id and t not in own))
+        return tuple(own[:limit]), tuple(foreign[:limit])
+
+    repo_pairs = [(p, r) for p, value in repos if (r := github_repo(value)) is not None]
+    app_pairs = [(p, a.strip()) for p, a in apps if a.strip()]
+    own_repos, foreign_repos = split(repo_pairs)
+    own_apps, foreign_apps = split(app_pairs)
+    owners = tuple(
+        dict.fromkeys(
+            [(f"github:{t}", p) for p, t in repo_pairs if p != project_id]
+            + [(f"coolify:{t}", p) for p, t in app_pairs if p != project_id]
+        )
+    )
+    return ReachTargets(own_repos, foreign_repos, own_apps, foreign_apps, owners)

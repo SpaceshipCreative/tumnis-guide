@@ -9,14 +9,22 @@
   three missed heartbeats (`rules.runner_status` at the scheduled time) and ends the runs
   waiting on them `runner_lost`, telling each waiting workflow through `DBOS.send`.
 - `check_profile_health(workspace_id, profile_id, request_id)`: asks the runner (or the
-  endpoint) and writes the profile's `health`.
+  endpoint) and writes the profile's `health`. P2-10: the runner's check carries the repos
+  and apps the profile's tokens must and must not reach; its report's MCP servers are
+  matched against the project's allowlist and its token reach judged, and drift or foreign
+  reach marks the profile degraded with one `drift` review item.
+- `profile_health_sweep(scheduled_at, context)`: scheduled every 15 minutes; enqueues
+  `check_profile_health` for every live, unpaused profile.
 """
 
+import hashlib
+import importlib
+import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID, uuid5
 
-from dbos import DBOS, SetWorkflowID
+from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
 from pydantic import ValidationError
 from sqlalchemy import Table, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -31,7 +39,19 @@ from tumnis.modules.agents import api
 from tumnis.modules.agents.adapters.hermes import DaemonTransport, McpEndpointTransport
 from tumnis.modules.agents.models import AgentProfile, RunEventRow, Runner, RunRow
 from tumnis.modules.agents.packet_builder import TaskPacket
-from tumnis.modules.agents.rules import runner_status
+from tumnis.modules.agents.review_kinds import DRIFT, DriftPayload, ForeignReach
+from tumnis.modules.agents.rules import (
+    Drift,
+    ReachTargets,
+    ReachVerdict,
+    allowlist_drift,
+    profile_health,
+    reach_targets,
+    reach_verdict,
+    runner_status,
+)
+from tumnis.modules.projects import api as projects
+from tumnis.modules.tasks import api as tasks
 
 if TYPE_CHECKING:
     from dbos import DBOSClient, WorkflowHandleAsync
@@ -45,6 +65,8 @@ RUNNER_SWEEP_NAME: Final = "runner-sweep"
 # three-missed-heartbeat detection (FR-5.9).
 RUNNER_SWEEP_QUEUE: Final = "agents-sweep"
 RUNS_QUEUE: Final = api.RUNS_QUEUE
+PROFILE_HEALTH_SCHEDULE: Final = "*/15 * * * *"  # every 15 minutes (plan default)
+PROFILE_HEALTH_SCHEDULE_NAME: Final = "profile-health"
 
 _profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
 _runners: Table = Runner.__table__  # type: ignore[assignment]
@@ -263,21 +285,47 @@ async def runner_sweep(scheduled_at: datetime, context: Any) -> list[str]:
 # --- check_profile_health ---------------------------------------------------------------------
 
 
+async def _coolify_base_url(ctx: WorkspaceContext) -> str | None:
+    """The workspace's Coolify base URL (Settings > Coolify, P2-14), when it has one."""
+    coolify = importlib.import_module("tumnis.modules.coolify.api")
+    get_settings = getattr(coolify, "get_settings", None)
+    if get_settings is None:  # before P2-14's settings exist
+        return None
+    settings = await get_settings(ctx)
+    base = getattr(settings, "base_url", None) if settings is not None else None
+    return str(base) if base else None
+
+
+async def _reach_targets(s: Any, project_id: UUID | None) -> ReachTargets:
+    repos = await projects.code_repos(s)
+    apps = await projects.links_of_kind(s, "coolify_app")
+    return reach_targets(
+        project_id,
+        [(link.project_id, link.value) for link in repos],
+        [(link.project_id, link.value) for link in apps],
+    )
+
+
 @DBOS.step()
 async def request_health_step(
     workspace_id: str, profile_id: str, request_id: str
 ) -> dict[str, Any] | None:
-    """Ask for the profile's health: a `health_check` on its runner (None: wait for the
-    report), or the endpoint's answer (MCP profiles) or `offline` straight away."""
+    """Ask for the profile's health: a `health_check` on its runner carrying the repos and
+    apps its tokens must and must not reach (None: wait for the report), or the endpoint's
+    answer (MCP profiles) or `offline` straight away."""
     ctx = _ctx(workspace_id)
     async with tenant_session(ctx) as s:
         row = (
             await s.execute(
-                select(_profiles.c.name, _profiles.c.transport, _profiles.c.endpoint).where(
-                    _profiles.c.id == UUID(profile_id)
-                )
+                select(
+                    _profiles.c.name,
+                    _profiles.c.transport,
+                    _profiles.c.endpoint,
+                    _profiles.c.project_id,
+                ).where(_profiles.c.id == UUID(profile_id))
             )
         ).one()
+        targets = await _reach_targets(s, row.project_id)
     clock = SystemClock()
     if row.transport == "mcp_endpoint" and row.endpoint is not None:
         health = await McpEndpointTransport(row.endpoint, profile=row.name, clock=clock).health(
@@ -290,8 +338,17 @@ async def request_health_step(
             error=health.detail,
             status=health.status,
         ).model_dump(mode="json")
+    scope = {
+        "own_repos": list(targets.own_repos),
+        "foreign_repos": list(targets.foreign_repos),
+        "own_apps": list(targets.own_apps),
+        "foreign_apps": list(targets.foreign_apps),
+        "coolify_base_url": await _coolify_base_url(ctx)
+        if targets.own_apps or targets.foreign_apps
+        else None,
+    }
     try:
-        await DaemonTransport(ctx, clock).request_health(UUID(profile_id), UUID(request_id))
+        await DaemonTransport(ctx, clock).request_health(UUID(profile_id), UUID(request_id), scope)
     except api.AgentUnavailable as exc:
         return api.ProfileHealth(reachable=False, error=exc.reason, status="offline").model_dump(
             mode="json"
@@ -313,24 +370,188 @@ def _health_from_report(report: dict[str, Any] | None) -> dict[str, Any]:
         mcp_servers=list(report.get("mcp_servers") or []),
         error=report.get("error"),
         status="ok" if ok else "error",
+        profile_version=report.get("profile_version"),
+        mcp_server_details=report.get("mcp_server_details") or [],
+        github=report.get("github"),
+        coolify=report.get("coolify"),
     ).model_dump(mode="json")
 
 
-@DBOS.step()
-async def record_health_step(workspace_id: str, profile_id: str, health: dict[str, Any]) -> None:
-    async with tenant_session(_ctx(workspace_id)) as s:
-        await s.execute(
-            update(_profiles)
-            .where(_profiles.c.id == UUID(profile_id))
-            .values(health=health, health_checked_at=SystemClock().now())
+def _foreign(
+    verdict: ReachVerdict, targets: ReachTargets, names: dict[UUID, str]
+) -> list[ForeignReach]:
+    owners = dict(targets.owners)
+    found = []
+    for item in verdict.foreign:
+        kind, _, target = item.partition(":")
+        owner = owners.get(item)
+        found.append(
+            ForeignReach(
+                kind="coolify" if kind == "coolify" else "github",
+                target=target,
+                project_id=owner,
+                project_name=names.get(owner) if owner else None,
+            )
         )
-        mark_changed(s, api.LIVE_PROFILE, UUID(profile_id))
+    return found
+
+
+def _fix(extra: list[str], foreign: list[ForeignReach]) -> str:
+    parts = []
+    if extra:
+        parts.append(
+            f"Remove {', '.join(extra)} from the profile's MCP servers, or add them to the "
+            "project's tool allowlist."
+        )
+    for kind in ("github", "coolify"):
+        reached = [f for f in foreign if f.kind == kind]
+        if not reached:
+            continue
+        where = ", ".join(
+            f"{f.target} ({f.project_name})" if f.project_name else f.target for f in reached
+        )
+        scope = (
+            "a fine-grained token with only this project's repositories"
+            if kind == "github"
+            else "a token of this project's own Coolify team"
+        )
+        parts.append(f"The {kind} token reaches {where}: replace it with {scope}.")
+    return " ".join(parts)
+
+
+def _dedupe_key(profile_id: str, extra: list[str], foreign: list[ForeignReach]) -> str:
+    finding = json.dumps(
+        {"extra": sorted(extra), "foreign": sorted(f"{f.kind}:{f.target}" for f in foreign)},
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(finding.encode()).hexdigest()[:32]
+    return f"drift:{profile_id}:{digest}"
+
+
+@DBOS.step()
+async def record_health_step(
+    workspace_id: str, profile_id: str, health: dict[str, Any], evaluate: bool = False
+) -> None:
+    """Write the profile's health. For a runner's report (`evaluate`), judge it first:
+    drift from the project's allowlist and each token's reach (P2-10, SAF-2, SAF-3) set
+    `degraded` or `warning`, and a server outside the allowlist or a token reaching another
+    project queues one `drift` review item (its dedupe key hashes the finding, so the same
+    report next time queues nothing)."""
+    pid = UUID(profile_id)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        row = (
+            await s.execute(
+                select(_profiles.c.name, _profiles.c.project_id).where(_profiles.c.id == pid)
+            )
+        ).one()
+        checked = api.ProfileHealth.model_validate(health)
+        values: dict[str, Any] = {"health_checked_at": SystemClock().now()}
+        if evaluate and checked.status == "ok":
+            checked = await _judged(s, row.project_id, checked)
+            if checked.profile_version:
+                values["profile_version"] = checked.profile_version
+            if checked.extra or checked.foreign:
+                payload = DriftPayload(
+                    profile_id=pid,
+                    profile=row.name,
+                    extra=checked.extra,
+                    foreign=checked.foreign,
+                    fix=_fix(checked.extra, checked.foreign),
+                )
+                await tasks.add_review_item(
+                    DRIFT.kind,
+                    target=tasks.TargetRef(type="agent_profile", id=pid),
+                    project_id=row.project_id,
+                    payload=payload.model_dump(mode="json"),
+                    dedupe_key=_dedupe_key(profile_id, checked.extra, checked.foreign),
+                    session=s,
+                )
+        values["health"] = checked.model_dump(mode="json")
+        await s.execute(update(_profiles).where(_profiles.c.id == pid).values(**values))
+        mark_changed(s, api.LIVE_PROFILE, pid)
+
+
+async def _judged(s: Any, project_id: UUID | None, checked: api.ProfileHealth) -> api.ProfileHealth:
+    """The report with its drift, foreign reach and status filled in."""
+    reported = [d.name for d in checked.mcp_server_details] or checked.mcp_servers
+    drift = (
+        allowlist_drift(reported, await projects.tool_allowlist(s, project_id))
+        if project_id is not None
+        else Drift(frozenset(), frozenset())
+    )
+    verdict = reach_verdict(checked.github, checked.coolify)
+    targets = await _reach_targets(s, project_id)
+    names = await projects.project_names(s, [p for _, p in targets.owners])
+    return checked.model_copy(
+        update={
+            "status": profile_health(checked.reachable, checked.authenticated, drift, verdict),
+            "extra": sorted(drift.extra),
+            "missing": sorted(drift.missing),
+            "foreign": _foreign(verdict, targets, names),
+            "warnings": list(verdict.reasons),
+        }
+    )
 
 
 @DBOS.workflow(name="check_profile_health")
 async def check_profile_health(workspace_id: str, profile_id: str, request_id: str) -> None:
     health = await request_health_step(workspace_id, profile_id, request_id)
+    evaluate = health is None
     if health is None:
         report = await DBOS.recv_async(topic=api.HEALTH_TOPIC, timeout_seconds=HEALTH_TIMEOUT_S)
         health = _health_from_report(report)
-    await record_health_step(workspace_id, profile_id, health)
+        evaluate = report is not None
+    await record_health_step(workspace_id, profile_id, health, evaluate)
+
+
+# --- profile_health_sweep ---------------------------------------------------------------------
+
+
+@DBOS.step()
+async def list_profiles_step(workspace_id: str) -> list[str]:
+    """The ids of the workspace's live, unpaused profiles."""
+    async with tenant_session(_ctx(workspace_id)) as s:
+        ids: list[UUID] = list(
+            await s.scalars(
+                select(_profiles.c.id).where(
+                    _profiles.c.deleted_at.is_(None), _profiles.c.status != "paused"
+                )
+            )
+        )
+    return [str(profile_id) for profile_id in ids]
+
+
+@DBOS.workflow(name="profile_health_sweep")
+async def profile_health_sweep(scheduled_at: datetime, context: Any) -> int:
+    """Scheduled every 15 minutes (plan default): one `check_profile_health` per profile,
+    with a request id per (profile, tick), so a replayed tick starts none twice."""
+    started = 0
+    found = [
+        (workspace_id, profile_id)
+        for workspace_id in await list_workspaces_step()
+        for profile_id in await list_profiles_step(workspace_id)
+    ]
+    for workspace_id, profile_id in found:
+        request_id = uuid5(UUID(profile_id), scheduled_at.isoformat())
+        with (
+            SetWorkflowID(api.health_workflow_id(request_id)),
+            SetEnqueueOptions(queue_partition_key=f"profile:{profile_id}"),
+        ):
+            await DBOS.enqueue_workflow_async(
+                RUNS_QUEUE, check_profile_health, workspace_id, profile_id, str(request_id)
+            )
+        started += 1
+    return started
+
+
+def schedules() -> list[Any]:
+    """This module's DBOS schedules, applied by the worker after launch (the runner sweep
+    has its own registration in `worker.py`)."""
+    return [
+        {
+            "schedule_name": PROFILE_HEALTH_SCHEDULE_NAME,
+            "workflow_fn": profile_health_sweep,
+            "schedule": PROFILE_HEALTH_SCHEDULE,
+            "queue_name": RUNNER_SWEEP_QUEUE,
+        }
+    ]

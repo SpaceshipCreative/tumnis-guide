@@ -8,6 +8,7 @@ state_dir = "/var/lib/tumnis-daemon"
 hermes_bin = "hermes"
 profiles = ["tumnis-master", "acme-site"]
 max_concurrent_runs = 2
+hermes_home = "/home/tumnis-agent/.hermes"  # default: ~/.hermes of the daemon's user
 ```
 """
 
@@ -26,6 +27,8 @@ class DaemonConfig:
     hermes_bin: str = "hermes"
     profiles: tuple[str, ...] = field(default_factory=tuple)
     max_concurrent_runs: int = 2  # plan default
+    # Hermes's home; a profile lives in <hermes_home>/profiles/<name> (P2-10's probes)
+    hermes_home: Path = field(default_factory=lambda: Path.home() / ".hermes")
 
     def read_token(self) -> str:
         return self.token_file.read_text(encoding="utf-8").strip()
@@ -41,4 +44,5 @@ def load_config(path: Path) -> DaemonConfig:
         hermes_bin=str(data.get("hermes_bin", "hermes")),
         profiles=tuple(str(p) for p in data.get("profiles", ())),
         max_concurrent_runs=int(data.get("max_concurrent_runs", 2)),
+        hermes_home=Path(data.get("hermes_home", Path.home() / ".hermes")),
     )
