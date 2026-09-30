@@ -1,14 +1,22 @@
 // Typed routes (P0-22, UX 11): search params and path params can never be invalid.
 // A bad value falls back to its default; a bad path lands somewhere real.
 import { waitFor } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { expect, test } from "vitest";
 
+import { makeProject } from "../test/factories";
 import { reviewKinds } from "../test/msw/handlers";
+import { ProjectFake } from "../test/msw/project";
 import { server } from "../test/msw/server";
+import { account } from "../test/msw/settings";
 import { renderRoute } from "../test/render";
 
 test("[P0-22][UX 11] T-P0-22-01 invalid project search params fall back", async () => {
   const projectId = crypto.randomUUID();
+  // The project page's own reads (issue #76: every request has a handler).
+  server.use(
+    ...new ProjectFake({ project: makeProject({ id: projectId }) }).handlers,
+  );
   const { router } = await renderRoute(
     `/projects/${projectId}?view=bogus&task=nope&filter=7`,
   );
@@ -31,6 +39,8 @@ test("[P0-22][UX 11] T-P0-22-02 non-uuid project id lands on the dashboard", asy
 });
 
 test("[P0-22][UX 11] T-P0-22-03 unknown settings section lands on account", async () => {
+  // The account section's read (issue #76: every request has a handler).
+  server.use(http.get("/v1/auth/account", () => HttpResponse.json(account())));
   const { router } = await renderRoute("/settings/nope");
 
   await waitFor(() => {

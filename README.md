@@ -30,7 +30,7 @@ make down   # stop it and delete its volumes
 
 Every process refuses to start (exit 78) on a configuration that would put a preview near production: `DEPLOYMENT_ENV=preview` needs `TUMNIS_ADAPTERS=fake` and no Jev key, and every process checks the database's `deployment_marker` against `DEPLOYMENT_ENV`.
 
-The runner daemon installs separately on the agent server; see [daemon/README.md](daemon/README.md).
+The runner daemon installs separately on the agent server; see [daemon/README.md](daemon/README.md). Give each client project's agent profile its own credentials: a fine-grained GitHub token limited to that project's repos, and an API token from that project's own Coolify team. The profile health check (every 15 minutes, and on demand in Settings > Agents) marks a profile degraded when a token reaches another project's repo or app, or when it has an MCP server outside the project's tool allowlist.
 
 ## Operate
 

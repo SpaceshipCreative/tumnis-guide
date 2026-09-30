@@ -98,6 +98,14 @@ async def update_profile(
     return await api.update_profile(session, id, body, now=_clock(request).now())
 
 
+@router.get("/agents/profiles/{id}/tools")
+@route_policy(RoutePolicy(auth="session"))
+async def get_profile_tools(id: UUID, ctx: Session, session: SessionDep) -> api.ProfileToolsOut:
+    """The profile's MCP servers from its last health check, read-only (FR-5.12): each
+    matched against its project's allowlist, and its GitHub and Coolify tokens' reach."""
+    return await api.profile_tools(session, id)
+
+
 @router.post("/agents/profiles/{id}/health-check", status_code=202)
 @route_policy(RoutePolicy(auth="session", idempotent=True))
 async def check_profile_health(
