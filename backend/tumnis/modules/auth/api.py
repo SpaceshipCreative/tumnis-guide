@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import zoneinfo
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
@@ -1351,6 +1351,21 @@ async def task_token_run(principal: Principal) -> UUID | None:
             )
         )
     return run_id
+
+
+async def task_token_runs(s: AsyncSession, token_ids: Collection[UUID]) -> dict[UUID, UUID]:
+    """The run each task token belonged to, by token id, revoked tokens included: a
+    comment keeps its author's token id after the run has ended (P2-08: the comment
+    follows its run's taint). Ids that are no task token of the workspace are left out."""
+    if not token_ids:
+        return {}
+    rows = await s.execute(
+        select(tokens.TASK_TOKENS.c.id, tokens.TASK_TOKENS.c.run_id).where(
+            # nosemgrep: tumnis-secret-eq  # a filter on the token rows' ids, not a secret
+            tokens.TASK_TOKENS.c.id.in_(sorted(token_ids, key=str))
+        )
+    )
+    return {row.id: row.run_id for row in rows}
 
 
 async def issue_device_token(ctx: WorkspaceContext, *, runner_id: UUID, now: datetime) -> str:

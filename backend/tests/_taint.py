@@ -75,7 +75,7 @@ class Runs:
     runner: FakeRunner | None = None
     made: list[uuid.UUID] = field(default_factory=list)
 
-    async def _setup(self) -> uuid.UUID:
+    async def setup(self) -> uuid.UUID:
         from tumnis.modules.agents import api as agents  # noqa: PLC0415
         from tumnis.modules.auth import api as auth  # noqa: PLC0415
 
@@ -102,7 +102,7 @@ class Runs:
         from tumnis.modules.agents.api import RunKind  # noqa: PLC0415
         from tumnis.modules.agents.packet_builder import build_packet  # noqa: PLC0415
 
-        profile_id = await self._setup()
+        profile_id = await self.setup()
         run_id = uuid.uuid4()
         packet = await build_packet(
             RunKind.TASK,
@@ -124,8 +124,8 @@ class Runs:
         from tumnis.wiring import load_mcp  # noqa: PLC0415
 
         load_mcp()  # the caller-facts resolvers register with the modules' mcp
-        await self._setup()
-        assert self.key_id is not None  # set by _setup
+        await self.setup()
+        assert self.key_id is not None  # set by setup
         clock = self.world.clock
         token = await auth.issue_task_token(
             self.world.workspace.ctx,
