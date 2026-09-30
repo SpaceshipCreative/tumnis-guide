@@ -253,6 +253,18 @@ async def purge_project(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+# --- Decision thresholds (P3-08) -------------------------------------------------------------
+
+
+async def change_threshold(ctx: Ctx) -> None:
+    """PUT /v1/decisions/thresholds/{point} with a reason: `threshold.changed`."""
+    response = await ctx.session_client.put(
+        "/v1/decisions/thresholds/project_match",
+        json={"threshold": {"min_confidence": 0.8}, "reason": "audit case"},
+    )
+    response.raise_for_status()
+
+
 AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("audit.exported", export_csv, "user"),
     AuditCase("dead_letter.retried", retry_dead_letter, "user"),
@@ -273,6 +285,7 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("runner.created", create_runner, "user"),
     AuditCase("runner.token_rotated", rotate_runner_token, "user"),
     AuditCase("data.purged", purge_project, "user"),
+    AuditCase("threshold.changed", change_threshold, "user"),
 )
 
 # action -> the work package that builds its operation and adds its case.

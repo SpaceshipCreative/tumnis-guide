@@ -579,6 +579,90 @@
         "title": "CalendarsIn",
         "type": "object"
       },
+      "CalibrationOut": {
+        "properties": {
+          "min_labeled": {
+            "title": "Min Labeled",
+            "type": "integer"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/CalibrationPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_version",
+          "min_labeled",
+          "points"
+        ],
+        "title": "CalibrationOut",
+        "type": "object"
+      },
+      "CalibrationPoint": {
+        "properties": {
+          "bar": {
+            "title": "Bar",
+            "type": "number"
+          },
+          "decision_point": {
+            "$ref": "#/components/schemas/DecisionPoint"
+          },
+          "evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/Evaluation"
+            },
+            "title": "Evaluations",
+            "type": "array"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "needs_recheck": {
+            "title": "Needs Recheck",
+            "type": "boolean"
+          },
+          "primitive": {
+            "enum": [
+              "choice",
+              "score",
+              "noul"
+            ],
+            "title": "Primitive",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "default",
+              "user"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "threshold": {
+            "$ref": "#/components/schemas/Threshold"
+          }
+        },
+        "required": [
+          "decision_point",
+          "model_version",
+          "threshold",
+          "source",
+          "needs_recheck",
+          "bar",
+          "primitive",
+          "evaluations"
+        ],
+        "title": "CalibrationPoint",
+        "type": "object"
+      },
       "Callback": {
         "additionalProperties": false,
         "description": "Where the agent calls back, and with what: the run's task token, valid until the\nrun ends (null when the packet is read outside a run, `get_task_packet`).",
@@ -1008,6 +1092,21 @@
         "title": "DecideIn",
         "type": "object"
       },
+      "DecisionPoint": {
+        "enum": [
+          "quick_add_label",
+          "project_match",
+          "actionability",
+          "duplicate",
+          "approval_need",
+          "blocking_impact",
+          "focus_on_task",
+          "nudge_warranted",
+          "estimate_plausibility"
+        ],
+        "title": "DecisionPoint",
+        "type": "string"
+      },
       "DefaultIn": {
         "properties": {
           "version": {
@@ -1252,6 +1351,75 @@
           "version"
         ],
         "title": "EstimateBody",
+        "type": "object"
+      },
+      "Evaluation": {
+        "description": "One point, provider and model: what the threshold in force did with its labeled\ndecisions. `metrics`, `explicit_metrics` and `sweep` stay empty under 100 labeled.",
+        "properties": {
+          "decision_point": {
+            "title": "Decision Point",
+            "type": "string"
+          },
+          "explicit_metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Metrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "labeled": {
+            "title": "Labeled",
+            "type": "integer"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Metrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "needed": {
+            "title": "Needed",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "sweep": {
+            "items": {
+              "$ref": "#/components/schemas/SweepRow"
+            },
+            "title": "Sweep",
+            "type": "array"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "decision_point",
+          "provider",
+          "model_version",
+          "labeled",
+          "needed",
+          "threshold",
+          "metrics",
+          "explicit_metrics",
+          "sweep"
+        ],
+        "title": "Evaluation",
         "type": "object"
       },
       "FolderIn": {
@@ -1917,6 +2085,46 @@
           "transport"
         ],
         "title": "McpServerInfo",
+        "type": "object"
+      },
+      "Metrics": {
+        "properties": {
+          "auto_precision": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Precision"
+          },
+          "auto_rate": {
+            "title": "Auto Rate",
+            "type": "number"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "overall_accuracy": {
+            "title": "Overall Accuracy",
+            "type": "number"
+          },
+          "review_rate": {
+            "title": "Review Rate",
+            "type": "number"
+          }
+        },
+        "required": [
+          "n",
+          "auto_rate",
+          "auto_precision",
+          "review_rate",
+          "overall_accuracy"
+        ],
+        "title": "Metrics",
         "type": "object"
       },
       "ModuleFlagIn": {
@@ -5100,6 +5308,51 @@
         "title": "StatusBody",
         "type": "object"
       },
+      "SweepRow": {
+        "properties": {
+          "auto_precision": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Precision"
+          },
+          "auto_rate": {
+            "title": "Auto Rate",
+            "type": "number"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "overall_accuracy": {
+            "title": "Overall Accuracy",
+            "type": "number"
+          },
+          "review_rate": {
+            "title": "Review Rate",
+            "type": "number"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "n",
+          "auto_rate",
+          "auto_precision",
+          "review_rate",
+          "overall_accuracy",
+          "threshold"
+        ],
+        "title": "SweepRow",
+        "type": "object"
+      },
       "TaskContextItemOut": {
         "description": "A task's link to outside content: the ContextItem and what it points at.",
         "properties": {
@@ -6304,6 +6557,157 @@
           "version"
         ],
         "title": "TextDocumentPatch",
+        "type": "object"
+      },
+      "Threshold": {
+        "properties": {
+          "fallback_margin": {
+            "default": 0.1,
+            "title": "Fallback Margin",
+            "type": "number"
+          },
+          "min_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Confidence"
+          },
+          "t_no": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "T No"
+          },
+          "t_yes": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "T Yes"
+          }
+        },
+        "title": "Threshold",
+        "type": "object"
+      },
+      "ThresholdEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "threshold": {
+            "$ref": "#/components/schemas/ThresholdIn"
+          }
+        },
+        "required": [
+          "threshold",
+          "reason"
+        ],
+        "title": "ThresholdEdit",
+        "type": "object"
+      },
+      "ThresholdIn": {
+        "additionalProperties": false,
+        "description": "A threshold a human sets: `min_confidence` for a Choice or Score point, the yes and\nno bands for a Noul point (no yes band for `approval_need`). The fallback margin is\nkept as it is.",
+        "properties": {
+          "min_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Confidence"
+          },
+          "t_no": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "T No"
+          },
+          "t_yes": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "T Yes"
+          }
+        },
+        "title": "ThresholdIn",
+        "type": "object"
+      },
+      "ThresholdOut": {
+        "properties": {
+          "bar": {
+            "title": "Bar",
+            "type": "number"
+          },
+          "decision_point": {
+            "$ref": "#/components/schemas/DecisionPoint"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "needs_recheck": {
+            "title": "Needs Recheck",
+            "type": "boolean"
+          },
+          "source": {
+            "enum": [
+              "default",
+              "user"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "threshold": {
+            "$ref": "#/components/schemas/Threshold"
+          }
+        },
+        "required": [
+          "decision_point",
+          "model_version",
+          "threshold",
+          "source",
+          "needs_recheck",
+          "bar"
+        ],
+        "title": "ThresholdOut",
         "type": "object"
       },
       "TokenReach": {
@@ -10016,6 +10420,230 @@
         "summary": "Post Retry",
         "tags": [
           "dead_letters"
+        ]
+      }
+    },
+    "/v1/decisions/calibration": {
+      "get": {
+        "description": "Per decision point: the threshold in force, the recheck flag, and accuracy once 100\nlabeled outcomes exist (until then, how many more are needed).",
+        "operationId": "decisions_get_calibration",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalibrationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Calibration",
+        "tags": [
+          "decisions"
+        ]
+      }
+    },
+    "/v1/decisions/thresholds/{point}": {
+      "put": {
+        "description": "Set the point's threshold with a reason; it clears the recheck flag.",
+        "operationId": "decisions_edit_threshold",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "point",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DecisionPoint"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThresholdEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThresholdOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Edit Threshold",
+        "tags": [
+          "decisions"
         ]
       }
     },

@@ -114,6 +114,12 @@ import type {
   DeadLettersPostRetryData,
   DeadLettersPostRetryErrors,
   DeadLettersPostRetryResponses,
+  DecisionsEditThresholdData,
+  DecisionsEditThresholdErrors,
+  DecisionsEditThresholdResponses,
+  DecisionsGetCalibrationData,
+  DecisionsGetCalibrationErrors,
+  DecisionsGetCalibrationResponses,
   GithubWebhookData,
   GithubWebhookErrors,
   GithubWebhookResponses,
@@ -334,6 +340,8 @@ import {
   zDeadLettersGetDeadLettersResponse,
   zDeadLettersPostDiscardResponse,
   zDeadLettersPostRetryResponse,
+  zDecisionsEditThresholdResponse,
+  zDecisionsGetCalibrationResponse,
   zGithubWebhookResponse,
   zHealthLiveResponse,
   zKnowledgeCreateLocationResponse,
@@ -1000,6 +1008,57 @@ export const deadLettersPostRetry = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zDeadLettersPostRetryResponse.parseAsync(data),
     url: "/v1/dead-letters/{dead_letter_id}/retry",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Calibration
+ *
+ * Per decision point: the threshold in force, the recheck flag, and accuracy once 100
+ * labeled outcomes exist (until then, how many more are needed).
+ */
+export const decisionsGetCalibration = <ThrowOnError extends boolean = false>(
+  options?: Options<DecisionsGetCalibrationData, ThrowOnError>,
+): RequestResult<
+  DecisionsGetCalibrationResponses,
+  DecisionsGetCalibrationErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    DecisionsGetCalibrationResponses,
+    DecisionsGetCalibrationErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zDecisionsGetCalibrationResponse.parseAsync(data),
+    url: "/v1/decisions/calibration",
+    ...options,
+  });
+
+/**
+ * Edit Threshold
+ *
+ * Set the point's threshold with a reason; it clears the recheck flag.
+ */
+export const decisionsEditThreshold = <ThrowOnError extends boolean = false>(
+  options: Options<DecisionsEditThresholdData, ThrowOnError>,
+): RequestResult<
+  DecisionsEditThresholdResponses,
+  DecisionsEditThresholdErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    DecisionsEditThresholdResponses,
+    DecisionsEditThresholdErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zDecisionsEditThresholdResponse.parseAsync(data),
+    url: "/v1/decisions/thresholds/{point}",
     ...options,
     headers: {
       "Content-Type": "application/json",

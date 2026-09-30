@@ -9,6 +9,7 @@ import {
   authListSessionsOptions,
   calendarListAccountsOptions,
   deadLettersGetDeadLettersOptions,
+  decisionsGetCalibrationOptions,
   knowledgeListLocationsOptions,
   settingsGetSectionOptions,
   settingsGetWorkingHoursOptions,
@@ -48,3 +49,5 @@ export const projectProfileQuery = (projectId: string) =>
 // Settings > Agents > a profile's tools (P2-10, FR-5.12): read-only.
 export const profileToolsQuery = (profileId: string) =>
   agentsGetProfileToolsOptions({ path: { id: profileId } });
+// Settings > Calibration (P3-08, FR-11.5): every decision point's threshold and evidence.
+export const calibrationQuery = () => decisionsGetCalibrationOptions();
