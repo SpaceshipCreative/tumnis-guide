@@ -1,0 +1,30 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/github.fetched.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "not_modified": {
+      "minimum": 0,
+      "title": "Not Modified",
+      "type": "integer"
+    },
+    "requests": {
+      "minimum": 0,
+      "title": "Requests",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "requests",
+    "not_modified"
+  ],
+  "title": "GitHubFetchedV1",
+  "type": "object"
+}
