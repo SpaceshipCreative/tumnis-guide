@@ -6,8 +6,10 @@ clock; `GET /v1/test/requests` lists the last write requests (P0-10); `POST
 the browser's installed clock, so the server must check it at the same instant)."""
 
 import asyncio
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Self
+from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from pydantic import AwareDatetime, BaseModel, model_validator
@@ -90,24 +92,53 @@ async def reset(
     settings = request.app.state.settings
     if settings.database_owner_url is None:
         raise HTTPException(status_code=500, detail="reset needs DATABASE_OWNER_URL")
-    # One reset at a time (issue #56): a reset whose caller gave up (A0.6's `load` set
-    # outlives its test) keeps seeding, and the next one's TRUNCATE would run under it.
-    async with _reset_lock(request.app):
-        await truncate_tables(settings.database_owner_url)
-        clock = request.app.state.clock
-        if isinstance(clock, OverridableClock):
-            clock.clear()  # a fresh stack reads the real time again
-        # A fresh stack: rate-limit buckets start full again (P0-13: every e2e test signs
-        # in from the same address, which the `login` bucket would otherwise throttle).
-        if isinstance(getattr(request.app.state, "rate_limiter", None), RateLimiter):
-            request.app.state.rate_limiter = RateLimiter(request.app.state.clock)
-        if writers_registered():  # from P0-17 on; before that the seed has nowhere to go
-            await load_seed(
-                SEED_PATHS[seed_set],
-                DatabaseSink(skip_missing=True),
-                clock=request.app.state.clock,
-            )
+    # Issue #56: the latest reset wins. A reset whose caller gave up keeps seeding (A0.6's
+    # `load` set outlives its test); the next reset's TRUNCATE ran under that seed, and
+    # waiting for it outlasts the next test. The newer reset supersedes it instead: the
+    # stale seed stops at its next record, and the lock keeps the two apart until then.
+    state = request.app.state
+    state.reset_generation = generation = getattr(state, "reset_generation", 0) + 1
+    try:
+        async with _reset_lock(request.app):
+            _refuse_if_superseded(state, generation)
+            await truncate_tables(settings.database_owner_url)
+            clock = state.clock
+            if isinstance(clock, OverridableClock):
+                clock.clear()  # a fresh stack reads the real time again
+            # A fresh stack: rate-limit buckets start full again (P0-13: every e2e test
+            # signs in from the same address, which `login` would otherwise throttle).
+            if isinstance(getattr(state, "rate_limiter", None), RateLimiter):
+                state.rate_limiter = RateLimiter(state.clock)
+            if writers_registered():  # from P0-17 on; before that the seed has nowhere to go
+                await load_seed(
+                    SEED_PATHS[seed_set],
+                    _ResetSink(lambda: _refuse_if_superseded(state, generation)),
+                    clock=state.clock,
+                )
+    except ResetSupersededError:
+        raise HTTPException(status_code=409, detail="superseded by a later reset") from None
     return Response(status_code=204)
+
+
+class ResetSupersededError(Exception):
+    """A later `POST /v1/test/reset` arrived; this one stops where it is."""
+
+
+def _refuse_if_superseded(state: Any, generation: int) -> None:
+    if state.reset_generation != generation:
+        raise ResetSupersededError
+
+
+class _ResetSink(DatabaseSink):
+    """The reset's seed sink: checks before each record that no later reset has begun."""
+
+    def __init__(self, check: Callable[[], None]) -> None:
+        super().__init__(skip_missing=True)
+        self._check = check
+
+    async def _write(self, kind: str, *args: Any) -> UUID:
+        self._check()
+        return await super()._write(kind, *args)
 
 
 def _reset_lock(app: FastAPI) -> asyncio.Lock:
