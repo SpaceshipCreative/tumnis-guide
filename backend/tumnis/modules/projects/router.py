@@ -68,7 +68,7 @@ async def list_projects(
 @router.post("", status_code=201)
 @route_policy(WRITE)
 async def create_project(
-    body: api.ProjectCreate, request: Request, session: SessionDep
+    body: api.ProjectCreateIn, request: Request, session: SessionDep
 ) -> api.ProjectOut:
     return await api.create_project(
         session, principal_of(request).actor, body, now=_clock(request).now()
