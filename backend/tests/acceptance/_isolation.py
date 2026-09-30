@@ -114,11 +114,12 @@ def route_inventory(app: Any) -> list[RouteCase]:
 
 
 def modules_with_routes() -> set[str]:
-    """Modules whose router.py declares at least one route."""
+    """Modules whose router.py declares at least one route the sweep can aim at (a module
+    whose only routes take no caller identity, like GitHub's signed webhook, has none)."""
     present = set()
     for name in MODULES:
         router = getattr(importlib.import_module(f"tumnis.modules.{name}.router"), "router", None)
-        if router is not None and getattr(router, "routes", None):
+        if router is not None and any(_auth(r) != "none" for r in getattr(router, "routes", ())):
             present.add(name)
     return present
 

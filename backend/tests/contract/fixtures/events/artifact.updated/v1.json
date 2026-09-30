@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "artifact_id": "01a0ec82-72d7-7f23-8be6-203712701f31",
+  "kind": "pull_request",
+  "url": "https://github.com/acme-example/site/pull/42",
+  "state": "open",
+  "checks": {
+    "pr_status": {
+      "repo": "acme-example/site",
+      "number": 42,
+      "title": "Add the booking form",
+      "draft": false,
+      "head_sha": "db4b6fe8e59088a31b8423d0d2a681fdb3240092",
+      "checks": "red",
+      "review": "review_required"
+    }
+  }
+}
