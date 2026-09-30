@@ -50,6 +50,24 @@ _SERVER_NAME: Final = re.compile(r"[^A-Za-z0-9_.-]")
 _REPO: Final = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}")
 _APP: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 _ENV_LINE: Final = re.compile(r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$")
+# python-dotenv's grammar for a quoted value and the comment that may follow it
+# (src/dotenv/parser.py): single quotes decode only \\ and \', double quotes also
+# \" and \a \b \f \n \r \t \v.
+_ENV_QUOTED: Final = re.compile(r"""(?:'((?:\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)")\s*(?:#.*)?""")
+_SINGLE_ESCAPES: Final = re.compile(r"\\[\\']")
+_DOUBLE_ESCAPES: Final = re.compile(r"""\\[\\'"abfnrtv]""")
+_DOUBLE_ESCAPED: Final = {
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+    "a": "\a",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "v": "\v",
+}
 
 
 def profile_dir(hermes_home: Path, profile: str) -> Path:
@@ -104,9 +122,25 @@ def mcp_servers(profile: Path) -> list[McpServerInfo]:
     return sorted(found.values(), key=lambda s: s.name)[:MAX_SERVERS]
 
 
+def _env_value(raw: str) -> str | None:
+    """One `.env` value as python-dotenv reads it (Hermes loads the profile's `.env` with
+    python-dotenv's parser): a quoted value ends at its closing quote, with its escapes
+    decoded and an optional `# comment` after it; an unquoted value ends before
+    whitespace + `#`. None for a quoted value that does not close on its line (dotenv
+    skips it; a token is never multi-line)."""
+    quoted = _ENV_QUOTED.fullmatch(raw)
+    if quoted is not None:
+        if raw[0] == "'":
+            return _SINGLE_ESCAPES.sub(lambda m: m.group(0)[1], quoted.group(1))
+        return _DOUBLE_ESCAPES.sub(lambda m: _DOUBLE_ESCAPED[m.group(0)[1]], quoted.group(2))
+    if raw[:1] in {"'", '"'}:
+        return None
+    return re.sub(r"\s+#.*", "", raw).rstrip()
+
+
 def read_env(profile: Path) -> dict[str, str]:
-    """The profile's `.env` as a mapping (`KEY=value`, optionally quoted or exported);
-    empty when there is none."""
+    """The profile's `.env` as a mapping (`KEY=value`, optionally quoted or exported, as
+    Hermes reads it: see `_env_value`); empty when there is none."""
     try:
         text = (profile / ".env").read_text(encoding="utf-8")
     except (OSError, ValueError):  # missing, unreadable, or not UTF-8
@@ -116,12 +150,9 @@ def read_env(profile: Path) -> dict[str, str]:
         found = _ENV_LINE.match(line.strip())
         if found is None:
             continue
-        value = found.group(2).strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":  # noqa: PLR2004
-            value = value[1:-1]
-        elif " #" in value:
-            value = value.split(" #", 1)[0].rstrip()
-        env[found.group(1)] = value
+        value = _env_value(found.group(2).strip())
+        if value is not None:
+            env[found.group(1)] = value
     return env
 
 
@@ -226,10 +257,16 @@ async def probe_github(
 
 
 def _origin(url: str) -> tuple[str, str, int | None] | None:
+    """(scheme, host, port) of an http(s) URL whose host DNS and httpx can both take;
+    None otherwise (an empty or over-long label, or a character IDNA refuses, would
+    otherwise raise out of the lookup or the request)."""
     try:
         parts = urlsplit(url.strip())
         port = parts.port
-    except ValueError:
+        if parts.hostname:
+            parts.hostname.encode("idna")  # what getaddrinfo does with it
+            httpx.URL(url.strip())  # httpx checks the host against IDNA 2008
+    except (ValueError, httpx.InvalidURL):  # UnicodeError is a ValueError
         return None
     if parts.scheme not in {"https", "http"} or not parts.hostname:
         return None
@@ -240,12 +277,13 @@ IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
 async def _resolve(host: str) -> list[IPAddress]:
-    """Every address the host resolves to; [] when it does not resolve."""
+    """Every address the host resolves to; [] when it does not resolve, or when any answer
+    is not an IP address (so it cannot pass as private)."""
     try:
         infos = await asyncio.get_running_loop().getaddrinfo(host, None)
-    except OSError:
+        found = [ipaddress.ip_address(str(info[4][0]).split("%", 1)[0]) for info in infos]
+    except (OSError, ValueError):  # ValueError: a host IDNA refuses, or not an address
         return []
-    found = [ipaddress.ip_address(str(info[4][0]).split("%", 1)[0]) for info in infos]
     return list(dict.fromkeys(found))
 
 
@@ -374,14 +412,16 @@ async def token_reach(
             for task in late:
                 task.cancel()
             await asyncio.gather(*late, return_exceptions=True)
-            # A kind that finished keeps its answer; only one still running times out.
-            reach = {
-                kind: TokenReach(
-                    token_present=bool(tokens[kind]),
-                    errors=[f"{kind}: probes did not finish in {deadline_s:g} s"],
-                )
-                if task in late
-                else task.result()
-                for kind, task in running.items()
-            }
+            # A kind that finished keeps its answer; only one still running times out, and
+            # only one whose probe raised reports "check failed" (never the exception's
+            # text, which could carry the request).
+            for kind, task in running.items():
+                if task in late:
+                    error = f"{kind}: probes did not finish in {deadline_s:g} s"
+                elif task.exception() is not None:
+                    error = f"{kind}: check failed"
+                else:
+                    reach[kind] = task.result()
+                    continue
+                reach[kind] = TokenReach(token_present=bool(tokens[kind]), errors=[error])
     return reach.get("github"), reach.get("coolify")

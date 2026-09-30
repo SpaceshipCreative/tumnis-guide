@@ -549,3 +549,154 @@ async def test_cleartext_coolify_is_pinned_to_the_checked_address(
     assert pinned.calls.last.request.headers["Host"] == "coolify.lan:8000"
     assert coolify is not None
     assert coolify.own_reachable == {"app-own": True}
+
+
+@pytest.mark.req("SAF-3")
+@pytest.mark.wp("P2-10")
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        pytest.param("http://coolify..lan", id="http-empty-label"),
+        pytest.param(f"http://{'a' * 64}.lan", id="http-label-too-long"),
+        pytest.param("https://coolify☃.lan", id="https-not-idna"),
+    ],
+)
+async def test_unusable_coolify_host_degrades_the_report(profile_dir: Path, base_url: str) -> None:
+    """A `COOLIFY_BASE_URL` whose host cannot be encoded for DNS (an empty or over-long
+    label, a character IDNA refuses) reports the URL as not usable instead of raising out
+    of the health report, and no request is sent (review follow-up to #82)."""
+    from tumnis_daemon.health import token_reach  # noqa: PLC0415
+
+    env = profile_dir / ".env"
+    env.write_text(
+        env.read_text(encoding="utf-8") + f"COOLIFY_BASE_URL={base_url}\n", encoding="utf-8"
+    )
+    with respx.mock(assert_all_called=False) as fake:
+        route = fake.route().respond(200, json={})
+        _, coolify = await token_reach(
+            profile_dir,
+            own_repos=[],
+            foreign_repos=[],
+            own_apps=["app-own"],
+            foreign_apps=[],
+            coolify_base_url=None,
+        )
+
+    assert not route.called
+    assert coolify is not None
+    assert coolify.token_present is True
+    assert coolify.own_reachable == {}
+    assert coolify.errors == ["coolify: COOLIFY_BASE_URL is not usable"]
+
+
+@pytest.mark.req("SAF-3")
+@pytest.mark.wp("P2-10")
+async def test_resolver_answer_that_is_not_an_address_refuses_cleartext(
+    profile_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lookup answer that `ipaddress` cannot parse (a socket family Python does not
+    know comes back as `(family, bytes)`) counts as not resolved: plain http is refused
+    and nothing is sent, instead of the ValueError stopping the health report (review
+    follow-up to #82)."""
+    import socket  # noqa: PLC0415
+
+    from tumnis_daemon.health import token_reach  # noqa: PLC0415
+
+    async def getaddrinfo(*_args: Any, **_kwargs: Any) -> list[Any]:
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", 0)),
+            (17, socket.SOCK_STREAM, 0, "", (17, b"\x00\x01")),
+        ]
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", getaddrinfo)
+    env = profile_dir / ".env"
+    env.write_text(env.read_text() + "COOLIFY_BASE_URL=http://coolify.lan:8000\n")
+    with respx.mock(assert_all_called=False) as fake:
+        route = fake.route().respond(200, json={})
+        _, coolify = await token_reach(
+            profile_dir,
+            own_repos=[],
+            foreign_repos=[],
+            own_apps=["app-own"],
+            foreign_apps=[],
+            coolify_base_url=None,
+        )
+
+    assert not route.called
+    assert coolify is not None
+    assert coolify.own_reachable == {}
+    assert coolify.errors == ["coolify: COOLIFY_BASE_URL must use https:// outside the LAN"]
+
+
+@pytest.mark.wp("P2-10")
+def test_env_values_read_as_hermes_reads_them(profile_dir: Path) -> None:
+    """The profile's `.env` reads as Hermes reads it (python-dotenv's line grammar): a
+    quoted value followed by a comment loses its quotes and the comment, so the probe
+    sends the token Hermes uses, not `Bearer "..."` (review follow-up to #82)."""
+    from tumnis_daemon.health import read_env  # noqa: PLC0415
+
+    (profile_dir / ".env").write_text(
+        "\n".join(
+            [
+                'GITHUB_TOKEN="ghp-double" # rotated in March',
+                "COOLIFY_TOKEN='3|single'   # the team token",
+                "COOLIFY_BASE_URL=https://coolify.example.org\t# tab before the comment",
+                'export ESCAPED="a\\"b\\\\c"',
+                "SINGLE_ESCAPED='it\\'s'",
+                "HASH_INSIDE=abc#def",
+                'QUOTED_HASH="abc # def"',
+                "EMPTY=",
+                'UNTERMINATED="no end',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert read_env(profile_dir) == {
+        "GITHUB_TOKEN": "ghp-double",
+        "COOLIFY_TOKEN": "3|single",
+        "COOLIFY_BASE_URL": "https://coolify.example.org",
+        "ESCAPED": 'a"b\\c',
+        "SINGLE_ESCAPED": "it's",
+        "HASH_INSIDE": "abc#def",
+        "QUOTED_HASH": "abc # def",
+        "EMPTY": "",
+    }
+
+
+@pytest.mark.req("SAF-3")
+@pytest.mark.wp("P2-10")
+async def test_a_probe_that_raises_degrades_only_its_own_kind(profile_dir: Path) -> None:
+    """An exception from a probe that is not an httpx.HTTPError (here from the transport,
+    as an IDNA failure inside the connection layer would be) marks only that kind's reach
+    as "check failed", without the exception's text; the other kind keeps its answer and
+    the health report still goes out (review follow-up to #82)."""
+    from tumnis_daemon.health import token_reach  # noqa: PLC0415
+
+    env = profile_dir / ".env"
+    env.write_text(env.read_text() + f"COOLIFY_BASE_URL={COOLIFY}\n")
+    with respx.mock(assert_all_called=False) as fake:
+        fake.get(f"{GITHUB}/repos/acme/site").respond(200, json=_repo(True))
+        fake.get(f"{COOLIFY}/api/v1/applications/app-own").mock(
+            side_effect=UnicodeError("3|fake-coolify-token-for-tests")
+        )
+        other = fake.route().respond(200, json={})
+        github, coolify = await token_reach(
+            profile_dir,
+            own_repos=["acme/site"],
+            foreign_repos=[],
+            own_apps=["app-own"],
+            foreign_apps=[],
+            coolify_base_url=COOLIFY,
+        )
+
+    assert not other.called  # decision 18: nothing went anywhere else
+    assert github is not None
+    assert github.own_reachable == {"acme/site": True}
+    assert github.errors == []
+    assert coolify is not None
+    assert coolify.token_present is True
+    assert coolify.own_reachable == {}
+    assert coolify.foreign_reachable == []
+    assert coolify.errors == ["coolify: check failed"]
