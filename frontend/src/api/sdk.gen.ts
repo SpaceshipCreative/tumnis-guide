@@ -94,6 +94,12 @@ import type {
   KnowledgeGetBriefData,
   KnowledgeGetBriefErrors,
   KnowledgeGetBriefResponses,
+  KnowledgeGetDocumentData,
+  KnowledgeGetDocumentErrors,
+  KnowledgeGetDocumentResponses,
+  KnowledgeGetFileData,
+  KnowledgeGetFileErrors,
+  KnowledgeGetFileResponses,
   KnowledgeListLocationsData,
   KnowledgeListLocationsErrors,
   KnowledgeListLocationsResponses,
@@ -109,6 +115,9 @@ import type {
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentErrors,
   KnowledgeUpdateDocumentResponses,
+  KnowledgeUploadDocumentData,
+  KnowledgeUploadDocumentErrors,
+  KnowledgeUploadDocumentResponses,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectErrors,
   ProjectsArchiveProjectResponses,
@@ -248,11 +257,14 @@ import {
   zHealthLiveResponse,
   zKnowledgeCreateLocationResponse,
   zKnowledgeGetBriefResponse,
+  zKnowledgeGetDocumentResponse,
+  zKnowledgeGetFileResponse,
   zKnowledgeListLocationsResponse,
   zKnowledgeSetDefaultLocationResponse,
   zKnowledgeSetProjectFolderResponse,
   zKnowledgeTestLocationResponse,
   zKnowledgeUpdateDocumentResponse,
+  zKnowledgeUploadDocumentResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
   zProjectsGetProjectResponse,
@@ -752,6 +764,31 @@ export const deadLettersPostRetry = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get File
+ *
+ * The document's original file, always as a download (`attachment`, octet-stream,
+ * `nosniff`); 409 `not_available` until the document is `ready`. `version` is a version
+ * number.
+ */
+export const knowledgeGetFile = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeGetFileData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetFileResponses,
+  KnowledgeGetFileErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeGetFileResponses,
+    KnowledgeGetFileErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeGetFileResponse.parseAsync(data),
+    url: "/v1/files/{document_id}",
+    ...options,
+  });
+
+/**
  * List Keys
  *
  * The workspace's API keys: name, prefix, scopes, projects, created, expires, last
@@ -835,6 +872,54 @@ export const authRotateKey = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Upload Document
+ *
+ * Upload a file (multipart: `file`, and optionally `project_id` and `title`). The
+ * answer is 202 with the document in `pending_scan`: it is scanned, its type read from its
+ * content and its text extracted by the extract worker. 413 `too_large` past 50 MiB.
+ */
+export const knowledgeUploadDocument = <ThrowOnError extends boolean = false>(
+  options?: Options<KnowledgeUploadDocumentData, ThrowOnError>,
+): RequestResult<
+  KnowledgeUploadDocumentResponses,
+  KnowledgeUploadDocumentErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).post<
+    KnowledgeUploadDocumentResponses,
+    KnowledgeUploadDocumentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeUploadDocumentResponse.parseAsync(data),
+    url: "/v1/knowledge/documents",
+    ...options,
+  });
+
+/**
+ * Get Document
+ *
+ * A document's state (status, reason, kind, path): what the upload flow polls.
+ */
+export const knowledgeGetDocument = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeGetDocumentData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetDocumentResponses,
+  KnowledgeGetDocumentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeGetDocumentResponses,
+    KnowledgeGetDocumentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeGetDocumentResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}",
+    ...options,
   });
 
 /**

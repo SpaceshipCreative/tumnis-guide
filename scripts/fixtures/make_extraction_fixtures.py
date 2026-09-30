@@ -1,4 +1,4 @@
-"""Generates backend/fixtures/extraction/* (P1-16). Run with the scratch venv:
+"""Generates backend/fixtures/extraction/* (P1-16). Run with a scratch venv holding
 reportlab, python-docx, openpyxl, python-pptx, pillow. Deterministic where the libraries
 allow (fixed creation dates)."""
 

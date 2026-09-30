@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 SYNC_QUEUE = "sync"  # connector syncs and OAuth exchanges (A9; P1-09)
 SYNC_WORKER_CONCURRENCY = 4  # plan default
+EXTRACT_QUEUE = "extract"  # upload scanning and extraction (P1-16); only `worker-extract` listens
+MAIN_QUEUES = (events.EVENTS_QUEUE, workflows_ops.MAINTENANCE_QUEUE, SYNC_QUEUE)  # all but extract
 
 
 def register_queues() -> None:
@@ -34,6 +36,7 @@ def register_queues() -> None:
     )
     DBOS.register_queue(workflows_ops.MAINTENANCE_QUEUE, worker_concurrency=1)
     DBOS.register_queue(SYNC_QUEUE, worker_concurrency=SYNC_WORKER_CONCURRENCY)
+    DBOS.register_queue(EXTRACT_QUEUE, worker_concurrency=1)  # one heavy conversion at a time
 
 
 def register_schedules(settings: Settings) -> None:
@@ -118,6 +121,13 @@ def register_task_schedules() -> None:
     )
 
 
+def configure_extraction(settings: Settings) -> None:
+    """The extraction pipeline's folders, clamd address and SSRF policy (P1-16): only the
+    worker runs its steps."""
+    pipeline = importlib.import_module("tumnis.modules.knowledge.pipeline")
+    pipeline.configure(settings.knowledge, net=settings.net_policy())
+
+
 def dbos_config(settings: Settings) -> "DBOSConfig":
     return {"name": "tumnis", "system_database_url": settings.dbos_system_url}
 
@@ -128,7 +138,11 @@ def main(
     """Launch DBOS, register queues and schedules, run the outbox relay beside it, and block
     until SIGTERM or SIGINT. A kill point (TUMNIS_KILLPOINT, tests only) is armed first, and
     refused in production before anything connects. `app_version` pins DBOS's application
-    version (the kill-and-resume harness runs two workers that must share it)."""
+    version (the kill-and-resume harness runs two workers that must share it).
+
+    Without `queues` the worker listens to every queue but `extract` and also runs the
+    relay and the schedules. With `queues` (`tumnis worker --queues extract`) it dequeues
+    only those, runs neither, and names its DBOS executor `worker-<queues>`."""
     faults.arm(settings.deployment_env)
 
     from dbos import DBOS  # noqa: PLC0415
@@ -140,38 +154,45 @@ def main(
     install_master_keys(settings)
     modules.configure(settings)
     configure_generation(settings)
+    configure_extraction(settings)
     cache.configure_backend(
         cache.InProcessCache(SystemClock(), publish=cache.pg_publisher(db.direct_engine))
     )
     config = dbos_config(settings)
     if app_version is not None:
         config["application_version"] = app_version
+    if queues:
+        config["executor_id"] = "worker-" + "-".join(queues)
     DBOS(config=config)
+    DBOS.listen_queues(list(queues) if queues else list(MAIN_QUEUES))
     DBOS.launch()
     register_queues()
-    register_schedules(settings)
-    register_audit_schedule()
-    register_module_schedules()
-    register_task_schedules()
+    if not queues:
+        register_schedules(settings)
+        register_audit_schedule()
+        register_module_schedules()
+        register_task_schedules()
     try:
-        asyncio.run(_serve(settings))
+        asyncio.run(_serve(settings, relay=not queues))
     finally:
         DBOS.destroy()
 
 
-async def _serve(settings: Settings) -> None:
-    """The relay and the cache invalidation listener (P0-08) on this thread's event loop
-    (DBOS runs workflows on its own) until a signal; then both are cancelled, not waited
-    for (either may sit in a LISTEN wait)."""
+async def _serve(settings: Settings, *, relay: bool = True) -> None:
+    """The relay (unless `relay` is off: a queue-limited worker) and the cache invalidation
+    listener (P0-08) on this thread's event loop (DBOS runs workflows on its own) until a
+    signal; then both are cancelled, not waited for (either may sit in a LISTEN wait)."""
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(signum, stop.set)
-    relay = asyncio.create_task(events.relay_forever(stop), name="outbox-relay")
+    relayed = (
+        [asyncio.create_task(events.relay_forever(stop), name="outbox-relay")] if relay else []
+    )
     listener = cache.CacheInvalidationListener(settings.database_direct_url)
     invalidations = asyncio.create_task(listener.run(stop), name="cache-invalidation")
     await stop.wait()
-    for task in (relay, invalidations):
+    for task in (*relayed, invalidations):
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task

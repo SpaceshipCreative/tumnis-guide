@@ -188,7 +188,7 @@ class FakeDocling:
         data = path.read_bytes()
         doc = self._stored.get(hashlib.sha256(data).hexdigest())
         if doc is None:
-            text = data.decode(errors="replace")
+            text = data.decode(errors="replace").replace("\x00", "")  # Postgres text holds no NUL
             doc = json.dumps({"markdown": text, "chunks": [_one_chunk(text).model_dump()]}).encode()
         stored = json.loads(doc)
         grades: dict[int, str | tuple[str, str]] = {
