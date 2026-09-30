@@ -1532,7 +1532,7 @@ export const tasksDecideReview = <ThrowOnError extends boolean = false>(
   >({
     responseValidator: async (data) =>
       await zTasksDecideReviewResponse.parseAsync(data),
-    url: "/v1/review/{item_id}/decide",
+    url: "/v1/review/{id}/decide",
     ...options,
     headers: {
       "Content-Type": "application/json",

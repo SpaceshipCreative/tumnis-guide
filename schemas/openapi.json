@@ -10742,18 +10742,18 @@
         ]
       }
     },
-    "/v1/review/{item_id}/decide": {
+    "/v1/review/{id}/decide": {
       "post": {
         "description": "Decides one item (R-04): 422 `action_not_allowed` for an action its kind lacks,\n`invalid_review_payload` or `invalid_snooze`; 409 `already_decided` or\n`stale_version`. Emits `human.decided`; the owning module applies the effect.",
         "operationId": "tasks_decide_review",
         "parameters": [
           {
             "in": "path",
-            "name": "item_id",
+            "name": "id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Item Id",
+              "title": "Id",
               "type": "string"
             }
           }

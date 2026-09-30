@@ -375,16 +375,19 @@ async def list_review(
     )
 
 
-@router.post("/review/{item_id}/decide")
+@router.post("/review/{id}/decide")
 @route_policy(DECIDE)
 async def decide_review(
-    item_id: UUID, body: DecideIn, request: Request, session: SessionDep
+    id: UUID,  # the plan's path, /v1/review/{id}/decide; the A0.3 sweep maps {id} after review
+    body: DecideIn,
+    request: Request,
+    session: SessionDep,
 ) -> api.ReviewItemOut:
     """Decides one item (R-04): 422 `action_not_allowed` for an action its kind lacks,
     `invalid_review_payload` or `invalid_snooze`; 409 `already_decided` or
     `stale_version`. Emits `human.decided`; the owning module applies the effect."""
     return await api.decide_review_item(
-        item_id,
+        id,
         action=body.action,
         payload=body.payload,
         snooze_until=body.snooze_until,

@@ -1606,7 +1606,7 @@ export const zTasksListReviewKindsResponse = zReviewKindsOut;
 export const zTasksDecideReviewBody = zDecideIn;
 
 export const zTasksDecideReviewPath = z.object({
-  item_id: z.uuid(),
+  id: z.uuid(),
 });
 
 /**

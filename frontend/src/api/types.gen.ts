@@ -5479,12 +5479,12 @@ export type TasksDecideReviewData = {
   body: DecideIn;
   path: {
     /**
-     * Item Id
+     * Id
      */
-    item_id: string;
+    id: string;
   };
   query?: never;
-  url: "/v1/review/{item_id}/decide";
+  url: "/v1/review/{id}/decide";
 };
 
 export type TasksDecideReviewErrors = {
