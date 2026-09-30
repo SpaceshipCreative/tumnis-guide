@@ -1608,6 +1608,8 @@ async def update_text_document(
 
 FOLDER_LAYOUT: Final = ("uploads", "notes", "agent-outputs", ".tumnis")
 TUMNIS_DIR: Final = ".tumnis"
+EXISTING_DIR: Final = "Tumnis"  # an existing folder: Tumnis writes only in here (P3-14)
+EXISTING_LAYOUT: Final = ("uploads", "notes", "agent-outputs", ".trash")
 FOLDER_SOURCE: Final = "folder"  # documents.source of a Document made from a folder file
 UPLOAD_SOURCE: Final = "upload"  # ... of an upload Tumnis placed in the folder
 SYNC_REVIEW_KINDS: Final = (
@@ -3225,8 +3227,73 @@ async def use_existing_folder(
     net: NetPolicy,
     resolver: Resolver = system_resolver,
 ) -> ProjectFolderOut:
-    """Make a folder the user already keeps the project's folder (mode `existing`)."""
-    raise NotImplementedError("P3-14")
+    """Make a folder the user already keeps the project's folder (mode `existing`,
+    FR-15.12): Tumnis makes `Tumnis/` with `uploads/`, `notes/`, `agent-outputs/` and
+    `.trash/` inside it and writes nothing else; the next folder sync indexes what it
+    finds as outside files. The location must answer (409 `location_offline`); a folder
+    that already holds this project's files is not re-pointed (409 `folder_not_empty`,
+    moving files is the move job), and a folder that is, holds or sits inside another
+    project's folder on the location is refused (409 `folder_taken`)."""
+    try:
+        root = safe_rel_path(path.strip("/"))
+    except PathRejected as exc:
+        raise _storage_problem(exc) from exc
+    location = await _location_row(s, location_id)
+    _require_online(location)
+    if not await projects.project_exists(s, project_id):
+        raise NotFound("projects", project_id)
+    current = (
+        (await s.execute(select(_folders).where(_folders.c.project_id == project_id)))
+        .mappings()
+        .first()
+    )
+    if current is not None and (current["location_id"], current["root_path"]) != (
+        location_id,
+        root,
+    ):
+        prefix = current["root_path"] + "/"
+        held = await s.scalar(
+            select(func.count())
+            .select_from(_files)
+            .where(
+                _files.c.location_id == current["location_id"],
+                _files.c.path.startswith(prefix, autoescape=True),
+                _files.c.deleted_at.is_(None),
+            )
+        )
+        if held:
+            raise ProblemError(409, "folder_not_empty", "The project folder already holds files.")
+    others: list[str] = list(
+        await s.scalars(
+            select(_folders.c.root_path).where(
+                _folders.c.location_id == location_id,
+                _folders.c.project_id != project_id,
+                _folders.c.deleted_at.is_(None),
+            )
+        )
+    )
+    for other in others:
+        if other == root or other.startswith(root + "/") or root.startswith(other + "/"):
+            raise ProblemError(409, "folder_taken", "Another project uses that folder.")
+    async with _opened(s, location, net=net, resolver=resolver) as backend:
+        if (await _health(backend)).status != "ok":
+            raise ProblemError(409, "location_offline", "The location is offline.")
+        try:
+            for sub in EXISTING_LAYOUT:
+                await backend.ensure_folder(f"{root}/{EXISTING_DIR}/{sub}")
+        except (StorageError, AdapterError) as exc:
+            raise _storage_problem(exc) from exc
+    values = {"location_id": location_id, "root_path": root, "mode": "existing"}
+    await s.execute(
+        pg_insert(_folders)
+        .values(project_id=project_id, **values)
+        .on_conflict_do_update(
+            index_elements=[_folders.c.workspace_id, _folders.c.project_id],
+            set_={**values, "version": _folders.c.version + 1, "deleted_at": None},
+        )
+    )
+    mark_changed(s, "project", project_id)
+    return await get_project_folder(s, project_id)
 
 
 async def rename_document(s: AsyncSession, document_id: UUID, *, title: str) -> DocumentDTO:
