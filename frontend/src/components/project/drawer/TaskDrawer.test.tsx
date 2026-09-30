@@ -58,7 +58,7 @@ test("[P0-24][FR-3.5] T-P0-24-16 drawer opens from the task param and saves a re
   }
 });
 
-test.fails("[P1-08][UX 9] T-P1-08-16 enrichment undo", async () => {
+test("[P1-08][UX 9] T-P1-08-16 enrichment undo", async () => {
   // The drawer shows what the agent filled (criteria, estimate, first action) with
   // `Enriched by agent · Undo`; Undo sends the enrichment's change with the task's
   // version and the drawer shows the values from before it.

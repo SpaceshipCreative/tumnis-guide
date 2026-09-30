@@ -2755,6 +2755,10 @@ export type TaskOut = {
    */
   due_on: string | null;
   /**
+   * Enrichment Status
+   */
+  enrichment_status: string | null;
+  /**
    * Estimate Minutes
    */
   estimate_minutes: number | null;
@@ -2762,6 +2766,10 @@ export type TaskOut = {
    * First Action
    */
   first_action: string | null;
+  /**
+   * First Action Source
+   */
+  first_action_source: string | null;
   /**
    * Id
    */
@@ -3066,6 +3074,10 @@ export type TaskWithLayoutOut = {
    */
   due_on: string | null;
   /**
+   * Enrichment Status
+   */
+  enrichment_status: string | null;
+  /**
    * Estimate Minutes
    */
   estimate_minutes: number | null;
@@ -3073,6 +3085,10 @@ export type TaskWithLayoutOut = {
    * First Action
    */
   first_action: string | null;
+  /**
+   * First Action Source
+   */
+  first_action_source: string | null;
   /**
    * Id
    */

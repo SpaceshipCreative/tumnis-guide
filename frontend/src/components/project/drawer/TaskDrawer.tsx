@@ -1,10 +1,17 @@
 // The task drawer (P0-24, FR-3.5, UX 9): `?task=<id>` opens it; the title, the status
 // action, the repeat rule, comments, and Move to trash (undoable). A side panel on a
 // laptop, a full sheet on the phone; Escape or Close shuts it.
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { taskQueryOptions, useUpdateTask } from "../../../lib/optimistic";
+import {
+  taskQueryKey,
+  taskQueryOptions,
+  useUpdateTask,
+} from "../../../lib/optimistic";
+import { invalidateTaskViews } from "../../../lib/task-cache";
+import { undo } from "../../../lib/undo";
+import { FirstActionLine } from "../../common/FirstAction";
 import { formatDay, formatMinutes } from "../../dashboard/format";
 import { STATUS_WORDS, useChangeStatus, useTrashTask } from "../mutations";
 import { deleteClass, fieldClass, saveClass } from "../rail/RailSection";
@@ -52,6 +59,81 @@ function TitleForm({ task }: { task: Task }) {
   );
 }
 
+// The acceptance criteria as a list (`- ` lines); any other line (a Hybrid task's
+// `AI part:` and `Your part:`, P1-08) as text below it.
+function Criteria({ text }: { text: string | null }) {
+  const lines = (text ?? "").split("\n").filter((line) => line.trim() !== "");
+  const items = lines.filter((line) => line.startsWith("- "));
+  const rest = lines.filter((line) => !line.startsWith("- "));
+  if (lines.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      <h3 className="text-muted">Acceptance criteria</h3>
+      {items.length > 0 && (
+        <ul
+          aria-label="Acceptance criteria"
+          className="list-disc pl-5 marker:text-muted"
+        >
+          {items.map((line, index) => (
+            <li key={index}>{line.slice(2)}</li>
+          ))}
+        </ul>
+      )}
+      {rest.map((line, index) => (
+        <p key={index}>{line}</p>
+      ))}
+    </div>
+  );
+}
+
+// `Enriched by agent · Undo` (P1-08, UX 9): shown while the task's latest write is the
+// project agent's enrichment; Undo puts back what it replaced (R-09).
+function Enriched({ task }: { task: Task }) {
+  const queryClient = useQueryClient();
+  const [failed, setFailed] = useState(false);
+  const undoing = useMutation({
+    mutationFn: (changeId: string) =>
+      undo({
+        changeId,
+        label: "Enrichment",
+        taskId: task.id,
+        afterVersion: task.version,
+        at: Date.now(),
+      }),
+    onSuccess: (restored) => {
+      queryClient.setQueryData(taskQueryKey(task.id), restored);
+      void invalidateTaskViews(queryClient);
+    },
+    onError: () => {
+      setFailed(true);
+    },
+  });
+  const byAgent =
+    task.first_action_source === "agent" || task.label_source === "agent";
+  if (!byAgent || task.enrichment_status !== "done" || !task.change_id) {
+    return null;
+  }
+  const changeId = task.change_id;
+  return (
+    <p className="flex items-center gap-2 text-sm text-muted">
+      <span>Enriched by agent</span>
+      <span aria-hidden="true">·</span>
+      <button
+        type="button"
+        disabled={undoing.isPending}
+        onClick={() => {
+          setFailed(false);
+          undoing.mutate(changeId);
+        }}
+        className="min-h-11 font-medium text-accent md:min-h-8"
+      >
+        Undo
+      </button>
+      {failed && <span role="status">Could not undo; try again.</span>}
+    </p>
+  );
+}
+
 function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
   const change = useChangeStatus();
   const trash = useTrashTask();
@@ -71,9 +153,9 @@ function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
         <dt className="text-muted">Due</dt>
         <dd>{task.due_on ? formatDay(task.due_on) : "No due date"}</dd>
       </dl>
-      {task.first_action && (
-        <p className="text-sm">First action: {task.first_action}</p>
-      )}
+      <FirstActionLine task={task} />
+      <Criteria text={task.acceptance_criteria} />
+      <Enriched task={task} />
       <div className="flex flex-wrap gap-2">
         {action && (
           <button

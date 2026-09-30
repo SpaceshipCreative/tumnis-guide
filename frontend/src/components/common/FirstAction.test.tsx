@@ -30,76 +30,73 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test.fails(
-  "[P1-08][UX 5] T-P1-08-15 placeholder then agent value",
-  async () => {
-    const placeholder = taskJson({
-      title: "Send Acme the March invoice",
-      first_action: PLACEHOLDER,
-      first_action_source: "placeholder",
-      enrichment_status: "running",
-      version: 2,
-    });
-    const pending = taskJson({
-      title: "Book the venue",
-      first_action: null,
-      first_action_source: null,
-      enrichment_status: "running",
-      version: 1,
-    });
-    const current: Record<string, Json> = {
-      [String(placeholder.id)]: placeholder,
-      [String(pending.id)]: pending,
+test("[P1-08][UX 5] T-P1-08-15 placeholder then agent value", async () => {
+  const placeholder = taskJson({
+    title: "Send Acme the March invoice",
+    first_action: PLACEHOLDER,
+    first_action_source: "placeholder",
+    enrichment_status: "running",
+    version: 2,
+  });
+  const pending = taskJson({
+    title: "Book the venue",
+    first_action: null,
+    first_action_source: null,
+    enrichment_status: "running",
+    version: 1,
+  });
+  const current: Record<string, Json> = {
+    [String(placeholder.id)]: placeholder,
+    [String(pending.id)]: pending,
+  };
+  server.use(
+    http.get("/v1/tasks/:id", ({ params }) =>
+      HttpResponse.json(current[String(params.id)]),
+    ),
+  );
+  const queryClient = createTestQueryClient();
+  const stop = connectLive(queryClient, "ws://localhost/ws");
+  FakeSocket.latest().open();
+  renderWithProviders(
+    <>
+      <TaskFirstAction taskId={String(placeholder.id)} />
+      <TaskFirstAction taskId={String(pending.id)} />
+    </>,
+    { queryClient },
+  );
+
+  await waitFor(() => {
+    expect(screen.getAllByTestId("first-action")).toHaveLength(2);
+  });
+  const [first, second] = screen.getAllByTestId("first-action");
+  expect(first).toHaveAttribute("data-state", "placeholder");
+  expect(first).toHaveTextContent(PLACEHOLDER);
+  expect(second).toHaveAttribute("data-state", "pending");
+  expect(second).toHaveTextContent("First action pending");
+
+  for (const task of [placeholder, pending]) {
+    current[String(task.id)] = {
+      ...task,
+      first_action: AGENT,
+      first_action_source: "agent",
+      enrichment_status: "done",
+      version: Number(task.version) + 1,
     };
-    server.use(
-      http.get("/v1/tasks/:id", ({ params }) =>
-        HttpResponse.json(current[String(params.id)]),
-      ),
-    );
-    const queryClient = createTestQueryClient();
-    const stop = connectLive(queryClient, "ws://localhost/ws");
-    FakeSocket.latest().open();
-    renderWithProviders(
-      <>
-        <TaskFirstAction taskId={String(placeholder.id)} />
-        <TaskFirstAction taskId={String(pending.id)} />
-      </>,
-      { queryClient },
-    );
-
-    await waitFor(() => {
-      expect(screen.getAllByTestId("first-action")).toHaveLength(2);
+  }
+  act(() => {
+    FakeSocket.latest().receive({
+      entity: "task",
+      id: String(placeholder.id),
     });
-    const [first, second] = screen.getAllByTestId("first-action");
-    expect(first).toHaveAttribute("data-state", "placeholder");
-    expect(first).toHaveTextContent(PLACEHOLDER);
-    expect(second).toHaveAttribute("data-state", "pending");
-    expect(second).toHaveTextContent("First action pending");
+    FakeSocket.latest().receive({ entity: "task", id: String(pending.id) });
+  });
 
-    for (const task of [placeholder, pending]) {
-      current[String(task.id)] = {
-        ...task,
-        first_action: AGENT,
-        first_action_source: "agent",
-        enrichment_status: "done",
-        version: Number(task.version) + 1,
-      };
+  await waitFor(() => {
+    for (const line of screen.getAllByTestId("first-action")) {
+      expect(line).toHaveTextContent(AGENT);
+      expect(line).toHaveAttribute("data-state", "agent");
     }
-    act(() => {
-      FakeSocket.latest().receive({
-        entity: "task",
-        id: String(placeholder.id),
-      });
-      FakeSocket.latest().receive({ entity: "task", id: String(pending.id) });
-    });
-
-    await waitFor(() => {
-      for (const line of screen.getAllByTestId("first-action")) {
-        expect(line).toHaveTextContent(AGENT);
-        expect(line).toHaveAttribute("data-state", "agent");
-      }
-    });
-    expect(screen.queryByText("First action pending")).toBeNull();
-    stop();
-  },
-);
+  });
+  expect(screen.queryByText("First action pending")).toBeNull();
+  stop();
+});

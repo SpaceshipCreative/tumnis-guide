@@ -26,6 +26,7 @@ import contextvars
 import hashlib
 import json
 import logging
+import statistics
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID, uuid5
@@ -41,8 +42,9 @@ from tumnis.core import audit, db, faults
 from tumnis.core.clock import SystemClock
 from tumnis.core.live import mark_changed
 from tumnis.core.schemas import registry
-from tumnis.core.tenancy import WorkspaceContext, tenant_session
+from tumnis.core.tenancy import WorkspaceContext, tenant_session, use_workspace
 from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.core.versioning import NotFound, StaleVersion
 from tumnis.modules.agents import api
 from tumnis.modules.agents.adapters.hermes import DaemonTransport, McpEndpointTransport
 from tumnis.modules.agents.models import (
@@ -52,8 +54,15 @@ from tumnis.modules.agents.models import (
     RunnerMessage,
     RunRow,
 )
-from tumnis.modules.agents.packet_builder import MCP_PATH, REST_BASE, Callback, TaskPacket
-from tumnis.modules.agents.protocol import Provision, ProvisionResult
+from tumnis.modules.agents.packet_builder import (
+    MCP_PATH,
+    REST_BASE,
+    Callback,
+    TaskPacket,
+    enrichment_request,
+    render_prompt,
+)
+from tumnis.modules.agents.protocol import Provision, ProvisionResult, SchemaRef
 from tumnis.modules.agents.review_kinds import DRIFT, DriftPayload, ForeignReach
 from tumnis.modules.agents.rules import (
     MASTER_PROFILE_NAME,
@@ -61,7 +70,14 @@ from tumnis.modules.agents.rules import (
     InvalidProfileName,
     ReachTargets,
     ReachVerdict,
+    RunKind,
+    TaskSnapshot,
     allowlist_drift,
+    enrichment_errors,
+    merge_enrichment,
+    missing_fields,
+    needs_enrichment,
+    plausibility_flag,
     profile_health,
     profile_name_for,
     provision_outcome,
@@ -70,8 +86,11 @@ from tumnis.modules.agents.rules import (
     runner_status,
     validate_profile_name,
 )
+from tumnis.modules.agents.skill_io import ESTIMATE_RANGE, EnrichmentRequest, EnrichmentResult
 from tumnis.modules.auth import api as auth
 from tumnis.modules.coolify import api as coolify
+from tumnis.modules.decisions import api as decisions
+from tumnis.modules.decisions import generation_api
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
 
@@ -945,14 +964,335 @@ async def start_provision(  # the workflow's arguments, spelled out
 api.register_provision_starter(start_provision)
 
 
-# --- enrich_task (P1-08): red-phase seam; the spec tests turn it green ---------------------
+# --- enrich_task (P1-08, FR-4.4, FR-4.6, UX 5, UX 9) -------------------------------------------
+
+ENRICH_RUNS: Final = UUID("6f1e0b8a-3c2d-5e4f-9a8b-7c6d5e4f3a21")  # uuid5 namespace of run ids
+LABEL_POLL_S: Final = 0.5  # how often the enrichment looks for the label (plan default)
+APPLY_ATTEMPTS: Final = 3  # a user write between read and apply: read, merge, try again
+ENRICH_SKILL: Final = "enrich"
+ENRICH_RESULT: Final = SchemaRef(family="enrichment", name="result", version=1)
+
+
+def enrich_workflow_id(task_id: UUID, key: str) -> str:
+    """`enrich:<task id>:<key>`: the key is the triggering event's id, so a redelivered
+    event starts nothing new (the idempotency key; see `start_enrichment`)."""
+    return f"enrich:{task_id}:{key}"
+
+
+def _snapshot(task: tasks.TaskOut) -> TaskSnapshot:
+    return TaskSnapshot(
+        id=task.id,
+        project_id=task.project_id,
+        title=task.title,
+        label=None if task.label is None else task.label.value,
+        label_source=task.label_source,
+        status=task.status.value,
+        first_action=task.first_action,
+        first_action_source=task.first_action_source,
+        acceptance_criteria=task.acceptance_criteria,
+        estimate_minutes=task.estimate_minutes,
+        version=task.version,
+        enrichment_status=task.enrichment_status,
+    )
+
+
+async def _read_snapshot(s: AsyncSession, task_id: UUID) -> TaskSnapshot | None:
+    try:
+        return _snapshot(await tasks.get_task(s, task_id))
+    except NotFound:
+        return None
+
+
+async def _project_profile(s: AsyncSession, project_id: UUID) -> UUID | None:
+    """The project's live agent profile (P1-06), None when it has none."""
+    found: UUID | None = await s.scalar(
+        select(_profiles.c.id).where(
+            _profiles.c.role == "project",
+            _profiles.c.project_id == project_id,
+            _profiles.c.deleted_at.is_(None),
+        )
+    )
+    return found
+
+
+def _wanted(snap: TaskSnapshot, only: list[str] | None) -> list[str]:
+    return [f for f in missing_fields(snap) if only is None or f in only]
+
+
+@DBOS.step()
+async def enrich_load_step(
+    workspace_id: str, task_id: str, only: list[str] | None
+) -> dict[str, Any] | None:
+    """The task's snapshot, its project's name and the enrichment's settings (R-30, read
+    here so a replay keeps them); None when the task is gone or needs nothing, or its
+    project has no agent profile at all (nothing is written then: the first action shows
+    as pending, and P1-06's provisioning gives the project its agent)."""
+    async with tenant_session(_ctx(workspace_id)) as s:
+        snap = await _read_snapshot(s, UUID(task_id))
+        if snap is None or not needs_enrichment(snap) or not _wanted(snap, only):
+            return None
+        if await _project_profile(s, snap.project_id) is None:
+            return None
+        names = await projects.project_names(s, [snap.project_id])
+    config = api.enrichment_config()
+    return {
+        "snapshot": snap.model_dump(mode="json"),
+        "project_name": names.get(snap.project_id, ""),
+        "label_wait_s": config.label_wait_s,
+        "run_timeout_s": config.run_timeout_s,
+    }
+
+
+@DBOS.step()
+async def enrich_placeholder_step(
+    workspace_id: str, snapshot: dict[str, Any], project_name: str
+) -> None:
+    """`pending`, with the Generation slot's placeholder first action (FR-4.6, its 2 s
+    budget) when the task has none: shown until the agent's arrives. A slow or failing
+    slot writes no placeholder, and the first action shows as pending."""
+    snap = TaskSnapshot.model_validate(snapshot)
+    placeholder = None
+    if snap.first_action is None or not snap.first_action.strip():
+        placeholder = await generation_api.placeholder_first_action(
+            title=snap.title, project_name=project_name, project_id=snap.project_id
+        )
+    async with tenant_session(_ctx(workspace_id)) as s:
+        await tasks.set_enrichment_status(s, snap.id, "pending", placeholder=placeholder)
+
+
+@DBOS.step()
+async def enrich_label_step(workspace_id: str, task_id: str) -> str | None:
+    """The task's label now (None: still pending, or the task is gone)."""
+    async with tenant_session(_ctx(workspace_id)) as s:
+        snap = await _read_snapshot(s, UUID(task_id))
+    return None if snap is None else snap.label
+
+
+@DBOS.step()
+async def enrich_availability_step(workspace_id: str, task_id: str, project_id: str) -> str:
+    """The project agent's availability on the enrichment's clock; when it is not ready,
+    the task's status says why (`agent_offline`, `not_provisioned`)."""
+    ctx = _ctx(workspace_id)
+    clock = api.enrichment_config().clock or SystemClock()
+    state = await api.agent_for_project(UUID(project_id), now=clock.now(), ctx=ctx)
+    if state != "ready":
+        async with tenant_session(ctx) as s:
+            status: tasks.EnrichmentStatus = (
+                "agent_offline" if state == "offline" else "not_provisioned"
+            )
+            await tasks.set_enrichment_status(s, UUID(task_id), status)
+    return state
+
+
+@DBOS.step()
+async def enrich_request_step(
+    workspace_id: str, task_id: str, project_id: str, only: list[str] | None
+) -> dict[str, Any] | None:
+    """The enrichment request as the task is now, the project's profile, and `running`
+    (set before the dispatch, so nothing writes the task while the run is out). None, and
+    `done`, when nothing is missing any more (the user filled it meanwhile)."""
+    async with tenant_session(_ctx(workspace_id)) as s:
+        snap = await _read_snapshot(s, UUID(task_id))
+        if snap is None:
+            return None
+        wanted = _wanted(snap, only) if snap.status != "done" else []
+        if not wanted:
+            await tasks.set_enrichment_status(s, snap.id, "done")
+            return None
+        request = await enrichment_request(s, snap.id, missing=wanted)
+        profile_id = await _project_profile(s, UUID(project_id))
+        if profile_id is None:  # removed while the enrichment waited
+            await tasks.set_enrichment_status(s, snap.id, "not_provisioned")
+            return None
+        await tasks.set_enrichment_status(s, snap.id, "running")
+    return {"request": request.model_dump(mode="json"), "profile_id": str(profile_id)}
+
+
+def _checked_result(request: EnrichmentRequest, outcome: dict[str, Any]) -> EnrichmentResult | None:
+    """The run's result when it succeeded and breaks no rule (schema, then
+    `enrichment_errors`); None otherwise."""
+    if outcome.get("status") != "succeeded":
+        return None
+    try:
+        result = EnrichmentResult.model_validate(outcome.get("output_json"))
+    except ValidationError:
+        return None
+    return None if enrichment_errors(request, result) else result
+
+
+@DBOS.step()
+async def enrich_fail_step(workspace_id: str, task_id: str) -> None:
+    """`failed`: the task keeps what it has (a placeholder stays for the user to replace);
+    the run's row holds the error."""
+    async with tenant_session(_ctx(workspace_id)) as s:
+        await tasks.set_enrichment_status(s, UUID(task_id), "failed")
+
+
+def _history_median(request: EnrichmentRequest) -> int | None:
+    actuals = [h.actual_minutes for h in request.estimate_history]
+    return round(statistics.median(actuals)) if actuals else None
+
+
+@DBOS.step()
+async def enrich_plausibility_step(
+    workspace_id: str, task_id: str, request: dict[str, Any], result: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Jev's `estimate_plausibility` Score for the estimate the enrichment would apply
+    (FR-4.4, FR-11.4): the flag when an applied answer sits at an outer level, else None.
+    Decisions down routes deterministic: no flag, no review item."""
+    ctx = _ctx(workspace_id)
+    req = EnrichmentRequest.model_validate(request)
+    res = EnrichmentResult.model_validate(result)
+    async with tenant_session(ctx) as s:
+        snap = await _read_snapshot(s, UUID(task_id))
+    if snap is None:
+        return None
+    patch = merge_enrichment(snap, res, requested=req.missing, estimate_range=ESTIMATE_RANGE)
+    if patch.estimate_minutes is None:
+        return None
+    inputs = {
+        "title": snap.title,
+        "label": patch.label or snap.label,
+        "estimate_minutes": patch.estimate_minutes,
+        "first_action": patch.first_action or snap.first_action,
+        "acceptance_criteria": list(res.acceptance_criteria),
+        "history": [
+            {"title": h.title, "estimate": h.estimate_minutes, "actual": h.actual_minutes}
+            for h in req.estimate_history
+        ],
+    }
+    with use_workspace(ctx):
+        decision = await decisions.decide(
+            decisions.DecisionPoint.ESTIMATE_PLAUSIBILITY,
+            inputs,
+            subject=decisions.SubjectRef(type="task", id=snap.id),
+            project_id=snap.project_id,
+        )
+    answer = decision.answers.get("plausibility")
+    score = answer if isinstance(answer, decisions.ScoreAnswer) else None
+    flag = plausibility_flag(score, decision.route.value)
+    if flag is None:
+        return None
+    return tasks.EstimateOutlierPayload(
+        estimate_minutes=patch.estimate_minutes,
+        flag=flag,
+        score=None if score is None else score.score,
+        history_median=_history_median(req),
+        decision_id=decision.decision_id,
+    ).model_dump(mode="json")
+
+
+@DBOS.step()
+async def enrich_apply_step(
+    workspace_id: str,
+    task_id: str,
+    request: dict[str, Any],
+    result: dict[str, Any],
+    outlier: dict[str, Any] | None,
+) -> str:
+    """The result merged into the task as it is now (a user's edit made meanwhile wins,
+    UX 9) and applied in one versioned write, `done`; an outlier flag for the estimate it
+    applied queues one `estimate_outlier` item in the same transaction."""
+    req = EnrichmentRequest.model_validate(request)
+    res = EnrichmentResult.model_validate(result)
+    flagged = None if outlier is None else tasks.EstimateOutlierPayload.model_validate(outlier)
+    for attempt in range(APPLY_ATTEMPTS):
+        try:
+            async with tenant_session(_ctx(workspace_id)) as s:
+                snap = await _read_snapshot(s, UUID(task_id))
+                if snap is None:
+                    return "gone"
+                patch = merge_enrichment(
+                    snap, res, requested=req.missing, estimate_range=ESTIMATE_RANGE
+                )
+                await tasks.apply_enrichment(
+                    s, snap.id, tasks.EnrichmentWrite(**patch.model_dump()), snap.version
+                )
+                if flagged is not None and patch.estimate_minutes == flagged.estimate_minutes:
+                    await tasks.add_estimate_outlier(s, snap.id, flagged)
+            return "done"
+        except StaleVersion:
+            if attempt == APPLY_ATTEMPTS - 1:
+                raise
+    return "done"  # pragma: no cover  # the loop returns or raises
+
+
+@DBOS.workflow(name="enrich_task")
+async def enrich_task(workspace_id: str, task_id: str, only: list[str] | None = None) -> str:
+    """Enrichment by the project agent (P1-08): a placeholder first action first, a wait
+    for the label (durable `DBOS.sleep_async`, up to `label_wait_s`), the project agent's
+    availability (an offline agent degrades only its own project), the request, the
+    `enrich` run (a child `run_skill`, run id derived from this workflow's id so a replay
+    dispatches nothing twice), validation, the plausibility decision and the apply.
+    Returns how it ended."""
+    loaded = await enrich_load_step(workspace_id, task_id, only)
+    if loaded is None:
+        return "not_needed"
+    snap = TaskSnapshot.model_validate(loaded["snapshot"])
+    await enrich_placeholder_step(workspace_id, loaded["snapshot"], loaded["project_name"])
+    label: str | None = snap.label
+    waited = 0.0
+    while label is None and waited < loaded["label_wait_s"]:
+        await DBOS.sleep_async(LABEL_POLL_S)
+        waited += LABEL_POLL_S
+        label = await enrich_label_step(workspace_id, task_id)
+    state = await enrich_availability_step(workspace_id, task_id, str(snap.project_id))
+    if state != "ready":
+        return state
+    built = await enrich_request_step(workspace_id, task_id, str(snap.project_id), only)
+    if built is None:
+        return "not_needed"
+    request = EnrichmentRequest.model_validate(built["request"])
+    run_id = uuid5(ENRICH_RUNS, DBOS.workflow_id or task_id)
+    packet = TaskPacket(
+        kind=RunKind.ENRICH,
+        run_id=run_id,
+        profile_id=UUID(built["profile_id"]),
+        skill=ENRICH_SKILL,
+        output_schema=ENRICH_RESULT,
+        correlation_id=f"enrich:{task_id}",
+        timeout_s=loaded["run_timeout_s"],
+        prompt_text=render_prompt(ENRICH_SKILL, ENRICH_RESULT, built["request"]),
+        body=built["request"],
+    )
+    with SetWorkflowID(run_workflow_id(run_id)):
+        outcome = await run_skill(workspace_id, packet.model_dump(mode="json"))
+    result = _checked_result(request, outcome)
+    if result is None:
+        await enrich_fail_step(workspace_id, task_id)
+        return "failed"
+    as_json = result.model_dump(mode="json")
+    outlier = await enrich_plausibility_step(workspace_id, task_id, built["request"], as_json)
+    return await enrich_apply_step(workspace_id, task_id, built["request"], as_json, outlier)
 
 
 async def start_enrichment(
-    workspace_id: UUID, task_id: UUID, project_id: UUID, *, key: str
+    workspace_id: UUID,
+    task_id: UUID,
+    project_id: UUID,
+    *,
+    key: str,
+    only: list[str] | None = None,
 ) -> None:
-    """Enqueue `enrich_task` for the task (workflow id `enrich:<task id>:<key>`)."""
-    raise NotImplementedError("P1-08")
+    """Enqueue `enrich_task` on the runs queue, partitioned by project (A9: an offline
+    project agent never holds up another project), with workflow id
+    `enrich:<task id>:<key>`. DBOS 3.1.0 refuses a deduplication id on a partitioned
+    queue, so the workflow id is the idempotency key (the plan's `enrich:{task_id}:
+    {version}` deduplication id; `task.updated` carries no version, so the key is the
+    event's id). `only` narrows the fields asked for (a label change asks for the
+    estimate). Like `start_provision`, the enqueue runs in a fresh context: subscribers
+    run inside a DBOS step, which may not start a workflow."""
+
+    async def enqueue() -> None:
+        with (
+            SetWorkflowID(enrich_workflow_id(task_id, key)),
+            SetEnqueueOptions(queue_partition_key=str(project_id)),
+        ):
+            await DBOS.enqueue_workflow_async(
+                RUNS_QUEUE, enrich_task, str(workspace_id), str(task_id), only
+            )
+
+    await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
 
 
 # --- profile_health_sweep ---------------------------------------------------------------------
