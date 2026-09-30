@@ -5,6 +5,7 @@ import { cleanup } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
 
 import { configureClient } from "../lib/client";
+import { resetIdb } from "./idb";
 import { server } from "./msw/server";
 
 // The generated client, as main.tsx configures it (absolute URLs on jsdom's origin).
@@ -15,9 +16,11 @@ configureClient();
 beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });
 });
-afterEach(() => {
+afterEach(async () => {
   server.resetHandlers();
   cleanup();
+  // A fresh IndexedDB per test: the offline queue persists there (P0-25).
+  await resetIdb();
 });
 afterAll(() => {
   server.close();
