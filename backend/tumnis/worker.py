@@ -187,9 +187,11 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     from dbos import DBOS  # noqa: PLC0415
 
     import tumnis.wiring  # noqa: F401, PLC0415  # registers adapters, events and workflows
-    from tumnis.core import db  # noqa: PLC0415
+    from tumnis.core import db, fake_scripts  # noqa: PLC0415
 
     db.configure(settings.database_direct_url, settings.database_direct_url)
+    if settings.tumnis_adapters == "fake":
+        fake_scripts.enable()  # scripts posted to the api reach this process's fakes (R-37)
     install_master_keys(settings)
     modules.configure(settings)
     configure_generation(settings)
