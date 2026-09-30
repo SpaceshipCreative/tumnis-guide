@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { searchSearchOptions } from "../../api/@tanstack/react-query.gen";
 import type { SearchHit } from "../../api/types.gen";
 import { useDebounced } from "../../lib/debounce";
+import { dialogKeyDown } from "../../lib/focusTrap";
 
 const LIMIT = 10;
 
@@ -81,10 +82,7 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
         aria-label="Search"
         className="w-full max-w-lg rounded-lg border border-border bg-surface p-3 shadow-xl"
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose();
-          }
+          dialogKeyDown(event, onClose);
         }}
       >
         <input

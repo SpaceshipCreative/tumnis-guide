@@ -5,6 +5,7 @@
 import { useSelector } from "@xstate/react";
 import { useEffect, useId, useRef, useState } from "react";
 
+import { dialogKeyDown } from "../../lib/focusTrap";
 import { persistent } from "../../lib/idb";
 import { uiStore } from "../../stores/uiStore";
 import { type ProjectChoice, ProjectTypeahead } from "./ProjectTypeahead";
@@ -75,10 +76,7 @@ export function QuickAddDialog({
         aria-labelledby={headingId}
         className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 shadow-xl"
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose();
-          }
+          dialogKeyDown(event, onClose);
         }}
       >
         <h2 id={headingId} className="mb-3 text-base font-semibold">
