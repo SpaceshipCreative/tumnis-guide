@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { apiWrite, ConflictError, useWrite } from "../../lib/fetch";
 import { uiStore } from "../../stores/uiStore";
+import { BUTTON_SECONDARY } from "../common/ui";
 import { formatMinutes } from "./format";
 import { invalidateTaskReads } from "./queries";
 import type { TaskLabel, TaskStatus, TodayTask } from "./types";
@@ -60,7 +61,7 @@ function PrimaryAction({ task }: { task: TodayTask }) {
       onClick={() => {
         change.mutate({ task, to: action.to });
       }}
-      className="min-h-11 shrink-0 rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-muted disabled:opacity-60 md:min-h-8"
+      className={`${BUTTON_SECONDARY} shrink-0 md:min-h-8`}
     >
       {action.text}
     </button>
@@ -80,7 +81,7 @@ export function TodayItem({
       ? task.estimate_minutes
       : null;
   return (
-    <li className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
+    <li className="flex flex-col gap-1 py-2 first:pt-0 last:pb-0">
       <div className="flex items-center justify-between gap-2">
         <span className="min-w-0 truncate font-medium">{task.title}</span>
         <PrimaryAction task={task} />

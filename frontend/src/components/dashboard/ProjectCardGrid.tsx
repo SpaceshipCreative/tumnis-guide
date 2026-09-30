@@ -31,7 +31,7 @@ export function ProjectCardGrid({
       aria-labelledby={headingId}
       className={`flex min-h-0 flex-col gap-2 ${className}`}
     >
-      <h2 id={headingId} className="text-lg font-semibold">
+      <h2 id={headingId} className="text-base font-semibold">
         Projects
       </h2>
       {pending ? null : unavailable ? (

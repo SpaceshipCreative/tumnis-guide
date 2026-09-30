@@ -1,6 +1,7 @@
 // One task in the Tasks view (P0-24, FR-2.6, UX 7): its title opens the drawer; one status
 // action (Start, or Done for a Human task in progress); subtasks indented underneath. A
 // capture still on the offline queue shows with its pending mark and no actions (P0-25).
+import { BUTTON_SECONDARY } from "../common/ui";
 import { formatDay, formatMinutes } from "../dashboard/format";
 import { PendingMark } from "../quickadd/PendingMark";
 import { isPendingId, pendingKey } from "../quickadd/queue";
@@ -41,11 +42,7 @@ export function TaskRow({
       ? null
       : formatMinutes(task.estimate_minutes);
   return (
-    <li
-      data-task-title={task.title}
-      data-task-id={task.id}
-      className="rounded-lg border border-border bg-surface px-3 py-2"
-    >
+    <li data-task-title={task.title} data-task-id={task.id} className="py-2">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <button
@@ -79,7 +76,7 @@ export function TaskRow({
             onClick={() => {
               change.mutate({ task, to: action.to });
             }}
-            className="min-h-11 shrink-0 rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-muted disabled:opacity-60 md:min-h-8"
+            className={`${BUTTON_SECONDARY} shrink-0 md:min-h-8`}
           >
             {action.text}
           </button>
