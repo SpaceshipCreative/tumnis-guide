@@ -159,40 +159,37 @@ test("[P1-12][FR-2.6] T-P1-12-02 drop on free block sends one PATCH", async () =
   expect(fake.writes()).toHaveLength(1);
 });
 
-test.fails(
-  "[P1-12][FR-2.6] T-P1-12-03 drop on busy block refused",
-  async () => {
-    const { fake, user } = setUp("laptop");
-    const card = await screen.findByRole("button", {
-      name: "Draft the brand guide, 45 minutes",
-    });
-    const from = cardPoint(0);
-    const to = pointAt(1, "12:30"); // Tuesday, inside someone else's meeting
-    await user.pointer([
-      {
-        keys: "[MouseLeft>]",
-        target: card,
-        coords: { clientX: from.x, clientY: from.y },
-      },
-      { coords: { clientX: to.x, clientY: to.y } },
-      { keys: "[/MouseLeft]" },
-    ]);
+test("[P1-12][FR-2.6] T-P1-12-03 drop on busy block refused", async () => {
+  const { fake, user } = setUp("laptop");
+  const card = await screen.findByRole("button", {
+    name: "Draft the brand guide, 45 minutes",
+  });
+  const from = cardPoint(0);
+  const to = pointAt(1, "12:30"); // Tuesday, inside someone else's meeting
+  await user.pointer([
+    {
+      keys: "[MouseLeft>]",
+      target: card,
+      coords: { clientX: from.x, clientY: from.y },
+    },
+    { coords: { clientX: to.x, clientY: to.y } },
+    { keys: "[/MouseLeft]" },
+  ]);
 
-    expect(
-      await screen.findByRole("status", { name: "Scheduling" }),
-    ).toHaveTextContent("That time is busy");
-    // The card is back in the list, and nothing was sent.
-    expect(
-      within(screen.getByRole("list", { name: "To schedule" })).getByRole(
-        "button",
-        {
-          name: "Draft the brand guide, 45 minutes",
-        },
-      ),
-    ).toBeVisible();
-    expect(fake.writes()).toEqual([]);
-  },
-);
+  expect(
+    await screen.findByRole("status", { name: "Scheduling" }),
+  ).toHaveTextContent("That time is busy");
+  // The card is back in the list, and nothing was sent.
+  expect(
+    within(screen.getByRole("list", { name: "To schedule" })).getByRole(
+      "button",
+      {
+        name: "Draft the brand guide, 45 minutes",
+      },
+    ),
+  ).toBeVisible();
+  expect(fake.writes()).toEqual([]);
+});
 
 test.fails("[P1-12][UX 7] T-P1-12-04 keyboard scheduling", async () => {
   const { fake, user } = setUp("laptop");
