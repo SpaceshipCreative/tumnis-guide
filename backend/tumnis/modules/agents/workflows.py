@@ -367,7 +367,8 @@ async def check_profile_health(workspace_id: str, profile_id: str, request_id: s
 
 class _Chosen(BaseModel):
     """What `choose_name_step` settled: the project's profile row, its name and mode, and
-    the error that ends the provision before it starts (`invalid_name`, `no_project`)."""
+    the error that ends the provision before it starts (`invalid_name`, `no_project`, or
+    `ready`: the profile needs nothing)."""
 
     profile_id: UUID | None
     name: str
@@ -404,20 +405,30 @@ async def choose_name_step(
     workspace_id: str, project_id: str, mode: str, link_name: str | None
 ) -> dict[str, Any]:
     """The project's live profile row when it has one (a retry, or a replay), set
-    `provisioning`; otherwise a new row, `provisioning`: named after the project (create)
-    or the linked name. A link to a name that cannot be linked gets a generated name and
-    `invalid_name`, so the project still has its agent row to retry."""
+    `provisioning` (a `ready` one is left alone and ends the provision); otherwise a new
+    row, `provisioning`: named after the project (create) or the linked name. A link to a
+    name that cannot be linked gets a generated name and `invalid_name`, so the project
+    still has its agent row to retry."""
     pid = UUID(project_id)
     async with tenant_session(_ctx(workspace_id)) as s:
         found = (
             await s.execute(
-                select(_profiles.c.id, _profiles.c.name, _profiles.c.provision_mode).where(
+                select(
+                    _profiles.c.id,
+                    _profiles.c.name,
+                    _profiles.c.status,
+                    _profiles.c.provision_mode,
+                ).where(
                     _profiles.c.role == "project",
                     _profiles.c.project_id == pid,
                     _profiles.c.deleted_at.is_(None),
                 )
             )
         ).first()
+        if found is not None and found.status == "ready":  # nothing left to provision
+            return _Chosen(
+                profile_id=found.id, name=found.name, mode="create", error_code="ready"
+            ).model_dump(mode="json")
         if found is not None:
             await s.execute(
                 update(_profiles).where(_profiles.c.id == found.id).values(status="provisioning")
@@ -603,8 +614,8 @@ async def provision_profile(
     (never inside a step, R-30), and no answer in `provision_timeout_s` counts as failed.
     Never retries an install by itself: a failure is a review item (accept retries)."""
     chosen = await choose_name_step(workspace_id, project_id, mode, link_name)
-    if chosen["error_code"] == "no_project":
-        return "no_project"
+    if chosen["error_code"] in {"no_project", "ready"}:
+        return str(chosen["error_code"])
     if chosen["error_code"] is not None:
         return await finish_provision_step(
             workspace_id, project_id, chosen, attempt, None, chosen["error_code"]
