@@ -10,7 +10,7 @@ import { useIsLaptop } from "../../lib/media";
 import type { ProjectView } from "../../lib/views";
 import { uiStore } from "../../stores/uiStore";
 import { BoardView } from "../board/BoardView";
-import { workspaceQuery } from "../settings/queries";
+import { profilesQuery, workspaceQuery } from "../settings/queries";
 import { Composer } from "./Composer";
 import { TaskDrawer } from "./drawer/TaskDrawer";
 import { groupOf } from "./grouping";
@@ -69,6 +69,10 @@ export function ProjectPage({
   const project = useQuery(projectQuery(projectId));
   const tasks = useQuery(projectTasksQuery(projectId));
   const workspace = useQuery(workspaceQuery());
+  const profiles = useQuery(profilesQuery());
+  const agent = profiles.data?.items.find(
+    (p) => p.role === "project" && p.project_id === projectId,
+  );
   const timezone = workspace.data?.timezone ?? "UTC";
   const [now] = useState(() => new Date());
 
@@ -92,7 +96,7 @@ export function ProjectPage({
   return (
     <div className="flex gap-8">
       <div className="flex min-w-0 flex-1 flex-col gap-4">
-        <ProjectHeader project={project.data} today={today} />
+        <ProjectHeader project={project.data} today={today} agent={agent} />
         {!laptop && (
           <ContextSheet
             project={project.data}

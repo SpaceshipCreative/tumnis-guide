@@ -42,7 +42,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test.fails("[P1-06][FR-2.1] create or link profile", async () => {
+test("[P1-06][FR-2.1] create or link profile", async () => {
   const created = makeProject({ name: "Old site", client: null, goal: null });
   const fake = new ProjectFake({ project: created });
   const posts: unknown[] = [];
