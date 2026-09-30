@@ -1147,7 +1147,9 @@ async def apply_enrichment(
     """The project agent's enrichment at `version` (409 `stale_version` when the task
     changed since it was read: read, merge and write again): one versioned write with
     `enrichment_status = "done"`, `first_action_source = "agent"` with a first action,
-    `label_source = "agent"` with a revised label. One `task_changes` row by the system
+    `label_source = "agent"` with a revised label (which drops an estimate when it is AI,
+    and closes an open `low_confidence_label` item as superseded, since it clears the
+    suggestion that item asked about). One `task_changes` row by the system
     (R-09), undone through `POST /v1/tasks/{id}/undo`, whose id this returns (None when the
     write filled nothing); `task.updated` names the changed fields (R-06)."""
     row = await _row(s, task_id, lock=True)
@@ -1167,10 +1169,16 @@ async def apply_enrichment(
             "label_decision_id": None,
             "label_suggestion": None,
         }
+        if write.label is Label.AI:  # AI work carries no estimate (normalize_estimate)
+            values["estimate_minutes"] = None
     changed = [field for field, value in values.items() if row[field] != value]
     updated = await _versioned(s, task_id, version, values)
     if changed:
         await _changed(s, updated, changed, now)
+    if write.label is not None:  # the suggestion it answered is gone with its review item
+        await close_open_items(
+            s, LABEL_KIND, TargetRef(type="task", id=task_id), decision="superseded", at=_now(now)
+        )
     return await _record(s, SYSTEM_ACTOR, row, updated)
 
 

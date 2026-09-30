@@ -59,38 +59,58 @@ function TitleForm({ task }: { task: Task }) {
   );
 }
 
-// The acceptance criteria as a list (`- ` lines); any other line (a Hybrid task's
-// `AI part:` and `Your part:`, P1-08) as text below it.
+// The acceptance criteria in their own order: each run of `- ` lines as a list, any
+// other line (a Hybrid task's `AI part:` and `Your part:`, P1-08) as text where it stands.
+type CriteriaBlock =
+  { kind: "list"; items: string[] } | { kind: "text"; text: string };
+
+function criteriaBlocks(text: string | null): CriteriaBlock[] {
+  const blocks: CriteriaBlock[] = [];
+  for (const line of (text ?? "").split("\n")) {
+    if (line.trim() === "") continue;
+    const last = blocks.at(-1);
+    if (!line.startsWith("- ")) blocks.push({ kind: "text", text: line });
+    else if (last?.kind === "list") last.items.push(line.slice(2));
+    else blocks.push({ kind: "list", items: [line.slice(2)] });
+  }
+  return blocks;
+}
+
 function Criteria({ text }: { text: string | null }) {
-  const lines = (text ?? "").split("\n").filter((line) => line.trim() !== "");
-  const items = lines.filter((line) => line.startsWith("- "));
-  const rest = lines.filter((line) => !line.startsWith("- "));
-  if (lines.length === 0) return null;
+  const blocks = criteriaBlocks(text);
+  if (blocks.length === 0) return null;
   return (
     <div className="flex flex-col gap-1 text-sm">
       <h3 className="text-muted">Acceptance criteria</h3>
-      {items.length > 0 && (
-        <ul
-          aria-label="Acceptance criteria"
-          className="list-disc pl-5 marker:text-muted"
-        >
-          {items.map((line, index) => (
-            <li key={index}>{line.slice(2)}</li>
-          ))}
-        </ul>
+      {blocks.map((block, index) =>
+        block.kind === "list" ? (
+          <ul
+            key={index}
+            aria-label="Acceptance criteria"
+            className="list-disc pl-5 marker:text-muted"
+          >
+            {block.items.map((item, at) => (
+              <li key={at}>{item}</li>
+            ))}
+          </ul>
+        ) : (
+          <p key={index}>{block.text}</p>
+        ),
       )}
-      {rest.map((line, index) => (
-        <p key={index}>{line}</p>
-      ))}
     </div>
   );
 }
 
 // `Enriched by agent · Undo` (P1-08, UX 9): shown while the task's latest write is the
-// project agent's enrichment; Undo puts back what it replaced (R-09).
+// project agent's enrichment; Undo puts back what it replaced (R-09). A read names the
+// enrichment's change only at the version it wrote, but a later write's own answer (a
+// title edit) carries that write's change id until the read comes back: the change first
+// seen is kept, and a different one hides the line (the read then names none, which
+// forgets it, so a later enrichment shows again).
 function Enriched({ task }: { task: Task }) {
   const queryClient = useQueryClient();
   const [failed, setFailed] = useState(false);
+  const [seen, setSeen] = useState<string | null>(null);
   const undoing = useMutation({
     mutationFn: (changeId: string) =>
       undo({
@@ -110,10 +130,12 @@ function Enriched({ task }: { task: Task }) {
   });
   const byAgent =
     task.first_action_source === "agent" || task.label_source === "agent";
-  if (!byAgent || task.enrichment_status !== "done" || !task.change_id) {
-    return null;
-  }
-  const changeId = task.change_id;
+  const eligible =
+    byAgent && task.enrichment_status === "done" ? task.change_id : null;
+  if (eligible === null && seen !== null) setSeen(null);
+  if (eligible !== null && seen === null) setSeen(eligible);
+  if (eligible === null || (seen !== null && seen !== eligible)) return null;
+  const changeId = eligible;
   return (
     <p className="flex items-center gap-2 text-sm text-muted">
       <span>Enriched by agent</span>

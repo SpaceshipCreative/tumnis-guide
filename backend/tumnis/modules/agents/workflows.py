@@ -1265,15 +1265,21 @@ async def enrich_task(workspace_id: str, task_id: str, only: list[str] | None = 
         prompt_text=render_prompt(ENRICH_SKILL, ENRICH_RESULT, built["request"]),
         body=built["request"],
     )
-    with SetWorkflowID(run_workflow_id(run_id)):
-        outcome = await run_skill(workspace_id, packet.model_dump(mode="json"))
-    result = _checked_result(request, outcome)
-    if result is None:
+    # `running` is on the task from here: whatever raises ends it `failed` (a status that
+    # lets a later relabel enrich again), and the workflow keeps its error.
+    try:
+        with SetWorkflowID(run_workflow_id(run_id)):
+            outcome = await run_skill(workspace_id, packet.model_dump(mode="json"))
+        result = _checked_result(request, outcome)
+        if result is None:
+            await enrich_fail_step(workspace_id, task_id)
+            return "failed"
+        as_json = result.model_dump(mode="json")
+        outlier = await enrich_plausibility_step(workspace_id, task_id, built["request"], as_json)
+        return await enrich_apply_step(workspace_id, task_id, built["request"], as_json, outlier)
+    except Exception:
         await enrich_fail_step(workspace_id, task_id)
-        return "failed"
-    as_json = result.model_dump(mode="json")
-    outlier = await enrich_plausibility_step(workspace_id, task_id, built["request"], as_json)
-    return await enrich_apply_step(workspace_id, task_id, built["request"], as_json, outlier)
+        raise
 
 
 async def start_enrichment(
