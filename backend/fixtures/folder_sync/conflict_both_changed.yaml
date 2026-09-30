@@ -1,0 +1,20 @@
+id: conflict_both_changed
+proves: Both copies kept with the conflict name and one review item
+backends: [server_path, s3]
+steps:
+  - tumnis_create_note: {project: acme-site, title: "Plan", body: "v1"}
+  - sync
+  - outside_write: {path: "notes/Plan.md", append: "\noutside edit"}
+  - tumnis_edit_note: {title: "Plan", body: "v2"}
+  - sync
+  - expect:
+      files:
+        "notes/Plan.md": {contains: "v2", not_contains: "outside edit"}
+        "notes/Plan (conflict 2026-03-09).md": {contains: "outside edit"}
+      review_items: [{kind: sync_conflict}]
+      documents: {count: 2}
+  - sync
+  - expect:
+      listing: ["notes/Plan (conflict 2026-03-09).md", "notes/Plan.md"]
+      review_items: [{kind: sync_conflict}]
+      documents: {count: 2}

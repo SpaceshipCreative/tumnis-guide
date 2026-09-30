@@ -3,19 +3,43 @@ Description=Tumnis runner daemon
 After=network-online.target
 Wants=network-online.target
 
+# Hardening (P2-07, SEC-8, R-26; systemd.exec). MemoryDenyWriteExecute is deliberately
+# absent: Claude Code and Codex run on JIT runtimes (Node) that need writable executable
+# memory. /home/tumnis-agent stays writable because Hermes profiles live under
+# ~/.hermes/profiles/. A project whose code path sits elsewhere is added to ReadWritePaths
+# by provisioning through the drop-in
+# /etc/systemd/system/tumnis-daemon.service.d/paths.conf; the daemon refuses any path the
+# unit does not cover. Check with `systemd-analyze security tumnis-daemon.service`.
 [Service]
 User=tumnis-agent
 Group=tumnis-agent
 ExecStart=/opt/tumnis-daemon/bin/tumnis-daemon run --config /etc/tumnis/daemon.toml
-Restart=always
+Restart=on-failure
 RestartSec=5
+StateDirectory=tumnis-daemon
+StateDirectoryMode=0700
+UMask=0077
 NoNewPrivileges=yes
-PrivateTmp=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
 ProtectSystem=strict
 ReadWritePaths=/var/lib/tumnis-daemon /home/tumnis-agent
-CapabilityBoundingSet=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
 RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
 LockPersonality=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+KillMode=control-group
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target

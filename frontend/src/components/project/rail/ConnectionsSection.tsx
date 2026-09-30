@@ -1,7 +1,12 @@
 // Connections (P0-24, FR-2.7): the project's people, domains and code location; read at
-// a glance, edited in a small form (one per line) with the project's version.
+// a glance, edited in a small form (one per line) with the project's version. Below it,
+// the linked Coolify apps with their last deploys, linked and unlinked by UUID (P2-14).
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { deployStatusQuery } from "../../dashboard/queries";
+import { workspaceQuery } from "../../settings/queries";
+import { CoolifyApps } from "../DeployStatus";
 import { useUpdateProject } from "../mutations";
 import type { ProjectLinkIn } from "../../../api/types.gen";
 import type { Project } from "../types";
@@ -103,6 +108,25 @@ function ConnectionsForm({ project }: { project: Project }) {
   );
 }
 
+/** The Coolify apps; the statuses load when the section opens (P2-14, FR-12.2). */
+function CoolifyConnections({ project }: { project: Project }) {
+  const deployStatus = useQuery(deployStatusQuery());
+  const workspace = useQuery(workspaceQuery());
+  const apps =
+    deployStatus.data?.find((entry) => entry.project_id === project.id)?.apps ??
+    [];
+  return (
+    <section aria-label="Coolify" className="flex flex-col gap-1">
+      <h3 className="text-sm font-semibold">Coolify apps</h3>
+      <CoolifyApps
+        project={project}
+        apps={apps}
+        timeZone={workspace.data?.timezone ?? "UTC"}
+      />
+    </section>
+  );
+}
+
 export function ConnectionsSection({
   project,
   open,
@@ -120,6 +144,7 @@ export function ConnectionsSection({
       onToggle={onToggle}
     >
       <ConnectionsForm key={project.version} project={project} />
+      <CoolifyConnections project={project} />
     </RailSection>
   );
 }

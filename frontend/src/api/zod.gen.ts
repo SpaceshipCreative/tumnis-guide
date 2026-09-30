@@ -215,6 +215,16 @@ export const zKeyOut = z.object({
 export const zLabel = z.enum(["human", "ai", "hybrid"]);
 
 /**
+ * LastDeployOut
+ */
+export const zLastDeployOut = z.object({
+  commit: z.string().nullable(),
+  created_at: z.iso.datetime(),
+  finished_at: z.iso.datetime().nullable(),
+  status: z.string(),
+});
+
+/**
  * LocationOut
  */
 export const zLocationOut = z.object({
@@ -331,6 +341,29 @@ export const zPageKeyOut = z.object({
 export const zPreset = z.enum(["daily", "weekdays", "weekly", "monthly"]);
 
 /**
+ * PreviewOut
+ */
+export const zPreviewOut = z.object({
+  commit: z.string().nullish(),
+  finished_at: z.iso.datetime().nullish(),
+  pull_request_id: z.int(),
+  status: z.string(),
+  url: z.string(),
+});
+
+/**
+ * AppDeployStatus
+ */
+export const zAppDeployStatus = z.object({
+  app_uuid: z.string(),
+  checked_at: z.iso.datetime().nullable(),
+  error: z.enum(["unavailable", "rejected"]).nullable(),
+  last: zLastDeployOut.nullable(),
+  name: z.string().nullable(),
+  previews: z.array(zPreviewOut),
+});
+
+/**
  * Problem
  */
 export const zProblem = z.object({
@@ -406,6 +439,14 @@ export const zProfilePatch = z.object({
   runner_id: z.uuid().nullish(),
   status: z.enum(["registered", "paused"]).nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * ProjectDeployStatus
+ */
+export const zProjectDeployStatus = z.object({
+  apps: z.array(zAppDeployStatus),
+  project_id: z.uuid(),
 });
 
 /**
@@ -504,6 +545,34 @@ export const zProjectPatch = z.object({
   status: z.enum(["active", "on_hold", "completed"]).nullish(),
   subtask_threshold_min: z.int().gte(1).lte(960).nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * PullRequestIn
+ */
+export const zPullRequestIn = z.object({
+  url: z.string().min(1).max(2048),
+});
+
+/**
+ * PullRequestOut
+ *
+ * A tracked pull request as the card shows it; every status field is None until the
+ * first read.
+ */
+export const zPullRequestOut = z.object({
+  artifact_id: z.uuid(),
+  checked_at: z.iso.datetime().nullable(),
+  checks: z.enum(["pending", "green", "red", "none"]).nullable(),
+  draft: z.boolean(),
+  number: z.int(),
+  repo: z.string(),
+  review: z
+    .enum(["approved", "changes_requested", "review_required", "none"])
+    .nullable(),
+  state: z.enum(["open", "merged", "closed"]).nullable(),
+  title: z.string().nullable(),
+  url: z.string(),
 });
 
 /**
@@ -1023,6 +1092,13 @@ export const zUsageRow = z.object({
 });
 
 /**
+ * WebhookOut
+ */
+export const zWebhookOut = z.object({
+  status: z.literal("accepted").optional().default("accepted"),
+});
+
+/**
  * WindowOut
  */
 export const zWindowOut = z.object({
@@ -1266,6 +1342,17 @@ export const zCalendarOauthCallbackQuery = z.object({
  */
 export const zCalendarOauthStartResponse = zOAuthStartOut;
 
+export const zCoolifyListDeployStatusQuery = z.object({
+  project_id: z.uuid().nullish(),
+});
+
+/**
+ * Response Coolify List Deploy Status
+ *
+ * Successful Response
+ */
+export const zCoolifyListDeployStatusResponse = z.array(zProjectDeployStatus);
+
 export const zDeadLettersGetDeadLettersQuery = z.object({
   status: z
     .string()
@@ -1302,6 +1389,15 @@ export const zDeadLettersPostRetryPath = z.object({
  * Successful Response
  */
 export const zDeadLettersPostRetryResponse = zDeadLetterOut;
+
+export const zGithubWebhookPath = z.object({
+  workspace_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zGithubWebhookResponse = zWebhookOut;
 
 export const zAuthListKeysQuery = z.object({
   cursor: z.string().max(2048).nullish(),
@@ -1743,6 +1839,28 @@ export const zTasksMoveTaskPath = z.object({
  * Successful Response
  */
 export const zTasksMoveTaskResponse = zTaskOut;
+
+export const zTasksListPullRequestsPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Response Tasks List Pull Requests
+ *
+ * Successful Response
+ */
+export const zTasksListPullRequestsResponse = z.array(zPullRequestOut);
+
+export const zTasksLinkPullRequestBody = zPullRequestIn;
+
+export const zTasksLinkPullRequestPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksLinkPullRequestResponse = zPullRequestOut;
 
 export const zTasksDeleteRecurrencePath = z.object({
   task_id: z.uuid(),

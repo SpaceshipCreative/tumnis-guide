@@ -1,0 +1,16 @@
+id: tumnis_edit_write_through
+proves: An editor save writes the file with the etag precondition
+backends: [server_path, s3]
+steps:
+  - tumnis_create_note: {project: acme-site, title: "Plan", body: "v1"}
+  - sync
+  - expect:
+      files: {"notes/Plan.md": {contains: "v1", tumnis_id_of: "Plan"}}
+  - tumnis_edit_note: {title: "Plan", body: "v2"}
+  - sync
+  - expect:
+      files: {"notes/Plan.md": {contains: "v2", not_contains: "v1", tumnis_id_of: "Plan"}}
+      writes: {"notes/Plan.md": [create, replace]}
+      documents: {count: 1}
+      listing: ["notes/Plan.md"]
+      review_items: []

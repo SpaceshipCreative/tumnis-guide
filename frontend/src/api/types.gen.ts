@@ -82,6 +82,33 @@ export type AgentProfileOut = {
 };
 
 /**
+ * AppDeployStatus
+ */
+export type AppDeployStatus = {
+  /**
+   * App Uuid
+   */
+  app_uuid: string;
+  /**
+   * Checked At
+   */
+  checked_at: string | null;
+  /**
+   * Error
+   */
+  error: "unavailable" | "rejected" | null;
+  last: LastDeployOut | null;
+  /**
+   * Name
+   */
+  name: string | null;
+  /**
+   * Previews
+   */
+  previews: Array<PreviewOut>;
+};
+
+/**
  * AuditEntry
  */
 export type AuditEntry = {
@@ -685,6 +712,28 @@ export type KeyOut = {
 export type Label = "human" | "ai" | "hybrid";
 
 /**
+ * LastDeployOut
+ */
+export type LastDeployOut = {
+  /**
+   * Commit
+   */
+  commit: string | null;
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Finished At
+   */
+  finished_at: string | null;
+  /**
+   * Status
+   */
+  status: string;
+};
+
+/**
  * LocationIn
  */
 export type LocationIn = {
@@ -1010,6 +1059,32 @@ export type PageSessionOut = {
 export type Preset = "daily" | "weekdays" | "weekly" | "monthly";
 
 /**
+ * PreviewOut
+ */
+export type PreviewOut = {
+  /**
+   * Commit
+   */
+  commit?: string | null;
+  /**
+   * Finished At
+   */
+  finished_at?: string | null;
+  /**
+   * Pull Request Id
+   */
+  pull_request_id: number;
+  /**
+   * Status
+   */
+  status: string;
+  /**
+   * Url
+   */
+  url: string;
+};
+
+/**
  * Problem
  */
 export type Problem = {
@@ -1179,6 +1254,20 @@ export type ProjectCreate = {
    * Status
    */
   status?: "active" | "on_hold" | "completed";
+};
+
+/**
+ * ProjectDeployStatus
+ */
+export type ProjectDeployStatus = {
+  /**
+   * Apps
+   */
+  apps: Array<AppDeployStatus>;
+  /**
+   * Project Id
+   */
+  project_id: string;
 };
 
 /**
@@ -1363,6 +1452,65 @@ export type ProjectPatch = {
    * Version
    */
   version: number;
+};
+
+/**
+ * PullRequestIn
+ */
+export type PullRequestIn = {
+  /**
+   * Url
+   */
+  url: string;
+};
+
+/**
+ * PullRequestOut
+ *
+ * A tracked pull request as the card shows it; every status field is None until the
+ * first read.
+ */
+export type PullRequestOut = {
+  /**
+   * Artifact Id
+   */
+  artifact_id: string;
+  /**
+   * Checked At
+   */
+  checked_at: string | null;
+  /**
+   * Checks
+   */
+  checks: "pending" | "green" | "red" | "none" | null;
+  /**
+   * Draft
+   */
+  draft: boolean;
+  /**
+   * Number
+   */
+  number: number;
+  /**
+   * Repo
+   */
+  repo: string;
+  /**
+   * Review
+   */
+  review: "approved" | "changes_requested" | "review_required" | "none" | null;
+  /**
+   * State
+   */
+  state: "open" | "merged" | "closed" | null;
+  /**
+   * Title
+   */
+  title: string | null;
+  /**
+   * Url
+   */
+  url: string;
 };
 
 /**
@@ -2271,6 +2419,16 @@ export type UsageRow = {
    * Value
    */
   value: number;
+};
+
+/**
+ * WebhookOut
+ */
+export type WebhookOut = {
+  /**
+   * Status
+   */
+  status?: "accepted";
 };
 
 /**
@@ -3611,6 +3769,68 @@ export type CalendarOauthStartResponses = {
 export type CalendarOauthStartResponse =
   CalendarOauthStartResponses[keyof CalendarOauthStartResponses];
 
+export type CoolifyListDeployStatusData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+  };
+  url: "/v1/coolify/status";
+};
+
+export type CoolifyListDeployStatusErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type CoolifyListDeployStatusError =
+  CoolifyListDeployStatusErrors[keyof CoolifyListDeployStatusErrors];
+
+export type CoolifyListDeployStatusResponses = {
+  /**
+   * Response Coolify List Deploy Status
+   *
+   * Successful Response
+   */
+  200: Array<ProjectDeployStatus>;
+};
+
+export type CoolifyListDeployStatusResponse =
+  CoolifyListDeployStatusResponses[keyof CoolifyListDeployStatusResponses];
+
 export type DeadLettersGetDeadLettersData = {
   body?: never;
   path?: never;
@@ -3798,6 +4018,65 @@ export type DeadLettersPostRetryResponses = {
 
 export type DeadLettersPostRetryResponse =
   DeadLettersPostRetryResponses[keyof DeadLettersPostRetryResponses];
+
+export type GithubWebhookData = {
+  body?: never;
+  path: {
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+  };
+  query?: never;
+  url: "/v1/github/webhook/{workspace_id}";
+};
+
+export type GithubWebhookErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type GithubWebhookError = GithubWebhookErrors[keyof GithubWebhookErrors];
+
+export type GithubWebhookResponses = {
+  /**
+   * Successful Response
+   */
+  202: WebhookOut;
+};
+
+export type GithubWebhookResponse =
+  GithubWebhookResponses[keyof GithubWebhookResponses];
 
 export type AuthListKeysData = {
   body?: never;
@@ -6658,6 +6937,128 @@ export type TasksMoveTaskResponses = {
 
 export type TasksMoveTaskResponse =
   TasksMoveTaskResponses[keyof TasksMoveTaskResponses];
+
+export type TasksListPullRequestsData = {
+  body?: never;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/pull-requests";
+};
+
+export type TasksListPullRequestsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksListPullRequestsError =
+  TasksListPullRequestsErrors[keyof TasksListPullRequestsErrors];
+
+export type TasksListPullRequestsResponses = {
+  /**
+   * Response Tasks List Pull Requests
+   *
+   * Successful Response
+   */
+  200: Array<PullRequestOut>;
+};
+
+export type TasksListPullRequestsResponse =
+  TasksListPullRequestsResponses[keyof TasksListPullRequestsResponses];
+
+export type TasksLinkPullRequestData = {
+  body: PullRequestIn;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/pull-requests";
+};
+
+export type TasksLinkPullRequestErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksLinkPullRequestError =
+  TasksLinkPullRequestErrors[keyof TasksLinkPullRequestErrors];
+
+export type TasksLinkPullRequestResponses = {
+  /**
+   * Successful Response
+   */
+  201: PullRequestOut;
+};
+
+export type TasksLinkPullRequestResponse =
+  TasksLinkPullRequestResponses[keyof TasksLinkPullRequestResponses];
 
 export type TasksDeleteRecurrenceData = {
   body?: never;

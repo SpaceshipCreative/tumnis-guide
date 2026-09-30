@@ -13,9 +13,11 @@ import { http, HttpResponse, type RequestHandler } from "msw";
 import type * as z from "zod";
 
 import type {
+  AppDeployStatus,
   BoardOut,
   ColumnOut,
   CommentOut,
+  PullRequestOut,
   Status,
 } from "../../api/types.gen";
 import type { zProjectOut, zTaskOut } from "../../api/zod.gen";
@@ -78,6 +80,8 @@ export interface ProjectFakeInit {
   recurrences?: readonly RecurrenceStub[];
   brief?: string;
   timezone?: string;
+  /** `GET /v1/coolify/status`'s apps for this project (P2-14). */
+  deployApps?: readonly AppDeployStatus[];
 }
 
 function without<T extends object>(value: T, key: string): Partial<T> {
@@ -100,9 +104,14 @@ export class ProjectFake {
   readonly tasks = new Map<string, Row>();
   readonly changes = new Map<string, Change>();
   readonly comments = new Map<string, CommentOut[]>();
+  /** Pull requests by task (P2-13): what `GET /v1/tasks/{id}/pull-requests` answers. */
+  readonly pullRequests = new Map<string, PullRequestOut[]>();
+  /** Answer the next link with this 422 problem code (`not_a_pull_request`, ...). */
+  refuseLink: string | null = null;
   recurrences: RecurrenceStub[];
   brief: BriefStub;
   timezone: string;
+  deployApps: readonly AppDeployStatus[];
   readonly recorder = new Recorder();
   /** Answer the next move with 409 `transition_not_allowed` (T-P0-24-06). */
   refuseMoves = false;
@@ -134,6 +143,7 @@ export class ProjectFake {
       version: 1,
     };
     this.timezone = init.timezone ?? "America/New_York";
+    this.deployApps = init.deployApps ?? [];
   }
 
   /** The first column holding `status`. */
@@ -237,6 +247,13 @@ export class ProjectFake {
       }),
       http.get("/v1/settings/workspace", () =>
         HttpResponse.json(workspaceSettings({ timezone: this.timezone })),
+      ),
+      http.get("/v1/coolify/status", () =>
+        HttpResponse.json(
+          this.deployApps.length === 0
+            ? []
+            : [{ project_id: pid, apps: this.deployApps }],
+        ),
       ),
       http.get("/v1/tasks", ({ request }) => {
         const query = new URL(request.url).searchParams;
@@ -409,6 +426,33 @@ export class ProjectFake {
           comment,
         ]);
         return HttpResponse.json(comment, { status: 201 });
+      }),
+      http.get("/v1/tasks/:id/pull-requests", ({ params }) =>
+        HttpResponse.json(this.pullRequests.get(String(params.id)) ?? []),
+      ),
+      http.post("/v1/tasks/:id/pull-requests", async ({ params, request }) => {
+        const sent = await this.recorder.record(request);
+        if (this.refuseLink) return problem(422, this.refuseLink);
+        const taskId = String(params.id);
+        const url = (sent.body as { url: string }).url;
+        const match = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
+        const linked: PullRequestOut = {
+          artifact_id: crypto.randomUUID(),
+          url,
+          repo: match?.[1] ?? "unknown/unknown",
+          number: Number(match?.[2] ?? 0),
+          title: null,
+          state: null,
+          draft: false,
+          checks: null,
+          review: null,
+          checked_at: null,
+        };
+        this.pullRequests.set(taskId, [
+          ...(this.pullRequests.get(taskId) ?? []),
+          linked,
+        ]);
+        return HttpResponse.json(linked, { status: 201 });
       }),
       http.get(`/v1/projects/${pid}/board`, () =>
         HttpResponse.json(this.board()),

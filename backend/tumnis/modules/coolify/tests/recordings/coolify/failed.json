@@ -1,0 +1,96 @@
+{
+  "notes": "Scrubbed: application and deployment UUIDs, names, domains, repositories, commit SHAs, commit messages, server names and deployment URLs replaced with invented values on example.com/example.org; logs are not returned without a sensitive-read token. Shapes follow Coolify v4.4 (GET /api/v1/applications/{uuid}; GET /api/v1/deployments/applications/{uuid}?take=10 answers {count, deployments}).",
+  "app_uuid": "brio0api0example00000002",
+  "open_prs": [],
+  "responses": {
+    "application": {
+      "id": 12,
+      "uuid": "brio0api0example00000002",
+      "name": "brio-api",
+      "description": null,
+      "fqdn": "https://api.brio.example.org",
+      "status": "running:unhealthy",
+      "preview_url_template": "{{pr_id}}.{{domain}}",
+      "git_repository": "example-org/brio-api",
+      "git_branch": "main",
+      "git_commit_sha": "HEAD",
+      "build_pack": "dockercompose",
+      "environment_id": 3,
+      "destination_type": "App\\Models\\StandaloneDocker",
+      "destination_id": 1,
+      "source_type": "App\\Models\\GithubApp",
+      "source_id": 1,
+      "created_at": "2026-01-14T09:12:40.000000Z",
+      "updated_at": "2026-03-09T11:43:51.000000Z"
+    },
+    "deployments": {
+      "count": 9,
+      "deployments": [
+        {
+          "id": 412,
+          "application_id": "12",
+          "deployment_uuid": "dpl00412example0000000",
+          "pull_request_id": 0,
+          "docker_registry_image_tag": null,
+          "force_rebuild": false,
+          "commit": "c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7",
+          "status": "failed",
+          "is_webhook": true,
+          "is_api": false,
+          "created_at": "2026-03-09T10:05:44.000000Z",
+          "updated_at": "2026-03-09T10:07:02.000000Z",
+          "current_process_id": null,
+          "restart_only": false,
+          "git_type": "github",
+          "server_id": 0,
+          "application_name": "brio-api",
+          "server_name": "homelab-1",
+          "deployment_url": "/project/prj0example/environment/env0example/application/app0example/deployment/dpl00412example0000000",
+          "destination_id": "1",
+          "only_this_server": false,
+          "parent_deployment_uuid": null,
+          "rollback": false,
+          "commit_message": "Bump the ORM",
+          "finished_at": "2026-03-09T10:07:02.000000Z"
+        },
+        {
+          "id": 409,
+          "application_id": "12",
+          "deployment_uuid": "dpl00409example0000000",
+          "pull_request_id": 0,
+          "docker_registry_image_tag": null,
+          "force_rebuild": false,
+          "commit": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d",
+          "status": "finished",
+          "is_webhook": true,
+          "is_api": false,
+          "created_at": "2026-03-08T18:30:00.000000Z",
+          "updated_at": "2026-03-08T18:34:21.000000Z",
+          "current_process_id": null,
+          "restart_only": false,
+          "git_type": "github",
+          "server_id": 0,
+          "application_name": "brio-api",
+          "server_name": "homelab-1",
+          "deployment_url": "/project/prj0example/environment/env0example/application/app0example/deployment/dpl00409example0000000",
+          "destination_id": "1",
+          "only_this_server": false,
+          "parent_deployment_uuid": null,
+          "rollback": false,
+          "commit_message": "Rate limit the login",
+          "finished_at": "2026-03-08T18:34:21.000000Z"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "latest": {
+      "deployment_uuid": "dpl00412example0000000",
+      "status": "failed",
+      "commit": "c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7",
+      "created_at": "2026-03-09T10:05:44Z",
+      "finished_at": "2026-03-09T10:07:02Z"
+    },
+    "previews": []
+  }
+}

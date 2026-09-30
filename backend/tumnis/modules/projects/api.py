@@ -326,6 +326,34 @@ async def effective_subtask_threshold(s: AsyncSession, project_id: UUID) -> int:
     return (await auth.get_workspace_settings(_context())).subtask_threshold_min
 
 
+class ProjectLinkOut(BaseModel):
+    project_id: UUID
+    value: str
+
+
+async def links_of_kind(
+    s: AsyncSession, kind: LinkKind, *, project_ids: frozenset[UUID] | None = None
+) -> list[ProjectLinkOut]:
+    """The links of one kind of the workspace's live, unarchived projects, by project
+    board order then link order (P2-14: the Coolify applications to poll and show).
+    `project_ids` limits them (a project-limited key, R-28)."""
+    stmt = (
+        select(_links.c.project_id, _links.c.value)
+        .join(_projects, _projects.c.id == _links.c.project_id)
+        .where(
+            _links.c.kind == kind,
+            _links.c.deleted_at.is_(None),
+            _live(),
+            _projects.c.archived_at.is_(None),
+        )
+        .order_by(_projects.c.sort_key, _projects.c.id, _links.c.id)
+    )
+    if project_ids is not None:
+        stmt = stmt.where(_links.c.project_id.in_(project_ids))
+    rows = await s.execute(stmt)
+    return [ProjectLinkOut(project_id=row.project_id, value=row.value) for row in rows]
+
+
 LOCAL_ONLY_CACHE: Final = register_cache(
     CacheSpec("projects.local_only", "workspace", None, ("update_project (local_decisions_only)",))
 )
@@ -358,6 +386,12 @@ async def project_exists(s: AsyncSession, project_id: UUID) -> bool:
     """A live project (archived or not) of the caller's workspace."""
     found = await s.scalar(select(_projects.c.id).where(_projects.c.id == project_id, _live()))
     return found is not None
+
+
+def check_code_location(code_path: str | None, repo_url: str | None) -> None:
+    """The FR-2.1 code location rule for other modules (the task packet, P2-07): raises a
+    ValueError with `code` (`code_location_conflict` for both, `invalid_code_location`)."""
+    validate_code_location(code_path, repo_url)
 
 
 # --- Writing -------------------------------------------------------------------------------

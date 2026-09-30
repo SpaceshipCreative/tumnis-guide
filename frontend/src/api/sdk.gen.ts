@@ -95,6 +95,9 @@ import type {
   CalendarSyncNowData,
   CalendarSyncNowErrors,
   CalendarSyncNowResponses,
+  CoolifyListDeployStatusData,
+  CoolifyListDeployStatusErrors,
+  CoolifyListDeployStatusResponses,
   DeadLettersGetDeadLettersData,
   DeadLettersGetDeadLettersErrors,
   DeadLettersGetDeadLettersResponses,
@@ -104,6 +107,9 @@ import type {
   DeadLettersPostRetryData,
   DeadLettersPostRetryErrors,
   DeadLettersPostRetryResponses,
+  GithubWebhookData,
+  GithubWebhookErrors,
+  GithubWebhookResponses,
   HealthLiveData,
   HealthLiveResponses,
   HealthReadyData,
@@ -217,9 +223,15 @@ import type {
   TasksLinkContextItemData,
   TasksLinkContextItemErrors,
   TasksLinkContextItemResponses,
+  TasksLinkPullRequestData,
+  TasksLinkPullRequestErrors,
+  TasksLinkPullRequestResponses,
   TasksListCommentsData,
   TasksListCommentsErrors,
   TasksListCommentsResponses,
+  TasksListPullRequestsData,
+  TasksListPullRequestsErrors,
+  TasksListPullRequestsResponses,
   TasksListRecurrenceData,
   TasksListRecurrenceErrors,
   TasksListRecurrenceResponses,
@@ -279,9 +291,11 @@ import {
   zCalendarOauthStartResponse,
   zCalendarSelectCalendarsResponse,
   zCalendarSyncNowResponse,
+  zCoolifyListDeployStatusResponse,
   zDeadLettersGetDeadLettersResponse,
   zDeadLettersPostDiscardResponse,
   zDeadLettersPostRetryResponse,
+  zGithubWebhookResponse,
   zHealthLiveResponse,
   zKnowledgeCreateLocationResponse,
   zKnowledgeGetBriefResponse,
@@ -319,7 +333,9 @@ import {
   zTasksGetReviewCountResponse,
   zTasksGetTaskResponse,
   zTasksLinkContextItemResponse,
+  zTasksLinkPullRequestResponse,
   zTasksListCommentsResponse,
+  zTasksListPullRequestsResponse,
   zTasksListRecurrenceResponse,
   zTasksListReviewKindsResponse,
   zTasksListTasksResponse,
@@ -824,6 +840,29 @@ export const calendarOauthStart = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List Deploy Status
+ *
+ * Deploy status per project in board order; projects without apps are left out.
+ */
+export const coolifyListDeployStatus = <ThrowOnError extends boolean = false>(
+  options?: Options<CoolifyListDeployStatusData, ThrowOnError>,
+): RequestResult<
+  CoolifyListDeployStatusResponses,
+  CoolifyListDeployStatusErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    CoolifyListDeployStatusResponses,
+    CoolifyListDeployStatusErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zCoolifyListDeployStatusResponse.parseAsync(data),
+    url: "/v1/coolify/status",
+    ...options,
+  });
+
+/**
  * Get Dead Letters
  */
 export const deadLettersGetDeadLetters = <ThrowOnError extends boolean = false>(
@@ -892,6 +931,23 @@ export const deadLettersPostRetry = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Webhook
+ */
+export const githubWebhook = <ThrowOnError extends boolean = false>(
+  options: Options<GithubWebhookData, ThrowOnError>,
+): RequestResult<GithubWebhookResponses, GithubWebhookErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    GithubWebhookResponses,
+    GithubWebhookErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zGithubWebhookResponse.parseAsync(data),
+    url: "/v1/github/webhook/{workspace_id}",
+    ...options,
   });
 
 /**
@@ -2018,6 +2074,58 @@ export const tasksMoveTask = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zTasksMoveTaskResponse.parseAsync(data),
     url: "/v1/tasks/{task_id}/move",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List Pull Requests
+ *
+ * The task's pull requests with their stored status. Opening the task asks for a fresh
+ * read: the worker's answer arrives over `/ws` as a change of the task (FR-12.1).
+ */
+export const tasksListPullRequests = <ThrowOnError extends boolean = false>(
+  options: Options<TasksListPullRequestsData, ThrowOnError>,
+): RequestResult<
+  TasksListPullRequestsResponses,
+  TasksListPullRequestsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TasksListPullRequestsResponses,
+    TasksListPullRequestsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListPullRequestsResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/pull-requests",
+    ...options,
+  });
+
+/**
+ * Link Pull Request
+ *
+ * Links a github.com pull request (422 `not_a_pull_request`, 422 `repo_not_allowed`
+ * outside Settings > GitHub's allow-list); linking again keeps one link (FR-12.1).
+ */
+export const tasksLinkPullRequest = <ThrowOnError extends boolean = false>(
+  options: Options<TasksLinkPullRequestData, ThrowOnError>,
+): RequestResult<
+  TasksLinkPullRequestResponses,
+  TasksLinkPullRequestErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TasksLinkPullRequestResponses,
+    TasksLinkPullRequestErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksLinkPullRequestResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/pull-requests",
     ...options,
     headers: {
       "Content-Type": "application/json",

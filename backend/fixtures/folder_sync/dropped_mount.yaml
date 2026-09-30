@@ -1,0 +1,24 @@
+id: dropped_mount
+proves: A dropped mount takes the location offline and nothing is written; a note save queues and lands once when the marker is back
+backends: [server_path]
+steps:
+  - tumnis_create_note: {project: acme-site, title: "Plan", body: "v1"}
+  - sync
+  - unmount
+  - sync
+  - tumnis_edit_note: {title: "Plan", body: "v2"}
+  - tumnis_save_note: {title: "Plan", status: queued}
+  - expect:
+      location: {status: offline}
+      pending_writes: 1
+      mount_point_files: []
+  - remount
+  - sync
+  - sync
+  - expect:
+      location: {status: online}
+      pending_writes: 0
+      files: {"notes/Plan.md": {contains: "v2"}}
+      writes: {"notes/Plan.md": [create, replace]}
+      listing: ["notes/Plan.md"]
+      review_items: []
