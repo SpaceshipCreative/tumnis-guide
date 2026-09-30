@@ -102,3 +102,16 @@ class ReviewItemAddedV1(EventPayload):
     project_id: UUID | None
     target_type: str
     target_id: UUID
+
+
+@event_type("result.posted", 1)
+class ResultPostedV1(EventPayload):
+    """An agent's result for its run is stored and its task is In review (P2-04, FR-5.8)."""
+
+    event_name: ClassVar[str] = "result.posted"
+    schema_version: Literal[1] = 1
+    result_id: UUID
+    run_id: UUID
+    task_id: UUID
+    project_id: UUID | None
+    outcome: Literal["done", "partial", "blocked"]
