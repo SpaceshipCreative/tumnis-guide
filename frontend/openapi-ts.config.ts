@@ -24,7 +24,21 @@ export default defineConfig({
   plugins: [
     "@hey-api/client-fetch",
     "@tanstack/react-query",
-    "zod",
+    {
+      name: "zod",
+      // `format: binary` (an upload's file, a download's body) is a Blob at runtime, as the
+      // generated types say (`Blob | File`), not a string (P1-16). Hey API resolvers:
+      // https://heyapi.dev/openapi-ts/plugins/concepts/resolvers
+      "~resolvers": {
+        string(ctx) {
+          if (ctx.schema.format !== "binary") return undefined;
+          return ctx
+            .$(ctx.plugin.imports.z)
+            .attr("instanceof")
+            .call(ctx.$("Blob"));
+        },
+      },
+    },
     // Validate responses with the generated zod schemas.
     { name: "@hey-api/sdk", validator: { response: "zod" } },
   ],
