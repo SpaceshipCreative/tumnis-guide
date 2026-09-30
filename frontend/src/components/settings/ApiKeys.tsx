@@ -219,7 +219,14 @@ export function ApiKeys({
           </p>
         </ConfirmDialog>
       )}
-      <div className="max-w-full overflow-x-auto rounded-xl border border-border bg-surface shadow-card">
+      {/* A wide table scrolls sideways here, so the keyboard must reach the wrapper
+          (axe scrollable-region-focusable), and as a region it needs its own name. */}
+      <div
+        role="region"
+        aria-label="API keys table"
+        tabIndex={0}
+        className="max-w-full overflow-x-auto rounded-xl border border-border bg-surface shadow-card"
+      >
         <table className={TABLE}>
           <thead className={TABLE_HEAD}>
             <tr>
