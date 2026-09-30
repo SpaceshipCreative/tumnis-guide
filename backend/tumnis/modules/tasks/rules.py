@@ -16,6 +16,10 @@
   own card; below it, unestimated or AI, it is a checklist item on its parent. Computed on
   every read, never stored.
 - Today's order: priority, then due date (undated last), then age.
+- Taint (P2-08, SAF-1, design decision 14): what is made from outside content is tainted.
+  A new record's taint is the OR of its sources (`derive_taint`); linking can add taint to
+  an existing task and unlinking never clears it (`raise_only`); no tainted task may run
+  unattended (`may_run_unattended`, which P4-04's scheduler calls).
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -536,3 +540,46 @@ def primary_action(spec: KindActions) -> str:
         if action in spec.actions:
             return action
     return spec.actions[0]
+
+
+# --- Taint (P2-08, SAF-1, FR-4.5, design decision 14) --------------------------------------
+
+TaintKind = Literal["context_item", "parent_task", "run", "document", "proposal", "user"]
+
+
+@dataclass(frozen=True)
+class TaintSource:
+    """One thing a record is made from: a linked context item, the parent task, the
+    creating run, a document, a proposal, or the person who wrote it."""
+
+    kind: TaintKind
+    id: UUID | None
+    tainted: bool
+
+
+def derive_taint(sources: Iterable[TaintSource]) -> bool:
+    """A new record's taint: tainted when any of its sources is (none: untainted). Stored
+    once, in the record's own transaction; never recomputed."""
+    return any(s.tainted for s in sources)
+
+
+def raise_only(current: bool, incoming: bool) -> bool:
+    """A record's taint after new input arrives: linking can add taint, and unlinking (or
+    marking a document trusted later) never clears it."""
+    return current or incoming
+
+
+@dataclass(frozen=True)
+class TaskView:
+    """What the unattended rule reads of a task (P4-04 adds its checks on these)."""
+
+    tainted: bool
+    label: Label | None = None
+    status: Status = Status.BACKLOG
+
+
+def may_run_unattended(task: TaskView) -> bool:
+    """False for every tainted task (SAF-1, FR-4.5): tainted work never runs in an
+    unattended window. P4-04 adds the green-light and label checks on top of this function;
+    it never removes this one."""
+    return not task.tainted

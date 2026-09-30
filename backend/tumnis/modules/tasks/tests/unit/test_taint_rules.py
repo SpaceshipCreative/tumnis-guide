@@ -14,7 +14,6 @@ KINDS = ("context_item", "parent_task", "run", "document", "proposal", "user")
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-08")
-@pytest.mark.xfail(strict=True, reason="spec:P2-08")
 @given(
     picks=st.lists(
         st.tuples(st.sampled_from(KINDS), st.booleans(), st.uuids() | st.none()), max_size=20
@@ -26,13 +25,13 @@ def test_derive_taint_is_or(picks: list[tuple[str, bool, object]]) -> None:
     derived taint is true exactly when one source is tainted; the order does not matter,
     and `raise_only` never lowers the current taint.
     """
-    from tumnis.modules.tasks.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.tasks.rules import (  # noqa: PLC0415
         TaintSource,
         derive_taint,
         raise_only,
     )
 
-    sources = [TaintSource(kind=kind, id=ident, tainted=tainted) for kind, tainted, ident in picks]  # type: ignore[arg-type, unused-ignore]
+    sources = [TaintSource(kind=kind, id=ident, tainted=tainted) for kind, tainted, ident in picks]  # type: ignore[arg-type]
     expected = any(tainted for _kind, tainted, _ident in picks)
     assert derive_taint(sources) is expected
     assert derive_taint(reversed(sources)) is expected
@@ -45,7 +44,6 @@ def test_derive_taint_is_or(picks: list[tuple[str, bool, object]]) -> None:
 
 @pytest.mark.req("FR-4.5")
 @pytest.mark.wp("P2-08")
-@pytest.mark.xfail(strict=True, reason="spec:P2-08")
 @given(data=st.data())
 def test_may_run_unattended_false_for_every_tainted_task(data: st.DataObject) -> None:
     """T-P2-08-03
@@ -53,7 +51,7 @@ def test_may_run_unattended_false_for_every_tainted_task(data: st.DataObject) ->
     `may_run_unattended` is false. (P4-04 adds its own checks on top, so nothing here says
     when an untainted task may run.)
     """
-    from tumnis.modules.tasks.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.tasks.rules import (  # noqa: PLC0415
         Label,
         Status,
         TaskView,
