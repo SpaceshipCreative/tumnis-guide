@@ -29,6 +29,7 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.enable_socket,
     pytest.mark.slow,
+    pytest.mark.serial,
     pytest.mark.usefixtures("test_cache"),
 ]
 

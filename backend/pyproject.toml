@@ -85,6 +85,7 @@ markers = [
   "integration: needs Postgres or containers (sockets allowed)",
   "contract: adapter, connector or schema contract",
   "slow: over 5 seconds",
+  "serial: timing-sensitive; runs alone (-n 0) after the parallel integration run",
   "drill: restore drill only, never on PRs",
 ]
 
