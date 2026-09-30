@@ -142,6 +142,12 @@ import type {
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarErrors,
   PlanningGetDayCalendarResponses,
+  PlanningGetProjectWeekData,
+  PlanningGetProjectWeekErrors,
+  PlanningGetProjectWeekResponses,
+  PlanningSchedulePlanItemData,
+  PlanningSchedulePlanItemErrors,
+  PlanningSchedulePlanItemResponses,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectErrors,
   ProjectsArchiveProjectResponses,
@@ -309,6 +315,8 @@ import {
   zKnowledgeTestLocationResponse,
   zKnowledgeUpdateDocumentResponse,
   zPlanningGetDayCalendarResponse,
+  zPlanningGetProjectWeekResponse,
+  zPlanningSchedulePlanItemResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
   zProjectsGetProjectResponse,
@@ -1211,6 +1219,27 @@ export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Project Week
+ */
+export const planningGetProjectWeek = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetProjectWeekData, ThrowOnError>,
+): RequestResult<
+  PlanningGetProjectWeekResponses,
+  PlanningGetProjectWeekErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetProjectWeekResponses,
+    PlanningGetProjectWeekErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetProjectWeekResponse.parseAsync(data),
+    url: "/v1/plan/week/{monday}",
+    ...options,
+  });
+
+/**
  * Get Day Calendar
  */
 export const planningGetDayCalendar = <ThrowOnError extends boolean = false>(
@@ -1229,6 +1258,31 @@ export const planningGetDayCalendar = <ThrowOnError extends boolean = false>(
       await zPlanningGetDayCalendarResponse.parseAsync(data),
     url: "/v1/plan/{day}/calendar",
     ...options,
+  });
+
+/**
+ * Schedule Plan Item
+ */
+export const planningSchedulePlanItem = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningSchedulePlanItemData, ThrowOnError>,
+): RequestResult<
+  PlanningSchedulePlanItemResponses,
+  PlanningSchedulePlanItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    PlanningSchedulePlanItemResponses,
+    PlanningSchedulePlanItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningSchedulePlanItemResponse.parseAsync(data),
+    url: "/v1/plan/{day}/items/{task_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
