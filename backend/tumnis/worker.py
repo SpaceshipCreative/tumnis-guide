@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from tumnis.core import audit_workflows, cache, events, faults, modules, workflows_ops
 from tumnis.core.clock import SystemClock
-from tumnis.settings import Settings, install_master_keys
+from tumnis.settings import Settings, install_master_keys, install_peppers
 
 if TYPE_CHECKING:
     from dbos import DBOSConfig
@@ -241,6 +241,9 @@ def main(
     if settings.tumnis_adapters == "fake":
         fake_scripts.enable()  # scripts posted to the api reach this process's fakes (R-37)
     install_master_keys(settings)
+    # dispatch issues each run's task token (P2-02, R-27): its HMAC needs the peppers here
+    # too, not only in the api (the boot checks install them; a harness worker skips those).
+    install_peppers(settings)
     modules.configure(settings)
     configure_generation(settings)
     configure_agents(settings)
