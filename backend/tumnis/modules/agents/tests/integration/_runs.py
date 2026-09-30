@@ -17,6 +17,7 @@ agents api, the fake runner and the outbox.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import contextlib
 import itertools
 import json
@@ -112,10 +113,12 @@ def user_ctx(workspace: WorkspaceHandle) -> WorkspaceContext:
 
 
 def workflow_status(run_id: uuid.UUID) -> str | None:
-    """The DBOS status of the run's `dispatch_run` workflow (its id is the run id)."""
+    """The DBOS status of the run's `dispatch_run` workflow (its id is the run id). Read on
+    a plain thread: DBOS refuses its sync API while an event loop runs on the caller's."""
     from dbos import DBOS  # noqa: PLC0415
 
-    status = DBOS.get_workflow_status(str(run_id))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        status = pool.submit(DBOS.get_workflow_status, str(run_id)).result()
     return None if status is None else str(status.status)
 
 
