@@ -120,6 +120,12 @@ _PAGE_PNG = bytes.fromhex(  # a 1x1 PNG: what FakeDocling shows the vision fake
 )
 
 
+# The EICAR anti-malware test string, in two halves so that no virus scanner on a dev
+# machine quarantines this file (the same split as tests/_samples.py).
+_EICAR = (r"X5O!P%@AP[4\PZX54(P^)7CC)7}$" + "EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*").encode()
+EICAR_SIGNATURE = "Win.Test.EICAR_HDB-1"  # clamd's name for it
+
+
 class FakeClamAV:
     """Flags the EICAR test file and nothing else (A6). `calls` records the byte count of
     each scan."""
@@ -128,7 +134,14 @@ class FakeClamAV:
         self.calls: list[int] = []
 
     async def scan(self, stream: AsyncIterator[bytes]) -> ScanResult:
-        raise NotImplementedError
+        size, tail, found = 0, b"", False
+        async for chunk in stream:
+            size += len(chunk)
+            window = tail + chunk  # the string may straddle two chunks
+            found = found or _EICAR in window
+            tail = window[-(len(_EICAR) - 1) :]
+        self.calls.append(size)
+        return ScanResult(infected=found, signature=EICAR_SIGNATURE if found else None)
 
 
 class FakeVision:

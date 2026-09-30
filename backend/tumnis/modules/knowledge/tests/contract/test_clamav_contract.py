@@ -51,7 +51,6 @@ class ScannerContract(AdapterContract[Scanner]):
 @pytest.mark.contract
 @pytest.mark.req("SEC-10")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 class TestFakeClamAV(ScannerContract):
     """T-P1-16-05
     The fake scanner flags EICAR and nothing else.
@@ -70,7 +69,6 @@ class TestFakeClamAV(ScannerContract):
 @pytest.mark.enable_socket
 @pytest.mark.req("SEC-10")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 class TestClamAV(ScannerContract):
     """T-P1-16-05
     INSTREAM framing against the `clamd` container: clean text is OK, EICAR is found.
