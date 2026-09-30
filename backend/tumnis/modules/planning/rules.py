@@ -9,10 +9,13 @@
   P0-19's `rules_recurrence` does).
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, time
-from typing import Final
+from typing import Final, Literal
+from uuid import UUID
 from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel
 
 from tumnis.core.types import Interval
 
@@ -42,3 +45,77 @@ def local_to_utc(day: date, local_time: time, tz: ZoneInfo) -> datetime:
     """`core.clock.local_to_utc` (R-12): fold=0 moves a gap time forward by the gap and
     takes an ambiguous time's first occurrence."""
     return datetime.combine(day, local_time.replace(tzinfo=None, fold=0), tzinfo=tz).astimezone(UTC)
+
+
+# --- Plans (P1-12; P1-11 extends them) --------------------------------------------------------
+
+Label = Literal["human", "ai", "hybrid"]
+TaskStatus = Literal["backlog", "today", "in_progress", "waiting_on_human", "in_review", "done"]
+ViolationCode = Literal[
+    "too_many_items",
+    "duplicate_task",
+    "unknown_task",
+    "ineligible_task",
+    "missing_reason",
+    "reason_too_long",
+    "missing_estimate",
+    "missing_block",
+    "ai_task_has_block",
+    "block_outside_free_time",
+    "block_length_mismatch",
+    "blocks_overlap",
+    "block_in_past",
+    "exceeds_free_time",
+]
+
+
+class PlanTask(BaseModel, frozen=True):
+    """A task as the plan rules see it (P1-11's interface)."""
+
+    task_id: UUID
+    project_id: UUID
+    label: Label
+    estimate_minutes: int | None
+    status: TaskStatus
+    blocked: bool
+    due_on: date | None
+    priority: int
+    rollover_count: int
+    created_at: datetime
+    eligible: bool  # not done, not trashed, project active
+
+
+class Violation(BaseModel, frozen=True):
+    code: ViolationCode
+    task_id: UUID | None = None
+
+
+class ProjectLink(BaseModel, frozen=True):
+    """A project's link as the matching rule reads it: `person` (an address) or `domain`."""
+
+    kind: str
+    value: str
+
+
+class EventDTO(BaseModel, frozen=True):
+    """A calendar event as the matching rule reads it: its attendees' addresses."""
+
+    attendees: tuple[str, ...] = ()
+
+
+def event_matches_project(event: EventDTO, links: Sequence[ProjectLink]) -> bool:
+    """True if any attendee email equals a person link, or any attendee domain equals a
+    domain link. Deterministic; Jev matching of events is not needed in v1."""
+    raise NotImplementedError
+
+
+def validate_manual_block(
+    task: PlanTask,
+    block: Interval,
+    free: Sequence[Interval],
+    planned: Sequence[Interval],
+    now: datetime,
+) -> list[Violation]:
+    """Same codes as validate_plan for a single item (block_outside_free_time,
+    blocks_overlap, block_length_mismatch, block_in_past, ai_task_has_block)."""
+    raise NotImplementedError

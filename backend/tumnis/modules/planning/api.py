@@ -22,7 +22,7 @@ from typing import Annotated, Any, Final
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import Table, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -266,3 +266,87 @@ async def day_calendar(ctx: WorkspaceContext, day: date) -> DayCalendarOut:
     tags = (free_blocks_tag(ctx.workspace_id), auth.workspace_settings_tag(ctx.workspace_id))
     await _CACHE.fill(key, out.model_dump_json().encode(), since=token, tags=tags)
     return out
+
+
+# --- The project week view and manual blocks (P1-12) -----------------------------------------
+
+
+class WeekEventOut(BaseModel):
+    title: str | None  # None: busy time that is not the project's (shown as `Busy`)
+    start: datetime
+    end: datetime
+    busy: bool
+    matched: bool  # an attendee is one of the project's person or domain links
+
+
+class TaskRefOut(BaseModel):
+    id: UUID
+    title: str
+    label: str | None
+    status: str
+    estimate_minutes: int | None
+    due_on: date | None
+
+
+class PlannedBlockOut(BaseModel):
+    task_id: UUID | None  # None: a block planned for another project's task
+    title: str | None
+    start: datetime
+    end: datetime
+
+
+class WeekDayOut(BaseModel):
+    day: date
+    window: WindowOut | None
+    free_blocks: list[FreeBlockOut]
+    events: list[WeekEventOut]
+    due: list[TaskRefOut]
+    planned: list[PlannedBlockOut]
+
+
+class WeekOut(BaseModel):
+    monday: date
+    timezone: str  # the workspace's IANA zone the days were computed in
+    days: list[WeekDayOut]  # Monday to Sunday
+    unscheduled: list[TaskRefOut]  # the project's open Human and Hybrid tasks with an
+    # estimate and no block this week: what the view offers to schedule
+
+
+class ManualBlockIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    block_start: AwareDatetime
+    block_end: AwareDatetime
+    version: Version | None = None  # the plan item's version when moving a scheduled block
+
+
+class PlanItemOut(BaseModel):
+    plan_id: UUID
+    task_id: UUID
+    day: date
+    position: int
+    reason: str
+    block_start: datetime | None
+    block_end: datetime | None
+    version: int
+
+
+class NotAMonday(ValueError):  # noqa: N818  # carries the problem code
+    code = "validation_error"
+
+
+async def project_week(ctx: WorkspaceContext, monday: date, project_id: UUID) -> WeekOut:
+    """Monday to Sunday of one project in the workspace timezone (P1-12)."""
+    raise NotImplementedError
+
+
+async def schedule_block(
+    ctx: WorkspaceContext,
+    day: date,
+    task_id: UUID,
+    body: ManualBlockIn,
+    *,
+    now: datetime,
+    session: AsyncSession | None = None,
+) -> PlanItemOut:
+    """Upserts the task's item with this block in the day's published plan (P1-12)."""
+    raise NotImplementedError
