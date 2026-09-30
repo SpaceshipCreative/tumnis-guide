@@ -7,7 +7,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { apiWrite } from "../../lib/fetch";
+import { ApiError, apiWrite } from "../../lib/fetch";
 import type { ThemeChoice } from "../../lib/theme";
 import { uiStore } from "../../stores/uiStore";
 import { reviewCountQuery } from "../dashboard/queries";
@@ -176,9 +176,15 @@ function AccountMenu() {
         path: "/auth/logout",
         idempotencyKey: crypto.randomUUID(),
       });
-    } catch {
-      uiStore.trigger.showNotice({ text: "Sign out did not work. Try again." });
-      return;
+    } catch (error) {
+      // 401: the session had already ended (expired, or revoked elsewhere), so this
+      // device is signed out all the same; anything else leaves it signed in.
+      if (!(error instanceof ApiError && error.status === 401)) {
+        uiStore.trigger.showNotice({
+          text: "Sign out did not work. Try again.",
+        });
+        return;
+      }
     }
     queryClient.clear();
     await navigate({ to: "/login", replace: true });

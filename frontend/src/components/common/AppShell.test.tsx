@@ -6,9 +6,10 @@ import { http, HttpResponse } from "msw";
 import { beforeEach, expect, test } from "vitest";
 
 import type { AccountOut } from "../../api/types.gen";
+import { setUnauthorizedHandler } from "../../lib/fetch";
 import { reviewCount } from "../../test/msw/dashboard";
 import { server } from "../../test/msw/server";
-import { renderRoute } from "../../test/render";
+import { createTestQueryClient, renderRoute } from "../../test/render";
 import { SIDEBAR_KEY, uiStore } from "../../stores/uiStore";
 
 const ACCOUNT: AccountOut = {
@@ -191,4 +192,46 @@ test("[DS-01][UX 11] T-DS-01-16 everything behind the phone drawer is inert, toa
   for (const status of screen.queryAllByRole("status", { hidden: true })) {
     expect(status.closest("[inert]")).not.toBeNull();
   }
+});
+
+test("[DS-01][UX 7] a 401 on sign out still signs out here: the cache is cleared and sign-in opens", async () => {
+  // The session is already gone (expired, or revoked from another device), so the
+  // server answers 401: this device is signed out all the same (review follow-up to
+  // #85). main.tsx's global 401 handler is not installed here, so the header has to
+  // clear the cache and open sign-in itself.
+  setUnauthorizedHandler(() => undefined);
+  uiStore.trigger.clearNotice();
+  server.use(
+    http.post("*/v1/auth/logout", () =>
+      HttpResponse.json(
+        {
+          type: "about:blank",
+          title: "Unauthenticated",
+          status: 401,
+          code: "unauthenticated",
+        },
+        { status: 401 },
+      ),
+    ),
+  );
+  const queryClient = createTestQueryClient();
+  queryClient.setQueryData(["left-behind"], { email: ACCOUNT.email });
+  const { user, router } = await renderRoute("/", {
+    viewport: "laptop",
+    queryClient,
+  });
+
+  await user.click(screen.getByRole("button", { name: "Account" }));
+  await user.click(
+    within(screen.getByRole("menu", { name: "Account" })).getByRole(
+      "menuitem",
+      { name: "Sign out" },
+    ),
+  );
+
+  await waitFor(() => {
+    expect(router.state.location.pathname).toBe("/login");
+  });
+  expect(queryClient.getQueryData(["left-behind"])).toBeUndefined();
+  expect(uiStore.getSnapshot().context.notice).toBeNull();
 });
