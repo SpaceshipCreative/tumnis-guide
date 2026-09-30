@@ -97,6 +97,10 @@ def _outcome(packet: TaskPacket, message: dict[str, Any] | None) -> api.RunOutco
     status = message.get("status")
     if status == "runner_lost":
         return api.RunOutcome(run_id=packet.run_id, status="runner_lost", error="runner_lost")
+    if status == "cancelled":  # a protocol-2 cancel, or the protocol-1 fallback (P2-07)
+        return api.RunOutcome(
+            run_id=packet.run_id, status="cancelled", error=message.get("error") or "cancelled"
+        )
     output = message.get("output_json")
     if status == "succeeded":
         invalid = _checked_output(packet, output)

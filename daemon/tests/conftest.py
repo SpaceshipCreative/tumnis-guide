@@ -1,17 +1,35 @@
-"""Shared daemon test helpers: a config in a temporary state dir, and Run messages."""
+"""Shared daemon test helpers: a config in a temporary state dir, Run messages, a git
+repository with a bare remote (`tmp_git_repo`), and the in-memory transport pair the replay
+property test talks through (`MemoryLink` to a `ServerDouble`)."""
 
 from __future__ import annotations
 
+import json
 import os
 import stat
+import subprocess
 import uuid
+from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
+from hypothesis import HealthCheck, settings
+from websockets.exceptions import ConnectionClosed
 
 from tumnis_daemon.config import DaemonConfig
 from tumnis_daemon.protocol import Run, SchemaRef, envelope
+
+# The random-disconnect property test runs 500 examples in CI (P2-07 done checklist) and
+# fewer locally, so `make check` stays under its budget.
+settings.register_profile(
+    "ci", max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+)
+settings.register_profile(
+    "dev", max_examples=40, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+)
+settings.load_profile("ci" if os.environ.get("CI") else "dev")
 
 TESTS = Path(__file__).resolve().parent
 REPO = TESTS.parents[1]
@@ -40,6 +58,8 @@ def make_run(
     skill: str = "enrich",
     prompt: str = "Use the skill.\n",
     timeout_s: int = 60,
+    workdir_policy: str = "none",
+    code_location: dict[str, Any] | None = None,
 ) -> Run:
     """A Run as the server would send it; built without validation so a test can hand the
     runner names the protocol itself would refuse."""
@@ -51,10 +71,15 @@ def make_run(
         "run_id": run_id,
         "profile": profile,
         "skill": skill,
-        "packet": {"prompt_text": prompt, "skill": skill, "run_id": str(run_id)},
+        "packet": {
+            "prompt_text": prompt,
+            "skill": skill,
+            "run_id": str(run_id),
+            "body": {"project": {"code_location": code_location}},
+        },
         "output_schema": SchemaRef(family="enrichment", name="result", version=1),
         "timeout_s": timeout_s,
-        "workdir_policy": "none",
+        "workdir_policy": workdir_policy,
     }
     return Run.model_construct(**fields)
 
@@ -65,3 +90,88 @@ def alive(pid: int) -> bool:
     except ProcessLookupError:
         return False
     return True
+
+
+# --- P2-07: agent home, git repositories, the in-memory transport ------------------------
+
+GIT_ENV = {
+    "GIT_AUTHOR_NAME": "Tumnis Test",
+    "GIT_AUTHOR_EMAIL": "test@example.org",
+    "GIT_COMMITTER_NAME": "Tumnis Test",
+    "GIT_COMMITTER_EMAIL": "test@example.org",
+    "GIT_CONFIG_NOSYSTEM": "1",
+}
+
+
+def git(cwd: Path | None, *args: str) -> str:
+    """Run git for a test (no shell); its stdout."""
+    env = {**os.environ, **GIT_ENV, "HOME": str(cwd or Path.cwd())}
+    argv = ["git", *args]  # git from PATH, as the daemon runs it
+    done = subprocess.run(argv, cwd=cwd, env=env, capture_output=True, text=True, check=True)
+    return done.stdout
+
+
+def agent_config(cfg: DaemonConfig, tmp_path: Path) -> DaemonConfig:
+    """The test config with the agent home and the unit's ReadWritePaths drop-in under
+    `tmp_path` (called in a test body: the fields arrive with P2-07)."""
+    return replace(cfg, agent_home=tmp_path / "home", paths_dropin=tmp_path / "paths.conf")
+
+
+def worktree_paths(repo: Path) -> list[str]:
+    """`git worktree list --porcelain` of a repository: the path of each worktree."""
+    listing = git(repo, "worktree", "list", "--porcelain")
+    return [line.split(" ", 1)[1] for line in listing.splitlines() if line.startswith("worktree ")]
+
+
+@pytest.fixture
+def tmp_git_repo(tmp_path: Path) -> tuple[Path, Path]:
+    """(repo, remote): a repository with one commit on `main` under the test agent home
+    (`tmp_path/home/code/acme`), and a bare copy of it as the clone URL's remote."""
+    repo = tmp_path / "home" / "code" / "acme"
+    repo.mkdir(parents=True)
+    git(repo, "init", "-q", "-b", "main")
+    (repo / "README.md").write_text("# Acme site\n")
+    git(repo, "add", "README.md")
+    git(repo, "commit", "-q", "-m", "first")
+    remote = tmp_path / "remote.git"
+    git(tmp_path, "clone", "-q", "--bare", str(repo), str(remote))
+    return repo, remote
+
+
+class ServerDouble:
+    """The server's side of the replay property: every frame it receives is counted, a
+    frame is stored once per `message_id` (the dedupe rule), and each receipt is acked
+    after it is stored; `take_acks` hands over the ids acked since the last call."""
+
+    def __init__(self) -> None:
+        self.stored: dict[str, dict[str, Any]] = {}
+        self.receipts: Counter[str] = Counter()
+        self._acks: list[str] = []
+
+    def receive(self, frame: str) -> None:
+        message = json.loads(frame)
+        message_id = str(message["message_id"])
+        self.receipts[message_id] += 1
+        self.stored.setdefault(message_id, message)
+        self._acks.append(message_id)
+
+    def take_acks(self) -> list[str]:
+        acks, self._acks = self._acks, []
+        return acks
+
+
+class MemoryLink:
+    """The daemon's end of one in-memory connection to a ServerDouble: `send` delivers the
+    frame at once; after `close` it raises ConnectionClosed, as a dropped socket does."""
+
+    def __init__(self, server: ServerDouble) -> None:
+        self.server = server
+        self.closed = False
+
+    async def send(self, message: str, /) -> None:
+        if self.closed:
+            raise ConnectionClosed(None, None)
+        self.server.receive(message)
+
+    def close(self) -> None:
+        self.closed = True

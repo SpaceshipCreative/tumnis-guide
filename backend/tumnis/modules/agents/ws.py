@@ -15,6 +15,17 @@ forwarder between the worker and their sockets.
    in a row close the socket) and a forwarder (woken by `NOTIFY runner_mailbox` through the
    `RunnerHub`, with a 1 s poll as a backstop) run until either side closes.
 
+Protocol 2 (P2-07) is the session's protocol when the daemon lists 2 and advertises the
+protocol-2 capabilities. Acks then go out batched (`ack{message_ids}`, up to 50 ids or
+500 ms); a protocol-1 session keeps P1-04's one `ack{ack_of}` per message. Mailbox rows are
+rendered for the session: a protocol-1 daemon gets a version-1 `run` (no worktree, at most
+an hour) and never a `cancel` or `archive`. `stream`, `status` and `upload_artifact` become
+run events (once per message id, acked after the commit) for runs dispatched to this
+runner; anything else, and an artifact that is not small UTF-8 text with the right sha256,
+is refused with `nack{code}`. A `status` of state `started` records the profile's VERSION
+on the run and on the profile. A result for a run the server already cancelled (the
+protocol-1 fallback) is acked and dropped.
+
 The api never calls out: the daemon dialled in. The worker never touches the socket; it
 writes mailbox rows and NOTIFYs. A result is written as a run event and handed to its
 waiting `run_skill` workflow with `DBOSClient.send` (idempotent on the message id) before
@@ -24,6 +35,7 @@ runner offline; only the runner sweep does, from the heartbeats.
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 from collections import defaultdict
@@ -45,23 +57,31 @@ from tumnis.core.principal import Principal
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import ActorRef
 from tumnis.modules.agents import api
-from tumnis.modules.agents.models import RunEventRow, RunnerMessage, RunRow
+from tumnis.modules.agents.models import AgentProfile, RunEventRow, RunnerMessage, RunRow
 from tumnis.modules.agents.models import Runner as RunnerModel
 from tumnis.modules.agents.protocol import (
     SERVER_PROTOCOL_VERSIONS,
     Ack,
+    AckBatch,
     DaemonMessage,
     ErrorCode,
     HealthReport,
     Heartbeat,
     InvalidMessage,
+    Nack,
+    NackCode,
     ProtocolError,
     Register,
     Registered,
     Result,
+    ResultV2,
+    Status,
+    Stream,
+    UploadArtifact,
     negotiate,
     parse_daemon,
 )
+from tumnis.modules.agents.rules import artifact_bytes, artifact_refusal
 
 if TYPE_CHECKING:
     from dbos import DBOSClient
@@ -74,11 +94,18 @@ RETRY_S: Final = 1.0
 RETRY_MAX_S: Final = 30.0
 POLICY_VIOLATION: Final = 1008
 NIL: Final = UUID(int=0)
+ACK_BATCH_MAX: Final = 50  # protocol 2: ids per batched ack (plan default)
+ACK_BATCH_S: Final = 0.5  # protocol 2: the longest an ack waits for its batch (plan default)
+PROTOCOL_2: Final = 2
+V1_TIMEOUT_MAX: Final = 3600  # a protocol-1 `run` carries at most an hour
+STREAM_EVENT_KIND: Final = {"log": "log", "tool_call": "tool_call", "file_touched": "file"}
+PROTOCOL_2_COMMANDS: Final = frozenset({"cancel", "archive"})  # never sent on protocol 1
 
 _runners: Table = RunnerModel.__table__  # type: ignore[assignment]
 _messages: Table = RunnerMessage.__table__  # type: ignore[assignment]
 _runs: Table = RunRow.__table__  # type: ignore[assignment]
 _events: Table = RunEventRow.__table__  # type: ignore[assignment]
+_profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
 _NOTIFY = text("SELECT pg_notify(:channel, :payload)")
 _log = logging.getLogger(__name__)
 
@@ -259,6 +286,9 @@ class _RunnerSocket:
         self.waiter = waiter
         self.clock = websocket.app.state.clock
         self._send_lock = asyncio.Lock()
+        self.protocol = 1  # the session's, from negotiate
+        self._acks: list[UUID] = []  # protocol 2: ids waiting for their batch
+        self._ack_timer: asyncio.Task[None] | None = None
 
     # --- sending -------------------------------------------------------------------------
 
@@ -289,8 +319,37 @@ class _RunnerSocket:
                 await self.ws.close(code=POLICY_VIOLATION)
 
     async def _ack(self, message: DaemonMessage) -> None:
-        ack = Ack(**self._envelope(message.correlation_id), ack_of=message.message_id)
-        await self._send_text(ack.model_dump_json())
+        """Protocol 1: its own `ack{ack_of}` now. Protocol 2: into the batch, sent at 50
+        ids or after 500 ms, whichever comes first."""
+        if self.protocol < PROTOCOL_2:
+            ack = Ack(**self._envelope(message.correlation_id), ack_of=message.message_id)
+            await self._send_text(ack.model_dump_json())
+            return
+        self._acks.append(message.message_id)
+        if len(self._acks) >= ACK_BATCH_MAX:
+            await self._flush_acks()
+        elif self._ack_timer is None or self._ack_timer.done():
+            self._ack_timer = asyncio.create_task(self._flush_acks_later())
+
+    async def _flush_acks_later(self) -> None:
+        await asyncio.sleep(ACK_BATCH_S)
+        with contextlib.suppress(RuntimeError, WebSocketDisconnect):
+            await self._flush_acks()
+
+    async def _flush_acks(self) -> None:
+        while self._acks:
+            batch, self._acks = self._acks[:ACK_BATCH_MAX], self._acks[ACK_BATCH_MAX:]
+            ack = AckBatch(**self._envelope(f"runner:{self.runner_id}"), message_ids=batch)
+            await self._send_text(ack.model_dump_json())
+
+    async def _nack(self, message: DaemonMessage, code: NackCode, detail: str) -> None:
+        nack = Nack(
+            **self._envelope(message.correlation_id),
+            nack_of=message.message_id,
+            code=code,
+            detail=detail,
+        )
+        await self._send_text(nack.model_dump_json())
 
     # --- the session ---------------------------------------------------------------------
 
@@ -309,7 +368,8 @@ class _RunnerSocket:
         if not isinstance(message, Register):
             await self._refuse("not_registered", "The first message must be register")
             return
-        version = negotiate(message.protocol_versions)
+        version = negotiate(message.protocol_versions, message.capabilities)
+        self.protocol = version or 1
         if version is None:
             await self._refuse(
                 "unsupported_protocol_version",
@@ -351,6 +411,10 @@ class _RunnerSocket:
             for task in tasks:
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
+            if self._ack_timer is not None:
+                self._ack_timer.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await self._ack_timer
             await self._close()
 
     # --- reading -------------------------------------------------------------------------
@@ -369,19 +433,25 @@ class _RunnerSocket:
                 continue
             invalid = 0
             if isinstance(message, Ack):
-                await self._acked(message.ack_of)
+                await self._acked([message.ack_of])
+                continue
+            if isinstance(message, AckBatch):
+                await self._acked(message.message_ids)
                 continue
             if await self._handle(message):
                 await self._ack(message)
 
     async def _handle(self, message: DaemonMessage) -> bool:
         """Write the message (once per message_id) and act on it; True when it may be
-        acked."""
+        acked (False: not yet, or refused with a `nack`)."""
+        if isinstance(message, Stream | Status | UploadArtifact):
+            return await self._run_report(message)
         await self._store_inbound(message)
         if isinstance(message, Heartbeat):
             await self._heartbeat()
         elif isinstance(message, Register):
-            await self._register(message, negotiate(message.protocol_versions) or 1)
+            version = negotiate(message.protocol_versions, message.capabilities)
+            await self._register(message, version or 1)
         elif isinstance(message, Result):
             return await self._result(message)
         elif isinstance(message, HealthReport):
@@ -398,6 +468,21 @@ class _RunnerSocket:
             await self._forward(("queued",))
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self.waiter.event.wait(), POLL_S)
+
+    def _render(self, payload: dict[str, Any]) -> str | None:
+        """A mailbox row as this session's protocol sends it: the worker writes version-2
+        `run`s; a protocol-1 daemon gets version 1 (no worktree, at most an hour) and never
+        a `cancel` or `archive`, which it would not understand."""
+        if payload.get("type") == "run":
+            if self.protocol >= PROTOCOL_2:
+                return json.dumps({**payload, "schema_version": 2})
+            timeout = min(int(payload.get("timeout_s", V1_TIMEOUT_MAX)), V1_TIMEOUT_MAX)
+            return json.dumps(
+                {**payload, "schema_version": 1, "workdir_policy": "none", "timeout_s": timeout}
+            )
+        if self.protocol < PROTOCOL_2 and payload.get("type") in PROTOCOL_2_COMMANDS:
+            return None
+        return json.dumps(payload)
 
     async def _forward(self, statuses: tuple[str, ...]) -> None:
         """Send the runner's outbound mailbox rows in `statuses`, oldest first, then mark
@@ -418,7 +503,9 @@ class _RunnerSocket:
         if not rows:
             return
         for row in rows:
-            await self._send_text(json.dumps(row.payload))
+            frame = self._render(row.payload)
+            if frame is not None:
+                await self._send_text(frame)
         async with tenant_session(self.ctx) as s:
             await s.execute(
                 update(_messages)
@@ -481,12 +568,12 @@ class _RunnerSocket:
         async with tenant_session(self.ctx) as s:
             await self._insert_inbound(s, message)
 
-    async def _acked(self, ack_of: UUID) -> None:
+    async def _acked(self, ids: list[UUID]) -> None:
         async with tenant_session(self.ctx) as s:
             await s.execute(
                 update(_messages)
                 .where(
-                    _messages.c.message_id == ack_of,
+                    _messages.c.message_id.in_(ids),
                     _messages.c.direction == "out",
                     _messages.c.runner_id == self.runner_id,
                 )
@@ -526,6 +613,12 @@ class _RunnerSocket:
                     "dropped a result for a run not dispatched to this runner",
                     extra={"run": str(message.run_id), "runner": str(self.runner_id)},
                 )
+                return True
+            run_status = await s.scalar(select(_runs.c.status).where(_runs.c.id == message.run_id))
+            cancelled = isinstance(message, ResultV2) and message.status == "cancelled"
+            if run_status == "cancelled" and not cancelled:
+                # The protocol-1 fallback: the server cancelled the run itself, and the old
+                # daemon ran it to the end anyway. Acked, and ignored.
                 return True
             await s.execute(
                 insert(_events)
@@ -571,3 +664,94 @@ class _RunnerSocket:
             )
         except Exception:  # a report nobody waits for any more
             _log.warning("health report without its workflow", extra={"id": message.request_id})
+
+    # --- protocol 2: stream, status, artifacts ----------------------------------------
+
+    async def _dispatched_here(self, s: Any, run_id: UUID) -> bool:
+        """The run's `run` message went to this runner (the mailbox row
+        uuid5(run_id, "run"))."""
+        found = await s.scalar(
+            select(_messages.c.id).where(
+                _messages.c.message_id == uuid5(run_id, "run"),
+                _messages.c.direction == "out",
+                _messages.c.runner_id == self.runner_id,
+            )
+        )
+        return found is not None
+
+    def _artifact_refusal(self, message: UploadArtifact) -> NackCode | None:
+        raw = artifact_bytes(message.content)
+        computed = hashlib.sha256(raw).hexdigest() if raw is not None else None
+        return artifact_refusal(
+            message.media_type, message.content, message.size, message.sha256, computed
+        )
+
+    async def _run_report(self, message: Stream | Status | UploadArtifact) -> bool:
+        """A run's `stream` line, `status` or artifact as a run event (once per message id;
+        acked after the commit), or a `nack` when it is refused."""
+        if isinstance(message, UploadArtifact):
+            refusal = self._artifact_refusal(message)
+            if refusal is not None:
+                await self._nack(message, refusal, f"artifact refused: {refusal}")
+                return False
+        run_id = message.run_id
+        async with tenant_session(self.ctx) as s:
+            if run_id is not None and not await self._dispatched_here(s, run_id):
+                refused = True
+            else:
+                refused = False
+                if isinstance(message, Status):
+                    await self._status(s, message)
+                if run_id is not None:
+                    await self._insert_event(s, message, run_id)
+        if refused:
+            await self._nack(message, "unknown_run", "no such run on this runner")
+            return False
+        return True
+
+    async def _insert_event(
+        self, s: Any, message: Stream | Status | UploadArtifact, run_id: UUID
+    ) -> None:
+        if isinstance(message, Stream):
+            kind = STREAM_EVENT_KIND[message.kind]
+        elif isinstance(message, Status):
+            kind = "status"
+        else:
+            kind = "artifact"
+        payload = message.model_dump(mode="json", exclude={"schema_version", "sent_at"})
+        await s.execute(
+            insert(_events)
+            .values(run_id=run_id, message_id=message.message_id, kind=kind, payload=payload)
+            .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
+        )
+        await s.execute(
+            _NOTIFY,
+            {"channel": api.RUN_EVENTS_CHANNEL, "payload": json.dumps({"run": str(run_id)})},
+        )
+
+    async def _status(self, s: Any, message: Status) -> None:
+        """`started` with the profile's VERSION: recorded on the run and on the profile (a
+        profile of this runner only)."""
+        if message.state != "started" or message.profile_version is None:
+            return
+        if message.run_id is not None:
+            await s.execute(
+                update(_runs)
+                .where(_runs.c.id == message.run_id)
+                .values(profile_version=message.profile_version)
+            )
+        if message.profile is None:
+            return
+        profile_id = await s.scalar(
+            update(_profiles)
+            .where(
+                _profiles.c.name == message.profile,
+                _profiles.c.runner_id == self.runner_id,
+                _profiles.c.deleted_at.is_(None),
+                _profiles.c.profile_version.is_distinct_from(message.profile_version),
+            )
+            .values(profile_version=message.profile_version)
+            .returning(_profiles.c.id)
+        )
+        if profile_id is not None:
+            mark_changed(s, api.LIVE_PROFILE, profile_id)

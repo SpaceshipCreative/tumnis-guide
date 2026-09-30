@@ -1,22 +1,29 @@
-"""The daemon's durable state (P1-04): outbound frames kept until the server acks them.
+"""The daemon's durable state (P1-04, P2-07): the SQLite outbox and seen-set, the runs in
+progress and their cancel switches.
 
-Every Result and HealthReport is written to `<state_dir>/unacked/<message_id>.json` before it
-is sent, and removed when its `ack` arrives. On reconnect `replay_unacked` sends the rest
-again with the same `message_id` (the server dedupes on it), so a result survives a dropped
-socket or a daemon restart. The run directory of an acked result is removed with it.
+Every outbound message goes into the outbox (`<state_dir>/state.db`) before it is sent and
+stays until the server acks it. Frames are rendered for the session's protocol at send
+time: protocol 2 gets everything as kept; protocol 1 (an older server) gets version-1
+results and never `stream`, `status` or `upload_artifact` (those are not even kept while the
+session is on protocol 1). On reconnect `replay_unacked` sends the rest again, oldest first,
+with the same `message_id`s (the server dedupes on them).
 """
 
+import asyncio
 import contextlib
 import json
 import logging
-import os
 import shutil
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
 from websockets.exceptions import ConnectionClosed
+
+from tumnis_daemon.outbox import MAX_BYTES, Outbox
+from tumnis_daemon.protocol import PROTOCOL_2, PROTOCOL_2_ONLY
 
 log = logging.getLogger(__name__)
 
@@ -25,75 +32,127 @@ class Sender(Protocol):
     async def send(self, message: str, /) -> None: ...
 
 
+def render(message: dict[str, Any], protocol_version: int) -> str | None:
+    """The frame for a kept message on a session of `protocol_version`; None when that
+    session cannot carry it."""
+    if protocol_version >= PROTOCOL_2:
+        return json.dumps(message)
+    if message.get("type") in PROTOCOL_2_ONLY:
+        return None
+    if message.get("type") == "result" and message.get("schema_version") == PROTOCOL_2:
+        v1 = {**message, "schema_version": 1}
+        if v1.get("status") == "cancelled":  # a protocol-1 result has no cancelled status
+            v1["status"] = "failed"
+            v1["error"] = v1.get("error") or "cancelled"
+        return json.dumps(v1)
+    return json.dumps(message)
+
+
 class StateStore:
-    def __init__(self, state_dir: Path) -> None:
+    def __init__(self, state_dir: Path, *, outbox_max_bytes: int = MAX_BYTES) -> None:
         self.state_dir = state_dir
-        self.unacked_dir = state_dir / "unacked"
         self.runs_dir = state_dir / "runs"
-        for d in (state_dir, self.unacked_dir, self.runs_dir):
+        for d in (state_dir, self.runs_dir):
             d.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.outbox = Outbox(state_dir / "state.db", max_bytes=outbox_max_bytes)
         self.running: set[UUID] = set()  # run ids executing now (heartbeats report them)
         self.protocol_version = 1  # set from `registered` on every connect
         self.ws: Sender | None = None  # the live connection, None while disconnected
+        self._cancels: dict[UUID, tuple[asyncio.Event, list[str]]] = {}
 
-    def _path(self, message_id: UUID) -> Path:
-        return self.unacked_dir / f"{message_id}.json"
+    def close(self) -> None:
+        self.outbox.close()
+
+    # --- outbound --------------------------------------------------------------------
 
     async def send_reliably(self, message: BaseModel) -> None:
-        """Persist, then send on the live connection; a dropped send is replayed later."""
-        data = message.model_dump_json()
-        message_id = UUID(str(message.model_dump()["message_id"]))
-        path = self._path(message_id)
-        tmp = path.with_suffix(".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(data)
-        tmp.replace(path)
-        await self._send(data)
+        """Keep, then send on the live connection; a dropped send is replayed later. A
+        protocol-2 message on a protocol-1 session is neither kept nor sent."""
+        data: dict[str, Any] = json.loads(message.model_dump_json())
+        if self.protocol_version < PROTOCOL_2 and data.get("type") in PROTOCOL_2_ONLY:
+            return
+        self.outbox.put(data)
+        frame = render(data, self.protocol_version)
+        if frame is not None:
+            await self._send(frame)
 
-    async def _send(self, data: str) -> None:
+    async def _send(self, frame: str) -> None:
         ws = self.ws
         if ws is None:
             return
         try:
-            await ws.send(data)
+            await ws.send(frame)
         except ConnectionClosed:
-            log.info("send_deferred")  # kept on disk; replayed on the next connection
+            log.info("send_deferred")  # kept; replayed on the next connection
 
-    def ack(self, message_id: UUID) -> None:
-        path = self._path(message_id)
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return  # an ack of a frame that was not kept (register, heartbeat, ack)
-        except ValueError:
-            data = {}
-        path.unlink(missing_ok=True)
-        run_id = data.get("run_id") if data.get("type") == "result" else None
-        if run_id:
-            with contextlib.suppress(ValueError):
-                shutil.rmtree(self.runs_dir / str(UUID(str(run_id))), ignore_errors=True)
+    def ack(self, message_id: UUID | str) -> None:
+        """Protocol 1: one message acked."""
+        self.acked([message_id])
+
+    def acked(self, ids: Iterable[UUID | str]) -> None:
+        """The server has these messages (an ack, a batched ack or a nack): forget them.
+        A repeated or unknown id is a no-op. The run directory of an acked result goes."""
+        for message in self.outbox.ack(str(i) for i in ids):
+            if message.get("type") == "result" and message.get("run_id"):
+                with contextlib.suppress(ValueError):
+                    run_dir = self.runs_dir / str(UUID(str(message["run_id"])))
+                    shutil.rmtree(run_dir, ignore_errors=True)
 
     def unacked(self) -> list[str]:
-        files = sorted(self.unacked_dir.glob("*.json"), key=lambda p: p.stat().st_mtime_ns)
-        return [p.read_text(encoding="utf-8") for p in files]
+        """The kept frames as this session's protocol would send them, oldest first."""
+        frames = (render(m, self.protocol_version) for m in self.outbox.unacked())
+        return [frame for frame in frames if frame is not None]
 
     async def replay_unacked(self, ws: Sender) -> None:
-        """Send every kept frame again, oldest first."""
-        for data in self.unacked():
-            await ws.send(data)
+        """Send every kept frame again, oldest first. On a protocol-1 session, messages it
+        cannot carry are dropped from the outbox (they would never be acked)."""
+        for message in self.outbox.unacked():
+            frame = render(message, self.protocol_version)
+            if frame is None:
+                self.outbox.ack([str(message["message_id"])])
+                continue
+            await ws.send(frame)
 
-    def claim_run(self, run_id: UUID) -> bool:
-        """True the first time this daemon sees `run_id`; its run directory is the durable
-        record. The directory goes when the run's result is acked, so a `run` the server
-        resends (its ack was lost) is not executed twice while its result is kept. A run cut
-        off by a daemon restart is not started again; the server times it out."""
-        run_dir = self.runs_dir / str(run_id)
-        if run_id in self.running or run_dir.exists():
+    # --- runs ------------------------------------------------------------------------
+
+    def claim_run(self, run_id: UUID, message_id: UUID | None = None) -> bool:
+        """True the first time this daemon sees `run_id` (or the `run` message itself): the
+        seen-set in the outbox's database is the durable record, so a `run` the server
+        resends (its ack was lost), before or after a daemon restart, is never executed
+        twice; its result waits in the outbox until acked. A run cut off by a restart is not
+        started again; the server times it out."""
+        if run_id in self.running or self.outbox.seen_run(str(run_id)):
             return False
-        run_dir.mkdir(mode=0o700, parents=True)
+        if message_id is not None and self.outbox.seen_command(str(message_id)):
+            return False
+        self.outbox.mark_command(str(message_id or f"run:{run_id}"), str(run_id))
         self.running.add(run_id)
         return True
 
     def running_run_ids(self) -> list[UUID]:
         return sorted(self.running)
+
+    def cancel_switch(self, run_id: UUID) -> asyncio.Event:
+        """The run's cancel switch (the runner waits on it) until `release`."""
+        switch = self._cancels.get(run_id)
+        if switch is None:
+            switch = self._cancels[run_id] = (asyncio.Event(), [])
+        return switch[0]
+
+    def cancel_reason(self, run_id: UUID) -> str | None:
+        switch = self._cancels.get(run_id)
+        return switch[1][0] if switch is not None and switch[1] else None
+
+    def release(self, run_id: UUID) -> None:
+        self._cancels.pop(run_id, None)
+
+    def cancel(self, run_id: UUID, reason: str) -> bool:
+        """Flip the run's cancel switch; False when the run is not running here."""
+        switch = self._cancels.get(run_id)
+        if switch is None:
+            return False
+        event, reasons = switch
+        if not reasons:
+            reasons.append(reason)
+        event.set()
+        return True

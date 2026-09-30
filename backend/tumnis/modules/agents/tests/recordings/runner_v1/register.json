@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "message_id": "78224454-f96a-4a6f-9159-0ea5340eb1b9",
+  "correlation_id": "runner:homelab-hermes",
+  "sent_at": "2026-09-30T02:25:16.691145Z",
+  "type": "register",
+  "protocol_versions": [
+    1
+  ],
+  "runner_name": "homelab-hermes",
+  "host": "hermes.example.org",
+  "os": "linux",
+  "daemon_version": "0.1.0",
+  "hermes_version": "0.9.0",
+  "profiles": [
+    {
+      "name": "tumnis-master",
+      "distribution_name": null,
+      "distribution_version": null
+    },
+    {
+      "name": "acme-site",
+      "distribution_name": null,
+      "distribution_version": null
+    }
+  ],
+  "capabilities": [
+    "run",
+    "health"
+  ],
+  "running_run_ids": []
+}
