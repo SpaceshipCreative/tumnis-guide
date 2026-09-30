@@ -139,8 +139,9 @@ def register_module_schedules() -> None:
 
 def register_task_schedules() -> None:
     """The day-close tick (every 5 minutes, also the recurrence tick) and hourly
-    housekeeping on the maintenance queue (P0-19), in every deployment, applied after
-    DBOS.launch(); applying again replaces them by name, so a restart adds no duplicates."""
+    housekeeping, both on the maintenance queue (P0-19; the tick since P1-16), in every
+    deployment, applied after DBOS.launch(); applying again replaces them by name, so a
+    restart adds no duplicates."""
     from dbos import DBOS  # noqa: PLC0415
 
     # Imported by name, as wiring does: the composition root reaches module workflows
@@ -152,6 +153,9 @@ def register_task_schedules() -> None:
                 "schedule_name": tasks.DAY_CLOSE_SCHEDULE_NAME,
                 "workflow_fn": tasks.day_close_tick,
                 "schedule": tasks.DAY_CLOSE_SCHEDULE,
+                # Named, not DBOS's internal queue: every process services that one whatever
+                # listen_queues says, so the extract worker could otherwise take the tick.
+                "queue_name": workflows_ops.MAINTENANCE_QUEUE,
             },
             {
                 "schedule_name": tasks.HOUSEKEEPING_SCHEDULE_NAME,
