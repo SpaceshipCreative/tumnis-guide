@@ -43,6 +43,9 @@ from tumnis.core.schemas import registry
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.agents import api
+
+# P2-18: importing archive also registers its steps with the project archive workflows.
+from tumnis.modules.agents import archive as _archive
 from tumnis.modules.agents.adapters.hermes import DaemonTransport, McpEndpointTransport
 from tumnis.modules.agents.models import (
     AgentProfile,
@@ -111,6 +114,9 @@ async def dispatch_step(workspace_id: str, packet: dict[str, Any]) -> str | None
     """Dispatch through the daemon transport; the refusal's reason when the agent is
     unavailable (nothing was written), None once the run is queued."""
     task = TaskPacket.model_validate(packet)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        if not await _archive.dispatch_allowed(s, task.profile_id):
+            return "project_archived"  # P2-18: none while archived, archiving or unarchiving
     try:
         await DaemonTransport(_ctx(workspace_id), SystemClock()).dispatch(task)
     except api.AgentUnavailable as exc:
@@ -875,7 +881,6 @@ async def start_provision(  # the workflow's arguments, spelled out
 
 
 api.register_provision_starter(start_provision)
-
 
 # --- profile_health_sweep ---------------------------------------------------------------------
 

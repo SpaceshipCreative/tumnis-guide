@@ -26,6 +26,7 @@ class Project(TenantBase, Base):
     repo_url: Mapped[str | None]
     profile_name: Mapped[str | None]
     archived_at: Mapped[datetime | None]
+    archive_state: Mapped[str | None]  # projects_0002 (P2-18)
     local_decisions_only: Mapped[bool] = mapped_column(server_default=text("false"))
     focus_cadence_min: Mapped[int | None]
     subtask_threshold_min: Mapped[int | None]

@@ -31,6 +31,11 @@ def _agents() -> Any:
     return importlib.import_module("tumnis.modules.agents.workflows")
 
 
+def _projects() -> Any:
+    """projects.workflows, imported by name (see `_agents`)."""
+    return importlib.import_module("tumnis.modules.projects.workflows")
+
+
 def main_queues() -> list[str]:
     """Every queue register_queues registers except `extract`: what the main worker listens to."""
     agents = _agents()
@@ -41,6 +46,7 @@ def main_queues() -> list[str]:
         agents.RUNS_QUEUE,
         agents.RUNNER_SWEEP_QUEUE,
         GITHUB_QUEUE,
+        _projects().ARCHIVE_QUEUE,
     ]
 
 
@@ -66,6 +72,10 @@ def register_queues() -> None:
         limiter={"limit": GITHUB_REFRESHES_PER_MINUTE, "period": 60},
     )
     DBOS.register_queue(EXTRACT_QUEUE, worker_concurrency=1)  # one heavy conversion at a time
+    # Project archive, unarchive and purge (P2-18): one at a time across the deployment.
+    # Not partitioned: DBOS then requires a partition key on every enqueue.
+    projects = _projects()
+    DBOS.register_queue(projects.ARCHIVE_QUEUE, concurrency=projects.ARCHIVE_CONCURRENCY)
 
 
 def register_schedules(settings: Settings) -> None:
