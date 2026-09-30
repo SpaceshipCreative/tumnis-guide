@@ -9,6 +9,7 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
@@ -32,6 +33,9 @@ import {
   type SnoozeKey,
 } from "./ReviewItemCard";
 import { LABELS } from "./slots";
+
+/** Marked once the queue has rendered with its data and takes input (P0-29 times it). */
+export const REVIEW_READY_MARK = "tumnis:review-ready";
 
 const SNOOZE_CHOICE: Record<SnoozeKey, SnoozeChoice> = {
   "1": "1h",
@@ -108,6 +112,14 @@ export function ReviewQueue({
   const [message, setMessage] = useState<string | null>(null);
   const cards = useRef(new Map<string, HTMLElement>());
   const placed = useRef(false);
+
+  const ready = queue.isSuccess;
+  const marked = useRef(false);
+  useLayoutEffect(() => {
+    if (!ready || marked.current) return;
+    marked.current = true;
+    performance.mark(REVIEW_READY_MARK);
+  }, [ready]);
 
   // The first item, or the one `item` names, takes focus once the queue has loaded.
   useEffect(() => {
