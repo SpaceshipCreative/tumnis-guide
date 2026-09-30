@@ -20,7 +20,6 @@ def _untag(text: str) -> str:
 
 @pytest.mark.req("SAF-6")
 @pytest.mark.wp("P2-11")
-@pytest.mark.xfail(strict=True, reason="spec:P2-11")
 def test_cases_validate_and_twins_exist(tmp_path: Path) -> None:
     """T-P2-11-06
     Every case in the index loads against the case schema; there are at least 16 across
@@ -80,7 +79,6 @@ def test_cases_validate_and_twins_exist(tmp_path: Path) -> None:
 
 @pytest.mark.req("SAF-6")
 @pytest.mark.wp("P2-11")
-@pytest.mark.xfail(strict=True, reason="spec:P2-11")
 def test_pdf_cases_are_reproducible_and_hide_their_text(tmp_path: Path) -> None:
     """Every hidden-text PDF case is what make_pdfs.py writes, byte for byte, and its
     hidden sentence is drawn in white; the case's passage text carries that sentence."""
