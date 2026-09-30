@@ -212,6 +212,28 @@ async def revoke_key(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+# --- Runners (P1-04) ----------------------------------------------------------------------
+
+
+async def _new_runner(ctx: Ctx) -> str:
+    response = await ctx.session_client.post("/v1/runners", json={"name": "audit-runner"})
+    response.raise_for_status()
+    runner_id: str = response.json()["id"]
+    return runner_id
+
+
+async def create_runner(ctx: Ctx) -> None:
+    """POST /v1/runners: `runner.created`."""
+    await _new_runner(ctx)
+
+
+async def rotate_runner_token(ctx: Ctx) -> None:
+    """POST /v1/runners/{id}/rotate-token: `runner.token_rotated`."""
+    runner_id = await _new_runner(ctx)
+    response = await ctx.session_client.post(f"/v1/runners/{runner_id}/rotate-token")
+    response.raise_for_status()
+
+
 AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("audit.exported", export_csv, "user"),
     AuditCase("dead_letter.retried", retry_dead_letter, "user"),
@@ -229,6 +251,8 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("key.created", create_key, "user"),
     AuditCase("key.rotated", rotate_key, "user"),
     AuditCase("key.revoked", revoke_key, "user"),
+    AuditCase("runner.created", create_runner, "user"),
+    AuditCase("runner.token_rotated", rotate_runner_token, "user"),
 )
 
 # action -> the work package that builds its operation and adds its case.

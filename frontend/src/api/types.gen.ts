@@ -27,6 +27,61 @@ export type AccountOut = {
 };
 
 /**
+ * AgentProfileOut
+ */
+export type AgentProfileOut = {
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Endpoint
+   */
+  endpoint: string | null;
+  health: ProfileHealth | null;
+  /**
+   * Health Checked At
+   */
+  health_checked_at: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Profile Version
+   */
+  profile_version: string | null;
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Role
+   */
+  role: "master" | "project";
+  /**
+   * Runner Id
+   */
+  runner_id: string | null;
+  /**
+   * Status
+   */
+  status: string;
+  /**
+   * Transport
+   */
+  transport: "daemon" | "mcp_endpoint";
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
  * AppDeployStatus
  */
 export type AppDeployStatus = {
@@ -465,6 +520,20 @@ export type FolderIn = {
 export type Health = "blocked" | "at_risk" | "on_track";
 
 /**
+ * HealthCheckAccepted
+ */
+export type HealthCheckAccepted = {
+  /**
+   * Profile Id
+   */
+  profile_id: string;
+  /**
+   * Request Id
+   */
+  request_id: string;
+};
+
+/**
  * KeyCreated
  */
 export type KeyCreated = {
@@ -782,6 +851,20 @@ export type OAuthStartOut = {
 };
 
 /**
+ * Page[AgentProfileOut]
+ */
+export type PageAgentProfileOut = {
+  /**
+   * Items
+   */
+  items: Array<AgentProfileOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
  * Page[AuditEntry]
  */
 export type PageAuditEntry = {
@@ -859,6 +942,20 @@ export type PageRecurrenceOut = {
    * Items
    */
   items: Array<RecurrenceOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
+ * Page[RunnerOut]
+ */
+export type PageRunnerOut = {
+  /**
+   * Items
+   */
+  items: Array<RunnerOut>;
   /**
    * Next Cursor
    */
@@ -958,6 +1055,92 @@ export type Problem = {
    * Type
    */
   type: string;
+};
+
+/**
+ * ProfileHealth
+ */
+export type ProfileHealth = {
+  /**
+   * Authenticated
+   */
+  authenticated?: boolean | null;
+  /**
+   * Error
+   */
+  error?: string | null;
+  /**
+   * Mcp Servers
+   */
+  mcp_servers?: Array<string>;
+  /**
+   * Profile Exists
+   */
+  profile_exists?: boolean | null;
+  /**
+   * Reachable
+   */
+  reachable: boolean;
+  /**
+   * Status
+   */
+  status?: "ok" | "offline" | "unsupported" | "error";
+  /**
+   * Version
+   */
+  version?: string | null;
+};
+
+/**
+ * ProfileIn
+ */
+export type ProfileIn = {
+  /**
+   * Endpoint
+   */
+  endpoint?: string | null;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Project Id
+   */
+  project_id?: string | null;
+  /**
+   * Role
+   */
+  role: "master" | "project";
+  /**
+   * Runner Id
+   */
+  runner_id?: string | null;
+  /**
+   * Transport
+   */
+  transport?: "daemon" | "mcp_endpoint";
+};
+
+/**
+ * ProfilePatch
+ */
+export type ProfilePatch = {
+  /**
+   * Endpoint
+   */
+  endpoint?: string | null;
+  /**
+   * Runner Id
+   */
+  runner_id?: string | null;
+  /**
+   * Status
+   */
+  status?: "registered" | "paused" | null;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -1355,6 +1538,120 @@ export type RotateIn = {
    * Grace Minutes
    */
   grace_minutes?: number;
+};
+
+/**
+ * RunnerCreated
+ */
+export type RunnerCreated = {
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Daemon Version
+   */
+  daemon_version: string | null;
+  /**
+   * Hermes Version
+   */
+  hermes_version: string | null;
+  /**
+   * Host
+   */
+  host: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Last Heartbeat At
+   */
+  last_heartbeat_at: string | null;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Os
+   */
+  os: string | null;
+  /**
+   * Profiles
+   */
+  profiles: Array<string>;
+  /**
+   * Protocol Version
+   */
+  protocol_version: number | null;
+  /**
+   * Status
+   */
+  status: "online" | "offline" | "never_seen";
+  /**
+   * Token
+   */
+  token: string;
+};
+
+/**
+ * RunnerIn
+ */
+export type RunnerIn = {
+  /**
+   * Name
+   */
+  name: string;
+};
+
+/**
+ * RunnerOut
+ */
+export type RunnerOut = {
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Daemon Version
+   */
+  daemon_version: string | null;
+  /**
+   * Hermes Version
+   */
+  hermes_version: string | null;
+  /**
+   * Host
+   */
+  host: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Last Heartbeat At
+   */
+  last_heartbeat_at: string | null;
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Os
+   */
+  os: string | null;
+  /**
+   * Profiles
+   */
+  profiles: Array<string>;
+  /**
+   * Protocol Version
+   */
+  protocol_version: number | null;
+  /**
+   * Status
+   */
+  status: "online" | "offline" | "never_seen";
 };
 
 /**
@@ -2090,6 +2387,245 @@ export type HealthReadyResponses = {
    */
   200: unknown;
 };
+
+export type AgentsListProfilesData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/agents/profiles";
+};
+
+export type AgentsListProfilesErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsListProfilesError =
+  AgentsListProfilesErrors[keyof AgentsListProfilesErrors];
+
+export type AgentsListProfilesResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageAgentProfileOut;
+};
+
+export type AgentsListProfilesResponse =
+  AgentsListProfilesResponses[keyof AgentsListProfilesResponses];
+
+export type AgentsRegisterProfileData = {
+  body: ProfileIn;
+  path?: never;
+  query?: never;
+  url: "/v1/agents/profiles";
+};
+
+export type AgentsRegisterProfileErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsRegisterProfileError =
+  AgentsRegisterProfileErrors[keyof AgentsRegisterProfileErrors];
+
+export type AgentsRegisterProfileResponses = {
+  /**
+   * Successful Response
+   */
+  201: AgentProfileOut;
+};
+
+export type AgentsRegisterProfileResponse =
+  AgentsRegisterProfileResponses[keyof AgentsRegisterProfileResponses];
+
+export type AgentsUpdateProfileData = {
+  body: ProfilePatch;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/v1/agents/profiles/{id}";
+};
+
+export type AgentsUpdateProfileErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsUpdateProfileError =
+  AgentsUpdateProfileErrors[keyof AgentsUpdateProfileErrors];
+
+export type AgentsUpdateProfileResponses = {
+  /**
+   * Successful Response
+   */
+  200: AgentProfileOut;
+};
+
+export type AgentsUpdateProfileResponse =
+  AgentsUpdateProfileResponses[keyof AgentsUpdateProfileResponses];
+
+export type AgentsCheckProfileHealthData = {
+  body?: never;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/v1/agents/profiles/{id}/health-check";
+};
+
+export type AgentsCheckProfileHealthErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsCheckProfileHealthError =
+  AgentsCheckProfileHealthErrors[keyof AgentsCheckProfileHealthErrors];
+
+export type AgentsCheckProfileHealthResponses = {
+  /**
+   * Successful Response
+   */
+  202: HealthCheckAccepted;
+};
+
+export type AgentsCheckProfileHealthResponse =
+  AgentsCheckProfileHealthResponses[keyof AgentsCheckProfileHealthResponses];
 
 export type AuditListAuditData = {
   body?: never;
@@ -4709,6 +5245,185 @@ export type TasksListReviewKindsResponses = {
 
 export type TasksListReviewKindsResponse =
   TasksListReviewKindsResponses[keyof TasksListReviewKindsResponses];
+
+export type AgentsListRunnersData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/runners";
+};
+
+export type AgentsListRunnersErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsListRunnersError =
+  AgentsListRunnersErrors[keyof AgentsListRunnersErrors];
+
+export type AgentsListRunnersResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageRunnerOut;
+};
+
+export type AgentsListRunnersResponse =
+  AgentsListRunnersResponses[keyof AgentsListRunnersResponses];
+
+export type AgentsCreateRunnerData = {
+  body: RunnerIn;
+  path?: never;
+  query?: never;
+  url: "/v1/runners";
+};
+
+export type AgentsCreateRunnerErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsCreateRunnerError =
+  AgentsCreateRunnerErrors[keyof AgentsCreateRunnerErrors];
+
+export type AgentsCreateRunnerResponses = {
+  /**
+   * Successful Response
+   */
+  201: RunnerCreated;
+};
+
+export type AgentsCreateRunnerResponse =
+  AgentsCreateRunnerResponses[keyof AgentsCreateRunnerResponses];
+
+export type AgentsRotateRunnerTokenData = {
+  body?: never;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/v1/runners/{id}/rotate-token";
+};
+
+export type AgentsRotateRunnerTokenErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsRotateRunnerTokenError =
+  AgentsRotateRunnerTokenErrors[keyof AgentsRotateRunnerTokenErrors];
+
+export type AgentsRotateRunnerTokenResponses = {
+  /**
+   * Successful Response
+   */
+  200: RunnerCreated;
+};
+
+export type AgentsRotateRunnerTokenResponse =
+  AgentsRotateRunnerTokenResponses[keyof AgentsRotateRunnerTokenResponses];
 
 export type SearchSearchData = {
   body?: never;

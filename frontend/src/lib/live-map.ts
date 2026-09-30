@@ -9,7 +9,9 @@ export type LiveEntity =
   | "settings"
   | "api_key"
   | "dead_letter"
-  | "calendar_account";
+  | "calendar_account"
+  | "runner"
+  | "agent_profile";
 
 export const LIVE_MAP: Record<
   LiveEntity,
@@ -64,6 +66,10 @@ export const LIVE_MAP: Record<
   dead_letter: { details: [], lists: ["deadLettersGetDeadLetters"] },
   // Connected Google accounts (P1-09): a sync or a revoked grant refreshes the list.
   calendar_account: { details: [], lists: ["calendarListAccounts"] },
+  // Runners register, heartbeat, go offline and get new tokens; profiles get health
+  // checks (P1-04): the Settings agents section refreshes.
+  runner: { details: [], lists: ["agentsListRunners"] },
+  agent_profile: { details: [], lists: ["agentsListProfiles"] },
 };
 
 export const NOT_LIVE = [

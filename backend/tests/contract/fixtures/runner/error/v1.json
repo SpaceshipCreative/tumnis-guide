@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "message_id": "01950000-0000-7000-8000-000000001011",
+  "correlation_id": "req:01950000-0000-7000-8000-000000000401",
+  "sent_at": "2026-03-09T12:00:00Z",
+  "type": "error",
+  "code": "invalid_message",
+  "detail": "The frame is not a runner protocol 1 message"
+}

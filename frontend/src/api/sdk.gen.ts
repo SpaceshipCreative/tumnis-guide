@@ -9,6 +9,27 @@ import type {
 } from "./client";
 import { client } from "./client.gen";
 import type {
+  AgentsCheckProfileHealthData,
+  AgentsCheckProfileHealthErrors,
+  AgentsCheckProfileHealthResponses,
+  AgentsCreateRunnerData,
+  AgentsCreateRunnerErrors,
+  AgentsCreateRunnerResponses,
+  AgentsListProfilesData,
+  AgentsListProfilesErrors,
+  AgentsListProfilesResponses,
+  AgentsListRunnersData,
+  AgentsListRunnersErrors,
+  AgentsListRunnersResponses,
+  AgentsRegisterProfileData,
+  AgentsRegisterProfileErrors,
+  AgentsRegisterProfileResponses,
+  AgentsRotateRunnerTokenData,
+  AgentsRotateRunnerTokenErrors,
+  AgentsRotateRunnerTokenResponses,
+  AgentsUpdateProfileData,
+  AgentsUpdateProfileErrors,
+  AgentsUpdateProfileResponses,
   AuditExportAuditCsvData,
   AuditExportAuditCsvErrors,
   AuditExportAuditCsvResponses,
@@ -225,6 +246,13 @@ import type {
   UsageGetUsageResponses,
 } from "./types.gen";
 import {
+  zAgentsCheckProfileHealthResponse,
+  zAgentsCreateRunnerResponse,
+  zAgentsListProfilesResponse,
+  zAgentsListRunnersResponse,
+  zAgentsRegisterProfileResponse,
+  zAgentsRotateRunnerTokenResponse,
+  zAgentsUpdateProfileResponse,
   zAuditListAuditResponse,
   zAuthConfirmTotpEnrolmentResponse,
   zAuthCreateKeyResponse,
@@ -338,6 +366,109 @@ export const healthReady = <ThrowOnError extends boolean = false>(
     HealthReadyErrors,
     ThrowOnError
   >({ url: "/health/ready", ...options });
+
+/**
+ * List Profiles
+ *
+ * Agent profiles by name, with their last health check.
+ */
+export const agentsListProfiles = <ThrowOnError extends boolean = false>(
+  options?: Options<AgentsListProfilesData, ThrowOnError>,
+): RequestResult<
+  AgentsListProfilesResponses,
+  AgentsListProfilesErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    AgentsListProfilesResponses,
+    AgentsListProfilesErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsListProfilesResponse.parseAsync(data),
+    url: "/v1/agents/profiles",
+    ...options,
+  });
+
+/**
+ * Register Profile
+ *
+ * Register a Hermes profile. 422 `invalid_profile_name`, `invalid_profile`; 404 for
+ * an unknown runner or project; 409 `master_exists`, `project_agent_exists`,
+ * `profile_exists`.
+ */
+export const agentsRegisterProfile = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsRegisterProfileData, ThrowOnError>,
+): RequestResult<
+  AgentsRegisterProfileResponses,
+  AgentsRegisterProfileErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsRegisterProfileResponses,
+    AgentsRegisterProfileErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsRegisterProfileResponse.parseAsync(data),
+    url: "/v1/agents/profiles",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Update Profile
+ *
+ * Move a profile to another runner or endpoint, or pause it. 409 `stale_version`.
+ */
+export const agentsUpdateProfile = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsUpdateProfileData, ThrowOnError>,
+): RequestResult<
+  AgentsUpdateProfileResponses,
+  AgentsUpdateProfileErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    AgentsUpdateProfileResponses,
+    AgentsUpdateProfileErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsUpdateProfileResponse.parseAsync(data),
+    url: "/v1/agents/profiles/{id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Check Profile Health
+ *
+ * Ask the profile's runner (or endpoint) for its health; the answer lands in the
+ * profile's `health` (reachable, authenticated, version).
+ */
+export const agentsCheckProfileHealth = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsCheckProfileHealthData, ThrowOnError>,
+): RequestResult<
+  AgentsCheckProfileHealthResponses,
+  AgentsCheckProfileHealthErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsCheckProfileHealthResponses,
+    AgentsCheckProfileHealthErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsCheckProfileHealthResponse.parseAsync(data),
+    url: "/v1/agents/profiles/{id}/health-check",
+    ...options,
+  });
 
 /**
  * List Audit
@@ -1338,6 +1469,80 @@ export const tasksListReviewKinds = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zTasksListReviewKindsResponse.parseAsync(data),
     url: "/v1/review/kinds",
+    ...options,
+  });
+
+/**
+ * List Runners
+ *
+ * Runners by name, with their status judged from the last heartbeat (online after a
+ * beat in the last 45 s, offline after that, never_seen before the first register).
+ */
+export const agentsListRunners = <ThrowOnError extends boolean = false>(
+  options?: Options<AgentsListRunnersData, ThrowOnError>,
+): RequestResult<
+  AgentsListRunnersResponses,
+  AgentsListRunnersErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    AgentsListRunnersResponses,
+    AgentsListRunnersErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsListRunnersResponse.parseAsync(data),
+    url: "/v1/runners",
+    ...options,
+  });
+
+/**
+ * Create Runner
+ *
+ * A runner and its device token, shown once. 409 `runner_exists`.
+ */
+export const agentsCreateRunner = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsCreateRunnerData, ThrowOnError>,
+): RequestResult<
+  AgentsCreateRunnerResponses,
+  AgentsCreateRunnerErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsCreateRunnerResponses,
+    AgentsCreateRunnerErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsCreateRunnerResponse.parseAsync(data),
+    url: "/v1/runners",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Rotate Runner Token
+ *
+ * A new device token, shown once; the old one stops and the runner's socket closes.
+ */
+export const agentsRotateRunnerToken = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsRotateRunnerTokenData, ThrowOnError>,
+): RequestResult<
+  AgentsRotateRunnerTokenResponses,
+  AgentsRotateRunnerTokenErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsRotateRunnerTokenResponses,
+    AgentsRotateRunnerTokenErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsRotateRunnerTokenResponse.parseAsync(data),
+    url: "/v1/runners/{id}/rotate-token",
     ...options,
   });
 
