@@ -87,10 +87,8 @@ def _load_refs(raw: list[dict[str, Any]]) -> list[TestRef]:
     ]
 
 
-def pytest_refs(repo: Path, trace_json: Path | None) -> list[TestRef]:
-    """From a trace.json, or by collecting backend/ with the pytest_trace plugin."""
-    if trace_json is not None:
-        return _load_refs(json.loads(trace_json.read_text()))
+def _collect(project: Path, prefix: str) -> list[TestRef]:
+    """Collect one pytest project with the pytest_trace plugin; node ids get `prefix`."""
     with tempfile.TemporaryDirectory() as tmp:
         target = Path(tmp) / "trace.json"
         path = os.pathsep.join(
@@ -99,11 +97,23 @@ def pytest_refs(repo: Path, trace_json: Path | None) -> list[TestRef]:
         env = {**os.environ, "TRACE_JSON": str(target), "PYTHONPATH": path}
         argv = [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "pytest_trace"]
         result = subprocess.run(  # noqa: S603 (fixed argv, no shell)
-            argv, cwd=repo / "backend", env=env, capture_output=True, text=True, check=False
+            argv, cwd=project, env=env, capture_output=True, text=True, check=False
         )
         if result.returncode != 0 or not target.is_file():
             raise RuntimeError(f"pytest collection failed:\n{result.stdout}{result.stderr}")
-        return _load_refs(json.loads(target.read_text()))
+        raw = json.loads(target.read_text())
+    return _load_refs([{**r, "id": prefix + r["id"]} for r in raw])
+
+
+def pytest_refs(repo: Path, trace_json: Path | None) -> list[TestRef]:
+    """From a trace.json, or by collecting backend/ and profiles/ (the harness tests and
+    the skill cases, P1-05) with the pytest_trace plugin."""
+    if trace_json is not None:
+        return _load_refs(json.loads(trace_json.read_text()))
+    refs = _collect(repo / "backend", "")
+    if (repo / "profiles" / "conftest.py").is_file():
+        refs += _collect(repo / "profiles", "profiles/")
+    return refs
 
 
 def _ts_files(frontend: Path, globs: tuple[str, ...]) -> list[Path]:

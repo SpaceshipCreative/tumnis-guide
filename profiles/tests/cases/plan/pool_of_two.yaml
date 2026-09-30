@@ -1,0 +1,24 @@
+# Only two candidates: at most two picks, and no task id the packet did not offer.
+id: plan-pool-of-two
+profile: master
+skill: plan
+input: ../../recordings/plan/pool_of_two.packet.json
+output_schema: {family: planning, name: result, version: 1}
+meta:
+  test_id: T-P1-05-05
+  req: [FR-5.2]
+  wp: P1-05
+  xfail: spec:P1-05
+expect:
+  tool_calls:
+    allow: []
+  rules: [planning_errors]
+  json:
+    - {path: "$.picks", type: array, max_items: 2}
+    - path: "$.picks"
+      each:
+        - path: "$.task_id"
+          in:
+            - 01950000-0000-7000-8000-000000000821
+            - 01950000-0000-7000-8000-000000000822
+        - {path: "$.reason", type: string, nonempty: true}
