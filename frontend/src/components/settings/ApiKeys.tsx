@@ -27,6 +27,13 @@ import {
   SECONDARY,
   SECTION,
 } from "./styles";
+import {
+  TABLE,
+  TABLE_BODY,
+  TABLE_CELL,
+  TABLE_HEAD,
+  TABLE_HEADER_CELL,
+} from "../common/ui";
 
 // FR-14.10; the server refuses any other (422 `unknown_scope`).
 export const SCOPES = [
@@ -212,37 +219,49 @@ export function ApiKeys({
           </p>
         </ConfirmDialog>
       )}
-      <div className="max-w-full overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
+      <div className="max-w-full overflow-x-auto rounded-xl border border-border bg-surface shadow-card">
+        <table className={TABLE}>
+          <thead className={TABLE_HEAD}>
             <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Prefix</th>
-              <th scope="col">Scopes</th>
-              <th scope="col">Last used</th>
-              <th scope="col">Status</th>
-              <th scope="col">
+              <th scope="col" className={TABLE_HEADER_CELL}>
+                Name
+              </th>
+              <th scope="col" className={TABLE_HEADER_CELL}>
+                Prefix
+              </th>
+              <th scope="col" className={TABLE_HEADER_CELL}>
+                Scopes
+              </th>
+              <th scope="col" className={TABLE_HEADER_CELL}>
+                Last used
+              </th>
+              <th scope="col" className={TABLE_HEADER_CELL}>
+                Status
+              </th>
+              <th scope="col" className={TABLE_HEADER_CELL}>
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLE_BODY}>
             {(keys.data?.items ?? []).map((key: KeyOut) => (
-              <tr key={key.id} className="border-t border-border align-top">
-                <td className="py-2 pr-3">{key.name}</td>
-                <td className="py-2 pr-3">
+              <tr key={key.id}>
+                <td className={TABLE_CELL}>{key.name}</td>
+                <td className={TABLE_CELL}>
                   <code>{key.prefix}</code>
                 </td>
-                <td className="py-2 pr-3">{key.scopes.join(", ")}</td>
-                <td className="py-2 pr-3">{when(key.last_used_at, "never")}</td>
-                <td className="py-2 pr-3">
+                <td className={TABLE_CELL}>{key.scopes.join(", ")}</td>
+                <td className={TABLE_CELL}>
+                  {when(key.last_used_at, "never")}
+                </td>
+                <td className={TABLE_CELL}>
                   {key.revoked_at !== null
                     ? "revoked"
                     : key.expires_at === null
                       ? "active"
                       : `expires ${when(key.expires_at, "")}`}
                 </td>
-                <td className="py-2">
+                <td className={TABLE_CELL}>
                   {key.revoked_at === null && (
                     <div className="flex gap-2">
                       <button

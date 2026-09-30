@@ -69,10 +69,13 @@ async def rotate_runner_token(
 @router.get("/agents/profiles")
 @route_policy(RoutePolicy(auth="session", paginated=True))
 async def list_profiles(
-    ctx: Session, session: SessionDep, page: Paging
+    ctx: Session, session: SessionDep, page: Paging, project_id: UUID | None = None
 ) -> Page[api.AgentProfileOut]:
-    """Agent profiles by name, with their last health check."""
-    return await api.list_profiles(session, cursor=page.cursor, limit=page.limit)
+    """Agent profiles by name, with their last health check; `project_id` narrows them to
+    that project's agent (the project header, P1-06)."""
+    return await api.list_profiles(
+        session, cursor=page.cursor, limit=page.limit, project_id=project_id
+    )
 
 
 @router.post("/agents/profiles", status_code=201)

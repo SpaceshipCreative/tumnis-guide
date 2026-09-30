@@ -98,6 +98,7 @@ export {
 } from "./sdk.gen";
 export type {
   AccountOut,
+  AgentProfileChoice,
   AgentProfileOut,
   AgentsCheckProfileHealthData,
   AgentsCheckProfileHealthError,
@@ -407,7 +408,7 @@ export type {
   ProfilePatch,
   ProfileToolsOut,
   ProjectContextOut,
-  ProjectCreate,
+  ProjectCreateIn,
   ProjectDeployStatus,
   ProjectFolderOut,
   ProjectLinkIn,

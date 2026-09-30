@@ -93,6 +93,16 @@ class KnowledgeSettings(BaseModel):
     vision_model: str | None = None
 
 
+class AgentsSettings(BaseModel):
+    """The agents module (P1-06): how long a project's profile provisioning waits for the
+    runner's answer before it counts as failed (R-30: tests shorten it). Env:
+    `AGENTS__PROVISION_TIMEOUT_S`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provision_timeout_s: int = Field(default=300, gt=0)  # plan default
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", extra="ignore", env_nested_delimiter="__")
 
@@ -119,6 +129,7 @@ class Settings(BaseSettings):
     outbound_allowlist: str = ""
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
     knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
+    agents: AgentsSettings = Field(default_factory=AgentsSettings)
 
     @model_validator(mode="after")
     def _preview_guard(self) -> Self:

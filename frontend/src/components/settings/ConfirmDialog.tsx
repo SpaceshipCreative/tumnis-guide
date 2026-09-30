@@ -4,6 +4,7 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
 import { DANGER, SECONDARY } from "./styles";
+import { DIALOG_BACKDROP, DIALOG_PANEL, DIALOG_TITLE } from "../common/ui";
 
 export function ConfirmDialog({
   title,
@@ -26,17 +27,17 @@ export function ConfirmDialog({
     cancel.current?.focus();
   }, []);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+    <div className={DIALOG_BACKDROP}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex w-full max-w-md flex-col gap-3 rounded-lg bg-surface p-4 shadow-lg"
+        className={DIALOG_PANEL}
         onKeyDown={(event) => {
           if (event.key === "Escape") onCancel();
         }}
       >
-        <h3 id={titleId} className="text-lg font-semibold">
+        <h3 id={titleId} className={DIALOG_TITLE}>
           {title}
         </h3>
         {children}

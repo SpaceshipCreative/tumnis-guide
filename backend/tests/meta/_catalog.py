@@ -65,6 +65,9 @@ ALLOW_LIST: dict[str, Allowed] = {
     "ops_backup_runs": Allowed("global", "deployment-level operations data, no workspace"),
     "ops_status": Allowed("global", "deployment-level operations data, no workspace"),
     "ops_drill_markers": Allowed("global", "deployment-level operations data, no workspace"),
+    "fake_scripts": Allowed(
+        "global", "test-only scripts for the fake adapters (R-37), written in fakes mode only"
+    ),
 }
 # Alembic's version table (and any per-branch variant) is bookkeeping, not data.
 ALEMBIC_PREFIX = "alembic_version"

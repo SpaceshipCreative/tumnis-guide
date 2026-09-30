@@ -27,6 +27,26 @@ export type AccountOut = {
 };
 
 /**
+ * AgentProfileChoice
+ *
+ * The project's agent (P1-06): a new Hermes profile from the project template
+ * (`create`, the default; named after the project, so `name` is ignored), or an existing
+ * profile on the agent server, by `name` (`link`; `create_project` answers 422
+ * `invalid_profile_choice` without one). The agents module provisions it on
+ * `project.created`.
+ */
+export type AgentProfileChoice = {
+  /**
+   * Mode
+   */
+  mode?: "create" | "link";
+  /**
+   * Name
+   */
+  name?: string | null;
+};
+
+/**
  * AgentProfileOut
  */
 export type AgentProfileOut = {
@@ -1589,9 +1609,13 @@ export type ProjectContextOut = {
 };
 
 /**
- * ProjectCreate
+ * ProjectCreateIn
+ *
+ * The body of `POST /v1/projects`: a project and the agent to give it (P1-06), a new
+ * profile from the template (the default, also when `profile` is absent) or an existing
+ * one. Reads never carry it: the agent is the agents module's.
  */
-export type ProjectCreate = {
+export type ProjectCreateIn = {
   /**
    * Brief Md
    */
@@ -1620,6 +1644,7 @@ export type ProjectCreate = {
    * Name
    */
   name: string;
+  profile?: AgentProfileChoice | null;
   /**
    * Profile Name
    */
@@ -3266,6 +3291,10 @@ export type AgentsListProfilesData = {
   body?: never;
   path?: never;
   query?: {
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
     /**
      * Cursor
      */
@@ -5841,7 +5870,7 @@ export type ProjectsListProjectsResponse =
   ProjectsListProjectsResponses[keyof ProjectsListProjectsResponses];
 
 export type ProjectsCreateProjectData = {
-  body: ProjectCreate;
+  body: ProjectCreateIn;
   path?: never;
   query?: never;
   url: "/v1/projects";
