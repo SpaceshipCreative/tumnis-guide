@@ -12,12 +12,14 @@ from uuid import UUID
 
 from fastapi import Depends, Query, Request
 
+from tumnis.core import agent_surface as surface
 from tumnis.core.clock import Clock
 from tumnis.core.idempotency import SessionDep
 from tumnis.core.pagination import Page, PageParams, page_params
 from tumnis.core.principal import principal_of
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.modules.search import api
+from tumnis.modules.search import mcp as tools
 
 router = v1_router("search", tags=["search"])
 
@@ -37,25 +39,28 @@ def _now(request: Request) -> Clock:
         auth="session_or_key", scopes=READ, paginated=True, project_param="query:project_id"
     )
 )
-async def search(  # noqa: PLR0917
+async def search(  # noqa: PLR0917  # the search tool's input as query parameters
     request: Request,
     session: SessionDep,
     page: Annotated[PageParams, Depends(page_params)],
     q: Q = "",
     scope: api.Scope = "all",
     project_id: Annotated[UUID | None, Query(description="Boosts this project's rows")] = None,
+    schema_version: Annotated[int | None, Query()] = None,
 ) -> Page[api.SearchHit]:
-    """Tasks and projects matching `q`, best first: text match, recency, project match."""
-    return await api.search(
-        session,
-        q,
-        scope=scope,
-        project_id=project_id,
-        cursor=page.cursor,
-        limit=page.limit,
-        now=_now(request).now(),
-        project_ids=principal_of(request).project_ids,
-    )
+    """Tasks and projects matching `q`, best first: text match, recency, project match.
+    The `search` tool's twin (P2-01)."""
+    raw = {
+        "cursor": page.cursor,
+        "limit": page.limit,
+        "q": q,
+        "scope": scope,
+        "project_id": project_id,
+        "schema_version": schema_version,
+    }
+    found = await surface.rest_twin(request, session, tools.SEARCH, raw)
+    assert isinstance(found, Page)  # noqa: S101  # the op's output model
+    return found
 
 
 @router.get("/typeahead/projects")
