@@ -728,6 +728,13 @@ export const zMoveIn = z.object({
 });
 
 /**
+ * MoveStarted
+ */
+export const zMoveStarted = z.object({
+  workflow_id: z.string(),
+});
+
+/**
  * OAuthStartOut
  */
 export const zOAuthStartOut = z.object({
@@ -3229,6 +3236,17 @@ export const zKnowledgeTestLocationPath = z.object({
  * Successful Response
  */
 export const zKnowledgeTestLocationResponse = zLocationOut;
+
+export const zKnowledgeUseExistingFolderBody = zExistingFolderIn;
+
+export const zKnowledgeUseExistingFolderPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeUseExistingFolderResponse = zProjectFolderOut;
 
 export const zKnowledgeSetProjectFolderBody = zFolderIn;
 

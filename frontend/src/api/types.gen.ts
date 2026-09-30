@@ -9316,6 +9316,66 @@ export type KnowledgeTestLocationResponses = {
 export type KnowledgeTestLocationResponse =
   KnowledgeTestLocationResponses[keyof KnowledgeTestLocationResponses];
 
+export type KnowledgeUseExistingFolderData = {
+  body: ExistingFolderIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/projects/{project_id}/existing-folder";
+};
+
+export type KnowledgeUseExistingFolderErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeUseExistingFolderError =
+  KnowledgeUseExistingFolderErrors[keyof KnowledgeUseExistingFolderErrors];
+
+export type KnowledgeUseExistingFolderResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProjectFolderOut;
+};
+
+export type KnowledgeUseExistingFolderResponse =
+  KnowledgeUseExistingFolderResponses[keyof KnowledgeUseExistingFolderResponses];
+
 export type KnowledgeSetProjectFolderData = {
   body: FolderIn;
   path: {

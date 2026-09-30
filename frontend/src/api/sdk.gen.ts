@@ -2072,6 +2072,36 @@ export const knowledgeTestLocation = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Use Existing Folder
+ *
+ * Make a folder the user already keeps the project's folder (Tumnis writes only in
+ * its `Tumnis/` subfolder).
+ */
+export const knowledgeUseExistingFolder = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeUseExistingFolderData, ThrowOnError>,
+): RequestResult<
+  KnowledgeUseExistingFolderResponses,
+  KnowledgeUseExistingFolderErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeUseExistingFolderResponses,
+    KnowledgeUseExistingFolderErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeUseExistingFolderResponse.parseAsync(data),
+    url: "/v1/knowledge/projects/{project_id}/existing-folder",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Set Project Folder
  */
 export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(

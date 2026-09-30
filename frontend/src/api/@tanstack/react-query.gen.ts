@@ -2819,6 +2819,36 @@ export const knowledgeTestLocationMutation = (
 };
 
 /**
+ * Use Existing Folder
+ *
+ * Make a folder the user already keeps the project's folder (Tumnis writes only in
+ * its `Tumnis/` subfolder).
+ */
+export const knowledgeUseExistingFolderMutation = (
+  options?: Partial<Options<KnowledgeUseExistingFolderData>>,
+): UseMutationOptions<
+  KnowledgeUseExistingFolderResponse,
+  KnowledgeUseExistingFolderError,
+  Options<KnowledgeUseExistingFolderData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeUseExistingFolderResponse,
+    KnowledgeUseExistingFolderError,
+    Options<KnowledgeUseExistingFolderData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeUseExistingFolder({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Set Project Folder
  */
 export const knowledgeSetProjectFolderMutation = (
