@@ -39,6 +39,7 @@ import {
   calendarOauthStart,
   calendarSelectCalendars,
   calendarSyncNow,
+  coolifyListDeployStatus,
   deadLettersGetDeadLetters,
   deadLettersPostDiscard,
   deadLettersPostRetry,
@@ -181,6 +182,9 @@ import type {
   CalendarSyncNowData,
   CalendarSyncNowError,
   CalendarSyncNowResponse,
+  CoolifyListDeployStatusData,
+  CoolifyListDeployStatusError,
+  CoolifyListDeployStatusResponse,
   DeadLettersGetDeadLettersData,
   DeadLettersGetDeadLettersError,
   DeadLettersGetDeadLettersResponse,
@@ -1206,6 +1210,36 @@ export const calendarOauthStartOptions = (
       return data;
     },
     queryKey: calendarOauthStartQueryKey(options),
+  });
+
+export const coolifyListDeployStatusQueryKey = (
+  options?: Options<CoolifyListDeployStatusData>,
+) => createQueryKey("coolifyListDeployStatus", options);
+
+/**
+ * List Deploy Status
+ *
+ * Deploy status per project in board order; projects without apps are left out.
+ */
+export const coolifyListDeployStatusOptions = (
+  options?: Options<CoolifyListDeployStatusData>,
+) =>
+  queryOptions<
+    CoolifyListDeployStatusResponse,
+    CoolifyListDeployStatusError,
+    CoolifyListDeployStatusResponse,
+    ReturnType<typeof coolifyListDeployStatusQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await coolifyListDeployStatus({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: coolifyListDeployStatusQueryKey(options),
   });
 
 export const deadLettersGetDeadLettersQueryKey = (
