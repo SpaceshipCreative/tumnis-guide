@@ -559,7 +559,9 @@ async def schedule_block(
         try:
             block = Interval(body.block_start, body.block_end)
         except ValueError:
-            raise ProblemError(422, "validation_error", "the block ends after it starts") from None
+            raise ProblemError(
+                422, "validation_error", "the block must end after it starts"
+            ) from None
         if task.status == "done":
             raise ProblemError(409, "ineligible_task", "a Done task cannot be scheduled")
         plan_id, items = await _day_items(s, day)

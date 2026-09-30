@@ -35,7 +35,7 @@ export const LIVE_MAP: Record<
   // threshold (FR-3.8) refresh them, a saved brief its Brief rail section (P0-24); any
   // project change refreshes search results (P0-20). The Coolify poll announces a linked
   // project when its deploy status changes, and a link edit changes which apps a project
-  // shows (P2-14).
+  // shows (P2-14) and which calendar events match the project's week (P1-12).
   project: {
     details: [
       "projectsGetProject",
@@ -48,6 +48,7 @@ export const LIVE_MAP: Record<
       "searchSearch",
       "searchTypeaheadProjects",
       "coolifyListDeployStatus",
+      "planningGetProjectWeek", // link edits change which events match (P1-12)
     ],
   },
   // The review badge (P0-18); the review queue joins with P1-13.
