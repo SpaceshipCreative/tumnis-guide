@@ -1,6 +1,7 @@
 // The project page's task writes (P0-24). Each goes through `apiWrite` (one idempotency
 // key per logical write), shows at once where it can, puts back what was there when the
-// server says no, keeps the answered change for undo, and refreshes every task view.
+// server says no, keeps the answered change for undo, and refreshes every task view. New
+// tasks go through the offline queue instead (P0-25, quickadd/queue.ts).
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { ProjectOut } from "../../api/types.gen";
@@ -10,12 +11,7 @@ import { invalidateTaskViews, queryId } from "../../lib/task-cache";
 import { remember } from "../../lib/undo";
 import { uiStore } from "../../stores/uiStore";
 import type { MovePlan } from "../board/move";
-import {
-  boardQuery,
-  briefQuery,
-  projectQuery,
-  projectTasksQuery,
-} from "./queries";
+import { boardQuery, briefQuery, projectQuery } from "./queries";
 import type { Board, Brief, Project, Task } from "./types";
 
 export type Status = Task["status"];
@@ -96,94 +92,6 @@ async function cancelTaskReads(client: QueryClient): Promise<void> {
   await client.cancelQueries({
     predicate: (q) =>
       ["tasksListTasks", "tasksGetBoard"].includes(queryId(q.queryKey) ?? ""),
-  });
-}
-
-// --- Create (the composer) --------------------------------------------------------------
-
-export interface CreateVars {
-  projectId: string;
-  title: string;
-  idempotencyKey?: string;
-}
-
-interface CreateSnap {
-  tempId: string;
-  lists: Snapshot;
-}
-
-/** An optimistic row: pending label, Backlog (FR-2.5), until the server answers. */
-function draftTask(id: string, projectId: string, title: string): Task {
-  const now = new Date().toISOString();
-  return {
-    schema_version: 1,
-    id,
-    project_id: projectId,
-    parent_id: null,
-    title,
-    label: null,
-    label_source: null,
-    status: "backlog",
-    priority: "normal",
-    due_on: null,
-    estimate_minutes: null,
-    first_action: null,
-    acceptance_criteria: null,
-    assigned_agent_id: null,
-    column_id: null,
-    board_rank: "",
-    rollover_count: 0,
-    started_at: null,
-    completed_at: null,
-    actual_minutes: null,
-    tainted: false,
-    source: "user",
-    version: 0,
-    created_at: now,
-    updated_at: now,
-  } as Task;
-}
-
-export function useCreateTask() {
-  return useWrite<CreateVars, Task, CreateSnap>({
-    mutationFn: (v) =>
-      apiWrite({
-        kind: "create",
-        method: "POST",
-        path: "/tasks",
-        body: { project_id: v.projectId, title: v.title },
-        idempotencyKey: v.idempotencyKey,
-        schema: zTaskOut,
-      }),
-    onMutate: async (v, ctx) => {
-      const key = projectTasksQuery(v.projectId).queryKey;
-      await ctx.client.cancelQueries({ queryKey: key });
-      const tempId = `draft-${crypto.randomUUID()}`;
-      const previous = ctx.client.getQueryData(key);
-      if (previous) {
-        ctx.client.setQueryData(key, {
-          ...previous,
-          items: [...previous.items, draftTask(tempId, v.projectId, v.title)],
-        });
-      }
-      return { tempId, lists: [[key, previous]] };
-    },
-    onSuccess: (task, v, snap, ctx) => {
-      const key = projectTasksQuery(v.projectId).queryKey;
-      const page = ctx.client.getQueryData(key);
-      if (page) {
-        ctx.client.setQueryData(key, {
-          ...page,
-          items: page.items.map((t) => (t.id === snap.tempId ? task : t)),
-        });
-      }
-      remember(task, "Task added");
-    },
-    onError: (error, _v, snap, ctx) => {
-      restore(ctx.client, snap?.lists);
-      reportFailure(error);
-    },
-    onSettled: (_d, _e, _v, _s, ctx) => invalidateTaskViews(ctx.client),
   });
 }
 
