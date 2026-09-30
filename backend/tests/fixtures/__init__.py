@@ -584,8 +584,10 @@ class WorkerKiller:
         event: str,
         logs: Path,
         imports: Sequence[str] = (),
+        queues: Sequence[str] = (),
     ) -> None:
         self.killpoint = killpoint
+        self.queues = tuple(queues)  # P1-16: `--queues`, a worker that dequeues only these
         self.db = db
         self.sys_db = sys_db
         self.events = events
@@ -638,7 +640,10 @@ class WorkerKiller:
         for name in self.imports:
             args += ["--import", name]
         args += ["--app-version", KILLER_APP_VERSION]
-        log = (self.logs / f"worker-{len(self._procs)}.log").open("wb")
+        if self.queues:
+            args += ["--queues", ",".join(self.queues)]
+        label = "-".join(self.queues) or "main"  # two killers may share the logs folder
+        log = (self.logs / f"worker-{label}-{len(self._procs)}.log").open("wb")
         proc = await asyncio.create_subprocess_exec(
             *args, cwd=BACKEND, env=env, stdout=log, stderr=asyncio.subprocess.STDOUT
         )
@@ -821,6 +826,7 @@ class WorkerKillerFactory(Protocol):
         events: int = 5,
         event: str = "test.ping",
         imports: Sequence[str] = (),
+        queues: Sequence[str] = (),
     ) -> WorkerKiller: ...
 
 
@@ -831,7 +837,8 @@ async def worker_killer(
     """`worker_killer(killpoint, *, events=5, event="test.ping", imports=())` -> a
     WorkerKiller on `db` and a fresh DBOS system database (dropped afterwards), so no
     earlier test's workflows are recovered by the subprocess. `imports` are more modules
-    the worker subprocesses import first (a WP's workflows and test probes)."""
+    the worker subprocesses import first (a WP's workflows and test probes); `queues` makes
+    them dequeue only those queues (`run_worker --queues`, P1-16)."""
     import psycopg  # noqa: PLC0415
     from psycopg import sql  # noqa: PLC0415
 
@@ -846,7 +853,12 @@ async def worker_killer(
     made: list[WorkerKiller] = []
 
     def factory(
-        killpoint: str, *, events: int = 5, event: str = "test.ping", imports: Sequence[str] = ()
+        killpoint: str,
+        *,
+        events: int = 5,
+        event: str = "test.ping",
+        imports: Sequence[str] = (),
+        queues: Sequence[str] = (),
     ) -> WorkerKiller:
         killer = WorkerKiller(
             killpoint,
@@ -856,6 +868,7 @@ async def worker_killer(
             event=event,
             logs=tmp_path,
             imports=imports,
+            queues=queues,
         )
         made.append(killer)
         return killer
