@@ -1,0 +1,16 @@
+# Three pages; the rate table is on page 2 under "Rates" (A1.5 relies on this chunk).
+min_chunks: 3
+max_chunks: 5
+chunks:
+  - contains: ["rate card lists what Acme pays"]
+    heading_path_endswith: ["Overview"]
+    page_from: 1
+    page_to: 1
+  - contains: ["Senior designer", "160"]
+    heading_path_endswith: ["Rates"]
+    page_from: 2
+    page_to: 2
+  - contains: ["Invoices are due within thirty days"]
+    heading_path_endswith: ["Terms"]
+    page_from: 3
+    page_to: 3

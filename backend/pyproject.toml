@@ -78,6 +78,12 @@ asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
   "error",
   "ignore::DeprecationWarning:testcontainers.*",
+  # Docling (P1-16) reads its own deprecated pipeline options while building a pipeline.
+  "ignore::DeprecationWarning:docling.*",
+  # RapidOCR (Docling's OCR) ships a docstring with a LaTeX backslash; compiling it warns.
+  "ignore:invalid escape sequence:SyntaxWarning",
+  # PyTorch notes a padded copy in a convolution of the OCR model; it is not a problem.
+  "ignore:Using padding='same':UserWarning:torch.*",
   # SocketBlockedError warns as it is raised; the error itself is what tests see.
   "ignore:A test tried to use socket:UserWarning:pytest_socket",
 ]
@@ -140,6 +146,12 @@ exclude = ["tumnis/modules/.*/migrations/"]
 [[tool.mypy.overrides]]
 module = ["tumnis.core.*", "tumnis.modules.*.rules", "tumnis.modules.*.api"]
 strict = true
+
+# Docling and what it brings (P1-16) are installed only where extraction runs (the extract
+# worker's image), so the default environment type-checks those imports as Any.
+[[tool.mypy.overrides]]
+module = ["docling.*", "docling_core.*", "transformers.*", "pypdfium2.*", "PIL.*"]
+ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["tumnis"]

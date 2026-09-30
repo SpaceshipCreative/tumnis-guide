@@ -1,0 +1,12 @@
+# Markdown has no pages; headings nest.
+min_chunks: 1
+max_chunks: 3
+chunks:
+  - contains: ["The launch date moves to the first Monday in May"]
+    heading_path_endswith: ["Workshop notes", "Decisions"]
+    page_from: null
+    page_to: null
+  - contains: ["Who writes the pricing page copy?"]
+    heading_path_endswith: ["Workshop notes", "Open questions"]
+    page_from: null
+    page_to: null
