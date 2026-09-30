@@ -99,3 +99,34 @@ def test_coverage_gates_groups(tmp_path: Path) -> None:
 
     assert _gate(tmp_path, {}) == 0
     assert _gate(tmp_path, {rules: (0, 0), tasks: (0, 0), other: (0, 50)}) == 0
+
+
+@pytest.mark.req("Quality rule 1")
+@pytest.mark.wp("P0-03")
+def test_spec_guard_job_compares_with_current_base_branch() -> None:
+    """T-P0-03-22
+    Red-proof for #79 and #81: the spec-guard job never uses the event's
+    `pull_request.base.sha` (it can predate a main the PR has since merged). With full
+    history, it fetches the base branch and passes it as `origin/<base_ref>`, and the
+    script compares against the merge-base with it.
+    """
+    job: dict[str, Any] = yaml.safe_load(CI_YML.read_text())["jobs"]["spec-guard"]
+    steps: list[dict[str, Any]] = job["steps"]
+    names = [step.get("name") for step in steps]
+    guard = steps[names.index("spec-guard")]
+    before = steps[: names.index("spec-guard")]
+
+    assert "pull_request.base.sha" not in yaml.safe_dump(job)
+    checkout = next(s for s in before if str(s.get("uses", "")).startswith("actions/checkout@"))
+    assert checkout["with"]["fetch-depth"] == 0
+    base_vars = [k for k, v in guard["env"].items() if v == "${{ github.base_ref }}"]
+    assert len(base_vars) == 1, "spec-guard needs the base branch name from github.base_ref"
+    assert f'--base "origin/${base_vars[0]}"' in guard["run"]
+    fetches = [
+        s
+        for s in before
+        if "git fetch" in s.get("run", "")
+        and "${{ github.base_ref }}" in (s.get("env") or {}).values()
+        and "refs/remotes/origin/" in s["run"]
+    ]
+    assert fetches, "a step before spec-guard fetches the current base branch"
