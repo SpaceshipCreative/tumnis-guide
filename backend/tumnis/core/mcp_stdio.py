@@ -3,20 +3,27 @@
 For an MCP client that only speaks stdio. Each JSON-RPC line read from stdin is one POST to
 `/mcp` (MCP Streamable HTTP, spec 2025-11-25, "Sending Messages to the Server"), carrying
 `Authorization: Bearer <TUMNIS_API_KEY>` and `Accept: application/json, text/event-stream`,
-so the caller's key and scopes apply exactly as over HTTP. The answer goes back as one line
-on stdout:
+so the caller's key and scopes apply exactly as over HTTP. The answer goes back on stdout:
 
 - 202 or an empty body (a notification or a response): nothing;
 - a JSON body: that message, compact, on one line;
-- an SSE body: one line per `data:` event;
+- an SSE body: one line per `data:` event, written as soon as the event is complete (so
+  progress reaches the client while the call runs); an event with empty data, such as the
+  stream's priming event, is skipped;
 - a non-2xx answer to a request: a JSON-RPC error line for that request's `id` (code
   -32000; `data` is the problem the server answered), so the client is never left waiting;
-- the server unreachable: the same, with the transport error as the message;
+- the server unreachable, or an SSE stream that ends before the answer: the same, with the
+  reason as the message;
 - a 2xx body that is not JSON (a proxy's page, a torn SSE event): the same.
 
-After `initialize`, later requests carry `MCP-Protocol-Version` with the negotiated
-version, and an `Mcp-Session-Id` the server assigned (none today: `/mcp` is stateless) is
-sent back. Stdout carries only MCP messages; anything else goes to stderr.
+Requests are relayed one at a time, in the order they were read, so answers come back in
+that order. Reading stdin never waits for them: a notification (such as
+`notifications/cancelled`) or a response is forwarded as soon as it is read, and a request
+cancelled while it still waits its turn is dropped unsent. `initialize` is relayed before
+anything read after it. After `initialize`, later requests carry `MCP-Protocol-Version`
+with the negotiated version, and an `Mcp-Session-Id` the server assigned (none today:
+`/mcp` is stateless) is sent back. Stdout carries only MCP messages; anything else goes to
+stderr.
 """
 
 import asyncio
@@ -49,17 +56,20 @@ def _error(request_id: Any, message: str, data: Any = None) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": request_id, "error": error}
 
 
-def sse_messages(body: str) -> list[Any]:
-    """The JSON messages of an SSE body: one per event, from its `data:` lines."""
-    messages: list[Any] = []
+async def sse_data(lines: AsyncIterable[str]) -> AsyncIterator[str]:
+    """The data of each complete SSE event in `lines` (lines without their endings), as
+    soon as the blank line ending it is read. An event whose data is empty (MCP's priming
+    event: an id and an empty `data:`) yields nothing, and so does an event the stream
+    ends before completing (WHATWG HTML, "Interpreting an event stream")."""
     data: list[str] = []
-    for line in [*body.splitlines(), ""]:
+    async for line in lines:
         if line.startswith("data:"):
             data.append(line.removeprefix("data:").removeprefix(" "))
-        elif not line and data:
-            messages.append(json.loads("\n".join(data)))
+        elif not line:
+            joined = "\n".join(data)
             data = []
-    return messages
+            if joined.strip():
+                yield joined
 
 
 def _body(response: httpx.Response) -> Any:
@@ -67,6 +77,22 @@ def _body(response: httpx.Response) -> Any:
         return response.json()
     except ValueError:
         return response.text or None
+
+
+def _request_id(message: Any) -> Any:
+    """The id a JSON-RPC request is answered under; None for a notification or a response."""
+    if isinstance(message, dict) and "method" in message:
+        return message.get("id")
+    return None
+
+
+def _answers(message: Any, request_id: Any) -> bool:
+    return (
+        isinstance(message, dict)
+        and "method" not in message
+        and message.get("id") == request_id
+        and ("result" in message or "error" in message)
+    )
 
 
 class _Session:
@@ -79,68 +105,72 @@ class _Session:
             "Content-Type": "application/json",
         }
 
-    def learn(self, response: httpx.Response, messages: list[Any]) -> None:
+    def learn_headers(self, response: httpx.Response) -> None:
         session_id = response.headers.get("mcp-session-id")
         if session_id:
             self.headers["Mcp-Session-Id"] = session_id
-        for message in messages:
-            result = message.get("result") if isinstance(message, dict) else None
-            version = result.get("protocolVersion") if isinstance(result, dict) else None
-            if isinstance(version, str):
-                self.headers["MCP-Protocol-Version"] = version
+
+    def learn(self, message: Any) -> None:
+        result = message.get("result") if isinstance(message, dict) else None
+        version = result.get("protocolVersion") if isinstance(result, dict) else None
+        if isinstance(version, str):
+            self.headers["MCP-Protocol-Version"] = version
 
 
 def _fail(out: TextIO, request_id: Any, message: str, data: Any = None) -> None:
-    """A request gets a JSON-RPC error line; a notification, a note on stderr."""
+    """A request gets a JSON-RPC error line; anything else, a note on stderr."""
     if request_id is not None:
         _emit(out, _error(request_id, message, data))
     else:
         print(f"tumnis mcp-stdio: {message}", file=sys.stderr)
 
 
-def _messages(response: httpx.Response) -> list[Any]:
-    """The JSON-RPC messages of a 2xx answer; ValueError when the body is not JSON."""
-    if response.headers.get("content-type", "").startswith("text/event-stream"):
-        return sse_messages(response.text)
-    return [response.json()]
-
-
 async def _relay(
-    line: str, out: TextIO, http: httpx.AsyncClient, session: _Session, url: str
+    line: str,
+    message: Any,
+    out: TextIO,
+    *,
+    http: httpx.AsyncClient,
+    session: _Session,
+    url: str,
 ) -> None:
-    try:
-        message = json.loads(line)
-    except ValueError:
-        _emit(
-            out,
-            {
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {"code": PARSE_ERROR, "message": "Parse error"},
-            },
-        )
-        return
-    request_id = message.get("id") if isinstance(message, dict) else None
-    try:
-        response = await http.post(url, content=line.strip(), headers=session.headers)
-    except httpx.HTTPError as exc:
-        _fail(out, request_id, f"Tumnis is unreachable: {exc!r}")
-        return
-    if not response.is_success:
-        body = _body(response)
-        title = body.get("title") if isinstance(body, dict) else None
-        _fail(out, request_id, str(title or f"HTTP {response.status_code}"), body)
-        return
-    if response.status_code == httpx.codes.ACCEPTED or not response.content:
-        return
-    try:
-        messages = _messages(response)
-    except ValueError:  # a 2xx that is not JSON (a proxy's page, a torn event)
-        _fail(out, request_id, "Tumnis answered with a body that is not JSON")
-        return
-    session.learn(response, messages)
-    for answer in messages:
+    request_id = _request_id(message)
+    answered = False
+
+    def emit(answer: Any) -> None:
+        nonlocal answered
+        session.learn(answer)
         _emit(out, answer)
+        answered = answered or _answers(answer, request_id)
+
+    try:
+        async with http.stream(
+            "POST", url, content=line.strip(), headers=session.headers
+        ) as response:
+            if not response.is_success:
+                await response.aread()
+                body = _body(response)
+                title = body.get("title") if isinstance(body, dict) else None
+                _fail(out, request_id, str(title or f"HTTP {response.status_code}"), body)
+                return
+            session.learn_headers(response)
+            if response.headers.get("content-type", "").startswith("text/event-stream"):
+                async for data in sse_data(response.aiter_lines()):
+                    emit(json.loads(data))
+            else:
+                content = await response.aread()
+                if response.status_code == httpx.codes.ACCEPTED or not content:
+                    return
+                emit(json.loads(content))
+                return
+    except httpx.HTTPError as exc:
+        _fail(out, None if answered else request_id, f"Tumnis is unreachable: {exc!r}")
+        return
+    except ValueError:  # a 2xx that is not JSON (a proxy's page, a torn event)
+        _fail(out, None if answered else request_id, "Tumnis answered with a body that is not JSON")
+        return
+    if request_id is not None and not answered:
+        _fail(out, request_id, "Tumnis ended the stream without an answer")
 
 
 async def forward(
@@ -151,12 +181,51 @@ async def forward(
     key: str,
     url: str = MCP_PATH,
 ) -> None:
-    """POST each non-empty line to `url` on `http` with the caller's key, one at a time,
-    and write each answer to `out` as described above."""
+    """POST each non-empty line to `url` on `http` with the caller's key, and write each
+    answer to `out`, as described above. Returns once `lines` ends and every request read
+    has been answered."""
     session = _Session(key)
-    async for line in lines:
-        if line.strip():
-            await _relay(line, out, http, session, url)
+    queue: asyncio.Queue[tuple[str, Any] | None] = asyncio.Queue()
+    cancelled: set[str | int] = set()
+
+    async def send_requests() -> None:
+        while (item := await queue.get()) is not None:
+            line, message = item
+            request_id = message.get("id")
+            if isinstance(request_id, str | int) and request_id in cancelled:
+                continue  # cancelled before it was sent: nothing to send or answer
+            await _relay(line, message, out, http=http, session=session, url=url)
+
+    async with asyncio.TaskGroup() as tasks:
+        tasks.create_task(send_requests())
+        try:
+            async for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    message = json.loads(line)
+                except ValueError:
+                    _emit(
+                        out,
+                        {
+                            "jsonrpc": "2.0",
+                            "id": None,
+                            "error": {"code": PARSE_ERROR, "message": "Parse error"},
+                        },
+                    )
+                    continue
+                method = message.get("method") if isinstance(message, dict) else None
+                if _request_id(message) is not None and method != "initialize":
+                    queue.put_nowait((line, message))
+                    continue
+                if method == "notifications/cancelled":
+                    params = message.get("params")
+                    target = params.get("requestId") if isinstance(params, dict) else None
+                    if isinstance(target, str | int):
+                        cancelled.add(target)
+                await _relay(line, message, out, http=http, session=session, url=url)
+        finally:
+            queue.put_nowait(None)
 
 
 async def stdin_lines() -> AsyncIterator[str]:

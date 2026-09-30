@@ -5,9 +5,10 @@ The end-to-end relay through the real `/mcp` mount is T-P2-01-12 (integration)."
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -29,14 +30,16 @@ async def _lines(*items: Any) -> AsyncIterator[str]:
         yield (item if isinstance(item, str) else json.dumps(item)) + "\n"
 
 
-async def _run(
-    handler: Callable[[httpx.Request], httpx.Response], *items: Any
-) -> tuple[list[Any], list[httpx.Request]]:
+Handler = Callable[[httpx.Request], httpx.Response | Awaitable[httpx.Response]]
+
+
+async def _run(handler: Handler, *items: Any) -> tuple[list[Any], list[httpx.Request]]:
     seen: list[httpx.Request] = []
 
-    def record(request: httpx.Request) -> httpx.Response:
+    async def record(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        return handler(request)
+        response = handler(request)
+        return await response if isinstance(response, Awaitable) else response
 
     out = io.StringIO()
     transport = httpx.MockTransport(record)
@@ -91,6 +94,59 @@ async def test_sse_answer_is_one_line_per_event() -> None:
 
     answers, _ = await _run(handler, LIST)
     assert answers == events
+
+
+async def test_sse_events_reach_stdout_as_each_completes_and_priming_is_skipped() -> None:
+    progress = {"jsonrpc": "2.0", "method": "notifications/progress", "params": {"progress": 1}}
+    answer = {"jsonrpc": "2.0", "id": 2, "result": {"tools": []}}
+    out = io.StringIO()
+    written_before_the_answer: list[str] = []
+
+    async def body() -> AsyncIterator[bytes]:
+        yield b"id: 0\ndata:\n\n"  # the priming event: an id and empty data (MCP 2025-11-25)
+        yield f"event: message\ndata: {json.dumps(progress)}\n\n".encode()
+        written_before_the_answer.append(out.getvalue())
+        yield f"event: message\ndata: {json.dumps(answer)}\n\n".encode()
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=body())
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport, base_url="https://tumnis.test") as http:
+        await mcp_stdio.forward(_lines(LIST), out, http, key=KEY)
+    assert [json.loads(line) for line in out.getvalue().splitlines()] == [progress, answer]
+    assert [json.loads(line) for line in written_before_the_answer[0].splitlines()] == [progress]
+
+
+async def test_an_sse_stream_that_ends_without_the_answer_answers_with_an_error() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, text="id: 0\ndata:\n\n", headers={"content-type": "text/event-stream"}
+        )
+
+    answers, _ = await _run(handler, LIST)
+    assert [(a["id"], a["error"]["code"]) for a in answers] == [(2, mcp_stdio.SERVER_ERROR)]
+
+
+async def test_a_notification_is_forwarded_while_a_request_is_pending() -> None:
+    """A cancellation read while a call runs is forwarded at once (stdin is not blocked);
+    a request it cancels before that request was sent is never sent."""
+    call = {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "x"}}
+    queued = {**call, "id": 4}
+    cancel = {"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": 4}}
+    cancel_seen = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("method") == "notifications/cancelled":
+            cancel_seen.set()
+            return httpx.Response(202)
+        await asyncio.wait_for(cancel_seen.wait(), timeout=5)  # times out if stdin blocks
+        return _result(request, {"ok": True})
+
+    answers, seen = await _run(handler, call, queued, cancel)
+    assert answers == [{"jsonrpc": "2.0", "id": 3, "result": {"ok": True}}]
+    assert sorted(json.loads(r.content).get("id", 0) for r in seen) == [0, 3]
 
 
 async def test_refused_request_becomes_a_json_rpc_error_for_its_id() -> None:
