@@ -68,7 +68,7 @@ claude mcp add --transport http tumnis https://tumnis.lan/mcp \
 A client that only speaks stdio runs `tumnis mcp-stdio`, which forwards each message to `$TUMNIS_URL/mcp` (default `http://127.0.0.1:8000`) with `TUMNIS_API_KEY` as the bearer. It exits 2 without a key, and it sends the key over plain `http://` only to `localhost` or a LAN address:
 
 ```bash
-claude mcp add --transport stdio --env TUMNIS_API_KEY=tmn_... --env TUMNIS_URL=https://tumnis.lan \
+claude mcp add --env TUMNIS_API_KEY=tmn_... --env TUMNIS_URL=https://tumnis.lan --transport stdio \
   tumnis -- uv run --directory /path/to/tumnis-guide/backend tumnis mcp-stdio
 ```
 

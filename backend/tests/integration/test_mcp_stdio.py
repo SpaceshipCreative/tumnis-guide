@@ -51,7 +51,6 @@ async def _lines(items: list[dict[str, Any]]) -> AsyncIterator[str]:
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_shim_forwards_with_callers_key(app: FastAPI, key_client: Any) -> None:
     """T-P2-01-12
     Given `forward(stdin, stdout, http, key=...)` over an in-process client, when
