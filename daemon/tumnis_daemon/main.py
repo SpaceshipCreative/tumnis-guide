@@ -3,7 +3,8 @@
 `tumnis-daemon run --config /etc/tumnis/daemon.toml` refuses to run as root (exit 78, before
 it reads anything), removes worktrees a crash left behind, then dials `<server_url>/ws/runner`
 with the device token, registers (protocols 1 and 2), replays its outbox, heartbeats, runs
-skills, cancels them and answers health checks. Server messages are acked in the session's
+skills, cancels them, answers health checks and archives, restores and purges profiles
+(P2-18; `register` lists the live profiles only). Server messages are acked in the session's
 style: `ack{ack_of}` on protocol 1, `ack{message_ids}` on protocol 2. The websockets
 reconnect iterator backs off and dials again when the connection drops
 (https://websockets.readthedocs.io/en/stable/reference/asyncio/client.html); a fatal
@@ -24,6 +25,7 @@ from typing import Any, Final, Literal
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
 
+from tumnis_daemon import archive
 from tumnis_daemon.config import DaemonConfig, load_config
 from tumnis_daemon.protocol import (
     PROTOCOL_2,
@@ -36,7 +38,9 @@ from tumnis_daemon.protocol import (
     Nack,
     ProtocolError,
     Provision,
+    PurgeArchive,
     Registered,
+    Restore,
     Run,
     ServerMessage,
     make_ack,
@@ -45,7 +49,7 @@ from tumnis_daemon.protocol import (
     make_register,
     parse_server,
 )
-from tumnis_daemon.provision import provision, remembered_profiles
+from tumnis_daemon.provision import provision
 from tumnis_daemon.runner import check_health, hermes_version, run_skill
 from tumnis_daemon.state import Sender, StateStore
 from tumnis_daemon.worktree import cleanup_stale_worktrees
@@ -126,7 +130,7 @@ async def _session(
         os=_os(),
         daemon_version=_daemon_version(),
         hermes_version=hermes,
-        profiles=list(dict.fromkeys([*cfg.profiles, *remembered_profiles(cfg.state_dir)])),
+        profiles=archive.live_profiles(cfg),
         running_run_ids=state.running_run_ids(),
     )
     await ws.send(register.model_dump_json())
@@ -203,6 +207,7 @@ def _handle(
     match msg:
         case Run():  # both versions; a resent run: running, or its result kept
             if state.claim_run(msg.run_id, msg.message_id):
+                state.run_profiles[msg.run_id] = msg.profile
                 _spawn(tasks, _guarded(runs, run_skill(msg, state, cfg)))
         case Cancel():
             if not state.cancel(msg.run_id, msg.reason):
@@ -218,8 +223,8 @@ def _handle(
         case Nack():  # refused for good: drop it from the outbox
             log.warning("nacked", extra={"code": msg.code})
             state.acked([msg.nack_of])
-        case Archive():  # schema only until P2-18
-            log.info("archive_not_supported")
+        case Archive() | Restore() | PurgeArchive():  # P2-18
+            _spawn(tasks, archive.dispatch(msg, state, cfg))
         case ProtocolError():
             log.warning("server_error", extra={"code": msg.code})
         case Registered():

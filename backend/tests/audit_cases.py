@@ -234,6 +234,25 @@ async def rotate_runner_token(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+# --- Purge (P2-18) --------------------------------------------------------------------------
+
+
+async def purge_project(ctx: Ctx) -> None:
+    """A project made and archived through the routes, then `POST /v1/purges` with a
+    reason: `data.purged` (R-37)."""
+    made = await ctx.session_client.post("/v1/projects", json={"name": "Purge case"})
+    made.raise_for_status()
+    project = made.json()
+    archived = await ctx.session_client.post(
+        f"/v1/projects/{project['id']}/archive", json={"version": project["version"]}
+    )
+    archived.raise_for_status()
+    response = await ctx.session_client.post(
+        "/v1/purges", json={"scope": "project", "id": project["id"], "reason": "Audit case"}
+    )
+    response.raise_for_status()
+
+
 # --- Decision thresholds (P3-08) -------------------------------------------------------------
 
 
@@ -265,6 +284,7 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("key.revoked", revoke_key, "user"),
     AuditCase("runner.created", create_runner, "user"),
     AuditCase("runner.token_rotated", rotate_runner_token, "user"),
+    AuditCase("data.purged", purge_project, "user"),
     AuditCase("threshold.changed", change_threshold, "user"),
 )
 

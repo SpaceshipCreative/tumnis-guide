@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "message_id": "01950000-0000-7000-8000-000000001020",
+  "correlation_id": "req:01950000-0000-7000-8000-000000000402",
+  "sent_at": "2026-03-09T12:00:00Z",
+  "type": "archive_done",
+  "archive_id": "01950000-0000-7000-8000-000000000501",
+  "path": "/var/lib/tumnis-daemon/archives/01950000-0000-7000-8000-000000000501.tar.zst",
+  "size": 48213,
+  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "manifest_digest": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+  "error_code": null,
+  "error": null
+}

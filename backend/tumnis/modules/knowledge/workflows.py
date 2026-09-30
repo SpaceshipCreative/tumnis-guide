@@ -351,3 +351,7 @@ async def move_project_folder(
 ) -> dict[str, Any]:
     """Copy the project's folder to `to_location`/`to_path`, verify every hash, switch."""
     raise NotImplementedError("P3-14")
+
+
+# P2-18: the folder steps of the project archive workflows register with projects.
+from tumnis.modules.knowledge import archive as _archive  # noqa: E402, F401

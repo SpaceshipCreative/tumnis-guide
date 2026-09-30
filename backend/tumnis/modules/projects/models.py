@@ -1,4 +1,5 @@
-"""projects SQLAlchemy tables owned by this module (mirrors of revision projects_0001).
+"""projects SQLAlchemy tables owned by this module (mirrors of revisions projects_0001 and
+projects_0002).
 
 `sort_key` compares bytewise (`COLLATE "C"`), so Postgres orders the fractional keys as
 Python and TypeScript do (P0-17)."""
@@ -49,3 +50,12 @@ class ProjectPolicy(TenantBase, Base):
     max_concurrent_runs: Mapped[int]
     max_run_minutes: Mapped[int]
     max_tasks_per_run: Mapped[int]
+
+
+class ProjectArchive(TenantBase, Base):
+    """Where a project's archive stands (projects_0002, P2-18); no row while it is live."""
+
+    __tablename__ = "project_archives"
+
+    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"))
+    state: Mapped[str]

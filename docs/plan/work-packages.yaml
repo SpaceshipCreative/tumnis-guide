@@ -648,7 +648,7 @@ phases:
 
 - id: 2
   name: Agent layer
-  status: planned
+  status: active
   weeks: 8 to 11
   lead: Phase 2 lets agents do real work through Tumnis, with every hop logged, every gated action approved and hostile content unable to steer a run.
   exit: One real task per day completed by an agent end to end, for 2 weeks (PRD).
