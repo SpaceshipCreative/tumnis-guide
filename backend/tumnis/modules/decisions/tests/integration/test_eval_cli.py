@@ -78,7 +78,6 @@ async def _evaluations_from_cli(
 
 @pytest.mark.req("Quality: decision quality")
 @pytest.mark.wp("P3-08")
-@pytest.mark.xfail(strict=True, reason="spec:P3-08")
 async def test_offline_eval_reproduces_page_numbers(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,
@@ -124,7 +123,6 @@ async def test_offline_eval_reproduces_page_numbers(  # noqa: PLR0917
 
 @pytest.mark.req("Quality: decision quality")
 @pytest.mark.wp("P3-08")
-@pytest.mark.xfail(strict=True, reason="spec:P3-08")
 async def test_eval_result_stored_with_model_version(  # noqa: PLR0917
     workspace: WorkspaceHandle,
     db: DbUrls,
