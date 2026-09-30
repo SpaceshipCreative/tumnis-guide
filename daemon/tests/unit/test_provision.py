@@ -53,6 +53,38 @@ async def test_provisioned_profiles_are_remembered(
 
 
 @pytest.mark.wp("P1-06")
+async def test_a_profile_without_its_env_is_removed(
+    cfg: DaemonConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The install succeeded but the profile's `.env` could not be written: the daemon
+    deletes the profile before answering `failed`, so the retry installs it again rather
+    than answering `exists` for a profile without its env."""
+    from tumnis_daemon import provision as provision_mod  # noqa: PLC0415
+
+    profiles_dir = tmp_path / "profiles"
+    log = tmp_path / "hermes.log"
+    monkeypatch.setenv("HERMES_STUB_PROFILES_DIR", str(profiles_dir))
+    monkeypatch.setenv("HERMES_STUB_LOG", str(log))
+    cfg = replace(cfg, template_dir=TEMPLATE, hermes_profiles_dir=profiles_dir)
+
+    def no_env(_cfg: DaemonConfig, _name: str) -> None:
+        raise PermissionError("profile.env is not readable")
+
+    monkeypatch.setattr(provision_mod, "_copy_profile_env", no_env)
+    answer = await provision_mod.handle_provision(_request("beta-app"), cfg)
+
+    assert answer.status == "failed"
+    assert answer.error_code == "hermes_error"
+    assert not (profiles_dir / "beta-app").exists()
+    assert "profile\tdelete\tbeta-app\t--yes" in log.read_text()
+
+    monkeypatch.undo()
+    monkeypatch.setenv("HERMES_STUB_PROFILES_DIR", str(profiles_dir))
+    retried = await provision_mod.handle_provision(_request("beta-app"), cfg)
+    assert retried.status == "created"
+
+
+@pytest.mark.wp("P1-06")
 def test_remembered_profiles_ignores_a_bad_file(cfg: DaemonConfig) -> None:
     cfg.state_dir.mkdir(parents=True)
     (cfg.state_dir / "profiles.json").write_text('["ok-name", "Bad Name", 3]')

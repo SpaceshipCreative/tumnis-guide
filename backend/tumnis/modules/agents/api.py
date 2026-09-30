@@ -659,7 +659,6 @@ class ProvisionStarter(Protocol):
         link_name: str | None,
         *,
         attempt: int,
-        dedupe_id: str,
     ) -> None: ...
 
 
@@ -673,19 +672,16 @@ def register_provision_starter(starter: ProvisionStarter) -> None:
     _starter[:] = [starter]
 
 
-async def _start_provision(  # noqa: PLR0917  # the workflow's arguments, spelled out
+async def _start_provision(
     workspace_id: UUID,
     project_id: UUID,
     mode: ProvisionMode,
     link_name: str | None,
     attempt: int,
-    dedupe_id: str,
 ) -> None:
     if not _starter:
         raise RuntimeError("agents.workflows is not loaded: nothing can start a provision")
-    await _starter[0](
-        workspace_id, project_id, mode, link_name, attempt=attempt, dedupe_id=dedupe_id
-    )
+    await _starter[0](workspace_id, project_id, mode, link_name, attempt=attempt)
 
 
 async def provision_project(
@@ -694,14 +690,11 @@ async def provision_project(
     *,
     mode: ProvisionMode,
     link_name: str | None,
-    event_id: UUID,
 ) -> None:
     """Start the project's first provision (`project.created`): workflow id
-    `provision:<project id>`, deduplication id `project.created:<event id>:agents`, so a
-    redelivered event starts nothing new."""
-    await _start_provision(
-        workspace_id, project_id, mode, link_name, 0, f"project.created:{event_id}:agents"
-    )
+    `provision:<project id>`, so a redelivered event starts nothing new (DBOS returns the
+    existing workflow for an id in use)."""
+    await _start_provision(workspace_id, project_id, mode, link_name, 0)
 
 
 async def retry_provision(project_id: UUID, *, ctx: WorkspaceContext | None = None) -> None:
@@ -751,7 +744,6 @@ async def retry_provision(project_id: UUID, *, ctx: WorkspaceContext | None = No
         mode,
         row.name if mode == "link" else None,
         attempt,
-        provision_workflow_id(project_id, attempt),
     )
 
 

@@ -17,14 +17,12 @@
 """
 
 import asyncio
-import contextlib
 import contextvars
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID, uuid5
 
 from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
-from dbos._error import DBOSQueueDeduplicatedError  # dbos 3.1.0: not re-exported
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import Table, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -642,11 +640,12 @@ async def start_provision(  # the workflow's arguments, spelled out
     link_name: str | None,
     *,
     attempt: int,
-    dedupe_id: str,
 ) -> None:
     """Enqueue `provision_profile` (workflow id `provision:<project id>[:<attempt>]`) on the
-    runs queue, partitioned by project, once: an existing workflow id returns that workflow
-    and the deduplication id refuses a second while the first is queued or running.
+    runs queue, partitioned by project, once: DBOS returns the existing workflow for an id
+    in use. (DBOS 3.1.0 refuses a deduplication id on a partitioned queue, so the workflow
+    id is the only guard, and it is enough: it outlives the workflow, a deduplication id
+    does not.)
 
     Subscribers run inside a DBOS step, and DBOS refuses to start a workflow from a step,
     so the enqueue runs in a fresh context (no enclosing workflow): the new workflow is a
@@ -655,10 +654,7 @@ async def start_provision(  # the workflow's arguments, spelled out
     async def enqueue() -> None:
         with (
             SetWorkflowID(api.provision_workflow_id(project_id, attempt)),
-            SetEnqueueOptions(
-                deduplication_id=dedupe_id, queue_partition_key=f"provision:{project_id}"
-            ),
-            contextlib.suppress(DBOSQueueDeduplicatedError),
+            SetEnqueueOptions(queue_partition_key=f"provision:{project_id}"),
         ):
             await DBOS.enqueue_workflow_async(
                 RUNS_QUEUE,

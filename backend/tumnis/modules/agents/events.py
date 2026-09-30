@@ -2,8 +2,8 @@
 
 - `agents.provision_project` listens to `project.created`: it starts the project's
   `provision_profile` workflow (a new profile from the template, or a link to an existing
-  one, as the payload's `profile` says; absent means create). The workflow id and the
-  deduplication id make a redelivered event start nothing new.
+  one, as the payload's `profile` says; absent means create). The workflow id makes a
+  redelivered event start nothing new.
 - `agents.retry_provisioning` listens to `human.decided`: accepting a `provisioning_failed`
   item provisions the project's profile again.
 
@@ -17,6 +17,10 @@ from tumnis.core.events import EventEnvelope, subscribe
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.agents import api
+
+# The subscribers start `provision_profile` through api's starter seam, which workflows
+# fills at import: loading the subscribers loads the workflow too, in every process.
+from tumnis.modules.agents import workflows as _workflows  # noqa: F401
 
 __all__ = ["PROVISION_SUBSCRIBER", "RETRY_SUBSCRIBER", "provision_project", "retry_provisioning"]
 
@@ -34,7 +38,6 @@ async def provision_project(envelope: EventEnvelope) -> None:
         UUID(str(payload["project_id"])),
         mode=mode,
         link_name=choice.get("name") if mode == "link" else None,
-        event_id=envelope.event_id,
     )
 
 
