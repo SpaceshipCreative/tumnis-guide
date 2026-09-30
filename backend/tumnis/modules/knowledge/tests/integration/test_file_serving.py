@@ -33,7 +33,6 @@ def _set_status(db: DbUrls, document_id: str, status: str) -> None:
 
 @pytest.mark.req("SEC-10")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 async def test_attachment_and_nosniff(
     extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient, db: DbUrls
 ) -> None:

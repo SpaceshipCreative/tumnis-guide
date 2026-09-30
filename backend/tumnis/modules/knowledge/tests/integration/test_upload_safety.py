@@ -43,7 +43,6 @@ async def _folder_files(env: ExtractEnv) -> list[str]:
 
 @pytest.mark.req("SEC-10")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 async def test_eicar_quarantined_never_extracted(
     extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient, db: DbUrls
 ) -> None:
@@ -109,7 +108,6 @@ TYPE_CASES = {
 
 @pytest.mark.req("SEC-10")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 @pytest.mark.parametrize("case", list(TYPE_CASES))
 async def test_type_sniffed_from_content(
     case: str,

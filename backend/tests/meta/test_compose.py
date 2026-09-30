@@ -145,7 +145,6 @@ def _mem_limit_bytes(service: dict[str, Any]) -> int:
 
 @pytest.mark.req("ADR-0007")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 def test_worker_extract_has_memory_limit_and_clamd() -> None:
     """T-P1-16-14
     compose.yaml defines `clamd` and `worker-extract`: the extract worker runs
