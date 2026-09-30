@@ -41,6 +41,7 @@ name = rules.py imports nothing that does I/O
 type = forbidden
 source_modules =
     tumnis.modules.*.rules
+    tumnis.modules.knowledge.sync_rules
 forbidden_modules =
     tumnis.core.db
     tumnis.core.tenancy

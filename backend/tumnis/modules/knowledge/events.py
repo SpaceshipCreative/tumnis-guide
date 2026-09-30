@@ -5,9 +5,10 @@
 brief index lets one row exist per project, so a redelivered event writes nothing. The
 payload is read as a dict, so knowledge needs nothing from projects.
 
-`knowledge.assign_project_folder` (P1-14, FR-15.7): on `project.created`, the project gets
-its folder on the workspace default location; idempotent through the folder's unique key
-(nothing happens while the workspace has no default location). Never rename a
+`knowledge.assign_project_folder` (P1-14, FR-15.7; P1-15, FR-15.12): on `project.created`,
+the project gets its folder on the workspace default location, made there with its layout
+when the location answers (`api.ensure_project_folder`); idempotent through the folder's
+unique key (nothing happens while the workspace has no default location). Never rename a
 subscriber: its name is part of every delivery's workflow ID.
 """
 
@@ -17,7 +18,7 @@ from uuid import UUID
 from tumnis.core.events import EventEnvelope, subscribe
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
-from tumnis.modules.knowledge import api
+from tumnis.modules.knowledge import api, sync
 
 
 @subscribe("project.created", name="knowledge.create_brief")
@@ -38,4 +39,4 @@ async def assign_project_folder(envelope: EventEnvelope) -> None:
     payload: dict[str, Any] = envelope.payload
     ctx = WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
     async with tenant_session(ctx) as s:
-        await api.assign_project_folder(s, UUID(str(payload["project_id"])))
+        await api.ensure_project_folder(s, UUID(str(payload["project_id"])), net=sync.net())

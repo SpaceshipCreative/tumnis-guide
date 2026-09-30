@@ -114,6 +114,17 @@ def configure_generation(settings: Settings) -> None:
     decisions.configure_net_policy(settings.net_policy())
 
 
+def configure_folder_sync(settings: Settings) -> None:
+    """The folder sync's SSRF policy (P1-15): every location is opened with the worker's."""
+    importlib.import_module("tumnis.modules.knowledge.sync").configure(settings.net_policy())
+
+
+def _folder_watch(stop: asyncio.Event) -> "asyncio.Task[None]":
+    """The local-disk folder watcher (P1-15) beside the relay: changes queue a folder sync."""
+    knowledge = importlib.import_module("tumnis.modules.knowledge.workflows")
+    return asyncio.create_task(knowledge.local_watch(stop), name="folder-watch")
+
+
 def register_module_schedules() -> None:
     """Module schedules (A9), applied after DBOS.launch(): a module's `workflows.schedules()`
     lists its own (P1-09: the calendar sync tick every 10 minutes on the sync queue)."""
@@ -175,6 +186,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     install_master_keys(settings)
     modules.configure(settings)
     configure_generation(settings)
+    configure_folder_sync(settings)
     cache.configure_backend(
         cache.InProcessCache(SystemClock(), publish=cache.pg_publisher(db.direct_engine))
     )
@@ -206,8 +218,9 @@ async def _serve(settings: Settings) -> None:
     relay = asyncio.create_task(events.relay_forever(stop), name="outbox-relay")
     listener = cache.CacheInvalidationListener(settings.database_direct_url)
     invalidations = asyncio.create_task(listener.run(stop), name="cache-invalidation")
+    watch = _folder_watch(stop)
     await stop.wait()
-    for task in (relay, invalidations):
+    for task in (relay, invalidations, watch):
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task

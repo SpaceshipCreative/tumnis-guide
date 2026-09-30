@@ -153,7 +153,7 @@ async def test_missing_marker_takes_location_offline_and_queues_writes(
     assert _count(db, "SELECT count(*) FROM pending_writes") == 0
     assert _files(tmp_location) == [queued.path]
     landed = tmp_location / queued.path
-    assert landed.read_bytes() == b"# Plan\n"
+    assert landed.read_bytes() == f"---\ntumnis_id: {note_id}\n---\n# Plan\n".encode()
     mtime = landed.stat().st_mtime_ns
 
     async with tenant_session(ws.ctx) as s:
@@ -591,7 +591,9 @@ async def test_pr52_two_offline_saves_of_one_note_both_drain_and_the_newest_land
     async with tenant_session(ws.ctx) as s:
         await knowledge.check_location(s, location_id, net=SELF_HOSTED)
     assert _count(db, "SELECT count(*) FROM pending_writes") == 0
-    assert (tmp_location / second.path).read_bytes() == b"# Plan v2\n"
+    assert (tmp_location / second.path).read_bytes() == (
+        f"---\ntumnis_id: {note_id}\n---\n# Plan v2\n".encode()
+    )
 
 
 @pytest.mark.req("FR-15.12")
