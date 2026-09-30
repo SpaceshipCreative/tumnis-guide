@@ -63,8 +63,10 @@ async def test_task_changes_reach_index_through_events(
     assert hit["title"] == "Send invoice to Acme"
 
     clock.advance(timedelta(minutes=1))
+    current = await session_client.get(f"/v1/tasks/{task['id']}")
     renamed = await session_client.patch(
-        f"/v1/tasks/{task['id']}", json={"title": "Send quote", "version": task["version"]}
+        f"/v1/tasks/{task['id']}",
+        json={"title": "Send quote", "version": current.json()["version"]},
     )
     assert renamed.status_code == 200, renamed.text
     await _search.drain(db)
