@@ -339,14 +339,16 @@ jobs:
 
   # Performance (P0-29, PERF-1, PERF-2): the budgets on the load set (10 projects, 2,000
   # tasks) of the compose.test stack. The bundle budget on the image's own dist; k6 against
-  # perf/baseline.json (a p95 more than 20% worse, or over its NFR, fails); Lighthouse CI
-  # at 375 px; the Playwright timings (A0.6, T-P0-29-01..03), which the e2e job leaves out.
-  # On the homelab runner once HOMELAB_RUNNER is "true"; until then GitHub-hosted, where
-  # timings vary more (perf/baseline.json names the runner it was measured on). The
-  # Playwright timings run only on the homelab runner (plan: hardware-sensitive); each pays
-  # a load-set reset, which a GitHub-hosted run cannot fit in the job's 5 minutes.
+  # perf/baseline.json (a p95 more than 20% AND at least 50 ms worse, or over its NFR,
+  # fails; decision 27); Lighthouse CI at 375 px; the Playwright timings (A0.6,
+  # T-P0-29-01..03), which the e2e job leaves out.
+  # On the homelab runner ([self-hosted, homelab], as preview.yml, and never for a fork's
+  # PR) once HOMELAB_RUNNER is "true"; until then GitHub-hosted, so a required check never
+  # waits on a runner that doesn't exist yet. The Playwright timings run only on the
+  # homelab runner (plan: hardware-sensitive; decision 25); each pays a load-set reset,
+  # which a GitHub-hosted run cannot fit in the job's 5 minutes.
   performance:
-    runs-on: ${{ vars.HOMELAB_RUNNER == 'true' && fromJSON('["self-hosted", "homelab"]') || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOMELAB_RUNNER == 'true' && github.event.pull_request.head.repo.fork != true && fromJSON('["self-hosted", "homelab"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
     env:
       K6_IMAGE: grafana/k6:2.3.0@sha256:9c2dee7f8ed74d317e4027c06a10f169b625638189de8d4555d0b3486a5aeb34
@@ -391,7 +393,23 @@ jobs:
           done
           node perf/check_summary.mjs "$RUNNER_TEMP"/k6/*.json
           exit "$status"
-      - name: Lighthouse CI, Core Web Vitals at 375 px (T-P0-29-08)
+      # Decision 26: the Core Web Vitals budget gates on a LAN/VPN profile (lighthouserc.json:
+      # 50 ms RTT, 10 Mbps, 2x CPU for a current phone). Lighthouse's default slow phone
+      # (slow 4G, 4x CPU) only warns (lighthouserc.slow-phone.json, one run); Phase 4 works
+      # on those numbers. It runs first because each collect clears .lighthouseci/.
+      - name: Lighthouse on the default slow phone, warnings only (decision 26)
+        working-directory: frontend
+        run: |
+          npx --yes "$LHCI_CLI" autorun --config=lighthouserc.slow-phone.json \
+            --collect.url="$E2E_BASE_URL/" \
+            --collect.url="$E2E_BASE_URL/projects/$PROJECT_ID?view=board" \
+            --collect.settings.extraHeaders="$LHCI_EXTRA_HEADERS"
+          mkdir -p "$RUNNER_TEMP/lhci/slow-phone"
+          for lhr in .lighthouseci/lhr-*.json; do
+            [ -e "$lhr" ] || continue
+            jq 'del(.configSettings.extraHeaders)' "$lhr" > "$RUNNER_TEMP/lhci/slow-phone/$(basename "$lhr")"
+          done
+      - name: Lighthouse CI, Core Web Vitals at 375 px on LAN (T-P0-29-08)
         working-directory: frontend
         run: >-
           npx --yes "$LHCI_CLI" autorun --config=lighthouserc.json
@@ -403,10 +421,10 @@ jobs:
       - name: Lighthouse reports for the artifact, without the session header
         if: always()
         run: |
-          mkdir -p "$RUNNER_TEMP/lhci"
+          mkdir -p "$RUNNER_TEMP/lhci/lan"
           for lhr in frontend/.lighthouseci/lhr-*.json; do
             [ -e "$lhr" ] || continue
-            jq 'del(.configSettings.extraHeaders)' "$lhr" > "$RUNNER_TEMP/lhci/$(basename "$lhr")"
+            jq 'del(.configSettings.extraHeaders)' "$lhr" > "$RUNNER_TEMP/lhci/lan/$(basename "$lhr")"
           done
       - name: Playwright timings on the load set (A0.6, T-P0-29-01..03), homelab runner only
         if: runner.environment == 'self-hosted'

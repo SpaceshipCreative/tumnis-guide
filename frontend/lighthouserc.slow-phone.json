@@ -1,7 +1,7 @@
 {
   "ci": {
     "collect": {
-      "numberOfRuns": 3,
+      "numberOfRuns": 1,
       "settings": {
         "onlyCategories": ["performance"],
         "formFactor": "mobile",
@@ -12,26 +12,21 @@
           "deviceScaleFactor": 2,
           "disabled": false
         },
-        "throttlingMethod": "simulate",
-        "throttling": {
-          "rttMs": 50,
-          "throughputKbps": 10240,
-          "cpuSlowdownMultiplier": 2
-        }
+        "throttlingMethod": "simulate"
       }
     },
     "assert": {
       "assertions": {
         "largest-contentful-paint": [
-          "error",
+          "warn",
           { "maxNumericValue": 2500, "aggregationMethod": "median-run" }
         ],
         "cumulative-layout-shift": [
-          "error",
+          "warn",
           { "maxNumericValue": 0.1, "aggregationMethod": "median-run" }
         ],
         "total-blocking-time": [
-          "error",
+          "warn",
           { "maxNumericValue": 200, "aggregationMethod": "median-run" }
         ]
       }
