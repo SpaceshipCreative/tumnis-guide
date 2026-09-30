@@ -547,15 +547,16 @@ async def schedule_block(
     code, with `current = {free_blocks, violations}`, and writes nothing. A `version`
     that is not the item's raises StaleVersion (409). An unknown task is NotFound (404), a
     Done one 409 `ineligible_task`, a block that ends before it starts 422."""
-    try:
-        block = Interval(body.block_start, body.block_end)
-    except ValueError:
-        raise ProblemError(422, "validation_error", "the block ends after it starts") from None
     calendar_day = await day_calendar(ctx, day)
     free = [Interval(b.start, b.end) for b in calendar_day.free_blocks]
     async with session_for(ctx, session) as s:
         await s.execute(_WEEK_LOCK, {"key": f"plan:{ctx.workspace_id}:{day.isoformat()}"})
+        # The task first: another workspace's task is 404 whatever the body says.
         task = await tasks.get_task(s, task_id)
+        try:
+            block = Interval(body.block_start, body.block_end)
+        except ValueError:
+            raise ProblemError(422, "validation_error", "the block ends after it starts") from None
         if task.status == "done":
             raise ProblemError(409, "ineligible_task", "a Done task cannot be scheduled")
         plan_id, items = await _day_items(s, day)
