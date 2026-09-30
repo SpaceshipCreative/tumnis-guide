@@ -20,6 +20,7 @@ from python_multipart.exceptions import MultipartParseError
 from python_multipart.multipart import MultipartParser, parse_options_header
 
 from tumnis.core.errors import ProblemError
+from tumnis.core.routing import NUL, NUL_DETAIL, NUL_WHERE_MAX
 from tumnis.modules.knowledge.rules import MAX_UPLOAD_BYTES
 
 MAX_FIELD_BYTES: Final = 64 * 1024  # a text field (project_id, title) is a few bytes
@@ -90,6 +91,17 @@ def _bad(detail: str) -> ProblemError:
     return ProblemError(422, "invalid_upload", detail)
 
 
+def _no_nul(where: str, text: str) -> str:
+    """`text`, unless it holds a NUL: PostgreSQL text cannot store one (the title and the
+    file's name are stored), so it is 422 `validation_error`, as `tumnis.core.routing`
+    answers for a NUL in a JSON body (which it does not read for multipart bodies)."""
+    if NUL in text:
+        if len(where) > NUL_WHERE_MAX:  # field names come from the caller: never echo a long one
+            where = where[: NUL_WHERE_MAX - 3] + "..."
+        raise ProblemError(422, "validation_error", f"{where}: {NUL_DETAIL}")
+    return text
+
+
 def _boundary(request: Request) -> bytes:
     kind, params = parse_options_header(request.headers.get("content-type", ""))
     boundary = params.get(b"boundary")
@@ -121,8 +133,10 @@ class _Sink:
         if name == FILE_FIELD and self.result.name is not None:
             raise _bad("The body has more than one file part")
         if name == FILE_FIELD:
+            filename = params.get(b"filename", b"").decode(errors="replace")
+            _no_nul("form.file.filename", filename)
             await self.on_file(self.result.fields)
-            self.result.name = params.get(b"filename", b"").decode(errors="replace") or "upload"
+            self.result.name = filename or "upload"
             # Made only now: a refused target or a body without a file part touches no disk.
             await asyncio.to_thread(self.dest.parent.mkdir, parents=True, exist_ok=True)
             self.handle = await asyncio.to_thread(self.dest.open, "wb")
@@ -144,7 +158,9 @@ class _Sink:
 
     async def end(self) -> None:
         if self.field is not None:
-            self.result.fields[self.field] = self.text.decode(errors="replace")
+            self.result.fields[self.field] = _no_nul(
+                f"form.{self.field}", self.text.decode(errors="replace")
+            )
         await self.close()
         self.field, self.text = None, b""
 

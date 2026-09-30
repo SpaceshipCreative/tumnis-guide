@@ -148,6 +148,43 @@ async def test_refused_target_touches_no_spool_directory(tmp_path: Path) -> None
     assert not dest.parent.exists()
 
 
+@pytest.mark.req("SEC-10")
+@pytest.mark.wp("P1-16")
+async def test_nul_in_a_text_field_is_a_validation_error(tmp_path: Path) -> None:
+    """A NUL (U+0000) in `title` would reach PostgreSQL text (`documents.title`), which
+    cannot hold it (a 500). Like #91's check for JSON bodies, it is 422 `validation_error`,
+    answered before the file part, so the spool directory is not made."""
+    body = (
+        f'--{BOUNDARY}\r\nContent-Disposition: form-data; name="title"\r\n\r\n'
+    ).encode() + b"a\x00b\r\n"
+    body += _file_part("a.txt", b"first") + f"--{BOUNDARY}--\r\n".encode()
+    dest = tmp_path / "spool" / "v1"
+
+    with pytest.raises(ProblemError) as caught:
+        await spool_upload(_request(body), dest, on_file=_no_check)
+
+    assert caught.value.problem.code == "validation_error"
+    assert "form.title" in str(caught.value.problem.detail)
+    assert not dest.parent.exists()
+
+
+@pytest.mark.req("SEC-10")
+@pytest.mark.wp("P1-16")
+async def test_nul_in_the_file_name_is_a_validation_error(tmp_path: Path) -> None:
+    """The file part's `filename` is stored as the version's `source_name` (and the title
+    when none is given): a NUL in it is 422 `validation_error`, not a 500, and nothing is
+    left in the spool."""
+    body = _file_part("a\x00b.txt", b"first") + f"--{BOUNDARY}--\r\n".encode()
+    dest = tmp_path / "spool" / "v1"
+
+    with pytest.raises(ProblemError) as caught:
+        await spool_upload(_request(body), dest, on_file=_no_check)
+
+    assert caught.value.problem.code == "validation_error"
+    assert "form.file.filename" in str(caught.value.problem.detail)
+    assert not dest.exists()
+
+
 class _NoRows:
     """A session whose UPDATE ... RETURNING matches nothing."""
 
