@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from tumnis.core.net import NetPolicy
-from tumnis.modules.knowledge.tests._samples import eicar
-from tumnis.modules.knowledge.tests.integration._upload import rows, scalar
+from tumnis.modules.knowledge.tests._samples import eicar, fixture_bytes
+from tumnis.modules.knowledge.tests.integration._upload import rows, scalar, settled, upload
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -243,3 +243,62 @@ async def test_issue_99_outside_edit_is_scanned_before_it_is_served(
     await _sync(env)
     assert await _settled(db, document_id, versions=2) == ["ready", "quarantined"]
     await _refused(session_client, document_id)
+
+
+UPLOADED_FILES = "SELECT count(*) FROM documents WHERE project_id = %s AND source <> 'text'"
+
+
+@pytest.mark.req("SEC-10", "FR-15.12")
+@pytest.mark.wp("P1-15")
+async def test_issue_99_placed_upload_is_recorded_so_sync_keeps_one_document(
+    extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient, db: DbUrls
+) -> None:
+    """An upload the pipeline placed in `uploads/` is recorded as Tumnis's own file: the
+    next folder sync links it to the upload's document and makes no second one."""
+    env = extract_env
+    response = await upload(
+        session_client, env.project_id, "brief.docx", fixture_bytes("brief.docx")
+    )
+    doc = await settled(session_client, response.json()["id"])
+    assert doc["status"] == "ready"
+
+    await _sync(env)
+
+    assert _doc_at(db, env, doc["path"]) == uuid.UUID(doc["id"])
+    assert scalar(db, UPLOADED_FILES, env.project_id) == 1
+    assert scalar(db, "SELECT count(*) FROM review_items") == 0
+
+
+@pytest.mark.req("SEC-10", "FR-15.12")
+@pytest.mark.wp("P1-15")
+async def test_issue_99_sniffed_text_upload_is_not_a_note(
+    extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient, db: DbUrls
+) -> None:
+    """A `.txt` upload is sniffed as kind `text`, yet it is a file, not a note: it cannot
+    be edited as a text entry (409 `not_text`), and the folder sync neither writes it out
+    as a note nor raises a conflict for it."""
+    from tumnis.core.errors import ProblemError  # noqa: PLC0415
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+
+    env = extract_env
+    data = b"Call Sam on Friday about the launch.\n"
+    response = await upload(session_client, env.project_id, "call.txt", data)
+    doc = await settled(session_client, response.json()["id"])
+    assert (doc["status"], doc["kind"]) == ("ready", "text")
+
+    with pytest.raises(ProblemError) as refused:
+        async with tenant_session(env.ws.ctx) as s:
+            await knowledge.update_text_document(
+                s, uuid.UUID(doc["id"]), body_md="edited", version=doc["version"]
+            )
+    assert refused.value.code == "not_text"
+
+    await _sync(env)
+    await _sync(env)
+    assert scalar(db, UPLOADED_FILES, env.project_id) == 1
+    assert scalar(db, "SELECT count(*) FROM review_items") == 0
+    written = rows(db, "SELECT path FROM folder_files WHERE document_id = %s", doc["id"])
+    assert [r["path"] for r in written] == [f"{env.folder}/{doc['path']}"]
+    served = await session_client.get(f"/v1/files/{doc['id']}")
+    assert served.content == data
