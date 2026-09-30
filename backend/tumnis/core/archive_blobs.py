@@ -39,7 +39,7 @@ _metadata = MetaData()
 archived_blobs = Table(
     "archived_blobs",
     _metadata,
-    Column("id", PG_UUID(as_uuid=True), primary_key=True),
+    Column("id", PG_UUID(as_uuid=True), primary_key=True, server_default=text("uuidv7()")),
     Column("workspace_id", PG_UUID(as_uuid=True)),
     Column("deleted_at", Text),
     Column("module", Text),
