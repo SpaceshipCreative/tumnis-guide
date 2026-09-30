@@ -1,30 +1,46 @@
-// Laptop navigation (768 px and up): a rail on the left.
-import { Link } from "@tanstack/react-router";
+// Laptop navigation (768 px and up; DS-01): a sidebar on the left with the grouped links.
+// The button at its foot collapses it to icons and back; the choice is remembered on this
+// device (uiStore `sidebarCollapsed`).
+import { useSelector } from "@xstate/store-react";
 
-import { NAV_ITEMS } from "./nav";
+import { uiStore } from "../../stores/uiStore";
+import { BrandMark, Icon } from "./icons";
+import { NavGroups } from "./NavGroups";
 
 export function NavRail() {
+  const collapsed = useSelector(uiStore, (s) => s.context.sidebarCollapsed);
   return (
     <nav
       aria-label="Primary"
-      className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col gap-1 border-r border-border bg-surface px-3 py-4 md:flex"
+      data-collapsed={collapsed ? "" : undefined}
+      className={`sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-border bg-surface py-4 transition-[width] duration-200 md:flex ${collapsed ? "w-20 px-3" : "w-64 px-4"}`}
     >
-      <p className="px-3 pb-4 text-lg font-semibold">Tumnis Guide</p>
-      {NAV_ITEMS.map((item) => (
-        <Link
-          key={item.label}
-          to={item.to}
-          {...(item.params ? { params: item.params } : {})}
-          className="rounded-md px-3 py-2 text-muted hover:bg-surface-muted"
-          activeProps={{
-            className: "bg-surface-muted font-medium text-text",
-            "aria-current": "page",
+      <div
+        className={`mb-6 flex h-8 items-center gap-3 ${collapsed ? "justify-center" : "px-2"}`}
+      >
+        <BrandMark />
+        <span className={collapsed ? "sr-only" : "text-base font-semibold"}>
+          Tumnis Guide
+        </span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <NavGroups collapsed={collapsed} />
+      </div>
+      <div
+        className={`mt-4 flex border-t border-border pt-3 ${collapsed ? "justify-center" : "justify-end"}`}
+      >
+        <button
+          type="button"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={() => {
+            uiStore.trigger.setSidebarCollapsed({ collapsed: !collapsed });
           }}
-          activeOptions={{ exact: item.to === "/" }}
+          className="inline-flex size-9 items-center justify-center rounded-lg text-muted hover:bg-surface-muted hover:text-text"
         >
-          {item.label}
-        </Link>
-      ))}
+          <Icon name={collapsed ? "expand" : "collapse"} />
+        </button>
+      </div>
     </nav>
   );
 }
