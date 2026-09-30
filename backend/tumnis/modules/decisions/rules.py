@@ -1,6 +1,6 @@
 """decisions pure rules: the typed answers, the label reason line, option keys for project
-matching and model pinning (P1-01); thresholds, routing and vLLM vote answers (P1-02). No
-I/O; nothing here reads the clock.
+matching and model pinning (P1-01); thresholds, routing and vLLM vote answers (P1-02);
+outcome labels and calibration metrics (P3-08). No I/O; nothing here reads the clock.
 
 The question catalogue and the outbound payload builder live in `catalog.py`: they need
 `unicodedata` and `json`, which the rules allow-list (T-P0-01-09) does not include. For the
@@ -11,6 +11,8 @@ rather than importing them.
 
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Final, Literal, Protocol
 
@@ -313,3 +315,100 @@ def one_line(text: str, max_chars: int) -> str | None:
         cut = line[:max_chars]
         line = (cut.rsplit(" ", 1)[0] if " " in cut else cut).rstrip(_TRAILING_CUT)
     return line if any(ch.isalnum() for ch in line) else None
+
+
+# --- Calibration (P3-08, FR-11.5): outcome labels and what each threshold would do -------
+
+MIN_LABELED: Final = 100  # FR-11.5: accuracy shows once 100 labeled outcomes exist
+SETTLE_DAYS: Final = 7  # plan default: an applied answer left alone this long counts as right
+SWEEP: Final = (0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95)
+
+
+class Outcome(StrEnum):
+    auto_applied = "auto_applied"
+    sent_to_review = "sent_to_review"
+    overridden = "overridden"
+    confirmed = "confirmed"
+
+
+@dataclass(frozen=True)
+class DecisionLogRow:
+    """What labeling reads of one `decision_log` row."""
+
+    decision_point: str
+    model_version: str
+    provider: str
+    route: str  # the row's outcome: applied, review, deterministic or approval_required
+    answer: str | None  # the main answer as text (`answer_text`); None without an answer
+    confidence: float | None
+    decided_at: datetime
+    input_hash: str = ""
+
+
+@dataclass(frozen=True)
+class HumanDecision:
+    """What the human did with the decision (`record_outcome`)."""
+
+    overridden: bool
+    value: str | None  # the value they chose as text (`value_text`), None when they gave none
+    at: datetime
+
+
+@dataclass(frozen=True)
+class LabeledDecision:
+    decision_point: str
+    model_version: str
+    provider: str
+    answer: str
+    confidence: float
+    truth: str  # from the human's decision
+    explicit: bool = True  # False: labeled only because nobody overrode it in time
+    input_hash: str = ""
+
+
+class Metrics(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    n: int
+    auto_rate: float
+    auto_precision: float | None  # None when nothing would be auto-applied
+    review_rate: float
+    overall_accuracy: float
+
+
+class SweepRow(Metrics):
+    threshold: float
+
+
+def answer_text(answer: TypedAnswer) -> str:
+    """The main answer as the text a label compares: a Choice's option, a Score's nearest
+    level, a Noul's `yes` (at or above 0.5) or `no`."""
+    raise NotImplementedError
+
+
+def value_text(value: Any) -> str | None:
+    """A human's chosen value as the same text: booleans as yes or no, numbers as the
+    nearest level, anything else as its string."""
+    raise NotImplementedError
+
+
+def outcome_of(row: DecisionLogRow, human: HumanDecision | None) -> Outcome:
+    raise NotImplementedError
+
+
+def label_outcome(
+    row: DecisionLogRow, human: HumanDecision | None, now: datetime, settle_days: int = SETTLE_DAYS
+) -> LabeledDecision | None:
+    raise NotImplementedError
+
+
+def accuracy(rows: Sequence[LabeledDecision], threshold: float) -> Metrics | None:
+    raise NotImplementedError
+
+
+def sweep(rows: Sequence[LabeledDecision], thresholds: Sequence[float] = SWEEP) -> list[SweepRow]:
+    raise NotImplementedError
+
+
+def confidence_bar(t: Threshold, *, fallback: bool = False) -> float:
+    raise NotImplementedError
