@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "message_id": "01950000-0000-7000-8000-000000001005",
+  "correlation_id": "run:01950000-0000-7000-8000-000000000101",
+  "sent_at": "2026-03-09T12:00:00Z",
+  "type": "result",
+  "run_id": "01950000-0000-7000-8000-000000000101",
+  "status": "succeeded",
+  "exit_code": 0,
+  "output_json": {
+    "first_action": "Open last month's invoice in Wave and duplicate it",
+    "estimate_minutes": 20
+  },
+  "text": "{\"first_action\": \"Open last month's invoice in Wave and duplicate it\", \"estimate_minutes\": 20}",
+  "error": null,
+  "duration_ms": 1500,
+  "tokens": {
+    "input": 1200,
+    "output": 80
+  },
+  "hermes_session_id": "sess-0001"
+}

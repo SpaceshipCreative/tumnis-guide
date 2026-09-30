@@ -1,0 +1,109 @@
+{
+  "$id": "https://tumnis.dev/schemas/runner/v1/provision_result.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "distribution_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Distribution Version"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "enum": [
+            "template_version_mismatch",
+            "not_found",
+            "hermes_error",
+            "invalid_name"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Error Code"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "profile": {
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "title": "Profile",
+      "type": "string"
+    },
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "created",
+        "exists",
+        "linked",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "type": {
+      "const": "provision_result",
+      "default": "provision_result",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "request_id",
+    "profile",
+    "status",
+    "distribution_version",
+    "error_code"
+  ],
+  "title": "ProvisionResult",
+  "type": "object"
+}

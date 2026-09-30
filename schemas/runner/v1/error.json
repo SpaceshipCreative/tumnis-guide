@@ -1,0 +1,60 @@
+{
+  "$id": "https://tumnis.dev/schemas/runner/v1/error.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "enum": [
+        "unsupported_schema_version",
+        "unsupported_protocol_version",
+        "invalid_message",
+        "unknown_runner",
+        "not_registered"
+      ],
+      "title": "Code",
+      "type": "string"
+    },
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "detail": {
+      "maxLength": 4096,
+      "title": "Detail",
+      "type": "string"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "type": {
+      "const": "error",
+      "default": "error",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "code",
+    "detail"
+  ],
+  "title": "ProtocolError",
+  "type": "object"
+}

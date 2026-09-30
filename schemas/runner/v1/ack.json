@@ -1,0 +1,49 @@
+{
+  "$id": "https://tumnis.dev/schemas/runner/v1/ack.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Protocol 1: one ack per message, in either direction.",
+  "properties": {
+    "ack_of": {
+      "format": "uuid",
+      "title": "Ack Of",
+      "type": "string"
+    },
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "type": {
+      "const": "ack",
+      "default": "ack",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "ack_of"
+  ],
+  "title": "Ack",
+  "type": "object"
+}

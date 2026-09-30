@@ -1,0 +1,76 @@
+{
+  "$id": "https://tumnis.dev/schemas/runner/v1/provision.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Schema reserved here; behavior in P1-06.",
+  "properties": {
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "create",
+        "link"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "profile": {
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "title": "Profile",
+      "type": "string"
+    },
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "template": {
+      "const": "project-template",
+      "title": "Template",
+      "type": "string"
+    },
+    "template_version": {
+      "maxLength": 64,
+      "title": "Template Version",
+      "type": "string"
+    },
+    "type": {
+      "const": "provision",
+      "default": "provision",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "request_id",
+    "profile",
+    "mode",
+    "template",
+    "template_version"
+  ],
+  "title": "Provision",
+  "type": "object"
+}
