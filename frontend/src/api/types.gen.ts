@@ -550,6 +550,28 @@ export type DocumentDto = {
 };
 
 /**
+ * EstimateBody
+ */
+export type EstimateBody = {
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes: number;
+  /**
+   * Reason
+   */
+  reason: string;
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
  * FolderIn
  */
 export type FolderIn = {
@@ -1132,6 +1154,38 @@ export type PlannedBlockOut = {
 };
 
 /**
+ * PolicySummary
+ *
+ * What an agent may do in the project without asking, and its run limits (FR-5.6).
+ */
+export type PolicySummary = {
+  /**
+   * Allowed
+   */
+  allowed: Array<string>;
+  /**
+   * Gated
+   */
+  gated: Array<string>;
+  /**
+   * Max Concurrent Runs
+   */
+  max_concurrent_runs: number;
+  /**
+   * Max Run Minutes
+   */
+  max_run_minutes: number;
+  /**
+   * Max Tasks Per Run
+   */
+  max_tasks_per_run: number;
+  /**
+   * Tool Allowlist
+   */
+  tool_allowlist: Array<string>;
+};
+
+/**
  * Preset
  */
 export type Preset = "daily" | "weekdays" | "weekly" | "monthly";
@@ -1282,6 +1336,64 @@ export type ProfilePatch = {
    * Version
    */
   version: number;
+};
+
+/**
+ * ProjectContextOut
+ *
+ * A project as an agent starts work in it: who it is for, what it aims at, where its
+ * code and domains are, the brief, the card threshold and the approval policy.
+ */
+export type ProjectContextOut = {
+  /**
+   * Archived
+   */
+  archived: boolean;
+  /**
+   * Brief Md
+   */
+  brief_md: string;
+  /**
+   * Client
+   */
+  client: string | null;
+  /**
+   * Code Path
+   */
+  code_path: string | null;
+  /**
+   * Deadline
+   */
+  deadline: string | null;
+  /**
+   * Domains
+   */
+  domains: Array<string>;
+  /**
+   * Goal
+   */
+  goal: string | null;
+  /**
+   * Name
+   */
+  name: string;
+  policy: PolicySummary | null;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Repo Url
+   */
+  repo_url: string | null;
+  /**
+   * Status
+   */
+  status: "active" | "on_hold" | "completed";
+  /**
+   * Subtask Threshold Min
+   */
+  subtask_threshold_min: number;
 };
 
 /**
@@ -2076,9 +2188,13 @@ export type Status =
   | "done";
 
 /**
- * StatusIn
+ * StatusBody
  */
-export type StatusIn = {
+export type StatusBody = {
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
   to: Status;
   /**
    * Version
@@ -2124,6 +2240,9 @@ export type TaskContextItemOut = {
 
 /**
  * TaskCreate
+ *
+ * The REST twin's body. Named `TaskCreate` so the published OpenAPI schema (and the
+ * generated `TaskCreate` the frontend's quick-add queue uses) keeps its P0-18 name.
  */
 export type TaskCreate = {
   /**
@@ -2158,7 +2277,7 @@ export type TaskCreate = {
   /**
    * Schema Version
    */
-  schema_version?: 1;
+  schema_version?: number | null;
   /**
    * Status
    */
@@ -2417,6 +2536,118 @@ export type TaskRefOut = {
    * Title
    */
   title: string;
+};
+
+/**
+ * TaskWithLayoutOut
+ *
+ * A task as the agent surface answers it (P2-01): where a subtask shows against its
+ * project's card threshold (`card`, a `checklist` item on its parent's card, or
+ * `nested_ai` for AI work); null for a root task.
+ */
+export type TaskWithLayoutOut = {
+  /**
+   * Acceptance Criteria
+   */
+  acceptance_criteria: string | null;
+  /**
+   * Actual Minutes
+   */
+  actual_minutes: number | null;
+  /**
+   * Assigned Agent Id
+   */
+  assigned_agent_id: string | null;
+  /**
+   * Board Rank
+   */
+  board_rank: string;
+  /**
+   * Change Id
+   */
+  change_id: string | null;
+  /**
+   * Column Id
+   */
+  column_id: string | null;
+  /**
+   * Completed At
+   */
+  completed_at: string | null;
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Due On
+   */
+  due_on: string | null;
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes: number | null;
+  /**
+   * First Action
+   */
+  first_action: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  label: Label | null;
+  /**
+   * Label Source
+   */
+  label_source: "user" | "jev" | "agent" | "fallback" | null;
+  /**
+   * Layout
+   */
+  layout: "card" | "checklist" | "nested_ai" | null;
+  /**
+   * Parent Id
+   */
+  parent_id: string | null;
+  /**
+   * Priority
+   */
+  priority: "low" | "normal" | "high" | "urgent";
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Rollover Count
+   */
+  rollover_count: number;
+  /**
+   * Schema Version
+   */
+  schema_version: 1;
+  /**
+   * Source
+   */
+  source: string;
+  /**
+   * Started At
+   */
+  started_at: string | null;
+  status: Status;
+  /**
+   * Tainted
+   */
+  tainted: boolean;
+  /**
+   * Title
+   */
+  title: string;
+  /**
+   * Updated At
+   */
+  updated_at: string;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -5579,6 +5810,71 @@ export type TasksPutColumnsResponses = {
 export type TasksPutColumnsResponse =
   TasksPutColumnsResponses[keyof TasksPutColumnsResponses];
 
+export type ProjectsGetProjectContextData = {
+  body?: never;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: {
+    /**
+     * Schema Version
+     */
+    schema_version?: number | null;
+  };
+  url: "/v1/projects/{project_id}/context";
+};
+
+export type ProjectsGetProjectContextErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsGetProjectContextError =
+  ProjectsGetProjectContextErrors[keyof ProjectsGetProjectContextErrors];
+
+export type ProjectsGetProjectContextResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProjectContextOut;
+};
+
+export type ProjectsGetProjectContextResponse =
+  ProjectsGetProjectContextResponses[keyof ProjectsGetProjectContextResponses];
+
 export type ProjectsReorderProjectData = {
   body: ReorderIn;
   path: {
@@ -6076,6 +6372,10 @@ export type SearchSearchData = {
      * Boosts this project's rows
      */
     project_id?: string | null;
+    /**
+     * Schema Version
+     */
+    schema_version?: number | null;
     /**
      * Cursor
      */
@@ -6705,9 +7005,21 @@ export type TasksListTasksData = {
      */
     status?: Status | null;
     /**
+     * Label
+     */
+    label?: Label | null;
+    /**
+     * Parent Id
+     */
+    parent_id?: string | null;
+    /**
      * Order
      */
     order?: "created" | "today";
+    /**
+     * Schema Version
+     */
+    schema_version?: number | null;
     /**
      * Cursor
      */
@@ -6817,7 +7129,7 @@ export type TasksCreateTaskResponses = {
   /**
    * Successful Response
    */
-  201: TaskOut;
+  201: TaskWithLayoutOut;
 };
 
 export type TasksCreateTaskResponse =
@@ -7191,6 +7503,66 @@ export type TasksLinkContextItemResponses = {
 export type TasksLinkContextItemResponse =
   TasksLinkContextItemResponses[keyof TasksLinkContextItemResponses];
 
+export type TasksUpdateEstimateData = {
+  body: EstimateBody;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/estimate";
+};
+
+export type TasksUpdateEstimateErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksUpdateEstimateError =
+  TasksUpdateEstimateErrors[keyof TasksUpdateEstimateErrors];
+
+export type TasksUpdateEstimateResponses = {
+  /**
+   * Successful Response
+   */
+  200: TaskWithLayoutOut;
+};
+
+export type TasksUpdateEstimateResponse =
+  TasksUpdateEstimateResponses[keyof TasksUpdateEstimateResponses];
+
 export type TasksMoveTaskData = {
   body: MoveIn;
   path: {
@@ -7558,7 +7930,7 @@ export type TasksPutRecurrenceResponse =
   TasksPutRecurrenceResponses[keyof TasksPutRecurrenceResponses];
 
 export type TasksChangeStatusData = {
-  body: StatusIn;
+  body: StatusBody;
   path: {
     /**
      * Task Id
@@ -7611,7 +7983,7 @@ export type TasksChangeStatusResponses = {
   /**
    * Successful Response
    */
-  200: TaskOut;
+  200: TaskWithLayoutOut;
 };
 
 export type TasksChangeStatusResponse =

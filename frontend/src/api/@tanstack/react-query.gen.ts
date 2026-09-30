@@ -60,6 +60,7 @@ import {
   projectsArchiveProject,
   projectsCreateProject,
   projectsGetProject,
+  projectsGetProjectContext,
   projectsListProjects,
   projectsReorderProject,
   projectsUnarchiveProject,
@@ -96,6 +97,7 @@ import {
   tasksPutRecurrence,
   tasksTrashTask,
   tasksUndoTask,
+  tasksUpdateEstimate,
   tasksUpdateTask,
   usageGetUsage,
 } from "../sdk.gen";
@@ -239,6 +241,9 @@ import type {
   ProjectsCreateProjectData,
   ProjectsCreateProjectError,
   ProjectsCreateProjectResponse,
+  ProjectsGetProjectContextData,
+  ProjectsGetProjectContextError,
+  ProjectsGetProjectContextResponse,
   ProjectsGetProjectData,
   ProjectsGetProjectError,
   ProjectsGetProjectResponse,
@@ -350,6 +355,9 @@ import type {
   TasksUndoTaskData,
   TasksUndoTaskError,
   TasksUndoTaskResponse,
+  TasksUpdateEstimateData,
+  TasksUpdateEstimateError,
+  TasksUpdateEstimateResponse,
   TasksUpdateTaskData,
   TasksUpdateTaskError,
   TasksUpdateTaskResponse,
@@ -2143,6 +2151,37 @@ export const tasksPutColumnsMutation = (
   return mutationOptions;
 };
 
+export const projectsGetProjectContextQueryKey = (
+  options: Options<ProjectsGetProjectContextData>,
+) => createQueryKey("projectsGetProjectContext", options);
+
+/**
+ * Get Project Context
+ *
+ * The project as an agent starts work in it (brief, code location, policy); the
+ * `get_project_context` tool's twin (P2-01).
+ */
+export const projectsGetProjectContextOptions = (
+  options: Options<ProjectsGetProjectContextData>,
+) =>
+  queryOptions<
+    ProjectsGetProjectContextResponse,
+    ProjectsGetProjectContextError,
+    ProjectsGetProjectContextResponse,
+    ReturnType<typeof projectsGetProjectContextQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await projectsGetProjectContext({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: projectsGetProjectContextQueryKey(options),
+  });
+
 /**
  * Reorder Project
  *
@@ -2496,6 +2535,7 @@ export const searchSearchQueryKey = (options?: Options<SearchSearchData>) =>
  * Search
  *
  * Tasks and projects matching `q`, best first: text match, recency, project match.
+ * The `search` tool's twin (P2-01).
  */
 export const searchSearchOptions = (options?: Options<SearchSearchData>) =>
   queryOptions<
@@ -2525,6 +2565,7 @@ export const searchSearchInfiniteQueryKey = (
  * Search
  *
  * Tasks and projects matching `q`, best first: text match, recency, project match.
+ * The `search` tool's twin (P2-01).
  */
 export const searchSearchInfiniteOptions = (
   options?: Options<SearchSearchData>,
@@ -2865,9 +2906,10 @@ export const tasksListTasksQueryKey = (options?: Options<TasksListTasksData>) =>
 /**
  * List Tasks
  *
- * Tasks, optionally of one project and one status, and how many match (`total`).
- * `order=created` (default) is creation order; `order=today` is the Today order
- * (priority, then due date, then created time; P0-23).
+ * Tasks, optionally of one project, status, label or parent, and how many match
+ * (`total`). `order=created` (default) is creation order; `order=today` is the Today
+ * order (priority, then due date, then created time; P0-23). The `list_tasks` tool's
+ * twin (P2-01).
  */
 export const tasksListTasksOptions = (options?: Options<TasksListTasksData>) =>
   queryOptions<
@@ -2896,9 +2938,10 @@ export const tasksListTasksInfiniteQueryKey = (
 /**
  * List Tasks
  *
- * Tasks, optionally of one project and one status, and how many match (`total`).
- * `order=created` (default) is creation order; `order=today` is the Today order
- * (priority, then due date, then created time; P0-23).
+ * Tasks, optionally of one project, status, label or parent, and how many match
+ * (`total`). `order=created` (default) is creation order; `order=today` is the Today
+ * order (priority, then due date, then created time; P0-23). The `list_tasks` tool's
+ * twin (P2-01).
  */
 export const tasksListTasksInfiniteOptions = (
   options?: Options<TasksListTasksData>,
@@ -2947,6 +2990,8 @@ export const tasksListTasksInfiniteOptions = (
 
 /**
  * Create Task
+ *
+ * A task or subtask; the `create_task` tool's twin (P2-01).
  */
 export const tasksCreateTaskMutation = (
   options?: Partial<Options<TasksCreateTaskData>>,
@@ -3196,6 +3241,36 @@ export const tasksLinkContextItemMutation = (
 };
 
 /**
+ * Update Estimate
+ *
+ * Re-estimates a Human or Hybrid task with a reason (422 `estimate_not_applicable`
+ * otherwise); the `update_estimate` tool's twin (P2-01).
+ */
+export const tasksUpdateEstimateMutation = (
+  options?: Partial<Options<TasksUpdateEstimateData>>,
+): UseMutationOptions<
+  TasksUpdateEstimateResponse,
+  TasksUpdateEstimateError,
+  Options<TasksUpdateEstimateData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksUpdateEstimateResponse,
+    TasksUpdateEstimateError,
+    Options<TasksUpdateEstimateData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksUpdateEstimate({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Move Task
  *
  * One board drag: column, rank and version in one request (R-20).
@@ -3377,7 +3452,8 @@ export const tasksPutRecurrenceMutation = (
 /**
  * Change Status
  *
- * Moves the task through the state machine (FR-3.2).
+ * Moves the task through the state machine (FR-3.2); the `update_task_status` tool's
+ * twin (P2-01).
  */
 export const tasksChangeStatusMutation = (
   options?: Partial<Options<TasksChangeStatusData>>,
