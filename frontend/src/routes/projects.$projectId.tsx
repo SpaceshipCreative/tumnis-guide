@@ -9,6 +9,7 @@ import { ProjectPage } from "../components/project/ProjectPage";
 import { projectQuery, projectTasksQuery } from "../components/project/queries";
 import { workspaceQuery } from "../components/settings/queries";
 import { isMonday } from "../lib/time";
+import { loaderRead } from "../lib/loader";
 import { projectViews } from "../lib/views";
 
 export { projectViews };
@@ -31,12 +32,12 @@ export const Route = createFileRoute("/projects/$projectId")({
   },
   validateSearch: projectSearch,
   loader: async ({ context: { queryClient }, params: { projectId } }) => {
-    // A failed read is left for its part of the page to report.
-    const settle = (read: Promise<unknown>) => read.catch(() => undefined);
+    // A failed read is left for its part of the page to report, and offline the loader
+    // does not wait for the network (lib/loader.ts).
     await Promise.all([
-      settle(queryClient.query(projectQuery(projectId))),
-      settle(queryClient.query(projectTasksQuery(projectId))),
-      settle(queryClient.query(workspaceQuery())),
+      loaderRead(queryClient, projectQuery(projectId)),
+      loaderRead(queryClient, projectTasksQuery(projectId)),
+      loaderRead(queryClient, workspaceQuery()),
     ]);
   },
   pendingMs: 0,
