@@ -1,5 +1,5 @@
 """knowledge SQLAlchemy tables owned by this module (mirrors of revisions knowledge_0001
-to knowledge_0003)."""
+to knowledge_0003, and knowledge_0005)."""
 
 from datetime import datetime
 from typing import Any
@@ -48,6 +48,7 @@ class StorageLocation(TenantBase, Base):
     status_reason: Mapped[str | None]
     is_default: Mapped[bool] = mapped_column(server_default=text("false"))
     capabilities: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'"))
+    last_sync_at: Mapped[datetime | None]  # knowledge_0005: the last folder sync's end
 
 
 class ProjectFolder(TenantBase, Base):
@@ -83,3 +84,22 @@ class PendingWrite(TenantBase, Base):
     if_match: Mapped[str | None]
     attempts: Mapped[int] = mapped_column(server_default=text("0"))
     last_error: Mapped[str | None]
+
+
+class FolderFile(TenantBase, Base):
+    """knowledge_0005: a file the folder sync knows on a location, as of the last sync
+    (P1-15); `content_hash` is sha256 hex, `origin` says who made the file."""
+
+    __tablename__ = "folder_files"
+
+    location_id: Mapped[UUID] = mapped_column(ForeignKey("storage_locations.id"))
+    path: Mapped[str]
+    size: Mapped[int] = mapped_column(BigInteger)
+    mtime: Mapped[datetime]
+    content_hash: Mapped[str]
+    etag: Mapped[str]
+    origin: Mapped[str]  # tumnis | external
+    document_id: Mapped[UUID | None] = mapped_column(ForeignKey("documents.id"))
+    synced_version: Mapped[int | None]
+    delete_confirmed: Mapped[bool] = mapped_column(server_default=text("false"))
+    last_op: Mapped[str | None]
