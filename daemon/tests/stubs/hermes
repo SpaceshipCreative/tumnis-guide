@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A stand-in `hermes` for the daemon's tests (P1-04, T-P1-04-16).
+"""A stand-in `hermes` for the daemon's tests (P1-04, T-P1-04-16; P2-07).
 
 `hermes -p <profile> chat --query-file <f> -s <skill> --format stream-json --source tool`
 replays the recording named by HERMES_STUB_RECORDING line by line on stdout. With
@@ -7,13 +7,40 @@ HERMES_STUB_SLEEP it first starts a child sharing its process group (both pids g
 HERMES_STUB_PIDFILE), and sleeps that many seconds, so a timeout must kill the group.
 HERMES_STUB_STDERR_FILE gets the path the stub's stderr points at (Linux /proc).
 `profile show`, `version`, `mcp list` and `status` answer for the health check.
+
+P2-07: HERMES_STUB_CWD_FILE gets a JSON note of where the run happened (its working
+directory, whether that is a linked git worktree, whether the query file sits in its
+`.tumnis/`). With HERMES_STUB_SIGNALS the stub notes each SIGTERM in that file and keeps
+running (only SIGKILL ends it). HERMES_STUB_TOUCH names a file the stub writes in its
+working directory after replaying the recording.
 """
 
+import json
 import os
+import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+
+def _note_term(signum: int, frame: object) -> None:
+    del frame
+    with Path(os.environ["HERMES_STUB_SIGNALS"]).open("a") as f:
+        f.write(f"{signal.Signals(signum).name}\n")
+
+
+def _note_cwd(query: Path) -> None:
+    cwd_file = os.environ.get("HERMES_STUB_CWD_FILE")
+    if not cwd_file:
+        return
+    cwd = Path.cwd()
+    note = {
+        "cwd": str(cwd),
+        "git_file": (cwd / ".git").is_file(),
+        "query_in_tumnis": query.resolve().parent == (cwd / ".tumnis").resolve(),
+    }
+    Path(cwd_file).write_text(json.dumps(note))
 
 
 def chat(args: list[str]) -> int:
@@ -21,6 +48,9 @@ def chat(args: list[str]) -> int:
     if not query.is_file():
         print(f"no query file {query}", file=sys.stderr)
         return 2
+    _note_cwd(query)
+    if os.environ.get("HERMES_STUB_SIGNALS"):
+        signal.signal(signal.SIGTERM, _note_term)
     stderr_file = os.environ.get("HERMES_STUB_STDERR_FILE")
     if stderr_file:
         Path(stderr_file).write_text(os.readlink("/proc/self/fd/2"))
@@ -36,6 +66,9 @@ def chat(args: list[str]) -> int:
         for line in Path(recording).read_text().splitlines():
             sys.stdout.write(line + "\n")
             sys.stdout.flush()
+    touch = os.environ.get("HERMES_STUB_TOUCH")
+    if touch:
+        (Path.cwd() / touch).write_text("changed by the stub\n")
     return 0
 
 

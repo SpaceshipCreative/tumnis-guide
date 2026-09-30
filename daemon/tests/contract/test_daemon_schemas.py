@@ -108,3 +108,57 @@ def test_daemon_messages_match_committed_schemas() -> None:
         parsed = parse_server(json.dumps(example))
         assert parsed.type == type_
         assert json.loads(parsed.model_dump_json()) == example
+
+
+# P2-07: protocol 2 (daemon -> server built here; server -> daemon parsed here).
+V2_SERVER_EXAMPLES = (("run", 2), ("ack", 2), ("cancel", 1), ("archive", 1), ("nack", 1))
+
+
+def _validator_v(type_: str, version: int) -> Draft202012Validator:
+    schema = json.loads((REPO / f"schemas/runner/v{version}" / f"{type_}.json").read_text())
+    return Draft202012Validator(schema)
+
+
+@pytest.mark.req("FR-5.11")
+@pytest.mark.wp("P2-07")
+def test_protocol2_messages_match_committed_schemas() -> None:
+    """The protocol-2 messages the daemon builds (stream, status, upload_artifact, the
+    batched ack, the version-2 result, a heartbeat with its outbox depth) and the server's
+    protocol-2 examples it parses validate against the committed schema of their type and
+    version."""
+    from tumnis_daemon.protocol import (  # noqa: PLC0415
+        make_ack_batch,
+        make_artifact,
+        make_status,
+        make_stream,
+    )
+    from tumnis_daemon.runner import as_v2  # noqa: PLC0415
+
+    run = make_run()
+    corr = run.correlation_id
+    events, final = read_recording(RECORDINGS / "enrich_ok.jsonl")
+    result = build_result(run, events, final, exit_code=0, timed_out=False, duration_ms=5)
+    built: list[BaseModel] = [
+        make_stream(run.run_id, corr, 1, "log", "Reading the packet." * 1000),
+        make_stream(run.run_id, corr, 2, "tool_call", '{"name": "skill_view"}'),
+        make_stream(run.run_id, corr, 3, "file_touched", "src/app.py"),
+        make_status(run.run_id, corr, "started", profile="acme-site", profile_version="1.4.0"),
+        make_status(run.run_id, corr, "cancelling", detail="stopped by the user"),
+        make_artifact(run.run_id, corr, "notes.md", "text/markdown", "# Notes\n"),
+        make_ack_batch(corr, [run.message_id]),
+        as_v2(result),
+        as_v2(result, status="cancelled", output_json=None, error="cancelled"),
+        make_heartbeat("homelab-hermes", 3, [run.run_id], outbox_depth=12),
+    ]
+    for message in built:
+        data: dict[str, Any] = json.loads(message.model_dump_json())
+        _validator_v(data["type"], data["schema_version"]).validate(data)
+
+    for type_, version in V2_SERVER_EXAMPLES:
+        path = REPO / "backend/tests/contract/fixtures/runner" / type_ / f"v{version}.json"
+        example = json.loads(path.read_text())
+        _validator_v(type_, version).validate(example)
+        parsed = parse_server(json.dumps(example))
+        assert parsed.type == type_
+        assert parsed.schema_version == version
+        assert json.loads(parsed.model_dump_json()) == example
