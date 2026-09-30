@@ -5,6 +5,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 
+import { TaintBadge } from "../common/TaintBadge";
 import { formatMinutes } from "../dashboard/format";
 import type { Board } from "../project/types";
 import { Checklist } from "./Checklist";
@@ -164,6 +165,11 @@ export function BoardCard({
       }`}
     >
       <p className="font-medium break-words">{task.title}</p>
+      {task.tainted && (
+        <div>
+          <TaintBadge />
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
         <span>
           {task.label === null ? "No label yet" : LABEL_TEXT[task.label]}
