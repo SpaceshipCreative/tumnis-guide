@@ -67,7 +67,6 @@ DELETES = {
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 def test_write_rename_delete_tables() -> None:
     """T-P3-14-04
     Every (mode, path, origin) for `may_write`, every (mode, origin) for `may_rename` and
@@ -111,7 +110,6 @@ _PIECES = st.sampled_from(
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 @given(
     parts=st.lists(st.one_of(_PIECES, st.text(max_size=8)), min_size=0, max_size=5),
     lead=st.sampled_from(["", "/", "./", "../"]),
