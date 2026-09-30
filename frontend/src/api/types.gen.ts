@@ -82,6 +82,33 @@ export type AgentProfileOut = {
 };
 
 /**
+ * AppDeployStatus
+ */
+export type AppDeployStatus = {
+  /**
+   * App Uuid
+   */
+  app_uuid: string;
+  /**
+   * Checked At
+   */
+  checked_at: string | null;
+  /**
+   * Error
+   */
+  error: "unavailable" | "rejected" | null;
+  last: LastDeployOut | null;
+  /**
+   * Name
+   */
+  name: string | null;
+  /**
+   * Previews
+   */
+  previews: Array<PreviewOut>;
+};
+
+/**
  * AuditEntry
  */
 export type AuditEntry = {
@@ -754,6 +781,28 @@ export type KeyOut = {
 export type Label = "human" | "ai" | "hybrid";
 
 /**
+ * LastDeployOut
+ */
+export type LastDeployOut = {
+  /**
+   * Commit
+   */
+  commit: string | null;
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Finished At
+   */
+  finished_at: string | null;
+  /**
+   * Status
+   */
+  status: string;
+};
+
+/**
  * LocationIn
  */
 export type LocationIn = {
@@ -1111,6 +1160,32 @@ export type PolicySummary = {
 export type Preset = "daily" | "weekdays" | "weekly" | "monthly";
 
 /**
+ * PreviewOut
+ */
+export type PreviewOut = {
+  /**
+   * Commit
+   */
+  commit?: string | null;
+  /**
+   * Finished At
+   */
+  finished_at?: string | null;
+  /**
+   * Pull Request Id
+   */
+  pull_request_id: number;
+  /**
+   * Status
+   */
+  status: string;
+  /**
+   * Url
+   */
+  url: string;
+};
+
+/**
  * Problem
  */
 export type Problem = {
@@ -1338,6 +1413,20 @@ export type ProjectCreate = {
    * Status
    */
   status?: "active" | "on_hold" | "completed";
+};
+
+/**
+ * ProjectDeployStatus
+ */
+export type ProjectDeployStatus = {
+  /**
+   * Apps
+   */
+  apps: Array<AppDeployStatus>;
+  /**
+   * Project Id
+   */
+  project_id: string;
 };
 
 /**
@@ -3838,6 +3927,68 @@ export type CalendarOauthStartResponses = {
 
 export type CalendarOauthStartResponse =
   CalendarOauthStartResponses[keyof CalendarOauthStartResponses];
+
+export type CoolifyListDeployStatusData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+  };
+  url: "/v1/coolify/status";
+};
+
+export type CoolifyListDeployStatusErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type CoolifyListDeployStatusError =
+  CoolifyListDeployStatusErrors[keyof CoolifyListDeployStatusErrors];
+
+export type CoolifyListDeployStatusResponses = {
+  /**
+   * Response Coolify List Deploy Status
+   *
+   * Successful Response
+   */
+  200: Array<ProjectDeployStatus>;
+};
+
+export type CoolifyListDeployStatusResponse =
+  CoolifyListDeployStatusResponses[keyof CoolifyListDeployStatusResponses];
 
 export type DeadLettersGetDeadLettersData = {
   body?: never;

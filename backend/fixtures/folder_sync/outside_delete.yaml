@@ -1,0 +1,16 @@
+id: outside_delete
+proves: A file deleted outside sends its Document to trash; nothing is deleted anywhere else
+backends: [server_path, s3]
+steps:
+  - outside_write: {path: "uploads/old.txt", content: "old"}
+  - outside_write: {path: "uploads/keep.txt", content: "keep"}
+  - sync
+  - outside_delete: {path: "uploads/old.txt"}
+  - sync
+  - sync
+  - expect:
+      documents: {count: 1}
+      trashed_documents: {count: 1}
+      listing: ["uploads/keep.txt"]
+      trash: []
+      deletes: 0

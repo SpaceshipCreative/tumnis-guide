@@ -445,6 +445,17 @@ class ServerPathStorage(AdapterBase):
 
         await self._run("delete", fn, idempotent=True)
 
+    async def ensure_folder(self, path: str) -> None:
+        """mkdir -p below the root, by folder fd like every write, and only while the
+        marker is there (a bare mount point stays empty)."""
+
+        def fn() -> None:
+            rel = self._resolve(path)
+            self._require_marker()
+            os.close(self._open_dir(rel.split("/"), create=True))
+
+        await self._run("ensure_folder", fn, idempotent=True)
+
     async def health(self) -> Health:
         present = await asyncio.to_thread(self._marker_present)
         return Health.ok() if present else Health.degraded("marker_missing")
