@@ -10,7 +10,7 @@
 """
 
 from collections.abc import Mapping, Sequence
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Final, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -127,5 +127,22 @@ def validate_manual_block(
     now: datetime,
 ) -> list[Violation]:
     """Same codes as validate_plan for a single item (block_outside_free_time,
-    blocks_overlap, block_length_mismatch, block_in_past, ai_task_has_block)."""
-    raise NotImplementedError
+    blocks_overlap, block_length_mismatch, block_in_past, ai_task_has_block), in
+    validate_plan's order: the estimate and the block's length, an AI task's block, the
+    block inside one free block, not before `now`, and clear of the other planned blocks.
+    An AI task runs anytime, so it never takes a block and nothing else is checked."""
+    found: list[ViolationCode] = []
+    if task.label == "ai":
+        found.append("ai_task_has_block")
+    else:
+        if task.estimate_minutes is None:
+            found.append("missing_estimate")
+        elif block.end - block.start != timedelta(minutes=task.estimate_minutes):
+            found.append("block_length_mismatch")
+        if not any(f.start <= block.start and block.end <= f.end for f in free):
+            found.append("block_outside_free_time")
+        if block.start < now:
+            found.append("block_in_past")
+        if any(p.start < block.end and block.start < p.end for p in planned):
+            found.append("blocks_overlap")
+    return [Violation(code=code, task_id=task.task_id) for code in found]
