@@ -17,20 +17,21 @@ if TYPE_CHECKING:
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
-# (seed workspace, its user, a project in it) per size.
+# (seed workspace, its user, a project in it, a typeahead query its projects match) per
+# size: the load set's projects are "Load project 01" to "10", so `ac` would match none.
 SIZES = {
-    "seed": ("ws_main", "u_scott", "p_acme"),
-    "load": ("ws_load", "u_load", "p_load_01"),
+    "seed": ("ws_main", "u_scott", "p_acme", "ac"),
+    "load": ("ws_load", "u_load", "p_load_01", "lo"),
 }
 
 # The dashboard's reads, the project task list, the board and the quick-add typeahead
-# (`{p}` is the size's project).
+# (`{p}` is the size's project, `{q}` its typeahead query).
 ENDPOINTS = {
     "projects": "/v1/projects",
     "today": "/v1/tasks?status=today&order=today&limit=5",
     "project_tasks": "/v1/tasks?project_id={p}",
     "board": "/v1/projects/{p}/board",
-    "typeahead": "/v1/typeahead/projects?q=ac",
+    "typeahead": "/v1/typeahead/projects?q={q}",
 }
 
 # Statements per request, the session check included (its lookup, then `set_config` and
@@ -67,10 +68,10 @@ async def test_query_count_is_constant(
     query_counter.watch(core_db.app_engine())
     counts: dict[str, dict[str, int]] = {name: {} for name in ENDPOINTS}
     for size, result in (("seed", seed), ("load", load_fixture)):
-        workspace, user, project = SIZES[size]
+        workspace, user, project, typed = SIZES[size]
         async with signed_in(app, result.ids[workspace], result.ids[user]) as http:
             for name, path in ENDPOINTS.items():
-                url = path.format(p=result.ids[project])
+                url = path.format(p=result.ids[project], q=typed)
                 (await http.get(url)).raise_for_status()  # warm: caches, prepared plans
                 query_counter.reset()
                 answer = await http.get(url)
