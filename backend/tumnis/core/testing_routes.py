@@ -14,8 +14,10 @@ from typing import Annotated, Any, Self
 from uuid import UUID
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
+from psycopg.errors import DeadlockDetected
 from pydantic import AwareDatetime, BaseModel, model_validator
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -41,8 +43,25 @@ _TRUNCATE_GUARDS = text(
 )
 
 
+# A reset that Postgres picks as a deadlock's victim tries again (P1-07): a worker
+# transaction that wrote a table and then emits waits on the reset's `outbox` lock while
+# the reset waits on that table. Postgres cancels one; the worker's write then commits.
+TRUNCATE_ATTEMPTS = 3
+
+
 async def truncate_tables(owner_url: str) -> list[str]:
-    """TRUNCATE every table in `public` but the kept ones and Alembic's, as the owner."""
+    """TRUNCATE every table in `public` but the kept ones and Alembic's, as the owner,
+    again after a deadlock (up to TRUNCATE_ATTEMPTS times)."""
+    for attempt in range(1, TRUNCATE_ATTEMPTS + 1):
+        try:
+            return await _truncate_once(owner_url)
+        except DBAPIError as exc:
+            if not isinstance(exc.orig, DeadlockDetected) or attempt == TRUNCATE_ATTEMPTS:
+                raise
+    raise AssertionError("unreachable")  # the loop returns or raises
+
+
+async def _truncate_once(owner_url: str) -> list[str]:
     engine = create_async_engine(owner_url, poolclass=NullPool)
     try:
         async with engine.begin() as conn:
