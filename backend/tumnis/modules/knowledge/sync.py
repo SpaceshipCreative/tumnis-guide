@@ -15,10 +15,13 @@ per DBOS step (`workflows.py`).
    write carries the decision's precondition; a write that already landed (a crash
    between the write and the commit) counts as done, so a replay writes nothing twice.
 4. `request_extraction` for the versions made from folder bytes, then `finish`
-   (`last_sync_at`).
+   (`last_sync_at`). Every such version starts `pending_scan` and is served only once
+   P1-16's pipeline (`source = "storage"`) has scanned and released it (#99).
 
 The net policy, the clock and the extraction hook come from `configure` and `use`; the
 worker configures the net policy at start (tests call `configure` and `use` themselves).
+The default hook, `knowledge_extract_document` on the `extract` queue, is registered by
+`workflows` with `register_extraction`.
 """
 
 import asyncio
@@ -83,14 +86,17 @@ _folders: Table = ProjectFolder.__table__  # type: ignore[assignment]
 _locations: Table = StorageLocation.__table__  # type: ignore[assignment]
 
 
-async def _no_extraction(_workspace_id: UUID, _version_id: UUID, _path: str) -> None:
-    """Until P1-16's `extract_document` is wired in, nothing is extracted."""
-
-
 class _Config:
     net: NetPolicy | None = None
     clock: Clock | None = None
     extraction: ExtractionHook | None = None
+    default_extraction: ExtractionHook | None = None
+
+
+def register_extraction(hook: ExtractionHook) -> None:
+    """The extraction every version made from folder bytes gets unless `use` swaps it
+    (`workflows` registers P1-16's pipeline)."""
+    _Config.default_extraction = hook
 
 
 def configure(net: NetPolicy | None) -> None:
@@ -186,13 +192,13 @@ def _prev(row: Mapping[Any, Any]) -> Prev:
 def local_bytes(doc: Mapping[Any, Any]) -> bytes:
     """What Tumnis would write for the Document: a note under its frontmatter, any other
     Document its text."""
-    if doc["kind"] == "text":
+    if api.is_note(doc):
         return render_note(doc["id"], doc["body_md"] or "").encode()
     return (doc["body_md"] or "").encode()
 
 
 def _local(doc: Mapping[Any, Any], record: Mapping[Any, Any] | None) -> Local:
-    if doc["kind"] == "text":
+    if api.is_note(doc):
         digest = hashlib.sha256(local_bytes(doc)).hexdigest()
     else:
         digest = bytes(doc["content_hash"]).hex()
@@ -290,7 +296,11 @@ async def _load(s: AsyncSession, location_id: UUID, scan: _Scan) -> None:
     scan.records = {row["path"]: row for row in records}
     linked = {row["document_id"] for row in records if row["document_id"] is not None}
     projects = [f["project_id"] for f in scan.folders]
-    candidates = (_documents.c.kind == "text") & _documents.c.deleted_at.is_(None)
+    candidates = (
+        (_documents.c.kind == "text")
+        & (_documents.c.source == api.TEXT_SOURCE)  # notes only, not a sniffed text file
+        & _documents.c.deleted_at.is_(None)
+    )
     docs = (
         (
             await s.execute(
@@ -392,7 +402,7 @@ def _listed_entries(scan: _Scan, roots: Mapping[UUID, str]) -> list[_Entry]:
             doc = scan.docs.get(found) if found is not None else None
             if (
                 doc is not None
-                and doc["kind"] == "text"
+                and api.is_note(doc)
                 and doc["id"] not in linked
                 and doc["project_id"] == scan.project_of[path]
             ):
@@ -421,7 +431,7 @@ async def _unwritten_entries(  # the notes no entry places yet
     used |= {r["document_id"] for r in scan.records.values() if r["document_id"] is not None}
     found: list[_Entry] = []
     for doc_id, doc in sorted(scan.docs.items(), key=lambda kv: str(kv[0])):
-        if doc_id in used or doc["deleted_at"] is not None or doc["kind"] != "text":
+        if doc_id in used or doc["deleted_at"] is not None or not api.is_note(doc):
             continue
         root = roots.get(doc["project_id"])
         if root is None:
@@ -625,14 +635,27 @@ class _Apply:
         self.extract.append([str(version_id), path])
 
     async def from_folder(self, doc: Mapping[Any, Any], data: bytes, *, restore: bool) -> int:
-        """The Document's next version from the folder's bytes; its new row version."""
-        if doc["kind"] == "text":
+        """The Document's next version from the folder's bytes; its new row version. A
+        file's version is `pending_scan` and extracted; the document follows it while it
+        has no released version to serve (#99)."""
+        note = api.is_note(doc)
+        if note:
             body: str | None = note_body(data.decode("utf-8", errors="replace"))
             stored = (body or "").encode()
             digest = hashlib.sha256(stored).digest()
         else:
             body, stored, digest = api.text_of(data), data, hashlib.sha256(data).digest()
+        version_id = await api.add_version(
+            self.s,
+            doc["id"],
+            stored,
+            body,
+            status="ready" if note else "pending_scan",
+            source_name=None if note else PurePosixPath(self.path).name,
+        )
         values: dict[str, Any] = {"body_md": body, "content_hash": digest}
+        if not note and doc["current_version_id"] is None:
+            values |= {"status": "pending_scan", "status_reason": None}
         if restore:
             values["deleted_at"] = None
         version: int = await self.s.scalar(
@@ -641,20 +664,19 @@ class _Apply:
             .values(**values)
             .returning(_documents.c.version)
         )
-        version_id = await api.add_version(self.s, doc["id"], stored, body)
-        if doc["kind"] != "text":
+        if not note:
             self.extract.append([str(version_id), self.path])
         return version
 
     async def snapshot(self, doc: Mapping[Any, Any]) -> None:
         """A note's text as a version, unless its latest version already holds it."""
-        if doc["kind"] != "text":
+        if not api.is_note(doc):
             return
         body = (doc["body_md"] or "").encode()
         held = await api.latest_version_hash(self.s, doc["id"])  # a content hash, no secret
         wanted = hashlib.sha256(body).digest()
         if held != wanted:
-            await api.add_version(self.s, doc["id"], body, doc["body_md"] or "")
+            await api.add_version(self.s, doc["id"], body, doc["body_md"] or "", status="ready")
 
     # Actions ---------------------------------------------------------------------------------
 
@@ -798,10 +820,11 @@ class _Apply:
             written = await _write(self.backend, target, tumnis_bytes, None)
             if self.project_id is None:
                 raise _Stale
-            copy_id, copy_version, _ = await api.create_file_document(
+            copy_id, copy_version, copy_version_id = await api.create_file_document(
                 self.s, self.project_id, self.location_id, target, tumnis_bytes,
                 source=api.FOLDER_SOURCE,
             )  # fmt: skip
+            self.extract.append([str(copy_version_id), target])
             await self.record_stat(
                 written,
                 hashlib.sha256(tumnis_bytes).hexdigest(),
@@ -943,6 +966,14 @@ async def apply(workspace_id: str, location_id: str, item: Mapping[Any, Any]) ->
             await s.execute(
                 update(_files).where(_files.c.id == record["id"]).values(path=item["path"])
             )
+            if record["document_id"] is not None and item["project_id"] is not None:
+                # The document follows its file: the pipeline and file serving read it.
+                rel = await api.folder_rel_path(s, UUID(item["project_id"]), item["path"])
+                await s.execute(
+                    update(_documents)
+                    .where(_documents.c.id == record["document_id"], _documents.c.path.is_not(None))
+                    .values(path=rel)
+                )
         try:
             async with api.open_backend(s, loc, net=net()) as backend:
                 work = _Apply(
@@ -963,7 +994,9 @@ async def apply(workspace_id: str, location_id: str, item: Mapping[Any, Any]) ->
 
 
 async def request_extraction(workspace_id: str, requests: list[list[str]]) -> None:
-    hook = _Config.extraction or _no_extraction
+    hook = _Config.extraction or _Config.default_extraction
+    if hook is None:  # the versions stay `pending_scan`: never served unscanned
+        raise RuntimeError("no extraction hook: import tumnis.modules.knowledge.workflows")
     for version_id, path in requests:
         await hook(UUID(workspace_id), UUID(version_id), path)
 

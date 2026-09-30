@@ -130,6 +130,7 @@ async def apply_review_decision(envelope: EventEnvelope) -> None:
             task.version,
             now=envelope.occurred_at,
             label_source="user" if "label" in values else None,
+            label_override=False,  # this human.decided already records the decision (P1-07)
         )
 
 

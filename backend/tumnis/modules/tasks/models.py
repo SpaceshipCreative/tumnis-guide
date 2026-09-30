@@ -1,5 +1,5 @@
 """tasks SQLAlchemy tables owned by this module (mirrors of revisions tasks_0001,
-tasks_0003, tasks_0004 and tasks_0005).
+tasks_0003, tasks_0004, tasks_0005 and tasks_0006).
 
 `board_rank` and `sort_key` compare bytewise (`COLLATE "C"`), so Postgres orders the
 fractional keys as Python and TypeScript do (core/rank.py)."""
@@ -45,6 +45,12 @@ class Task(TenantBase, Base):
     title: Mapped[str]
     label: Mapped[str | None] = mapped_column(LABEL_ENUM)
     label_source: Mapped[str | None]
+    # P1-07: the label's one-line reason and the decision behind it (no foreign key, as
+    # below); a low-confidence answer waits in `label_suggestion` while `label` stays NULL.
+    label_reason: Mapped[str | None]
+    label_confidence: Mapped[float | None]
+    label_decision_id: Mapped[UUID | None]
+    label_suggestion: Mapped[str | None] = mapped_column(LABEL_ENUM)
     status: Mapped[str] = mapped_column(STATUS_ENUM, server_default=text("'backlog'"))
     priority: Mapped[str] = mapped_column(PRIORITY_ENUM, server_default=text("'normal'"))
     due_on: Mapped[date | None]

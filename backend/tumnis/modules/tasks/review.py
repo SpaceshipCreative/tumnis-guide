@@ -624,6 +624,29 @@ async def review_badge_count(s: AsyncSession, now: datetime) -> int:
     return count or 0
 
 
+async def close_open_items(
+    s: AsyncSession, kind: str, target: TargetRef, *, decision: str, at: datetime
+) -> int:
+    """Closes the open items of `kind` on `target` with `decision` (for example
+    `superseded` when the human settled the question another way); returns how many."""
+    closed = (
+        await s.execute(
+            update(_review)
+            .where(
+                _review.c.kind == kind,
+                _review.c.target_type == target.type,
+                _review.c.target_id == target.id,
+                text(OPEN_WHERE),
+            )
+            .values(decided_at=at, decision=decision)
+            .returning(_review.c.id)
+        )
+    ).all()
+    for (item_id,) in closed:
+        mark_changed(s, LIVE_ENTITY, item_id)
+    return len(closed)
+
+
 # --- tasks' own kinds (P1-13; P1-07 and P1-08 queue them) --------------------------------------
 
 LABEL_KIND: Final = "low_confidence_label"

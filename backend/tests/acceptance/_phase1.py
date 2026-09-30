@@ -178,16 +178,26 @@ def script_run(fake_runner: Any, profile: str, skill: str, output: Json, delay_m
 
 
 def script_label(fakes: Any, label: str, confidence: float) -> None:
-    """Script the Jev fake's `quick_add_label` answer (P1-01's fake; P1-07's decision)."""
-    fakes["decisions.jev"].script("quick_add_label", answer=label, confidence=confidence)
+    """Script the Jev fake's `quick_add_label` answer (P1-01's fake; P1-07's decision): the
+    recorded answers with `label` winning at `confidence`, asked by every `decide` in this
+    process (the queued workflows included) until the test's `reset_label_fakes`."""
+    from tests._labels import label_answers, use_label_fakes  # noqa: PLC0415
+
+    jev = fakes["decisions.jev"]
+    jev.script("quick_add_label", label_answers(label, confidence))
+    use_label_fakes(jev, fakes["decisions.vllm"])
 
 
 def fail_decision_providers(fakes: Any) -> None:
-    """Make both decision providers fail as unavailable: Jev and the vLLM fallback (P1-02)."""
+    """Make both decision providers fail as unavailable for the quick-add label: Jev and the
+    vLLM fallback (P1-02), asked by every `decide` in this process until the test's
+    `reset_label_fakes`."""
+    from tests._labels import use_label_fakes  # noqa: PLC0415
     from tumnis.core.adapters.errors import AdapterUnavailable  # noqa: PLC0415
 
     for name in ("decisions.jev", "decisions.vllm"):
-        fakes[name].script_failure(AdapterUnavailable(f"{name} down (A1.4)"))
+        fakes[name].script("quick_add_label", fail=AdapterUnavailable(name, "ask", "down (A1.4)"))
+    use_label_fakes(fakes["decisions.jev"], fakes["decisions.vllm"])
 
 
 def knowledge_app(app_factory: Any, minio: S3Endpoint, clamd: ClamdEndpoint) -> Any:
