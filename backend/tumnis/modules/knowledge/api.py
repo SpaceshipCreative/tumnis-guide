@@ -956,3 +956,35 @@ async def update_text_document(
     if row["project_id"] is not None:
         mark_changed(s, "project", row["project_id"])
     return DocumentDTO.model_validate(dict(row))
+
+
+# --- Uploads and files found in a folder (P1-16, SEC-10, FR-15.2, FR-15.12) --------------
+
+
+class UploadAccepted(BaseModel):
+    id: UUID  # the document
+    version_id: UUID
+    status: Literal["pending_scan"]
+
+
+async def begin_upload(
+    ctx: WorkspaceContext,
+    *,
+    project_id: UUID | None,
+    name: str,
+    title: str | None,
+    sha256: str,
+    size: int,
+    version_id: UUID,
+) -> UploadAccepted:
+    """The rows for an upload the route has spooled to `<spool>/<version_id>`: an untrusted,
+    tainted document and its first version, both `pending_scan`."""
+    raise NotImplementedError
+
+
+async def ingest_folder_file(
+    ctx: WorkspaceContext, *, project_id: UUID, path: str, size: int
+) -> UploadAccepted:
+    """The rows for a file found in the project's folder (`path` relative to the folder),
+    and its extraction enqueued with `source = "storage"`."""
+    raise NotImplementedError

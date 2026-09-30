@@ -1,0 +1,25 @@
+{
+  "markdown": "# Meeting notes\n\nThe typed summary is on this page; the scan follows.\n",
+  "grades": {"1": "good", "2": ["poor", "poor"]},
+  "text_items": {"1": 2, "2": 0},
+  "chunks": [
+    {
+      "ordinal": 0,
+      "text": "The typed summary is on this page; the scan follows.",
+      "context_text": "Meeting notes\nThe typed summary is on this page; the scan follows.",
+      "heading_path": ["Meeting notes"],
+      "page_from": 1,
+      "page_to": 1,
+      "extractor": "docling"
+    },
+    {
+      "ordinal": 1,
+      "text": "l1l lIl l1lI Il1l",
+      "context_text": "l1l lIl l1lI Il1l",
+      "heading_path": [],
+      "page_from": 2,
+      "page_to": 2,
+      "extractor": "docling"
+    }
+  ]
+}

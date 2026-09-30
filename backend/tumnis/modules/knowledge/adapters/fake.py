@@ -7,12 +7,16 @@ Etags are sha256 hex, as on a server path. Scripting: `script(health=...)` sets 
 """
 
 import hashlib
-from collections.abc import AsyncIterator
+import json
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Literal
 
 from tumnis.core.clock import Clock, SystemClock
-from tumnis.modules.knowledge.rules import etag_equal, safe_rel_path
+from tumnis.modules.knowledge.adapters.port import ChunkRow, Conversion, ScanResult
+from tumnis.modules.knowledge.rules import DocKind, etag_equal, safe_rel_path
 from tumnis.modules.knowledge.storage import (
     LIST_PAGE_SIZE,
     FileStat,
@@ -105,3 +109,100 @@ class FakeStorage:
 
     async def health(self) -> Health:
         return self._health
+
+
+# --- Extraction pipeline fakes (P1-16) ----------------------------------------------------
+
+EXTRACTION_FIXTURES = Path(__file__).resolve().parents[4] / "fixtures" / "extraction"
+_PAGE_PNG = bytes.fromhex(  # a 1x1 PNG: what FakeDocling shows the vision fake
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000d49444154789c6360f8cfc0f01f0005000201a5f645400000000049454e44ae426082"
+)
+
+
+# The EICAR anti-malware test string, in two halves so that no virus scanner on a dev
+# machine quarantines this file (the same split as tests/_samples.py).
+_EICAR = (r"X5O!P%@AP[4\PZX54(P^)7CC)7}$" + "EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*").encode()
+EICAR_SIGNATURE = "Win.Test.EICAR_HDB-1"  # clamd's name for it
+
+
+class FakeClamAV:
+    """Flags the EICAR test file and nothing else (A6). `calls` records the byte count of
+    each scan."""
+
+    def __init__(self) -> None:
+        self.calls: list[int] = []
+
+    async def scan(self, stream: AsyncIterator[bytes]) -> ScanResult:
+        size, tail, found = 0, b"", False
+        async for chunk in stream:
+            size += len(chunk)
+            window = tail + chunk  # the string may straddle two chunks
+            found = found or _EICAR in window
+            tail = window[-(len(_EICAR) - 1) :]
+        self.calls.append(size)
+        return ScanResult(infected=found, signature=EICAR_SIGNATURE if found else None)
+
+
+class FakeVision:
+    """Per-page Markdown: `script(pages={n: markdown})`; a page not scripted answers a
+    placeholder line. `calls` is the page numbers asked, in order."""
+
+    def __init__(self) -> None:
+        self._pages: dict[int, str] = {}
+        self.calls: list[int] = []
+
+    def script(self, *, pages: Mapping[int, str]) -> None:
+        self._pages = dict(pages)
+
+    async def page_markdown(self, image: bytes, *, page: int) -> str:
+        self.calls.append(page)
+        return self._pages.get(page, f"Page {page} read by the vision model.")
+
+    async def health(self) -> Literal["ok", "degraded"]:
+        return "ok"
+
+
+def _one_chunk(text: str) -> ChunkRow:
+    return ChunkRow(
+        ordinal=0, text=text, context_text=text, heading_path=[], page_from=None, page_to=None
+    )
+
+
+class FakeDocling:
+    """Stored conversions: a fixture file with a `<name>.conversion.json` beside it (its
+    Markdown, per-page grades and text-item counts, and its chunks) converts to that, found
+    by the file's sha256. Any other content is one chunk of its decoded text. `calls`
+    records (file name, kind) for each conversion."""
+
+    def __init__(self, fixtures: Path = EXTRACTION_FIXTURES) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self._stored: dict[str, bytes] = {}
+        for stored in sorted(fixtures.glob("*.conversion.json")):
+            source = stored.with_name(stored.name.removesuffix(".conversion.json"))
+            if source.is_file():
+                self._stored[hashlib.sha256(source.read_bytes()).hexdigest()] = stored.read_bytes()
+
+    def convert(self, path: Path, kind: DocKind) -> Conversion:
+        self.calls.append((path.name, kind))
+        data = path.read_bytes()
+        doc = self._stored.get(hashlib.sha256(data).hexdigest())
+        if doc is None:
+            text = data.decode(errors="replace")
+            doc = json.dumps({"markdown": text, "chunks": [_one_chunk(text).model_dump()]}).encode()
+        stored = json.loads(doc)
+        grades: dict[int, str | tuple[str, str]] = {
+            int(page): grade if isinstance(grade, str) else (grade[0], grade[1])
+            for page, grade in stored.get("grades", {}).items()
+        }
+        items = {int(page): int(count) for page, count in stored.get("text_items", {}).items()}
+        return Conversion(doc, stored["markdown"], grades, items)
+
+    def chunk(self, doc_json: bytes) -> list[ChunkRow]:
+        return [ChunkRow.model_validate(row) for row in json.loads(doc_json)["chunks"]]
+
+    def chunk_markdown(self, markdown: str) -> list[ChunkRow]:
+        return [_one_chunk(markdown)]
+
+    def page_image(self, path: Path, page: int) -> bytes:
+        return _PAGE_PNG

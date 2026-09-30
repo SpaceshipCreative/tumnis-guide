@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import importlib
 import signal
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from tumnis.core import audit_workflows, cache, events, faults, modules, workflows_ops
@@ -121,7 +122,9 @@ def dbos_config(settings: Settings) -> "DBOSConfig":
     return {"name": "tumnis", "system_database_url": settings.dbos_system_url}
 
 
-def main(settings: Settings, *, app_version: str | None = None) -> None:
+def main(
+    settings: Settings, *, app_version: str | None = None, queues: Sequence[str] | None = None
+) -> None:
     """Launch DBOS, register queues and schedules, run the outbox relay beside it, and block
     until SIGTERM or SIGINT. A kill point (TUMNIS_KILLPOINT, tests only) is armed first, and
     refused in production before anything connects. `app_version` pins DBOS's application
