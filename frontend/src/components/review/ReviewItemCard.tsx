@@ -110,6 +110,42 @@ function ValueForm({
   );
 }
 
+/** The snooze choices (1 hour, 3 hours, tomorrow) and Cancel. */
+export function SnoozeChoices({
+  busy,
+  onPick,
+  onCancel,
+}: {
+  busy: boolean;
+  onPick: (key: SnoozeKey) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Snooze until"
+      className="flex flex-wrap gap-2"
+    >
+      {SNOOZES.map((choice) => (
+        <button
+          key={choice.key}
+          type="button"
+          className={BUTTON_SECONDARY}
+          disabled={busy}
+          onClick={() => {
+            onPick(choice.key);
+          }}
+        >
+          {choice.text}
+        </button>
+      ))}
+      <button type="button" className={BUTTON_SECONDARY} onClick={onCancel}>
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 export interface ReviewItemCardProps {
   item: ReviewItemOut;
   current: boolean;
@@ -197,34 +233,15 @@ export function ReviewItemCard({
         )}
 
         {mode === "snooze" && (
-          <div
-            role="group"
-            aria-label="Snooze until"
-            className="flex flex-wrap gap-2"
-          >
-            {SNOOZES.map((choice) => (
-              <button
-                key={choice.key}
-                type="button"
-                className={BUTTON_SECONDARY}
-                disabled={busy}
-                onClick={() => {
-                  onDecide({ action: "snooze", snooze: choice.key });
-                }}
-              >
-                {choice.text}
-              </button>
-            ))}
-            <button
-              type="button"
-              className={BUTTON_SECONDARY}
-              onClick={() => {
-                onMode("idle");
-              }}
-            >
-              Cancel
-            </button>
-          </div>
+          <SnoozeChoices
+            busy={busy}
+            onPick={(key) => {
+              onDecide({ action: "snooze", snooze: key });
+            }}
+            onCancel={() => {
+              onMode("idle");
+            }}
+          />
         )}
 
         {editor?.type === "label" && (

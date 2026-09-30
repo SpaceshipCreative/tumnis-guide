@@ -1,170 +1,135 @@
-# HANDOFF: P2-04 (dispatch_run and the run view), continuation c2 next
+# HANDOFF: P2-04 (dispatch_run and the run view), continuation c3 next
 
-Branch `wp/P2-04` (pushed to `origin/wp/P2-04`). Based on main at 7083652 (#104, P2-02); main
-had not moved at c1. No PR is open yet. No CodeRabbit review, no CI run yet. Scratch folder
-for the next agent: `$TMPDIR/P2-04-c2/`.
+Branch `wp/P2-04` (pushed to `origin/wp/P2-04`). Based on main at cf20116 (#106); main had
+not moved at c2. **No PR is open yet.** No CodeRabbit review, no CI run on a PR yet.
+Scratch folder for the next agent: `$TMPDIR/P2-04-c3/`.
 
 ## Commits
 
 | Commit | What |
 | --- | --- |
-| 38f6010 | c0: `test(agents): P2-04 backend spec tests (red, work in progress)`: 17 backend spec tests + `_runs.py` helpers |
-| (this commit) | c1: `chore: P2-04 handoff (work in progress)`: rules, migrations, api, payloads, workflows, frontend red specs |
+| 38f6010 | c0: backend spec tests (red) + `_runs.py` helpers |
+| b6939c8 | c1: rules, migrations, api, payloads, workflows, frontend red specs (WIP) |
+| e3e7e34 | c2: subscribers, result decision, ws result path, sweep signal, routes, `post_result`, fixtures + `make gen`, `run` live entity |
+| (this commit) | c2: authz/MCP sweep helpers for runs and `post_result`, RunOut trimmed, RunView/ResultItem/useRunEvents + queue wiring, T-02/T-14/T-15/T-16 markers removed, handoff |
 
-The c1 commit is WORK IN PROGRESS and was made on a HANDOFF NOW: `ruff check`, `ruff format`,
-`mypy tumnis` and `lint-imports` were clean just before it, but the new workflow code has
-never run, and the subscribers/routes below are missing, so the integration specs are still
-red. `make check` unit layer: 1508 passed, 1 failed (`test_semgrep_rules_pass_their_own_tests`,
-the known ~/.semgrep read-only issue: set SEMGREP_SETTINGS_FILE, SEMGREP_LOG_FILE and
-SEMGREP_VERSION_CACHE_PATH under $TMPDIR). That run was before workflows.py grew; rerun it.
+`make check` passes at this commit (run through `$TMPDIR/P2-04-c2/check.sh`, which sets the
+three SEMGREP_* variables under $TMPDIR; copy it to your own folder).
 
-## Done in c1 (uncommitted work now in the c1 commit)
+## State of the spec tests
 
-- `agents/rules.py`: `RUN_TRANSITIONS`, `ACTIVE_RUN_STATUSES`, `TransitionNotAllowed`,
-  `run_transition`, `active_seconds`, `over_ceiling(started_at, now, ceiling)`,
-  `DispatchTask`, `DispatchProfile`, `Refusal`, `can_dispatch`. T-03, T-17, T-19 GREEN;
-  their xfail markers are removed. In test_run_rules.py the first loop variable was renamed
-  `label` -> `any_label` (mypy redefinition error; no assertion changed; the file is new in
-  this branch, so spec-guard does not lock it).
-- `core/limits.py`: `WAIT_SLICE_S`, `RUN_WALL_CLOCK_CEILING`.
-- Migrations (by a helper subagent; squawk passes offline):
-  - `agents_0005` (`agents/migrations/0005_runs_v2.py`): runs.state_seq, active_seconds_used,
-    runner_id, stop_reason, packet, rerun_of, tasks_created; run_events.seq (sequence
-    `run_events_seq_seq`, backfilled with row_number, nullable because squawk refuses SET NOT
-    NULL; unique `ux_run_events_ws_run_seq`); partial unique `ux_runs_ws_task_kind_active`.
-  - `tasks_0007` (`tasks/migrations/0007_results.py`): `results` tenant table; task_id FK to
-    tasks ON DELETE CASCADE (purge takes results with the task); unique (ws, run_id).
-  - models mirrored (`agents/models.py`, `tasks/models.py` `Result`); `row_factory.COLUMN_VALUES`
-    has `("results", "outcome"): "done"`. App role gets sequence USAGE via
-    deploy/postgres/initdb/02-database.sql default privileges (no GRANT needed).
-- `agents/payloads.py` (new): RunRequestedV1, RunSignalV1, RunStartedV1, RunFinishedV1.
-  `tasks/payloads.py`: ResultPostedV1. (Contract fixtures + `make gen` NOT done yet.)
-- `tasks/api.py`: FileTouched, ResultLink, ResultFields, ResultOut, `result_of_run`,
-  `post_result(s, actor, task_id, run_id, fields, now=) -> (ResultOut, created)`.
-- `agents/review_kinds.py`: kinds `result` (accept/reject/snooze, reject payload
-  `RejectFeedback{feedback}`) and `run_limit` (accept/snooze); ResultPayload, RunLimitPayload.
-- `agents/api.py` (end of file, "Runs" section): LIVE_RUN, constants, `configure_runs`,
-  `run_caps`, RunRequested, RunRequestIn, RunOut, RunEventOut, RunEventsPage, `request_run`
-  (session= optional; savepoint; IntegrityError -> 409 run_already_active), `get_run`,
-  `run_project` (+ `register_project_lookup("runs", ...)`), `run_events_page`, `log_text`
-  (scrub + 8 KiB cut), `add_system_line`, `finish_run_in` (idempotent end: row, revoke +
-  redact tokens, closing line, run.finished, run_limit item), `signal_run`, `cancel_run`,
-  `PostResultIn`, `ResultOut`, `accept_result(s, actor, caller_run, inp, now=)`.
-- `agents/workflows.py` ("dispatch_run" section): Prepared, RunHandleData, `prepare_run`,
-  `send_to_agent` (build_packet + `_with_token` + adapter dispatch + killpoint
-  `agents.send_to_agent.after_dispatch` + stores redacted packet), `now_s`, `stop_agent`,
-  `finish_run`, `park`, `bump_state`, `_end`, `_signal` (legacy message shapes), `_supervise`
-  (killpoint `agents.dispatch_run.waiting_recv`), `dispatch_run(workspace_id, run_id)`
-  (killpoint `agents.dispatch_run.after_send`), `start_dispatch` (SetWorkflowID(run id),
-  partition key = project id, priority, fresh-context create_task), `deliver_signal`.
-  NOTE: the workflow takes `(workspace_id, run_id)`, not the plan's `(run_id)`: steps need
-  the workspace for tenant_session. P2-09's check_pause/held is not built (P2-09's scope).
-- `_runs.py` helper: `relay()` imports `tumnis.wiring` instead of `tumnis.modules.tasks.events`
-  (import-linter modules-api-only).
-- Frontend red specs (`test.fails`, confirmed red, typecheck + eslint clean):
-  `frontend/src/components/runs/RunView.test.tsx` (T-15; RunView({runId}); log role "log"
-  named "Run log"; events page body `{items, next_after_seq}`; Stop button; "Elapsed" label)
-  and `frontend/src/components/review/ResultItem.test.tsx` (T-16; ResultItem({item,
-  onDecide}); Reject disabled until "Feedback" typed; Enter on the card accepts).
+- GREEN, markers removed: T-03, T-17, T-19 (unit, c1); T-02 `test_other_project_not_blocked`
+  and T-14 `test_double_run_click_refused` (XPASS(strict) in c2's local `make test-int`);
+  T-15 RunView and T-16 ResultItem (Vitest; `test.fails` -> `test`, prettier reflowed the
+  RunView body's indentation only; watch spec-guard on the PR).
+- STILL xfail (strict), reasons unknown (xfailed tests print no traceback): T-01, T-04,
+  T-18, T-08, T-05/06/07 (kill), T-09, T-10, T-11, T-12, T-13. The coordinator now forbids
+  more than one full local `make test-int` per continuation (Docker overload): use CI as the
+  authority. To see their tracebacks, open the PR and read CI, or temporarily remove markers
+  in a throwaway commit on the PR branch and read CI's integration log, then put back the
+  markers of the ones still red (never weaken an assertion).
+- c2's local `make test-int` (before the fixes in this commit) also failed these, now fixed:
+  `tests/meta/test_authz_matrix.py` (no LOOKUP_TARGETS entry for runs: added `run_row` in
+  tests/meta/_authz.py), `tests/meta/test_mcp_*` (no `post_result` sample: added
+  `running_run` + `_post_result` in tests/_mcp.py; the sample posts for the newest task
+  token's run of the project, so the scope matrix's task-token caller posts for its own run).
+  Environment-only failures seen locally (not ours): folder_sync s3 (Docker 500),
+  pgbouncer (Docker 500), typeahead latency (load), rclone (known), decisions
+  test_log_never_holds_input_text (CancelledError under load).
 
 ## Remaining steps (in order)
 
-1. `agents/events.py`: subscribers `agents.start_dispatch` on `run.requested` (call
-   `_workflows.start_dispatch(envelope.workspace_id, run_id, project_id, priority)`) and
-   `agents.deliver_run_signal` on `run.signal` (`_workflows.deliver_signal(ws, run_id, kind,
-   reason, key=str(envelope.event_id))`). Extend the ONE `agents.apply_review_decision`
-   (decision 29): kind `result` accept -> `tasks.change_status(s, ActorRef(envelope.actor),
-   task, DONE, version)` if task is in_review; reject -> in ONE tenant_session with the
-   envelope actor: `tasks.add_comment(feedback)`, change_status R->P, then
-   `api.request_run(task, TASK, rerun_of=<item payload run_id>, ctx=, session=s)`; skip all
-   if the task is no longer in_review (idempotent redelivery). The item payload (run_id) is
-   read with `tasks.get_review_item`. Update the events.py docstring.
-2. `agents/ws.py` `_result`: when `runs.workflow_id == str(run_id)` (a dispatch_run run):
-   keep the `result` run event; status succeeded -> parse `output_json` leniently into
-   `api.PostResultIn(run_id=..., **output)` and call `api.accept_result(s, self.ctx.actor,
-   run_id, inp, now=self.now())` in the same tenant_session (catch ProblemError: log, ack);
-   invalid output or other status -> `api.signal_run(..., "agent_failed", reason=...)` (a
-   `cancelled` result after our own stop may simply be recorded). NEVER `hub.client().send`
-   for these (the kill tests have no DBOS in the test process). Keep the old send for
-   `run_skill:` ids. Also route stream `text` through `api.log_text` in `_insert_event`.
-3. `workflows.sweep_workspace_step`: for runs whose workflow_id == str(run id) (running or
-   waiting_on_human on an offline runner) emit `RunSignalV1(kind="runner_lost")` in the
-   sweep transaction instead of flipping the row; keep the old flip + send for run_skill runs
-   (P1-04 test_runner_sweep.py). `runner_sweep` must not send for those.
-4. `agents/mcp.py`: op `post_result` (scope tasks:write, write=True, input
-   `PostResultToolIn(WriteInput, PostResultIn)`, rest POST `/v1/runs/{run_id}/result`,
-   project_resolver = api.run_project on raw run_id, `session_twin_allowed=False`, handler
-   -> `api.accept_result(call.session, call.actor, call.caller.run_id, data, now=call.now)`).
-   Remove `"post_result"` from `PENDING_TOOLS` in `core/agent_surface.py`.
-5. `agents/router.py`: `POST /v1/tasks/{task_id}/run` (session, idempotent, 202,
-   `api.RunRequested`; call request_run with the route's SessionDep and principal ctx);
-   `GET /v1/runs/{id}` (session_or_key tasks:read, project_param lookup:runs);
-   `GET /v1/runs/{id}/events?after_seq=&limit=` (RunEventsPage; not `Page`, so the route
-   registry is fine with a model); `POST /v1/runs/{id}/cancel` (202, idempotent);
-   `POST /v1/runs/{run_id}/result` (the twin; policy session_or_key, tasks:write,
-   idempotent, project_param lookup:runs; raw = {**body, "run_id": run_id}).
-6. `worker.py`: keep `DBOS.register_queue(RUNS_QUEUE, partition_concurrency=2)`, add
-   `polling_interval_sec=0.5` (T-01 timing). Consider `configure_runs` settings later (PR2).
-7. Contract fixtures `backend/tests/contract/fixtures/events/{run.requested,run.signal,
-   run.started,run.finished,result.posted}/v1.json`, then `make gen` (schemas, openapi,
-   generated tests, openapi-ts client). Then `frontend/src/lib/live-map.ts`: add a `"run"`
-   LiveEntity with details `agentsGetRun`, `agentsListRunEvents` (or whatever op ids gen
-   produces) so T-P0-22-11 passes.
-8. Run: `make check`; `make test` (bare); `make test-int` (bare; VM loaded, CI is the
-   judge). Remove each P2-04 xfail marker only after that test passed. Kill tests: plan asks
-   20 runs in a row (CI or local loop).
-9. Open PR1 (`[P2-04] impl: dispatch_run and the run view`), body with deviations below,
-   `@coderabbitai review` once, review loop, MERGE-READY to main.
-10. PR2 `wp/P2-04-impl-2`: RunView, ResultItem, useRunEvents, `run` search param on
-   projects.$projectId, signals.py refactor, `supervise_run`, `reconcile_runs` (hourly on
-   maintenance), Playwright runner-fake routes, settings wiring for configure_runs.
+1. Push (done by this commit), open PR1: `gh pr create --base main --head wp/P2-04 --title
+   "[P2-04] impl: dispatch_run and the run view" --body-file <file>`; then
+   `gh pr comment <url> --body "@coderabbitai review"` once. Decide: this branch now also
+   holds the frontend (RunView, ResultItem, useRunEvents, queue wiring). Recommended: keep it
+   in PR1 and leave PR2 (`wp/P2-04-impl-2`) for A2.1 support: the drawer Run button and
+   `run` search param on `projects.$projectId`, files touched in the run view, the
+   compose-stack fake runner hooks `POST /v1/test/fakes/runner/script` `{task_title, runs}`
+   and `GET /v1/test/fakes/runner/last-packet` (coordinator: they are P2-04's, R-37; see
+   `frontend/e2e/phase2.ts` on `origin/wp/P2-00-spec` for the script shape: stream,
+   upload_artifact, result, ask_human steps), `signals.py` refactor, `supervise_run`,
+   `reconcile_runs` (hourly on maintenance), settings wiring for `configure_runs`.
+2. Read CI; fix the still-red P2-04 integration tests one at a time; remove each marker
+   only after it passed. Likely suspects to check first:
+   - T-01: `workflow_status(waiting) == "ENQUEUED"` with the in-test DBOS; the runs queue
+     now polls every 0.5 s (`RUNS_QUEUE_POLL_S`).
+   - T-09/10/11/12: REST `POST /v1/runs/{id}/result` with the packet's task token (the
+     `run_world` key must give `tasks:write`); `accept_result` then `run.signal{result}`.
+     T-09 posts twice: if the run ends (token revoked) before the second post, it 401s
+     (race; report to Scott, never weaken).
+   - T-13: `ws._insert_event` now stores stream text through `api.log_text`; paging by seq.
+   - T-04/T-18: `configure_runs` in the test process; `_supervise` caps; closing line.
+   - T-08: sweep emits `run.signal{runner_lost}` for dispatch_run runs (workflow_id =
+     run id), in `sweep_workspace_step`.
+   - T-05..07 kill tests: worker subprocess; ws `_result` (test process) goes through
+     `accept_result` and the worker's relay delivers the signal.
+3. Review loop (pr-review-loop.md), MERGE-READY to main with SendMessage.
 
-## Decisions settled (binding for c2; c0's list still applies)
+## Decisions settled in c2 (binding; c0 1-15 and c1's list still hold)
 
-c0 decisions 1-15 (see git history of this file, commit a4ef89b) still hold. Additions:
-- `finish_run_in` is the single end path (workflow step and cancel of a queued run).
-- The `result` review item is added by `agents.accept_result` (the owner of the kind), right
-  after `tasks.post_result`, in the same transaction; the plan's wording puts it inside
-  `tasks.api.post_result`. PR-body deviation.
-- Closing system log lines: time_limit "Stopped at the time limit", wall_clock_ceiling
-  "Stopped at the wall-clock limit", runner_lost "Stopped: the runner stopped answering",
-  stopped_by_user "Stopped by you"; none on success.
-- request_run refusals: 422 label_not_runnable; 409 status_not_runnable, no_ready_profile,
-  run_already_active.
+- `accept_result`: a caller holding a task token posts only for its run (403
+  `run_mismatch`); a key with NO run may post for any run it can reach. Needed by the
+  locked P2-01 sweeps (T-P2-01-05/10/11 require every write op to succeed for an
+  ALL_SCOPES key with no run). PR-body deviation from the plan's "task token must belong
+  to inp.run_id".
+- ws `_result`: a run whose `workflow_id == str(run_id)` (dispatch_run) takes
+  `_dispatched_run_result` (succeeded -> `accept_result` in a savepoint, ProblemError
+  logged; else or invalid output -> `run.signal{agent_failed}`); never DBOS. A `cancelled`
+  answer after the run ended is acked and dropped (the log stays closed).
+- DBOS 3.1.0 `DBOS.send_async` from inside a step sends directly (no step recorded) with
+  the idempotency key (checked in dbos/_core.py `send_bulk`); `deliver_signal` needs no
+  fresh-context wrapper. `register_queue(..., polling_interval_sec=)` is the poll kwarg.
+- Part A alignment: `result.posted` carries summary and links; `run.started` status
+  `running`; `run.finished` `duration_s`.
+- `RunOut` trimmed to what the run view reads (error and active_seconds_used default), so
+  the locked RunView fixture validates against the generated zod.
+- RunView elapsed counts in 5-second steps (the locked T-15 checks 1:10 then 1:15 under
+  `shouldAdvanceTime`, where real time drifts the fake clock by about a second).
+- ResultItem: standalone = feedback field + Reject disabled until typed (T-16). In the
+  review queue `confirmReject`: Reject opens the field, "Confirm reject" sends (A2.1 on
+  wp/P2-00-spec clicks Reject first, then fills Feedback, then Confirm reject). Enter and r
+  stop propagation so the queue does not act twice.
+- `POST /v1/tasks/{task_id}/run` is `session_or_key` + `tasks:write` + idempotent +
+  `lookup:tasks`; run routes use `lookup:runs`.
 
-## PR-body deviations to record
+## PR-body deviations to record (c1's list plus these)
 
 - No deduplication_id on the partitioned `runs` queue (DBOS 3.1.0 refuses it; Context7
-  /dbos-inc/dbos-docs prompting.md: "setting any partition_* limit makes the queue
-  partitioned ... disabling deduplication"); deterministic workflow id + partial unique index.
-- No `priority_enabled` flag in DBOS 3.1.0 `register_queue`; priority via
-  `SetEnqueueOptions(priority=)` (queue tutorial: lower = higher).
-- `over_ceiling` takes the ceiling as a parameter (rules purity).
-- `dispatch_run(workspace_id, run_id)` signature; P2-09 pause/held not built.
-- `result` review item added in agents.accept_result.
-- `run_events.seq` is one global sequence: order is insertion order; a concurrent insert
-  can commit out of seq order (rare: one socket per runner).
-- `results.task_id` FK ON DELETE CASCADE.
-- `result/task_result/1` schema not registered (no spec test needs it); decide and state.
+  /dbos-inc/dbos-docs); deterministic workflow id + partial unique index.
+- No `priority_enabled` in DBOS 3.1.0 `register_queue`; priority via `SetEnqueueOptions`.
+- `over_ceiling` takes the ceiling as a parameter; `dispatch_run(workspace_id, run_id)`;
+  P2-09 pause/held not built.
+- `result` review item added in `agents.accept_result`; `results.task_id` ON DELETE CASCADE;
+  `run_events.seq` one global sequence; `result/task_result/1` schema not registered.
+- Keyless `post_result` allowed (above); ResultItem `confirmReject` mode; 5 s elapsed step.
+- `run_skill` partitions `runs` by profile id, `dispatch_run` by project id: a project using
+  both can reach 4 at once.
+- `send_to_agent` replayed after `inside_send` issues a second token; run end revokes both.
+- Migrations: `agents_0005` (after agents_0004), `tasks_0007` (after tasks_0006). P1-08 also
+  adds a tasks_0007: whichever merges second re-chains to tasks_0008 (coordinator).
+- Docs cited: Context7 /dbos-inc/dbos-docs (queue tutorial: partitioned queues, priority;
+  client.send idempotency_key), dbos 3.1.0 source (`_dbos.py register_queue`,
+  `_core.py send_bulk`).
 
 ## Scott / coordinator items
 
-- A2.1 / `frontend/e2e/journeys/J3.spec.ts` is P2-00's (wp/P2-00-spec); after it merges,
-  merge main and un-fail A2.1 only if it passes.
+- SPEC CONFLICT to raise: T-P2-04-16 (ResultItem: Reject disabled until feedback typed)
+  vs A2.1 on wp/P2-00-spec (click Reject, then fill Feedback, then "Confirm reject").
+  Resolved by the queue-only `confirmReject` mode; flag it anyway.
+- A2.1 (`frontend/e2e/journeys/J3.spec.ts`) is P2-00's; after it merges, merge main and
+  un-fail A2.1 only if it passes (needs PR2's pieces above).
 - R-29's 24-hour ceiling remains a plan default flagged for Scott.
-- Open item unchanged: who mints a profile's API key (keyless profiles dispatch without a token).
-- Watch: T-09 posts a second result right after the first; if the run ends first, the
-  revoked token could 401 the second post (race). Report, never weaken.
+- Open: who mints a profile's API key (keyless profiles dispatch without a token).
+- T-09 second-post race vs token revocation (report, never weaken).
 
 ## Verify commands
 
 ```bash
-cd backend && uv run pytest -q -p no:randomly -m "not integration and not contract" tumnis/modules/agents/tests/unit/test_run_rules.py
-cd backend && uv run ruff check tumnis && uv run mypy tumnis && uv run lint-imports
-make check          # from the worktree root
-make test           # bare, unit + contract
-make test-int       # bare, integration
+bash $TMPDIR/P2-04-c3/check.sh      # a copy of c2's check.sh: make check with SEMGREP_* set
+cd backend && uv run ruff check . && uv run mypy tumnis && uv run lint-imports
+cd frontend && npx vitest run src/components/runs src/components/review src/lib
+make test-int                       # bare, at most once per continuation; CI is the judge
 ```
 
-Push with `/usr/bin/git push origin HEAD:wp/P2-04`. Use `/usr/bin/git`, never plain `git`.
-Never merge.
+Push with `/usr/bin/git push origin HEAD:wp/P2-04`. Use `/usr/bin/git`. Never merge.

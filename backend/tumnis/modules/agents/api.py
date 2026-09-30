@@ -1126,20 +1126,20 @@ class RunRequestIn(BaseModel):
 
 
 class RunOut(BaseModel):
+    """A run as the run view shows it."""
+
     id: UUID
     task_id: UUID | None
     project_id: UUID | None
-    profile_id: UUID
     kind: RunKind
     status: RunStatus
     stop_reason: str | None
-    error: str | None
     rerun_of: UUID | None
-    tainted: bool
-    active_seconds_used: float
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime
+    error: str | None = None
+    active_seconds_used: float = 0.0
 
 
 class RunEventOut(BaseModel):
@@ -1519,13 +1519,14 @@ async def accept_result(
     *,
     now: datetime,
 ) -> ResultOut:
-    """Result intake, one path for the tool, its REST twin and the runner (FR-5.8). The
-    caller's task token must belong to `inp.run_id` (403 `run_mismatch`). A second result
-    for the run answers the first. Otherwise the run must be running or waiting (409
-    `run_not_active`), and in the caller's transaction: `tasks.post_result` (the results
-    row, the task In review, `result.posted`), the `result` review item and
-    `run.signal{result}`, which ends the run `succeeded`."""
-    if caller_run != inp.run_id:
+    """Result intake, one path for the tool, its REST twin and the runner (FR-5.8). A
+    caller holding a task token (`caller_run`, R-31) posts only for that token's run (403
+    `run_mismatch`); a key with no run may post for any run it can reach (the surface's
+    write rules, P2-01). A second result for the run answers the first. Otherwise the run
+    must be running or waiting (409 `run_not_active`), and in the caller's transaction:
+    `tasks.post_result` (the results row, the task In review, `result.posted`), the
+    `result` review item and `run.signal{result}`, which ends the run `succeeded`."""
+    if caller_run is not None and caller_run != inp.run_id:
         raise ProblemError(403, "run_mismatch", "This token belongs to another run")
     run = (
         await s.execute(

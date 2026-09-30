@@ -86,7 +86,6 @@ async def test_two_runs_per_project_third_waits(
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_other_project_not_blocked(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -116,7 +115,6 @@ async def test_other_project_not_blocked(
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_double_run_click_refused(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,

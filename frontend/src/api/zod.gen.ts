@@ -997,21 +997,21 @@ export const zRunStatus = z.enum([
 
 /**
  * RunOut
+ *
+ * A run as the run view shows it.
  */
 export const zRunOut = z.object({
-  active_seconds_used: z.number(),
+  active_seconds_used: z.number().optional().default(0),
   created_at: z.iso.datetime(),
-  error: z.string().nullable(),
+  error: z.string().nullish(),
   finished_at: z.iso.datetime().nullable(),
   id: z.uuid(),
   kind: zRunKind,
-  profile_id: z.uuid(),
   project_id: z.uuid().nullable(),
   rerun_of: z.uuid().nullable(),
   started_at: z.iso.datetime().nullable(),
   status: zRunStatus,
   stop_reason: z.string().nullable(),
-  tainted: z.boolean(),
   task_id: z.uuid().nullable(),
 });
 

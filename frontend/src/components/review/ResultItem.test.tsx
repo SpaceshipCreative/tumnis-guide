@@ -49,7 +49,7 @@ function resultItem() {
   });
 }
 
-test.fails("[P2-04][FR-5.8] reject requires feedback", async () => {
+test("[P2-04][FR-5.8] reject requires feedback", async () => {
   const { ResultItem } = await load<ResultItemModule>("./ResultItem");
   const onDecide = vi.fn<Decide>();
   const { user } = renderWithProviders(

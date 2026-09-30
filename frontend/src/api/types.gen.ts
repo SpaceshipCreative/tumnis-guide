@@ -2548,12 +2548,14 @@ export type RunKind =
 
 /**
  * RunOut
+ *
+ * A run as the run view shows it.
  */
 export type RunOut = {
   /**
    * Active Seconds Used
    */
-  active_seconds_used: number;
+  active_seconds_used?: number;
   /**
    * Created At
    */
@@ -2561,7 +2563,7 @@ export type RunOut = {
   /**
    * Error
    */
-  error: string | null;
+  error?: string | null;
   /**
    * Finished At
    */
@@ -2571,10 +2573,6 @@ export type RunOut = {
    */
   id: string;
   kind: RunKind;
-  /**
-   * Profile Id
-   */
-  profile_id: string;
   /**
    * Project Id
    */
@@ -2592,10 +2590,6 @@ export type RunOut = {
    * Stop Reason
    */
   stop_reason: string | null;
-  /**
-   * Tainted
-   */
-  tainted: boolean;
   /**
    * Task Id
    */

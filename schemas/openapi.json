@@ -4863,8 +4863,10 @@
         "type": "string"
       },
       "RunOut": {
+        "description": "A run as the run view shows it.",
         "properties": {
           "active_seconds_used": {
+            "default": 0.0,
             "title": "Active Seconds Used",
             "type": "number"
           },
@@ -4903,11 +4905,6 @@
           },
           "kind": {
             "$ref": "#/components/schemas/RunKind"
-          },
-          "profile_id": {
-            "format": "uuid",
-            "title": "Profile Id",
-            "type": "string"
           },
           "project_id": {
             "anyOf": [
@@ -4959,10 +4956,6 @@
             ],
             "title": "Stop Reason"
           },
-          "tainted": {
-            "title": "Tainted",
-            "type": "boolean"
-          },
           "task_id": {
             "anyOf": [
               {
@@ -4980,14 +4973,10 @@
           "id",
           "task_id",
           "project_id",
-          "profile_id",
           "kind",
           "status",
           "stop_reason",
-          "error",
           "rerun_of",
-          "tainted",
-          "active_seconds_used",
           "started_at",
           "finished_at",
           "created_at"
