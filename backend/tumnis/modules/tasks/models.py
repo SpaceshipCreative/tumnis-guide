@@ -131,6 +131,7 @@ class Result(TenantBase, Base):
     files_touched: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     links: Mapped[list[Any]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     tests_summary: Mapped[str | None]
+    tainted: Mapped[bool] = mapped_column(server_default=text("false"))
 
 
 class RecurrenceRule(TenantBase, Base):

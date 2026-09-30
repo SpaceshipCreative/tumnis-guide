@@ -331,6 +331,7 @@ class ResultOut(ResultFields):
     run_id: UUID
     task_id: UUID
     created_at: datetime
+    tainted: bool = False  # posted by a tainted run or a key with no run (P2-08, SAF-1)
 
 
 class TaskContextItemOut(BaseModel):
@@ -1439,6 +1440,7 @@ async def post_result(  # the result, plus who and when
     run_id: UUID,
     fields: ResultFields,
     *,
+    tainted: bool = False,
     now: datetime | None = None,
 ) -> tuple[ResultOut, bool]:
     """Stores the run's result (P2-04, FR-5.8) in the caller's transaction: the `results`
@@ -1456,6 +1458,7 @@ async def post_result(  # the result, plus who and when
                 .values(
                     task_id=task_id,
                     run_id=run_id,
+                    tainted=tainted,
                     **fields.model_dump(mode="json"),
                 )
                 .on_conflict_do_nothing(index_elements=["workspace_id", "run_id"])

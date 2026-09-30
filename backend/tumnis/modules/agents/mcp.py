@@ -106,7 +106,9 @@ class PostResultToolIn(surface.WriteInput, api.PostResultIn):
 
 async def _post_result(call: surface.SurfaceCall, data: PostResultToolIn) -> api.ResultOut:
     inp = api.PostResultIn.model_validate(data.model_dump(exclude={"idempotency_key"}))
-    return await api.accept_result(call.session, call.actor, call.caller.run_id, inp, now=call.now)
+    return await api.accept_result(
+        call.session, call.actor, call.caller.run_id, inp, now=call.now, tainted=call.tainted
+    )
 
 
 async def _project_of_run(ctx: WorkspaceContext, raw: Any) -> UUID | None:

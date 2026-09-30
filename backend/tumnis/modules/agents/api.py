@@ -1523,6 +1523,7 @@ async def accept_result(
     inp: PostResultIn,
     *,
     now: datetime,
+    tainted: bool = False,
 ) -> ResultOut:
     """Result intake, one path for the tool, its REST twin and the runner (FR-5.8). A
     caller holding a task token (`caller_run`, R-31) posts only for that token's run (403
@@ -1530,12 +1531,13 @@ async def accept_result(
     write rules, P2-01). A second result for the run answers the first. Otherwise the run
     must be running or waiting (409 `run_not_active`), and in the caller's transaction:
     `tasks.post_result` (the results row, the task In review, `result.posted`), the
-    `result` review item and `run.signal{result}`, which ends the run `succeeded`."""
+    `result` review item and `run.signal{result}`, which ends the run `succeeded`. The
+    result is tainted when the caller's write is (`tainted`) or the run is (P2-08, SAF-1)."""
     if caller_run is not None and caller_run != inp.run_id:
         raise ProblemError(403, "run_mismatch", "This token belongs to another run")
     run = (
         await s.execute(
-            select(_runs.c.status, _runs.c.task_id)
+            select(_runs.c.status, _runs.c.task_id, _runs.c.tainted)
             .where(_runs.c.id == inp.run_id, _runs.c.deleted_at.is_(None))
             .with_for_update()
         )
@@ -1550,7 +1552,9 @@ async def accept_result(
     if run.task_id is None:
         raise ProblemError(422, "run_has_no_task", "Only a task's run posts a result")
     fields = tasks.ResultFields.model_validate(inp.model_dump(exclude={"run_id"}))
-    result, created = await tasks.post_result(s, actor, run.task_id, inp.run_id, fields, now=now)
+    result, created = await tasks.post_result(
+        s, actor, run.task_id, inp.run_id, fields, tainted=tainted or run.tainted, now=now
+    )
     if created:
         await tasks.add_review_item(
             RESULT,

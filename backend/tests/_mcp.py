@@ -55,6 +55,7 @@ ALL_SCOPES: Final = frozenset(
 )
 TOKEN_SCOPES: Final = frozenset({"tasks:read", "tasks:write", "context:read"})
 _ids = itertools.count(1)
+_surface_runs: set[uuid.UUID] = set()  # the runs running_run made (not real runs)
 
 
 @dataclass(frozen=True)
@@ -312,11 +313,14 @@ async def _get_task_packet(world: World, project: str) -> dict[str, Any]:
 
 
 async def running_run(world: World, project: str) -> uuid.UUID:
-    """A running run of a fresh AI task in the project (P2-04's `post_result`), on the
-    project's agent profile (made when there is none), written as the owner. Its id is the
-    run of the newest task token issued for the project when there is one, so a sweep
-    calling with that token posts for its own run; any other caller (a key without a run)
-    may post for it too."""
+    """A running run in the project for P2-04's `post_result`, written as the owner. A
+    task token only posts for its own run, so the run is a token's run:
+
+    - a real run of the project that a task token was issued for (P2-08's taint sweep
+      calls with a fresh token of a finished run), reopened when it has ended;
+    - otherwise the run of the newest task token issued for the project (a fresh AI task's
+      run on the project's agent profile, made when there is none);
+    - otherwise a new run. Any other caller (a key without a run) may post for it too."""
     from sqlalchemy import text  # noqa: PLC0415
 
     from tumnis.core import db  # noqa: PLC0415
@@ -324,6 +328,25 @@ async def running_run(world: World, project: str) -> uuid.UUID:
     project_id = world.projects[project]
     task = await world.task(project, label="ai", estimate_minutes=None)
     async with db.owner_sessionmaker()() as s, s.begin():
+        real_run = await s.scalar(
+            text(
+                "SELECT r.id FROM task_tokens t JOIN runs r ON r.id = t.run_id"
+                " WHERE t.workspace_id = :ws AND t.project_id = :p"
+                " AND NOT (r.id = ANY(CAST(:made AS uuid[])))"
+                " ORDER BY t.created_at DESC, t.id DESC LIMIT 1"
+            ),
+            {"ws": world.workspace.id, "p": project_id, "made": [str(r) for r in _surface_runs]},
+        )
+        if real_run is not None:
+            await s.execute(
+                text(
+                    "UPDATE runs SET status = 'running', finished_at = NULL"
+                    " WHERE id = :id AND status NOT IN ('running', 'waiting_on_human')"
+                ),
+                {"id": real_run},
+            )
+            run_id: uuid.UUID = real_run
+            return run_id
         token_run = await s.scalar(
             text(
                 "SELECT run_id FROM task_tokens WHERE workspace_id = :ws AND project_id = :p"
@@ -331,7 +354,8 @@ async def running_run(world: World, project: str) -> uuid.UUID:
             ),
             {"ws": world.workspace.id, "p": project_id},
         )
-        run_id: uuid.UUID = token_run or uuid.uuid4()
+        run_id = token_run or uuid.uuid4()
+        _surface_runs.add(run_id)
         profile_id = await s.scalar(
             text(
                 "SELECT id FROM agent_profiles WHERE project_id = :p AND role = 'project'"

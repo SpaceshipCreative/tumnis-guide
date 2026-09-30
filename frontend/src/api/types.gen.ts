@@ -2392,6 +2392,10 @@ export type ResultOut = {
    */
   summary: string;
   /**
+   * Tainted
+   */
+  tainted?: boolean;
+  /**
    * Task Id
    */
   task_id: string;

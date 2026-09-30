@@ -4599,6 +4599,11 @@
             "title": "Summary",
             "type": "string"
           },
+          "tainted": {
+            "default": false,
+            "title": "Tainted",
+            "type": "boolean"
+          },
           "task_id": {
             "format": "uuid",
             "title": "Task Id",

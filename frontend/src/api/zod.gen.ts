@@ -881,6 +881,7 @@ export const zResultOut = z.object({
   outcome: z.enum(["done", "partial", "blocked"]),
   run_id: z.uuid(),
   summary: z.string().min(1).max(20000),
+  tainted: z.boolean().optional().default(false),
   task_id: z.uuid(),
   tests_summary: z.string().max(20000).nullish(),
 });

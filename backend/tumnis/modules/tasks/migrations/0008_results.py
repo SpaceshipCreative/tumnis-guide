@@ -4,6 +4,7 @@
 - `summary`: the agent's account of the work.
 - `files_touched` and `links`: JSON lists, empty by default.
 - `tests_summary`: how the tests went, when the agent ran any.
+- `tainted`: posted by a tainted run or by a key with no run (P2-08, SAF-1).
 
 `task_id` is the task the run worked on (ON DELETE CASCADE: a purged task takes its
 results with it, as its comments and undo log go); `run_id` is the agents module's `runs`
@@ -41,6 +42,7 @@ def upgrade() -> None:
         sa.Column("files_touched", JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
         sa.Column("links", JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
         sa.Column("tests_summary", sa.Text, nullable=True),
+        sa.Column("tainted", sa.Boolean, nullable=False, server_default=sa.false()),
         sa.CheckConstraint("outcome IN ('done', 'partial', 'blocked')", name="ck_results_outcome"),
         sa.Index("ux_results_ws_run", "workspace_id", "run_id", unique=True),
         sa.Index("ix_results_ws_task", "workspace_id", "task_id"),
