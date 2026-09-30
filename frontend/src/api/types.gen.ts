@@ -893,6 +893,24 @@ export type LoginOut = {
 };
 
 /**
+ * ManualBlockIn
+ */
+export type ManualBlockIn = {
+  /**
+   * Block End
+   */
+  block_end: string;
+  /**
+   * Block Start
+   */
+  block_start: string;
+  /**
+   * Version
+   */
+  version?: number | null;
+};
+
+/**
  * ModuleFlagIn
  */
 export type ModuleFlagIn = {
@@ -1103,6 +1121,66 @@ export type PageSessionOut = {
    * Next Cursor
    */
   next_cursor: string | null;
+};
+
+/**
+ * PlanItemOut
+ */
+export type PlanItemOut = {
+  /**
+   * Block End
+   */
+  block_end: string | null;
+  /**
+   * Block Start
+   */
+  block_start: string | null;
+  /**
+   * Day
+   */
+  day: string;
+  /**
+   * Plan Id
+   */
+  plan_id: string;
+  /**
+   * Position
+   */
+  position: number;
+  /**
+   * Reason
+   */
+  reason: string;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * PlannedBlockOut
+ */
+export type PlannedBlockOut = {
+  /**
+   * End
+   */
+  end: string;
+  /**
+   * Start
+   */
+  start: string;
+  /**
+   * Task Id
+   */
+  task_id: string | null;
+  /**
+   * Title
+   */
+  title: string | null;
 };
 
 /**
@@ -2364,6 +2442,36 @@ export type TaskRecurrenceOut = {
 };
 
 /**
+ * TaskRefOut
+ */
+export type TaskRefOut = {
+  /**
+   * Due On
+   */
+  due_on: string | null;
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes: number | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Label
+   */
+  label: string | null;
+  /**
+   * Status
+   */
+  status: string;
+  /**
+   * Title
+   */
+  title: string;
+};
+
+/**
  * TextDocumentPatch
  */
 export type TextDocumentPatch = {
@@ -2499,6 +2607,81 @@ export type WebhookOut = {
    * Status
    */
   status?: "accepted";
+};
+
+/**
+ * WeekDayOut
+ */
+export type WeekDayOut = {
+  /**
+   * Day
+   */
+  day: string;
+  /**
+   * Due
+   */
+  due: Array<TaskRefOut>;
+  /**
+   * Events
+   */
+  events: Array<WeekEventOut>;
+  /**
+   * Free Blocks
+   */
+  free_blocks: Array<FreeBlockOut>;
+  /**
+   * Planned
+   */
+  planned: Array<PlannedBlockOut>;
+  window: WindowOut | null;
+};
+
+/**
+ * WeekEventOut
+ */
+export type WeekEventOut = {
+  /**
+   * Busy
+   */
+  busy: boolean;
+  /**
+   * End
+   */
+  end: string;
+  /**
+   * Matched
+   */
+  matched: boolean;
+  /**
+   * Start
+   */
+  start: string;
+  /**
+   * Title
+   */
+  title: string | null;
+};
+
+/**
+ * WeekOut
+ */
+export type WeekOut = {
+  /**
+   * Days
+   */
+  days: Array<WeekDayOut>;
+  /**
+   * Monday
+   */
+  monday: string;
+  /**
+   * Timezone
+   */
+  timezone: string;
+  /**
+   * Unscheduled
+   */
+  unscheduled: Array<TaskRefOut>;
 };
 
 /**
@@ -4919,6 +5102,71 @@ export type KnowledgeSetProjectFolderResponses = {
 export type KnowledgeSetProjectFolderResponse =
   KnowledgeSetProjectFolderResponses[keyof KnowledgeSetProjectFolderResponses];
 
+export type PlanningGetProjectWeekData = {
+  body?: never;
+  path: {
+    /**
+     * Monday
+     */
+    monday: string;
+  };
+  query: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  url: "/v1/plan/week/{monday}";
+};
+
+export type PlanningGetProjectWeekErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningGetProjectWeekError =
+  PlanningGetProjectWeekErrors[keyof PlanningGetProjectWeekErrors];
+
+export type PlanningGetProjectWeekResponses = {
+  /**
+   * Successful Response
+   */
+  200: WeekOut;
+};
+
+export type PlanningGetProjectWeekResponse =
+  PlanningGetProjectWeekResponses[keyof PlanningGetProjectWeekResponses];
+
 export type PlanningGetDayCalendarData = {
   body?: never;
   path: {
@@ -4978,6 +5226,70 @@ export type PlanningGetDayCalendarResponses = {
 
 export type PlanningGetDayCalendarResponse =
   PlanningGetDayCalendarResponses[keyof PlanningGetDayCalendarResponses];
+
+export type PlanningSchedulePlanItemData = {
+  body: ManualBlockIn;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/plan/{day}/items/{task_id}";
+};
+
+export type PlanningSchedulePlanItemErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningSchedulePlanItemError =
+  PlanningSchedulePlanItemErrors[keyof PlanningSchedulePlanItemErrors];
+
+export type PlanningSchedulePlanItemResponses = {
+  /**
+   * Successful Response
+   */
+  200: PlanItemOut;
+};
+
+export type PlanningSchedulePlanItemResponse =
+  PlanningSchedulePlanItemResponses[keyof PlanningSchedulePlanItemResponses];
 
 export type ProjectsListProjectsData = {
   body?: never;

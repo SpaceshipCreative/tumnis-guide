@@ -286,6 +286,15 @@ export const zLoginOut = z.object({
 });
 
 /**
+ * ManualBlockIn
+ */
+export const zManualBlockIn = z.object({
+  block_end: z.iso.datetime(),
+  block_start: z.iso.datetime(),
+  version: z.int().gte(0).lte(2147483647).nullish(),
+});
+
+/**
  * ModuleFlagIn
  */
 export const zModuleFlagIn = z.object({
@@ -358,6 +367,30 @@ export const zPageDeadLetterOut = z.object({
 export const zPageKeyOut = z.object({
   items: z.array(zKeyOut),
   next_cursor: z.string().nullable(),
+});
+
+/**
+ * PlanItemOut
+ */
+export const zPlanItemOut = z.object({
+  block_end: z.iso.datetime().nullable(),
+  block_start: z.iso.datetime().nullable(),
+  day: z.iso.date(),
+  plan_id: z.uuid(),
+  position: z.int(),
+  reason: z.string(),
+  task_id: z.uuid(),
+  version: z.int(),
+});
+
+/**
+ * PlannedBlockOut
+ */
+export const zPlannedBlockOut = z.object({
+  end: z.iso.datetime(),
+  start: z.iso.datetime(),
+  task_id: z.uuid().nullable(),
+  title: z.string().nullable(),
 });
 
 /**
@@ -1052,6 +1085,18 @@ export const zTaskRecurrenceOut = z.object({
 });
 
 /**
+ * TaskRefOut
+ */
+export const zTaskRefOut = z.object({
+  due_on: z.iso.date().nullable(),
+  estimate_minutes: z.int().nullable(),
+  id: z.uuid(),
+  label: z.string().nullable(),
+  status: z.string(),
+  title: z.string(),
+});
+
+/**
  * TextDocumentPatch
  */
 export const zTextDocumentPatch = z.object({
@@ -1133,6 +1178,17 @@ export const zWebhookOut = z.object({
 });
 
 /**
+ * WeekEventOut
+ */
+export const zWeekEventOut = z.object({
+  busy: z.boolean(),
+  end: z.iso.datetime(),
+  matched: z.boolean(),
+  start: z.iso.datetime(),
+  title: z.string().nullable(),
+});
+
+/**
  * WindowOut
  */
 export const zWindowOut = z.object({
@@ -1148,6 +1204,28 @@ export const zDayCalendarOut = z.object({
   free_blocks: z.array(zFreeBlockOut),
   timezone: z.string(),
   window: zWindowOut.nullable(),
+});
+
+/**
+ * WeekDayOut
+ */
+export const zWeekDayOut = z.object({
+  day: z.iso.date(),
+  due: z.array(zTaskRefOut),
+  events: z.array(zWeekEventOut),
+  free_blocks: z.array(zFreeBlockOut),
+  planned: z.array(zPlannedBlockOut),
+  window: zWindowOut.nullable(),
+});
+
+/**
+ * WeekOut
+ */
+export const zWeekOut = z.object({
+  days: z.array(zWeekDayOut),
+  monday: z.iso.date(),
+  timezone: z.string(),
+  unscheduled: z.array(zTaskRefOut),
 });
 
 /**
@@ -1559,6 +1637,19 @@ export const zKnowledgeSetProjectFolderPath = z.object({
  */
 export const zKnowledgeSetProjectFolderResponse = zProjectFolderOut;
 
+export const zPlanningGetProjectWeekPath = z.object({
+  monday: z.iso.date(),
+});
+
+export const zPlanningGetProjectWeekQuery = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetProjectWeekResponse = zWeekOut;
+
 export const zPlanningGetDayCalendarPath = z.object({
   day: z.iso.date(),
 });
@@ -1567,6 +1658,18 @@ export const zPlanningGetDayCalendarPath = z.object({
  * Successful Response
  */
 export const zPlanningGetDayCalendarResponse = zDayCalendarOut;
+
+export const zPlanningSchedulePlanItemBody = zManualBlockIn;
+
+export const zPlanningSchedulePlanItemPath = z.object({
+  day: z.iso.date(),
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningSchedulePlanItemResponse = zPlanItemOut;
 
 export const zProjectsListProjectsQuery = z.object({
   include_archived: z.boolean().optional().default(false),
