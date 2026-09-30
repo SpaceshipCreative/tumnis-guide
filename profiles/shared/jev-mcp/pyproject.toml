@@ -1,0 +1,21 @@
+[project]
+name = "tumnis-jev-mcp"
+# The profiles' mcp.json run this at the git tag jev-mcp-v<version>; bump both together.
+version = "0.1.0"
+description = "A stdio MCP server exposing TypeSafe's Jev to Tumnis Hermes profiles."
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "mcp==2.2.0",
+  "typesafe-sdk==0.7.2",
+]
+
+[project.scripts]
+tumnis-jev-mcp = "jev_mcp.server:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "jev_mcp"
+module-root = ""

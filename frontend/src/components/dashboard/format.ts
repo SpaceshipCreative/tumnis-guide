@@ -41,3 +41,13 @@ export function formatMinutes(minutes: number): string {
     ? `${String(hours)} h`
     : `${String(hours)} h ${String(rest)} min`;
 }
+
+/** The calendar day `now` falls on in `timeZone`, as `YYYY-MM-DD`. */
+export function localDay(now: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone,
+  }).format(now);
+}

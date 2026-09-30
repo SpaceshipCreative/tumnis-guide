@@ -139,6 +139,9 @@ import type {
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentErrors,
   KnowledgeUploadDocumentResponses,
+  PlanningGetDayCalendarData,
+  PlanningGetDayCalendarErrors,
+  PlanningGetDayCalendarResponses,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectErrors,
   ProjectsArchiveProjectResponses,
@@ -172,6 +175,9 @@ import type {
   SettingsGetSectionData,
   SettingsGetSectionErrors,
   SettingsGetSectionResponses,
+  SettingsGetWorkingHoursData,
+  SettingsGetWorkingHoursErrors,
+  SettingsGetWorkingHoursResponses,
   SettingsGetWorkspaceSettingsData,
   SettingsGetWorkspaceSettingsErrors,
   SettingsGetWorkspaceSettingsResponses,
@@ -181,6 +187,9 @@ import type {
   SettingsPutSectionData,
   SettingsPutSectionErrors,
   SettingsPutSectionResponses,
+  SettingsPutWorkingHoursData,
+  SettingsPutWorkingHoursErrors,
+  SettingsPutWorkingHoursResponses,
   SettingsPutWorkspaceSettingsData,
   SettingsPutWorkspaceSettingsErrors,
   SettingsPutWorkspaceSettingsResponses,
@@ -293,6 +302,7 @@ import {
   zKnowledgeTestLocationResponse,
   zKnowledgeUpdateDocumentResponse,
   zKnowledgeUploadDocumentResponse,
+  zPlanningGetDayCalendarResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
   zProjectsGetProjectResponse,
@@ -304,9 +314,11 @@ import {
   zSearchTypeaheadProjectsResponse,
   zSearchTypeaheadTasksResponse,
   zSettingsGetSectionResponse,
+  zSettingsGetWorkingHoursResponse,
   zSettingsGetWorkspaceSettingsResponse,
   zSettingsListModulesResponse,
   zSettingsPutSectionResponse,
+  zSettingsPutWorkingHoursResponse,
   zSettingsPutWorkspaceSettingsResponse,
   zSettingsSetModuleResponse,
   zTasksAddCommentResponse,
@@ -1200,6 +1212,27 @@ export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Day Calendar
+ */
+export const planningGetDayCalendar = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetDayCalendarData, ThrowOnError>,
+): RequestResult<
+  PlanningGetDayCalendarResponses,
+  PlanningGetDayCalendarErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetDayCalendarResponses,
+    PlanningGetDayCalendarErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetDayCalendarResponse.parseAsync(data),
+    url: "/v1/plan/{day}/calendar",
+    ...options,
+  });
+
+/**
  * List Projects
  *
  * Projects in board order; archived ones with `include_archived=true`.
@@ -1666,6 +1699,52 @@ export const settingsSetModule = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zSettingsSetModuleResponse.parseAsync(data),
     url: "/v1/settings/modules",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Working Hours
+ */
+export const settingsGetWorkingHours = <ThrowOnError extends boolean = false>(
+  options?: Options<SettingsGetWorkingHoursData, ThrowOnError>,
+): RequestResult<
+  SettingsGetWorkingHoursResponses,
+  SettingsGetWorkingHoursErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    SettingsGetWorkingHoursResponses,
+    SettingsGetWorkingHoursErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSettingsGetWorkingHoursResponse.parseAsync(data),
+    url: "/v1/settings/working-hours",
+    ...options,
+  });
+
+/**
+ * Put Working Hours
+ */
+export const settingsPutWorkingHours = <ThrowOnError extends boolean = false>(
+  options: Options<SettingsPutWorkingHoursData, ThrowOnError>,
+): RequestResult<
+  SettingsPutWorkingHoursResponses,
+  SettingsPutWorkingHoursErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    SettingsPutWorkingHoursResponses,
+    SettingsPutWorkingHoursErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSettingsPutWorkingHoursResponse.parseAsync(data),
+    url: "/v1/settings/working-hours",
     ...options,
     headers: {
       "Content-Type": "application/json",

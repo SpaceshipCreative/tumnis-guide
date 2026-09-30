@@ -1,0 +1,31 @@
+# A Monday with eight candidates across two projects: at most five picks, each one a
+# candidate with a reason.
+id: plan-monday-four-picks
+profile: master
+skill: plan
+input: ../../recordings/plan/monday_four_picks.packet.json
+output_schema: {family: planning, name: result, version: 1}
+meta:
+  test_id: T-P1-05-04
+  req: [FR-5.2]
+  wp: P1-05
+  xfail: spec:P1-05
+expect:
+  tool_calls:
+    allow: []
+  rules: [planning_errors]
+  json:
+    - {path: "$.picks", type: array, min_items: 1, max_items: 5}
+    - path: "$.picks"
+      each:
+        - path: "$.task_id"
+          in:
+            - 01950000-0000-7000-8000-000000000811
+            - 01950000-0000-7000-8000-000000000812
+            - 01950000-0000-7000-8000-000000000813
+            - 01950000-0000-7000-8000-000000000814
+            - 01950000-0000-7000-8000-000000000815
+            - 01950000-0000-7000-8000-000000000816
+            - 01950000-0000-7000-8000-000000000817
+            - 01950000-0000-7000-8000-000000000818
+        - {path: "$.reason", type: string, nonempty: true}

@@ -1,0 +1,7 @@
+# A profile distribution never carries credentials or the agent's own data (FR-5.10).
+*/.env
+*/auth.json
+*/memories/
+*/sessions/
+*/state.db
+*/logs/

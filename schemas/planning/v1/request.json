@@ -1,0 +1,364 @@
+{
+  "$defs": {
+    "EventSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "format": "date-time",
+          "title": "End",
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "title": "Start",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "start",
+        "end"
+      ],
+      "title": "EventSummary",
+      "type": "object"
+    },
+    "Interval": {
+      "additionalProperties": false,
+      "description": "A span of time, UTC; the planner's `calendar.rules.Interval` on the wire (P1-09).",
+      "properties": {
+        "end": {
+          "format": "date-time",
+          "title": "End",
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "Interval",
+      "type": "object"
+    },
+    "PlanCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "age_days": {
+          "minimum": 0,
+          "title": "Age Days",
+          "type": "integer"
+        },
+        "due_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due On"
+        },
+        "estimate_minutes": {
+          "anyOf": [
+            {
+              "maximum": 960,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Estimate Minutes"
+        },
+        "first_action": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "First Action"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "enum": [
+                "human",
+                "ai",
+                "hybrid"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Label"
+        },
+        "priority": {
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "project_name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Project Name",
+          "type": "string"
+        },
+        "rollover_count": {
+          "minimum": 0,
+          "title": "Rollover Count",
+          "type": "integer"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "project_id",
+        "project_name",
+        "title",
+        "label",
+        "estimate_minutes",
+        "due_on",
+        "priority",
+        "rollover_count",
+        "first_action",
+        "age_days"
+      ],
+      "title": "PlanCandidate",
+      "type": "object"
+    },
+    "PlanProject": {
+      "additionalProperties": false,
+      "properties": {
+        "brief_excerpt": {
+          "maxLength": 600,
+          "title": "Brief Excerpt",
+          "type": "string"
+        },
+        "health": {
+          "enum": [
+            "on_track",
+            "at_risk",
+            "blocked"
+          ],
+          "title": "Health",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "next_milestone": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Milestone"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "health",
+        "next_milestone",
+        "brief_excerpt"
+      ],
+      "title": "PlanProject",
+      "type": "object"
+    },
+    "ProjectAgentEntry": {
+      "additionalProperties": false,
+      "description": "One row of the master's registry of project agents (filled by P1-06).",
+      "properties": {
+        "profile": {
+          "maxLength": 63,
+          "title": "Profile",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "project_name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Project Name",
+          "type": "string"
+        },
+        "runner": {
+          "anyOf": [
+            {
+              "maxLength": 63,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Runner"
+        },
+        "status": {
+          "maxLength": 32,
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "project_name",
+        "profile",
+        "status",
+        "runner"
+      ],
+      "title": "ProjectAgentEntry",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/planning/v1/request.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "agents": {
+      "items": {
+        "$ref": "#/$defs/ProjectAgentEntry"
+      },
+      "maxItems": 200,
+      "title": "Agents",
+      "type": "array"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/PlanCandidate"
+      },
+      "maxItems": 60,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "day": {
+      "format": "date",
+      "title": "Day",
+      "type": "string"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/EventSummary"
+      },
+      "maxItems": 100,
+      "title": "Events",
+      "type": "array"
+    },
+    "free_blocks": {
+      "items": {
+        "$ref": "#/$defs/Interval"
+      },
+      "maxItems": 48,
+      "title": "Free Blocks",
+      "type": "array"
+    },
+    "max_items": {
+      "const": 5,
+      "default": 5,
+      "title": "Max Items",
+      "type": "integer"
+    },
+    "now": {
+      "format": "date-time",
+      "title": "Now",
+      "type": "string"
+    },
+    "projects": {
+      "items": {
+        "$ref": "#/$defs/PlanProject"
+      },
+      "maxItems": 200,
+      "title": "Projects",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "timezone": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Timezone",
+      "type": "string"
+    },
+    "working_window": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Interval"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "day",
+    "timezone",
+    "now",
+    "working_window",
+    "free_blocks",
+    "candidates",
+    "projects",
+    "agents",
+    "events"
+  ],
+  "title": "PlanningRequest",
+  "type": "object"
+}

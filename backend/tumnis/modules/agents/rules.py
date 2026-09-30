@@ -9,13 +9,16 @@
   can never carry a path or a shell trick; a few names are reserved.
 - `select_runner`: the runner a daemon-transport profile runs on, when it is online and
   lists the profile in its inventory.
+- Skill replies (P1-05): `enrichment_errors` and `planning_errors`, the cross-field checks
+  a JSON Schema cannot express, shared by the skill harness and the workflows that apply
+  a reply (P1-08, P1-11). They read the skill models of `skill_io.py` structurally.
 """
 
 import re
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Final, Literal
+from typing import Final, Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -25,6 +28,9 @@ SKILL_RE: Final = r"^[a-z][a-z0-9-]{0,40}$"
 HEARTBEAT_S: Final = 15  # architecture: every 15 seconds
 MISSED_BEATS: Final = 3
 RESERVED_PROFILE_NAMES: Final = frozenset({"default", "root", "hermes", "tumnis"})
+
+Label = Literal["human", "ai", "hybrid"]  # the task labels (FR-4.1)
+ESTIMATED_LABELS: Final[frozenset[str]] = frozenset({"human", "hybrid"})
 
 _NAME: Final = re.compile(NAME_RE)
 
@@ -123,3 +129,111 @@ def select_runner(
         online = runner_status(runner.last_heartbeat_at, now) == "online"
         return runner if online and profile.name in runner.inventory else None
     return None
+
+
+# --- skill replies (P1-05) ---------------------------------------------------------------
+
+
+class _EnrichTaskView(Protocol):
+    @property
+    def id(self) -> UUID: ...
+    @property
+    def label(self) -> Label: ...
+
+
+class EnrichmentRequestView(Protocol):
+    """What the rule reads of an `EnrichmentRequest` (skill_io.py)."""
+
+    @property
+    def task(self) -> _EnrichTaskView: ...
+
+
+class _LabelRevisionView(Protocol):
+    @property
+    def label(self) -> Label: ...
+
+
+class EnrichmentResultView(Protocol):
+    """What the rule reads of an `EnrichmentResult` (skill_io.py)."""
+
+    @property
+    def task_id(self) -> UUID: ...
+    @property
+    def estimate_minutes(self) -> int | None: ...
+    @property
+    def label_revision(self) -> _LabelRevisionView | None: ...
+    @property
+    def hybrid_split(self) -> object | None: ...
+
+
+def enrichment_errors(req: EnrichmentRequestView, res: EnrichmentResultView) -> list[str]:
+    """The cross-field rules an enrichment result breaks, in a fixed order; [] when none.
+
+    effective = res.label_revision.label if present else req.task.label
+    - res.task_id == req.task.id                                   -> 'task_id_mismatch'
+    - estimate_minutes present iff effective in {human, hybrid}   -> 'estimate_for_ai',
+                                                                      'estimate_missing'
+    - hybrid_split present iff effective == hybrid                -> 'hybrid_split_missing',
+                                                                      'hybrid_split_unexpected'
+    """
+    effective = res.label_revision.label if res.label_revision is not None else req.task.label
+    errors: list[str] = []
+    if res.task_id != req.task.id:
+        errors.append("task_id_mismatch")
+    estimated = effective in ESTIMATED_LABELS
+    if res.estimate_minutes is not None and not estimated:
+        errors.append("estimate_for_ai")
+    elif res.estimate_minutes is None and estimated:
+        errors.append("estimate_missing")
+    hybrid = effective == "hybrid"
+    if res.hybrid_split is None and hybrid:
+        errors.append("hybrid_split_missing")
+    elif res.hybrid_split is not None and not hybrid:
+        errors.append("hybrid_split_unexpected")
+    return errors
+
+
+class _CandidateView(Protocol):
+    @property
+    def task_id(self) -> UUID: ...
+
+
+class PlanningRequestView(Protocol):
+    """What the rule reads of a `PlanningRequest` (skill_io.py)."""
+
+    @property
+    def max_items(self) -> int: ...
+    @property
+    def candidates(self) -> Sequence[_CandidateView]: ...
+
+
+class _PickView(Protocol):
+    @property
+    def task_id(self) -> UUID: ...
+
+
+class PlanningResultView(Protocol):
+    """What the rule reads of a `PlanningResult` (skill_io.py)."""
+
+    @property
+    def picks(self) -> Sequence[_PickView]: ...
+    @property
+    def alternates(self) -> Sequence[UUID]: ...
+
+
+def planning_errors(req: PlanningRequestView, res: PlanningResultView) -> list[str]:
+    """The rules a planning result breaks, in a fixed order; [] when none: every pick and
+    alternate is one of the request's candidates (no invented task ids), no task is picked
+    twice, and there are at most `max_items` picks."""
+    offered = {c.task_id for c in req.candidates}
+    picked = [p.task_id for p in res.picks]
+    errors: list[str] = []
+    if any(task_id not in offered for task_id in picked):
+        errors.append("unknown_pick")
+    if len(set(picked)) != len(picked):
+        errors.append("duplicate_pick")
+    if len(picked) > req.max_items:
+        errors.append("too_many_picks")
+    if any(task_id not in offered for task_id in res.alternates):
+        errors.append("unknown_alternate")
+    return errors

@@ -19,6 +19,7 @@ import copy
 import difflib
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -46,6 +47,8 @@ EXEMPT_GLOBS = ("backend/tests/contract/generated/**", "frontend/src/api/**")
 GENERATED_HEADER = ("# @generated", "// @generated")
 PYTESTMARK = "<pytestmark>"
 SPEC_CHANGE = "spec-change"
+# A skill case's spec marker (profiles/tests/cases/**.yaml, `meta.xfail: spec:<WP>`).
+CASE_SPEC_XFAIL = re.compile(r"""^\s*xfail:\s*["']?spec:[^"'\s]*["']?\s*$""")
 
 
 @dataclass(frozen=True)
@@ -138,11 +141,14 @@ def is_exempt(path: str, base_src: str) -> bool:
 
 
 def _compare_text(path: str, base_src: str, head_src: str) -> list[Violation]:
-    """Skill test cases and other data-only tests: any change but whitespace is an edit."""
+    """Skill test cases and other data-only tests: any change but whitespace is an edit,
+    except dropping a case's `xfail: spec:<WP>` line and nothing else."""
     before = [line.rstrip() for line in base_src.strip().splitlines()]
     after = [line.rstrip() for line in head_src.strip().splitlines()]
     if before == after:
         return []
+    if [line for line in before if not CASE_SPEC_XFAIL.match(line)] == after:
+        return []  # only the spec marker went: the case's analogue of dropping a spec xfail
     return [Violation(path, "*", "edited_test", unified_diff(base_src, head_src))]
 
 

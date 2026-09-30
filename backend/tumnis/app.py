@@ -117,11 +117,12 @@ def operation_id(route: Any) -> str:
     return f"{tags[0]}_{route.name}" if tags else str(route.name)
 
 
-def module_routers() -> list[APIRouter]:
-    """Each module's `router` (tumnis.modules.<m>.router.router), when it declares one."""
+def module_routers(name: str = "router") -> list[APIRouter]:
+    """Each module's `router` (tumnis.modules.<m>.router.router), when it declares one;
+    `name="settings_router"` gives the modules' routers under /v1/settings instead."""
     found = []
     for module in modules.MODULES:
-        router = getattr(importlib.import_module(f"tumnis.modules.{module}.router"), "router", None)
+        router = getattr(importlib.import_module(f"tumnis.modules.{module}.router"), name, None)
         if isinstance(router, APIRouter):
             found.append(router)
     return found
@@ -134,7 +135,10 @@ def v1_routes(settings: Settings, extra_routers: Sequence[APIRouter] = ()) -> AP
     v1.include_router(deadletter.router)
     v1.include_router(audit_router.router)
     v1.include_router(auth_router.settings_router)  # R-14
-    v1.include_router(settings_router.router)  # P0-26: after /settings/workspace
+    for router in module_routers("settings_router"):  # P1-10: /settings/working-hours
+        if router is not auth_router.settings_router:
+            v1.include_router(router)
+    v1.include_router(settings_router.router)  # P0-26: after the modules' own sections
     for router in module_routers():
         v1.include_router(router)
     if settings.tumnis_adapters == "fake":

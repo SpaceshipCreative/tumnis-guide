@@ -1,14 +1,31 @@
-// Project settings (P0-24, FR-2.7, FR-3.8): the subtask threshold; empty means the
-// workspace default.
-import { useQuery } from "@tanstack/react-query";
+// The project rail's Settings section. P0-24 (FR-2.7, FR-3.8): the subtask threshold;
+// empty means the workspace default. P1-02 (Data flow rule 6): the local decisions only
+// switch. Turning it on keeps every decision about the project's items on the local vLLM
+// model; nothing is sent to Jev. A toggle sends one PATCH /v1/projects/{id} with the
+// version it read; a 409 shows the current value with a notice (REL-2).
+// In the rail, RailSections opens one section at a time (`open`, `onToggle`); rendered on
+// its own, the section starts open and toggles itself.
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
+import type * as z from "zod";
 
+import type { ProjectOut } from "../../../api/types.gen";
+import { zProjectOut } from "../../../api/zod.gen";
+import {
+  ApiError,
+  apiWrite,
+  ConflictError,
+  useWrite,
+} from "../../../lib/fetch";
 import { workspaceQuery } from "../../settings/queries";
 import { useUpdateProject } from "../mutations";
+import { projectQuery } from "../queries";
 import type { Project } from "../types";
 import { fieldClass, RailSection, saveClass } from "./RailSection";
 
 const DEFAULT_THRESHOLD = 30; // the workspace default until settings load (FR-3.8)
+
+type Saved = z.infer<typeof zProjectOut>;
 
 function SettingsForm({
   project,
@@ -59,34 +76,156 @@ function SettingsForm({
   );
 }
 
+function LocalDecisionsSwitch({ project }: { project: Project }) {
+  const queryClient = useQueryClient();
+  const ids = { label: useId(), hint: useId() };
+  const [written, setSaved] = useState({
+    localOnly: project.local_decisions_only ?? false,
+    version: project.version,
+  });
+  // A refetch that brings a newer project (a rename elsewhere, a live update, a saved
+  // threshold) wins over what this switch last wrote, so the next toggle sends the
+  // current version.
+  const saved =
+    project.version > written.version
+      ? {
+          localOnly: project.local_decisions_only ?? false,
+          version: project.version,
+        }
+      : written;
+  const [message, setMessage] = useState<string | null>(null);
+
+  function show(current: Saved) {
+    queryClient.setQueryData(
+      projectQuery(project.id).queryKey,
+      current as ProjectOut,
+    );
+    setSaved({
+      localOnly: current.local_decisions_only,
+      version: current.version,
+    });
+  }
+
+  const save = useWrite<
+    { local_decisions_only: boolean; version: number; idempotencyKey?: string },
+    Saved
+  >({
+    mutationFn: ({ version, idempotencyKey, ...body }) =>
+      apiWrite({
+        kind: "update",
+        method: "PATCH",
+        path: `/projects/${project.id}`,
+        body,
+        version,
+        idempotencyKey,
+        schema: zProjectOut,
+      }),
+    onSuccess: show,
+    onError: (error) => {
+      if (error instanceof ConflictError) {
+        const current = zProjectOut.safeParse(error.current);
+        if (current.success) {
+          show(current.data);
+          setMessage(
+            "This project changed elsewhere; you are now seeing the current setting.",
+          );
+          return;
+        }
+      }
+      setMessage(
+        error instanceof ApiError
+          ? (error.problem.detail ?? error.message)
+          : "The setting could not be saved.",
+      );
+    },
+  });
+
+  function toggle() {
+    setMessage(null);
+    save.mutate({
+      local_decisions_only: !saved.localOnly,
+      version: saved.version,
+    });
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-2 border-t border-border pt-3">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <span id={ids.label} className="text-sm font-medium">
+          Local decisions only
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={saved.localOnly}
+          aria-labelledby={ids.label}
+          aria-describedby={ids.hint}
+          disabled={save.isPending}
+          onClick={toggle}
+          className={`relative inline-flex min-h-11 min-w-16 shrink-0 items-center rounded-full border border-border px-1 disabled:opacity-60 ${
+            saved.localOnly ? "bg-accent" : "bg-surface"
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className={`h-7 w-7 rounded-full bg-text transition-transform ${
+              saved.localOnly ? "translate-x-7" : "translate-x-0"
+            }`}
+          />
+        </button>
+      </div>
+      <p id={ids.hint} className="text-sm text-muted">
+        Decisions about this project&apos;s items run on the local model and are
+        never sent to Jev. They are judged more strictly, so more of them come
+        to you for review.
+      </p>
+      {message ? (
+        <p role="status" className="text-sm text-muted">
+          {message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function SettingsSection({
   project,
   open,
   onToggle,
 }: {
   project: Project;
-  open: boolean;
-  onToggle: () => void;
+  open?: boolean;
+  onToggle?: () => void;
 }) {
+  const [ownOpen, setOwnOpen] = useState(true);
   const workspace = useQuery(workspaceQuery());
   const workspaceDefault =
     workspace.data?.subtask_threshold_min ?? DEFAULT_THRESHOLD;
-  const summary =
+  const threshold =
     project.subtask_threshold_min == null
       ? "Subtask threshold: workspace default"
       : `Subtask threshold: ${String(project.subtask_threshold_min)} min`;
+  const summary = project.local_decisions_only
+    ? `${threshold} · Local decisions only`
+    : threshold;
   return (
     <RailSection
       title="Settings"
       summary={summary}
-      open={open}
-      onToggle={onToggle}
+      open={open ?? ownOpen}
+      onToggle={
+        onToggle ??
+        (() => {
+          setOwnOpen((current) => !current);
+        })
+      }
     >
       <SettingsForm
         key={project.version}
         project={project}
         workspaceDefault={workspaceDefault}
       />
+      <LocalDecisionsSwitch project={project} />
     </RailSection>
   );
 }

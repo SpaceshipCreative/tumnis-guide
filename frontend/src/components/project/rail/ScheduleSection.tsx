@@ -2,7 +2,8 @@
 // /v1/recurrence?project_id=`, P0-19); each opens its current task in the drawer.
 import { useQuery } from "@tanstack/react-query";
 
-import { projectRecurrenceQuery, type RecurrenceRule } from "../queries";
+import type { RecurrenceOut } from "../../../api/types.gen";
+import { projectRecurrenceQuery } from "../queries";
 import { RailSection } from "./RailSection";
 
 const PRESET_WORDS = {
@@ -12,7 +13,7 @@ const PRESET_WORDS = {
   monthly: "Monthly",
 } as const;
 
-export function cadenceWords(rule: RecurrenceRule): string {
+export function cadenceWords(rule: Pick<RecurrenceOut, "preset">): string {
   return rule.preset ? PRESET_WORDS[rule.preset] : "Custom schedule";
 }
 
@@ -53,8 +54,9 @@ export function ScheduleSection({
             <li key={rule.id}>
               <button
                 type="button"
+                disabled={rule.latest_task_id === null}
                 onClick={() => {
-                  onOpenTask(rule.latest_task_id ?? rule.task_id);
+                  if (rule.latest_task_id) onOpenTask(rule.latest_task_id);
                 }}
                 className="flex min-h-11 w-full items-center justify-between gap-2 rounded-md px-2 text-left text-sm hover:bg-surface-muted md:min-h-8"
               >

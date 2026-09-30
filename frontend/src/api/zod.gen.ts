@@ -90,6 +90,17 @@ export const zContextItemIn = z.object({
 });
 
 /**
+ * DayEventOut
+ */
+export const zDayEventOut = z.object({
+  account: z.string(),
+  busy: z.boolean(),
+  end: z.iso.datetime(),
+  start: z.iso.datetime(),
+  title: z.string().nullable(),
+});
+
+/**
  * DeadLetterOut
  */
 export const zDeadLetterOut = z.object({
@@ -158,6 +169,15 @@ export const zDocumentStatusOut = z.object({
  */
 export const zFolderIn = z.object({
   location_id: z.uuid(),
+});
+
+/**
+ * FreeBlockOut
+ */
+export const zFreeBlockOut = z.object({
+  end: z.iso.datetime(),
+  minutes: z.int(),
+  start: z.iso.datetime(),
 });
 
 /**
@@ -466,6 +486,7 @@ export const zProjectOut = z.object({
   id: z.uuid(),
   last_agent_activity_at: z.iso.datetime().nullish(),
   links: z.array(zProjectLinkIn).optional().default([]),
+  local_decisions_only: z.boolean().optional().default(false),
   name: z.string().min(1).max(120),
   next_milestone: z.iso.date().nullable(),
   open_count: z.int(),
@@ -501,6 +522,7 @@ export const zProjectPatch = z.object({
   deadline: z.iso.date().nullish(),
   goal: z.string().max(280).nullish(),
   links: z.array(zProjectLinkIn).nullish(),
+  local_decisions_only: z.boolean().optional(),
   name: z.string().min(1).max(120).nullish(),
   profile_name: z.string().nullish(),
   repo_url: z.string().nullish(),
@@ -1035,6 +1057,49 @@ export const zUsageRow = z.object({
 });
 
 /**
+ * WindowOut
+ */
+export const zWindowOut = z.object({
+  end: z.iso.datetime(),
+  start: z.iso.datetime(),
+});
+
+/**
+ * DayCalendarOut
+ */
+export const zDayCalendarOut = z.object({
+  events: z.array(zDayEventOut),
+  free_blocks: z.array(zFreeBlockOut),
+  timezone: z.string(),
+  window: zWindowOut.nullable(),
+});
+
+/**
+ * WorkingDay
+ */
+export const zWorkingDay = z.object({
+  end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  weekday: z.int().gte(0).lte(6),
+});
+
+/**
+ * WorkingHoursIn
+ */
+export const zWorkingHoursIn = z.object({
+  days: z.array(zWorkingDay).min(1).max(7),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * WorkingHoursOut
+ */
+export const zWorkingHoursOut = z.object({
+  days: z.array(zWorkingDay),
+  version: z.int(),
+});
+
+/**
  * WorkspaceSettingsIn
  */
 export const zWorkspaceSettingsIn = z.object({
@@ -1392,6 +1457,15 @@ export const zKnowledgeSetProjectFolderPath = z.object({
  */
 export const zKnowledgeSetProjectFolderResponse = zProjectFolderOut;
 
+export const zPlanningGetDayCalendarPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetDayCalendarResponse = zDayCalendarOut;
+
 export const zProjectsListProjectsQuery = z.object({
   include_archived: z.boolean().optional().default(false),
   cursor: z.string().max(2048).nullish(),
@@ -1574,6 +1648,18 @@ export const zSettingsSetModuleBody = zModuleFlagIn;
  * Successful Response
  */
 export const zSettingsSetModuleResponse = zModuleFlagOut;
+
+/**
+ * Successful Response
+ */
+export const zSettingsGetWorkingHoursResponse = zWorkingHoursOut;
+
+export const zSettingsPutWorkingHoursBody = zWorkingHoursIn;
+
+/**
+ * Successful Response
+ */
+export const zSettingsPutWorkingHoursResponse = zWorkingHoursOut;
 
 /**
  * Successful Response

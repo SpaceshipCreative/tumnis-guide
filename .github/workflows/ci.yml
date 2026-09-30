@@ -34,6 +34,8 @@ jobs:
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the profile VERSION check diffs against the base commit
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
@@ -57,6 +59,15 @@ jobs:
           uv run ruff check --config pyproject.toml ../scripts/ci ../scripts/release
           uv run ruff format --config pyproject.toml --check ../scripts/ci ../scripts/release
           uv run mypy --strict ../scripts/ci ../scripts/release
+      - name: Profile VERSION bumps (P1-05)
+        working-directory: backend
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          case "$BASE_SHA" in
+            "" | 0000000000000000000000000000000000000000) echo "no base commit; skipped" ;;
+            *) uv run python ../scripts/ci/profile_version_check.py --base "$BASE_SHA" --head "$GITHUB_SHA" ;;
+          esac
       - name: Frontend lint and types
         working-directory: frontend
         run: |
@@ -227,11 +238,47 @@ jobs:
   # Skills and Performance need the homelab self-hosted runner (P1-05, P0-29). Until the
   # repo variable HOMELAB_RUNNER is "true" they run as stubs on a GitHub-hosted runner, so
   # a missing or offline homelab runner can never leave a required check queued.
+  # Skills (P1-05): the only job that calls a model. The harness's own tests run on any
+  # runner. The skill cases (3 runs each through the real Hermes and the pinned model) run
+  # only on the homelab runner, which never takes a fork's PR, and only when profiles/, the
+  # skill schemas or the daemon's run path changed; otherwise the job exits green.
   skills:
-    runs-on: ${{ vars.HOMELAB_RUNNER == 'true' && fromJSON('["self-hosted", "homelab"]') || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOMELAB_RUNNER == 'true' && github.event.pull_request.head.repo.fork != true && fromJSON('["self-hosted", "homelab", "hermes"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
-      - run: echo "Skills job is a stub until P1-05 (profiles harness on the homelab runner)"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the change check diffs against the base commit
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: profiles/uv.lock
+      - name: Harness lint, types and tests; every case loads
+        working-directory: profiles
+        run: |
+          uv sync
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy
+          uv run pytest -q
+          uv run python -m harness check --cases tests/cases
+      - name: Did a skill input change?
+        id: changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          changed=true
+          case "$BASE_SHA" in
+            "" | 0000000000000000000000000000000000000000) ;;
+            *) git diff --quiet "$BASE_SHA...$GITHUB_SHA" -- profiles schemas/enrichment \
+                 schemas/planning daemon && changed=false ;;
+          esac
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "skill inputs changed: $changed"
+      - name: Skill cases, 3 runs each (homelab Hermes)
+        if: runner.environment == 'self-hosted' && steps.changed.outputs.changed == 'true'
+        working-directory: profiles
+        run: uv run python -m harness run --cases tests/cases --junit "$RUNNER_TEMP/skills-junit.xml"
 
   # Security (P0-16, SEC-7): every tool exits non-zero on a high or critical finding, and
   # the job is required, so such a finding blocks the merge. A finding with no fix yet goes

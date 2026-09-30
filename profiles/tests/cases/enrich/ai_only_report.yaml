@@ -1,0 +1,22 @@
+# An AI task: no estimate (minutes of human time) and no split.
+id: enrich-ai-only-report
+profile: project-template
+skill: enrich
+input: ../../recordings/enrich/ai_only_report.packet.json
+output_schema: {family: enrichment, name: result, version: 1}
+meta:
+  test_id: T-P1-05-02
+  req: [FR-4.4]
+  wp: P1-05
+  xfail: spec:P1-05
+expect:
+  tool_calls:
+    allow: []
+  rules: [enrichment_errors]
+  json:
+    - {path: "$.task_id", equals_input: "$.body.task.id"}
+    - {path: "$.first_action", type: string, nonempty: true}
+    - {path: "$.acceptance_criteria", type: array, min_items: 1, max_items: 6}
+    - {path: "$.label_revision", absent: true}
+    - {path: "$.estimate_minutes", absent: true}
+    - {path: "$.hybrid_split", absent: true}

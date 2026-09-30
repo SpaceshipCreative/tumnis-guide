@@ -42,6 +42,12 @@ from tumnis.modules.agents.rules import (
     runner_status,
     validate_profile_name,
 )
+from tumnis.modules.agents.skill_io import (
+    EnrichmentRequest,
+    EnrichmentResult,
+    PlanningRequest,
+    PlanningResult,
+)
 from tumnis.modules.auth import api as auth
 from tumnis.modules.projects import api as projects
 
@@ -55,7 +61,11 @@ __all__ = [
     "AgentHealth",
     "AgentProfileOut",
     "AgentUnavailable",
+    "EnrichmentRequest",
+    "EnrichmentResult",
     "HealthCheckAccepted",
+    "PlanningRequest",
+    "PlanningResult",
     "ProfileIn",
     "ProfilePatch",
     "RunEvent",

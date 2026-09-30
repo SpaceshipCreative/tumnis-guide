@@ -1,0 +1,131 @@
+{
+  "$defs": {
+    "HybridSplit": {
+      "additionalProperties": false,
+      "properties": {
+        "ai_portion": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Ai Portion",
+          "type": "string"
+        },
+        "human_portion": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Human Portion",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ai_portion",
+        "human_portion"
+      ],
+      "title": "HybridSplit",
+      "type": "object"
+    },
+    "LabelRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "reason"
+      ],
+      "title": "LabelRevision",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/enrichment/v1/result.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The `enrich` skill's reply. `estimate_minutes` is minutes of human time: for a\nhybrid task the human portion only, and never for an ai task.",
+  "properties": {
+    "acceptance_criteria": {
+      "items": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 6,
+      "minItems": 1,
+      "title": "Acceptance Criteria",
+      "type": "array"
+    },
+    "estimate_minutes": {
+      "anyOf": [
+        {
+          "maximum": 960,
+          "minimum": 5,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimate Minutes"
+    },
+    "first_action": {
+      "maxLength": 200,
+      "minLength": 8,
+      "title": "First Action",
+      "type": "string"
+    },
+    "hybrid_split": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HybridSplit"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "label_revision": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LabelRevision"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task_id": {
+      "format": "uuid",
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "task_id",
+    "first_action",
+    "acceptance_criteria"
+  ],
+  "title": "EnrichmentResult",
+  "type": "object"
+}
