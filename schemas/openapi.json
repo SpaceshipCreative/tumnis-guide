@@ -39,6 +39,35 @@
         "title": "AccountOut",
         "type": "object"
       },
+      "AgentProfileChoice": {
+        "additionalProperties": false,
+        "description": "The project's agent (P1-06): a new Hermes profile from the project template\n(`create`, the default; named after the project, so `name` is ignored), or an existing\nprofile on the agent server, by `name` (`link`; `create_project` answers 422\n`invalid_profile_choice` without one). The agents module provisions it on\n`project.created`.",
+        "properties": {
+          "mode": {
+            "default": "create",
+            "enum": [
+              "create",
+              "link"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "AgentProfileChoice",
+        "type": "object"
+      },
       "AgentProfileOut": {
         "properties": {
           "created_at": {
@@ -2373,7 +2402,8 @@
         "title": "ProfilePatch",
         "type": "object"
       },
-      "ProjectCreate": {
+      "ProjectCreateIn": {
+        "description": "The body of `POST /v1/projects`: a project and the agent to give it (P1-06), a new\nprofile from the template (the default, also when `profile` is absent) or an existing\none. Reads never carry it: the agent is the agents module's.",
         "properties": {
           "brief_md": {
             "default": "",
@@ -2441,6 +2471,16 @@
             "title": "Name",
             "type": "string"
           },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentProfileChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "profile_name": {
             "anyOf": [
               {
@@ -2483,7 +2523,7 @@
         "required": [
           "name"
         ],
-        "title": "ProjectCreate",
+        "title": "ProjectCreateIn",
         "type": "object"
       },
       "ProjectDeployStatus": {
@@ -5272,9 +5312,26 @@
     },
     "/v1/agents/profiles": {
       "get": {
-        "description": "Agent profiles by name, with their last health check.",
+        "description": "Agent profiles by name, with their last health check; `project_id` narrows them to\nthat project's agent (the project header, P1-06).",
         "operationId": "agents_list_profiles",
         "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
           {
             "in": "query",
             "name": "cursor",
@@ -9998,7 +10055,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectCreate"
+                "$ref": "#/components/schemas/ProjectCreateIn"
               }
             }
           },

@@ -455,7 +455,8 @@ export const agentsListProfilesQueryKey = (
 /**
  * List Profiles
  *
- * Agent profiles by name, with their last health check.
+ * Agent profiles by name, with their last health check; `project_id` narrows them to
+ * that project's agent (the project header, P1-06).
  */
 export const agentsListProfilesOptions = (
   options?: Options<AgentsListProfilesData>,
@@ -520,7 +521,8 @@ export const agentsListProfilesInfiniteQueryKey = (
 /**
  * List Profiles
  *
- * Agent profiles by name, with their last health check.
+ * Agent profiles by name, with their last health check; `project_id` narrows them to
+ * that project's agent (the project header, P1-06).
  */
 export const agentsListProfilesInfiniteOptions = (
   options?: Options<AgentsListProfilesData>,

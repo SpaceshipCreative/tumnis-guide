@@ -114,6 +114,13 @@ def configure_generation(settings: Settings) -> None:
     decisions.configure_net_policy(settings.net_policy())
 
 
+def configure_agents(settings: Settings) -> None:
+    """How long profile provisioning waits for the runner (P1-06): only the worker runs
+    `provision_profile`."""
+    agents = importlib.import_module("tumnis.modules.agents.api")
+    agents.configure_provisioning(timeout_s=settings.agents.provision_timeout_s)
+
+
 def configure_folder_sync(settings: Settings) -> None:
     """The folder sync's SSRF policy (P1-15): every location is opened with the worker's."""
     importlib.import_module("tumnis.modules.knowledge.sync").configure(settings.net_policy())
@@ -186,6 +193,7 @@ def main(settings: Settings, *, app_version: str | None = None) -> None:
     install_master_keys(settings)
     modules.configure(settings)
     configure_generation(settings)
+    configure_agents(settings)
     configure_folder_sync(settings)
     cache.configure_backend(
         cache.InProcessCache(SystemClock(), publish=cache.pg_publisher(db.direct_engine))

@@ -24,7 +24,15 @@ SKILL_RE: Final = r"^[a-z][a-z0-9-]{0,40}$"
 PROTOCOL_VERSIONS: Final = (1, 2)  # what this daemon speaks
 PROTOCOL_2: Final = 2
 # Advertised on register; "archive" joins with P2-18's behavior.
-CAPABILITIES: Final = ("run", "health", "stream", "cancel", "upload_artifact", "worktree")
+CAPABILITIES: Final = (
+    "run",
+    "provision",
+    "health",
+    "stream",
+    "cancel",
+    "upload_artifact",
+    "worktree",
+)
 TEXT_MAX: Final = 65_536
 ERROR_MAX: Final = 4_096
 STREAM_TEXT_MAX: Final = 8_192  # one stream line (plan default, 8 KiB)
