@@ -42,6 +42,7 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("review_items", "kind"): "row_factory",  # ck_review_items_kind
     ("calendar_accounts", "status"): "connected",  # ck_calendar_accounts_status
     ("storage_locations", "kind"): "server_path",  # ck_storage_locations_kind
+    ("folder_files", "origin"): "tumnis",  # ck_folder_files_origin
     ("runners", "name"): "row-factory",  # ck_runners_name
     ("agent_profiles", "name"): "row-factory",  # ck_agent_profiles_name
     ("agent_profiles", "role"): "project",

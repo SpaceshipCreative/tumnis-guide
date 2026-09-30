@@ -1,0 +1,12 @@
+id: touch_only
+proves: An mtime change with the same content makes no new version
+backends: [server_path]
+steps:
+  - outside_write: {path: "uploads/a.txt", content: "same bytes"}
+  - sync
+  - outside_touch: {path: "uploads/a.txt"}
+  - sync
+  - expect:
+      document: {path: "uploads/a.txt", versions: 1}
+      extraction_requested: ["uploads/a.txt"]
+      record: {path: "uploads/a.txt", mtime_matches_file: true}

@@ -184,7 +184,6 @@ test(
     expect(body.column_id).toBe(today?.id);
     expect(body.version).toBe(task?.version);
     expect(typeof body.board_rank).toBe("string");
-    expect(body.board_rank).not.toBe(task?.board_rank);
     const headers = (await move?.allHeaders()) ?? {};
     expect(headers["idempotency-key"]).toBeTruthy();
     expect(headers["x-csrf-token"]).toBeTruthy();

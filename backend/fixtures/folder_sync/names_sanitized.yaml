@@ -1,0 +1,15 @@
+id: names_sanitized
+proves: Uploading CON.txt and a:b?.pdf twice gives CON_.txt, a-b-.pdf and a-b- 2.pdf
+backends: [server_path, s3]
+steps:
+  - upload: {name: "CON.txt", content: "con"}
+  - upload: {name: "a:b?.pdf", content: "%PDF-1.4 one"}
+  - upload: {name: "a:b?.pdf", content: "%PDF-1.4 two"}
+  - sync
+  - expect:
+      listing: ["uploads/CON_.txt", "uploads/a-b- 2.pdf", "uploads/a-b-.pdf"]
+      files:
+        "uploads/a-b-.pdf": {equals: "%PDF-1.4 one"}
+        "uploads/a-b- 2.pdf": {equals: "%PDF-1.4 two"}
+      documents: {count: 3}
+      review_items: []

@@ -386,6 +386,10 @@ class S3Storage(Adapter):
 
         await self._call("delete", fn, idempotent=True)
 
+    async def ensure_folder(self, path: str) -> None:
+        """A no-op: an S3 folder is a key prefix, there once a file is under it."""
+        safe_rel_path(path)
+
     # --- Health and probe ----------------------------------------------------------------
 
     async def health(self) -> Health:

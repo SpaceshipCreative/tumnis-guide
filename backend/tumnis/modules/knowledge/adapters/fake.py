@@ -41,6 +41,7 @@ class FakeStorage:
         self._files: dict[str, _Entry] = {}
         self._health = Health.ok()
         self.calls: list[tuple[str, str]] = []
+        self.folders: set[str] = set()  # what ensure_folder made
 
     def script(self, *, health: Health | None = None) -> None:
         if health is not None:
@@ -102,6 +103,11 @@ class FakeStorage:
         path = safe_rel_path(path)
         self.calls.append(("delete", path))
         self._files.pop(path, None)
+
+    async def ensure_folder(self, path: str) -> None:
+        path = safe_rel_path(path)
+        self.calls.append(("ensure_folder", path))
+        self.folders.add(path)
 
     async def health(self) -> Health:
         return self._health
