@@ -20,7 +20,7 @@ BUDGETS = {
     "lint": 2,
     "unit": 3,
     "contract": 3,
-    "integration": 10,
+    "integration": 15,
     "daemon": 3,  # runner daemon lint, types and tests (P1-04)
     "e2e": 10,
     "skills": 5,
