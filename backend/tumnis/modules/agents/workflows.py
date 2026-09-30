@@ -18,7 +18,6 @@
 """
 
 import hashlib
-import importlib
 import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final
@@ -50,6 +49,7 @@ from tumnis.modules.agents.rules import (
     reach_verdict,
     runner_status,
 )
+from tumnis.modules.coolify import api as coolify
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
 
@@ -289,13 +289,8 @@ async def _coolify_base_url(ctx: WorkspaceContext) -> str | None:
     """The workspace's Coolify base URL (Settings > Coolify, P2-14), when it has one. The
     daemon only compares it with the profile's own `COOLIFY_BASE_URL` and never sends a
     token to it (Scott, decision 18)."""
-    coolify = importlib.import_module("tumnis.modules.coolify.api")
-    get_settings = getattr(coolify, "get_settings", None)
-    if get_settings is None:  # before P2-14's settings exist
-        return None
-    settings = await get_settings(ctx)
-    base = getattr(settings, "base_url", None) if settings is not None else None
-    return str(base) if base else None
+    settings = await coolify.get_settings(ctx)
+    return settings.base_url if settings is not None and settings.base_url else None
 
 
 async def _reach_targets(s: Any, project_id: UUID | None) -> ReachTargets:
