@@ -75,3 +75,17 @@ def commit(repo: Repo, files: Mapping[str, str], delete: Iterable[str] = ()) -> 
     git(repo.path, "add", "-A")
     git(repo.path, "commit", "-q", "--no-verify", "--allow-empty", "-m", "head")
     return git(repo.path, "rev-parse", "HEAD")
+
+
+def checkout(repo: Repo, branch: str, *, start: str | None = None) -> None:
+    """Switch to `branch`; with `start`, create it there first."""
+    if start is None:
+        git(repo.path, "checkout", "-q", branch)
+    else:
+        git(repo.path, "checkout", "-q", "-b", branch, start)
+
+
+def merge(repo: Repo, ref: str) -> str:
+    """Merge `ref` into the current branch with a merge commit; returns the SHA."""
+    git(repo.path, "merge", "-q", "--no-ff", "--no-edit", ref)
+    return git(repo.path, "rev-parse", "HEAD")
