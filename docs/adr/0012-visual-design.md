@@ -22,7 +22,8 @@ Rebuild the look on our own tokens, with no UI kit and no Mosaic source in the r
 - **Shell.** On a laptop a sidebar with the same destinations in two groups, collapsible to icons (remembered per device, `uiStore.sidebarCollapsed`). A sticky header with search (opens the Mod+K palette through `uiStore.searchOpen`), the review queue with its count (the one badge, nothing shown at zero), help with the keyboard shortcuts, and an account menu (settings, theme, sign out). On a phone the bottom bar stays in thumb reach and the header's menu button opens a modal drawer with the grouped links (focus trapped, Escape closes, the page behind inert). No destination was added for the look.
 - **Primitives.** Menus and the drawer are small hand-written components following the WAI-ARIA menu button and modal dialog patterns. A Radix primitive can still replace one when a screen needs more than they do (ADR-0004).
 - **Shared classes.** `components/common/ui.ts` holds the class sets for buttons (primary, secondary, danger, quiet), fields, cards (`Card`: a labelled region with a header row), badges (`badge(tone)`: neutral, accent, success, warning, danger, info on soft tints), tables and dialogs. `settings/styles.ts` and the project rail's field classes point at them, so Settings, sign-in, setup and the rail share one look.
-- **Cards and charts** follow in DS-01's later PRs: rounded, bordered cards with header rows within the PRD's one-screen and five-task limits, and a Chart.js wrapper loaded only through a dynamic import on pages that already have metrics.
+- **Page cards.** On the dashboard, Today and the calendar strip are `Card`s (Today's "+N more" link sits in its header row and its list scrolls inside the card on a laptop), each project is a card tile, and agent activity is a collapsed card. On the project page each task group is a card with its tasks as divided rows, and the Context rail is a card that sticks below the header. Nothing was added for the look: the dashboard still fits 1280 x 800 without scrolling and Today still shows at most five tasks. The review page keeps its placeholder until the review queue (P1-13) lands, and then uses the same `Card`.
+- **Charts.** `components/common/LazyChart.tsx` wraps Chart.js (pinned). It imports `chart.js` only inside an effect (a dynamic import, so Chart.js is never in the initial bundle), registers only the bar and line parts it uses rather than the "auto" entry, reads its colours and font from the tokens, repaints when the theme changes and destroys the chart on unmount. The canvas is `role="img"` with a plain-words label. No page uses it yet, because no page has metrics to show; a page adds a chart only when it does.
 
 ## Consequences
 - The whole app restyles through the tokens; pages in flight on other branches pick up the look without edits.
@@ -30,6 +31,7 @@ Rebuild the look on our own tokens, with no UI kit and no Mosaic source in the r
 - The initial JavaScript grows only by the shell's own code; fonts are CSS assets and do not count against the 200 KB budget.
 - The header adds 4 rem at the top; a page that fills the screen (the dashboard) subtracts `--tg-header-h`.
 - Components colour themselves only through the tokens: no Tailwind hue with a shade (`text-emerald-700`) and no white or black text. T-DS-01-13 checks every source file, so a page on another branch that adds one fails until it uses a token.
+- Only `LazyChart.tsx` may load `chart.js`, and only through `import()`; T-DS-01-17 checks every source file, so a page cannot pull Chart.js into the initial bundle by importing it directly.
 - No Mosaic code, CSS or images enter the repository, so its licence places no terms on ours.
 
 ## Sources
@@ -37,6 +39,7 @@ Rebuild the look on our own tokens, with no UI kit and no Mosaic source in the r
 - [Tailwind CSS: dark mode, toggling manually with a data attribute](https://tailwindcss.com/docs/dark-mode)
 - [Tailwind CSS: adding custom variants](https://tailwindcss.com/docs/adding-custom-styles#adding-custom-variants)
 - [Fontsource: Inter variable](https://fontsource.org/fonts/inter/install)
+- [Chart.js: integration and tree-shaking](https://www.chartjs.org/docs/latest/getting-started/integration.html), [updating charts](https://www.chartjs.org/docs/latest/developers/updates.html) and [accessibility](https://www.chartjs.org/docs/latest/general/accessibility.html)
 - [WAI-ARIA APG: menu button pattern](https://www.w3.org/WAI/ARIA/apg/patterns/menu-button/)
 - [WAI-ARIA APG: modal dialog pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)
 - [WCAG 2.2: contrast (minimum)](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)

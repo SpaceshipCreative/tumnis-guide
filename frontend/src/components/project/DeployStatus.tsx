@@ -97,7 +97,7 @@ function AppStatus({
         <span
           data-testid="deploy-chip"
           data-status={app.last?.status ?? "none"}
-          className={badge(tone)}
+          className={badge(tone, { wrap: true })}
         >
           {deployWords(app.last, timeZone)}
         </span>
