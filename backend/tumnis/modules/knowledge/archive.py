@@ -36,6 +36,7 @@ from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.knowledge import api, sync
 from tumnis.modules.knowledge.models import Chunk, FolderFile, ProjectFolder
 from tumnis.modules.knowledge.storage import MAX_FILE_BYTES, StorageBackend, spool
+from tumnis.modules.knowledge.storage import NotFound as FileMissing
 from tumnis.modules.projects import api as projects
 
 _log = structlog.get_logger(__name__)
@@ -87,7 +88,10 @@ async def _tree(backend: StorageBackend, root: str) -> dict[str, bytes]:
     found: dict[str, bytes] = {}
     cursor: str | None = None
     while True:
-        page = await backend.list(f"{root}/", cursor)
+        try:
+            page = await backend.list(f"{root}/", cursor)
+        except FileMissing:  # the folder was never made on the location
+            return found
         for stat in page.items:
             found[stat.path.removeprefix(f"{root}/")] = await spool(backend.read(stat.path))
         cursor = page.next_cursor
@@ -151,6 +155,7 @@ async def _pack_folder(s: AsyncSession, folder: RowMapping, project_id: UUID) ->
             if len(packed) > MAX_FILE_BYTES:
                 _log.warning("folder_pack_too_large", project_id=str(project_id))
                 return False
+            await backend.ensure_folder(ARCHIVES_DIR)
             await backend.write(path, _one(packed), None)
         kept = _unpack(await spool(backend.read(path)))
         if files and blobs.Manifest.of_files(kept) != blobs.Manifest.of_files(files):
