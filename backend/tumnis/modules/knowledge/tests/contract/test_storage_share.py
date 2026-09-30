@@ -23,7 +23,6 @@ def _share(root: Path) -> Any:
 @pytest.mark.contract
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 class TestShareStorage(StorageContract):
     """T-P3-14-02
     The shared storage suite passes on a temp dir configured as a share: the backend
