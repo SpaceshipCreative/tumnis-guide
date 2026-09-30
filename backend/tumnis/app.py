@@ -27,6 +27,7 @@ from tumnis.core import (
     deadletter,
     health,
     live,
+    mcp_server,
     metrics,
     modules,
     ops_status,
@@ -83,7 +84,7 @@ class ShellFiles(StaticFiles):
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """The cache invalidation listener (P0-08) and the live hub (P0-22) run beside the
     server; they reconnect on their own, so a database that is down at start does not stop
-    the api."""
+    the api. The MCP session manager (P2-01) runs for the app's whole life."""
     settings: Settings = app.state.settings
     stop = asyncio.Event()
     listener = cache.CacheInvalidationListener(settings.database_direct_url)
@@ -91,7 +92,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     hub_task = asyncio.create_task(app.state.live_hub.run(stop))  # /ws fan-out (P0-22)
     runner_task = asyncio.create_task(app.state.runner_hub.run(stop))  # /ws/runner (P1-04)
     try:
-        yield
+        async with contextlib.AsyncExitStack() as stack:
+            # /mcp (P2-01): the SDK's session manager must run, or the first call fails.
+            await stack.enter_async_context(app.state.mcp_session_manager.run())
+            yield
     finally:
         stop.set()
         with contextlib.suppress(TimeoutError):
@@ -244,6 +248,10 @@ def create_app(
         settings.database_direct_url, settings.dbos_system_url
     )
     app.add_api_websocket_route("/ws/runner", agents_ws.runner_socket, name="runner_socket")
+    # /mcp (P2-01): every module's ops as tools; a raw route, so POST /mcp is not redirected.
+    wiring.load_mcp()
+    app.state.mcp_session_manager = mcp_server.session_manager()
+    app.router.routes.append(mcp_server.mcp_route())
     shell = shell_dir or SHELL_DIR
     if shell.is_dir():
         app.mount("/", ShellFiles(directory=shell, html=True), name="shell")
