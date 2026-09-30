@@ -16,7 +16,7 @@ Branch: `wp/DS-01-impl` (pushed with this file). **No PR opened yet.** PR 2 (`wp
 - All markers removed; no `test.fails`/`test.fail()` left from DS-01.
 - Vitest: full suite 99/99 green before the merge (`npx vitest run --maxWorkers=4`; the default worker count times out under this VM's load, ~50 load average).
 - Playwright (`make e2e` against a stack started with `docker compose -p ds01 -f deploy/compose.test.yaml up -d --wait --build`, port 8080, before the main merge): 41 passed, 5 skipped, and the only "failures" were the 8 DS-01 specs reporting "expected to fail, but passed" (fixed by b140a9f). Every locked spec stayed green, including T-P0-22-17 (shell keyboard + axe), T-P0-23-10 (no scroll at 1280x800), T-P0-23-11, T-P0-24-17, T-P0-26-10, J2.
-- `make check` after the merge was running when HANDOFF NOW arrived; result unknown. Re-run it.
+- `make check` after the merge (d6c44db): backend, lint, format and typecheck green; Vitest had 8 failures at the default worker count. A `--maxWorkers=4` re-run had 2 failures (AgentsSection T-P1-04-19, CalendarSection T-P1-09-12), both of which passed in every earlier run, and a third run of a subset failed a different set of 7 tests. The failing set moves between runs (findBy/20 s timeouts at load average ~52), so this looks like machine load, not the DS-01 changes. Not yet shown clean on the merged tree: re-run when load is lower, or rely on CI's unit job, before opening the PR.
 - The ds01 compose stack is being taken down with this handoff (`docker compose -p ds01 -f deploy/compose.test.yaml down -v`).
 
 ## Remaining steps
