@@ -22,5 +22,8 @@ export function sessionProbeOptions() {
     },
     staleTime: 5 * 60_000,
     retry: false,
+    // Never paused while offline (P0-25): the query answers for itself when it cannot
+    // reach the server, so an offline open still gets the shell.
+    networkMode: "always",
   });
 }
