@@ -26,7 +26,7 @@ from collections.abc import Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Annotated, Final, Literal, Protocol
+from typing import Annotated, Any, Final, Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -663,3 +663,37 @@ RUN_TOKEN_SCOPES: Final[dict[RunKind, frozenset[str]]] = {
 def run_token_scopes(kind: RunKind, key_scopes: frozenset[str]) -> frozenset[str]:
     """The kind's token scopes that the issuing key also holds."""
     return RUN_TOKEN_SCOPES[kind] & frozenset(key_scopes)
+
+
+# --- Enrichment (P1-08, FR-4.4): red-phase seams; the spec tests turn them green ---------
+
+
+class TaskSnapshot(BaseModel):
+    """The task as the enrichment reads it (P1-08)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    def __init__(self, **data: object) -> None:
+        raise NotImplementedError("P1-08")
+
+
+def missing_fields(t: TaskSnapshot) -> list[str]:
+    raise NotImplementedError("P1-08")
+
+
+def needs_enrichment(t: TaskSnapshot) -> bool:
+    raise NotImplementedError("P1-08")
+
+
+def merge_enrichment(
+    current: TaskSnapshot,
+    res: object,
+    *,
+    requested: Sequence[str],
+    estimate_range: tuple[int, int],
+) -> Any:
+    raise NotImplementedError("P1-08")
+
+
+def plausibility_flag(answer: object | None, route: str) -> str | None:
+    raise NotImplementedError("P1-08")

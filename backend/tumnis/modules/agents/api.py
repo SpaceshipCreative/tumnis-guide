@@ -1022,3 +1022,13 @@ async def profile_key(s: AsyncSession, profile_id: UUID) -> UUID | None:
     return await s.scalar(
         select(_profiles.c.api_key_id).where(_profiles.c.id == profile_id, _live_profiles())
     )
+
+
+# --- Enrichment (P1-08): red-phase seam; the spec tests turn it green ----------------------
+
+
+def configure_enrichment(
+    *, clock: Any = None, label_wait_s: float = 10.0, run_timeout_s: int = 120
+) -> None:
+    """The enrichment's clock and timeouts (R-30); called with nothing, the defaults."""
+    raise NotImplementedError("P1-08")
