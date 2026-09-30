@@ -886,7 +886,7 @@ async def update_estimate(  # noqa: PLR0917  # the tool's input, plus who and wh
 ) -> TaskOut:
     """Re-estimates a Human or Hybrid task at `version` (the `update_estimate` tool,
     P2-01): 422 `estimate_not_applicable` for AI work or a pending label, which carry no
-    estimate of human time. The reason is logged beside the change."""
+    estimate of human time. The reason is logged beside the change, once it is made."""
     row = await _row(s, task_id)  # 404 before any body rule (A0.3, #28)
     label = _label(row["label"])
     if label not in (Label.HUMAN, Label.HYBRID):
@@ -895,16 +895,19 @@ async def update_estimate(  # noqa: PLR0917  # the tool's input, plus who and wh
             "estimate_not_applicable",
             "Only Human and Hybrid tasks carry an estimate of human time",
         )
+    patch = TaskPatch(estimate_minutes=estimate_minutes, version=version)
+    updated = await update_task(s, actor, task_id, patch, version, now=now)
     _log.info(
         "tasks.estimate_updated",
         task_id=str(task_id),
         before=row["estimate_minutes"],
-        after=estimate_minutes,
+        after=updated.estimate_minutes,
         reason=reason,
         actor=str(actor),
+        version=updated.version,
+        change_id=str(updated.change_id) if updated.change_id else None,
     )
-    patch = TaskPatch(estimate_minutes=estimate_minutes, version=version)
-    return await update_task(s, actor, task_id, patch, version, now=now)
+    return updated
 
 
 async def move_task(  # noqa: PLR0917  # R-20's body, plus who and when
