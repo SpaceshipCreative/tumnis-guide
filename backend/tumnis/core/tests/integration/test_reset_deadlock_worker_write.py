@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import psycopg
 import pytest
 
-from tests._pg import OWNER
+from tests._pg import OWNER, SUPERUSER
 
 if TYPE_CHECKING:
     from tests._pg import DbUrls
@@ -36,11 +36,16 @@ def _truncate_waiting(db: DbUrls) -> bool:
 @pytest.mark.wp("P1-07")
 async def test_reset_retries_after_a_deadlock_with_a_worker_write(db: DbUrls) -> None:
     """A transaction holding `tasks` asks for `outbox` while the reset holds `outbox` and
-    waits for `tasks`. The reset, waiting first, is the deadlock's victim; it retries once
-    the worker's transaction commits, and empties the tables."""
+    waits for `tasks`. The reset, the first to check (the worker's deadlock_timeout is
+    longer), is the deadlock's victim; it retries once the worker's transaction commits,
+    and empties the tables."""
     from tumnis.core.testing_routes import truncate_tables  # noqa: PLC0415
 
-    worker = psycopg.connect(db.libpq(OWNER))
+    worker = psycopg.connect(db.libpq(SUPERUSER))
+    # Postgres runs the deadlock check in whichever waiter's deadlock_timeout ends first,
+    # and that waiter is the one cancelled. The worker's longer timeout (superuser only)
+    # makes the reset, waiting at the default 1 s, always the victim.
+    worker.execute("SET deadlock_timeout = '10s'")
     worker.execute("LOCK TABLE tasks IN ROW EXCLUSIVE MODE")  # as an UPDATE tasks would
     reset = asyncio.create_task(truncate_tables(db.owner))
     try:

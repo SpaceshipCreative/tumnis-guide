@@ -682,10 +682,34 @@ async def _record(
     before, after = rules.change_between(before_row, after_row)
     if not before:
         return None
-    if "label" in before:  # who set the label goes back with it on undo (P1-07)
-        before["label_source"] = before_row["label_source"]
-        after["label_source"] = after_row["label_source"]
+    if "label" in before:  # the label's metadata goes back with it on undo (P1-07)
+        before |= _label_meta(before_row)
+        after |= _label_meta(after_row)
     return await record_change(s, actor, after_row["id"], before, after)
+
+
+# What goes with a label on undo (P1-07, R-09): who set it, why, how sure, the decision
+# behind it and a suggestion it replaced.
+_LABEL_META: Final = (
+    "label_source",
+    "label_reason",
+    "label_confidence",
+    "label_decision_id",
+    "label_suggestion",
+)
+
+
+def _label_meta(row: Mapping[Any, Any]) -> dict[str, object]:
+    """The row's label metadata as JSON values, for a change row."""
+    return {f: str(row[f]) if isinstance(row[f], UUID) else row[f] for f in _LABEL_META}
+
+
+def _restored_meta(before: Mapping[str, Any]) -> dict[str, Any]:
+    """The label metadata a change's `before` holds, as row values."""
+    values = {f: before[f] for f in _LABEL_META if f in before}
+    if isinstance(values.get("label_decision_id"), str):
+        values["label_decision_id"] = UUID(values["label_decision_id"])
+    return values
 
 
 def _with_change(row: Mapping[Any, Any], change_id: UUID | None) -> TaskOut:
@@ -849,7 +873,8 @@ async def update_task(
     updated = await _versioned(s, task_id, version, values or {"updated_at": func.now()})
     if changed:
         await _changed(s, updated, changed, now)
-    if label_override and kind is ActorKind.HUMAN and "label" in changed:
+    # Setting the AI's own label makes it the person's too (only `label_source` changes).
+    if label_override and kind is ActorKind.HUMAN and {"label", "label_source"} & set(changed):
         await _label_overridden(s, row, updated, now)
     return _with_change(updated, await _record(s, actor, row, updated))
 
@@ -950,8 +975,8 @@ async def set_ai_label(
         s,
         SYSTEM_ACTOR,
         task_id,
-        {"label": row["label"], "label_source": row["label_source"]},
-        {"label": str(label), "label_source": source},
+        {"label": row["label"], **_label_meta(row)},
+        {"label": str(label), **_label_meta(updated)},
     )
 
 
@@ -970,25 +995,37 @@ async def set_label_suggestion(
     """A low-confidence label: kept as `label_suggestion` (the label stays pending, R-08)
     with one open `low_confidence_label` review item for the human, unless a person has
     chosen the label, or the title is no longer `for_title` (False, nothing written).
-    Emits `task.updated` with `label_suggestion`."""
+    An AI label already on the task (a retitle's relabel) goes back to pending, so no
+    confirmed label stands beside the suggestion's reason; that change is recorded (R-09).
+    The review item replaces any open one for the task, which closes as `superseded`.
+    Emits `task.updated` with `label_suggestion` (and `label`, `label_source` when an AI
+    label was cleared)."""
     row = await _row(s, task_id, lock=True)
     if not may_auto_label(row["label_source"]) or _retitled(row, for_title):
         return False
-    updated = await _versioned(
+    values: dict[str, Any] = {
+        "label_suggestion": suggestion,
+        "label_reason": reason,
+        "label_confidence": confidence,
+        "label_decision_id": decision_id,
+    }
+    cleared = row["label"] is not None
+    if cleared:
+        values |= {"label": None, "label_source": None}
+    updated = await _versioned(s, task_id, row["version"], values)
+    await _changed(
         s,
-        task_id,
-        row["version"],
-        {
-            "label_suggestion": suggestion,
-            "label_reason": reason,
-            "label_confidence": confidence,
-            "label_decision_id": decision_id,
-        },
+        updated,
+        ["label", "label_source", "label_suggestion"] if cleared else ["label_suggestion"],
+        now,
     )
-    await _changed(s, updated, ["label_suggestion"], now)
+    if cleared:
+        await _record(s, SYSTEM_ACTOR, row, updated)
+    target = TargetRef(type="task", id=task_id)
+    await close_open_items(s, LABEL_KIND, target, decision="superseded", at=_now(now))
     await add_review_item(
         LABEL_KIND,
-        target=TargetRef(type="task", id=task_id),
+        target=target,
         project_id=row["project_id"],
         payload=LowConfidenceLabelPayload(
             suggested=suggestion,
@@ -1251,8 +1288,8 @@ async def undo_task(
         raise _stale(row)
     at = _now(now)
     values = rules.restore_values(change["before"], row["completed_at"], at)
-    if "label" in values and "label_source" in change["before"]:
-        values["label_source"] = change["before"]["label_source"]
+    if "label" in values:
+        values |= _restored_meta(change["before"])
     if "status" in values or "column_id" in values:
         await _restored_column(s, row, values)
     updated = (
