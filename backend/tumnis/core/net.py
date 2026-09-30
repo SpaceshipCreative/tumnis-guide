@@ -10,7 +10,8 @@ Redirects are never followed by the client; `follow_redirects` follows up to
 MAX_REDIRECTS, and each hop goes through the same check.
 
 Non-HTTP clients (asyncssh for SFTP, aioboto3 endpoint URLs) call `resolve_and_check`
-themselves and connect to the address it returns.
+themselves and connect to the address it returns. The one unguarded client is
+`operator_client`: the stdio MCP shim's link to the operator's own server (P2-01).
 
 Blocked in every deployment mode: loopback, unspecified, link-local, multicast, reserved
 and cloud metadata addresses; nothing Tumnis talks to lives on its own loopback. Private
@@ -268,6 +269,40 @@ def guarded_client(
     )
     return httpx.AsyncClient(
         transport=transport, timeout=timeout, follow_redirects=False, trust_env=False
+    )
+
+
+_LOOPBACK: Final[tuple[IPNetwork, ...]] = (ip_network("127.0.0.0/8"), ip_network("::1/128"))
+
+
+def check_operator_url(url: str) -> None:
+    """ValueError unless `url` is an absolute http(s) URL that may carry a bearer key:
+    `https://` anywhere, plain `http://` only to `localhost` or a loopback or private
+    (LAN) address literal, so the key never crosses the internet in clear."""
+    parsed = httpx.URL(url)
+    if parsed.scheme == "https" and parsed.host:
+        return
+    if parsed.scheme != "http" or not parsed.host:
+        raise ValueError(f"{url!r} is not an http(s) URL")
+    name = parsed.host.removeprefix("[").removesuffix("]")
+    literal = _literal(name)
+    near = _is_localhost(name) or (
+        literal is not None and any(literal in net for net in (*_LOOPBACK, *PRIVATE))
+    )
+    if not near:
+        raise ValueError(f"{url!r}: plain http only to localhost or a LAN address; use https")
+
+
+def operator_client(base_url: str, *, timeout: httpx.Timeout) -> httpx.AsyncClient:
+    """A client for the operator's own Tumnis server, named by the operator on their own
+    machine (`tumnis mcp-stdio`'s TUMNIS_URL), never by a user, a stored row or a remote
+    answer. So there is no SSRF check: the target is usually loopback, which
+    `guarded_client` always refuses. The URL passes `check_operator_url` (the client
+    carries a bearer key); redirects are not followed (a key must not follow one) and
+    proxy variables are ignored, as for every client here."""
+    check_operator_url(base_url)
+    return httpx.AsyncClient(
+        base_url=base_url, timeout=timeout, follow_redirects=False, trust_env=False
     )
 
 
