@@ -1,8 +1,17 @@
 {
-  "quick_add": { "p95_ms": 500 },
-  "dashboard_projects": { "p95_ms": 300 },
-  "dashboard_today": { "p95_ms": 300 },
-  "typeahead": { "p95_ms": 100 },
-  "measured_on": "bootstrap: the NFR values, until CI measures a baseline",
-  "commit": ""
+  "quick_add": {
+    "p95_ms": 167.8
+  },
+  "dashboard_projects": {
+    "p95_ms": 20.1
+  },
+  "dashboard_today": {
+    "p95_ms": 17.8
+  },
+  "typeahead": {
+    "p95_ms": 11.2
+  },
+  "measured_on": "github-hosted-ubuntu-latest",
+  "commit": "9865cc7",
+  "summaries": 14
 }

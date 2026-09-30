@@ -47,7 +47,7 @@ function main() {
   const baseline = Object.fromEntries(
     Object.keys(NFR_MS).map((name) => [name, { p95_ms: Math.round(worst[name] * 10) / 10 }]),
   );
-  const body = { ...baseline, measured_on: measuredOn, commit, runs: summaries.length };
+  const body = { ...baseline, measured_on: measuredOn, commit, summaries: summaries.length };
   writeFileSync(out, `${JSON.stringify(body, null, 2)}\n`);
   console.log(JSON.stringify(body, null, 2));
 }
