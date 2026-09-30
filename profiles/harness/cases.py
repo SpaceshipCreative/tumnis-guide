@@ -24,8 +24,9 @@ from pathlib import Path
 from typing import Any, Final
 
 import yaml
+from pydantic import ValidationError
 
-from harness.assertions import RULES, InvalidCheck, validate_checks
+from harness.assertions import RULE_REQUESTS, RULES, InvalidCheck, validate_checks
 
 CASE_KEYS: Final = frozenset({"id", "profile", "skill", "input", "output_schema", "meta", "expect"})
 EXPECT_KEYS: Final = frozenset({"tool_calls", "rules", "json"})
@@ -118,6 +119,19 @@ def _packet(path: Path) -> dict[str, Any]:
     return packet
 
 
+def _check_body(name: str, rules: tuple[str, ...], body: dict[str, Any]) -> None:
+    """Each rule reads the body as its request model; a body it cannot read is the case's
+    fault, so it is refused here rather than failing a reply later."""
+    for rule in rules:
+        try:
+            RULE_REQUESTS[rule].model_validate(body)
+        except ValidationError as exc:
+            raise CaseError(
+                f"{name}: the input's body is not a request {rule} can read "
+                f"({exc.error_count()} errors)"
+            ) from exc
+
+
 def load_case(path: Path) -> Case:
     """The case in `path`; CaseError when it is malformed, sets `runs`, names an unknown
     rule or operator, or its input is not a recorded packet."""
@@ -168,13 +182,15 @@ def load_case(path: Path) -> Case:
         raise CaseError(f"{path.name}: {exc}") from exc
 
     input_path = (path.parent / str(data["input"])).resolve()
+    packet = _packet(input_path)
+    _check_body(path.name, rules, packet["body"])
     return Case(
         id=case_id,
         path=path,
         profile=profile,
         skill=skill,
         input_path=input_path,
-        packet=_packet(input_path),
+        packet=packet,
         output_schema=output_schema,
         allow=allow,
         rules=rules,

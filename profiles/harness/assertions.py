@@ -233,3 +233,9 @@ RULES: Final[Mapping[str, Rule]] = {
     "enrichment_errors": _enrichment,
     "planning_errors": _planning,
 }
+# name -> the request model the rule reads the packet body as; a case is refused at load
+# when its body does not validate, so a rule never fails on the case's own input.
+RULE_REQUESTS: Final[Mapping[str, type[EnrichmentRequest | PlanningRequest]]] = {
+    "enrichment_errors": EnrichmentRequest,
+    "planning_errors": PlanningRequest,
+}

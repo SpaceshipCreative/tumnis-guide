@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.cases import Case, load_case
+from harness.cases import Case, CaseError, load_case
 from harness.report import junit_xml, summary_line, verdict
 from harness.run import (
     Attempt,
@@ -86,6 +86,14 @@ def test_runs_cannot_be_lowered(tmp_path: Path, case: Case) -> None:
         load_config(toml)
     with pytest.raises(HarnessError, match="runs"):
         run_case(case, lambda c, n: Attempt(outcome="pass"), runs=1)
+
+
+def test_a_body_the_rule_cannot_read_is_refused_at_load(tmp_path: Path) -> None:
+    path = write_case(tmp_path)
+    packet = json.loads((tmp_path / "unit.packet.json").read_text())
+    (tmp_path / "unit.packet.json").write_text(json.dumps({**packet, "body": {}}))
+    with pytest.raises(CaseError, match="enrichment_errors"):
+        load_case(path)
 
 
 def test_the_real_runner_refuses_an_unpinned_model() -> None:
