@@ -4,6 +4,7 @@
 import { Link } from "@tanstack/react-router";
 import { useId } from "react";
 
+import { type AppDeployStatus, DeployStatus } from "../project/DeployStatus";
 import { formatDay, formatInstant } from "./format";
 import { HealthBadge } from "./HealthBadge";
 import type { DashboardProject } from "./types";
@@ -11,9 +12,12 @@ import type { DashboardProject } from "./types";
 export function ProjectCard({
   project,
   timeZone,
+  deploy,
 }: {
   project: DashboardProject;
   timeZone: string;
+  /** The project's linked Coolify applications (P2-14); absent or empty: none. */
+  deploy?: readonly AppDeployStatus[] | undefined;
 }) {
   const nameId = useId();
   const activity = project.last_agent_activity_at;
@@ -50,6 +54,7 @@ export function ProjectCard({
             : "No agent activity yet"}
         </span>
       </p>
+      <DeployStatus apps={deploy ?? []} timeZone={timeZone} />
     </article>
   );
 }
