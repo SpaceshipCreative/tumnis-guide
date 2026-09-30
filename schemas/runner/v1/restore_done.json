@@ -1,8 +1,8 @@
 {
-  "$id": "https://tumnis.dev/schemas/runner/v1/archive.json",
+  "$id": "https://tumnis.dev/schemas/runner/v1/restore_done.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "P2-18: pack a profile's home into one archive and take it out of the live list.",
+  "description": "P2-18: the answer to `restore`: ok when the restored tree's manifest digest is the\nexpected one.",
   "properties": {
     "archive_id": {
       "maxLength": 128,
@@ -14,15 +14,32 @@
       "title": "Correlation Id",
       "type": "string"
     },
+    "error": {
+      "anyOf": [
+        {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "manifest_digest": {
+      "maxLength": 64,
+      "title": "Manifest Digest",
+      "type": "string"
+    },
     "message_id": {
       "format": "uuid",
       "title": "Message Id",
       "type": "string"
     },
-    "profile": {
-      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
-      "title": "Profile",
-      "type": "string"
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
     },
     "schema_version": {
       "const": 1,
@@ -36,8 +53,8 @@
       "type": "string"
     },
     "type": {
-      "const": "archive",
-      "default": "archive",
+      "const": "restore_done",
+      "default": "restore_done",
       "title": "Type",
       "type": "string"
     }
@@ -47,9 +64,10 @@
     "message_id",
     "correlation_id",
     "sent_at",
-    "profile",
-    "archive_id"
+    "archive_id",
+    "manifest_digest",
+    "ok"
   ],
-  "title": "Archive",
+  "title": "RestoreDone",
   "type": "object"
 }
