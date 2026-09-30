@@ -1168,6 +1168,7 @@ export const zTumnisModulesProjectsRouterVersionIn = z.object({
 export const zHealthLiveResponse = z.record(z.string(), z.string());
 
 export const zAgentsListProfilesQuery = z.object({
+  project_id: z.uuid().nullish(),
   cursor: z.string().max(2048).nullish(),
   limit: z.int().gte(1).lte(200).optional().default(50),
 });

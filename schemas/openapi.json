@@ -4831,9 +4831,26 @@
     },
     "/v1/agents/profiles": {
       "get": {
-        "description": "Agent profiles by name, with their last health check.",
+        "description": "Agent profiles by name, with their last health check; `project_id` narrows them to\nthat project's agent (the project header, P1-06).",
         "operationId": "agents_list_profiles",
         "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
           {
             "in": "query",
             "name": "cursor",

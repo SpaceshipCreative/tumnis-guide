@@ -99,7 +99,9 @@ async def _install(msg: Provision, cfg: DaemonConfig, version: str | None) -> Pr
     try:
         _copy_profile_env(cfg, msg.profile)
     except OSError as exc:
+        # A profile without its .env must not answer `exists` to the retry: remove it.
         log.warning("profile_env_not_copied", extra={"profile": msg.profile})
+        await _hermes(cfg, "profile", "delete", msg.profile, "--yes")
         return _answer(msg, "failed", error_code="hermes_error", error=f"profile env: {exc}")
     return _answer(msg, "created", version=version)
 

@@ -2549,6 +2549,10 @@ export type AgentsListProfilesData = {
   path?: never;
   query?: {
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
      * Cursor
      */
     cursor?: string | null;

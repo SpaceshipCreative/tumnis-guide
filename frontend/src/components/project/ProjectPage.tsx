@@ -10,7 +10,7 @@ import { useIsLaptop } from "../../lib/media";
 import type { ProjectView } from "../../lib/views";
 import { uiStore } from "../../stores/uiStore";
 import { BoardView } from "../board/BoardView";
-import { profilesQuery, workspaceQuery } from "../settings/queries";
+import { projectProfileQuery, workspaceQuery } from "../settings/queries";
 import { Composer } from "./Composer";
 import { TaskDrawer } from "./drawer/TaskDrawer";
 import { groupOf } from "./grouping";
@@ -69,7 +69,7 @@ export function ProjectPage({
   const project = useQuery(projectQuery(projectId));
   const tasks = useQuery(projectTasksQuery(projectId));
   const workspace = useQuery(workspaceQuery());
-  const profiles = useQuery(profilesQuery());
+  const profiles = useQuery(projectProfileQuery(projectId));
   const agent = profiles.data?.items.find(
     (p) => p.role === "project" && p.project_id === projectId,
   );

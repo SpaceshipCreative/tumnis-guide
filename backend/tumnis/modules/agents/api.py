@@ -328,11 +328,15 @@ def _profile_out(row: _ProfileRow) -> AgentProfileOut:
 
 
 async def list_profiles(
-    s: AsyncSession, *, cursor: str | None, limit: int
+    s: AsyncSession, *, cursor: str | None, limit: int, project_id: UUID | None = None
 ) -> Page[AgentProfileOut]:
+    """Live profiles by name; with `project_id`, only that project's agent (P1-06)."""
+    query = select(_profiles).where(_live_profiles())
+    if project_id is not None:
+        query = query.where(_profiles.c.project_id == project_id)
     page = await paginate(
         s,
-        select(_profiles).where(_live_profiles()),
+        query,
         keys=[SortKey(_profiles.c.name)],
         id_col=_profiles.c.id,
         cursor=cursor,
