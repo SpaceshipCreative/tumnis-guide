@@ -176,3 +176,22 @@ test("[DS-01][UX 11] T-DS-01-07 the phone drawer traps focus and closes on Escap
   });
   expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
 });
+
+test.fails(
+  "[DS-01][UX 11] T-DS-01-16 everything behind the phone drawer is inert, toasts and Quick add included",
+  async () => {
+    const { user } = await renderRoute("/", { viewport: "phone" });
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    const drawer = screen.getByRole("dialog", { name: "Menu" });
+    expect(drawer.closest("[inert]")).toBeNull();
+
+    const quickAdd = screen.getByRole("button", {
+      name: "Quick add",
+      hidden: true,
+    });
+    expect(quickAdd.closest("[inert]")).not.toBeNull();
+    for (const status of screen.queryAllByRole("status", { hidden: true })) {
+      expect(status.closest("[inert]")).not.toBeNull();
+    }
+  },
+);
