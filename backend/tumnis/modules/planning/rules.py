@@ -105,8 +105,18 @@ class EventDTO(BaseModel, frozen=True):
 
 def event_matches_project(event: EventDTO, links: Sequence[ProjectLink]) -> bool:
     """True if any attendee email equals a person link, or any attendee domain equals a
-    domain link. Deterministic; Jev matching of events is not needed in v1."""
-    raise NotImplementedError
+    domain link. Deterministic; Jev matching of events is not needed in v1.
+
+    Addresses and domains compare case-insensitively and whole: a subdomain of a linked
+    domain is not that domain. Other link kinds (repo, coolify_app) never match."""
+    people = {link.value.strip().lower() for link in links if link.kind == "person"}
+    domains = {link.value.strip().lower().lstrip("@") for link in links if link.kind == "domain"}
+    for attendee in event.attendees:
+        address = attendee.strip().lower()
+        local, at, domain = address.rpartition("@")
+        if address in people or (at and local and domain in domains):
+            return True
+    return False
 
 
 def validate_manual_block(

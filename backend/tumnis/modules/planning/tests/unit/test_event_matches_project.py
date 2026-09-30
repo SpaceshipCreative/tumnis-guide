@@ -38,7 +38,6 @@ CASES: list[Any] = [
 
 @pytest.mark.req("FR-2.6")
 @pytest.mark.wp("P1-12")
-@pytest.mark.xfail(strict=True, reason="spec:P1-12")
 @pytest.mark.parametrize(("attendees", "links", "expected"), CASES)
 def test_table(attendees: list[str], links: list[tuple[str, str]], expected: bool) -> None:
     """T-P1-12-07
