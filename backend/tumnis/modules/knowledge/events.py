@@ -9,6 +9,9 @@ payload is read as a dict, so knowledge needs nothing from projects.
 its folder on the workspace default location; idempotent through the folder's unique key
 (nothing happens while the workspace has no default location). Never rename a
 subscriber: its name is part of every delivery's workflow ID.
+
+The `document.added` and `document.changed` payloads (P1-16) live in `payloads.py` and are
+re-exported here.
 """
 
 from typing import Any
@@ -18,6 +21,9 @@ from tumnis.core.events import EventEnvelope, subscribe
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.knowledge import api
+from tumnis.modules.knowledge.payloads import DocumentAddedV1, DocumentChangedV1
+
+__all__ = ["DocumentAddedV1", "DocumentChangedV1"]
 
 
 @subscribe("project.created", name="knowledge.create_brief")

@@ -46,11 +46,14 @@ import {
   healthReady,
   knowledgeCreateLocation,
   knowledgeGetBrief,
+  knowledgeGetDocument,
+  knowledgeGetFile,
   knowledgeListLocations,
   knowledgeSetDefaultLocation,
   knowledgeSetProjectFolder,
   knowledgeTestLocation,
   knowledgeUpdateDocument,
+  knowledgeUploadDocument,
   type Options,
   projectsArchiveProject,
   projectsCreateProject,
@@ -194,6 +197,12 @@ import type {
   KnowledgeGetBriefData,
   KnowledgeGetBriefError,
   KnowledgeGetBriefResponse,
+  KnowledgeGetDocumentData,
+  KnowledgeGetDocumentError,
+  KnowledgeGetDocumentResponse,
+  KnowledgeGetFileData,
+  KnowledgeGetFileError,
+  KnowledgeGetFileResponse,
   KnowledgeListLocationsData,
   KnowledgeListLocationsError,
   KnowledgeListLocationsResponse,
@@ -209,6 +218,9 @@ import type {
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentError,
   KnowledgeUpdateDocumentResponse,
+  KnowledgeUploadDocumentData,
+  KnowledgeUploadDocumentError,
+  KnowledgeUploadDocumentResponse,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectError,
   ProjectsArchiveProjectResponse,
@@ -1323,6 +1335,38 @@ export const deadLettersPostRetryMutation = (
   return mutationOptions;
 };
 
+export const knowledgeGetFileQueryKey = (
+  options: Options<KnowledgeGetFileData>,
+) => createQueryKey("knowledgeGetFile", options);
+
+/**
+ * Get File
+ *
+ * The document's original file, always as a download (`attachment`, octet-stream,
+ * `nosniff`); 409 `not_available` until the document is `ready`. `version` is a version
+ * number.
+ */
+export const knowledgeGetFileOptions = (
+  options: Options<KnowledgeGetFileData>,
+) =>
+  queryOptions<
+    KnowledgeGetFileResponse,
+    KnowledgeGetFileError,
+    KnowledgeGetFileResponse,
+    ReturnType<typeof knowledgeGetFileQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetFile({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetFileQueryKey(options),
+  });
+
 export const authListKeysQueryKey = (options?: Options<AuthListKeysData>) =>
   createQueryKey("authListKeys", options);
 
@@ -1494,6 +1538,67 @@ export const authRotateKeyMutation = (
   };
   return mutationOptions;
 };
+
+/**
+ * Upload Document
+ *
+ * Upload a file (multipart: `file`, and optionally `project_id` and `title`). The
+ * answer is 202 with the document in `pending_scan`: it is scanned, its type read from its
+ * content and its text extracted by the extract worker. 413 `too_large` past 50 MiB.
+ */
+export const knowledgeUploadDocumentMutation = (
+  options?: Partial<Options<KnowledgeUploadDocumentData>>,
+): UseMutationOptions<
+  KnowledgeUploadDocumentResponse,
+  KnowledgeUploadDocumentError,
+  Options<KnowledgeUploadDocumentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeUploadDocumentResponse,
+    KnowledgeUploadDocumentError,
+    Options<KnowledgeUploadDocumentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeUploadDocument({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const knowledgeGetDocumentQueryKey = (
+  options: Options<KnowledgeGetDocumentData>,
+) => createQueryKey("knowledgeGetDocument", options);
+
+/**
+ * Get Document
+ *
+ * A document's state (status, reason, kind, path): what the upload flow polls.
+ */
+export const knowledgeGetDocumentOptions = (
+  options: Options<KnowledgeGetDocumentData>,
+) =>
+  queryOptions<
+    KnowledgeGetDocumentResponse,
+    KnowledgeGetDocumentError,
+    KnowledgeGetDocumentResponse,
+    ReturnType<typeof knowledgeGetDocumentQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetDocument({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetDocumentQueryKey(options),
+  });
 
 /**
  * Update Document

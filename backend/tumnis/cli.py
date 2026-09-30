@@ -136,15 +136,24 @@ def api(
 
 
 @app.command()
-def worker() -> None:
-    """Launch DBOS: queues, workflows and schedules."""
+def worker(
+    queues: Annotated[
+        str | None,
+        typer.Option(help="Comma-separated queues to dequeue, e.g. extract (default: all others)"),
+    ] = None,
+) -> None:
+    """Launch DBOS: queues, workflows and schedules. `--queues extract` runs only the
+    extraction worker (no relay, no schedules)."""
     settings = load_settings()
     check_database_tls(settings)
     run_boot_checks(settings)
     start_observability(settings, "worker")
     from tumnis.worker import main as worker_main  # noqa: PLC0415
 
-    worker_main(settings)
+    if queues:
+        worker_main(settings, queues=queues.split(","))
+    else:
+        worker_main(settings)
 
 
 @app.command()
