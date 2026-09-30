@@ -505,7 +505,7 @@ export async function markStartTime(
   name: string,
   timeoutMs = 10_000,
 ): Promise<number> {
-  return page.evaluate(
+  const ms = await page.evaluate(
     ([markName, limit]) =>
       new Promise<number>((resolve, reject) => {
         const seen = performance.getEntriesByName(markName, "mark")[0];
@@ -530,6 +530,11 @@ export async function markStartTime(
       }),
     [name, timeoutMs] as const,
   );
+  const info = test.info();
+  console.log(
+    `TIMING ${info.project.name} ${info.title}: ${name} at ${ms.toFixed(0)} ms`,
+  );
+  return ms;
 }
 
 // --- App shell (P0-22) ----------------------------------------------------------
