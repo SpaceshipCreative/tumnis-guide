@@ -19,12 +19,14 @@ Protocol 2 (P2-07) is the session's protocol when the daemon lists 2 and adverti
 protocol-2 capabilities. Acks then go out batched (`ack{message_ids}`, up to 50 ids or
 500 ms); a protocol-1 session keeps P1-04's one `ack{ack_of}` per message. Mailbox rows are
 rendered for the session: a protocol-1 daemon gets a version-1 `run` (no worktree, at most
-an hour) and never a `cancel` or `archive`. `stream`, `status` and `upload_artifact` become
-run events (once per message id, acked after the commit) for runs dispatched to this
-runner; anything else, and an artifact that is not small UTF-8 text with the right sha256,
-is refused with `nack{code}`. A `status` of state `started` records the profile's VERSION
-on the run and on the profile. A result for a run the server already cancelled (the
-protocol-1 fallback) is acked and dropped.
+an hour) and never a `cancel`, `archive`, `restore` or `purge_archive`. `stream`,
+`status` and `upload_artifact` become run events (once per message id, acked after the
+commit) for runs dispatched to this runner; anything else, and an artifact that is not
+small UTF-8 text with the right sha256, is refused with `nack{code}`. A `status` of state
+`started` records the profile's VERSION on the run and on the profile. A result for a run
+the server already cancelled (the protocol-1 fallback) is acked and dropped. P2-18's
+`archive_done` and `restore_done` are handed to the archiving workflow that sent the
+command, like a `provision_result`.
 
 The api never calls out: the daemon dialled in. The worker never touches the socket; it
 writes mailbox rows and NOTIFYs. A result is written as a run event and handed to its
@@ -57,12 +59,19 @@ from tumnis.core.principal import Principal
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import ActorRef
 from tumnis.modules.agents import api
+from tumnis.modules.agents.archive import (
+    archive_message_id,
+    archive_topic,
+    restore_message_id,
+    restore_topic,
+)
 from tumnis.modules.agents.models import AgentProfile, RunEventRow, RunnerMessage, RunRow
 from tumnis.modules.agents.models import Runner as RunnerModel
 from tumnis.modules.agents.protocol import (
     SERVER_PROTOCOL_VERSIONS,
     Ack,
     AckBatch,
+    ArchiveDone,
     DaemonMessage,
     ErrorCode,
     HealthReport,
@@ -74,6 +83,7 @@ from tumnis.modules.agents.protocol import (
     ProvisionResult,
     Register,
     Registered,
+    RestoreDone,
     Result,
     ResultV2,
     Status,
@@ -100,7 +110,8 @@ ACK_BATCH_S: Final = 0.5  # protocol 2: the longest an ack waits for its batch (
 PROTOCOL_2: Final = 2
 V1_TIMEOUT_MAX: Final = 3600  # a protocol-1 `run` carries at most an hour
 STREAM_EVENT_KIND: Final = {"log": "log", "tool_call": "tool_call", "file_touched": "file"}
-PROTOCOL_2_COMMANDS: Final = frozenset({"cancel", "archive"})  # never sent on protocol 1
+# never sent on protocol 1
+PROTOCOL_2_COMMANDS: Final = frozenset({"cancel", "archive", "restore", "purge_archive"})
 
 _runners: Table = RunnerModel.__table__  # type: ignore[assignment]
 _messages: Table = RunnerMessage.__table__  # type: ignore[assignment]
@@ -460,6 +471,8 @@ class _RunnerSocket:
             await self._health_report(message)
         elif isinstance(message, ProvisionResult):
             return await self._provision_result(message)
+        elif isinstance(message, ArchiveDone | RestoreDone):
+            return await self._archive_answer(message)
         return True
 
     # --- forwarding ----------------------------------------------------------------------
@@ -476,7 +489,7 @@ class _RunnerSocket:
     def _render(self, payload: dict[str, Any]) -> str | None:
         """A mailbox row as this session's protocol sends it: the worker writes version-2
         `run`s; a protocol-1 daemon gets version 1 (no worktree, at most an hour) and never
-        a `cancel` or `archive`, which it would not understand."""
+        a `cancel` or an archive command, which it would not understand."""
         if payload.get("type") == "run":
             if self.protocol >= PROTOCOL_2:
                 return json.dumps({**payload, "schema_version": 2})
@@ -707,6 +720,55 @@ class _RunnerSocket:
             )
         except Exception:  # not acked: the daemon resends and the send is idempotent
             _log.exception("could not hand a provision result to its workflow")
+            return False
+        return True
+
+    async def _archive_answer(self, message: ArchiveDone | RestoreDone) -> bool:
+        """The runner's `archive_done` or `restore_done` (P2-18), handed to the archiving
+        workflow that sent the command (the `archive` or `restore` row's correlation id) on
+        `archive:<id>` or `restore:<id>`, and acked once the workflow has it. It counts only
+        from the runner the command went to; from any other runner, or for no known command,
+        it is acked and dropped. It also acks that command's row: the runner got it even if
+        its ack was lost. A `restore` is one per unarchive attempt, found by the workflow id
+        the answer echoes as its correlation id."""
+        if isinstance(message, ArchiveDone):
+            command, message_id = "archive", archive_message_id(message.archive_id)
+            topic = archive_topic(message.archive_id)
+        else:
+            command = "restore"
+            message_id = restore_message_id(message.archive_id, message.correlation_id)
+            topic = restore_topic(message.archive_id)
+        async with tenant_session(self.ctx) as s:
+            payload = await s.scalar(
+                update(_messages)
+                .where(
+                    _messages.c.message_id == message_id,
+                    _messages.c.direction == "out",
+                    _messages.c.type == command,
+                    _messages.c.runner_id == self.runner_id,
+                )
+                .values(
+                    status="acked",
+                    acked_at=func.coalesce(_messages.c.acked_at, self.now()),
+                )
+                .returning(_messages.c.payload)
+            )
+        workflow_id = None if payload is None else payload.get("correlation_id")
+        if not workflow_id:
+            _log.warning(
+                "dropped an archive answer for no command sent to this runner",
+                extra={"type": message.type, "runner": str(self.runner_id)},
+            )
+            return True
+        try:
+            await self.hub.client().send_async(
+                workflow_id,
+                message.model_dump(mode="json"),
+                topic,
+                str(message.message_id),
+            )
+        except Exception:  # not acked: the daemon resends and the send is idempotent
+            _log.exception("could not hand an archive answer to its workflow")
             return False
         return True
 
