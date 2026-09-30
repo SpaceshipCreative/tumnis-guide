@@ -12,7 +12,8 @@
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Final, Literal
@@ -123,3 +124,17 @@ def select_runner(
         online = runner_status(runner.last_heartbeat_at, now) == "online"
         return runner if online and profile.name in runner.inventory else None
     return None
+
+
+# --- Tool allowlists and token reach (P2-10, SAF-2, SAF-3) -------------------------------
+
+
+@dataclass(frozen=True)
+class Drift:
+    extra: frozenset[str]  # present in the profile, not allowed: degraded
+    missing: frozenset[str]  # allowed, not present: warning only
+
+
+def allowlist_drift(reported: Iterable[str], allowlist: Iterable[str]) -> Drift:
+    """The servers a profile has beyond its project's allowlist, and those it lacks."""
+    raise NotImplementedError("P2-10")
