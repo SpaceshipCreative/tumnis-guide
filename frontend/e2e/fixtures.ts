@@ -210,15 +210,17 @@ export const test = base.extend<E2EFixtures>({
       const signedIn = (await context.cookies()).some(
         (cookie) => cookie.name === SESSION_COOKIE,
       );
+      // Loading a larger set (15-30 s for the load set in CI) is setup, not the test: the
+      // test may wait for it as long as the reset request may take, and then gets what it
+      // took on top of its own timeout (P0-29).
+      const info = base.info();
+      const budget = info.timeout;
+      const larger = set !== "seed" && budget > 0;
+      if (larger) info.setTimeout(budget + RESET_TIMEOUT_MS * RESET_ATTEMPTS);
       const started = Date.now();
       const response = await postReset(request, set);
+      if (larger) info.setTimeout(budget + (Date.now() - started));
       expect(response.status(), `POST /v1/test/reset (${set})`).toBe(204);
-      if (set !== "seed") {
-        // Loading a larger set (15-30 s for the load set in CI) is setup, not the test:
-        // it extends the test's timeout by what it took (P0-29).
-        const info = base.info();
-        info.setTimeout(info.timeout + (Date.now() - started));
-      }
       if (signedIn) await signInAs(context.request, seedSetUser(set));
     };
     await reset();
