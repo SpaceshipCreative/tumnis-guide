@@ -304,18 +304,19 @@ class FakeGeneration:
 
     async def complete(self, *, system: str, user: str, max_tokens: int, timeout_ms: int) -> str:
         self.calls.append(GenerationCall(system, user, max_tokens, timeout_ms))
-        text, delay_ms = self.text, self.delay_ms
+        text, delay_ms, fail = self.text, self.delay_ms, self.fail
         stored = await fake_scripts.lookup(GENERATION_HOOK)
         if stored is not None:
+            # A stored script replaces the whole in-memory one, failure included.
             parsed = StoredGenerationScript.model_validate(stored)
-            text, delay_ms = parsed.first_action, parsed.delay_ms
+            text, delay_ms, fail = parsed.first_action, parsed.delay_ms, None
         if delay_ms > timeout_ms:
             await self._sleep(timeout_ms / 1000)
             raise AdapterTimeout("decisions.vllm_generation", "chat_completion")
         if delay_ms:
             await self._sleep(delay_ms / 1000)
-        if self.fail is not None:
-            raise self.fail
+        if fail is not None:
+            raise fail
         return text
 
     def health_state(self) -> Health:
