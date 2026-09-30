@@ -108,6 +108,9 @@ import type {
   DeadLettersPostRetryData,
   DeadLettersPostRetryErrors,
   DeadLettersPostRetryResponses,
+  GithubWebhookData,
+  GithubWebhookErrors,
+  GithubWebhookResponses,
   HealthLiveData,
   HealthLiveResponses,
   HealthReadyData,
@@ -230,9 +233,15 @@ import type {
   TasksLinkContextItemData,
   TasksLinkContextItemErrors,
   TasksLinkContextItemResponses,
+  TasksLinkPullRequestData,
+  TasksLinkPullRequestErrors,
+  TasksLinkPullRequestResponses,
   TasksListCommentsData,
   TasksListCommentsErrors,
   TasksListCommentsResponses,
+  TasksListPullRequestsData,
+  TasksListPullRequestsErrors,
+  TasksListPullRequestsResponses,
   TasksListRecurrenceData,
   TasksListRecurrenceErrors,
   TasksListRecurrenceResponses,
@@ -296,6 +305,7 @@ import {
   zDeadLettersGetDeadLettersResponse,
   zDeadLettersPostDiscardResponse,
   zDeadLettersPostRetryResponse,
+  zGithubWebhookResponse,
   zHealthLiveResponse,
   zKnowledgeCreateLocationResponse,
   zKnowledgeGetBriefResponse,
@@ -336,7 +346,9 @@ import {
   zTasksGetReviewCountResponse,
   zTasksGetTaskResponse,
   zTasksLinkContextItemResponse,
+  zTasksLinkPullRequestResponse,
   zTasksListCommentsResponse,
+  zTasksListPullRequestsResponse,
   zTasksListRecurrenceResponse,
   zTasksListReviewKindsResponse,
   zTasksListTasksResponse,
@@ -956,6 +968,23 @@ export const knowledgeGetFile = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zKnowledgeGetFileResponse.parseAsync(data),
     url: "/v1/files/{document_id}",
+    ...options,
+  });
+
+/**
+ * Webhook
+ */
+export const githubWebhook = <ThrowOnError extends boolean = false>(
+  options: Options<GithubWebhookData, ThrowOnError>,
+): RequestResult<GithubWebhookResponses, GithubWebhookErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    GithubWebhookResponses,
+    GithubWebhookErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zGithubWebhookResponse.parseAsync(data),
+    url: "/v1/github/webhook/{workspace_id}",
     ...options,
   });
 
@@ -2136,6 +2165,58 @@ export const tasksMoveTask = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zTasksMoveTaskResponse.parseAsync(data),
     url: "/v1/tasks/{task_id}/move",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List Pull Requests
+ *
+ * The task's pull requests with their stored status. Opening the task asks for a fresh
+ * read: the worker's answer arrives over `/ws` as a change of the task (FR-12.1).
+ */
+export const tasksListPullRequests = <ThrowOnError extends boolean = false>(
+  options: Options<TasksListPullRequestsData, ThrowOnError>,
+): RequestResult<
+  TasksListPullRequestsResponses,
+  TasksListPullRequestsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TasksListPullRequestsResponses,
+    TasksListPullRequestsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListPullRequestsResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/pull-requests",
+    ...options,
+  });
+
+/**
+ * Link Pull Request
+ *
+ * Links a github.com pull request (422 `not_a_pull_request`, 422 `repo_not_allowed`
+ * outside Settings > GitHub's allow-list); linking again keeps one link (FR-12.1).
+ */
+export const tasksLinkPullRequest = <ThrowOnError extends boolean = false>(
+  options: Options<TasksLinkPullRequestData, ThrowOnError>,
+): RequestResult<
+  TasksLinkPullRequestResponses,
+  TasksLinkPullRequestErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TasksLinkPullRequestResponses,
+    TasksLinkPullRequestErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksLinkPullRequestResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/pull-requests",
     ...options,
     headers: {
       "Content-Type": "application/json",
