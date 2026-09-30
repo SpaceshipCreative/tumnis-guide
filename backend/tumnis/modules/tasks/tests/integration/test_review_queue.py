@@ -124,7 +124,6 @@ def _impact_answer(level: int) -> dict[str, Any]:
 
 @pytest.mark.req("FR-11.4")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 async def test_jev_score_combines_with_count(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,
@@ -171,7 +170,6 @@ async def test_jev_score_combines_with_count(  # noqa: PLR0917
 
 @pytest.mark.req("FR-6.1")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 async def test_decisions_down_count_alone_orders(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,
@@ -215,7 +213,6 @@ async def test_decisions_down_count_alone_orders(  # noqa: PLR0917
 
 @pytest.mark.req("FR-6.1")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 async def test_impact_updates_when_subtree_changes(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,
@@ -249,7 +246,6 @@ async def test_impact_updates_when_subtree_changes(  # noqa: PLR0917
 
 @pytest.mark.req("FR-1.4")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 def test_badge_equals_unreviewed(
     workspace: WorkspaceHandle, actors: Actors, clock: FixedClock, db: DbUrls
 ) -> None:
@@ -385,7 +381,6 @@ def test_badge_equals_unreviewed(
 
 @pytest.mark.req("UX 2")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 async def test_decide_emits_human_decided_and_owner_applies(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,
@@ -459,7 +454,6 @@ async def test_decide_emits_human_decided_and_owner_applies(  # noqa: PLR0917
 
 @pytest.mark.req("FR-6.1")
 @pytest.mark.wp("P1-13")
-@pytest.mark.xfail(strict=True, reason="spec:P1-13")
 async def test_invalid_action_for_kind_rejected(
     app: FastAPI,
     session_client: SessionClient,
