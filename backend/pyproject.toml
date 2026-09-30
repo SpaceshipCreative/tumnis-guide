@@ -67,7 +67,7 @@ module-root = ""
 
 [tool.pytest.ini_options]
 minversion = "8.3"
-testpaths = ["tests", "tumnis", "../scripts/release"]
+testpaths = ["tests", "tumnis", "../scripts/release", "../scripts/backup/tests"]
 addopts = "--strict-markers --strict-config -p randomly --disable-socket --allow-unix-socket -ra"
 xfail_strict = true
 asyncio_mode = "auto"
