@@ -26,7 +26,7 @@ test("[P1-10][FR-1.3] T-P1-10-12 free blocks highlighted", async () => {
     renderWithProviders(<CalendarStrip day={DAY} />, { viewport });
 
     const strip = await screen.findByRole("region", {
-      name: "Today's calendar",
+      name: "Calendar and free blocks",
     });
     expect(days).toEqual([DAY]);
 

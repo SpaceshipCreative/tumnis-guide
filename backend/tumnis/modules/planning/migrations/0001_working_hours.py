@@ -19,7 +19,7 @@ phase = "expand"
 def upgrade() -> None:
     create_tenant_table(
         "working_hours",
-        sa.Column("weekday", sa.SmallInteger, nullable=False),
+        sa.Column("weekday", sa.Integer, nullable=False),
         sa.Column("start_local", sa.Time, nullable=False),
         sa.Column("end_local", sa.Time, nullable=False),
         sa.CheckConstraint("weekday BETWEEN 0 AND 6", name="ck_working_hours_weekday"),

@@ -30,7 +30,7 @@ export function CalendarStrip({ day }: CalendarStripProps) {
       className="flex shrink-0 flex-col gap-2"
     >
       <h2 id={headingId} className="text-lg font-semibold">
-        Today's calendar
+        Calendar and free blocks
       </h2>
       {calendar.data ? (
         <Strip calendar={calendar.data} now={new Date()} />
