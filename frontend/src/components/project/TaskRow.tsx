@@ -1,13 +1,32 @@
 // One task in the Tasks view (P0-24, FR-2.6, UX 7): its title opens the drawer; one status
 // action (Start, or Done for a Human task in progress); subtasks indented underneath. A
 // capture still on the offline queue shows with its pending mark and no actions (P0-25).
+// The label chip (P1-07): pending, suggested or confirmed, overridden with one click.
+import { LabelChip, useLabelOverride } from "../common/LabelChip";
 import { formatDay, formatMinutes } from "../dashboard/format";
 import { PendingMark } from "../quickadd/PendingMark";
 import { isPendingId, pendingKey } from "../quickadd/queue";
 import type { TaskLite } from "./grouping";
 import { useChangeStatus, type Status } from "./mutations";
+import type { Task } from "./types";
 
-const LABEL_TEXT = { human: "Human", ai: "AI", hybrid: "Hybrid" } as const;
+/** A row's task: list rows carry the label's source, reason and suggestion too. */
+type RowTask = TaskLite &
+  Partial<Pick<Task, "label_source" | "label_reason" | "label_suggestion">>;
+
+function RowLabel({ task }: { task: RowTask }) {
+  const { picked, pick } = useLabelOverride(task);
+  return (
+    <LabelChip
+      label={picked ?? task.label}
+      source={picked ? "user" : (task.label_source ?? null)}
+      reason={picked ? null : (task.label_reason ?? null)}
+      suggestion={picked ? null : (task.label_suggestion ?? null)}
+      onOverride={pick}
+      showReason={false}
+    />
+  );
+}
 
 /** The row's one status action (P0-18's human edges). */
 export function statusAction(
@@ -27,7 +46,7 @@ export function TaskRow({
   subtasksOf,
   onOpen,
 }: {
-  task: TaskLite;
+  task: RowTask;
   /** The task's subtasks shown with it (nested ones included, recursively). */
   subtasksOf: (taskId: string) => readonly TaskLite[];
   onOpen: (taskId: string) => void;
@@ -62,9 +81,7 @@ export function TaskRow({
           </button>
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
             {pending && <PendingMark idempotencyKey={pendingKey(task.id)} />}
-            <span>
-              {task.label === null ? "No label yet" : LABEL_TEXT[task.label]}
-            </span>
+            {pending ? <span>No label yet</span> : <RowLabel task={task} />}
             {estimate && <span>{estimate}</span>}
             {task.due_on && <span>Due {formatDay(task.due_on)}</span>}
           </p>

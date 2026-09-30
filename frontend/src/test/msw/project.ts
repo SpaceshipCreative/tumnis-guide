@@ -283,6 +283,8 @@ export class ProjectFake {
           title: body.title,
           label: null,
           label_source: null,
+          label_reason: null,
+          label_suggestion: null,
           status,
           priority: "normal",
           due_on: null,
