@@ -34,6 +34,8 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("project_links", "kind"): "person",
     ("projects", "sort_key"): "a0",  # a valid rank key (core/rank.py); "x" breaks create
     ("provider_configs", "slot"): "decisions",
+    ("decision_log", "provider"): "jev",  # ck_decision_log_provider
+    ("decision_log", "outcome"): "applied",  # ck_decision_log_outcome
     ("board_columns", "sort_key"): "a0",
     ("board_columns", "status_map"): "backlog",  # a task_status enum value
     ("tasks", "board_rank"): "a0",
@@ -51,6 +53,8 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("recurrence_rules", "preset"): "daily",  # ck_recurrence_rules_preset_or_cron
     ("recurrence_rules", "task_template"): Jsonb({"title": "x"}),  # RecurrenceOut.title
     ("search_index", "entity_type"): "task",  # ck_search_index_entity_type
+    ("working_hours", "start_local"): time(9, 0),  # ck_working_hours_order
+    ("working_hours", "end_local"): time(18, 0),
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)

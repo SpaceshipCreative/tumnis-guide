@@ -25,6 +25,12 @@ CASES = [
     ),
     (
         "events",
+        "decision.made",
+        1,
+        "backend/tests/contract/fixtures/events/decision.made/v1.json",
+    ),
+    (
+        "events",
         "human.decided",
         1,
         "backend/tests/contract/fixtures/events/human.decided/v1.json",

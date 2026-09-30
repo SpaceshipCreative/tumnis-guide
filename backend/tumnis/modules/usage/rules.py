@@ -38,8 +38,9 @@ COUNTERS: Final[Mapping[str, Counters]] = _ReadOnly(
     {
         "task.created": (("tasks_created", _one),),
         "project.created": (("projects_created", _one),),
+        "decision.made": (("decisions", _one),),  # P1-02
         # added by later WPs: run.finished -> runs, run_minutes (ceil(duration_s / 60));
-        # decision.made -> decisions; items.ingested -> ingested_items (len(item_ids))
+        # items.ingested -> ingested_items (len(item_ids))
     }
 )
 

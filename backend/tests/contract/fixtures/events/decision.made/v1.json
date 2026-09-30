@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "decision_id": "01a0ec82-72d7-7f23-8be6-203712701f51",
+  "decision_point": "quick_add_label",
+  "outcome": "review",
+  "provider": "vllm",
+  "fallback": true,
+  "cached": false
+}

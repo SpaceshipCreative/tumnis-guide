@@ -445,7 +445,15 @@ export class ProjectFake {
         return HttpResponse.json(this.brief);
       }),
       http.get("/v1/recurrence", () =>
-        HttpResponse.json({ items: this.recurrences, next_cursor: null }),
+        HttpResponse.json({
+          items: this.recurrences.map((r) => ({
+            project_id: this.project.id,
+            latest_task_id: r.task_id,
+            latest_occurrence_on: null,
+            ...r,
+          })),
+          next_cursor: null,
+        }),
       ),
       http.get("/v1/tasks/:id/recurrence", ({ params }) => {
         const found = this.recurrences.find((r) => r.task_id === params.id);

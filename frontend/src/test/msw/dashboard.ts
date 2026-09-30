@@ -1,6 +1,7 @@
 // MSW handlers for the dashboard's reads (P0-23): the project list, the Today query
 // (`GET /v1/tasks?status=today&order=today&limit=5`, a `TaskPage` with `total`), the review
-// badge count (`ReviewCountOut`) and the workspace settings (for the timezone). Bodies are
+// badge count (`ReviewCountOut`), the workspace settings (for the timezone) and today's
+// calendar strip (P1-10). Bodies are
 // typed with the generated response types.
 import { http, HttpResponse, type RequestHandler } from "msw";
 
@@ -11,6 +12,7 @@ import type {
   TaskPage,
 } from "../../api/types.gen";
 import type { makeProject } from "../factories";
+import { dayCalendar, NO_WINDOW } from "./planning";
 import { workspaceSettings } from "./settings";
 
 /** `GET /v1/projects` answering these projects on one page. */
@@ -58,11 +60,13 @@ export function deployStatus(
   return http.get("/v1/coolify/status", () => HttpResponse.json(entries));
 }
 
-/** The dashboard's reads, empty: no projects, nothing today, nothing to review, no apps. */
+/** The dashboard's reads, empty: no projects, nothing today, nothing to review, no apps,
+ * no working hours or events today. */
 export const dashboardDefaults: RequestHandler[] = [
   deployStatus(),
   projectsList([]),
   todayTasks([]),
   reviewCount(0),
   workspaceTimezone("America/New_York"),
+  dayCalendar(NO_WINDOW),
 ];

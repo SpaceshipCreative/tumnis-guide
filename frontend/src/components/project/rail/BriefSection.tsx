@@ -1,5 +1,7 @@
 // The brief (P0-24, FR-2.7): plain Markdown in a text field (Tiptap arrives with P1-17),
-// saved as the project's text entry with the version read.
+// saved as the project's text entry with the version read. The save lives in the section,
+// not the editor: a save answers a new version, which re-creates the editor, and "Saved"
+// must outlast that.
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -20,12 +22,13 @@ export function firstLine(markdown: string | null | undefined): string | null {
 function BriefEditor({
   projectId,
   brief,
+  save,
 }: {
   projectId: string;
   brief: Brief;
+  save: ReturnType<typeof useSaveBrief>;
 }) {
   const [text, setText] = useState(brief.body_md ?? "");
-  const save = useSaveBrief();
   return (
     <form
       className="flex flex-col gap-2"
@@ -46,7 +49,9 @@ function BriefEditor({
       <button type="submit" disabled={save.isPending} className={saveClass}>
         Save brief
       </button>
-      {save.isSuccess && <p className="text-xs text-muted">Saved</p>}
+      {save.isSuccess && save.data?.id === brief.id && (
+        <p className="text-xs text-muted">Saved</p>
+      )}
     </form>
   );
 }
@@ -61,6 +66,7 @@ export function BriefSection({
   onToggle: () => void;
 }) {
   const brief = useQuery(briefQuery(projectId));
+  const save = useSaveBrief();
   const summary = brief.isPending
     ? "Loading…"
     : (firstLine(brief.data?.body_md) ?? "No brief yet");
@@ -76,6 +82,7 @@ export function BriefSection({
           key={`${brief.data.id}:${String(brief.data.version)}`}
           projectId={projectId}
           brief={brief.data}
+          save={save}
         />
       ) : (
         <p className="text-sm text-muted">

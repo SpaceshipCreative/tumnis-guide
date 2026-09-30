@@ -1,11 +1,13 @@
 // The session's Undo (P0-24, UX 9): the latest task action with an Undo button, and Mod+Z
 // (Ctrl or Cmd + Z) anywhere outside a text field. After an undo every task view refetches
-// and shows the restored task.
+// and shows the restored task. An entry being undone is skipped, so a second Mod+Z (or
+// Undo click) while the first is on its way undoes the one before it instead of sending the
+// same change twice.
 import { useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "@xstate/store-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ConflictError } from "../../lib/fetch";
+import { ApiError, ConflictError } from "../../lib/fetch";
 import { invalidateTaskViews } from "../../lib/task-cache";
 import { undo, undoStore, type UndoEntry } from "../../lib/undo";
 import { uiStore } from "../../stores/uiStore";
@@ -33,21 +35,42 @@ function refusal(error: unknown): string {
   if (error instanceof ConflictError) {
     return "The task changed since, so that action can no longer be undone.";
   }
+  if (error instanceof ApiError && error.status === 404) {
+    return "That task no longer exists, so the action can't be undone.";
+  }
   return "Could not undo. Try again.";
 }
 
+/** The latest entry not being undone right now. */
+function latestIdle(
+  entries: readonly UndoEntry[],
+  busy: ReadonlySet<string>,
+): UndoEntry | undefined {
+  return entries.findLast((e) => !busy.has(e.changeId));
+}
+
 export function UndoToast() {
-  const latest = useSelector(undoStore, (s) => s.context.entries.at(-1));
+  const entries = useSelector(undoStore, (s) => s.context.entries);
   const queryClient = useQueryClient();
   const [hidden, setHidden] = useState<string | null>(null);
+  // The change ids being undone: the ref for the key handler (two presses can come before
+  // a render), the state to redraw the toast.
+  const inFlight = useRef(new Set<string>());
+  const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set());
+  const latest = latestIdle(entries, busy);
 
   const run = useCallback(
     async (entry: UndoEntry) => {
+      if (inFlight.current.has(entry.changeId)) return;
+      inFlight.current.add(entry.changeId);
+      setBusy(new Set(inFlight.current));
       try {
         await undo(entry);
       } catch (error) {
         uiStore.trigger.showNotice({ text: refusal(error) });
       } finally {
+        inFlight.current.delete(entry.changeId);
+        setBusy(new Set(inFlight.current));
         await invalidateTaskViews(queryClient);
       }
     },
@@ -59,7 +82,10 @@ export function UndoToast() {
       const mod = event.ctrlKey || event.metaKey;
       if (!mod || event.shiftKey || event.altKey) return;
       if (event.key.toLowerCase() !== "z" || isEditable(event.target)) return;
-      const entry = undoStore.getSnapshot().context.entries.at(-1);
+      const entry = latestIdle(
+        undoStore.getSnapshot().context.entries,
+        inFlight.current,
+      );
       if (!entry) return;
       event.preventDefault();
       void run(entry);

@@ -7,6 +7,7 @@ export const SETTINGS_SECTIONS = [
   "dead-letters",
   "agents",
   "workspace",
+  "working-hours",
   "calendar",
   "storage",
 ] as const;
@@ -20,6 +21,7 @@ export const SECTION_LABELS: Record<SettingsSection, string> = {
   "dead-letters": "Dead letters",
   agents: "Agents",
   workspace: "Workspace",
+  "working-hours": "Working hours",
   calendar: "Calendar",
   storage: "Storage",
 };

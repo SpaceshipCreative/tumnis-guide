@@ -50,6 +50,7 @@ from tumnis.modules.calendar.rules import (
     map_event,
     sync_window,
 )
+from tumnis.modules.calendar.rules import free_blocks as _free_blocks
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.integrations.api import (
     Capability,
@@ -375,6 +376,11 @@ async def ingest_events_page(
         stats = await upsert_events(ctx, connection_id, records, raw_ids=record_raw, session=s)
         await soft_delete_records(s, _events, connection_id, page.deleted)
     return stats
+
+
+# The free blocks of a window between busy intervals (P1-10): the planner computes the day
+# calendar through this api (it may not import calendar's rules).
+free_blocks = _free_blocks
 
 
 async def events_between(
