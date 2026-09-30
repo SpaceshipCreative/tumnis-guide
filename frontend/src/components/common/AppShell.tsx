@@ -2,7 +2,7 @@
 // sidebar on a laptop, the header (search, review, help, account), the bottom bar and the
 // navigation drawer on a phone, the page in `main`, the conflict notice, notices and the
 // Undo toast (P0-24), all inside the quick-add host (P0-25: the offline queue, quick add,
-// search, shortcuts). While the drawer is open the rest of the shell is inert. Sign-in and
+// search, shortcuts). While the drawer is open everything else is inert. Sign-in and
 // setup get the bare frame (no navigation before a session exists).
 import { Outlet, useRouterState } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
@@ -24,29 +24,33 @@ export function AppShell() {
   const navOpen = useSelector(uiStore, (s) => s.context.navOpen);
   const bare = PUBLIC_PATHS.has(pathname);
   return (
-    <QuickAddHost>
-      <div className="min-h-dvh bg-bg text-text">
-        <div inert={!bare && navOpen} className="min-h-dvh md:flex">
-          <SkipLink />
-          {!bare && <NavRail />}
-          <div className="flex min-w-0 flex-1 flex-col">
-            {!bare && <AppHeader />}
-            {/* Before main, so the keyboard meets the navigation first, as on a laptop. */}
-            {!bare && <BottomBar />}
-            <main
-              id={MAIN_ID}
-              tabIndex={-1}
-              className="min-w-0 flex-1 px-4 pt-4 pb-24 md:px-8 md:pb-8"
-            >
-              <Outlet />
-            </main>
+    <div className="min-h-dvh bg-bg text-text">
+      {/* Everything but the drawer: inert while the drawer is open, so nothing behind it
+          (page, toasts, Quick add) takes a click or focus. */}
+      <div inert={!bare && navOpen}>
+        <QuickAddHost>
+          <div className="min-h-dvh md:flex">
+            <SkipLink />
+            {!bare && <NavRail />}
+            <div className="flex min-w-0 flex-1 flex-col">
+              {!bare && <AppHeader />}
+              {/* Before main, so the keyboard meets the navigation first, as on a laptop. */}
+              {!bare && <BottomBar />}
+              <main
+                id={MAIN_ID}
+                tabIndex={-1}
+                className="min-w-0 flex-1 px-4 pt-4 pb-24 md:px-8 md:pb-8"
+              >
+                <Outlet />
+              </main>
+            </div>
           </div>
-        </div>
-        {!bare && <NavDrawer />}
-        <ConflictToast />
-        {!bare && <UndoToast />}
-        <NoticeToast />
+          <ConflictToast />
+          {!bare && <UndoToast />}
+          <NoticeToast />
+        </QuickAddHost>
       </div>
-    </QuickAddHost>
+      {!bare && <NavDrawer />}
+    </div>
   );
 }
