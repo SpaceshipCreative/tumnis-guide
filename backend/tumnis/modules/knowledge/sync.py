@@ -962,3 +962,38 @@ async def locations() -> list[tuple[str, str]]:
             )
             found += [(str(workspace_id), str(i)) for i in ids]
     return found
+
+
+async def watched_roots() -> list[tuple[str, str, str]]:
+    """(workspace, location, root) for every live server path on a local disk: what
+    `local_watch` watches (a network share's events are unreliable, FR-15.12, so its
+    15-minute scan is all it gets)."""
+    from tumnis.core import audit, db  # noqa: PLC0415
+
+    async with db.app_sessionmaker()() as s, s.begin():
+        workspaces = await audit.workspace_ids(s)
+    found: list[tuple[str, str, str]] = []
+    for workspace_id in workspaces:
+        async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
+            rows = await s.execute(
+                select(_locations.c.id, _locations.c.root, _locations.c.capabilities).where(
+                    _locations.c.deleted_at.is_(None), _locations.c.kind == "server_path"
+                )
+            )
+            found += [
+                (str(workspace_id), str(row.id), row.root)
+                for row in rows
+                if not (row.capabilities or {}).get("network_fs")
+            ]
+    return found
+
+
+def watched_location(path: str, roots: Iterable[tuple[str, str, str]]) -> tuple[str, str] | None:
+    """The (workspace, location) whose project folders hold the changed `path`; None for a
+    change at the root itself, Tumnis's own (`.tumnis/`, temp files) or an OS dropping."""
+    for workspace_id, location_id, root in roots:
+        prefix = root.rstrip("/") + "/"
+        if path.startswith(prefix):
+            _folder, _, inside = path[len(prefix) :].partition("/")
+            return None if not inside or ignored(inside) else (workspace_id, location_id)
+    return None
