@@ -6,11 +6,13 @@ import { AccountSection } from "../components/settings/AccountSection";
 import { AgentsSection } from "../components/settings/AgentsSection";
 import { AuditSection } from "../components/settings/AuditSection";
 import { CalendarSection } from "../components/settings/CalendarSection";
+import { CalibrationSection } from "../components/settings/calibration/Calibration";
 import { DeadLettersSection } from "../components/settings/DeadLettersSection";
 import { KeysSection } from "../components/settings/KeysSection";
 import {
   accountQuery,
   calendarAccountsQuery,
+  calibrationQuery,
   deadLettersQuery,
   keysQuery,
   profilesQuery,
@@ -44,6 +46,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   "working-hours": WorkingHoursSection,
   calendar: () => <CalendarSection />,
   storage: StorageSection,
+  calibration: CalibrationSection,
 };
 
 export const Route = createFileRoute("/settings/$section")({
@@ -89,6 +92,9 @@ export const Route = createFileRoute("/settings/$section")({
         break;
       case "storage":
         started(queryClient.query(storageQuery()));
+        break;
+      case "calibration":
+        started(queryClient.query(calibrationQuery()));
         break;
       default:
         break; // the audit log reads by page

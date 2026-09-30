@@ -1,5 +1,5 @@
 """decisions SQLAlchemy tables owned by this module (mirrors of revisions decisions_0001
-and decisions_0002)."""
+to decisions_0003)."""
 
 from datetime import datetime
 from typing import Any
@@ -60,3 +60,29 @@ class DecisionLog(TenantBase, Base):
     overridden: Mapped[bool | None]
     final_value: Mapped[Any | None] = mapped_column(JSONB)
     outcome_at: Mapped[datetime | None]
+
+
+class ThresholdHistory(TenantBase, Base):
+    """One human edit of a threshold, with the value before, the value after and the
+    reason (P3-08, FR-11.5); `created_by` is the editor."""
+
+    __tablename__ = "thresholds_history"
+
+    decision_point: Mapped[str]
+    model_version: Mapped[str]
+    before: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    after: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    reason: Mapped[str]
+
+
+class DecisionEval(TenantBase, Base):
+    """One `tumnis decisions eval` result for one point, provider and model (P3-08)."""
+
+    __tablename__ = "decision_evals"
+
+    decision_point: Mapped[str]
+    provider: Mapped[str]
+    model_version: Mapped[str]
+    set_sha256: Mapped[str]
+    metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # JSON null under 100
+    run_at: Mapped[datetime]

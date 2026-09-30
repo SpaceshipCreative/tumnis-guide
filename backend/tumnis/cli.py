@@ -1,4 +1,5 @@
-"""Command-line entry point: `tumnis api|worker|migrate|seed|gen|drill|audit|knowledge|mcp-stdio`.
+"""Command-line entry point: `tumnis api|worker|migrate|seed|gen|drill|audit|knowledge|
+decisions|mcp-stdio`.
 
 The image runs every process through this CLI. `api` and `worker` load the deployment
 settings and run the boot checks first; a configuration error exits 78 (EX_CONFIG), so a
@@ -7,7 +8,7 @@ misconfigured preview never serves a request.
 
 import asyncio
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Literal, NoReturn
@@ -31,6 +32,8 @@ admin_app = typer.Typer(help="Account recovery (P0-13).", no_args_is_help=True)
 app.add_typer(admin_app, name="admin")
 knowledge_app = typer.Typer(help="Project folders (P1-15).", no_args_is_help=True)
 app.add_typer(knowledge_app, name="knowledge")
+decisions_app = typer.Typer(help="Decision calibration (P3-08).", no_args_is_help=True)
+app.add_typer(decisions_app, name="decisions")
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -498,3 +501,109 @@ def knowledge_backup_sources(
         return
     for source in sources:
         typer.echo(f"{source.source}\t{source.dest}\t{source.mode}")
+
+
+@decisions_app.command("eval")
+def decisions_eval(
+    set_path: Annotated[
+        Path | None,
+        typer.Option("--set", exists=True, dir_okay=False, help="A stored labeled set (JSONL)"),
+    ] = None,
+    from_log: Annotated[
+        bool, typer.Option("--from-log", help="Label the workspace's decision log instead")
+    ] = False,
+    since: Annotated[
+        datetime | None,
+        typer.Option(formats=["%Y-%m-%d"], help="With --from-log: decisions from this day (UTC)"),
+    ] = None,
+    export: Annotated[
+        Path | None, typer.Option(help="With --from-log: write the labeled set to this file")
+    ] = None,
+    workspace: Annotated[
+        UUID | None,
+        typer.Option(help="Judge at its thresholds and keep the result in decision_evals"),
+    ] = None,
+) -> None:
+    """Evaluate labeled decisions offline, with the calibration page's engine, and print the
+    evaluations as JSON (P3-08, FR-11.5). `--set` alone needs no database and judges each
+    point at its plan default; `--workspace` uses that workspace's thresholds and keeps
+    one decision_evals row per point, provider and model with the set's sha256.
+    `--from-log` reads the workspace's log (and `--export` writes it as a stored set)."""
+    import importlib  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    # By name, as the knowledge command does: module tests that drive the CLI must not
+    # reach decisions through it.
+    decisions = importlib.import_module("tumnis.modules.decisions.api")
+
+    if (set_path is None) == (not from_log):
+        typer.echo("decisions eval: give exactly one of --set and --from-log", err=True)
+        raise typer.Exit(EXIT_USAGE)
+    if from_log and workspace is None:
+        typer.echo("decisions eval: --from-log needs --workspace", err=True)
+        raise typer.Exit(EXIT_USAGE)
+    now = make_clock().now()
+    rows: list[Any] = []
+    data = b""
+    if set_path is not None:
+        data = set_path.read_bytes()
+        try:
+            rows = decisions.load_set(data)
+        except decisions.InvalidSet as exc:
+            typer.echo(f"decisions eval: {set_path}: {exc}", err=True)
+            raise typer.Exit(EXIT_USAGE) from None
+    if workspace is None:
+        evaluations = decisions.evaluate(rows, {})  # offline: the plan defaults
+    else:
+        rows, data, evaluations = _eval_in_workspace(
+            decisions, workspace, rows, data, now=now, from_log=from_log, since=since
+        )
+        if export is not None and from_log:
+            export.write_bytes(data)
+    typer.echo(
+        json.dumps(
+            {
+                "set_sha256": decisions.set_sha256(data),
+                "evaluations": [e.model_dump(mode="json") for e in evaluations],
+            }
+        )
+    )
+
+
+def _eval_in_workspace(
+    decisions: Any,
+    workspace: UUID,
+    rows: list[Any],
+    data: bytes,
+    *,
+    now: datetime,
+    from_log: bool,
+    since: datetime | None,
+) -> tuple[list[Any], bytes, list[Any]]:
+    """`tumnis decisions eval --workspace`: the rows (read from the log with --from-log,
+    as a stored set's bytes), judged at the workspace's thresholds, the result kept in
+    decision_evals. One connection per command, as the app role in that workspace."""
+    from tumnis.core import db  # noqa: PLC0415
+    from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    settings = load_settings()
+    db.configure(settings.database_direct_url, settings.database_direct_url, pooled=False)
+    ctx = WorkspaceContext(workspace, SYSTEM_ACTOR)
+    start = None if since is None else since.replace(tzinfo=UTC)
+
+    async def run() -> tuple[list[Any], bytes, list[Any]]:
+        try:
+            found, raw = rows, data
+            if from_log:
+                found = await decisions.labeled_decisions(ctx, now=now, since=start)
+                raw = decisions.dump_set(found)
+            evaluations = decisions.evaluate(found, await decisions.thresholds_in_force(ctx))
+            await decisions.store_evaluations(
+                ctx, evaluations, set_sha256=decisions.set_sha256(raw), run_at=now
+            )
+            return found, raw, evaluations
+        finally:
+            await db.dispose()
+
+    return asyncio.run(run())

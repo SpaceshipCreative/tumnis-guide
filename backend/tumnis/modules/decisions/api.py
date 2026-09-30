@@ -20,16 +20,25 @@ from typing import Annotated, Any, Final, Literal, Self
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    StringConstraints,
+    TypeAdapter,
+    model_validator,
+)
 from sqlalchemy import insert, null, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import tenancy
+from tumnis.core import audit, tenancy
 from tumnis.core.adapters.errors import AdapterError
 from tumnis.core.adapters.registry import current_mode, resolve
 from tumnis.core.cache import CacheKey, CacheSpec, invalidate_on_commit, register_cache
 from tumnis.core.clock import Clock, SystemClock
+from tumnis.core.errors import ProblemError
 from tumnis.core.net import NetPolicy
 from tumnis.core.outbox import emit
 from tumnis.core.settings_store import (
@@ -59,8 +68,16 @@ from tumnis.modules.decisions.catalog import (
     build_request,
     input_hash,
 )
+from tumnis.modules.decisions.eval import (
+    Evaluation,
+    InvalidSet,
+    dump_set,
+    evaluate,
+    load_set,
+    set_sha256,
+)
 from tumnis.modules.decisions.limiter import credential_fingerprint, limiter_for
-from tumnis.modules.decisions.models import DecisionLog
+from tumnis.modules.decisions.models import DecisionEval, DecisionLog, ThresholdHistory
 from tumnis.modules.decisions.models import ProviderConfig as ProviderConfigRow
 from tumnis.modules.decisions.models import Threshold as ThresholdRow
 from tumnis.modules.decisions.payloads import (
@@ -70,24 +87,40 @@ from tumnis.modules.decisions.payloads import (
 )
 from tumnis.modules.decisions.rules import (
     DEFAULT_THRESHOLDS,
+    MIN_LABELED,
+    DecisionLogRow,
+    HumanDecision,
+    LabeledDecision,
+    Metrics,
     Route,
+    SweepRow,
     Threshold,
+    answer_text,
+    confidence_bar,
     effective_threshold,
     is_pinned_model,
+    label_outcome,
     low_route,
     main_answer,
     route,
+    value_text,
 )
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
 from tumnis.settings import GenerationSettings
 
 __all__ = [
+    "CalibrationOut",
+    "CalibrationPoint",
     "ChoiceAnswer",
     "Decision",
     "DecisionPoint",
     "DecisionsProvider",
+    "Evaluation",
+    "InvalidSet",
     "JevSettings",
+    "LabeledDecision",
+    "Metrics",
     "NoulAnswer",
     "ProviderConfig",
     "ProviderConfigIn",
@@ -97,19 +130,32 @@ __all__ = [
     "ScoreAnswer",
     "Slot",
     "SubjectRef",
+    "SweepRow",
     "Threshold",
+    "ThresholdEdit",
+    "ThresholdIn",
+    "ThresholdOut",
     "TriageSettings",
     "TypedAnswer",
     "VllmSettings",
     "ask_raw",
     "assess_blocking_impact",
+    "calibration",
     "configure_generation",
     "configure_net_policy",
     "decide",
+    "dump_set",
+    "edit_threshold",
+    "evaluate",
     "get_provider_config",
+    "labeled_decisions",
+    "load_set",
     "put_provider_config",
     "put_threshold",
     "record_outcome",
+    "set_sha256",
+    "store_evaluations",
+    "thresholds_in_force",
     "use_providers",
 ]
 
@@ -807,3 +853,257 @@ async def assess_blocking_impact(
         decision_id=decision.decision_id,
     )
     return decision
+
+
+# --- Calibration (P3-08, FR-11.5) -------------------------------------------------------------
+
+THRESHOLD_CHANGED: Final = "threshold.changed"
+_ANSWERS: Final = TypeAdapter(dict[str, TypedAnswer])
+
+
+class ThresholdIn(BaseModel):
+    """A threshold a human sets: `min_confidence` for a Choice or Score point, the yes and
+    no bands for a Noul point (no yes band for `approval_need`). The fallback margin is
+    kept as it is."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_confidence: float | None = Field(default=None, ge=0, le=1)
+    t_yes: float | None = Field(default=None, ge=0, le=1)
+    t_no: float | None = Field(default=None, ge=0, le=1)
+
+
+class ThresholdEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    threshold: ThresholdIn
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+
+class ThresholdOut(BaseModel):
+    decision_point: DecisionPoint
+    model_version: str
+    threshold: Threshold
+    source: Literal["default", "user"]
+    needs_recheck: bool
+    bar: float  # the threshold on the logged confidence scale (`rules.confidence_bar`)
+
+
+class CalibrationPoint(ThresholdOut):
+    primitive: Literal["choice", "score", "noul"]
+    evaluations: list[Evaluation]  # one per provider and model with labeled decisions
+
+
+class CalibrationOut(BaseModel):
+    model_version: str  # the pinned model the thresholds are for
+    min_labeled: int
+    points: list[CalibrationPoint]
+
+
+async def _pinned_version(s: AsyncSession) -> str:
+    """The decisions slot's pinned model, without opening its credential."""
+    t = ProviderConfigRow
+    found = await s.scalar(
+        select(t.model_version).where(t.slot == "decisions", t.deleted_at.is_(None))
+    )
+    return PINNED_JEV_DEFAULT if found is None else found
+
+
+async def _threshold_rows(s: AsyncSession, model: str) -> dict[str, ThresholdRow]:
+    t = ThresholdRow
+    stmt = select(t).where(t.model_version == model, t.deleted_at.is_(None))
+    # Fresh values even for rows already in the session (an upsert changes them in SQL).
+    found = await s.execute(stmt.execution_options(populate_existing=True))
+    return {row.decision_point: row for row in found.scalars()}
+
+
+def _in_force(point: DecisionPoint, row: ThresholdRow | None) -> Threshold:
+    return DEFAULT_THRESHOLDS[point] if row is None else Threshold.model_validate(row.value)
+
+
+def _threshold_out(point: DecisionPoint, model: str, row: ThresholdRow | None) -> ThresholdOut:
+    threshold = _in_force(point, row)
+    return ThresholdOut(
+        decision_point=point,
+        model_version=model,
+        threshold=threshold,
+        source="user" if row is not None and row.source == "user" else "default",
+        needs_recheck=row is not None and row.needs_recheck,
+        bar=confidence_bar(threshold),
+    )
+
+
+async def thresholds_in_force(
+    ctx: WorkspaceContext, *, session: AsyncSession | None = None
+) -> dict[str, Threshold]:
+    """Every point's threshold for the pinned model (its row, else the plan default)."""
+    async with session_for(ctx, session) as s:
+        rows = await _threshold_rows(s, await _pinned_version(s))
+    return {point.value: _in_force(point, rows.get(point.value)) for point in DecisionPoint}
+
+
+def _log_row(row: DecisionLog) -> DecisionLogRow | None:
+    """The row as labeling reads it; None without a usable main answer."""
+    if row.answer is None:
+        return None
+    try:  # a point the catalogue no longer knows is skipped, like an unusable answer
+        spec = CATALOGUE[DecisionPoint(row.decision_point)]
+        main = main_answer(spec.main_question, _ANSWERS.validate_python(row.answer))
+    except (KeyError, ValueError):
+        return None
+    return DecisionLogRow(
+        decision_point=row.decision_point,
+        model_version=row.model_version or "unknown",
+        provider=row.provider,
+        route=row.outcome,
+        answer=answer_text(main),
+        confidence=row.confidence,
+        decided_at=row.created_at,
+        input_hash=bytes(row.input_hash).hex(),
+    )
+
+
+async def labeled_decisions(
+    ctx: WorkspaceContext,
+    *,
+    now: datetime,
+    since: datetime | None = None,
+    session: AsyncSession | None = None,
+) -> list[LabeledDecision]:
+    """The logged decisions (made at or after `since`) that have a truth at `now`, oldest
+    first (`rules.label_outcome`)."""
+    t = DecisionLog
+    stmt = select(t).where(t.deleted_at.is_(None), t.answer.is_not(None))
+    if since is not None:
+        stmt = stmt.where(t.created_at >= since)
+    async with session_for(ctx, session) as s:
+        found = (await s.execute(stmt.order_by(t.created_at, t.id))).scalars().all()
+    labeled = []
+    for row in found:
+        log_row = _log_row(row)
+        if log_row is None:
+            continue
+        human = (
+            None
+            if row.outcome_at is None
+            else HumanDecision(
+                overridden=bool(row.overridden),
+                value=value_text(row.final_value),
+                at=row.outcome_at,
+            )
+        )
+        label = label_outcome(log_row, human, now)
+        if label is not None:
+            labeled.append(label)
+    return labeled
+
+
+async def calibration(
+    ctx: WorkspaceContext, *, now: datetime, session: AsyncSession | None = None
+) -> CalibrationOut:
+    """Settings > Calibration: every point's threshold for the pinned model, its recheck
+    flag, and the evaluation of its labeled decisions (`eval.evaluate`, as the CLI)."""
+    async with session_for(ctx, session) as s:
+        model = await _pinned_version(s)
+        rows = await _threshold_rows(s, model)
+        labeled = await labeled_decisions(ctx, now=now, session=s)
+    in_force = {point.value: _in_force(point, rows.get(point.value)) for point in DecisionPoint}
+    evaluations = evaluate(labeled, in_force)
+    points = [
+        CalibrationPoint(
+            **_threshold_out(point, model, rows.get(point.value)).model_dump(),
+            primitive=CATALOGUE[point].primitive,
+            evaluations=[e for e in evaluations if e.decision_point == point.value],
+        )
+        for point in DecisionPoint
+    ]
+    return CalibrationOut(model_version=model, min_labeled=MIN_LABELED, points=points)
+
+
+def _noul_problem(point: DecisionPoint, given: ThresholdIn) -> str | None:
+    if given.min_confidence is not None:
+        return "a yes-or-no point takes t_yes and t_no, not min_confidence"
+    if given.t_yes is None and given.t_no is None:
+        return "set t_yes, t_no or both"
+    if point is DecisionPoint.APPROVAL_NEED and given.t_yes is not None:
+        return "approval_need has no yes band"
+    if given.t_yes is not None and given.t_no is not None and given.t_no >= given.t_yes:
+        return "t_no must be below t_yes"
+    return None
+
+
+def _edited(point: DecisionPoint, given: ThresholdIn, before: Threshold) -> Threshold:
+    """The new threshold, or 422 `invalid_threshold` when its shape does not fit the point."""
+    primitive = CATALOGUE[point].primitive
+    if primitive == "noul":
+        problem = _noul_problem(point, given)
+    elif given.min_confidence is None:
+        problem = "set min_confidence"
+    elif given.t_yes is not None or given.t_no is not None:
+        problem = f"a {primitive} point takes only min_confidence"
+    else:
+        problem = None
+    if problem is not None:
+        raise ProblemError(422, "invalid_threshold", problem)
+    return Threshold(**given.model_dump(), fallback_margin=before.fallback_margin)
+
+
+async def edit_threshold(
+    ctx: WorkspaceContext,
+    point: DecisionPoint,
+    edit: ThresholdEdit,
+    *,
+    now: datetime,
+    session: AsyncSession,
+) -> ThresholdOut:
+    """A human sets the point's threshold for the pinned model, with a reason: the row
+    (source `user`, recheck cleared, cached answers dropped), a `thresholds_history` row
+    and the `threshold.changed` audit row, in the caller's transaction (SEC-3). Nothing
+    else ever changes a threshold's value (design decision 8)."""
+    model = await _pinned_version(session)
+    before = _in_force(point, (await _threshold_rows(session, model)).get(point.value))
+    after = _edited(point, edit.threshold, before)
+    await put_threshold(ctx, point, after, model_version=model, session=session)
+    values = {"before": before.model_dump(mode="json"), "after": after.model_dump(mode="json")}
+    await session.execute(
+        insert(ThresholdHistory).values(
+            decision_point=point.value, model_version=model, reason=edit.reason, **values
+        )
+    )
+    await audit.record(
+        session,
+        THRESHOLD_CHANGED,
+        reason=edit.reason,
+        details={"decision_point": point.value, "model_version": model, **values},
+        occurred_at=now,
+    )
+    rows = await _threshold_rows(session, model)
+    return _threshold_out(point, model, rows.get(point.value))
+
+
+async def store_evaluations(
+    ctx: WorkspaceContext,
+    evaluations: Sequence[Evaluation],
+    *,
+    set_sha256: str,
+    run_at: datetime,
+    session: AsyncSession | None = None,
+) -> None:
+    """One `decision_evals` row per evaluation of a `tumnis decisions eval` run."""
+    if not evaluations:
+        return
+    async with session_for(ctx, session) as s:
+        await s.execute(
+            insert(DecisionEval),
+            [
+                {
+                    "decision_point": e.decision_point,
+                    "provider": e.provider,
+                    "model_version": e.model_version,
+                    "set_sha256": set_sha256,
+                    "metrics": None if e.metrics is None else e.metrics.model_dump(mode="json"),
+                    "run_at": run_at,
+                }
+                for e in evaluations
+            ],
+        )
