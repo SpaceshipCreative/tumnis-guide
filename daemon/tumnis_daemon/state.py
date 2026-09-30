@@ -59,6 +59,28 @@ class StateStore:
         self.protocol_version = 1  # set from `registered` on every connect
         self.ws: Sender | None = None  # the live connection, None while disconnected
         self._cancels: dict[UUID, tuple[asyncio.Event, list[str]]] = {}
+        self._import_legacy(state_dir / "unacked")
+
+    def _import_legacy(self, unacked_dir: Path) -> None:
+        """Upgrading from the P1-04 daemon: the results and health reports it kept unacked
+        as `<state_dir>/unacked/<message_id>.json` move into the outbox, oldest first. Each
+        file goes only once its message is kept (a repeat is ignored by message id); a file
+        that does not parse is left for a human."""
+        if not unacked_dir.is_dir():
+            return
+        for path in sorted(unacked_dir.glob("*.json"), key=lambda p: p.stat().st_mtime_ns):
+            try:
+                message = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                log.warning("legacy_unacked_unreadable", extra={"file": path.name})
+                continue
+            if not isinstance(message, dict) or not message.get("message_id"):
+                log.warning("legacy_unacked_unreadable", extra={"file": path.name})
+                continue
+            self.outbox.put(message)
+            path.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            unacked_dir.rmdir()  # only when nothing was left behind
 
     def close(self) -> None:
         self.outbox.close()
