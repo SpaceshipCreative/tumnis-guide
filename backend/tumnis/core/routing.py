@@ -28,7 +28,9 @@ key or task token aiming at another project is 404 `not_found`, the answer RLS g
 another workspace's row, so existence never leaks. The project comes from the policy's
 `project_param`: `path:<name>`, `query:<name>`, `body:<name>` or `lookup:<module>` (the
 module registers `register_project_lookup(module, fn)`, which resolves the route's row id
-to its project in the caller's workspace).
+to its project in the caller's workspace). Last, a NUL character (U+0000) in a path or query
+parameter or anywhere in a JSON body is 422 `validation_error`: PostgreSQL text cannot hold
+it, and a handler passing it on would answer 500.
 """
 
 import hmac
@@ -287,6 +289,82 @@ async def _authorize(request: Request, policy: RoutePolicy) -> None:
         authorize(principal, policy, project_id)
 
 
+# --- NUL in request strings ------------------------------------------------------------------
+#
+# PostgreSQL text cannot hold the character U+0000 (psycopg refuses to send one: DataError),
+# and no module's own string types forbid it, so a route that passed such a string to the
+# database answered 500 (found by the P0-11 fuzzer on POST /v1/auth/login). TumnisRoute
+# refuses it for every /v1 route, as the validation error any other malformed input gets.
+
+NUL: Final = "\x00"
+NUL_DETAIL: Final = "text must not contain the NUL character (U+0000)"
+
+
+def _json_media(content_type: str | None) -> bool:
+    """The bodies FastAPI parses as JSON: `application/json` and `application/*+json`
+    (a body without a content type is refused by FastAPI's strict content type)."""
+    if not content_type:
+        return False
+    main, _, sub = content_type.split(";", 1)[0].strip().lower().partition("/")
+    return main == "application" and (sub == "json" or sub.endswith("+json"))
+
+
+def _nul_in_json(document: Any) -> str | None:
+    """Where the first string (a value or an object key) holding a NUL sits, as
+    `body.a.0.b`; walked with a stack, so a deep document cannot exhaust the recursion."""
+    stack: list[tuple[Any, str]] = [(document, "body")]
+    while stack:
+        item, where = stack.pop()
+        if isinstance(item, str):
+            if NUL in item:
+                return where
+        elif isinstance(item, dict):
+            for key, child in item.items():
+                if NUL in key:
+                    return where
+                stack.append((child, f"{where}.{key}"))
+        elif isinstance(item, list):
+            stack.extend((child, f"{where}.{index}") for index, child in enumerate(item))
+    return None
+
+
+def _nul_in_params(request: Request) -> str | None:
+    for name, value in request.path_params.items():
+        if isinstance(value, str) and NUL in value:
+            return f"path.{name}"
+    for name, value in request.query_params.multi_items():
+        if NUL in name:
+            return "query"
+        if NUL in value:
+            return f"query.{name}"
+    return None
+
+
+async def _nul_in_body(request: Request) -> str | None:
+    if not _json_media(request.headers.get("content-type")):
+        return None
+    body = await request.body()
+    # A NUL reaches a JSON string only as the escape \u0000, or as a zero byte of a UTF-16
+    # or UTF-32 body (json.loads reads those too); without either there is nothing to parse.
+    if b"\\u0000" not in body and b"\x00" not in body:
+        return None
+    try:
+        document = await request.json()  # Starlette caches the parse; FastAPI reuses it
+    except (ValueError, RecursionError):
+        return None  # not JSON: FastAPI answers its own 422 `validation_error`
+    return _nul_in_json(document)
+
+
+async def _check_nul(request: Request) -> None:
+    """422 `validation_error` for a NUL in a path or query parameter or anywhere in a JSON
+    body. It runs after the auth checks and before idempotency, so nothing is stored for
+    the key, and it never depends on what exists (a known and an unknown email get the
+    same answer)."""
+    where = _nul_in_params(request) or await _nul_in_body(request)
+    if where is not None:
+        raise ProblemError(422, "validation_error", f"{where}: {NUL_DETAIL}")
+
+
 def _log_write(request: Request, template: str, response: Response) -> None:
     log = getattr(request.app.state, "request_log", None)
     if isinstance(log, deque):
@@ -326,6 +404,7 @@ class TumnisRoute(APIRoute):
             _check_rate(request, policy)
             _check_auth(request, policy)
             await _authorize(request, policy)
+            await _check_nul(request)
             if request.method not in WRITE_METHODS:
                 return await original(request)
             if policy.idempotent:
