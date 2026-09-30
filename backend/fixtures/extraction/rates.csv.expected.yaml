@@ -1,0 +1,7 @@
+# A CSV is one table without pages.
+min_chunks: 1
+max_chunks: 2
+chunks:
+  - contains: ["Senior designer", "160", "Copywriter", "95"]
+    page_from: null
+    page_to: null

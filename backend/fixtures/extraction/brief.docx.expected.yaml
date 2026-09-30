@@ -1,0 +1,12 @@
+# Word has no pages: page numbers are null; headings nest under the title.
+min_chunks: 1
+max_chunks: 3
+chunks:
+  - contains: ["Double the newsletter sign-ups by June"]
+    heading_path_endswith: ["Client brief", "Goals"]
+    page_from: null
+    page_to: null
+  - contains: ["Small studios that run their own bookings"]
+    heading_path_endswith: ["Client brief", "Audience"]
+    page_from: null
+    page_to: null

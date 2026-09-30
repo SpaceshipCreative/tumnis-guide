@@ -80,7 +80,8 @@ class KnowledgeSettings(BaseModel):
     (which reads them); `scratch_dir` is the extract worker's own working space. clamd is
     operator-configured infrastructure, like Postgres: the worker connects to
     `clamd_host:clamd_port` directly, not through the SSRF guard. The vision model
-    (`vision_base_url`, `vision_model`) is unset until impl-2 wires it."""
+    (`vision_base_url`, `vision_model`: a vLLM server and a Markdown-capable model) is
+    optional: without it, low-confidence pages keep Docling's own chunks."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

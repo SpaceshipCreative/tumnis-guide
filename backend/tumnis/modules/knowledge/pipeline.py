@@ -13,7 +13,9 @@ Docling reads the format from the extension; a step that finds it gone brings it
 the spool or from where the file was placed.
 
 The scanner, the extractor and the vision model come from `use()` (tests) or, in a real
-deployment, the adapter registry and the settings given to `configure()`; in fakes mode
+deployment, the settings given to `configure()`: clamd's address, Docling with the chunk
+tokenizer, and the vision model when `vision_base_url` and `vision_model` are set (none
+otherwise: low-confidence pages keep Docling's chunks); in fakes mode
 (`TUMNIS_ADAPTERS=fake`) the fakes.
 """
 
@@ -40,6 +42,7 @@ from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.knowledge import api
 from tumnis.modules.knowledge import store as records
 from tumnis.modules.knowledge.adapters.clamav import ClamAV
+from tumnis.modules.knowledge.adapters.docling import DoclingExtractor
 from tumnis.modules.knowledge.adapters.fake import FakeDocling, FakeVision
 from tumnis.modules.knowledge.adapters.port import ChunkRow, Extractor, Scanner, Vision
 from tumnis.modules.knowledge.rules import (
@@ -132,9 +135,11 @@ def _extractor() -> Extractor:
     if _use["extractor"] is not None:
         return cast("Extractor", _use["extractor"])
     if "extractor" not in _defaults:
-        if current_mode() != "fake":
-            raise RuntimeError("the Docling extractor is not wired yet (P1-16 impl-2)")
-        _defaults["extractor"] = FakeDocling()
+        _defaults["extractor"] = (
+            FakeDocling()
+            if current_mode() == "fake"
+            else DoclingExtractor(chunk_tokenizer=_settings.chunk_tokenizer)
+        )
     return cast("Extractor", _defaults["extractor"])
 
 
@@ -142,8 +147,20 @@ def _vision() -> Vision | None:
     if _use["vision"] is not None:
         return cast("Vision", _use["vision"])
     if "vision" not in _defaults:
-        # No vision model is configured in a real deployment until impl-2 wires one.
-        _defaults["vision"] = FakeVision() if current_mode() == "fake" else None
+        # A real deployment reads low-confidence pages only when a vision model is set.
+        if current_mode() == "fake":
+            _defaults["vision"] = FakeVision()
+        elif _settings.vision_base_url and _settings.vision_model:
+            _defaults["vision"] = resolve(
+                "knowledge.vision",
+                "real",
+                base_url=_settings.vision_base_url,
+                model=_settings.vision_model,
+                clock=SystemClock(),
+                net_policy=_net,
+            )
+        else:
+            _defaults["vision"] = None
     return cast("Vision | None", _defaults["vision"])
 
 

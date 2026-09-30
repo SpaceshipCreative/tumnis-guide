@@ -178,7 +178,6 @@ async def test_task_packet_carries_brief_and_table_passage(  # noqa: PLR0917
 
 
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 async def test_eicar_upload_is_quarantined(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,
