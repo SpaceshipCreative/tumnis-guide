@@ -74,6 +74,9 @@ import type {
   CalendarSyncNowData,
   CalendarSyncNowErrors,
   CalendarSyncNowResponses,
+  CoolifyListDeployStatusData,
+  CoolifyListDeployStatusErrors,
+  CoolifyListDeployStatusResponses,
   DeadLettersGetDeadLettersData,
   DeadLettersGetDeadLettersErrors,
   DeadLettersGetDeadLettersResponses,
@@ -242,6 +245,7 @@ import {
   zCalendarOauthStartResponse,
   zCalendarSelectCalendarsResponse,
   zCalendarSyncNowResponse,
+  zCoolifyListDeployStatusResponse,
   zDeadLettersGetDeadLettersResponse,
   zDeadLettersPostDiscardResponse,
   zDeadLettersPostRetryResponse,
@@ -677,6 +681,29 @@ export const calendarOauthStart = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zCalendarOauthStartResponse.parseAsync(data),
     url: "/v1/calendar/oauth/start",
+    ...options,
+  });
+
+/**
+ * List Deploy Status
+ *
+ * Deploy status per project in board order; projects without apps are left out.
+ */
+export const coolifyListDeployStatus = <ThrowOnError extends boolean = false>(
+  options?: Options<CoolifyListDeployStatusData, ThrowOnError>,
+): RequestResult<
+  CoolifyListDeployStatusResponses,
+  CoolifyListDeployStatusErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    CoolifyListDeployStatusResponses,
+    CoolifyListDeployStatusErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zCoolifyListDeployStatusResponse.parseAsync(data),
+    url: "/v1/coolify/status",
     ...options,
   });
 

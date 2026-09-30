@@ -11,6 +11,7 @@ import { formatToday } from "./format";
 import { ProjectCardGrid } from "./ProjectCardGrid";
 import { QuickAddFab } from "./QuickAddFab";
 import {
+  deployStatusQuery,
   projectsQuery,
   reviewCountQuery,
   todayQuery,
@@ -44,11 +45,16 @@ export function DashboardPage() {
   const today = useQuery(todayQuery());
   const reviewCount = useQuery(reviewCountQuery());
   const workspace = useQuery(workspaceQuery());
+  const deployStatus = useQuery(deployStatusQuery());
   const timeZone = workspace.data?.timezone ?? deviceTimeZone();
 
   const allProjects = projects.data?.items ?? [];
   const projectNames = Object.fromEntries(
     allProjects.map((p) => [p.id, p.name]),
+  );
+
+  const deploy = Object.fromEntries(
+    (deployStatus.data ?? []).map((entry) => [entry.project_id, entry.apps]),
   );
 
   const ready = projects.isSuccess && today.isSuccess;
@@ -85,6 +91,7 @@ export function DashboardPage() {
         <ProjectCardGrid
           projects={activeInBoardOrder(allProjects)}
           timeZone={timeZone}
+          deploy={deploy}
           unavailable={projects.isError}
           pending={projects.isPending}
           className="md:col-span-7"
