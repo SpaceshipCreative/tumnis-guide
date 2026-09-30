@@ -18,7 +18,6 @@ test(
   "T-P0-25-12 quick-add from any route",
   { tag: ["@J2", "@FR-3.3", "@P0-25"] },
   async ({ signedInPage: page }, testInfo) => {
-    test.fail();
     const phone = testInfo.project.name === "phone";
     const dogfood = await projectIdByName(page.request, DOGFOOD);
     const routes = ["/", `/projects/${dogfood}`, "/settings/account"];
@@ -55,7 +54,6 @@ test.describe("a lost response", () => {
     "T-P0-25-13 a lost response still creates exactly one task",
     { tag: ["@FR-3.10", "@REL-2", "@P0-25"] },
     async ({ signedInPage: page }, testInfo) => {
-      test.fail();
       const phone = testInfo.project.name === "phone";
       const dogfood = await projectIdByName(page.request, DOGFOOD);
       const title = `Lost response ${testInfo.project.name}`;
