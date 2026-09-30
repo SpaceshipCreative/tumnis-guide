@@ -36,9 +36,6 @@ branch_labels = None
 depends_on = None
 phase = "expand"
 
-STATUSES = "'pending_scan', 'extracting', 'ready', 'quarantined', 'failed'"
-CHUNK_TSV = "to_tsvector('english', coalesce(array_to_string(h, ' '), '') || ' ' || t)"
-
 
 def upgrade() -> None:
     op.add_column(
@@ -88,7 +85,8 @@ def upgrade() -> None:
 
     op.execute(
         "CREATE FUNCTION chunk_tsv(h text[], t text) RETURNS tsvector"
-        f" LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT {CHUNK_TSV} $$"
+        " LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$"
+        " SELECT to_tsvector('english', coalesce(array_to_string(h, ' '), '') || ' ' || t) $$"
     )
     # Functions are private by default (02-database.sql); the app role writes `chunks`,
     # whose generated column calls this.
