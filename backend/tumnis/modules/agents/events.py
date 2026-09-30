@@ -11,8 +11,8 @@
   subscriber for agents' review kinds (Scott decision 29).
 
 - `agents.enrich_on_create` (`task.created`, P1-08): starts `enrich_task` for the new task
-  (workflow id `enrich:<task id>:<event id>`); the workflow itself decides whether the
-  task needs anything.
+  (workflow id `enrich:<task id>:<event id>`) when its project has a provisioned agent;
+  the workflow itself decides whether the task needs anything.
 - `agents.enrich_on_update` (`task.updated` naming `label`, P1-08): a task relabelled
   Human or Hybrid without an estimate, whose enrichment has ended, is enriched again: for
   the estimate alone after a finished enrichment, for everything missing after one that
@@ -79,10 +79,16 @@ async def apply_review_decision(envelope: EventEnvelope) -> None:
 @subscribe("task.created", name=ENRICH_CREATE_SUBSCRIBER)
 async def enrich_on_create(envelope: EventEnvelope) -> None:
     payload = envelope.payload
+    project_id = UUID(str(payload["project_id"]))
+    ctx = WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
+    # No workflow at all for a project without a provisioned agent: bulk task writes
+    # (imports, the seed) would otherwise queue one per task only to end at once.
+    if not await workflows.agent_provisioned(project_id, ctx=ctx):
+        return
     await workflows.start_enrichment(
         envelope.workspace_id,
         UUID(str(payload["task_id"])),
-        UUID(str(payload["project_id"])),
+        project_id,
         key=str(envelope.event_id),
     )
 

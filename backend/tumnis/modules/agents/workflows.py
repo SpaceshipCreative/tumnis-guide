@@ -1019,6 +1019,14 @@ def _wanted(snap: TaskSnapshot, only: list[str] | None) -> list[str]:
     return [f for f in missing_fields(snap) if only is None or f in only]
 
 
+async def agent_provisioned(project_id: UUID, *, ctx: WorkspaceContext) -> bool:
+    """Whether the project has an agent enrichment can wait for (ready or offline); a
+    project without a profile, or with one still `provisioning` or `not_provisioned`,
+    has none (P1-06), whatever the clock says."""
+    now = (api.enrichment_config().clock or SystemClock()).now()
+    return await api.agent_for_project(project_id, now=now, ctx=ctx) != "not_provisioned"
+
+
 @DBOS.step()
 async def enrich_load_step(
     workspace_id: str, task_id: str, only: list[str] | None
@@ -1035,8 +1043,7 @@ async def enrich_load_step(
             return None
         names = await projects.project_names(s, [snap.project_id])
     config = api.enrichment_config()
-    now = (config.clock or SystemClock()).now()
-    if await api.agent_for_project(snap.project_id, now=now, ctx=ctx) == "not_provisioned":
+    if not await agent_provisioned(snap.project_id, ctx=ctx):
         return None
     return {
         "snapshot": snap.model_dump(mode="json"),

@@ -6,8 +6,10 @@
 - `enrichment_status`: the project agent's enrichment of the task: `pending`, `running`,
   `done`, `agent_offline`, `not_provisioned` or `failed`; NULL before one starts.
 
-Both nullable additions with CHECKs (expand). Chained after P1-07's label columns
-(tasks_0006).
+Both nullable additions with CHECKs (expand). The checks are added NOT VALID: every new
+or changed row is checked, and no scan of `tasks` runs inside the migration's transaction
+(squawk's constraint-missing-not-valid); existing rows hold NULL, which they allow.
+Chained after P1-07's label columns (tasks_0006).
 """
 
 import sqlalchemy as sa
@@ -30,16 +32,13 @@ def _in(column: str, values: tuple[str, ...]) -> str:
 def upgrade() -> None:
     op.add_column("tasks", sa.Column("first_action_source", sa.Text, nullable=True))
     op.add_column("tasks", sa.Column("enrichment_status", sa.Text, nullable=True))
-    op.create_check_constraint(
-        "ck_tasks_first_action_source",
-        "tasks",
-        _in("first_action_source", FIRST_ACTION_SOURCES),
-    )
-    op.create_check_constraint(
-        "ck_tasks_enrichment_status",
-        "tasks",
-        _in("enrichment_status", ENRICHMENT_STATUSES),
-    )
+    for name, column, values in (
+        ("ck_tasks_first_action_source", "first_action_source", FIRST_ACTION_SOURCES),
+        ("ck_tasks_enrichment_status", "enrichment_status", ENRICHMENT_STATUSES),
+    ):
+        op.execute(
+            f"ALTER TABLE tasks ADD CONSTRAINT {name} CHECK ({_in(column, values)}) NOT VALID"
+        )
 
 
 def downgrade() -> None:
