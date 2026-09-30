@@ -115,52 +115,49 @@ test("[P1-12][FR-2.6] T-P1-12-01 week shows meetings, due dates and planned bloc
   ).toBeVisible();
 });
 
-test.fails(
-  "[P1-12][FR-2.6] T-P1-12-02 drop on free block sends one PATCH",
-  async () => {
-    const { fake, user } = setUp("laptop");
-    const card = await screen.findByRole("button", {
-      name: "Draft the brand guide, 45 minutes",
-    });
-    const from = cardPoint(0);
-    const to = pointAt(1, "10:15"); // Tuesday, inside the free block 10:00 to 12:00
-    await user.pointer([
-      {
-        keys: "[MouseLeft>]",
-        target: card,
-        coords: { clientX: from.x, clientY: from.y },
-      },
-      { coords: { clientX: to.x, clientY: to.y } },
-      { keys: "[/MouseLeft]" },
-    ]);
+test("[P1-12][FR-2.6] T-P1-12-02 drop on free block sends one PATCH", async () => {
+  const { fake, user } = setUp("laptop");
+  const card = await screen.findByRole("button", {
+    name: "Draft the brand guide, 45 minutes",
+  });
+  const from = cardPoint(0);
+  const to = pointAt(1, "10:15"); // Tuesday, inside the free block 10:00 to 12:00
+  await user.pointer([
+    {
+      keys: "[MouseLeft>]",
+      target: card,
+      coords: { clientX: from.x, clientY: from.y },
+    },
+    { coords: { clientX: to.x, clientY: to.y } },
+    { keys: "[/MouseLeft]" },
+  ]);
 
-    // The card shows in the slot at once.
-    const tuesday = screen.getByRole("region", { name: DAYS[1] });
-    expect(
-      await within(
-        within(tuesday).getByRole("list", { name: "Planned" }),
-      ).findByRole("listitem", {
-        name: "Draft the brand guide, 10:15 to 11:00",
-      }),
-    ).toBeVisible();
-    await waitFor(() => {
-      expect(fake.writes()).toEqual([PATCH_TUESDAY]);
-    });
-    // 10:15 to 11:00 in New York (UTC-4): the task's 45 minutes from where it was dropped.
-    expect(sentBlock(fake)).toEqual({
-      start: Date.parse("2026-03-10T14:15:00Z"),
-      end: Date.parse("2026-03-10T15:00:00Z"),
-    });
-    const patch = fake.recorder.sent.find((s) => s.method === "PATCH");
-    expect(patch?.idempotencyKey).toBeTruthy();
-    expect(
-      within(screen.getByRole("list", { name: "To schedule" })).queryByText(
-        /Draft the brand guide/,
-      ),
-    ).toBeNull();
-    expect(fake.writes()).toHaveLength(1);
-  },
-);
+  // The card shows in the slot at once.
+  const tuesday = screen.getByRole("region", { name: DAYS[1] });
+  expect(
+    await within(
+      within(tuesday).getByRole("list", { name: "Planned" }),
+    ).findByRole("listitem", {
+      name: "Draft the brand guide, 10:15 to 11:00",
+    }),
+  ).toBeVisible();
+  await waitFor(() => {
+    expect(fake.writes()).toEqual([PATCH_TUESDAY]);
+  });
+  // 10:15 to 11:00 in New York (UTC-4): the task's 45 minutes from where it was dropped.
+  expect(sentBlock(fake)).toEqual({
+    start: Date.parse("2026-03-10T14:15:00Z"),
+    end: Date.parse("2026-03-10T15:00:00Z"),
+  });
+  const patch = fake.recorder.sent.find((s) => s.method === "PATCH");
+  expect(patch?.idempotencyKey).toBeTruthy();
+  expect(
+    within(screen.getByRole("list", { name: "To schedule" })).queryByText(
+      /Draft the brand guide/,
+    ),
+  ).toBeNull();
+  expect(fake.writes()).toHaveLength(1);
+});
 
 test.fails(
   "[P1-12][FR-2.6] T-P1-12-03 drop on busy block refused",
