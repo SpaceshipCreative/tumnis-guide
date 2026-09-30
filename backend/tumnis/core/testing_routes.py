@@ -5,10 +5,11 @@ clock; `GET /v1/test/requests` lists the last write requests (P0-10); `POST
 /v1/test/clock` sets the server clock (A10; issue #6: A0.1 signs in with the TOTP code at
 the browser's installed clock, so the server must check it at the same instant)."""
 
+import asyncio
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Self
 
-from fastapi import HTTPException, Query, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from pydantic import AwareDatetime, BaseModel, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -89,21 +90,32 @@ async def reset(
     settings = request.app.state.settings
     if settings.database_owner_url is None:
         raise HTTPException(status_code=500, detail="reset needs DATABASE_OWNER_URL")
-    await truncate_tables(settings.database_owner_url)
-    clock = request.app.state.clock
-    if isinstance(clock, OverridableClock):
-        clock.clear()  # a fresh stack reads the real time again
-    # A fresh stack: rate-limit buckets start full again (P0-13: every e2e test signs in
-    # from the same address, which the `login` bucket would otherwise throttle).
-    if isinstance(getattr(request.app.state, "rate_limiter", None), RateLimiter):
-        request.app.state.rate_limiter = RateLimiter(request.app.state.clock)
-    if writers_registered():  # from P0-17 on; before that the seed has nowhere to go
-        await load_seed(
-            SEED_PATHS[seed_set],
-            DatabaseSink(skip_missing=True),
-            clock=request.app.state.clock,
-        )
+    # One reset at a time (issue #56): a reset whose caller gave up (A0.6's `load` set
+    # outlives its test) keeps seeding, and the next one's TRUNCATE would run under it.
+    async with _reset_lock(request.app):
+        await truncate_tables(settings.database_owner_url)
+        clock = request.app.state.clock
+        if isinstance(clock, OverridableClock):
+            clock.clear()  # a fresh stack reads the real time again
+        # A fresh stack: rate-limit buckets start full again (P0-13: every e2e test signs
+        # in from the same address, which the `login` bucket would otherwise throttle).
+        if isinstance(getattr(request.app.state, "rate_limiter", None), RateLimiter):
+            request.app.state.rate_limiter = RateLimiter(request.app.state.clock)
+        if writers_registered():  # from P0-17 on; before that the seed has nowhere to go
+            await load_seed(
+                SEED_PATHS[seed_set],
+                DatabaseSink(skip_missing=True),
+                clock=request.app.state.clock,
+            )
     return Response(status_code=204)
+
+
+def _reset_lock(app: FastAPI) -> asyncio.Lock:
+    """The app's reset lock, made on first use (in the app's event loop)."""
+    lock: asyncio.Lock | None = getattr(app.state, "reset_lock", None)
+    if lock is None:
+        lock = app.state.reset_lock = asyncio.Lock()
+    return lock
 
 
 class RecordedRequest(BaseModel):
