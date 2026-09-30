@@ -1951,6 +1951,7 @@ dependencies = [
     { name = "aioboto3" },
     { name = "alembic" },
     { name = "argon2-cffi" },
+    { name = "asyncssh" },
     { name = "cryptography" },
     { name = "dbos" },
     { name = "fastapi" },
@@ -1982,7 +1983,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "asyncssh" },
     { name = "hypothesis" },
     { name = "import-linter" },
     { name = "jsonschema" },
@@ -2006,6 +2006,7 @@ requires-dist = [
     { name = "aioboto3", specifier = "==15.5.0" },
     { name = "alembic", specifier = "==1.20.0" },
     { name = "argon2-cffi", specifier = "==25.1.0" },
+    { name = "asyncssh", specifier = "==2.24.0" },
     { name = "cryptography", specifier = "==50.0.1" },
     { name = "dbos", specifier = "==3.1.0" },
     { name = "fastapi", specifier = "==0.141.1" },
@@ -2037,7 +2038,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "asyncssh", specifier = "==2.24.0" },
     { name = "hypothesis", specifier = "==6.168.3" },
     { name = "import-linter", specifier = "==2.15" },
     { name = "jsonschema", specifier = "==4.26.0" },

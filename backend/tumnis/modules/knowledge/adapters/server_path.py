@@ -23,11 +23,13 @@ import hashlib
 import os
 import posixpath
 import stat
+import time
 import uuid
+from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import ClassVar, Final
+from typing import ClassVar, Final, Literal
 
 from tumnis.core.adapters.base import Adapter as AdapterBase
 from tumnis.core.adapters.base import AdapterRejected, AdapterUnavailable, CallPolicy
@@ -57,6 +59,9 @@ _NO_LINK: Final = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno
 _READ_FLAGS: Final = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
 _CREATE_FLAGS: Final = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
 _DIR_FLAGS: Final = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+RACY_S: Final = 2.0  # SMB keeps mtimes to 2 s; a file changed this recently is not cached
+_HASH_CACHE_MAX: Final = 200_000
+_HASHES: "OrderedDict[tuple[int, int, int, int], str]" = OrderedDict()
 
 
 class ServerPathStorage(AdapterBase):
@@ -67,16 +72,19 @@ class ServerPathStorage(AdapterBase):
         self,
         root: Path | str,
         *,
+        kind: Literal["server_path", "share"] = "server_path",
         network_fs: bool = False,
         clock: Clock | None = None,
         policy: CallPolicy | None = None,
     ) -> None:
         super().__init__(policy=policy or POLICY, clock=clock or SystemClock())
         self.root = Path(root).resolve()
-        self.network_fs = network_fs
-        # (dev, inode, size, mtime_ns) -> sha256 hex, so a listing does not rehash
-        # unchanged files; a replace always hashes afresh.
-        self._hashes: dict[tuple[int, int, int, int], str] = {}
+        self.kind = kind
+        # A share (P3-14) is a mounted SMB or NFS folder: no hard links assumed.
+        self.network_fs = network_fs or kind == "share"
+        # (dev, inode, size, mtime_ns) -> sha256 hex, shared by every instance in the
+        # process, so a scan does not rehash unchanged files; a replace always hashes afresh.
+        self._hashes = _HASHES
 
     # --- Paths ---------------------------------------------------------------------------
 
@@ -192,7 +200,9 @@ class ServerPathStorage(AdapterBase):
             etag = None if fresh else self._hashes.get(key)
             if etag is None:
                 etag = self._hash_fd(fd)
-                self._hashes[key] = etag
+                _remember(key, etag, st.st_mtime)
+            else:
+                self._hashes.move_to_end(key)
         finally:
             os.close(fd)
         mtime = datetime.fromtimestamp(st.st_mtime, UTC)
@@ -459,6 +469,18 @@ class ServerPathStorage(AdapterBase):
     async def health(self) -> Health:
         present = await asyncio.to_thread(self._marker_present)
         return Health.ok() if present else Health.degraded("marker_missing")
+
+
+def _remember(key: tuple[int, int, int, int], etag: str, mtime: float) -> None:
+    """Cache a hash only for a file whose mtime is safely in the past: a share may keep
+    mtimes to the second (or two, on SMB), so a same-size rewrite within that window
+    would look unchanged ("racy" entries are hashed again next time)."""
+    if time.time() - mtime < RACY_S:
+        return
+    _HASHES[key] = etag
+    _HASHES.move_to_end(key)
+    while len(_HASHES) > _HASH_CACHE_MAX:
+        _HASHES.popitem(last=False)
 
 
 def _write_all(fd: int, chunk: bytes) -> None:

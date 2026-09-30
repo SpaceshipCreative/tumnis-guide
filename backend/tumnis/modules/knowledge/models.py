@@ -1,5 +1,5 @@
 """knowledge SQLAlchemy tables owned by this module (mirrors of revisions knowledge_0001
-to knowledge_0006)."""
+to knowledge_0007)."""
 
 from datetime import datetime
 from typing import Any
@@ -45,7 +45,7 @@ class StorageLocation(TenantBase, Base):
     __tablename__ = "storage_locations"
 
     name: Mapped[str]
-    kind: Mapped[str]  # server_path | s3 | sftp
+    kind: Mapped[str]  # server_path | share | s3 | sftp
     root: Mapped[str]  # absolute path, or bucket/prefix
     config_enc: Mapped[bytes | None] = mapped_column(LargeBinary)
     status: Mapped[str] = mapped_column(server_default=text("'online'"))
@@ -53,6 +53,8 @@ class StorageLocation(TenantBase, Base):
     is_default: Mapped[bool] = mapped_column(server_default=text("false"))
     capabilities: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'"))
     last_sync_at: Mapped[datetime | None]  # knowledge_0005: the last folder sync's end
+    host_key_pinned: Mapped[str | None]  # knowledge_0007: SFTP, the confirmed host key
+    host_key_pending: Mapped[str | None]  # knowledge_0007: SFTP, the key shown to confirm
 
 
 class ProjectFolder(TenantBase, Base):

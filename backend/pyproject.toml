@@ -7,6 +7,7 @@ dependencies = [
   "aioboto3==15.5.0",
   "alembic==1.20.0",
   "argon2-cffi==25.1.0",
+  "asyncssh==2.24.0",
   "cryptography==50.0.1",
   "dbos==3.1.0",
   "fastapi==0.141.1",
@@ -41,7 +42,6 @@ tumnis = "tumnis.cli:app"
 
 [dependency-groups]
 dev = [
-  "asyncssh==2.24.0",
   "hypothesis==6.168.3",
   "import-linter==2.15",
   "jsonschema==4.26.0",

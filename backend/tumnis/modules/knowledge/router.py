@@ -7,6 +7,8 @@ Storage locations (P1-14, FR-15.7), all `auth="session"` (the Settings screen):
 `GET /knowledge/locations` (every location; a workspace has a handful, so a bare list),
 `POST /knowledge/locations` (201), `POST /knowledge/locations/{storage_location_id}/test`
 (test the connection now; drains queued writes when healthy), `POST
+/knowledge/locations/{storage_location_id}/host-key` (P3-14: pin the SFTP server's key
+when the fingerprint typed matches the key it shows; a reason when re-pinning), `POST
 /knowledge/locations/{storage_location_id}/default` (versioned),
 and `PUT /knowledge/projects/{project_id}/folder` (move an empty project folder to another
 location). Each handler finds its row (404) before any rule about the body. Storage calls
@@ -88,6 +90,28 @@ async def test_location(
 ) -> api.LocationOut:
     async with tenant_session(ctx) as s:
         return await api.check_location(s, storage_location_id, net=_net(request))
+
+
+class HostKeyIn(BaseModel):
+    sha256: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    reason: Annotated[str, StringConstraints(max_length=500)] | None = None
+
+
+@router.post("/knowledge/locations/{storage_location_id}/host-key")
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason="pinning reads the server's key again, never a replay",
+    )
+)
+async def confirm_host_key(
+    storage_location_id: UUID, body: HostKeyIn, request: Request, ctx: Session
+) -> api.LocationOut:
+    async with tenant_session(ctx) as s:
+        return await api.confirm_host_key(
+            s, storage_location_id, body.sha256, reason=body.reason, net=_net(request)
+        )
 
 
 @router.post("/knowledge/locations/{storage_location_id}/default")

@@ -1537,6 +1537,33 @@
         "title": "HealthCheckAccepted",
         "type": "object"
       },
+      "HostKeyIn": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "sha256": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sha256"
+        ],
+        "title": "HostKeyIn",
+        "type": "object"
+      },
       "KeyCreated": {
         "properties": {
           "created_at": {
@@ -1844,7 +1871,9 @@
           "kind": {
             "enum": [
               "server_path",
-              "s3"
+              "s3",
+              "share",
+              "sftp"
             ],
             "title": "Kind",
             "type": "string"
@@ -1865,6 +1894,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/S3ConfigIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sftp": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SftpConfigIn"
               },
               {
                 "type": "null"
@@ -1900,6 +1939,17 @@
             ],
             "title": "Endpoint"
           },
+          "host_key_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Key Sha256"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1917,6 +1967,17 @@
             "title": "Name",
             "type": "string"
           },
+          "pending_host_key_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Host Key Sha256"
+          },
           "root": {
             "title": "Root",
             "type": "string"
@@ -1924,7 +1985,9 @@
           "status": {
             "enum": [
               "online",
-              "offline"
+              "offline",
+              "pending_host_key",
+              "host_key_changed"
             ],
             "title": "Status",
             "type": "string"
@@ -5174,6 +5237,42 @@
           "code"
         ],
         "title": "SetupTotpIn",
+        "type": "object"
+      },
+      "SftpConfigIn": {
+        "properties": {
+          "host": {
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "port": {
+            "default": 22,
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Port",
+            "type": "integer"
+          },
+          "private_key": {
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Private Key",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "username",
+          "private_key"
+        ],
+        "title": "SftpConfigIn",
         "type": "object"
       },
       "SignedInOut": {
@@ -11993,6 +12092,129 @@
           }
         },
         "summary": "Set Default Location",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/v1/knowledge/locations/{storage_location_id}/host-key": {
+      "post": {
+        "operationId": "knowledge_confirm_host_key",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storage_location_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Storage Location Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostKeyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Confirm Host Key",
         "tags": [
           "knowledge"
         ]

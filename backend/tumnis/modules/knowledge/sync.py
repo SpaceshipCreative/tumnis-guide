@@ -351,7 +351,7 @@ async def plan(workspace_id: str, location_id: str) -> list[dict[str, Any]]:
                 if folder["mode"] == "tumnis_made":
                     await api.make_layout(backend, folder["root_path"])
                 await _list(backend, folder, scan)
-            await _hash_changed(backend, scan, etag_is_hash=kind == "server_path")
+            await _hash_changed(backend, scan, etag_is_hash=kind != "s3")
         taken = await api.taken_paths(s, loc)
         taken |= {p.casefold() for p in scan.files}
         roots = {f["project_id"]: f["root_path"] for f in scan.folders}

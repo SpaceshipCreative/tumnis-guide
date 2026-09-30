@@ -50,6 +50,7 @@ import {
   githubWebhook,
   healthLive,
   healthReady,
+  knowledgeConfirmHostKey,
   knowledgeCreateLocation,
   knowledgeGetBrief,
   knowledgeGetDocument,
@@ -226,6 +227,9 @@ import type {
   HealthLiveData,
   HealthLiveResponse,
   HealthReadyData,
+  KnowledgeConfirmHostKeyData,
+  KnowledgeConfirmHostKeyError,
+  KnowledgeConfirmHostKeyResponse,
   KnowledgeCreateLocationData,
   KnowledgeCreateLocationError,
   KnowledgeCreateLocationResponse,
@@ -1919,6 +1923,33 @@ export const knowledgeSetDefaultLocationMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await knowledgeSetDefaultLocation({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Confirm Host Key
+ */
+export const knowledgeConfirmHostKeyMutation = (
+  options?: Partial<Options<KnowledgeConfirmHostKeyData>>,
+): UseMutationOptions<
+  KnowledgeConfirmHostKeyResponse,
+  KnowledgeConfirmHostKeyError,
+  Options<KnowledgeConfirmHostKeyData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeConfirmHostKeyResponse,
+    KnowledgeConfirmHostKeyError,
+    Options<KnowledgeConfirmHostKeyData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeConfirmHostKey({
         ...options,
         ...fnOptions,
         throwOnError: true,
