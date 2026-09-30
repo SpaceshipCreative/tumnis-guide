@@ -127,6 +127,19 @@ async def finish_step(
     outcome = _outcome(task, message)
     now = SystemClock().now()
     async with tenant_session(_ctx(workspace_id)) as s:
+        # A run already cancelled (the protocol-1 fallback, whose message to this workflow
+        # is best effort) stays cancelled: a lost message must not turn it into `timed_out`.
+        current = (
+            await s.execute(
+                select(_runs.c.status, _runs.c.error)
+                .where(_runs.c.id == task.run_id)
+                .with_for_update()
+            )
+        ).first()
+        if current is not None and current.status == "cancelled":
+            return api.RunOutcome(
+                run_id=task.run_id, status="cancelled", error=current.error or "cancelled"
+            ).model_dump(mode="json")
         await s.execute(
             update(_runs)
             .where(_runs.c.id == task.run_id)

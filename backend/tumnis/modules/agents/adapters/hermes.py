@@ -279,7 +279,9 @@ class DaemonTransport:
         async with tenant_session(self.ctx) as s:
             found = (
                 await s.execute(
-                    select(_runs.c.status, _runs.c.workflow_id).where(_runs.c.id == run.run_id)
+                    select(_runs.c.status, _runs.c.workflow_id)
+                    .where(_runs.c.id == run.run_id)
+                    .with_for_update()  # serialised with the workflow's finish_step
                 )
             ).first()
             if found is None or found.status in TERMINAL_RUN:

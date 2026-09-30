@@ -450,8 +450,9 @@ class _RunnerSocket:
         if isinstance(message, Heartbeat):
             await self._heartbeat()
         elif isinstance(message, Register):
-            version = negotiate(message.protocol_versions, message.capabilities)
-            await self._register(message, version or 1)
+            # The session's protocol is fixed at the handshake; the row stays in step with it
+            # (a row saying 2 on a protocol-1 session would route cancels nowhere).
+            await self._register(message, self.protocol)
         elif isinstance(message, Result):
             return await self._result(message)
         elif isinstance(message, HealthReport):
