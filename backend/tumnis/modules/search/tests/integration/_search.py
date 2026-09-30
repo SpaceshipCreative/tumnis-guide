@@ -132,10 +132,16 @@ async def drain(db: DbUrls) -> None:
                     delivery_id(row["event_id"], sub.name)
                 )
                 await handle.get_result()
+    # Looked for again after each round: a queued delivery may itself start a workflow
+    # (the label's fallback path), which the earlier listing could not see.
     events = {str(row["event_id"]) for row in pending}
-    for status in await DBOS.list_workflows_async(status=["ENQUEUED", "PENDING"]):
-        if any(event in status.workflow_id for event in events):
-            other: WorkflowHandleAsync[Any] = await DBOS.retrieve_workflow_async(status.workflow_id)
+    while running := [
+        status.workflow_id
+        for status in await DBOS.list_workflows_async(status=["ENQUEUED", "PENDING"])
+        if any(event in status.workflow_id for event in events)
+    ]:
+        for workflow_id in running:
+            other: WorkflowHandleAsync[Any] = await DBOS.retrieve_workflow_async(workflow_id)
             with contextlib.suppress(Exception):  # its outcome is its own tests' concern
                 await other.get_result()
 
