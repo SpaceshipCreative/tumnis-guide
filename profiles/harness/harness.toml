@@ -1,0 +1,10 @@
+# The skill harness (P1-05). A case file cannot change any of this.
+runs = 3                                   # the 3-of-3 rule: every attempt must pass
+# The pinned model id on the homelab vLLM, passed with -m (never an alias), and its
+# provider, passed with --provider. Both profiles' config.yaml carry the same pair
+# (tests/test_config.py). The harness refuses to run while either starts with UNSET.
+model = "UNSET-pinned-homelab-model"
+provider = "custom"
+timeout_s = 180                            # per attempt (plan default)
+install_prefix = "tumnis-ci"               # installed as tumnis-ci-<profile>-<sha8>
+max_parallel = 5                           # cases run at once

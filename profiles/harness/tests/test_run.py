@@ -15,7 +15,6 @@ RECORDINGS = Path(__file__).parent / "recordings"
 
 @pytest.mark.req("Quality: Hermes skills")
 @pytest.mark.wp("P1-05")
-@pytest.mark.xfail(strict=True, reason="spec:P1-05")
 def test_three_of_three_rule(tmp_path: Path) -> None:
     """T-P1-05-07
     Given a stub attempt runner returning pass, pass, fail, when run_case executes, the
@@ -63,7 +62,6 @@ def test_three_of_three_rule(tmp_path: Path) -> None:
 
 @pytest.mark.req("Quality: Hermes skills")
 @pytest.mark.wp("P1-05")
-@pytest.mark.xfail(strict=True, reason="spec:P1-05")
 def test_unlisted_tool_call_fails_case(tmp_path: Path) -> None:
     """T-P1-05-08
     A recorded stream-json run with one `tool_use` and an otherwise valid enrichment

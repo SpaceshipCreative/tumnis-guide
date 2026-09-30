@@ -112,14 +112,20 @@ def _parse_line(line: str | bytes) -> dict[str, Any] | None:
     return record if isinstance(record, dict) else None
 
 
-def read_recording(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-    """A stream-json transcript: every record, and the last `result` record."""
+def read_stream_json(text: str) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Hermes' stream-json output: every record (lines that are not a JSON object are
+    skipped, as `execute` skips them), and the last `result` record."""
     events = [
         record
-        for line in path.read_text(encoding="utf-8").splitlines()
+        for line in text.splitlines()
         if line.strip() and (record := _parse_line(line)) is not None
     ]
     return events, _final(events)
+
+
+def read_recording(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """A stream-json transcript on disk: every record, and the last `result` record."""
+    return read_stream_json(path.read_text(encoding="utf-8"))
 
 
 def _final(events: list[dict[str, Any]]) -> dict[str, Any] | None:
