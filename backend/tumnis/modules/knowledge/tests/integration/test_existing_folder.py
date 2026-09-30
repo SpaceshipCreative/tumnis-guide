@@ -158,7 +158,6 @@ async def test_outside_files_never_renamed_moved_or_overwritten(  # one script
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_agent_delete_of_external_file_refused(  # noqa: PLR0917  # fixtures
     db: DbUrls,
     dbos: type[DBOS],
@@ -217,7 +216,6 @@ async def test_agent_delete_of_external_file_refused(  # noqa: PLR0917  # fixtur
 
 @pytest.mark.req("FR-15.12", "SEC-3")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_user_delete_needs_confirmation(  # noqa: PLR0917  # fixtures
     db: DbUrls,
     dbos: type[DBOS],
