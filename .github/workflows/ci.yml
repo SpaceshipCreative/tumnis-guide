@@ -360,15 +360,21 @@ jobs:
       - name: Install TypeScript for the test extractor
         working-directory: frontend
         run: npm ci --no-audit --no-fund --ignore-scripts
+      # The event's base SHA can predate a main the PR has since merged (#79, #81), so
+      # compare with the base branch as it is now; the script uses its merge-base with head.
+      - name: Fetch the current base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
       - name: spec-guard
         env:
           GH_TOKEN: ${{ github.token }}
           SPEC_CHANGE_ACTORS: ${{ vars.SPEC_CHANGE_ACTORS }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: >-
-          python3 scripts/ci/spec_guard.py --base "$BASE_SHA" --head "$GITHUB_SHA"
+          python3 scripts/ci/spec_guard.py --base "origin/$BASE_REF" --head "$GITHUB_SHA"
           --labels "$LABELS" --pr "$PR_NUMBER"
 
   red-proof:

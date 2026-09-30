@@ -9,7 +9,7 @@ from textwrap import dedent
 
 import pytest
 
-from tests.ci._gitrepo import Repo, commit, make_repo
+from tests.ci._gitrepo import Repo, checkout, commit, make_repo, merge
 from tests.ci._scripts import load, node_with_typescript
 
 CALC_TEST = dedent(
@@ -350,3 +350,97 @@ def test_skill_case_may_drop_only_its_spec_marker(tmp_path: Path) -> None:
     repo = make_repo(tmp_path / "edited", {path: SKILL_CASE})
     weakened = unmarked.replace("absent: true", "type: integer")
     assert _guard(repo, commit(repo, {path: weakened})) == (1, ["edited_test"])
+
+
+# --- The base is the merge-base with current main (Scott decision 24, 2026-09-30) ------
+
+TWO_SPECS = dedent(
+    """\
+    import pytest
+
+
+    @pytest.mark.wp("P0-18")
+    @pytest.mark.xfail(strict=True, reason="spec:P0-18")
+    def test_a() -> None:
+        \"\"\"T-P0-18-01\"\"\"
+        assert state("a") == "ready"
+
+
+    @pytest.mark.wp("P0-18")
+    @pytest.mark.xfail(strict=True, reason="spec:P0-18")
+    def test_b() -> None:
+        \"\"\"T-P0-18-02\"\"\"
+        assert state("b") == "ready"
+    """
+)
+B_MARKER = '@pytest.mark.xfail(strict=True, reason="spec:P0-18")\ndef test_b() -> None:'
+B_UNMARKED = "def test_b() -> None:"
+# What a merged spec-change PR did to test_a on main after the branch point.
+A_ON_MAIN = TWO_SPECS.replace('state("a") == "ready"', 'state("a") == "queued"')
+
+
+def _guard_from(repo: Repo, base: str, head: str) -> tuple[int, list[str]]:
+    """spec-guard's CLI and its collector with an explicit --base (a ref or a SHA)."""
+    spec_guard = load("spec_guard")
+    argv = ["--base", base, "--head", head, "--repo", str(repo.path), "--labels", ""]
+    code = spec_guard.main(argv)
+    return code, sorted(v.kind for v in spec_guard.collect(repo.path, base, head))
+
+
+@pytest.mark.req("Quality rule 1")
+@pytest.mark.wp("P0-03")
+def test_spec_change_on_main_after_branch_point_is_not_the_branchs(tmp_path: Path) -> None:
+    """T-P0-03-19
+    Red-proof for the stale-base false positive (#79, #81): main changes test_a after the
+    branch point and the branch only drops test_b's spec marker in the same file. Compared
+    with current main, the branch did not touch test_a, so spec-guard reports nothing.
+    """
+    path = "backend/tests/test_state.py"
+    repo = make_repo(tmp_path, {path: TWO_SPECS})
+    commit(repo, {path: A_ON_MAIN})  # main: a merged spec-change PR
+    checkout(repo, "wp", start=repo.base)
+    head = commit(repo, {path: TWO_SPECS.replace(B_MARKER, B_UNMARKED)})
+
+    assert _guard_from(repo, "main", head) == (0, [])
+
+
+@pytest.mark.req("Quality rule 1")
+@pytest.mark.wp("P0-03")
+def test_branch_that_merged_main_is_not_blamed_for_mains_spec_change(tmp_path: Path) -> None:
+    """T-P0-03-20
+    Main gains a spec change after the branch point, the branch merges main, and main then
+    moves on: spec-guard against current main reports nothing, including for a spec marker
+    the branch drops in the file main changed.
+    """
+    path = "backend/tests/test_state.py"
+    repo = make_repo(tmp_path, {path: TWO_SPECS, "backend/tests/test_calc.py": CALC_TEST})
+    commit(repo, {path: A_ON_MAIN})
+    checkout(repo, "wp", start=repo.base)
+    commit(repo, {"backend/tests/test_new.py": SPEC_TEST})
+    merge(repo, "main")
+    head = commit(repo, {path: A_ON_MAIN.replace(B_MARKER, B_UNMARKED)})
+    checkout(repo, "main")
+    commit(repo, {path: A_ON_MAIN.replace('state("b") == "ready"', 'state("b") == "done"')})
+
+    assert _guard_from(repo, "main", head) == (0, [])
+
+
+@pytest.mark.req("Quality rule 1")
+@pytest.mark.wp("P0-03")
+def test_branch_edits_are_still_caught_after_merging_main(tmp_path: Path) -> None:
+    """T-P0-03-21
+    After the branch merges main (which changed test_a), the branch's own edit to test_b's
+    assertion and its deletion of a test file are still violations against current main.
+    """
+    path = "backend/tests/test_state.py"
+    repo = make_repo(tmp_path, {path: TWO_SPECS, "backend/tests/test_calc.py": CALC_TEST})
+    commit(repo, {path: A_ON_MAIN})
+    checkout(repo, "wp", start=repo.base)
+    commit(repo, {"backend/tests/test_new.py": SPEC_TEST})
+    merge(repo, "main")
+    edited = A_ON_MAIN.replace(B_MARKER, B_UNMARKED).replace(
+        'state("b") == "ready"', 'state("b") != "failed"'
+    )
+    head = commit(repo, {path: edited}, delete=["backend/tests/test_calc.py"])
+
+    assert _guard_from(repo, "main", head) == (1, ["deleted_file", "edited_test"])
