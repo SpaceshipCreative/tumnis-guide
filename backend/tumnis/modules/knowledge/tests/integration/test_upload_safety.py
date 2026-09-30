@@ -171,13 +171,13 @@ def _multipart(project_id: object, name: str, size: int, sent: list[int]) -> Asy
 
 @pytest.mark.req("SEC-10")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 async def test_51_mb_refused_50_mb_accepted(
     extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient, db: DbUrls
 ) -> None:
     """T-P1-16-03
     A 51 MiB body answers 413 `too_large` after the server has read at most the limit and
-    one more megabyte: no document, nothing left in the spool. A body of exactly
+    two more megabytes (one 1 MiB chunk past the limit, plus the multipart head): no
+    document, nothing left in the spool. A body of exactly
     `MAX_UPLOAD_BYTES` is accepted (202).
     """
     env = extract_env
@@ -190,7 +190,7 @@ async def test_51_mb_refused_50_mb_accepted(
     )
     assert refused.status_code == 413, refused.text
     assert refused.json()["code"] == "too_large"
-    assert sent[0] <= MAX_UPLOAD_BYTES + MIB
+    assert sent[0] <= MAX_UPLOAD_BYTES + 2 * MIB
     assert scalar(db, UPLOADS, env.project_id) == 0
     assert list(env.dirs.spool.iterdir()) == []
 
