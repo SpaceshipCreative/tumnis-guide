@@ -13090,7 +13090,7 @@
     },
     "/v1/knowledge/projects/{project_id}/folder/move": {
       "post": {
-        "description": "Copy the project's folder to another location, verify every hash, switch; the old\ncopy is kept.",
+        "description": "Copy the project's folder to another location, verify every hash, switch; the old\ncopy is kept. A target that cannot take the folder is refused here (409, or 422 for an\nunsafe path), not after a 202.",
         "operationId": "knowledge_move_project_folder",
         "parameters": [
           {

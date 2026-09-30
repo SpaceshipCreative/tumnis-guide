@@ -1553,7 +1553,8 @@ export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
  * Move Project Folder
  *
  * Copy the project's folder to another location, verify every hash, switch; the old
- * copy is kept.
+ * copy is kept. A target that cannot take the folder is refused here (409, or 422 for an
+ * unsafe path), not after a 202.
  */
 export const knowledgeMoveProjectFolder = <
   ThrowOnError extends boolean = false,

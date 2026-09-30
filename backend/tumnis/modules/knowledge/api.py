@@ -2443,31 +2443,32 @@ CONFIRM_TTL: Final = timedelta(minutes=10)  # how long a delete confirmation is 
 
 
 async def _delete_target(s: AsyncSession, document_id: UUID) -> tuple[WritePolicy, str]:
-    """The document's folder policy and its file's origin (`tumnis` without a file)."""
-    project_id = await s.scalar(
-        select(_documents.c.project_id).where(
-            _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+    """The document's folder policy and its file's origin (`tumnis` without a file). Should
+    the document ever have more than one live file record, any outside one makes it
+    `external`: the stricter delete rules win."""
+    project_id = (
+        await s.execute(
+            select(_documents.c.project_id).where(
+                _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+            )
         )
-    )
-    found = await s.scalar(
-        select(_documents.c.id).where(
-            _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
-        )
-    )
-    if found is None:
+    ).first()
+    if project_id is None:
         raise NotFound("documents", document_id)
     mode = await s.scalar(
         select(_folders.c.mode).where(
-            _folders.c.project_id == project_id, _folders.c.deleted_at.is_(None)
+            _folders.c.project_id == project_id[0], _folders.c.deleted_at.is_(None)
         )
     )
-    origin = await s.scalar(
-        select(_files.c.origin).where(
-            _files.c.document_id == document_id, _files.c.deleted_at.is_(None)
+    origins: set[str] = set(
+        await s.scalars(
+            select(_files.c.origin).where(
+                _files.c.document_id == document_id, _files.c.deleted_at.is_(None)
+            )
         )
     )
     policy = WritePolicy(mode="existing" if mode == "existing" else "tumnis_made")
-    return policy, origin or "tumnis"
+    return policy, "external" if "external" in origins else "tumnis"
 
 
 async def delete_document(s: AsyncSession, document_id: UUID, *, actor: ActorKind) -> str:

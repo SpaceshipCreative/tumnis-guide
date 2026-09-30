@@ -33,7 +33,7 @@ from tumnis.core.principal import principal_of
 from tumnis.core.routing import RoutePolicy, authorize, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.versioning import Version
-from tumnis.modules.knowledge import api, uploads
+from tumnis.modules.knowledge import api, move, uploads
 from tumnis.modules.knowledge.rules import MAX_UPLOAD_BYTES, ActorKind
 
 router = v1_router("knowledge", tags=["knowledge"])
@@ -178,7 +178,10 @@ async def move_project_folder(
     project_id: UUID, body: ExistingFolderIn, ctx: Session
 ) -> api.MoveStarted:
     """Copy the project's folder to another location, verify every hash, switch; the old
-    copy is kept."""
+    copy is kept. A target that cannot take the folder is refused here (409, or 422 for an
+    unsafe path), not after a 202."""
+    async with tenant_session(ctx) as s:
+        await move.precheck(s, project_id, body.location_id, body.path)
     return await api.enqueue_move(ctx, project_id, body.location_id, body.path)
 
 
