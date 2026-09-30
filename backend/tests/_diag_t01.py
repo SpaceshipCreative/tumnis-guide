@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import gc
 import os
 import resource
 import statistics
@@ -19,6 +20,32 @@ from typing import Any
 import pytest
 
 LAG: list[float] = []
+LAG_AT: list[tuple[float, float]] = []
+GC: list[tuple[int, float, float, int]] = []  # (generation, start, ms, collected)
+_gc_start: dict[str, float] = {}
+
+
+def _gc_cb(phase: str, info: dict[str, Any]) -> None:
+    if phase == "start":
+        _gc_start["t"] = time.perf_counter()
+    else:
+        t0 = _gc_start.get("t", time.perf_counter())
+        GC.append(
+            (info["generation"], time.time(), (time.perf_counter() - t0) * 1000, info["collected"])
+        )
+
+
+gc.callbacks.append(_gc_cb)
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    print(f"DIAG collected {len(session.items)} items; gc objects {len(gc.get_objects())}")
+    if os.environ.get("DIAG_FREEZE") == "1":
+        gc.collect()
+        gc.freeze()
+        print(f"DIAG gc.freeze(): {gc.get_freeze_count()} objects frozen")
+
+
 POSTS: list[tuple[float, float, str]] = []
 CPU: dict[str, Any] = {}
 
@@ -45,6 +72,8 @@ def _docker_ps() -> str:
 @pytest.fixture(autouse=True)
 async def _diag_loop_lag() -> AsyncIterator[None]:
     LAG.clear()
+    LAG_AT.clear()
+    GC.clear()
     POSTS.clear()
     stop = asyncio.Event()
 
@@ -53,7 +82,10 @@ async def _diag_loop_lag() -> AsyncIterator[None]:
         while not stop.is_set():
             t = loop.time()
             await asyncio.sleep(0.005)
-            LAG.append((loop.time() - t - 0.005) * 1000)
+            lag = (loop.time() - t - 0.005) * 1000
+            LAG.append(lag)
+            if lag > 50:
+                LAG_AT.append((time.time(), lag))
 
     from tests import _auth  # noqa: PLC0415
 
@@ -132,6 +164,19 @@ def _report(item: pytest.Item) -> None:  # noqa: PLR0915
     print(
         f"DIAG POST /v1/tasks ms: n={len(post_ms)} p50={_pct(post_ms, 0.5):.0f} "
         f"p95={_pct(post_ms, 0.95):.0f} max={max(post_ms, default=0):.0f}"
+    )
+    t_first = min((s for s, e, t in POSTS), default=CPU["wall_before"])
+    print(f"DIAG gc objects now {len(gc.get_objects())} frozen {gc.get_freeze_count()}")
+    for gen in (0, 1, 2):
+        ms = [g[2] for g in GC if g[0] == gen]
+        print(f"DIAG gc gen{gen}: n={len(ms)} total={sum(ms):.0f}ms max={max(ms, default=0):.0f}ms")
+    print(
+        "DIAG gc >20ms (s after first POST, gen, ms): "
+        + ", ".join(f"{g[1] - t_first:.2f}/{g[0]}/{g[2]:.0f}" for g in GC if g[2] > 20)
+    )
+    print(
+        "DIAG lag >50ms (s after first POST, ms): "
+        + ", ".join(f"{a - t_first:.2f}/{b:.0f}" for a, b in LAG_AT)
     )
     post_end = {t: e for s, e, t in POSTS}
     post_start = {t: s for s, e, t in POSTS}
