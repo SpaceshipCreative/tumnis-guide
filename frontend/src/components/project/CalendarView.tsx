@@ -125,6 +125,12 @@ function planned(week: WeekOut, v: ScheduleVars): WeekOut {
   };
 }
 
+/** What a schedule mutation changed: the week's cache key and the week before it. */
+interface Snapshot {
+  key: ReturnType<typeof weekQuery>["queryKey"];
+  previous: WeekOut | undefined;
+}
+
 function useScheduleBlock(
   projectId: string,
   monday: string,
@@ -132,7 +138,9 @@ function useScheduleBlock(
   timeZone: string,
 ) {
   const key = weekQuery(projectId, monday).queryKey;
-  return useWrite<ScheduleVars, PlanItemOut, WeekOut | undefined>({
+  // The rollback goes to the week the mutation changed, even if the view has moved to
+  // another week since (the options, and so `key`, follow the latest render).
+  return useWrite<ScheduleVars, PlanItemOut, Snapshot>({
     mutationFn: (v) =>
       apiWrite({
         kind: "create",
@@ -146,15 +154,17 @@ function useScheduleBlock(
       await ctx.client.cancelQueries({ queryKey: key });
       const previous = ctx.client.getQueryData(key);
       if (previous) ctx.client.setQueryData(key, planned(previous, v));
-      return previous;
+      return { key, previous };
     },
     onSuccess: (_item, v) => {
       say(
         `Scheduled ${v.task.title}, ${dayName(v.day)}, ${spanText(v.block, timeZone)}`,
       );
     },
-    onError: (error, _v, previous, ctx) => {
-      if (previous) ctx.client.setQueryData(key, previous);
+    onError: (error, _v, snapshot, ctx) => {
+      if (snapshot?.previous) {
+        ctx.client.setQueryData(snapshot.key, snapshot.previous);
+      }
       say(
         error instanceof ConflictError
           ? "That time is no longer free"
