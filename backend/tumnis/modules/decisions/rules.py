@@ -89,6 +89,31 @@ def label_reason(label: Literal["human", "ai", "hybrid"], companions: Mapping[st
     return reason[:MAX_REASON_CHARS]
 
 
+# --- Label inputs (P1-07, Data flow rule 6) -----------------------------------------------
+
+
+def label_inputs(
+    task: Mapping[str, Any],
+    *,
+    parent_title: str | None,
+    project: Mapping[str, Any] | None,
+    reserved_judgments: Sequence[str],
+) -> dict[str, Any]:
+    """The `quick_add_label` request's inputs: the task's title, its parent's title, the
+    project's name and goal and the user's reserved judgments. Nothing else of the task
+    or project (description, comments, links, client, brief) is ever read; an empty or
+    missing value is left out."""
+    project = project or {}
+    inputs: dict[str, Any] = {
+        "title": task["title"],
+        "parent_title": parent_title,
+        "project_name": project.get("name"),
+        "project_goal": project.get("goal"),
+        "reserved_judgments": [str(item) for item in reserved_judgments if item],
+    }
+    return {key: value for key, value in inputs.items() if value}
+
+
 # --- Project match option keys ---------------------------------------------------------
 #
 # Option keys are sent to the model, so they carry no data: `p01`..`p254` by position in

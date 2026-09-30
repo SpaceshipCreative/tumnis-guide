@@ -37,7 +37,8 @@ test:
 
 ## Integration tests: Postgres 18 + pgvector, DBOS, MinIO, SFTP, clamd (needs Docker).
 test-int:
-	$(BACKEND) uv run pytest -q -n auto -m integration
+	$(BACKEND) uv run pytest -q -n auto -m "integration and not serial"
+	$(BACKEND) uv run pytest -q -n 0 -m "integration and serial"
 
 ## Playwright journeys and acceptance, phone and laptop (the stack starts from compose.test
 ## once P0-04 lands; E2E_BASE_URL points at a running app instead).

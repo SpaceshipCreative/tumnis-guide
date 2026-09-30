@@ -23,7 +23,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime
 from enum import StrEnum
 from math import ceil
-from typing import Any, Final
+from typing import Any, Final, Literal
 from uuid import UUID
 
 
@@ -43,6 +43,22 @@ class Label(StrEnum):
 
 
 # tasks.label is nullable: None means pending (R-08). Rules take `Label | None`.
+
+LabelSource = Literal["user", "jev", "agent", "fallback"]  # R-08; `fallback` is vLLM (P1-02)
+LabelState = Literal["pending", "suggested", "confirmed"]
+
+
+def may_auto_label(label_source: LabelSource | None) -> bool:
+    """False once the user has chosen a label (source `user`); True otherwise (P1-07)."""
+    return label_source != "user"
+
+
+def label_state(label: Label | None, suggestion: Label | None) -> LabelState:
+    """The label chip's state (P1-07): confirmed when the label is set, suggested when only
+    a low-confidence suggestion exists, pending otherwise."""
+    if label is not None:
+        return "confirmed"
+    return "pending" if suggestion is None else "suggested"
 
 
 class ActorKind(StrEnum):

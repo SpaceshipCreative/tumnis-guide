@@ -4972,6 +4972,17 @@
               }
             ]
           },
+          "label_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Reason"
+          },
           "label_source": {
             "anyOf": [
               {
@@ -4988,6 +4999,16 @@
               }
             ],
             "title": "Label Source"
+          },
+          "label_suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "parent_id": {
             "anyOf": [
@@ -5071,6 +5092,8 @@
           "title",
           "label",
           "label_source",
+          "label_reason",
+          "label_suggestion",
           "status",
           "priority",
           "due_on",
@@ -5554,6 +5577,17 @@
               }
             ]
           },
+          "label_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Reason"
+          },
           "label_source": {
             "anyOf": [
               {
@@ -5570,6 +5604,16 @@
               }
             ],
             "title": "Label Source"
+          },
+          "label_suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "layout": {
             "anyOf": [
@@ -5669,6 +5713,8 @@
           "title",
           "label",
           "label_source",
+          "label_reason",
+          "label_suggestion",
           "status",
           "priority",
           "due_on",
