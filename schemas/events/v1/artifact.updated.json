@@ -1,0 +1,59 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/artifact.updated.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_id": {
+      "format": "uuid",
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "checks": {
+      "additionalProperties": true,
+      "title": "Checks",
+      "type": "object"
+    },
+    "kind": {
+      "title": "Kind",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "state": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "State"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Url"
+    }
+  },
+  "required": [
+    "schema_version",
+    "artifact_id",
+    "kind",
+    "url",
+    "state",
+    "checks"
+  ],
+  "title": "ArtifactUpdatedV1",
+  "type": "object"
+}

@@ -1,0 +1,298 @@
+{
+  "notes": "Scrubbed: owners, repositories, user logins and ids, node ids, SHAs, titles, bodies, branch names, timestamps and ETags replaced with invented values; avatar, gravatar and email fields removed; example repositories on github.com. Shapes follow the GitHub REST API (X-GitHub-Api-Version 2022-11-28): GET /repos/{owner}/{repo}/pulls/{n}, /commits/{ref}/status, /commits/{ref}/check-runs and /pulls/{n}/reviews.",
+  "pull": {
+    "owner": "acme-example",
+    "repo": "site",
+    "number": 38
+  },
+  "rounds": 1,
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/repos/acme-example/site/pulls/38",
+      "query": {},
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"f283938002c0153332eb447eab824c5f7cb0b5e8f4c8845b4b38b2089a68cadb\""
+      },
+      "body": {
+        "url": "https://api.github.com/repos/acme-example/site/pulls/38",
+        "id": 50038,
+        "node_id": "PR_example500038",
+        "html_url": "https://github.com/acme-example/site/pull/38",
+        "number": 38,
+        "state": "closed",
+        "locked": false,
+        "title": "Fix the footer links",
+        "user": {
+          "login": "ana-example",
+          "id": 9001,
+          "node_id": "U_example9001",
+          "html_url": "https://github.com/ana-example",
+          "type": "User",
+          "site_admin": false
+        },
+        "body": "Invented description.",
+        "created_at": "2026-03-08T09:00:00Z",
+        "updated_at": "2026-03-09T11:30:00Z",
+        "closed_at": "2026-03-08T16:00:00Z",
+        "merged_at": "2026-03-08T16:00:00Z",
+        "merge_commit_sha": "29fbace74d99f461ae474343446b5b2d706c3136",
+        "assignee": null,
+        "assignees": [],
+        "requested_reviewers": [],
+        "requested_teams": [],
+        "labels": [],
+        "draft": false,
+        "head": {
+          "label": "acme-example:feature-38",
+          "ref": "feature-38",
+          "sha": "f7947e2b4cd1d97003b34b5e926095905f22e0c0",
+          "user": {
+            "login": "acme-example",
+            "id": 5001,
+            "node_id": "U_example5001",
+            "html_url": "https://github.com/acme-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "repo": {
+            "id": 5000,
+            "node_id": "R_example5000",
+            "name": "site",
+            "full_name": "acme-example/site",
+            "private": true,
+            "owner": {
+              "login": "acme-example",
+              "id": 5001,
+              "node_id": "U_example5001",
+              "html_url": "https://github.com/acme-example",
+              "type": "User",
+              "site_admin": false
+            },
+            "html_url": "https://github.com/acme-example/site",
+            "default_branch": "main"
+          }
+        },
+        "base": {
+          "label": "acme-example:main",
+          "ref": "main",
+          "sha": "9fd8994b2c85d2069065452765316a6d2f7e8bd6",
+          "user": {
+            "login": "acme-example",
+            "id": 5001,
+            "node_id": "U_example5001",
+            "html_url": "https://github.com/acme-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "repo": {
+            "id": 5000,
+            "node_id": "R_example5000",
+            "name": "site",
+            "full_name": "acme-example/site",
+            "private": true,
+            "owner": {
+              "login": "acme-example",
+              "id": 5001,
+              "node_id": "U_example5001",
+              "html_url": "https://github.com/acme-example",
+              "type": "User",
+              "site_admin": false
+            },
+            "html_url": "https://github.com/acme-example/site",
+            "default_branch": "main"
+          }
+        },
+        "author_association": "MEMBER",
+        "merged": true,
+        "mergeable": null,
+        "mergeable_state": "unknown",
+        "merged_by": {
+          "login": "ben-example",
+          "id": 9002,
+          "node_id": "U_example9002",
+          "html_url": "https://github.com/ben-example",
+          "type": "User",
+          "site_admin": false
+        },
+        "comments": 1,
+        "review_comments": 0,
+        "commits": 3,
+        "additions": 40,
+        "deletions": 7,
+        "changed_files": 4
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/acme-example/site/commits/f7947e2b4cd1d97003b34b5e926095905f22e0c0/status",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"f8b71bb26008310b6b0e1ce5f30d472cd765d520ef448b781046a81d723aa203\""
+      },
+      "body": {
+        "state": "success",
+        "statuses": [
+          {
+            "url": "https://api.github.com/repos/acme-example/site/statuses/f7947e2b4cd1d97003b34b5e926095905f22e0c0",
+            "id": 7000,
+            "node_id": "SC_example7000",
+            "state": "success",
+            "description": "ci/lint success",
+            "target_url": "https://ci.example.com/acme-example/site/7000",
+            "context": "ci/lint",
+            "created_at": "2026-03-09T11:00:00Z",
+            "updated_at": "2026-03-09T11:05:00Z"
+          }
+        ],
+        "sha": "f7947e2b4cd1d97003b34b5e926095905f22e0c0",
+        "total_count": 1,
+        "repository": {
+          "id": 5000,
+          "node_id": "R_example5000",
+          "name": "site",
+          "full_name": "acme-example/site",
+          "private": true,
+          "owner": {
+            "login": "acme-example",
+            "id": 5001,
+            "node_id": "U_example5001",
+            "html_url": "https://github.com/acme-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "html_url": "https://github.com/acme-example/site",
+          "default_branch": "main"
+        },
+        "commit_url": "https://api.github.com/repos/acme-example/site/commits/f7947e2b4cd1d97003b34b5e926095905f22e0c0"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/acme-example/site/commits/f7947e2b4cd1d97003b34b5e926095905f22e0c0/check-runs",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"77e3762e1ddf863d4f28233de61fb90e35b01c12d5811db37985e5c09fac987c\""
+      },
+      "body": {
+        "total_count": 1,
+        "check_runs": [
+          {
+            "id": 8000,
+            "head_sha": "f7947e2b4cd1d97003b34b5e926095905f22e0c0",
+            "node_id": "CR_example8000",
+            "external_id": "",
+            "url": "https://api.github.com/repos/acme-example/site/check-runs/8000",
+            "html_url": "https://github.com/acme-example/site/runs/8000",
+            "details_url": "https://ci.example.com/acme-example/site/runs/8000",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-03-09T11:00:00Z",
+            "completed_at": "2026-03-09T11:06:00Z",
+            "output": {
+              "title": null,
+              "summary": null,
+              "text": null,
+              "annotations_count": 0
+            },
+            "name": "build",
+            "check_suite": {
+              "id": 8500
+            },
+            "app": {
+              "id": 15368,
+              "slug": "github-actions",
+              "name": "GitHub Actions"
+            },
+            "pull_requests": []
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/acme-example/site/pulls/38/reviews",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"29719dc26997bed40a062f149c59fda5c1a8ff154db79815eefdff4b62cb0480\""
+      },
+      "body": [
+        {
+          "id": 9500,
+          "node_id": "PRR_example9500",
+          "user": {
+            "login": "ana-example",
+            "id": 9200,
+            "node_id": "U_example9200",
+            "html_url": "https://github.com/ana-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "body": "",
+          "state": "APPROVED",
+          "html_url": "https://github.com/acme-example/site/pull/38#pullrequestreview-9500",
+          "pull_request_url": "https://api.github.com/repos/acme-example/site/pulls/38",
+          "author_association": "MEMBER",
+          "submitted_at": "2026-03-08T15:00:00Z",
+          "commit_id": "58142a414ef91ab859b0903dacafdb6a57fbecbf"
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "external_id": "acme-example/site#38",
+    "url": "https://github.com/acme-example/site/pull/38",
+    "state": "merged",
+    "pr_status": {
+      "repo": "acme-example/site",
+      "number": 38,
+      "title": "Fix the footer links",
+      "draft": false,
+      "head_sha": "f7947e2b4cd1d97003b34b5e926095905f22e0c0",
+      "checks": "green",
+      "review": "approved"
+    }
+  }
+}
