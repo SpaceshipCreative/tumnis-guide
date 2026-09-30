@@ -226,7 +226,7 @@ test("[P1-12][UX 7] T-P1-12-04 keyboard scheduling", async () => {
   expect(fake.writes()).toHaveLength(1);
 });
 
-test.fails("[P1-12][UX 11] T-P1-12-05 phone layout", async () => {
+test("[P1-12][UX 11] T-P1-12-05 phone layout", async () => {
   const { fake, user } = setUp("phone");
   const calendar = await screen.findByRole("region", { name: "Calendar" });
 
