@@ -233,3 +233,35 @@ async def test_token_never_carries_delegate_or_ingest(
         assert "delegate" not in principal.scopes, kind
         assert "ingest" not in principal.scopes, kind
         assert principal.scopes, kind
+
+
+@pytest.mark.req("SAF-1")
+@pytest.mark.wp("P2-02")
+async def test_resolver_gives_a_projectless_token_no_project_ids(
+    app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls
+) -> None:
+    """Scott decision 30 (auth_0006): `app.auth_resolve_token` answers an empty project
+    list for a master run's project-less token, never `{NULL}`, so a release that reads
+    the list as-is (and the shared prefix cache it fills) sees "no project" as well."""
+    import psycopg  # noqa: PLC0415
+
+    from tests._pg import APP  # noqa: PLC0415
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+    from tumnis.modules.auth import keys  # noqa: PLC0415
+
+    master = await _key(workspace, clock, ALL_SCOPES)
+    token = await agents.issue_run_token(
+        workspace.ctx,
+        run_id=uuid.uuid4(),
+        kind=agents.RunKind.PLAN,
+        project_id=None,
+        api_key_id=master.id,
+        now=clock.now(),
+    )
+    parsed = keys.parse(token)
+    assert parsed is not None
+    with psycopg.connect(db.libpq(APP)) as conn:
+        rows = conn.execute(
+            "SELECT project_ids FROM app.auth_resolve_token('task', %s)", (parsed.prefix,)
+        ).fetchall()
+    assert rows == [([],)]

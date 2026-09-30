@@ -96,15 +96,16 @@ async def test_get_task_packet_leaves_context_items_out_without_context_read(
     full, _ = await callers.key(ALL_SCOPES)
     narrow, _ = await callers.key(frozenset({"tasks:read"}))
 
-    async with mcp_running(app), http_for(app, full) as http:
-        seen = await mcp_call(http, "get_task_packet", {"task_id": str(task.id)})
+    async with mcp_running(app):  # the MCP session manager runs once per app
+        async with http_for(app, full) as http:
+            seen = await mcp_call(http, "get_task_packet", {"task_id": str(task.id)})
+        async with http_for(app, narrow) as http:
+            via_mcp = await mcp_call(http, "get_task_packet", {"task_id": str(task.id)})
+            via_rest = await rest_call(http, op, {"task_id": str(task.id)})
     assert seen.ok, seen
     assert [item["provider_url"] for item in seen.data["body"]["context_items"]] == [url]
     assert url in seen.data["prompt_text"]
 
-    async with mcp_running(app), http_for(app, narrow) as http:
-        via_mcp = await mcp_call(http, "get_task_packet", {"task_id": str(task.id)})
-        via_rest = await rest_call(http, op, {"task_id": str(task.id)})
     for answer in (via_mcp, via_rest):
         assert answer.ok, answer
         assert answer.data["body"]["context_items"] == []
