@@ -7,6 +7,7 @@ import type { ProjectView } from "../../lib/views";
 const VIEW_LABELS: Record<ProjectView, string> = {
   tasks: "Tasks",
   board: "Board",
+  calendar: "Calendar",
 };
 const VIEWS = Object.keys(VIEW_LABELS) as ProjectView[];
 
@@ -73,7 +74,7 @@ export function ViewSwitcher({
     <div
       role="radiogroup"
       aria-label="Views"
-      className="grid grid-cols-2 rounded-md border border-border bg-surface-muted p-1"
+      className="grid grid-cols-3 rounded-md border border-border bg-surface-muted p-1"
     >
       {VIEWS.map((v) => (
         <label

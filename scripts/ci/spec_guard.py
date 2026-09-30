@@ -8,6 +8,10 @@ files are locked: other files, CI definitions included, are reviewed as ordinary
 Only the `spec-change` label added by an owner (repo variable SPEC_CHANGE_ACTORS) waives
 violations; the report is printed either way.
 
+--base is the current base branch (origin/main); spec-guard compares head with the
+merge-base of the two, so a spec change that reached main after the branch point is not
+the branch's, whether or not the branch has merged main since.
+
     python scripts/ci/spec_guard.py --base origin/main --head HEAD --labels ""
 """
 
@@ -32,6 +36,7 @@ from _tests_extract import (
     Change,
     changes,
     dump,
+    git,
     is_python_test,
     is_spec_xfail,
     is_test_file,
@@ -176,13 +181,33 @@ def compare_file(path: str, base_src: str, head_src: str) -> list[Violation]:
     return _compare_text(path, base_src, head_src)
 
 
+def merge_base(repo: Path, base: str, head: str) -> str:
+    """The best common ancestor of `base` and `head` (`git merge-base`).
+
+    Everything main gained after that point, merged into the branch or not, is main's
+    change and not the branch's (Scott decision 24): `base` may be a ref ahead of it.
+    """
+    result = git(repo, "merge-base", base, head, check=False)
+    sha = result.stdout.strip()
+    if result.returncode != 0 or not sha:
+        raise SystemExit(
+            f"spec-guard: no merge-base for {base} and {head}; fetch full history "
+            f"(fetch-depth: 0) and the base branch. {result.stderr.strip()}"
+        )
+    return sha
+
+
 def collect(repo: Path, base: str, head: str) -> list[Violation]:
     """Every violation between base and head, from `git diff --name-status -M base...head`.
 
-    A (added) is never a violation; D (deleted) is deleted_file; R (renamed) compares the
-    old path's blocks with the new path's; M compares blocks. Exempt paths and generated
-    files are skipped. Files that are not tests (CI definitions included) are not locked.
+    Test files are read at the merge-base of base and head, the point the diff starts
+    from, so a later change on base (a spec-change PR merged to main) is never blamed on
+    the branch. A (added) is never a violation; D (deleted) is deleted_file; R (renamed)
+    compares the old path's blocks with the new path's; M compares blocks. Exempt paths and
+    generated files are skipped. Files that are not tests (CI definitions included) are not
+    locked.
     """
+    base = merge_base(repo, base, head)
     out: list[Violation] = []
     for change in changes(repo, base, head):
         if change.status == "A" or change.old is None:
