@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
+NAMES = ["Acme:", "Acme?", "Acme*", "Acme|"]  # each sanitizes to "Acme-"
+
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P1-15")
@@ -41,10 +43,10 @@ async def test_concurrent_projects_of_one_name_get_distinct_folders(
             net=SELF_HOSTED,
         )
     ids: list[UUID] = []
-    for _ in range(4):
+    for name in NAMES:  # project names are unique; their folder names are not
         async with tenant_session(ws.ctx) as s:
             made = await projects.create_project(
-                s, ws.ctx.actor, projects.ProjectCreate(name="Acme"), now=clock.now()
+                s, ws.ctx.actor, projects.ProjectCreate(name=name), now=clock.now()
             )
             ids.append(made.id)
 
@@ -55,4 +57,4 @@ async def test_concurrent_projects_of_one_name_get_distinct_folders(
         return folder.root_path
 
     names = await asyncio.gather(*(place(pid) for pid in ids))
-    assert sorted(names) == ["Acme", "Acme 2", "Acme 3", "Acme 4"]
+    assert sorted(names) == ["Acme-", "Acme- 2", "Acme- 3", "Acme- 4"]
