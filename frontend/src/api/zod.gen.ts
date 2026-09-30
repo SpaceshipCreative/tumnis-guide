@@ -529,6 +529,34 @@ export const zProjectPatch = z.object({
 });
 
 /**
+ * PullRequestIn
+ */
+export const zPullRequestIn = z.object({
+  url: z.string().min(1).max(2048),
+});
+
+/**
+ * PullRequestOut
+ *
+ * A tracked pull request as the card shows it; every status field is None until the
+ * first read.
+ */
+export const zPullRequestOut = z.object({
+  artifact_id: z.uuid(),
+  checked_at: z.iso.datetime().nullable(),
+  checks: z.enum(["pending", "green", "red", "none"]).nullable(),
+  draft: z.boolean(),
+  number: z.int(),
+  repo: z.string(),
+  review: z
+    .enum(["approved", "changes_requested", "review_required", "none"])
+    .nullable(),
+  state: z.enum(["open", "merged", "closed"]).nullable(),
+  title: z.string().nullable(),
+  url: z.string(),
+});
+
+/**
  * RecurrenceIn
  *
  * `PUT /v1/tasks/{id}/recurrence`: a preset or a 5-field cron (never both), the
@@ -1148,6 +1176,13 @@ export const zUsageRow = z.object({
 });
 
 /**
+ * WebhookOut
+ */
+export const zWebhookOut = z.object({
+  status: z.literal("accepted").optional().default("accepted"),
+});
+
+/**
  * WindowOut
  */
 export const zWindowOut = z.object({
@@ -1447,6 +1482,15 @@ export const zDeadLettersPostRetryPath = z.object({
  * Successful Response
  */
 export const zDeadLettersPostRetryResponse = zDeadLetterOut;
+
+export const zGithubWebhookPath = z.object({
+  workspace_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zGithubWebhookResponse = zWebhookOut;
 
 export const zAuthListKeysQuery = z.object({
   cursor: z.string().max(2048).nullish(),
@@ -1888,6 +1932,28 @@ export const zTasksMoveTaskPath = z.object({
  * Successful Response
  */
 export const zTasksMoveTaskResponse = zTaskOut;
+
+export const zTasksListPullRequestsPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Response Tasks List Pull Requests
+ *
+ * Successful Response
+ */
+export const zTasksListPullRequestsResponse = z.array(zPullRequestOut);
+
+export const zTasksLinkPullRequestBody = zPullRequestIn;
+
+export const zTasksLinkPullRequestPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksLinkPullRequestResponse = zPullRequestOut;
 
 export const zTasksDeleteRecurrencePath = z.object({
   task_id: z.uuid(),

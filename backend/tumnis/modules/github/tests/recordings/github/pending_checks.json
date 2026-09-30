@@ -1,0 +1,340 @@
+{
+  "notes": "Scrubbed: owners, repositories, user logins and ids, node ids, SHAs, titles, bodies, branch names, timestamps and ETags replaced with invented values; avatar, gravatar and email fields removed; example repositories on github.com. Shapes follow the GitHub REST API (X-GitHub-Api-Version 2022-11-28): GET /repos/{owner}/{repo}/pulls/{n}, /commits/{ref}/status, /commits/{ref}/check-runs and /pulls/{n}/reviews.",
+  "pull": {
+    "owner": "dune-example",
+    "repo": "portal",
+    "number": 14
+  },
+  "rounds": 1,
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/repos/dune-example/portal/pulls/14",
+      "query": {},
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"e7ea167ca96ccb44ea4e7da31eb26463ff69ec5fb5bf333b3e81da0182dea5e7\""
+      },
+      "body": {
+        "url": "https://api.github.com/repos/dune-example/portal/pulls/14",
+        "id": 53014,
+        "node_id": "PR_example530014",
+        "html_url": "https://github.com/dune-example/portal/pull/14",
+        "number": 14,
+        "state": "open",
+        "locked": false,
+        "title": "Show invoices on the portal",
+        "user": {
+          "login": "ana-example",
+          "id": 9001,
+          "node_id": "U_example9001",
+          "html_url": "https://github.com/ana-example",
+          "type": "User",
+          "site_admin": false
+        },
+        "body": "Invented description.",
+        "created_at": "2026-03-08T09:00:00Z",
+        "updated_at": "2026-03-09T11:30:00Z",
+        "closed_at": null,
+        "merged_at": null,
+        "merge_commit_sha": null,
+        "assignee": null,
+        "assignees": [],
+        "requested_reviewers": [],
+        "requested_teams": [],
+        "labels": [],
+        "draft": true,
+        "head": {
+          "label": "dune-example:feature-14",
+          "ref": "feature-14",
+          "sha": "320172559f74174806eb8ac87e3f267536dcbde1",
+          "user": {
+            "login": "dune-example",
+            "id": 5301,
+            "node_id": "U_example5301",
+            "html_url": "https://github.com/dune-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "repo": {
+            "id": 5300,
+            "node_id": "R_example5300",
+            "name": "portal",
+            "full_name": "dune-example/portal",
+            "private": true,
+            "owner": {
+              "login": "dune-example",
+              "id": 5301,
+              "node_id": "U_example5301",
+              "html_url": "https://github.com/dune-example",
+              "type": "User",
+              "site_admin": false
+            },
+            "html_url": "https://github.com/dune-example/portal",
+            "default_branch": "main"
+          }
+        },
+        "base": {
+          "label": "dune-example:main",
+          "ref": "main",
+          "sha": "66e5b8566c6b6d48ed7133331ceab7b9c327c705",
+          "user": {
+            "login": "dune-example",
+            "id": 5301,
+            "node_id": "U_example5301",
+            "html_url": "https://github.com/dune-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "repo": {
+            "id": 5300,
+            "node_id": "R_example5300",
+            "name": "portal",
+            "full_name": "dune-example/portal",
+            "private": true,
+            "owner": {
+              "login": "dune-example",
+              "id": 5301,
+              "node_id": "U_example5301",
+              "html_url": "https://github.com/dune-example",
+              "type": "User",
+              "site_admin": false
+            },
+            "html_url": "https://github.com/dune-example/portal",
+            "default_branch": "main"
+          }
+        },
+        "author_association": "MEMBER",
+        "merged": false,
+        "mergeable": true,
+        "mergeable_state": "clean",
+        "merged_by": null,
+        "comments": 1,
+        "review_comments": 0,
+        "commits": 3,
+        "additions": 40,
+        "deletions": 7,
+        "changed_files": 4
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/dune-example/portal/commits/320172559f74174806eb8ac87e3f267536dcbde1/status",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"ce2ee97c214bea819be3f95bbf899e7a6b0b106a5d3e9a433228a5ded82c5a03\""
+      },
+      "body": {
+        "state": "pending",
+        "statuses": [
+          {
+            "url": "https://api.github.com/repos/dune-example/portal/statuses/320172559f74174806eb8ac87e3f267536dcbde1",
+            "id": 7000,
+            "node_id": "SC_example7000",
+            "state": "success",
+            "description": "ci/lint success",
+            "target_url": "https://ci.example.com/dune-example/portal/7000",
+            "context": "ci/lint",
+            "created_at": "2026-03-09T11:00:00Z",
+            "updated_at": "2026-03-09T11:05:00Z"
+          },
+          {
+            "url": "https://api.github.com/repos/dune-example/portal/statuses/320172559f74174806eb8ac87e3f267536dcbde1",
+            "id": 7001,
+            "node_id": "SC_example7001",
+            "state": "pending",
+            "description": "deploy/preview pending",
+            "target_url": "https://ci.example.com/dune-example/portal/7001",
+            "context": "deploy/preview",
+            "created_at": "2026-03-09T11:00:00Z",
+            "updated_at": "2026-03-09T11:05:00Z"
+          }
+        ],
+        "sha": "320172559f74174806eb8ac87e3f267536dcbde1",
+        "total_count": 2,
+        "repository": {
+          "id": 5000,
+          "node_id": "R_example5000",
+          "name": "portal",
+          "full_name": "dune-example/portal",
+          "private": true,
+          "owner": {
+            "login": "dune-example",
+            "id": 5001,
+            "node_id": "U_example5001",
+            "html_url": "https://github.com/dune-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "html_url": "https://github.com/dune-example/portal",
+          "default_branch": "main"
+        },
+        "commit_url": "https://api.github.com/repos/dune-example/portal/commits/320172559f74174806eb8ac87e3f267536dcbde1"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/dune-example/portal/commits/320172559f74174806eb8ac87e3f267536dcbde1/check-runs",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"249f810ca8d07e9da34fde842504382036a7628e11e1ac0e0e6b1ef225d1239e\""
+      },
+      "body": {
+        "total_count": 3,
+        "check_runs": [
+          {
+            "id": 8000,
+            "head_sha": "320172559f74174806eb8ac87e3f267536dcbde1",
+            "node_id": "CR_example8000",
+            "external_id": "",
+            "url": "https://api.github.com/repos/dune-example/portal/check-runs/8000",
+            "html_url": "https://github.com/dune-example/portal/runs/8000",
+            "details_url": "https://ci.example.com/dune-example/portal/runs/8000",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-03-09T11:00:00Z",
+            "completed_at": "2026-03-09T11:06:00Z",
+            "output": {
+              "title": null,
+              "summary": null,
+              "text": null,
+              "annotations_count": 0
+            },
+            "name": "build",
+            "check_suite": {
+              "id": 8500
+            },
+            "app": {
+              "id": 15368,
+              "slug": "github-actions",
+              "name": "GitHub Actions"
+            },
+            "pull_requests": []
+          },
+          {
+            "id": 8001,
+            "head_sha": "320172559f74174806eb8ac87e3f267536dcbde1",
+            "node_id": "CR_example8001",
+            "external_id": "",
+            "url": "https://api.github.com/repos/dune-example/portal/check-runs/8001",
+            "html_url": "https://github.com/dune-example/portal/runs/8001",
+            "details_url": "https://ci.example.com/dune-example/portal/runs/8001",
+            "status": "in_progress",
+            "conclusion": null,
+            "started_at": "2026-03-09T11:00:00Z",
+            "completed_at": null,
+            "output": {
+              "title": null,
+              "summary": null,
+              "text": null,
+              "annotations_count": 0
+            },
+            "name": "test",
+            "check_suite": {
+              "id": 8500
+            },
+            "app": {
+              "id": 15368,
+              "slug": "github-actions",
+              "name": "GitHub Actions"
+            },
+            "pull_requests": []
+          },
+          {
+            "id": 8002,
+            "head_sha": "320172559f74174806eb8ac87e3f267536dcbde1",
+            "node_id": "CR_example8002",
+            "external_id": "",
+            "url": "https://api.github.com/repos/dune-example/portal/check-runs/8002",
+            "html_url": "https://github.com/dune-example/portal/runs/8002",
+            "details_url": "https://ci.example.com/dune-example/portal/runs/8002",
+            "status": "queued",
+            "conclusion": null,
+            "started_at": "2026-03-09T11:00:00Z",
+            "completed_at": null,
+            "output": {
+              "title": null,
+              "summary": null,
+              "text": null,
+              "annotations_count": 0
+            },
+            "name": "e2e",
+            "check_suite": {
+              "id": 8500
+            },
+            "app": {
+              "id": 15368,
+              "slug": "github-actions",
+              "name": "GitHub Actions"
+            },
+            "pull_requests": []
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/dune-example/portal/pulls/14/reviews",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"c180399221c4dbf45f704211c50bc6ab05e6a76b0c4066788f3c66dcf5cbb257\""
+      },
+      "body": []
+    }
+  ],
+  "expected": {
+    "external_id": "dune-example/portal#14",
+    "url": "https://github.com/dune-example/portal/pull/14",
+    "state": "open",
+    "pr_status": {
+      "repo": "dune-example/portal",
+      "number": 14,
+      "title": "Show invoices on the portal",
+      "draft": true,
+      "head_sha": "320172559f74174806eb8ac87e3f267536dcbde1",
+      "checks": "pending",
+      "review": "none"
+    }
+  }
+}

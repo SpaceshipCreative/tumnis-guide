@@ -108,6 +108,11 @@ class StorageBackend(Protocol):
 
     async def delete(self, path: str) -> None: ...
 
+    async def ensure_folder(self, path: str) -> None:
+        """Make the folder and its parents if missing (P1-15); a no-op where folders are
+        only key prefixes (S3). Never writes a file."""
+        ...
+
     async def health(self) -> Health: ...
 
 
