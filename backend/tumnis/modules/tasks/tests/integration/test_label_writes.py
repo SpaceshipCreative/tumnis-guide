@@ -14,6 +14,10 @@ from tests._labels import owner_query
 from tumnis.modules.tasks.tests.conftest import outbox
 
 if TYPE_CHECKING:
+    from dbos import DBOS
+    from fastapi import FastAPI
+
+    from tests._auth import SessionClient
     from tests._pg import DbUrls
     from tests.fixtures import WorkspaceHandle
     from tumnis.core.clock import FixedClock
@@ -204,3 +208,42 @@ async def test_a_new_suggestion_replaces_the_open_review_item(
     assert item["payload"]["suggested"] == "human"
     assert item["payload"]["reason"] == "Maybe a phone call"
     assert item["payload"]["decision_id"] == str(latest)
+
+
+async def _deliver(db: DbUrls, subscriber: str, event: str) -> None:
+    """Every outbox row of `event`, oldest first, through `subscriber`."""
+    import tumnis.wiring  # noqa: F401, PLC0415  # registers every module's subscribers
+    from tumnis.core.events import EventEnvelope, run_subscriber  # noqa: PLC0415
+
+    for row in owner_query(db, "SELECT * FROM outbox WHERE name = %s ORDER BY id", event):
+        await run_subscriber(EventEnvelope.from_outbox_row(row), subscriber)
+
+
+@pytest.mark.req("R-07")
+@pytest.mark.wp("P1-07")
+async def test_accepting_a_suggestion_in_review_records_one_human_decision(  # noqa: PLR0917
+    app: FastAPI,
+    session_client: SessionClient,
+    dbos: type[DBOS],
+    db: DbUrls,
+    make_task: MakeTask,
+    writes: _Writes,
+) -> None:
+    """Accepting a `low_confidence_label` item in the review queue (P1-13) emits one
+    `human.decided`; applying it sets the label as the person's without a second one
+    (`apply_review_decision` passes `label_override=False`)."""
+    task = await make_task()
+    await writes.suggest(task.id, "hybrid", "Maybe a person sends it", uuid.uuid4())
+    listed = await session_client.get("/v1/review", params={"limit": 200})
+    assert listed.status_code == 200, listed.text
+    [item] = [i for i in listed.json()["items"] if i["target_id"] == str(task.id)]
+
+    decided = await session_client.post(
+        f"/v1/review/{item['id']}/decide", json={"action": "accept", "version": item["version"]}
+    )
+    assert decided.status_code == 200, decided.text
+    await _deliver(db, "tasks.apply_review_decision", "human.decided")
+
+    row = _row(db, task.id)
+    assert (row["label"], row["label_source"]) == ("hybrid", "user")
+    assert len(outbox(db, "human.decided")) == 1
