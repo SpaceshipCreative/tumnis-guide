@@ -837,14 +837,15 @@ async def move_archive_state(
     *,
     expect: ArchiveState,
     to: ArchiveState | None,
-    now: datetime | None = None,
 ) -> bool:
     """`archive_state` from `expect` to `to` (None: the project is live again, its row in
     `project_archives` goes) for a project not purged; False when it was not `expect`
-    (another archive or unarchive came first). Emits `project.updated`. The project's
-    version stays: the move is the workflow's, not an edit (T-P0-20-13)."""
+    (another archive or unarchive came first). The move is the workflow's, not an edit:
+    the project's version stays (T-P0-20-13) and no `project.updated` goes out (the
+    routes emitted the archive and the unarchive; a later event would outrank them in
+    the search index). Open views hear of it through the live channel."""
     try:
-        row = await _row(s, project_id, lock=True)
+        await _row(s, project_id, lock=True)
     except NotFound:
         return False  # purged meanwhile
     match = (
@@ -860,7 +861,7 @@ async def move_archive_state(
     moved = await s.scalar(stmt.returning(_archives.c.id))
     if moved is None:
         return False
-    await _changed(s, row, ["archive_state"], now)
+    mark_changed(s, LIVE_ENTITY, project_id)
     return True
 
 

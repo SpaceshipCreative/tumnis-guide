@@ -11,7 +11,7 @@ time, each step a hook another module registered in `api` (projects cannot impor
     excerpts   `integrations.archive_excerpts`
     folder     `knowledge.archive_folder`: a Tumnis-made folder packed into one file, an
                existing one's index only
-    finish     `archiving` -> `archived` (`project.updated`)
+    finish     `archiving` -> `archived` (no event: the route emitted `project.archived`)
 
 `unarchive_project` runs the reverse, the profile last: its `restore_done` must report
 the manifest digest the archive did before the project turns live (`archive_state` null).
