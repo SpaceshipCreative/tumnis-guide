@@ -1,0 +1,5 @@
+{"type": "system", "subtype": "init", "model": "example-model", "session_id": "sess-harness-0001"}
+{"type": "text", "text": "Reading the enrichment packet."}
+{"type": "tool_use", "name": "mcp_jev_ask", "input": {"state": "Get the Acme contract signed", "questions": {}}}
+{"type": "tool_result", "name": "mcp_jev_ask", "output": "{}", "duration_ms": 412, "is_error": false}
+{"type": "result", "session_id": "sess-harness-0001", "exit_code": 0, "text": "{\"schema_version\": 1, \"task_id\": \"01950000-0000-7000-8000-000000000601\", \"first_action\": \"Open the Acme contract PDF and add the signature field\", \"acceptance_criteria\": [\"Acme has the signed contract\"], \"estimate_minutes\": 20, \"label_revision\": null, \"hybrid_split\": null}", "tokens": {"input": 1840, "output": 96, "total": 1936}}
