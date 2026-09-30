@@ -13,7 +13,11 @@ It takes three steps:
    set meanwhile; REVIEW with a label keeps it as a suggestion with a
    `low_confidence_label` item (`tasks.set_label_suggestion`); REVIEW without one (Jev
    said `unknown`) asks the human through a `decision_unavailable` item. When no provider
-   answered, `decide` has already queued that item.
+   answered, `decide` has already queued that item. The label's `task.updated` carries
+   the time of the event it answers (`as_of`), not the worker's clock: the label changes
+   no searchable text, and a person's later edit, stamped by the api's clock, must stay
+   the newer one in the search index (P0-20) even while that clock is fixed (tests,
+   `POST /v1/test/clock`).
 
 Starting: the label must land within 1 s of the task's commit (FR-3.3), so it waits on
 no queue. The subscribers are `direct` (core.events): the relay runs them as it reads the
@@ -29,6 +33,7 @@ from a task with a fresh context.
 import asyncio
 import contextlib
 import contextvars
+from datetime import datetime
 from typing import Any, Final, Literal
 from uuid import UUID
 
@@ -99,11 +104,18 @@ async def decide_label(
 
 
 @DBOS.step()
-async def apply_label(
-    workspace_id: str, task_id: str, project_id: str, title: str, decided: dict[str, Any]
+async def apply_label(  # noqa: PLR0917
+    workspace_id: str,
+    task_id: str,
+    project_id: str,
+    title: str,
+    decided: dict[str, Any],
+    as_of: str | None = None,
 ) -> Outcome:
-    """Writes nothing for a title the task no longer has (`for_title`)."""
+    """Writes nothing for a title the task no longer has (`for_title`). `as_of` (ISO) is
+    the answered event's time, which the label's `task.updated` carries."""
     d = api.Decision.model_validate(decided)
+    now = None if as_of is None else datetime.fromisoformat(as_of)
     if d.provider == "none":
         return "unanswered"  # decide queued the decision_unavailable item itself
     answer = d.answers.get("label")
@@ -122,6 +134,7 @@ async def apply_label(
                 confidence=confidence,
                 decision_id=d.decision_id,
                 for_title=title,
+                now=now,
             )
             return "skipped" if change is None else "applied"
         if label is not None:
@@ -135,6 +148,7 @@ async def apply_label(
                 decision_id=d.decision_id,
                 probabilities=probabilities,
                 for_title=title,
+                now=now,
             )
             return "suggested" if kept else "skipped"
         task = await tasks.get_task(s, UUID(task_id))
@@ -154,32 +168,41 @@ async def apply_label(
 
 
 @DBOS.workflow(name="decisions.label_task")
-async def label_task(workspace_id: str, task_id: str) -> Outcome:
-    """Label one task with Jev's answer; the steps read the task's current row."""
+async def label_task(workspace_id: str, task_id: str, as_of: str | None = None) -> Outcome:
+    """Label one task with Jev's answer; the steps read the task's current row. `as_of`
+    (ISO) is the time of the event that asked for the label."""
     loaded = await load_label_task(workspace_id, task_id)
     if loaded is None:
         return "skipped"
     decided = await decide_label(workspace_id, task_id, loaded["inputs"], loaded["project_id"])
-    return await apply_label(workspace_id, task_id, loaded["project_id"], loaded["title"], decided)
+    return await apply_label(
+        workspace_id, task_id, loaded["project_id"], loaded["title"], decided, as_of
+    )
 
 
-async def _start(workspace_id: UUID, task_id: UUID, event_id: UUID) -> None:
+async def _start(workspace_id: UUID, task_id: UUID, event_id: UUID, as_of: datetime) -> None:
     with SetWorkflowID(label_workflow_id(event_id)):
-        await DBOS.start_workflow_async(label_task, str(workspace_id), str(task_id))
+        await DBOS.start_workflow_async(
+            label_task, str(workspace_id), str(task_id), as_of.isoformat()
+        )
 
 
 def label_workflow_id(event_id: UUID) -> str:
     return f"label:{event_id}"
 
 
-async def start_label(workspace_id: UUID, task_id: UUID, *, event_id: UUID) -> None:
+async def start_label(
+    workspace_id: UUID, task_id: UUID, *, event_id: UUID, as_of: datetime
+) -> None:
     """Start `label_task` for the task, keyed on the event: a redelivered event finds the
     workflow it started (DBOS runs a workflow ID once). The workflow's first step skips a
-    task that is gone or whose label the user chose."""
+    task that is gone or whose label the user chose. `as_of` is the event's time."""
     # A fresh context: DBOS refuses to start a workflow from inside a step, which is where
     # the handler runs when the relay falls back to a queued delivery. Shielded: if the
     # relay stops waiting (its direct-handler timeout), the start still completes, and
     # the queued delivery's own start finds this workflow.
     await asyncio.shield(
-        asyncio.create_task(_start(workspace_id, task_id, event_id), context=contextvars.Context())
+        asyncio.create_task(
+            _start(workspace_id, task_id, event_id, as_of), context=contextvars.Context()
+        )
     )

@@ -67,6 +67,7 @@ async def label_on_create(envelope: EventEnvelope) -> None:
         envelope.workspace_id,
         UUID(str(envelope.payload["task_id"])),
         event_id=envelope.event_id,
+        as_of=envelope.occurred_at,
     )
 
 
@@ -78,4 +79,5 @@ async def label_on_title_change(envelope: EventEnvelope) -> None:
         envelope.workspace_id,
         UUID(str(envelope.payload["task_id"])),
         event_id=envelope.event_id,
+        as_of=envelope.occurred_at,
     )
