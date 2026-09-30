@@ -150,7 +150,9 @@ jobs:
         working-directory: backend
         run: |
           uv sync
-          uv run pytest -m "integration and not contract" -n auto
+          # Pull the service images while xdist starts, so no worker's first test waits on one.
+          uv run python -c "from tests._services import CLAMD_IMAGE, MINIO_IMAGE, SFTP_IMAGE; from tests.fixtures import PG_IMAGE, PGBOUNCER_IMAGE; print(PG_IMAGE, PGBOUNCER_IMAGE, MINIO_IMAGE, SFTP_IMAGE, CLAMD_IMAGE)" | xargs -n1 -P5 docker pull -q > /dev/null &
+          uv run pytest -m "integration and not contract" -n auto --dist worksteal --durations=40
 
   e2e:
     runs-on: ubuntu-latest
