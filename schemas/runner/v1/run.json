@@ -1,0 +1,116 @@
+{
+  "$defs": {
+    "SchemaRef": {
+      "additionalProperties": false,
+      "description": "Names a @versioned model, e.g. (\"enrichment\", \"result\", 1).",
+      "properties": {
+        "family": {
+          "maxLength": 32,
+          "title": "Family",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 64,
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "family",
+        "name",
+        "version"
+      ],
+      "title": "SchemaRef",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/runner/v1/run.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "output_schema": {
+      "$ref": "#/$defs/SchemaRef"
+    },
+    "packet": {
+      "additionalProperties": true,
+      "title": "Packet",
+      "type": "object"
+    },
+    "profile": {
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "title": "Profile",
+      "type": "string"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "skill": {
+      "pattern": "^[a-z][a-z0-9-]{0,40}$",
+      "title": "Skill",
+      "type": "string"
+    },
+    "timeout_s": {
+      "maximum": 3600,
+      "minimum": 10,
+      "title": "Timeout S",
+      "type": "integer"
+    },
+    "type": {
+      "const": "run",
+      "default": "run",
+      "title": "Type",
+      "type": "string"
+    },
+    "workdir_policy": {
+      "default": "none",
+      "enum": [
+        "none",
+        "worktree"
+      ],
+      "title": "Workdir Policy",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "run_id",
+    "profile",
+    "skill",
+    "packet",
+    "output_schema",
+    "timeout_s"
+  ],
+  "title": "Run",
+  "type": "object"
+}

@@ -1,0 +1,58 @@
+{
+  "$id": "https://tumnis.dev/schemas/runner/v1/heartbeat.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "correlation_id": {
+      "maxLength": 128,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "message_id": {
+      "format": "uuid",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "running_run_ids": {
+      "default": [],
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "maxItems": 500,
+      "title": "Running Run Ids",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 0,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "type": {
+      "const": "heartbeat",
+      "default": "heartbeat",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "sent_at",
+    "seq"
+  ],
+  "title": "Heartbeat",
+  "type": "object"
+}

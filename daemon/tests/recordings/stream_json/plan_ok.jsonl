@@ -1,0 +1,3 @@
+{"type": "session", "session_id": "sess-plan-0001", "profile": "tumnis-master", "model": "example-model"}
+{"type": "assistant", "text": "Planning the day."}
+{"type": "result", "subtype": "success", "is_error": false, "text": "{\"today\": [{\"task_id\": \"01950000-0000-7000-8000-000000000901\", \"reason\": \"Due tomorrow and unblocks the client review\"}], \"deferred\": []}", "session_id": "sess-plan-0001", "duration_ms": 15480, "usage": {"input_tokens": 4210, "output_tokens": 388}}

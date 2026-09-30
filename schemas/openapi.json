@@ -39,6 +39,133 @@
         "title": "AccountOut",
         "type": "object"
       },
+      "AgentProfileOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfileHealth"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "health_checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Checked At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Version"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "role": {
+            "enum": [
+              "master",
+              "project"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "transport": {
+            "enum": [
+              "daemon",
+              "mcp_endpoint"
+            ],
+            "title": "Transport",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "transport",
+          "project_id",
+          "runner_id",
+          "endpoint",
+          "status",
+          "profile_version",
+          "health",
+          "health_checked_at",
+          "version",
+          "created_at"
+        ],
+        "title": "AgentProfileOut",
+        "type": "object"
+      },
       "AuditEntry": {
         "properties": {
           "action": {
@@ -702,6 +829,91 @@
         "title": "DefaultIn",
         "type": "object"
       },
+      "DocumentDTO": {
+        "properties": {
+          "body_md": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Md"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "tainted": {
+            "title": "Tainted",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trust": {
+            "enum": [
+              "trusted",
+              "untrusted"
+            ],
+            "title": "Trust",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "title",
+          "kind",
+          "role",
+          "body_md",
+          "trust",
+          "tainted",
+          "pinned",
+          "version"
+        ],
+        "title": "DocumentDTO",
+        "type": "object"
+      },
       "FolderIn": {
         "properties": {
           "location_id": {
@@ -749,6 +961,26 @@
         ],
         "title": "Health",
         "type": "string"
+      },
+      "HealthCheckAccepted": {
+        "properties": {
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "profile_id"
+        ],
+        "title": "HealthCheckAccepted",
+        "type": "object"
       },
       "KeyCreated": {
         "properties": {
@@ -1286,6 +1518,34 @@
         "title": "OAuthStartOut",
         "type": "object"
       },
+      "Page_AgentProfileOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgentProfileOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "Page[AgentProfileOut]",
+        "type": "object"
+      },
       "Page_AuditEntry_": {
         "properties": {
           "items": {
@@ -1312,6 +1572,34 @@
           "next_cursor"
         ],
         "title": "Page[AuditEntry]",
+        "type": "object"
+      },
+      "Page_CommentOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CommentOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "Page[CommentOut]",
         "type": "object"
       },
       "Page_DeadLetterOut_": {
@@ -1424,6 +1712,34 @@
           "next_cursor"
         ],
         "title": "Page[RecurrenceOut]",
+        "type": "object"
+      },
+      "Page_RunnerOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "Page[RunnerOut]",
         "type": "object"
       },
       "Page_SearchHit_": {
@@ -1548,6 +1864,204 @@
           "code"
         ],
         "title": "Problem",
+        "type": "object"
+      },
+      "ProfileHealth": {
+        "properties": {
+          "authenticated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authenticated"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "mcp_servers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Mcp Servers",
+            "type": "array"
+          },
+          "profile_exists": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Exists"
+          },
+          "reachable": {
+            "title": "Reachable",
+            "type": "boolean"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "offline",
+              "unsupported",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "reachable"
+        ],
+        "title": "ProfileHealth",
+        "type": "object"
+      },
+      "ProfileIn": {
+        "properties": {
+          "endpoint": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "name": {
+            "maxLength": 63,
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "role": {
+            "enum": [
+              "master",
+              "project"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          },
+          "transport": {
+            "default": "daemon",
+            "enum": [
+              "daemon",
+              "mcp_endpoint"
+            ],
+            "title": "Transport",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "role"
+        ],
+        "title": "ProfileIn",
+        "type": "object"
+      },
+      "ProfilePatch": {
+        "properties": {
+          "endpoint": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "registered",
+                  "paused"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "version": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "ProfilePatch",
         "type": "object"
       },
       "ProjectCreate": {
@@ -2359,6 +2873,257 @@
         "title": "RotateIn",
         "type": "object"
       },
+      "RunnerCreated": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "daemon_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daemon Version"
+          },
+          "hermes_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hermes Version"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_heartbeat_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "os": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os"
+          },
+          "profiles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Profiles",
+            "type": "array"
+          },
+          "protocol_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol Version"
+          },
+          "status": {
+            "enum": [
+              "online",
+              "offline",
+              "never_seen"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "host",
+          "os",
+          "daemon_version",
+          "hermes_version",
+          "protocol_version",
+          "last_heartbeat_at",
+          "status",
+          "profiles",
+          "created_at",
+          "token"
+        ],
+        "title": "RunnerCreated",
+        "type": "object"
+      },
+      "RunnerIn": {
+        "properties": {
+          "name": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RunnerIn",
+        "type": "object"
+      },
+      "RunnerOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "daemon_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daemon Version"
+          },
+          "hermes_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hermes Version"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_heartbeat_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "os": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os"
+          },
+          "profiles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Profiles",
+            "type": "array"
+          },
+          "protocol_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol Version"
+          },
+          "status": {
+            "enum": [
+              "online",
+              "offline",
+              "never_seen"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "host",
+          "os",
+          "daemon_version",
+          "hermes_version",
+          "protocol_version",
+          "last_heartbeat_at",
+          "status",
+          "profiles",
+          "created_at"
+        ],
+        "title": "RunnerOut",
+        "type": "object"
+      },
       "S3ConfigIn": {
         "properties": {
           "access_key": {
@@ -2940,6 +3705,18 @@
             "title": "Board Rank",
             "type": "string"
           },
+          "change_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Id"
+          },
           "column_id": {
             "anyOf": [
               {
@@ -3110,6 +3887,7 @@
           }
         },
         "required": [
+          "schema_version",
           "id",
           "project_id",
           "parent_id",
@@ -3133,7 +3911,8 @@
           "source",
           "version",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "change_id"
         ],
         "title": "TaskOut",
         "type": "object"
@@ -3406,6 +4185,27 @@
         "title": "TaskRecurrenceOut",
         "type": "object"
       },
+      "TextDocumentPatch": {
+        "properties": {
+          "body_md": {
+            "maxLength": 100000,
+            "title": "Body Md",
+            "type": "string"
+          },
+          "version": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "body_md",
+          "version"
+        ],
+        "title": "TextDocumentPatch",
+        "type": "object"
+      },
       "TotpEnrolConfirmIn": {
         "additionalProperties": false,
         "properties": {
@@ -3479,6 +4279,43 @@
           "code"
         ],
         "title": "TotpIn",
+        "type": "object"
+      },
+      "TrashIn": {
+        "properties": {
+          "version": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "TrashIn",
+        "type": "object"
+      },
+      "UndoIn": {
+        "description": "The change a write answered (`change_id`) and the version it left (R-09).",
+        "properties": {
+          "change_id": {
+            "format": "uuid",
+            "title": "Change Id",
+            "type": "string"
+          },
+          "version": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "change_id",
+          "version"
+        ],
+        "title": "UndoIn",
         "type": "object"
       },
       "UsageRow": {
@@ -3755,6 +4592,487 @@
         "summary": "Ready",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/v1/agents/profiles": {
+      "get": {
+        "description": "Agent profiles by name, with their last health check.",
+        "operationId": "agents_list_profiles",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AgentProfileOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "List Profiles",
+        "tags": [
+          "agents"
+        ]
+      },
+      "post": {
+        "description": "Register a Hermes profile. 422 `invalid_profile_name`, `invalid_profile`; 404 for\nan unknown runner or project; 409 `master_exists`, `project_agent_exists`,\n`profile_exists`.",
+        "operationId": "agents_register_profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Register Profile",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/profiles/{id}": {
+      "patch": {
+        "description": "Move a profile to another runner or endpoint, or pause it. 409 `stale_version`.",
+        "operationId": "agents_update_profile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Update Profile",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/profiles/{id}/health-check": {
+      "post": {
+        "description": "Ask the profile's runner (or endpoint) for its health; the answer lands in the\nprofile's `health` (reachable, authenticated, version).",
+        "operationId": "agents_check_profile_health",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheckAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Check Profile Health",
+        "tags": [
+          "agents"
         ]
       }
     },
@@ -6553,6 +7871,130 @@
         ]
       }
     },
+    "/v1/knowledge/documents/{document_id}": {
+      "patch": {
+        "description": "Replace a text entry's Markdown body; 409 `stale_version` with the current entry.",
+        "operationId": "knowledge_update_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextDocumentPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Update Document",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
     "/v1/knowledge/locations": {
       "get": {
         "operationId": "knowledge_list_locations",
@@ -7962,6 +9404,120 @@
         ]
       }
     },
+    "/v1/projects/{project_id}/brief": {
+      "get": {
+        "description": "The project's pinned brief (a text entry); 404 until the project's subscriber ran.",
+        "operationId": "knowledge_get_brief",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Brief",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
     "/v1/projects/{project_id}/columns": {
       "get": {
         "operationId": "tasks_get_columns",
@@ -8795,6 +10351,363 @@
         "summary": "List Review Kinds",
         "tags": [
           "tasks"
+        ]
+      }
+    },
+    "/v1/runners": {
+      "get": {
+        "description": "Runners by name, with their status judged from the last heartbeat (online after a\nbeat in the last 45 s, offline after that, never_seen before the first register).",
+        "operationId": "agents_list_runners",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_RunnerOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "List Runners",
+        "tags": [
+          "agents"
+        ]
+      },
+      "post": {
+        "description": "A runner and its device token, shown once. 409 `runner_exists`.",
+        "operationId": "agents_create_runner",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Create Runner",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/runners/{id}/rotate-token": {
+      "post": {
+        "description": "A new device token, shown once; the old one stops and the runner's socket closes.",
+        "operationId": "agents_rotate_runner_token",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Rotate Runner Token",
+        "tags": [
+          "agents"
         ]
       }
     },
@@ -10358,6 +12271,128 @@
       }
     },
     "/v1/tasks/{task_id}": {
+      "delete": {
+        "description": "Moves the task to the trash (UX 9); `POST /undo` with the answered `change_id`\nbrings it back.",
+        "operationId": "tasks_trash_task",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrashIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Trash Task",
+        "tags": [
+          "tasks"
+        ]
+      },
       "get": {
         "operationId": "tasks_get_task",
         "parameters": [
@@ -10592,6 +12627,147 @@
       }
     },
     "/v1/tasks/{task_id}/comments": {
+      "get": {
+        "description": "The task's comments, oldest first.",
+        "operationId": "tasks_list_comments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_CommentOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "List Comments",
+        "tags": [
+          "tasks"
+        ]
+      },
       "post": {
         "operationId": "tasks_add_comment",
         "parameters": [
@@ -11433,6 +13609,130 @@
           }
         },
         "summary": "Change Status",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/tasks/{task_id}/undo": {
+      "post": {
+        "description": "Puts back what one change did (R-09, UX 9): 409 `already_undone`, or\n`stale_version` when the task changed since.",
+        "operationId": "tasks_undo_task",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UndoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Undo Task",
         "tags": [
           "tasks"
         ]

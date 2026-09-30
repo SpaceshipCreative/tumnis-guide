@@ -10,6 +10,13 @@ import {
 
 import { client } from "../client.gen";
 import {
+  agentsCheckProfileHealth,
+  agentsCreateRunner,
+  agentsListProfiles,
+  agentsListRunners,
+  agentsRegisterProfile,
+  agentsRotateRunnerToken,
+  agentsUpdateProfile,
   auditExportAuditCsv,
   auditListAudit,
   authConfirmTotpEnrolment,
@@ -38,10 +45,12 @@ import {
   healthLive,
   healthReady,
   knowledgeCreateLocation,
+  knowledgeGetBrief,
   knowledgeListLocations,
   knowledgeSetDefaultLocation,
   knowledgeSetProjectFolder,
   knowledgeTestLocation,
+  knowledgeUpdateDocument,
   type Options,
   planningGetDayCalendar,
   projectsArchiveProject,
@@ -72,16 +81,40 @@ import {
   tasksGetReviewCount,
   tasksGetTask,
   tasksLinkContextItem,
+  tasksListComments,
   tasksListRecurrence,
   tasksListReviewKinds,
   tasksListTasks,
   tasksMoveTask,
   tasksPutColumns,
   tasksPutRecurrence,
+  tasksTrashTask,
+  tasksUndoTask,
   tasksUpdateTask,
   usageGetUsage,
 } from "../sdk.gen";
 import type {
+  AgentsCheckProfileHealthData,
+  AgentsCheckProfileHealthError,
+  AgentsCheckProfileHealthResponse,
+  AgentsCreateRunnerData,
+  AgentsCreateRunnerError,
+  AgentsCreateRunnerResponse,
+  AgentsListProfilesData,
+  AgentsListProfilesError,
+  AgentsListProfilesResponse,
+  AgentsListRunnersData,
+  AgentsListRunnersError,
+  AgentsListRunnersResponse,
+  AgentsRegisterProfileData,
+  AgentsRegisterProfileError,
+  AgentsRegisterProfileResponse,
+  AgentsRotateRunnerTokenData,
+  AgentsRotateRunnerTokenError,
+  AgentsRotateRunnerTokenResponse,
+  AgentsUpdateProfileData,
+  AgentsUpdateProfileError,
+  AgentsUpdateProfileResponse,
   AuditExportAuditCsvData,
   AuditExportAuditCsvError,
   AuditListAuditData,
@@ -161,6 +194,9 @@ import type {
   KnowledgeCreateLocationData,
   KnowledgeCreateLocationError,
   KnowledgeCreateLocationResponse,
+  KnowledgeGetBriefData,
+  KnowledgeGetBriefError,
+  KnowledgeGetBriefResponse,
   KnowledgeListLocationsData,
   KnowledgeListLocationsError,
   KnowledgeListLocationsResponse,
@@ -173,6 +209,9 @@ import type {
   KnowledgeTestLocationData,
   KnowledgeTestLocationError,
   KnowledgeTestLocationResponse,
+  KnowledgeUpdateDocumentData,
+  KnowledgeUpdateDocumentError,
+  KnowledgeUpdateDocumentResponse,
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarError,
   PlanningGetDayCalendarResponse,
@@ -260,6 +299,9 @@ import type {
   TasksLinkContextItemData,
   TasksLinkContextItemError,
   TasksLinkContextItemResponse,
+  TasksListCommentsData,
+  TasksListCommentsError,
+  TasksListCommentsResponse,
   TasksListRecurrenceData,
   TasksListRecurrenceError,
   TasksListRecurrenceResponse,
@@ -278,6 +320,12 @@ import type {
   TasksPutRecurrenceData,
   TasksPutRecurrenceError,
   TasksPutRecurrenceResponse,
+  TasksTrashTaskData,
+  TasksTrashTaskError,
+  TasksTrashTaskResponse,
+  TasksUndoTaskData,
+  TasksUndoTaskError,
+  TasksUndoTaskResponse,
   TasksUpdateTaskData,
   TasksUpdateTaskError,
   TasksUpdateTaskResponse,
@@ -376,23 +424,26 @@ export const healthReadyOptions = (options?: Options<HealthReadyData>) =>
     queryKey: healthReadyQueryKey(options),
   });
 
-export const auditListAuditQueryKey = (options?: Options<AuditListAuditData>) =>
-  createQueryKey("auditListAudit", options);
+export const agentsListProfilesQueryKey = (
+  options?: Options<AgentsListProfilesData>,
+) => createQueryKey("agentsListProfiles", options);
 
 /**
- * List Audit
+ * List Profiles
  *
- * The workspace's audit log, newest first.
+ * Agent profiles by name, with their last health check.
  */
-export const auditListAuditOptions = (options?: Options<AuditListAuditData>) =>
+export const agentsListProfilesOptions = (
+  options?: Options<AgentsListProfilesData>,
+) =>
   queryOptions<
-    AuditListAuditResponse,
-    AuditListAuditError,
-    AuditListAuditResponse,
-    ReturnType<typeof auditListAuditQueryKey>
+    AgentsListProfilesResponse,
+    AgentsListProfilesError,
+    AgentsListProfilesResponse,
+    ReturnType<typeof agentsListProfilesQueryKey>
   >({
     queryFn: async ({ queryKey, signal }) => {
-      const { data } = await auditListAudit({
+      const { data } = await agentsListProfiles({
         ...options,
         ...queryKey[0],
         signal,
@@ -400,7 +451,7 @@ export const auditListAuditOptions = (options?: Options<AuditListAuditData>) =>
       });
       return data;
     },
-    queryKey: auditListAuditQueryKey(options),
+    queryKey: agentsListProfilesQueryKey(options),
   });
 
 const createInfiniteParams = <
@@ -436,6 +487,178 @@ const createInfiniteParams = <
   }
   return params as unknown as typeof page;
 };
+
+export const agentsListProfilesInfiniteQueryKey = (
+  options?: Options<AgentsListProfilesData>,
+): QueryKey<Options<AgentsListProfilesData>> =>
+  createQueryKey("agentsListProfiles", options, true);
+
+/**
+ * List Profiles
+ *
+ * Agent profiles by name, with their last health check.
+ */
+export const agentsListProfilesInfiniteOptions = (
+  options?: Options<AgentsListProfilesData>,
+) => {
+  const opts = infiniteQueryOptions<
+    AgentsListProfilesResponse,
+    AgentsListProfilesError,
+    InfiniteData<AgentsListProfilesResponse>,
+    QueryKey<Options<AgentsListProfilesData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<AgentsListProfilesData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<AgentsListProfilesData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await agentsListProfiles({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: agentsListProfilesInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Register Profile
+ *
+ * Register a Hermes profile. 422 `invalid_profile_name`, `invalid_profile`; 404 for
+ * an unknown runner or project; 409 `master_exists`, `project_agent_exists`,
+ * `profile_exists`.
+ */
+export const agentsRegisterProfileMutation = (
+  options?: Partial<Options<AgentsRegisterProfileData>>,
+): UseMutationOptions<
+  AgentsRegisterProfileResponse,
+  AgentsRegisterProfileError,
+  Options<AgentsRegisterProfileData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsRegisterProfileResponse,
+    AgentsRegisterProfileError,
+    Options<AgentsRegisterProfileData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsRegisterProfile({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Update Profile
+ *
+ * Move a profile to another runner or endpoint, or pause it. 409 `stale_version`.
+ */
+export const agentsUpdateProfileMutation = (
+  options?: Partial<Options<AgentsUpdateProfileData>>,
+): UseMutationOptions<
+  AgentsUpdateProfileResponse,
+  AgentsUpdateProfileError,
+  Options<AgentsUpdateProfileData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsUpdateProfileResponse,
+    AgentsUpdateProfileError,
+    Options<AgentsUpdateProfileData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsUpdateProfile({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Check Profile Health
+ *
+ * Ask the profile's runner (or endpoint) for its health; the answer lands in the
+ * profile's `health` (reachable, authenticated, version).
+ */
+export const agentsCheckProfileHealthMutation = (
+  options?: Partial<Options<AgentsCheckProfileHealthData>>,
+): UseMutationOptions<
+  AgentsCheckProfileHealthResponse,
+  AgentsCheckProfileHealthError,
+  Options<AgentsCheckProfileHealthData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsCheckProfileHealthResponse,
+    AgentsCheckProfileHealthError,
+    Options<AgentsCheckProfileHealthData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsCheckProfileHealth({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const auditListAuditQueryKey = (options?: Options<AuditListAuditData>) =>
+  createQueryKey("auditListAudit", options);
+
+/**
+ * List Audit
+ *
+ * The workspace's audit log, newest first.
+ */
+export const auditListAuditOptions = (options?: Options<AuditListAuditData>) =>
+  queryOptions<
+    AuditListAuditResponse,
+    AuditListAuditError,
+    AuditListAuditResponse,
+    ReturnType<typeof auditListAuditQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await auditListAudit({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: auditListAuditQueryKey(options),
+  });
 
 export const auditListAuditInfiniteQueryKey = (
   options?: Options<AuditListAuditData>,
@@ -1284,6 +1507,35 @@ export const authRotateKeyMutation = (
   return mutationOptions;
 };
 
+/**
+ * Update Document
+ *
+ * Replace a text entry's Markdown body; 409 `stale_version` with the current entry.
+ */
+export const knowledgeUpdateDocumentMutation = (
+  options?: Partial<Options<KnowledgeUpdateDocumentData>>,
+): UseMutationOptions<
+  KnowledgeUpdateDocumentResponse,
+  KnowledgeUpdateDocumentError,
+  Options<KnowledgeUpdateDocumentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeUpdateDocumentResponse,
+    KnowledgeUpdateDocumentError,
+    Options<KnowledgeUpdateDocumentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeUpdateDocument({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const knowledgeListLocationsQueryKey = (
   options?: Options<KnowledgeListLocationsData>,
 ) => createQueryKey("knowledgeListLocations", options);
@@ -1669,6 +1921,36 @@ export const tasksGetBoardOptions = (options: Options<TasksGetBoardData>) =>
     queryKey: tasksGetBoardQueryKey(options),
   });
 
+export const knowledgeGetBriefQueryKey = (
+  options: Options<KnowledgeGetBriefData>,
+) => createQueryKey("knowledgeGetBrief", options);
+
+/**
+ * Get Brief
+ *
+ * The project's pinned brief (a text entry); 404 until the project's subscriber ran.
+ */
+export const knowledgeGetBriefOptions = (
+  options: Options<KnowledgeGetBriefData>,
+) =>
+  queryOptions<
+    KnowledgeGetBriefResponse,
+    KnowledgeGetBriefError,
+    KnowledgeGetBriefResponse,
+    ReturnType<typeof knowledgeGetBriefQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetBrief({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetBriefQueryKey(options),
+  });
+
 export const tasksGetColumnsQueryKey = (
   options: Options<TasksGetColumnsData>,
 ) => createQueryKey("tasksGetColumns", options);
@@ -1925,6 +2207,151 @@ export const tasksListReviewKindsOptions = (
     },
     queryKey: tasksListReviewKindsQueryKey(options),
   });
+
+export const agentsListRunnersQueryKey = (
+  options?: Options<AgentsListRunnersData>,
+) => createQueryKey("agentsListRunners", options);
+
+/**
+ * List Runners
+ *
+ * Runners by name, with their status judged from the last heartbeat (online after a
+ * beat in the last 45 s, offline after that, never_seen before the first register).
+ */
+export const agentsListRunnersOptions = (
+  options?: Options<AgentsListRunnersData>,
+) =>
+  queryOptions<
+    AgentsListRunnersResponse,
+    AgentsListRunnersError,
+    AgentsListRunnersResponse,
+    ReturnType<typeof agentsListRunnersQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsListRunners({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsListRunnersQueryKey(options),
+  });
+
+export const agentsListRunnersInfiniteQueryKey = (
+  options?: Options<AgentsListRunnersData>,
+): QueryKey<Options<AgentsListRunnersData>> =>
+  createQueryKey("agentsListRunners", options, true);
+
+/**
+ * List Runners
+ *
+ * Runners by name, with their status judged from the last heartbeat (online after a
+ * beat in the last 45 s, offline after that, never_seen before the first register).
+ */
+export const agentsListRunnersInfiniteOptions = (
+  options?: Options<AgentsListRunnersData>,
+) => {
+  const opts = infiniteQueryOptions<
+    AgentsListRunnersResponse,
+    AgentsListRunnersError,
+    InfiniteData<AgentsListRunnersResponse>,
+    QueryKey<Options<AgentsListRunnersData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<AgentsListRunnersData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<AgentsListRunnersData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await agentsListRunners({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: agentsListRunnersInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Create Runner
+ *
+ * A runner and its device token, shown once. 409 `runner_exists`.
+ */
+export const agentsCreateRunnerMutation = (
+  options?: Partial<Options<AgentsCreateRunnerData>>,
+): UseMutationOptions<
+  AgentsCreateRunnerResponse,
+  AgentsCreateRunnerError,
+  Options<AgentsCreateRunnerData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsCreateRunnerResponse,
+    AgentsCreateRunnerError,
+    Options<AgentsCreateRunnerData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsCreateRunner({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Rotate Runner Token
+ *
+ * A new device token, shown once; the old one stops and the runner's socket closes.
+ */
+export const agentsRotateRunnerTokenMutation = (
+  options?: Partial<Options<AgentsRotateRunnerTokenData>>,
+): UseMutationOptions<
+  AgentsRotateRunnerTokenResponse,
+  AgentsRotateRunnerTokenError,
+  Options<AgentsRotateRunnerTokenData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsRotateRunnerTokenResponse,
+    AgentsRotateRunnerTokenError,
+    Options<AgentsRotateRunnerTokenData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsRotateRunnerToken({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const searchSearchQueryKey = (options?: Options<SearchSearchData>) =>
   createQueryKey("searchSearch", options);
@@ -2409,6 +2836,36 @@ export const tasksCreateTaskMutation = (
   return mutationOptions;
 };
 
+/**
+ * Trash Task
+ *
+ * Moves the task to the trash (UX 9); `POST /undo` with the answered `change_id`
+ * brings it back.
+ */
+export const tasksTrashTaskMutation = (
+  options?: Partial<Options<TasksTrashTaskData>>,
+): UseMutationOptions<
+  TasksTrashTaskResponse,
+  TasksTrashTaskError,
+  Options<TasksTrashTaskData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksTrashTaskResponse,
+    TasksTrashTaskError,
+    Options<TasksTrashTaskData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksTrashTask({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const tasksGetTaskQueryKey = (options: Options<TasksGetTaskData>) =>
   createQueryKey("tasksGetTask", options);
 
@@ -2459,6 +2916,91 @@ export const tasksUpdateTaskMutation = (
     },
   };
   return mutationOptions;
+};
+
+export const tasksListCommentsQueryKey = (
+  options: Options<TasksListCommentsData>,
+) => createQueryKey("tasksListComments", options);
+
+/**
+ * List Comments
+ *
+ * The task's comments, oldest first.
+ */
+export const tasksListCommentsOptions = (
+  options: Options<TasksListCommentsData>,
+) =>
+  queryOptions<
+    TasksListCommentsResponse,
+    TasksListCommentsError,
+    TasksListCommentsResponse,
+    ReturnType<typeof tasksListCommentsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListComments({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListCommentsQueryKey(options),
+  });
+
+export const tasksListCommentsInfiniteQueryKey = (
+  options: Options<TasksListCommentsData>,
+): QueryKey<Options<TasksListCommentsData>> =>
+  createQueryKey("tasksListComments", options, true);
+
+/**
+ * List Comments
+ *
+ * The task's comments, oldest first.
+ */
+export const tasksListCommentsInfiniteOptions = (
+  options: Options<TasksListCommentsData>,
+) => {
+  const opts = infiniteQueryOptions<
+    TasksListCommentsResponse,
+    TasksListCommentsError,
+    InfiniteData<TasksListCommentsResponse>,
+    QueryKey<Options<TasksListCommentsData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<TasksListCommentsData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<TasksListCommentsData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await tasksListComments({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: tasksListCommentsInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
 };
 
 /**
@@ -2654,6 +3196,36 @@ export const tasksChangeStatusMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await tasksChangeStatus({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Undo Task
+ *
+ * Puts back what one change did (R-09, UX 9): 409 `already_undone`, or
+ * `stale_version` when the task changed since.
+ */
+export const tasksUndoTaskMutation = (
+  options?: Partial<Options<TasksUndoTaskData>>,
+): UseMutationOptions<
+  TasksUndoTaskResponse,
+  TasksUndoTaskError,
+  Options<TasksUndoTaskData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksUndoTaskResponse,
+    TasksUndoTaskError,
+    Options<TasksUndoTaskData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksUndoTask({
         ...options,
         ...fnOptions,
         throwOnError: true,

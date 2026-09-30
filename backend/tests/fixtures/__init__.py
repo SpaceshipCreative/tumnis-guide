@@ -118,7 +118,16 @@ def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
 # checkpoint), and one container per xdist worker shares one Docker disk. With fsync on,
 # those flushes stalled commits for hundreds of milliseconds, and a DROP for up to a minute
 # (seen in teardown), which pushed the relay's 1 s latency tests over budget under load.
-PG_TEST_SETTINGS = ("fsync=off", "synchronous_commit=off", "full_page_writes=off")
+# Engines keep no idle connections in tests (NullPool), so every session opens a server
+# connection: with the roles' passwords hashed at one SCRAM iteration instead of 4,096,
+# each sign-in to the server stops costing two PBKDF2 runs (the role passwords are set
+# after start, by bootstrap_roles, so the setting applies to them).
+PG_TEST_SETTINGS = (
+    "fsync=off",
+    "synchronous_commit=off",
+    "full_page_writes=off",
+    "scram_iterations=1",
+)
 
 
 @pytest.fixture(scope="session")
@@ -389,9 +398,18 @@ async def _load_set(path: Path, db: DbUrls, clock: FixedClock) -> SeedResult:
     from tumnis.core import db as core_db  # noqa: PLC0415
     from tumnis.seed import DatabaseSink, load_seed  # noqa: PLC0415
 
-    core_db.configure(app_url=db.app, direct_url=db.app, pooled=False)
-    sink = DatabaseSink(skip_missing=True)  # kinds whose module has not landed are skipped
-    return await load_seed(path, sink, anchor=clock.now().date(), clock=clock)
+    # Pooled while loading: each record is a session of its own, and a new server
+    # connection per record (NullPool) made the 2,000-task load set take most of a minute.
+    # The pool is closed on this loop before the engines go back to NullPool.
+    core_db.configure(app_url=db.app, direct_url=db.app, pooled=True)
+    try:
+        sink = DatabaseSink(skip_missing=True)  # kinds whose module has not landed are skipped
+        return await load_seed(path, sink, anchor=clock.now().date(), clock=clock)
+    finally:
+        try:
+            await core_db.dispose()
+        finally:
+            core_db.configure(app_url=db.app, direct_url=db.app, pooled=False)
 
 
 @pytest.fixture
@@ -441,6 +459,7 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
     }
     DBOS(config=config)
     DBOS.reset_system_database(truncate=True)
+    _restore_queue_rows(dbos_sys_db)
     earlier = set(threading.enumerate())  # a destroyed instance's threads may linger
     DBOS.launch()
     # DBOS 3.1 persists queues in the system database, so they register after launch, and
@@ -452,11 +471,47 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
     _wait_for_queue_workers(queues, earlier)
     closing = _close_late_checkins()
     try:
+        _save_queue_rows(dbos_sys_db)
         yield DBOS
     finally:
         _stop_queue_workers(earlier)
         closing.set()
         DBOS.destroy(destroy_registry=False)
+
+
+# System database name -> its `dbos.queues` rows (JSON) as register_queues left them.
+_QUEUE_ROWS: dict[str, str] = {}
+
+
+def _save_queue_rows(sys_db: DbUrls) -> None:
+    """Keep the queue rows of the worker's first launch (register_queues' queues only: the
+    system database was just emptied), for `_restore_queue_rows`."""
+    import psycopg  # noqa: PLC0415
+
+    if sys_db.name in _QUEUE_ROWS:
+        return
+    with psycopg.connect(sys_db.libpq(APP)) as conn:
+        row = conn.execute(b"SELECT json_agg(q)::text FROM dbos.queues q").fetchone()
+    if row is not None and row[0] is not None:
+        _QUEUE_ROWS[sys_db.name] = row[0]
+
+
+def _restore_queue_rows(sys_db: DbUrls) -> None:
+    """Put the queue rows back after the truncate, before launch. DBOS's queue manager
+    (dbos 3.1.0) lists the queues when it starts and then once a second, so queues that
+    register only after launch got their worker threads up to a second later: that second
+    was most of the `dbos` fixture's setup. register_queues still runs after launch and
+    upserts the same rows."""
+    import psycopg  # noqa: PLC0415
+
+    rows = _QUEUE_ROWS.get(sys_db.name)
+    if rows is None:
+        return
+    with psycopg.connect(sys_db.libpq(APP)) as conn:
+        conn.execute(
+            b"INSERT INTO dbos.queues SELECT * FROM json_populate_recordset(NULL::dbos.queues, %s)",
+            (rows,),
+        )
 
 
 def _wait_for_queue_workers(
@@ -796,6 +851,14 @@ class WorkerKiller:
         finally:
             await self._stop(proc)
 
+    async def start(self, killpoint: str | None = None) -> asyncio.subprocess.Process:
+        """A worker on this killer's databases, armed at `killpoint` when one is given, for
+        tests that drive their own workflows (P1-04); end it with `stop`."""
+        return await self._start(killpoint)
+
+    async def stop(self, proc: asyncio.subprocess.Process) -> None:
+        await self._stop(proc)
+
     @staticmethod
     async def _stop(proc: asyncio.subprocess.Process) -> None:
         if proc.returncode is not None:
@@ -843,6 +906,11 @@ async def worker_killer(
             sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(name), sql.Identifier(APP))
         )
     sys_db = DbUrls(pg_base.host, pg_base.port, name)
+    # DBOS's tables up front, so a test may enqueue through a DBOSClient (which never
+    # migrates) before its first worker starts (P1-04).
+    from dbos import run_dbos_database_migrations  # noqa: PLC0415
+
+    await asyncio.to_thread(run_dbos_database_migrations, sys_db.url(APP))
     made: list[WorkerKiller] = []
 
     def factory(

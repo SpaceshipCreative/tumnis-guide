@@ -8,6 +8,7 @@ const ENTITY_NAMES: Record<string, string> = {
   task: "task",
   project: "project",
   settings: "settings",
+  brief: "brief",
 };
 
 export function ConflictToast() {

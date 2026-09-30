@@ -89,12 +89,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     listener = cache.CacheInvalidationListener(settings.database_direct_url)
     task = asyncio.create_task(listener.run(stop))
     hub_task = asyncio.create_task(app.state.live_hub.run(stop))  # /ws fan-out (P0-22)
+    runner_task = asyncio.create_task(app.state.runner_hub.run(stop))  # /ws/runner (P1-04)
     try:
         yield
     finally:
         stop.set()
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(asyncio.gather(task, hub_task), cache.POLL_S * 5)
+            await asyncio.wait_for(asyncio.gather(task, hub_task, runner_task), cache.POLL_S * 5)
         deadletter.close()
         await metrics.dispose()
         await db.dispose()
@@ -236,6 +237,13 @@ def create_app(
     # WS /ws (P0-22). Added on the app itself: FastAPI's walker loses the path of a
     # WebSocket route inside an included router, and the route sweeps read it.
     app.add_api_websocket_route("/ws", live.live_socket, name="live_socket")
+    # WS /ws/runner (P1-04): runner daemons dial in with a device token. Imported by name,
+    # as module_routers does, so no module's tests import agents through this root.
+    agents_ws = importlib.import_module("tumnis.modules.agents.ws")
+    app.state.runner_hub = agents_ws.RunnerHub(
+        settings.database_direct_url, settings.dbos_system_url
+    )
+    app.add_api_websocket_route("/ws/runner", agents_ws.runner_socket, name="runner_socket")
     shell = shell_dir or SHELL_DIR
     if shell.is_dir():
         app.mount("/", ShellFiles(directory=shell, html=True), name="shell")

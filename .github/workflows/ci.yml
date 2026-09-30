@@ -1,4 +1,4 @@
-# CI: the architecture's eight jobs plus spec-guard, red-proof and traceability (P0-03).
+# CI: the architecture's nine jobs plus spec-guard, red-proof and traceability (P0-03, P1-04).
 #
 # Job ids are the required-check names: .github/required-checks.txt lists them and
 # scripts/ci/branch_protection.sh requires them on main. Every job runs on every PR (no
@@ -137,6 +137,26 @@ jobs:
           git add --intent-to-add -- schemas frontend/src/api backend/tests/contract/generated
           git diff --exit-code -- schemas frontend/src/api backend/tests/contract/generated
 
+  # The runner daemon is its own uv project and never imports backend/ (P1-04); its
+  # contract test checks its protocol copies against schemas/runner/v1.
+  daemon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: daemon/uv.lock
+      - name: Daemon lint, types and tests
+        working-directory: daemon
+        run: |
+          uv sync
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy
+          uv run pytest -q
+
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -150,7 +170,9 @@ jobs:
         working-directory: backend
         run: |
           uv sync
-          uv run pytest -m "integration and not contract" -n auto
+          # Pull the service images while xdist starts, so no worker's first test waits on one.
+          uv run python -c "from tests._services import CLAMD_IMAGE, MINIO_IMAGE, SFTP_IMAGE; from tests.fixtures import PG_IMAGE, PGBOUNCER_IMAGE; print(PG_IMAGE, PGBOUNCER_IMAGE, MINIO_IMAGE, SFTP_IMAGE, CLAMD_IMAGE)" | xargs -n1 -P5 docker pull -q > /dev/null &
+          uv run pytest -m "integration and not contract" -n auto --dist worksteal --durations=40
 
   e2e:
     runs-on: ubuntu-latest
@@ -186,6 +208,21 @@ jobs:
           docker compose -f deploy/compose.test.yaml logs --no-color api postgres \
             | grep -E 'ERROR|FATAL|Traceback|deadlock|" 5[0-9][0-9]' | grep -v 'violates foreign key' | tail -n 300 || true
           echo "::endgroup::"
+          # The whole run's logs per service, for the artifact below (issue #56).
+          mkdir -p stack-logs
+          for service in api worker postgres; do
+            docker compose -f deploy/compose.test.yaml logs --no-color --timestamps "$service" \
+              > "stack-logs/$service.log" 2>&1 || true
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure() && hashFiles('deploy/compose.test.yaml') != ''
+        with:
+          name: e2e-logs
+          path: |
+            stack-logs/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Skills and Performance need the homelab self-hosted runner (P1-05, P0-29). Until the
   # repo variable HOMELAB_RUNNER is "true" they run as stubs on a GitHub-hosted runner, so

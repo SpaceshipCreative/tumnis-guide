@@ -9,6 +9,27 @@ import type {
 } from "./client";
 import { client } from "./client.gen";
 import type {
+  AgentsCheckProfileHealthData,
+  AgentsCheckProfileHealthErrors,
+  AgentsCheckProfileHealthResponses,
+  AgentsCreateRunnerData,
+  AgentsCreateRunnerErrors,
+  AgentsCreateRunnerResponses,
+  AgentsListProfilesData,
+  AgentsListProfilesErrors,
+  AgentsListProfilesResponses,
+  AgentsListRunnersData,
+  AgentsListRunnersErrors,
+  AgentsListRunnersResponses,
+  AgentsRegisterProfileData,
+  AgentsRegisterProfileErrors,
+  AgentsRegisterProfileResponses,
+  AgentsRotateRunnerTokenData,
+  AgentsRotateRunnerTokenErrors,
+  AgentsRotateRunnerTokenResponses,
+  AgentsUpdateProfileData,
+  AgentsUpdateProfileErrors,
+  AgentsUpdateProfileResponses,
   AuditExportAuditCsvData,
   AuditExportAuditCsvErrors,
   AuditExportAuditCsvResponses,
@@ -91,6 +112,9 @@ import type {
   KnowledgeCreateLocationData,
   KnowledgeCreateLocationErrors,
   KnowledgeCreateLocationResponses,
+  KnowledgeGetBriefData,
+  KnowledgeGetBriefErrors,
+  KnowledgeGetBriefResponses,
   KnowledgeListLocationsData,
   KnowledgeListLocationsErrors,
   KnowledgeListLocationsResponses,
@@ -103,6 +127,9 @@ import type {
   KnowledgeTestLocationData,
   KnowledgeTestLocationErrors,
   KnowledgeTestLocationResponses,
+  KnowledgeUpdateDocumentData,
+  KnowledgeUpdateDocumentErrors,
+  KnowledgeUpdateDocumentResponses,
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarErrors,
   PlanningGetDayCalendarResponses,
@@ -190,6 +217,9 @@ import type {
   TasksLinkContextItemData,
   TasksLinkContextItemErrors,
   TasksLinkContextItemResponses,
+  TasksListCommentsData,
+  TasksListCommentsErrors,
+  TasksListCommentsResponses,
   TasksListRecurrenceData,
   TasksListRecurrenceErrors,
   TasksListRecurrenceResponses,
@@ -208,6 +238,12 @@ import type {
   TasksPutRecurrenceData,
   TasksPutRecurrenceErrors,
   TasksPutRecurrenceResponses,
+  TasksTrashTaskData,
+  TasksTrashTaskErrors,
+  TasksTrashTaskResponses,
+  TasksUndoTaskData,
+  TasksUndoTaskErrors,
+  TasksUndoTaskResponses,
   TasksUpdateTaskData,
   TasksUpdateTaskErrors,
   TasksUpdateTaskResponses,
@@ -216,6 +252,13 @@ import type {
   UsageGetUsageResponses,
 } from "./types.gen";
 import {
+  zAgentsCheckProfileHealthResponse,
+  zAgentsCreateRunnerResponse,
+  zAgentsListProfilesResponse,
+  zAgentsListRunnersResponse,
+  zAgentsRegisterProfileResponse,
+  zAgentsRotateRunnerTokenResponse,
+  zAgentsUpdateProfileResponse,
   zAuditListAuditResponse,
   zAuthConfirmTotpEnrolmentResponse,
   zAuthCreateKeyResponse,
@@ -241,10 +284,12 @@ import {
   zDeadLettersPostRetryResponse,
   zHealthLiveResponse,
   zKnowledgeCreateLocationResponse,
+  zKnowledgeGetBriefResponse,
   zKnowledgeListLocationsResponse,
   zKnowledgeSetDefaultLocationResponse,
   zKnowledgeSetProjectFolderResponse,
   zKnowledgeTestLocationResponse,
+  zKnowledgeUpdateDocumentResponse,
   zPlanningGetDayCalendarResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
@@ -274,12 +319,15 @@ import {
   zTasksGetReviewCountResponse,
   zTasksGetTaskResponse,
   zTasksLinkContextItemResponse,
+  zTasksListCommentsResponse,
   zTasksListRecurrenceResponse,
   zTasksListReviewKindsResponse,
   zTasksListTasksResponse,
   zTasksMoveTaskResponse,
   zTasksPutColumnsResponse,
   zTasksPutRecurrenceResponse,
+  zTasksTrashTaskResponse,
+  zTasksUndoTaskResponse,
   zTasksUpdateTaskResponse,
   zUsageGetUsageResponse,
 } from "./zod.gen";
@@ -326,6 +374,109 @@ export const healthReady = <ThrowOnError extends boolean = false>(
     HealthReadyErrors,
     ThrowOnError
   >({ url: "/health/ready", ...options });
+
+/**
+ * List Profiles
+ *
+ * Agent profiles by name, with their last health check.
+ */
+export const agentsListProfiles = <ThrowOnError extends boolean = false>(
+  options?: Options<AgentsListProfilesData, ThrowOnError>,
+): RequestResult<
+  AgentsListProfilesResponses,
+  AgentsListProfilesErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    AgentsListProfilesResponses,
+    AgentsListProfilesErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsListProfilesResponse.parseAsync(data),
+    url: "/v1/agents/profiles",
+    ...options,
+  });
+
+/**
+ * Register Profile
+ *
+ * Register a Hermes profile. 422 `invalid_profile_name`, `invalid_profile`; 404 for
+ * an unknown runner or project; 409 `master_exists`, `project_agent_exists`,
+ * `profile_exists`.
+ */
+export const agentsRegisterProfile = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsRegisterProfileData, ThrowOnError>,
+): RequestResult<
+  AgentsRegisterProfileResponses,
+  AgentsRegisterProfileErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsRegisterProfileResponses,
+    AgentsRegisterProfileErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsRegisterProfileResponse.parseAsync(data),
+    url: "/v1/agents/profiles",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Update Profile
+ *
+ * Move a profile to another runner or endpoint, or pause it. 409 `stale_version`.
+ */
+export const agentsUpdateProfile = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsUpdateProfileData, ThrowOnError>,
+): RequestResult<
+  AgentsUpdateProfileResponses,
+  AgentsUpdateProfileErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    AgentsUpdateProfileResponses,
+    AgentsUpdateProfileErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsUpdateProfileResponse.parseAsync(data),
+    url: "/v1/agents/profiles/{id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Check Profile Health
+ *
+ * Ask the profile's runner (or endpoint) for its health; the answer lands in the
+ * profile's `health` (reachable, authenticated, version).
+ */
+export const agentsCheckProfileHealth = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsCheckProfileHealthData, ThrowOnError>,
+): RequestResult<
+  AgentsCheckProfileHealthResponses,
+  AgentsCheckProfileHealthErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsCheckProfileHealthResponses,
+    AgentsCheckProfileHealthErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsCheckProfileHealthResponse.parseAsync(data),
+    url: "/v1/agents/profiles/{id}/health-check",
+    ...options,
+  });
 
 /**
  * List Audit
@@ -830,6 +981,33 @@ export const authRotateKey = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Update Document
+ *
+ * Replace a text entry's Markdown body; 409 `stale_version` with the current entry.
+ */
+export const knowledgeUpdateDocument = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeUpdateDocumentData, ThrowOnError>,
+): RequestResult<
+  KnowledgeUpdateDocumentResponses,
+  KnowledgeUpdateDocumentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    KnowledgeUpdateDocumentResponses,
+    KnowledgeUpdateDocumentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeUpdateDocumentResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * List Locations
  */
 export const knowledgeListLocations = <ThrowOnError extends boolean = false>(
@@ -1108,6 +1286,29 @@ export const tasksGetBoard = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Brief
+ *
+ * The project's pinned brief (a text entry); 404 until the project's subscriber ran.
+ */
+export const knowledgeGetBrief = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeGetBriefData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetBriefResponses,
+  KnowledgeGetBriefErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeGetBriefResponses,
+    KnowledgeGetBriefErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeGetBriefResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/brief",
+    ...options,
+  });
+
+/**
  * Get Columns
  */
 export const tasksGetColumns = <ThrowOnError extends boolean = false>(
@@ -1274,6 +1475,80 @@ export const tasksListReviewKinds = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zTasksListReviewKindsResponse.parseAsync(data),
     url: "/v1/review/kinds",
+    ...options,
+  });
+
+/**
+ * List Runners
+ *
+ * Runners by name, with their status judged from the last heartbeat (online after a
+ * beat in the last 45 s, offline after that, never_seen before the first register).
+ */
+export const agentsListRunners = <ThrowOnError extends boolean = false>(
+  options?: Options<AgentsListRunnersData, ThrowOnError>,
+): RequestResult<
+  AgentsListRunnersResponses,
+  AgentsListRunnersErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    AgentsListRunnersResponses,
+    AgentsListRunnersErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsListRunnersResponse.parseAsync(data),
+    url: "/v1/runners",
+    ...options,
+  });
+
+/**
+ * Create Runner
+ *
+ * A runner and its device token, shown once. 409 `runner_exists`.
+ */
+export const agentsCreateRunner = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsCreateRunnerData, ThrowOnError>,
+): RequestResult<
+  AgentsCreateRunnerResponses,
+  AgentsCreateRunnerErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsCreateRunnerResponses,
+    AgentsCreateRunnerErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsCreateRunnerResponse.parseAsync(data),
+    url: "/v1/runners",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Rotate Runner Token
+ *
+ * A new device token, shown once; the old one stops and the runner's socket closes.
+ */
+export const agentsRotateRunnerToken = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsRotateRunnerTokenData, ThrowOnError>,
+): RequestResult<
+  AgentsRotateRunnerTokenResponses,
+  AgentsRotateRunnerTokenErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsRotateRunnerTokenResponses,
+    AgentsRotateRunnerTokenErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsRotateRunnerTokenResponse.parseAsync(data),
+    url: "/v1/runners/{id}/rotate-token",
     ...options,
   });
 
@@ -1587,6 +1862,30 @@ export const tasksCreateTask = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Trash Task
+ *
+ * Moves the task to the trash (UX 9); `POST /undo` with the answered `change_id`
+ * brings it back.
+ */
+export const tasksTrashTask = <ThrowOnError extends boolean = false>(
+  options: Options<TasksTrashTaskData, ThrowOnError>,
+): RequestResult<TasksTrashTaskResponses, TasksTrashTaskErrors, ThrowOnError> =>
+  (options.client ?? client).delete<
+    TasksTrashTaskResponses,
+    TasksTrashTaskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksTrashTaskResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Get Task
  */
 export const tasksGetTask = <ThrowOnError extends boolean = false>(
@@ -1626,6 +1925,29 @@ export const tasksUpdateTask = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * List Comments
+ *
+ * The task's comments, oldest first.
+ */
+export const tasksListComments = <ThrowOnError extends boolean = false>(
+  options: Options<TasksListCommentsData, ThrowOnError>,
+): RequestResult<
+  TasksListCommentsResponses,
+  TasksListCommentsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TasksListCommentsResponses,
+    TasksListCommentsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListCommentsResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/comments",
+    ...options,
   });
 
 /**
@@ -1797,6 +2119,30 @@ export const tasksChangeStatus = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zTasksChangeStatusResponse.parseAsync(data),
     url: "/v1/tasks/{task_id}/status",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Undo Task
+ *
+ * Puts back what one change did (R-09, UX 9): 409 `already_undone`, or
+ * `stale_version` when the task changed since.
+ */
+export const tasksUndoTask = <ThrowOnError extends boolean = false>(
+  options: Options<TasksUndoTaskData, ThrowOnError>,
+): RequestResult<TasksUndoTaskResponses, TasksUndoTaskErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    TasksUndoTaskResponses,
+    TasksUndoTaskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksUndoTaskResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/undo",
     ...options,
     headers: {
       "Content-Type": "application/json",

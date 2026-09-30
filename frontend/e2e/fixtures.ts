@@ -27,8 +27,10 @@ import {
   test as base,
   expect,
   type APIRequestContext,
+  type APIResponse,
   type Locator,
   type Page,
+  type Request,
 } from "@playwright/test";
 
 import { testFakes, type TestFakes } from "./testHooks";
@@ -103,6 +105,31 @@ function followPageClock(
   return () => synced;
 }
 
+const RESET_ATTEMPTS = 3;
+
+/**
+ * `POST /v1/test/reset`, retried after a 409 (issue #56): a later reset superseded this
+ * one while it was seeding, so the stack is not in the state this call asked for. Gives up
+ * after three attempts and returns the last response; a 409 is never a success.
+ */
+async function postReset(
+  request: APIRequestContext,
+  set: SeedSetName,
+): Promise<APIResponse> {
+  const send = () =>
+    request.post("/v1/test/reset", { params: set === "seed" ? {} : { set } });
+  let response = await send();
+  for (
+    let attempt = 1;
+    attempt < RESET_ATTEMPTS && response.status() === 409;
+    attempt++
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    response = await send();
+  }
+  return response;
+}
+
 export const test = base.extend<E2EFixtures>({
   page: async ({ page, request }, use) => {
     const synced = followPageClock(page, request);
@@ -113,9 +140,7 @@ export const test = base.extend<E2EFixtures>({
   seededApp: async ({ baseURL, request }, use) => {
     // Mounted only with fake adapters (compose.test and previews).
     const reset = async (set: SeedSetName = "seed"): Promise<void> => {
-      const response = await request.post("/v1/test/reset", {
-        params: set === "seed" ? {} : { set },
-      });
+      const response = await postReset(request, set);
       expect(response.status(), `POST /v1/test/reset (${set})`).toBe(204);
     };
     await reset();
@@ -386,9 +411,7 @@ export async function signIn(
   request: APIRequestContext,
   set: SeedSetName = "seed",
 ): Promise<void> {
-  const reset = await request.post("/v1/test/reset", {
-    params: set === "seed" ? {} : { set },
-  });
+  const reset = await postReset(request, set);
   if (reset.status() !== 204) {
     throw new Error(`POST /v1/test/reset -> ${String(reset.status())}`);
   }
@@ -514,4 +537,37 @@ export async function scrollsVertically(page: Page): Promise<boolean> {
       (document.scrollingElement?.scrollHeight ?? Infinity) >
       window.innerHeight,
   );
+}
+
+// --- Project page and board (P0-24) ---------------------------------------------
+
+/** The board cards (not their checklist items) inside a column. */
+export function boardCards(column: Locator): Locator {
+  return column.locator("[data-board-card]");
+}
+
+/**
+ * Signs in (after resetting to the seed set), opens the project called `name` with
+ * `search` (for example `?view=board`) and waits for its header. Answers the project id.
+ */
+export async function openProject(
+  page: Page,
+  name: string,
+  search = "",
+): Promise<string> {
+  await signIn(page.request);
+  const projectId = await projectIdByName(page.request, name);
+  await page.goto(`/projects/${projectId}${search}`);
+  await page.getByRole("heading", { level: 1, name }).waitFor();
+  return projectId;
+}
+
+/** Every write request the page sends from now on whose path matches `pattern`. */
+export function recordWrites(page: Page, pattern: RegExp): Request[] {
+  const writes: Request[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() !== "GET" && pattern.test(path)) writes.push(request);
+  });
+  return writes;
 }

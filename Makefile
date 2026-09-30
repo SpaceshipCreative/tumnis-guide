@@ -3,6 +3,10 @@
 
 BACKEND := cd backend &&
 
+# `-n auto` here means the CPU count, capped at 8: several local runs share one machine, and
+# each integration worker starts its own Postgres. CI calls pytest directly, so it's unaffected.
+export PYTEST_XDIST_AUTO_NUM_WORKERS ?= $(shell n=$$(nproc); [ $$n -gt 8 ] && echo 8 || echo $$n)
+
 ## Lint, typecheck, boundaries and unit tests; must finish under 60 s (P0-01).
 check:
 	$(BACKEND) uv run ruff check .
@@ -10,6 +14,7 @@ check:
 	$(BACKEND) uv run mypy tumnis
 	$(BACKEND) uv run lint-imports
 	$(BACKEND) uv run pytest -q -n auto -m "not integration and not contract"
+	cd daemon && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest -q
 	@if [ -d frontend/node_modules ]; then \
 		npm --prefix frontend run typecheck & typecheck=$$!; \
 		npm --prefix frontend run lint && wait $$typecheck \

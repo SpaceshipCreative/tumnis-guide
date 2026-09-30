@@ -124,6 +124,22 @@ export const zDefaultIn = z.object({
 });
 
 /**
+ * DocumentDTO
+ */
+export const zDocumentDto = z.object({
+  body_md: z.string().nullable(),
+  id: z.uuid(),
+  kind: z.string(),
+  pinned: z.boolean(),
+  project_id: z.uuid().nullable(),
+  role: z.string().nullable(),
+  tainted: z.boolean(),
+  title: z.string(),
+  trust: z.enum(["trusted", "untrusted"]),
+  version: z.int(),
+});
+
+/**
  * FolderIn
  */
 export const zFolderIn = z.object({
@@ -143,6 +159,14 @@ export const zFreeBlockOut = z.object({
  * Health
  */
 export const zHealth = z.enum(["blocked", "at_risk", "on_track"]);
+
+/**
+ * HealthCheckAccepted
+ */
+export const zHealthCheckAccepted = z.object({
+  profile_id: z.uuid(),
+  request_id: z.uuid(),
+});
 
 /**
  * KeyCreated
@@ -278,6 +302,14 @@ export const zPageAuditEntry = z.object({
 });
 
 /**
+ * Page[CommentOut]
+ */
+export const zPageCommentOut = z.object({
+  items: z.array(zCommentOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
  * Page[DeadLetterOut]
  */
 export const zPageDeadLetterOut = z.object({
@@ -309,6 +341,71 @@ export const zProblem = z.object({
   status: z.int(),
   title: z.string(),
   type: z.string(),
+});
+
+/**
+ * ProfileHealth
+ */
+export const zProfileHealth = z.object({
+  authenticated: z.boolean().nullish(),
+  error: z.string().nullish(),
+  mcp_servers: z.array(z.string()).optional().default([]),
+  profile_exists: z.boolean().nullish(),
+  reachable: z.boolean(),
+  status: z
+    .enum(["ok", "offline", "unsupported", "error"])
+    .optional()
+    .default("ok"),
+  version: z.string().nullish(),
+});
+
+/**
+ * AgentProfileOut
+ */
+export const zAgentProfileOut = z.object({
+  created_at: z.iso.datetime(),
+  endpoint: z.string().nullable(),
+  health: zProfileHealth.nullable(),
+  health_checked_at: z.iso.datetime().nullable(),
+  id: z.uuid(),
+  name: z.string(),
+  profile_version: z.string().nullable(),
+  project_id: z.uuid().nullable(),
+  role: z.enum(["master", "project"]),
+  runner_id: z.uuid().nullable(),
+  status: z.string(),
+  transport: z.enum(["daemon", "mcp_endpoint"]),
+  version: z.int(),
+});
+
+/**
+ * Page[AgentProfileOut]
+ */
+export const zPageAgentProfileOut = z.object({
+  items: z.array(zAgentProfileOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * ProfileIn
+ */
+export const zProfileIn = z.object({
+  endpoint: z.string().max(2048).nullish(),
+  name: z.string().max(63),
+  project_id: z.uuid().nullish(),
+  role: z.enum(["master", "project"]),
+  runner_id: z.uuid().nullish(),
+  transport: z.enum(["daemon", "mcp_endpoint"]).optional().default("daemon"),
+});
+
+/**
+ * ProfilePatch
+ */
+export const zProfilePatch = z.object({
+  endpoint: z.string().max(2048).nullish(),
+  runner_id: z.uuid().nullish(),
+  status: z.enum(["registered", "paused"]).nullish(),
+  version: z.int().gte(0).lte(2147483647),
 });
 
 /**
@@ -490,6 +587,56 @@ export const zReviewKindsOut = z.object({
  */
 export const zRotateIn = z.object({
   grace_minutes: z.int().gte(0).lte(1440).optional().default(0),
+});
+
+/**
+ * RunnerCreated
+ */
+export const zRunnerCreated = z.object({
+  created_at: z.iso.datetime(),
+  daemon_version: z.string().nullable(),
+  hermes_version: z.string().nullable(),
+  host: z.string().nullable(),
+  id: z.uuid(),
+  last_heartbeat_at: z.iso.datetime().nullable(),
+  name: z.string(),
+  os: z.string().nullable(),
+  profiles: z.array(z.string()),
+  protocol_version: z.int().nullable(),
+  status: z.enum(["online", "offline", "never_seen"]),
+  token: z.string(),
+});
+
+/**
+ * RunnerIn
+ */
+export const zRunnerIn = z.object({
+  name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/),
+});
+
+/**
+ * RunnerOut
+ */
+export const zRunnerOut = z.object({
+  created_at: z.iso.datetime(),
+  daemon_version: z.string().nullable(),
+  hermes_version: z.string().nullable(),
+  host: z.string().nullable(),
+  id: z.uuid(),
+  last_heartbeat_at: z.iso.datetime().nullable(),
+  name: z.string(),
+  os: z.string().nullable(),
+  profiles: z.array(z.string()),
+  protocol_version: z.int().nullable(),
+  status: z.enum(["online", "offline", "never_seen"]),
+});
+
+/**
+ * Page[RunnerOut]
+ */
+export const zPageRunnerOut = z.object({
+  items: z.array(zRunnerOut),
+  next_cursor: z.string().nullable(),
 });
 
 /**
@@ -707,6 +854,7 @@ export const zTaskOut = z.object({
   actual_minutes: z.int().nullable(),
   assigned_agent_id: z.uuid().nullable(),
   board_rank: z.string(),
+  change_id: z.uuid().nullable(),
   column_id: z.uuid().nullable(),
   completed_at: z.iso.datetime().nullable(),
   created_at: z.iso.datetime(),
@@ -720,7 +868,7 @@ export const zTaskOut = z.object({
   priority: z.enum(["low", "normal", "high", "urgent"]),
   project_id: z.uuid(),
   rollover_count: z.int(),
-  schema_version: z.literal(1).optional().default(1),
+  schema_version: z.literal(1).default(1),
   source: z.string(),
   started_at: z.iso.datetime().nullable(),
   status: zStatus,
@@ -808,6 +956,14 @@ export const zTaskRecurrenceOut = z.object({
 });
 
 /**
+ * TextDocumentPatch
+ */
+export const zTextDocumentPatch = z.object({
+  body_md: z.string().max(100000),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
  * TotpEnrolConfirmIn
  */
 export const zTotpEnrolConfirmIn = z.object({
@@ -836,6 +992,23 @@ export const zTotpEnrolOut = z.object({
 export const zTotpIn = z.object({
   code: z.string().max(16),
   preauth: z.string().max(2048),
+});
+
+/**
+ * TrashIn
+ */
+export const zTrashIn = z.object({
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * UndoIn
+ *
+ * The change a write answered (`change_id`) and the version it left (R-09).
+ */
+export const zUndoIn = z.object({
+  change_id: z.uuid(),
+  version: z.int().gte(0).lte(2147483647),
 });
 
 /**
@@ -928,6 +1101,43 @@ export const zTumnisModulesProjectsRouterVersionIn = z.object({
  * Successful Response
  */
 export const zHealthLiveResponse = z.record(z.string(), z.string());
+
+export const zAgentsListProfilesQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsListProfilesResponse = zPageAgentProfileOut;
+
+export const zAgentsRegisterProfileBody = zProfileIn;
+
+/**
+ * Successful Response
+ */
+export const zAgentsRegisterProfileResponse = zAgentProfileOut;
+
+export const zAgentsUpdateProfileBody = zProfilePatch;
+
+export const zAgentsUpdateProfilePath = z.object({
+  id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsUpdateProfileResponse = zAgentProfileOut;
+
+export const zAgentsCheckProfileHealthPath = z.object({
+  id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsCheckProfileHealthResponse = zHealthCheckAccepted;
 
 export const zAuditListAuditQuery = z.object({
   action: z.string().max(200).nullish(),
@@ -1128,6 +1338,17 @@ export const zAuthRotateKeyPath = z.object({
  */
 export const zAuthRotateKeyResponse = zKeyCreated;
 
+export const zKnowledgeUpdateDocumentBody = zTextDocumentPatch;
+
+export const zKnowledgeUpdateDocumentPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeUpdateDocumentResponse = zDocumentDto;
+
 /**
  * Response Knowledge List Locations
  *
@@ -1241,6 +1462,15 @@ export const zTasksGetBoardPath = z.object({
  */
 export const zTasksGetBoardResponse = zBoardOut;
 
+export const zKnowledgeGetBriefPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeGetBriefResponse = zDocumentDto;
+
 export const zTasksGetColumnsPath = z.object({
   project_id: z.uuid(),
 });
@@ -1304,6 +1534,32 @@ export const zTasksGetReviewCountResponse = zReviewCountOut;
  * Successful Response
  */
 export const zTasksListReviewKindsResponse = zReviewKindsOut;
+
+export const zAgentsListRunnersQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsListRunnersResponse = zPageRunnerOut;
+
+export const zAgentsCreateRunnerBody = zRunnerIn;
+
+/**
+ * Successful Response
+ */
+export const zAgentsCreateRunnerResponse = zRunnerCreated;
+
+export const zAgentsRotateRunnerTokenPath = z.object({
+  id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsRotateRunnerTokenResponse = zRunnerCreated;
 
 export const zSearchSearchQuery = z.object({
   q: z.string().max(200).optional().default(""),
@@ -1408,6 +1664,17 @@ export const zTasksCreateTaskBody = zTaskCreate;
  */
 export const zTasksCreateTaskResponse = zTaskOut;
 
+export const zTasksTrashTaskBody = zTrashIn;
+
+export const zTasksTrashTaskPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksTrashTaskResponse = zTaskOut;
+
 export const zTasksGetTaskPath = z.object({
   task_id: z.uuid(),
 });
@@ -1427,6 +1694,20 @@ export const zTasksUpdateTaskPath = z.object({
  * Successful Response
  */
 export const zTasksUpdateTaskResponse = zTaskOut;
+
+export const zTasksListCommentsPath = z.object({
+  task_id: z.uuid(),
+});
+
+export const zTasksListCommentsQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksListCommentsResponse = zPageCommentOut;
 
 export const zTasksAddCommentBody = zCommentIn;
 
@@ -1504,6 +1785,17 @@ export const zTasksChangeStatusPath = z.object({
  * Successful Response
  */
 export const zTasksChangeStatusResponse = zTaskOut;
+
+export const zTasksUndoTaskBody = zUndoIn;
+
+export const zTasksUndoTaskPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksUndoTaskResponse = zTaskOut;
 
 export const zSearchTypeaheadProjectsQuery = z.object({
   q: z.string().max(200).optional().default(""),

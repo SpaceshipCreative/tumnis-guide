@@ -9,7 +9,9 @@ export type LiveEntity =
   | "settings"
   | "api_key"
   | "dead_letter"
-  | "calendar_account";
+  | "calendar_account"
+  | "runner"
+  | "agent_profile";
 
 export const LIVE_MAP: Record<
   LiveEntity,
@@ -19,7 +21,7 @@ export const LIVE_MAP: Record<
   // columns, a subtask onto its parent's checklist), and search results (P0-20). A task's
   // recurrence rule and the project's recurrence list change with its task messages (P0-19).
   task: {
-    details: ["tasksGetTask", "tasksGetRecurrence"],
+    details: ["tasksGetTask", "tasksListComments", "tasksGetRecurrence"],
     lists: [
       "tasksListTasks",
       "tasksGetBoard",
@@ -29,9 +31,15 @@ export const LIVE_MAP: Record<
     ],
   },
   // A project's board and columns carry its id in their path: column edits and a new card
-  // threshold (FR-3.8) refresh them; any project change refreshes search results (P0-20).
+  // threshold (FR-3.8) refresh them, a saved brief its Brief rail section (P0-24); any
+  // project change refreshes search results (P0-20).
   project: {
-    details: ["projectsGetProject", "tasksGetBoard", "tasksGetColumns"],
+    details: [
+      "projectsGetProject",
+      "tasksGetBoard",
+      "tasksGetColumns",
+      "knowledgeGetBrief",
+    ],
     lists: ["projectsListProjects", "searchSearch", "searchTypeaheadProjects"],
   },
   // The review badge (P0-18); the review queue joins with P1-13.
@@ -57,6 +65,10 @@ export const LIVE_MAP: Record<
     details: [],
     lists: ["calendarListAccounts", "planningGetDayCalendar"],
   },
+  // Runners register, heartbeat, go offline and get new tokens; profiles get health
+  // checks (P1-04): the Settings agents section refreshes.
+  runner: { details: [], lists: ["agentsListRunners"] },
+  agent_profile: { details: [], lists: ["agentsListProfiles"] },
 };
 
 export const NOT_LIVE = [
