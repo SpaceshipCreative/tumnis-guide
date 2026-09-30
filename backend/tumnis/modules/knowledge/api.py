@@ -168,9 +168,12 @@ def _text_row(
 
 
 def _brief_conflict() -> dict[str, Any]:
+    # The predicate is literal SQL (issue #56): bound as `role = $1`, it cannot prove the
+    # partial index's `role = 'brief'` once Postgres plans the prepared statement
+    # generically, and the upsert fails with "no unique or exclusion constraint".
     return {
         "index_elements": [_documents.c.workspace_id, _documents.c.project_id],
-        "index_where": _documents.c.role == BRIEF,
+        "index_where": text("role = 'brief'"),
     }
 
 

@@ -112,7 +112,9 @@ class _Sink:
     async def start(self, headers: dict[bytes, bytes]) -> None:
         _, params = parse_options_header(headers.get(b"content-disposition", b""))
         name = params.get(b"name", b"").decode(errors="replace")
-        if name == FILE_FIELD and self.result.name is None:
+        if name == FILE_FIELD and self.result.name is not None:
+            raise _bad("The body has more than one file part")
+        if name == FILE_FIELD:
             await self.on_file(self.result.fields)
             self.result.name = params.get(b"filename", b"").decode(errors="replace") or "upload"
             self.handle = await asyncio.to_thread(self.dest.open, "wb")

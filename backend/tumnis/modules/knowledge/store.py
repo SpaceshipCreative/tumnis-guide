@@ -195,6 +195,8 @@ async def set_content(s: AsyncSession, version_id: UUID, *, digest: bytes, size:
         .values(content_hash=digest, size=size)
         .returning(_versions.c.document_id)
     )
+    if document_id is None:
+        raise NotFound("document_versions", version_id)
     await s.execute(
         update(_documents).where(_documents.c.id == document_id).values(content_hash=digest)
     )
@@ -209,6 +211,8 @@ async def set_sniffed(s: AsyncSession, version_id: UUID, *, mime: str, kind: str
         .values(mime=mime)
         .returning(_versions.c.document_id)
     )
+    if document_id is None:
+        raise NotFound("document_versions", version_id)
     if kind is not None:
         await s.execute(update(_documents).where(_documents.c.id == document_id).values(kind=kind))
 
