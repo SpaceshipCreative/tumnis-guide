@@ -83,7 +83,7 @@ class Runs:
             return self.profile_id
         workspace, clock = self.world.workspace, self.world.clock
         self.runner = self.fake_runner(profiles=[PROFILE])
-        self.runner.script(PROFILE, SKILL, {"summary": "Done"}, repeat=10_000)
+        self.runner.script(PROFILE, SKILL, {"summary": "Done"})  # kept for every run
         self.profile_id = self.fake_runner.register_profile(
             PROFILE, runner=self.runner, role="project", project_id=self.world.projects["A"]
         )
