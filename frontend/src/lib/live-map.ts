@@ -21,7 +21,12 @@ export const LIVE_MAP: Record<
   // columns, a subtask onto its parent's checklist), and search results (P0-20). A task's
   // recurrence rule and the project's recurrence list change with its task messages (P0-19).
   task: {
-    details: ["tasksGetTask", "tasksListComments", "tasksGetRecurrence"],
+    details: [
+      "tasksGetTask",
+      "tasksListComments",
+      "tasksGetRecurrence",
+      "tasksListPullRequests",
+    ],
     lists: [
       "tasksListTasks",
       "tasksGetBoard",

@@ -1,0 +1,297 @@
+{
+  "notes": "Scrubbed: owners, repositories, user logins and ids, node ids, SHAs, titles, bodies, branch names, timestamps and ETags replaced with invented values; avatar, gravatar and email fields removed; example repositories on github.com. Shapes follow the GitHub REST API (X-GitHub-Api-Version 2022-11-28): GET /repos/{owner}/{repo}/pulls/{n}, /commits/{ref}/status, /commits/{ref}/check-runs and /pulls/{n}/reviews.",
+  "pull": {
+    "owner": "brio-example",
+    "repo": "api",
+    "number": 7
+  },
+  "rounds": 1,
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/repos/brio-example/api/pulls/7",
+      "query": {},
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"2d091c9ca75fc59cf7cbf5619e481e4b64a6abbedc65ee83e71f4c10b9138c07\""
+      },
+      "body": {
+        "url": "https://api.github.com/repos/brio-example/api/pulls/7",
+        "id": 51007,
+        "node_id": "PR_example51007",
+        "html_url": "https://github.com/brio-example/api/pull/7",
+        "number": 7,
+        "state": "open",
+        "locked": false,
+        "title": "Retry webhook deliveries",
+        "user": {
+          "login": "ana-example",
+          "id": 9001,
+          "node_id": "U_example9001",
+          "html_url": "https://github.com/ana-example",
+          "type": "User",
+          "site_admin": false
+        },
+        "body": "Invented description.",
+        "created_at": "2026-03-08T09:00:00Z",
+        "updated_at": "2026-03-09T11:30:00Z",
+        "closed_at": null,
+        "merged_at": null,
+        "merge_commit_sha": null,
+        "assignee": null,
+        "assignees": [],
+        "requested_reviewers": [
+          {
+            "login": "ben-example",
+            "id": 9100,
+            "node_id": "U_example9100",
+            "html_url": "https://github.com/ben-example",
+            "type": "User",
+            "site_admin": false
+          }
+        ],
+        "requested_teams": [],
+        "labels": [],
+        "draft": false,
+        "head": {
+          "label": "brio-example:feature-7",
+          "ref": "feature-7",
+          "sha": "d91f084e2589f39805896eaee707795f52e8218e",
+          "user": {
+            "login": "brio-example",
+            "id": 5101,
+            "node_id": "U_example5101",
+            "html_url": "https://github.com/brio-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "repo": {
+            "id": 5100,
+            "node_id": "R_example5100",
+            "name": "api",
+            "full_name": "brio-example/api",
+            "private": true,
+            "owner": {
+              "login": "brio-example",
+              "id": 5101,
+              "node_id": "U_example5101",
+              "html_url": "https://github.com/brio-example",
+              "type": "User",
+              "site_admin": false
+            },
+            "html_url": "https://github.com/brio-example/api",
+            "default_branch": "main"
+          }
+        },
+        "base": {
+          "label": "brio-example:main",
+          "ref": "main",
+          "sha": "3ffcd47ad425af30b08f442cecf5fda047690b1a",
+          "user": {
+            "login": "brio-example",
+            "id": 5101,
+            "node_id": "U_example5101",
+            "html_url": "https://github.com/brio-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "repo": {
+            "id": 5100,
+            "node_id": "R_example5100",
+            "name": "api",
+            "full_name": "brio-example/api",
+            "private": true,
+            "owner": {
+              "login": "brio-example",
+              "id": 5101,
+              "node_id": "U_example5101",
+              "html_url": "https://github.com/brio-example",
+              "type": "User",
+              "site_admin": false
+            },
+            "html_url": "https://github.com/brio-example/api",
+            "default_branch": "main"
+          }
+        },
+        "author_association": "MEMBER",
+        "merged": false,
+        "mergeable": true,
+        "mergeable_state": "clean",
+        "merged_by": null,
+        "comments": 1,
+        "review_comments": 0,
+        "commits": 3,
+        "additions": 40,
+        "deletions": 7,
+        "changed_files": 4
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/brio-example/api/commits/d91f084e2589f39805896eaee707795f52e8218e/status",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"4d38e18bc8ee321d4955edbc6566e58d46e200ce05e5048136a5859339d87143\""
+      },
+      "body": {
+        "state": "pending",
+        "statuses": [],
+        "sha": "d91f084e2589f39805896eaee707795f52e8218e",
+        "total_count": 0,
+        "repository": {
+          "id": 5000,
+          "node_id": "R_example5000",
+          "name": "api",
+          "full_name": "brio-example/api",
+          "private": true,
+          "owner": {
+            "login": "brio-example",
+            "id": 5001,
+            "node_id": "U_example5001",
+            "html_url": "https://github.com/brio-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "html_url": "https://github.com/brio-example/api",
+          "default_branch": "main"
+        },
+        "commit_url": "https://api.github.com/repos/brio-example/api/commits/d91f084e2589f39805896eaee707795f52e8218e"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/brio-example/api/commits/d91f084e2589f39805896eaee707795f52e8218e/check-runs",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"82d015cf3b439f56548f49888013511ef65bbf5e1d1cc4c6d69a390999c7fe18\""
+      },
+      "body": {
+        "total_count": 2,
+        "check_runs": [
+          {
+            "id": 8000,
+            "head_sha": "d91f084e2589f39805896eaee707795f52e8218e",
+            "node_id": "CR_example8000",
+            "external_id": "",
+            "url": "https://api.github.com/repos/brio-example/api/check-runs/8000",
+            "html_url": "https://github.com/brio-example/api/runs/8000",
+            "details_url": "https://ci.example.com/brio-example/api/runs/8000",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-03-09T11:00:00Z",
+            "completed_at": "2026-03-09T11:06:00Z",
+            "output": {
+              "title": null,
+              "summary": null,
+              "text": null,
+              "annotations_count": 0
+            },
+            "name": "build",
+            "check_suite": {
+              "id": 8500
+            },
+            "app": {
+              "id": 15368,
+              "slug": "github-actions",
+              "name": "GitHub Actions"
+            },
+            "pull_requests": []
+          },
+          {
+            "id": 8001,
+            "head_sha": "d91f084e2589f39805896eaee707795f52e8218e",
+            "node_id": "CR_example8001",
+            "external_id": "",
+            "url": "https://api.github.com/repos/brio-example/api/check-runs/8001",
+            "html_url": "https://github.com/brio-example/api/runs/8001",
+            "details_url": "https://ci.example.com/brio-example/api/runs/8001",
+            "status": "completed",
+            "conclusion": "failure",
+            "started_at": "2026-03-09T11:00:00Z",
+            "completed_at": "2026-03-09T11:06:00Z",
+            "output": {
+              "title": null,
+              "summary": null,
+              "text": null,
+              "annotations_count": 0
+            },
+            "name": "test",
+            "check_suite": {
+              "id": 8500
+            },
+            "app": {
+              "id": 15368,
+              "slug": "github-actions",
+              "name": "GitHub Actions"
+            },
+            "pull_requests": []
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/brio-example/api/pulls/7/reviews",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"ff0e51669c87228820810c13b108be2a9d9d14233b69a22c91c1cec290743294\""
+      },
+      "body": []
+    }
+  ],
+  "expected": {
+    "external_id": "brio-example/api#7",
+    "url": "https://github.com/brio-example/api/pull/7",
+    "state": "open",
+    "pr_status": {
+      "repo": "brio-example/api",
+      "number": 7,
+      "title": "Retry webhook deliveries",
+      "draft": false,
+      "head_sha": "d91f084e2589f39805896eaee707795f52e8218e",
+      "checks": "red",
+      "review": "review_required"
+    }
+  }
+}

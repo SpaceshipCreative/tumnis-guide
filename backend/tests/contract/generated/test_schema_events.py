@@ -13,6 +13,12 @@ from tumnis.core.schemas import parse_versioned
 CASES = [
     (
         "events",
+        "artifact.updated",
+        1,
+        "backend/tests/contract/fixtures/events/artifact.updated/v1.json",
+    ),
+    (
+        "events",
         "auth.failed",
         1,
         "backend/tests/contract/fixtures/events/auth.failed/v1.json",
@@ -22,6 +28,12 @@ CASES = [
         "calendar.synced",
         1,
         "backend/tests/contract/fixtures/events/calendar.synced/v1.json",
+    ),
+    (
+        "events",
+        "github.fetched",
+        1,
+        "backend/tests/contract/fixtures/events/github.fetched/v1.json",
     ),
     (
         "events",
