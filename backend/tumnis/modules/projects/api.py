@@ -326,6 +326,11 @@ async def project_exists(s: AsyncSession, project_id: UUID) -> bool:
     return found is not None
 
 
+async def project_links(s: AsyncSession, project_id: UUID) -> list[ProjectLinkIn]:
+    """A project's live links (person, domain, repo, coolify_app), in the order added."""
+    return (await _links_of(s, [project_id]))[project_id]
+
+
 # --- Writing -------------------------------------------------------------------------------
 
 

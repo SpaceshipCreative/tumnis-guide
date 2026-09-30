@@ -413,6 +413,17 @@ async def list_tasks(
     return TaskPage(items=page.items, next_cursor=page.next_cursor, total=total or 0)
 
 
+async def project_tasks(s: AsyncSession, project_id: UUID) -> list[TaskOut]:
+    """Every live task of one project, Done ones included, in creation order: one
+    statement, for views that project the whole project (the Calendar week, P1-12)."""
+    rows = await s.execute(
+        select(_tasks)
+        .where(_live(_tasks), _tasks.c.project_id == project_id)
+        .order_by(_tasks.c.created_at, _tasks.c.id)
+    )
+    return [_out(row._mapping) for row in rows]
+
+
 # `rules.today_order` in SQL: the same keys, ranks from `rules.PRIORITY_RANK`.
 _TODAY_KEYS: Final = (
     SortKey(

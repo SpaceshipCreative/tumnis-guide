@@ -29,14 +29,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tumnis.core import audit, live
 from tumnis.core.cache import CacheKey, CacheSpec, invalidate_on_commit, register_cache
 from tumnis.core.clock import local_to_utc
+from tumnis.core.errors import ProblemError
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import Interval
-from tumnis.core.versioning import StaleVersion, Version
+from tumnis.core.versioning import NotFound, StaleVersion, Version
 from tumnis.modules.auth import api as auth
 from tumnis.modules.calendar import api as calendar
 from tumnis.modules.integrations import api as integrations
-from tumnis.modules.planning.models import WorkingHours
-from tumnis.modules.planning.rules import DEFAULT_HOURS, working_window
+from tumnis.modules.planning.models import DailyPlan, PlanItem, WorkingHours
+from tumnis.modules.planning.rules import (
+    DEFAULT_HOURS,
+    EventDTO,
+    PlanTask,
+    ProjectLink,
+    Violation,
+    event_matches_project,
+    validate_manual_block,
+    working_window,
+)
+from tumnis.modules.projects import api as projects
+from tumnis.modules.tasks import api as tasks
 
 FREE_BLOCKS_CACHE: Final = "free_blocks"  # the day calendar's cache namespace
 DAY_CALENDAR_TTL_S: Final = 300.0  # bounds what no invalidation reaches (event writes
@@ -54,6 +66,13 @@ _CACHE = register_cache(
     )
 )
 _HOURS: Table = WorkingHours.__table__  # type: ignore[assignment]
+_PLANS: Table = DailyPlan.__table__  # type: ignore[assignment]
+_ITEMS: Table = PlanItem.__table__  # type: ignore[assignment]
+MANUAL_REASON: Final = "Scheduled from the calendar"
+# Open statuses a task can be scheduled from in the Calendar view.
+SCHEDULABLE_STATUSES: Final = frozenset({"backlog", "today", "in_progress"})
+# Violations that mean "that time is not free" (the view's one refusal message).
+NOT_FREE: Final = frozenset({"block_outside_free_time", "blocks_overlap"})
 _WEEK_LOCK: Final = text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
 SECTION: Final = "working-hours"
 
@@ -334,9 +353,181 @@ class NotAMonday(ValueError):  # noqa: N818  # carries the problem code
     code = "validation_error"
 
 
+def _day_bounds(day: date, tz: ZoneInfo) -> Interval:
+    return Interval(
+        local_to_utc(day, time(0), tz), local_to_utc(day + timedelta(days=1), time(0), tz)
+    )
+
+
+def _task_ref(task: tasks.TaskOut) -> TaskRefOut:
+    return TaskRefOut(
+        id=task.id,
+        title=task.title,
+        label=task.label,
+        status=task.status,
+        estimate_minutes=task.estimate_minutes,
+        due_on=task.due_on,
+    )
+
+
+async def _planned_blocks(s: AsyncSession, first: date, last: date) -> list[Any]:
+    """The live blocks of the published plans from `first` to `last`: (day, task_id,
+    block_start, block_end), by start."""
+    stmt = (
+        select(_PLANS.c.day, _ITEMS.c.task_id, _ITEMS.c.block_start, _ITEMS.c.block_end)
+        .join(_PLANS, _PLANS.c.id == _ITEMS.c.plan_id)
+        .where(
+            _PLANS.c.status == "published",
+            _PLANS.c.deleted_at.is_(None),
+            _PLANS.c.day.between(first, last),
+            _ITEMS.c.deleted_at.is_(None),
+            _ITEMS.c.removed_at.is_(None),
+            _ITEMS.c.block_start.is_not(None),
+        )
+        .order_by(_ITEMS.c.block_start, _ITEMS.c.id)
+    )
+    return list((await s.execute(stmt)).all())
+
+
+def _week_events(
+    today: Sequence[calendar.EventOut], links: Sequence[ProjectLink]
+) -> list[WeekEventOut]:
+    """The project's meetings by title; other busy time without one; other free-time
+    events are not the project's business and are left out."""
+    shown: list[WeekEventOut] = []
+    for event in today:
+        matched = event_matches_project(EventDTO(attendees=tuple(event.attendees)), links)
+        if matched or event.busy:
+            shown.append(
+                WeekEventOut(
+                    title=event.title if matched else None,
+                    start=event.start_at,
+                    end=event.end_at,
+                    busy=event.busy,
+                    matched=matched,
+                )
+            )
+    return shown
+
+
 async def project_week(ctx: WorkspaceContext, monday: date, project_id: UUID) -> WeekOut:
-    """Monday to Sunday of one project in the workspace timezone (P1-12)."""
-    raise NotImplementedError
+    """Monday to Sunday of one project in the workspace timezone (P1-12, FR-2.6): each
+    day's working window and free blocks (as the day calendar computes them), its events
+    (`_week_events`), the project's open tasks due that day and the blocks planned that
+    day (another project's without its task). `unscheduled` holds the project's open
+    Human and Hybrid tasks with an estimate and no block this week. A fixed number of
+    statements, whatever the number of events, tasks or blocks. Raises NotAMonday (422)
+    and NotFound (404) for an unknown project."""
+    if monday.weekday() != 0:
+        raise NotAMonday(f"{monday.isoformat()} is not a Monday")
+    zone = (await auth.get_workspace_settings(ctx)).timezone
+    tz = ZoneInfo(zone)
+    days = [monday + timedelta(days=n) for n in range(7)]
+    week = Interval(_day_bounds(days[0], tz).start, _day_bounds(days[-1], tz).end)
+    async with tenant_session(ctx) as s:
+        if not await projects.project_exists(s, project_id):
+            raise NotFound("projects", project_id)
+        links = [
+            ProjectLink(kind=link.kind, value=link.value)
+            for link in await projects.project_links(s, project_id)
+        ]
+        hours = hours_by_weekday(await _rows(s))
+        events = await calendar.events_between(ctx, week.start, week.end, session=s)
+        project_tasks = await tasks.project_tasks(s, project_id)
+        blocks = await _planned_blocks(s, days[0], days[-1])
+    mine = {task.id: task for task in project_tasks}
+    open_tasks = [task for task in project_tasks if task.status != "done"]
+    out: list[WeekDayOut] = []
+    for day in days:
+        bounds = _day_bounds(day, tz)
+        window = working_window(day, tz, hours, replan=False)
+        today = [e for e in events if e.start_at < bounds.end and e.end_at > bounds.start]
+        busy = [Interval(e.start_at, e.end_at) for e in today if e.busy and e.end_at > e.start_at]
+        out.append(
+            WeekDayOut(
+                day=day,
+                window=None if window is None else WindowOut(start=window.start, end=window.end),
+                free_blocks=[
+                    FreeBlockOut(start=b.start, end=b.end, minutes=b.minutes)
+                    for b in calendar.free_blocks(window, busy)
+                ],
+                events=_week_events(today, links),
+                due=[_task_ref(task) for task in open_tasks if task.due_on == day],
+                planned=[
+                    PlannedBlockOut(
+                        task_id=row.task_id if row.task_id in mine else None,
+                        title=mine[row.task_id].title if row.task_id in mine else None,
+                        start=row.block_start,
+                        end=row.block_end,
+                    )
+                    for row in blocks
+                    if row.day == day
+                ],
+            )
+        )
+    planned_ids = {row.task_id for row in blocks}
+    unscheduled = [
+        _task_ref(task)
+        for task in open_tasks
+        if task.status in SCHEDULABLE_STATUSES
+        and task.label in {"human", "hybrid"}
+        and task.estimate_minutes is not None
+        and task.id not in planned_ids
+    ]
+    return WeekOut(monday=monday, timezone=zone, days=out, unscheduled=unscheduled)
+
+
+def _plan_task(task: tasks.TaskOut) -> PlanTask:
+    # A task whose label is still pending is scheduled as the human's (only AI tasks run
+    # without a block).
+    return PlanTask(
+        task_id=task.id,
+        project_id=task.project_id,
+        label=task.label or "human",
+        estimate_minutes=task.estimate_minutes,
+        status=task.status,
+        blocked=task.status == "waiting_on_human",
+        due_on=task.due_on,
+        priority=0,
+        rollover_count=task.rollover_count,
+        created_at=task.created_at,
+        eligible=task.status != "done",
+    )
+
+
+def _item_out(row: Any, day: date) -> PlanItemOut:
+    return PlanItemOut(
+        plan_id=row.plan_id,
+        task_id=row.task_id,
+        day=day,
+        position=row.position,
+        reason=row.reason,
+        block_start=row.block_start,
+        block_end=row.block_end,
+        version=row.version,
+    )
+
+
+def _refusal(violations: Sequence[Violation]) -> str:
+    codes = [v.code for v in violations]
+    return "block_not_free" if set(codes) & NOT_FREE else codes[0]
+
+
+async def _day_items(s: AsyncSession, day: date) -> tuple[UUID | None, list[Any]]:
+    """The day's published plan and its live items, locked for the write."""
+    plan_id: UUID | None = await s.scalar(
+        select(_PLANS.c.id).where(
+            _PLANS.c.day == day, _PLANS.c.status == "published", _PLANS.c.deleted_at.is_(None)
+        )
+    )
+    if plan_id is None:
+        return None, []
+    rows = await s.execute(
+        select(_ITEMS)
+        .where(_ITEMS.c.plan_id == plan_id, _ITEMS.c.deleted_at.is_(None))
+        .with_for_update()
+    )
+    return plan_id, list(rows.all())
 
 
 async def schedule_block(
@@ -348,5 +539,73 @@ async def schedule_block(
     now: datetime,
     session: AsyncSession | None = None,
 ) -> PlanItemOut:
-    """Upserts the task's item with this block in the day's published plan (P1-12)."""
-    raise NotImplementedError
+    """Upserts the task's item with this block in the day's published plan, creating a
+    `manual` plan for the day when it has none (P1-12, FR-2.6): the Calendar view's only
+    write. The block is checked with `validate_manual_block` against the day's free blocks
+    and the plan's other blocks, under a per-day lock; a violation raises ProblemError 409
+    `block_not_free` (outside free time or over another block) or the violation's own
+    code, with `current = {free_blocks, violations}`, and writes nothing. A `version`
+    that is not the item's raises StaleVersion (409). An unknown task is NotFound (404), a
+    Done one 409 `ineligible_task`, a block that ends before it starts 422."""
+    try:
+        block = Interval(body.block_start, body.block_end)
+    except ValueError:
+        raise ProblemError(422, "validation_error", "the block ends after it starts") from None
+    calendar_day = await day_calendar(ctx, day)
+    free = [Interval(b.start, b.end) for b in calendar_day.free_blocks]
+    async with session_for(ctx, session) as s:
+        await s.execute(_WEEK_LOCK, {"key": f"plan:{ctx.workspace_id}:{day.isoformat()}"})
+        task = await tasks.get_task(s, task_id)
+        if task.status == "done":
+            raise ProblemError(409, "ineligible_task", "a Done task cannot be scheduled")
+        plan_id, items = await _day_items(s, day)
+        current = next((row for row in items if row.task_id == task_id), None)
+        if body.version is not None and (current is None or current.version != body.version):
+            raise StaleVersion(
+                current={} if current is None else _item_out(current, day).model_dump(mode="json")
+            )
+        planned = [
+            Interval(row.block_start, row.block_end)
+            for row in items
+            if row.task_id != task_id and row.block_start is not None and row.removed_at is None
+        ]
+        violations = validate_manual_block(_plan_task(task), block, free, planned, now)
+        if violations:
+            raise ProblemError(
+                409,
+                _refusal(violations),
+                "That time is not free for this task.",
+                current={
+                    "free_blocks": [b.model_dump(mode="json") for b in calendar_day.free_blocks],
+                    "violations": [v.code for v in violations],
+                },
+            )
+        if plan_id is None:
+            plan_id = (
+                await s.execute(
+                    _PLANS.insert()
+                    .values(
+                        day=day, built_at=now, source="manual", trigger="manual", status="published"
+                    )
+                    .returning(_PLANS.c.id)
+                )
+            ).scalar_one()
+        stmt: Any
+        if current is None:
+            stmt = _ITEMS.insert().values(
+                plan_id=plan_id,
+                task_id=task_id,
+                position=max((row.position for row in items), default=0) + 1,
+                reason=MANUAL_REASON,
+                block_start=block.start,
+                block_end=block.end,
+            )
+        else:
+            stmt = (
+                update(_ITEMS)
+                .where(_ITEMS.c.id == current.id)
+                .values(block_start=block.start, block_end=block.end, removed_at=None)
+            )
+        row = (await s.execute(stmt.returning(*_ITEMS.c))).one()
+        live.mark_changed(s, "task", task_id)
+        return _item_out(row, day)

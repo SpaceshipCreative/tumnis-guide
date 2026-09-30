@@ -53,6 +53,9 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("search_index", "entity_type"): "task",  # ck_search_index_entity_type
     ("working_hours", "start_local"): time(9, 0),  # ck_working_hours_order
     ("working_hours", "end_local"): time(18, 0),
+    ("daily_plans", "source"): "manual",  # ck_daily_plans_source
+    ("daily_plans", "trigger"): "manual",  # ck_daily_plans_trigger
+    ("daily_plans", "status"): "superseded",  # ck_daily_plans_status
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
