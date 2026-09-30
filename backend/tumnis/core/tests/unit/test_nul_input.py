@@ -91,6 +91,27 @@ async def test_nul_in_path_param_is_422() -> None:
     _assert_refused(await _send("GET", "/v1/items/on%00e"))
 
 
+async def test_long_key_over_a_long_array_stays_small_in_memory() -> None:
+    """A long key over a long array holding one NUL: the walk keeps each child's location
+    as a reference to its parent, not a copy of the whole path, so memory stays near the
+    body's size (a copy per element would be key length x elements, here ~100 MB)."""
+    import json  # noqa: PLC0415
+    import tracemalloc  # noqa: PLC0415
+
+    key = "k" * 10_000
+    content = json.dumps({"name": "ok", "labels": {key: [0] * 9_999 + [NUL]}}).encode()
+    headers = {"content-type": "application/json"}
+    tracemalloc.start()
+    try:
+        response = await _send("POST", "/v1/items", content=content, headers=headers)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    _assert_refused(response)
+    assert peak < 20_000_000, f"peak {peak:,} bytes"
+    assert len(response.json()["detail"]) <= 300  # the location is cut short, not echoed
+
+
 async def test_escaped_backslash_before_u0000_is_not_a_nul() -> None:
     """`\\\\u0000` in JSON is a backslash followed by the text `u0000`: allowed."""
     content = b'{"name": "a\\\\u0000b"}'

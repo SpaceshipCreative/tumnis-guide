@@ -309,22 +309,38 @@ def _json_media(content_type: str | None) -> bool:
     return main == "application" and (sub == "json" or sub.endswith("+json"))
 
 
+NUL_WHERE_MAX: Final = 200  # a location longer than this is cut short in the detail
+
+# A location while walking: (parent location, key or index), None at the body's root. Each
+# child holds a reference to its parent, so a long key over a long array costs one small
+# tuple per element, not a copy of the whole path; the text is built only for a hit.
+_Where = tuple[Any, str | int] | None
+
+
+def _location(where: _Where) -> str:
+    parts: list[str] = []
+    while where is not None:
+        where, part = where
+        parts.append(str(part))
+    return ".".join(["body", *reversed(parts)])
+
+
 def _nul_in_json(document: Any) -> str | None:
     """Where the first string (a value or an object key) holding a NUL sits, as
     `body.a.0.b`; walked with a stack, so a deep document cannot exhaust the recursion."""
-    stack: list[tuple[Any, str]] = [(document, "body")]
+    stack: list[tuple[Any, _Where]] = [(document, None)]
     while stack:
         item, where = stack.pop()
         if isinstance(item, str):
             if NUL in item:
-                return where
+                return _location(where)
         elif isinstance(item, dict):
             for key, child in item.items():
                 if NUL in key:
-                    return where
-                stack.append((child, f"{where}.{key}"))
+                    return _location(where)
+                stack.append((child, (where, key)))
         elif isinstance(item, list):
-            stack.extend((child, f"{where}.{index}") for index, child in enumerate(item))
+            stack.extend((child, (where, index)) for index, child in enumerate(item))
     return None
 
 
@@ -362,6 +378,8 @@ async def _check_nul(request: Request) -> None:
     same answer)."""
     where = _nul_in_params(request) or await _nul_in_body(request)
     if where is not None:
+        if len(where) > NUL_WHERE_MAX:  # names come from the caller: never echo a long one
+            where = where[: NUL_WHERE_MAX - 3] + "..."
         raise ProblemError(422, "validation_error", f"{where}: {NUL_DETAIL}")
 
 
