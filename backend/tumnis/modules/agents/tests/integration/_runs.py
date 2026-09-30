@@ -15,6 +15,8 @@ agents api, the fake runner and the outbox.
   on an event the blocked relay would have had to deliver. `settle()` also waits until
   the world's fake runner holds the `run` message of every running run of its profiles
   (a run is `running` from `prepare_run`, a moment before its packet reaches the runner).
+  On exit it cancels the `dispatch_run` workflows of the runs still open (DBOS state only),
+  so teardown does not wait for a workflow parked in `recv`.
 - `finish(runner, run_id, output)`, `stream(runner, run_id, seq, text)`: what a daemon
   sends for a run (protocol-2 frames), with their message ids.
 - `wait_until(check)`, `owner_rows(db, sql, params)`, `workflow_status(run_id)`.
@@ -149,6 +151,26 @@ async def relay(db: DbUrls, *, poll_s: float = 0.1) -> AsyncIterator[None]:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await task
+        await _cancel_open_dispatches(db)
+
+
+async def _cancel_open_dispatches(db: DbUrls) -> None:
+    """Cancel the `dispatch_run` workflows of the runs the test left open, so the `dbos`
+    fixture's teardown does not wait out its 10 s for a workflow parked in `recv`. Only
+    DBOS state changes (no run, event or outbox row). DBOS 3.1.0 checks cancellation at a
+    workflow's next step, and `recv` does not wake for it: an empty message on the run's
+    topic wakes it, and its next step (`now_s`) aborts."""
+    from dbos import DBOS  # noqa: PLC0415
+
+    from tumnis.modules.agents import api  # noqa: PLC0415
+
+    open_runs = owner_rows(
+        db, "SELECT id FROM runs WHERE status IN ('queued', 'running', 'waiting_on_human')"
+    )
+    for (run_id,) in open_runs:
+        with contextlib.suppress(Exception):
+            await DBOS.cancel_workflow_async(str(run_id))
+            await DBOS.send_async(str(run_id), {}, topic=api.run_topic(run_id))
 
 
 def user_ctx(workspace: WorkspaceHandle) -> WorkspaceContext:
