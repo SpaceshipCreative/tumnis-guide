@@ -159,7 +159,9 @@ UPLOAD_POLICY = RoutePolicy(
         "the idempotency layer buffers the body, which an upload streams to disk; "
         "a retry is a new document"
     ),
-    max_body_bytes=MAX_UPLOAD_BYTES + MIB,
+    # A backstop only: the handler refuses the file itself (413 `too_large`) the moment it
+    # passes MAX_UPLOAD_BYTES. The margin is two chunks' worth so that refusal fires first.
+    max_body_bytes=MAX_UPLOAD_BYTES + 2 * MIB,
 )
 
 
