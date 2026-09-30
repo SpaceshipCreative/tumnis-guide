@@ -31,6 +31,9 @@ EVENTS_WORKER_CONCURRENCY = 8  # A9
 EVENTS_QUEUE_POLL_S = 0.2
 RELAY_BATCH = 100  # plan default
 POLL_SECONDS = 5.0  # plan default ("polls every few seconds as a backstop")
+# A direct subscriber only starts its own workflow; past this, the relay stops waiting
+# for it and queues its delivery instead, so one slow start never holds the relay's claim.
+DIRECT_TIMEOUT_S = 2.0
 
 
 class EventSchemaError(ValueError):
@@ -145,6 +148,7 @@ class Subscriber:
     max_attempts: int = 5
     base_delay_s: float = 2.0
     cap_s: float = 300.0
+    direct: bool = False
 
 
 _subscribers: dict[str, Subscriber] = {}
@@ -157,10 +161,16 @@ def subscribe(
     max_attempts: int = 5,
     base_delay_s: float = 2.0,
     cap_s: float = 300.0,
+    direct: bool = False,
 ) -> Callable[[Handler], Handler]:
     """Registers `handler` as subscriber `name` ("<module>.<handler>") of `event`. The name
     is part of every delivery's workflow ID: never rename a subscriber (add a new one and
-    delete the old). Handlers must be idempotent: a crash inside one re-runs it."""
+    delete the old). Handlers must be idempotent: a crash inside one re-runs it.
+
+    `direct=True` is for a handler that only starts its own durable workflow, keyed on the
+    event, and must not wait behind the events queue (the quick-add label's 1 s budget,
+    FR-3.3): the relay runs it itself, outside any DBOS step. If it raises, the relay
+    queues the ordinary delivery instead, with its retries and dead letter."""
     module, dot, handler_name = name.partition(".")
     if not (module and dot and handler_name):
         raise ValueError(f"subscriber name {name!r} is not '<module>.<handler>'")
@@ -171,7 +181,7 @@ def subscribe(
         if name in _subscribers:
             raise ValueError(f"subscriber {name} is already registered")
         _subscribers[name] = Subscriber(
-            name, module, event, handler, max_attempts, base_delay_s, cap_s
+            name, module, event, handler, max_attempts, base_delay_s, cap_s, direct
         )
         return handler
 
@@ -219,17 +229,33 @@ async def _enqueue(subscriber: str, envelope: EventEnvelope) -> None:
         )
 
 
+async def _run_direct(sub: Subscriber, envelope: EventEnvelope) -> bool:
+    """A direct subscriber's handler, run by the relay; False (logged) if it raised or took
+    longer than `DIRECT_TIMEOUT_S`, so the caller queues the ordinary delivery. Its
+    exception never reaches the relay's claim."""
+    try:
+        async with asyncio.timeout(DIRECT_TIMEOUT_S):
+            await run_subscriber(envelope, sub.name)
+    except Exception:
+        log.exception("direct subscriber %s failed; queueing its delivery", sub.name)
+        return False
+    return True
+
+
 async def relay_once(limit: int = RELAY_BATCH) -> int:
     """Claim up to `limit` unsent rows (app role, direct connection, no workspace), enqueue
     a delivery per subscriber, mark them sent, in one transaction. Returns the rows claimed.
     A subscriber whose module is off for the event's workspace (or the deployment) is
-    skipped (P0-08)."""
+    skipped (P0-08). A direct subscriber runs here instead of being queued, unless it
+    fails."""
     async with db.direct_sessionmaker()() as session, session.begin():
         rows = (await session.execute(CLAIM, {"n": limit})).mappings().all()
         for row in rows:
             envelope = EventEnvelope.from_outbox_row(row)
             for sub in subscribers_for(envelope.name):
-                if await modules.enabled(sub.module, envelope.workspace_id):  # P0-08
+                if not await modules.enabled(sub.module, envelope.workspace_id):  # P0-08
+                    continue
+                if not (sub.direct and await _run_direct(sub, envelope)):
                     await _enqueue(sub.name, envelope)
             faults.killpoint("relay.after_enqueue")
         if rows:

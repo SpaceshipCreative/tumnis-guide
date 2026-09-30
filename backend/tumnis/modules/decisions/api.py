@@ -15,11 +15,11 @@ logs every decision (typed answers, never the inputs) with a `decision.made` eve
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Final, Literal, Self
+from typing import Annotated, Any, Final, Literal, Self
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, model_validator
 from sqlalchemy import insert, null, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +31,13 @@ from tumnis.core.cache import CacheKey, CacheSpec, invalidate_on_commit, registe
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.net import NetPolicy
 from tumnis.core.outbox import emit
-from tumnis.core.settings_store import get_setting, open_for_workspace, seal_for_workspace
+from tumnis.core.settings_store import (
+    SettingSection,
+    get_setting,
+    open_for_workspace,
+    register_section,
+    seal_for_workspace,
+)
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.modules.decisions import generation_config
 from tumnis.modules.decisions.adapters.port import (
@@ -87,6 +93,7 @@ __all__ = [
     "Slot",
     "SubjectRef",
     "Threshold",
+    "TriageSettings",
     "TypedAnswer",
     "VllmSettings",
     "ask_raw",
@@ -97,6 +104,7 @@ __all__ = [
     "put_provider_config",
     "put_threshold",
     "record_outcome",
+    "use_providers",
 ]
 
 _log = structlog.get_logger(__name__)
@@ -283,6 +291,20 @@ class JevSettings(BaseModel):
 
 DEFAULT_VLLM_MODEL: Final = "vllm-local"
 
+ReservedJudgment = Annotated[str, StringConstraints(min_length=1, max_length=120)]
+
+
+class TriageSettings(BaseModel):
+    """Workspace setting `triage` (P1-07): `reserved_judgments`, the short list of calls
+    the user keeps for themselves (for example pricing, hiring); the quick-add label sends
+    it to Jev so such tasks come back Human. Empty by default."""
+
+    reserved_judgments: Annotated[list[ReservedJudgment], Field(max_length=10)] = []
+
+
+TRIAGE_SECTION: Final = "triage"
+register_section(SettingSection(TRIAGE_SECTION, TriageSettings))
+
 
 class VllmSettings(BaseModel):
     """Workspace setting `decisions.vllm`: where the fallback runs and the model it serves.
@@ -420,6 +442,14 @@ async def _threshold(s: AsyncSession, point: DecisionPoint, model: str) -> Thres
 
 _net_policy: list[NetPolicy] = [NetPolicy(mode="hosted")]  # the strictest until configured
 _built: dict[tuple[str, str], DecisionsProvider] = {}
+_override: list[Providers | None] = [None]
+
+
+def use_providers(providers: Providers | None) -> None:
+    """Every `decide` in this process that is not handed providers asks these instead of
+    the configured ones (tests: the fakes the queued workflows must see); None restores
+    the configured providers."""
+    _override[0] = providers
 
 
 def configure_net_policy(policy: NetPolicy) -> None:
@@ -595,7 +625,7 @@ async def decide(  # the plan's signature plus the injected providers and clock
     vllm_setting = await get_setting(ctx, "decisions.vllm", VllmSettings)
     vllm = VllmSettings() if vllm_setting is None else vllm_setting.value
     if providers is None:
-        providers = _production_providers(config, vllm)
+        providers = _override[0] or _production_providers(config, vllm)
     chain = _chain(config, providers, vllm_model=vllm.model, local_only=local_only)
     asked = await _ask(ctx, config, chain, req, spec, clock)
 

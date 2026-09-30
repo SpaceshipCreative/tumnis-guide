@@ -79,35 +79,53 @@ from tumnis.modules.tasks.models import (
 )
 from tumnis.modules.tasks.payloads import (
     DOC_BODY_MAX_BYTES,
+    HumanDecidedV1,
     TaskCreatedV1,
     TaskDoc,
     TaskStatusChangedV1,
     TaskUpdatedV1,
 )
 from tumnis.modules.tasks.review import (
+    LABEL_KIND,
     DuplicateReviewKind,
+    LowConfidenceLabelPayload,
     ReviewKindSpec,
     TargetRef,
     UnknownReviewKind,
     add_review_item,
+    close_open_items,
     flag_pull_request_results,
     register_review_kind,
     review_badge_count,
     review_kinds,
 )
-from tumnis.modules.tasks.rules import ActorKind, Label, Status
+from tumnis.modules.tasks.rules import (
+    ActorKind,
+    Label,
+    LabelSource,
+    LabelState,
+    Status,
+    label_state,
+    may_auto_label,
+)
 from tumnis.modules.tasks.rules_recurrence import Preset
 from tumnis.seed import TaskSeed, register_seed_writer
 
 __all__ = [
+    "LABEL_KIND",
     "ActorKind",
     "DuplicateReviewKind",
     "Label",
+    "LabelSource",
+    "LabelState",
+    "LowConfidenceLabelPayload",
     "ReviewKindSpec",
     "Status",
     "TargetRef",
     "UnknownReviewKind",
     "add_review_item",
+    "label_state",
+    "may_auto_label",
     "register_review_kind",
     "review_badge_count",
     "review_kinds",
@@ -122,7 +140,6 @@ _changes: Table = TaskChange.__table__  # type: ignore[assignment]
 LIVE_ENTITY: Final = "task"
 PROJECT_ENTITY: Final = "project"  # column edits refresh the project's views
 Priority = Literal["low", "normal", "high", "urgent"]
-LabelSource = Literal["user", "jev", "agent", "fallback"]
 TaskOrder = Literal["created", "today"]
 Title = Annotated[str, StringConstraints(min_length=1, max_length=500, strip_whitespace=True)]
 Estimate = Annotated[int, Field(gt=0, le=MAX_ESTIMATE_MINUTES)]
@@ -181,6 +198,10 @@ class TaskOut(BaseModel):
     title: str
     label: Label | None
     label_source: LabelSource | None
+    # P1-07: the one-line reason for the label (or the suggestion), and a low-confidence
+    # suggestion shown while `label` stays pending (R-08).
+    label_reason: str | None
+    label_suggestion: Label | None
     status: Status
     priority: Priority
     due_on: date | None
@@ -382,8 +403,27 @@ register_project_lookup("tasks", project_of)
 # --- Reading ---------------------------------------------------------------------------------
 
 
+AI_LABEL_SOURCES: Final = frozenset({"jev", "fallback"})
+
+
 async def get_task(s: AsyncSession, task_id: UUID) -> TaskOut:
-    return _out(await _row(s, task_id))
+    """The task. While its label is still the AI's own write (P1-07), `change_id` names
+    that write, so the open UI can offer to undo it for the session (UX 9)."""
+    row = await _row(s, task_id)
+    change_id = None
+    if row["label_source"] in AI_LABEL_SOURCES:
+        change_id = await s.scalar(
+            select(_changes.c.change_id)
+            .where(
+                _changes.c.task_id == task_id,
+                _changes.c.task_version == row["version"],
+                _changes.c.undone_at.is_(None),
+                _changes.c.actor == str(SYSTEM_ACTOR),
+            )
+            .order_by(_changes.c.change_id.desc())
+            .limit(1)
+        )
+    return _with_change(row, change_id)
 
 
 async def list_tasks(
@@ -622,6 +662,9 @@ async def _record(
     before, after = rules.change_between(before_row, after_row)
     if not before:
         return None
+    if "label" in before:  # who set the label goes back with it on undo (P1-07)
+        before["label_source"] = before_row["label_source"]
+        after["label_source"] = after_row["label_source"]
     return await record_change(s, actor, after_row["id"], before, after)
 
 
@@ -751,10 +794,17 @@ async def update_task(
     *,
     now: datetime | None = None,
     label_source: LabelSource | None = None,
+    label_override: bool = True,
 ) -> TaskOut:
     """Changes the fields the patch sets at `version`; emits `task.updated` with the names
     of the fields whose value changed (R-06). Setting a label records who set it
-    (`label_source`); the estimate rule applies whenever the label or estimate changes."""
+    (`label_source`); the estimate rule applies whenever the label or estimate changes.
+
+    A person changing a label the AI decided (P1-07: `label_decision_id` set or a
+    `label_suggestion` waiting, and not already the user's) is a recorded human decision:
+    `human.decided` with `item_kind = label_override` (R-07) and the open
+    `low_confidence_label` items of the task closed as `superseded`. A caller that already
+    records the decision another way passes `label_override=False`."""
     row = await _row(s, task_id)  # 404 before any body rule (A0.3, #28)
     values = patch.model_dump(exclude_unset=True, exclude={"version"})
     for required in ("title", "priority"):
@@ -769,11 +819,163 @@ async def update_task(
         values["label_source"] = (
             None if values["label"] is None else (label_source or _LABEL_SOURCE[kind])
         )
+    if values.get("label") is not None:  # a person's (or agent's) label ends the suggestion
+        values["label_suggestion"] = None
     changed = [field for field, value in values.items() if row[field] != value]
     updated = await _versioned(s, task_id, version, values or {"updated_at": func.now()})
     if changed:
         await _changed(s, updated, changed, now)
+    if label_override and kind is ActorKind.HUMAN and "label" in changed:
+        await _label_overridden(s, row, updated, now)
     return _with_change(updated, await _record(s, actor, row, updated))
+
+
+async def _label_overridden(
+    s: AsyncSession, row: Mapping[Any, Any], updated: Mapping[Any, Any], now: datetime | None
+) -> None:
+    """`human.decided` for a person's label over the AI's (P1-07, R-07), and the task's
+    open low-confidence items closed as superseded."""
+    ai_decided = row["label_decision_id"] is not None or row["label_suggestion"] is not None
+    if not ai_decided or row["label_source"] == "user" or updated["label"] is None:
+        return
+    at = _now(now)
+    chosen = str(updated["label"])
+    proposed = row["label_suggestion"] or row["label"]
+    await emit(
+        s,
+        HumanDecidedV1(
+            item_kind="label_override",
+            item_id=row["id"],
+            target_type="task",
+            target_id=row["id"],
+            decision=chosen,
+            previous={
+                "label": row["label"],
+                "label_source": row["label_source"],
+                "label_suggestion": row["label_suggestion"],
+            },
+            payload={"value": chosen, "overridden": chosen != proposed},
+            decision_id=row["label_decision_id"],
+        ),
+        occurred_at=at,
+    )
+    await close_open_items(
+        s, LABEL_KIND, TargetRef(type="task", id=row["id"]), decision="superseded", at=at
+    )
+
+
+# --- AI labels (P1-07, FR-4.1, R-08) ---------------------------------------------------------
+
+
+def _retitled(row: RowMapping, for_title: str | None) -> bool:
+    """Whether the task's title is no longer the one the AI's answer was decided for."""
+    return for_title is not None and row["title"] != for_title
+
+
+async def set_ai_label(
+    s: AsyncSession,
+    task_id: UUID,
+    *,
+    label: Label,
+    source: Literal["jev", "fallback"],
+    reason: str,
+    confidence: float | None,
+    decision_id: UUID,
+    for_title: str | None = None,
+    now: datetime | None = None,
+) -> UUID | None:
+    """The AI's label, unless a person chose one first: the row is locked and updated only
+    while `label_source` is not `user`, so a human override committed while the decision
+    ran always wins (None, nothing written). With `for_title` (the title the label was
+    decided for), nothing is written once the title has changed: the retitle's own label
+    is on its way (FR-4.1). Clears any suggestion, bumps the version,
+    records the change (R-09, undoable by a person) and returns its id; emits
+    `task.updated` with `label`, `label_reason` and `label_source` and marks the task
+    changed for /ws."""
+    row = await _row(s, task_id, lock=True)
+    if not may_auto_label(row["label_source"]) or _retitled(row, for_title):
+        return None
+    values = {
+        "label": label,
+        "label_source": source,
+        "label_reason": reason,
+        "label_confidence": confidence,
+        "label_decision_id": decision_id,
+        "label_suggestion": None,
+    }
+    updated = (
+        (
+            await s.execute(
+                update(_tasks)
+                .where(
+                    _tasks.c.id == task_id,
+                    _live(_tasks),
+                    _tasks.c.label_source.is_distinct_from("user"),
+                )
+                .values(**values)
+                .returning(*_tasks.c)
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if updated is None:
+        return None
+    await _changed(s, updated, ["label", "label_reason", "label_source"], now)
+    return await record_change(
+        s,
+        SYSTEM_ACTOR,
+        task_id,
+        {"label": row["label"], "label_source": row["label_source"]},
+        {"label": str(label), "label_source": source},
+    )
+
+
+async def set_label_suggestion(
+    s: AsyncSession,
+    task_id: UUID,
+    *,
+    suggestion: Label,
+    reason: str | None,
+    confidence: float | None,
+    decision_id: UUID,
+    probabilities: Mapping[str, float] | None = None,
+    for_title: str | None = None,
+    now: datetime | None = None,
+) -> bool:
+    """A low-confidence label: kept as `label_suggestion` (the label stays pending, R-08)
+    with one open `low_confidence_label` review item for the human, unless a person has
+    chosen the label, or the title is no longer `for_title` (False, nothing written).
+    Emits `task.updated` with `label_suggestion`."""
+    row = await _row(s, task_id, lock=True)
+    if not may_auto_label(row["label_source"]) or _retitled(row, for_title):
+        return False
+    updated = await _versioned(
+        s,
+        task_id,
+        row["version"],
+        {
+            "label_suggestion": suggestion,
+            "label_reason": reason,
+            "label_confidence": confidence,
+            "label_decision_id": decision_id,
+        },
+    )
+    await _changed(s, updated, ["label_suggestion"], now)
+    await add_review_item(
+        LABEL_KIND,
+        target=TargetRef(type="task", id=task_id),
+        project_id=row["project_id"],
+        payload=LowConfidenceLabelPayload(
+            suggested=suggestion,
+            probabilities=dict(probabilities or {}),
+            reason=reason,
+            decision_id=decision_id,
+        ).model_dump(mode="json"),
+        dedupe_key=f"label:{task_id}",
+        session=s,
+    )
+    return True
 
 
 async def _transition(  # one path for /status and /move
@@ -972,6 +1174,8 @@ async def undo_task(
         raise _stale(row)
     at = _now(now)
     values = rules.restore_values(change["before"], row["completed_at"], at)
+    if "label" in values and "label_source" in change["before"]:
+        values["label_source"] = change["before"]["label_source"]
     if "status" in values or "column_id" in values:
         await _restored_column(s, row, values)
     updated = (
