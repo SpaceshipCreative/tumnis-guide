@@ -20,6 +20,7 @@ import pytest
 from tumnis.modules.tasks.tests.conftest import owner_rows
 
 if TYPE_CHECKING:
+    from dbos import DBOS
     from fastapi import FastAPI
 
     from tests._auth import SessionClient
@@ -388,6 +389,7 @@ async def test_decide_emits_human_decided_and_owner_applies(  # noqa: PLR0917
     make_project: MakeProject,
     db: DbUrls,
     workspace: WorkspaceHandle,
+    dbos: type[DBOS],
 ) -> None:
     """T-P1-13-09
     Accepting a `low_confidence_label` item closes it and emits `human.decided` with the
