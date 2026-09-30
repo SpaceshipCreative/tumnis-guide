@@ -33,7 +33,7 @@ from tumnis.core import tenancy
 from tumnis.core.schemas import VersionedPayload, versioned
 from tumnis.core.tenancy import WorkspaceContext, session_for
 from tumnis.core.versioning import NotFound
-from tumnis.modules.agents.models import AgentProfile
+from tumnis.modules.agents.models import AgentProfile, RunRow
 from tumnis.modules.agents.protocol import SchemaRef
 from tumnis.modules.agents.rules import (
     CONTEXT_ITEM_MAX_BYTES,
@@ -49,6 +49,7 @@ from tumnis.modules.agents.rules import (
     render_task_prompt,
     truncate_utf8,
 )
+from tumnis.modules.auth import api as auth
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.knowledge import api as knowledge
 from tumnis.modules.projects import api as projects
@@ -77,6 +78,7 @@ __all__ = [
 ]
 
 _profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
+_runs: Table = RunRow.__table__  # type: ignore[assignment]
 
 
 # --- The task packet (P2-02, FR-5.4, SAF-1, R-24) --------------------------------------------
@@ -594,6 +596,30 @@ def new_nonce() -> str:
     return f"u-{secrets.token_hex(8)}"
 
 
+_RUN_AUTHOR: Final = "task_token:"
+
+
+async def _tainted_token_authors(s: AsyncSession, authors: set[str]) -> set[str]:
+    """The comment authors that are task tokens of a tainted run (P2-08: a task token's
+    comment follows its run's taint)."""
+    by_token: dict[UUID, str] = {}
+    for author in authors:
+        if author.startswith(_RUN_AUTHOR):
+            try:
+                by_token[UUID(author.removeprefix(_RUN_AUTHOR))] = author
+            except ValueError:
+                continue
+    runs = await auth.task_token_runs(s, by_token)
+    if not runs:
+        return set()
+    tainted: set[UUID] = set(
+        await s.scalars(
+            select(_runs.c.id).where(_runs.c.id.in_(set(runs.values())), _runs.c.tainted)
+        )
+    )
+    return {by_token[token] for token, run in runs.items() if run in tainted}
+
+
 async def gather_inputs(
     s: AsyncSession, task_id: UUID, *, profile_id: UUID | None = None
 ) -> PacketInputs:
@@ -602,6 +628,7 @@ async def gather_inputs(
     `knowledge.api.passages_for` lands; until then the packet carries none."""
     task = await tasks.get_task(s, task_id)
     comments = (await tasks.list_comments(s, task_id, limit=COMMENTS_LIMIT)).items
+    tainted_tokens = await _tainted_token_authors(s, {c.created_by for c in comments})
     context = await projects.project_context(s, task.project_id)
     policy = await projects.get_policy(s, task.project_id)
     try:
@@ -635,7 +662,11 @@ async def gather_inputs(
             by_user=task.source != "agent",
         ),
         comments=[
-            CommentInput(author=c.created_by, body=c.body_md, tainted=comment_tainted(c.created_by))
+            CommentInput(
+                author=c.created_by,
+                body=c.body_md,
+                tainted=comment_tainted(c.created_by, run_tainted=c.created_by in tainted_tokens),
+            )
             for c in comments
         ],
         project=ProjectInput(

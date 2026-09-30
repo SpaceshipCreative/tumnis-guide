@@ -18,6 +18,7 @@ import {
   FIELD,
   FIELD_LABEL,
 } from "../common/ui";
+import { TaintBadge } from "../common/TaintBadge";
 import { ANSWER, LABELS, slotFor, type Editor } from "./slots";
 
 export type Mode = "idle" | "edit" | "answer" | "snooze";
@@ -164,6 +165,11 @@ export function ReviewItemCard({
       </header>
       <div className={CARD_BODY}>
         <p className="text-sm text-muted">{slot.summary(item)}</p>
+        {item.target_tainted && (
+          <div>
+            <TaintBadge />
+          </div>
+        )}
 
         {mode === "idle" && (
           <div className="flex flex-wrap gap-2">

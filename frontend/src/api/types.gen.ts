@@ -2309,7 +2309,8 @@ export type ReviewCountOut = {
  * ReviewItemOut
  *
  * One item as the queue shows it: its kind's actions and primary action (Enter, R-04),
- * its target's title when the target is a task or a project, and its impact.
+ * its target's title when the target is a task or a project, whether that task is
+ * tainted (P2-08: the queue shows the taint mark), and its impact.
  */
 export type ReviewItemOut = {
   /**
@@ -2366,6 +2367,10 @@ export type ReviewItemOut = {
    * Target Id
    */
   target_id: string;
+  /**
+   * Target Tainted
+   */
+  target_tainted?: boolean;
   /**
    * Target Title
    */
