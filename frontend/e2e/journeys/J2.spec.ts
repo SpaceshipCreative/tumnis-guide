@@ -1,7 +1,7 @@
 // A0.1 · Capture to dashboard by hand (journey J2). T-P0-05-01.
 // Phase 0 acceptance, committed red by P0-05. Turns green with P0-13 (steps 1
 // to 4), P0-17 (5), P0-20 and P0-25 (6 to 8), P0-24 (9 to 11), P0-23 (12); the
-// `test.fail()` came off with P0-25, the last of P0-25 and P0-23 to merge.
+// `test.fail()` comes off when the last of P0-25 and P0-23 merges.
 //
 // A1.1 · Quick-add with AI label and enrichment (journey J2). Phase 1
 // acceptance, committed red on the phase's first day. Turns green with P1-07
@@ -55,6 +55,7 @@ test(
     ],
   },
   async ({ seededApp, page, context }, testInfo) => {
+    test.fail();
     const phone = testInfo.project.name === "phone";
     const user = seedUser();
     expect(seededApp.baseURL).toBeTruthy(); // seed set loaded
