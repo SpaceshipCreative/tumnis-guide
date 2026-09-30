@@ -16,6 +16,7 @@ from typing import Any, Final
 from uuid import UUID
 
 from fastapi import Request
+from python_multipart.exceptions import MultipartParseError
 from python_multipart.multipart import MultipartParser, parse_options_header
 
 from tumnis.core.errors import ProblemError
@@ -165,7 +166,10 @@ async def spool_upload(
     await asyncio.to_thread(dest.parent.mkdir, parents=True, exist_ok=True)
     try:
         async for chunk in request.stream():
-            parser.write(chunk)
+            try:
+                parser.write(chunk)
+            except MultipartParseError:
+                raise _bad("The body is not valid multipart/form-data") from None
             for kind, value in collector.events:
                 if kind == "start":
                     await sink.start(value)
@@ -174,7 +178,10 @@ async def spool_upload(
                 else:
                     await sink.end()
             collector.events.clear()
-        parser.finalize()
+        try:
+            parser.finalize()
+        except MultipartParseError:
+            raise _bad("The body is not valid multipart/form-data") from None
         if result.name is None:
             raise _bad("The body has no file part")
     except BaseException:
