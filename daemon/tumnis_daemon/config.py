@@ -1,4 +1,4 @@
-"""The daemon's configuration (`/etc/tumnis/daemon.toml`, P1-04).
+"""The daemon's configuration (`/etc/tumnis/daemon.toml`, P1-04, P2-07).
 
 ```toml
 server_url = "wss://tumnis.example.org"   # /ws/runner is appended
@@ -8,13 +8,23 @@ state_dir = "/var/lib/tumnis-daemon"
 hermes_bin = "hermes"
 profiles = ["tumnis-master", "acme-site"]
 max_concurrent_runs = 2
+# P2-07 (defaults shown)
+agent_home = "/home/tumnis-agent"          # a `path` code location must sit under it...
+paths_dropin = "/etc/systemd/system/tumnis-daemon.service.d/paths.conf"  # ...or be listed
+kill_grace_s = 10.0                        # SIGTERM to SIGKILL on cancel
+outbox_max_bytes = 52428800                # 50 MiB; past it, old log lines give way
 ```
 """
 
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
+
+AGENT_HOME: Final = Path("/home/tumnis-agent")  # R-26
+PATHS_DROPIN: Final = Path("/etc/systemd/system/tumnis-daemon.service.d/paths.conf")
+KILL_GRACE_S: Final = 10.0  # plan default
+OUTBOX_MAX_BYTES: Final = 50 * 1024 * 1024  # plan default
 
 
 @dataclass(frozen=True)
@@ -26,6 +36,10 @@ class DaemonConfig:
     hermes_bin: str = "hermes"
     profiles: tuple[str, ...] = field(default_factory=tuple)
     max_concurrent_runs: int = 2  # plan default
+    agent_home: Path = AGENT_HOME
+    paths_dropin: Path = PATHS_DROPIN
+    kill_grace_s: float = KILL_GRACE_S
+    outbox_max_bytes: int = OUTBOX_MAX_BYTES
 
     def read_token(self) -> str:
         return self.token_file.read_text(encoding="utf-8").strip()
@@ -41,4 +55,8 @@ def load_config(path: Path) -> DaemonConfig:
         hermes_bin=str(data.get("hermes_bin", "hermes")),
         profiles=tuple(str(p) for p in data.get("profiles", ())),
         max_concurrent_runs=int(data.get("max_concurrent_runs", 2)),
+        agent_home=Path(data.get("agent_home", AGENT_HOME)),
+        paths_dropin=Path(data.get("paths_dropin", PATHS_DROPIN)),
+        kill_grace_s=float(data.get("kill_grace_s", KILL_GRACE_S)),
+        outbox_max_bytes=int(data.get("outbox_max_bytes", OUTBOX_MAX_BYTES)),
     )

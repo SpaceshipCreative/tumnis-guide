@@ -1,0 +1,272 @@
+{
+  "notes": "Scrubbed: owners, repositories, user logins and ids, node ids, SHAs, titles, bodies, branch names, timestamps and ETags replaced with invented values; avatar, gravatar and email fields removed; example repositories on github.com. Shapes follow the GitHub REST API (X-GitHub-Api-Version 2022-11-28): GET /repos/{owner}/{repo}/pulls/{n}, /commits/{ref}/status, /commits/{ref}/check-runs and /pulls/{n}/reviews.",
+  "pull": {
+    "owner": "brio-example",
+    "repo": "api",
+    "number": 9
+  },
+  "rounds": 1,
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/repos/brio-example/api/pulls/9",
+      "query": {},
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"46638b3a504267132635fab43f64b8e66a579e3ddce3542d9843b85b48f39ec3\""
+      },
+      "body": {
+        "url": "https://api.github.com/repos/brio-example/api/pulls/9",
+        "id": 51009,
+        "node_id": "PR_example51009",
+        "html_url": "https://github.com/brio-example/api/pull/9",
+        "number": 9,
+        "state": "open",
+        "locked": false,
+        "title": "Bump the parser",
+        "user": {
+          "login": "ana-example",
+          "id": 9001,
+          "node_id": "U_example9001",
+          "html_url": "https://github.com/ana-example",
+          "type": "User",
+          "site_admin": false
+        },
+        "body": "Invented description.",
+        "created_at": "2026-03-08T09:00:00Z",
+        "updated_at": "2026-03-09T11:30:00Z",
+        "closed_at": null,
+        "merged_at": null,
+        "merge_commit_sha": null,
+        "assignee": null,
+        "assignees": [],
+        "requested_reviewers": [],
+        "requested_teams": [],
+        "labels": [],
+        "draft": false,
+        "head": {
+          "label": "brio-example:feature-9",
+          "ref": "feature-9",
+          "sha": "61b0a458b7fd44b0534036afeb7321fb983d1b29",
+          "user": {
+            "login": "brio-example",
+            "id": 5101,
+            "node_id": "U_example5101",
+            "html_url": "https://github.com/brio-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "repo": {
+            "id": 5100,
+            "node_id": "R_example5100",
+            "name": "api",
+            "full_name": "brio-example/api",
+            "private": true,
+            "owner": {
+              "login": "brio-example",
+              "id": 5101,
+              "node_id": "U_example5101",
+              "html_url": "https://github.com/brio-example",
+              "type": "User",
+              "site_admin": false
+            },
+            "html_url": "https://github.com/brio-example/api",
+            "default_branch": "main"
+          }
+        },
+        "base": {
+          "label": "brio-example:main",
+          "ref": "main",
+          "sha": "3ffcd47ad425af30b08f442cecf5fda047690b1a",
+          "user": {
+            "login": "brio-example",
+            "id": 5101,
+            "node_id": "U_example5101",
+            "html_url": "https://github.com/brio-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "repo": {
+            "id": 5100,
+            "node_id": "R_example5100",
+            "name": "api",
+            "full_name": "brio-example/api",
+            "private": true,
+            "owner": {
+              "login": "brio-example",
+              "id": 5101,
+              "node_id": "U_example5101",
+              "html_url": "https://github.com/brio-example",
+              "type": "User",
+              "site_admin": false
+            },
+            "html_url": "https://github.com/brio-example/api",
+            "default_branch": "main"
+          }
+        },
+        "author_association": "MEMBER",
+        "merged": false,
+        "mergeable": true,
+        "mergeable_state": "clean",
+        "merged_by": null,
+        "comments": 1,
+        "review_comments": 0,
+        "commits": 3,
+        "additions": 40,
+        "deletions": 7,
+        "changed_files": 4
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/brio-example/api/commits/61b0a458b7fd44b0534036afeb7321fb983d1b29/status",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"c81df5db6e96e9f9791e0ced3c5ddb3f965f0d03c84243f536a2096dd98bc7f8\""
+      },
+      "body": {
+        "state": "success",
+        "statuses": [
+          {
+            "url": "https://api.github.com/repos/brio-example/api/statuses/61b0a458b7fd44b0534036afeb7321fb983d1b29",
+            "id": 7000,
+            "node_id": "SC_example7000",
+            "state": "success",
+            "description": "ci/build success",
+            "target_url": "https://ci.example.com/brio-example/api/7000",
+            "context": "ci/build",
+            "created_at": "2026-03-09T11:00:00Z",
+            "updated_at": "2026-03-09T11:05:00Z"
+          },
+          {
+            "url": "https://api.github.com/repos/brio-example/api/statuses/61b0a458b7fd44b0534036afeb7321fb983d1b29",
+            "id": 7001,
+            "node_id": "SC_example7001",
+            "state": "success",
+            "description": "ci/test success",
+            "target_url": "https://ci.example.com/brio-example/api/7001",
+            "context": "ci/test",
+            "created_at": "2026-03-09T11:00:00Z",
+            "updated_at": "2026-03-09T11:05:00Z"
+          }
+        ],
+        "sha": "61b0a458b7fd44b0534036afeb7321fb983d1b29",
+        "total_count": 2,
+        "repository": {
+          "id": 5000,
+          "node_id": "R_example5000",
+          "name": "api",
+          "full_name": "brio-example/api",
+          "private": true,
+          "owner": {
+            "login": "brio-example",
+            "id": 5001,
+            "node_id": "U_example5001",
+            "html_url": "https://github.com/brio-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "html_url": "https://github.com/brio-example/api",
+          "default_branch": "main"
+        },
+        "commit_url": "https://api.github.com/repos/brio-example/api/commits/61b0a458b7fd44b0534036afeb7321fb983d1b29"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/brio-example/api/commits/61b0a458b7fd44b0534036afeb7321fb983d1b29/check-runs",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"2dd6690d96951d81e67047576004f0e60907f562e6bab0dcc74f9a50fc658a53\""
+      },
+      "body": {
+        "total_count": 0,
+        "check_runs": []
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/repos/brio-example/api/pulls/9/reviews",
+      "query": {
+        "per_page": "100"
+      },
+      "if_none_match": null,
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-github-api-version-selected": "2022-11-28",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1773061200",
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-used": "10",
+        "etag": "W/\"fa0ef1537869730ab83e37f57f8b8ed93b5f1e8a2d8429df3c0b923df97f6b9f\""
+      },
+      "body": [
+        {
+          "id": 9500,
+          "node_id": "PRR_example9500",
+          "user": {
+            "login": "ana-example",
+            "id": 9200,
+            "node_id": "U_example9200",
+            "html_url": "https://github.com/ana-example",
+            "type": "User",
+            "site_admin": false
+          },
+          "body": "",
+          "state": "APPROVED",
+          "html_url": "https://github.com/brio-example/api/pull/9#pullrequestreview-9500",
+          "pull_request_url": "https://api.github.com/repos/brio-example/api/pulls/9",
+          "author_association": "MEMBER",
+          "submitted_at": "2026-03-09T08:00:00Z",
+          "commit_id": "314a8797d022cb5bfb110125bc6c2ca80345e2f0"
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "external_id": "brio-example/api#9",
+    "url": "https://github.com/brio-example/api/pull/9",
+    "state": "open",
+    "pr_status": {
+      "repo": "brio-example/api",
+      "number": 9,
+      "title": "Bump the parser",
+      "draft": false,
+      "head_sha": "61b0a458b7fd44b0534036afeb7321fb983d1b29",
+      "checks": "green",
+      "review": "approved"
+    }
+  }
+}

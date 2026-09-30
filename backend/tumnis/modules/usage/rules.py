@@ -34,11 +34,27 @@ def _one(_payload: Mapping[str, Any]) -> int:
     return 1
 
 
+def _field(name: str) -> CounterFn:
+    """The payload's non-negative integer `name` (0 when absent or not a count)."""
+
+    def amount(payload: Mapping[str, Any]) -> int:
+        value = payload.get(name, 0)
+        return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+    return amount
+
+
 COUNTERS: Final[Mapping[str, Counters]] = _ReadOnly(
     {
         "task.created": (("tasks_created", _one),),
         "project.created": (("projects_created", _one),),
         "decision.made": (("decisions", _one),),  # P1-02
+        # P2-13: GitHub requests made by a pull request refresh, and how many of them GitHub
+        # answered 304 Not Modified (those do not count against its rate limit)
+        "github.fetched": (
+            ("github_requests", _field("requests")),
+            ("github_not_modified", _field("not_modified")),
+        ),
         # added by later WPs: run.finished -> runs, run_minutes (ceil(duration_s / 60));
         # items.ingested -> ingested_items (len(item_ids))
     }
