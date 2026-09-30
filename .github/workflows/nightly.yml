@@ -47,3 +47,27 @@ jobs:
               "tumnis/core/tests/integration/test_relay.py::test_worker_killed_after_handler_step_does_not_rerun_it" \
               || exit 1
           done
+
+  # P2-11 (SAF-6, A2.7): the whole hostile set, every case and its benign twin against
+  # every skill, 3 runs each, through the real Hermes with the recording mock MCP servers
+  # only. It needs the homelab runner and its pinned model, so it is skipped until the
+  # repo variable HOMELAB_RUNNER is "true". Not a required check; A2.7 is judged here.
+  skills-hostile:
+    if: vars.HOMELAB_RUNNER == 'true'
+    runs-on: [self-hosted, homelab, hermes]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # Hermes' own tools can read the workspace
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: profiles/uv.lock
+      - name: Hostile suite, every case and twin on every skill, 3 runs each
+        working-directory: profiles
+        run: |
+          uv sync
+          uv run python -m harness coverage --suite hostile
+          uv run python -m harness run --suite hostile --runs 3 \
+            --junit "$RUNNER_TEMP/hostile-junit.xml"
