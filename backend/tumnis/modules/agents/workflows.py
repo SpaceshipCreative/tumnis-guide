@@ -1025,16 +1025,19 @@ async def enrich_load_step(
 ) -> dict[str, Any] | None:
     """The task's snapshot, its project's name and the enrichment's settings (R-30, read
     here so a replay keeps them); None when the task is gone or needs nothing, or its
-    project has no agent profile at all (nothing is written then: the first action shows
-    as pending, and P1-06's provisioning gives the project its agent)."""
-    async with tenant_session(_ctx(workspace_id)) as s:
+    project has no provisioned agent (no profile, or one still `provisioning` or
+    `not_provisioned`): nothing is written to the task then, and its first action shows
+    as pending. An offline agent goes on: the placeholder, then `agent_offline`."""
+    ctx = _ctx(workspace_id)
+    async with tenant_session(ctx) as s:
         snap = await _read_snapshot(s, UUID(task_id))
         if snap is None or not needs_enrichment(snap) or not _wanted(snap, only):
             return None
-        if await _project_profile(s, snap.project_id) is None:
-            return None
         names = await projects.project_names(s, [snap.project_id])
     config = api.enrichment_config()
+    now = (config.clock or SystemClock()).now()
+    if await api.agent_for_project(snap.project_id, now=now, ctx=ctx) == "not_provisioned":
+        return None
     return {
         "snapshot": snap.model_dump(mode="json"),
         "project_name": names.get(snap.project_id, ""),

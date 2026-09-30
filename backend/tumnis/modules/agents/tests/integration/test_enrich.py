@@ -76,7 +76,6 @@ def _outlier_items(db: DbUrls, task_id: uuid.UUID) -> list[dict[str, Any]]:
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_missing_first_action_and_criteria_are_filled(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -113,7 +112,6 @@ async def test_missing_first_action_and_criteria_are_filled(
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_ai_task_never_gets_estimate(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -149,7 +147,6 @@ async def test_ai_task_never_gets_estimate(
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_hybrid_gets_human_portion_estimate(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -186,7 +183,6 @@ async def test_hybrid_gets_human_portion_estimate(
 
 @pytest.mark.req("FR-4.6", "UX 5")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_placeholder_first_then_replaced(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -233,7 +229,6 @@ async def test_placeholder_first_then_replaced(
 
 @pytest.mark.req("FR-4.6", "UX 5")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_generation_timeout_leaves_first_action_pending(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -270,7 +265,6 @@ async def test_generation_timeout_leaves_first_action_pending(
 
 @pytest.mark.req("FR-4.6")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_one_project_offline_other_completes(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -329,7 +323,6 @@ async def test_one_project_offline_other_completes(
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_request_carries_brief_and_estimate_history(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -394,7 +387,6 @@ async def test_request_carries_brief_and_estimate_history(
 
 @pytest.mark.req("FR-4.4", "FR-11.4")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_plausibility_flags_outlier(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -466,7 +458,6 @@ async def test_plausibility_flags_outlier(
 
 @pytest.mark.req("UX 9")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_user_edit_during_run_wins(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -518,7 +509,6 @@ async def test_user_edit_during_run_wins(
 
 @pytest.mark.req("UX 9")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_enrichment_undo_restores_previous_values(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -570,7 +560,6 @@ async def test_enrichment_undo_restores_previous_values(  # noqa: PLR0917
 
 @pytest.mark.req("FR-4.1")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_agent_label_revision_respects_human_choice(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -632,7 +621,6 @@ async def test_agent_label_revision_respects_human_choice(
 
 @pytest.mark.req("FR-4.6")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_invalid_json_fails_cleanly(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -669,7 +657,6 @@ async def test_invalid_json_fails_cleanly(
 
 @pytest.mark.req("FR-4.4")
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 @pytest.mark.slow
 async def test_killed_worker_does_not_double_run(
     worker_killer: WorkerKillerFactory,

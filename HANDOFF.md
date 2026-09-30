@@ -1,170 +1,109 @@
-# HANDOFF · P1-08 Enrichment by the project agent
+# HANDOFF · P1-08 Enrichment by the project agent (c1 → c2)
 
-Stopped on "HANDOFF NOW" from the context watcher. Branch `wp/P1-08` (pushed), based on main
-68d5476 (P1-06, P1-03, P1-07 merged). **No PR yet**, so no CodeRabbit threads and no CI run
-of the implementation. Task prompt: `/tmp/claude-1002/coord7/p1-08.txt`.
+Stopped on "HANDOFF NOW" from the context watcher. Branch `wp/P1-08` (pushed). **No PR yet.**
+Original task prompt: `/tmp/claude-1002/coord7/p1-08.txt`. Scratch: `/tmp/claude-1002/P1-08-c1/`
+(the new agent uses `$TMPDIR/P1-08-c2/`). A **draft PR body** is at
+`/tmp/claude-1002/P1-08-c1/pr-body.md` (copy it; fill `TEST_RESULTS_PLACEHOLDER`; add deviation 9
+below).
 
-## Commits
+## Commits on wp/P1-08
 
-- `24100b6` test(agents): P1-08 spec tests (red)
-- this file: chore: P1-08 handoff
+- `24100b6` test(agents): P1-08 spec tests (red) (c0)
+- `f7f97fb` chore: P1-08 handoff (c0)
+- `818ccd0` merge of main (7083652, incl. #104 P2-02) into the WP; conflicts in fake_runner.py,
+  agents/api.py, agents/rules.py resolved keeping both sides (strict-mode refusal keeps the gate
+  via `dataclasses.replace`)
+- `eaa1f02` feat(agents): rules (T-P1-08-01 green, markers removed), `EnrichTask.label` nullable
+- `5a4d448` feat(agents): workflow, subscribers, tasks writes, migration tasks_0007, frontend
+  (T-P1-08-15/16 green, markers removed)
+- this commit: `fix(agents)`: enrichment skips projects whose agent is `not_provisioned`; the 13
+  integration markers in `test_enrich.py` removed (see below) + this file
 
-## State of the spec tests (all red, strict expected failures)
+## State
 
-| ID | Where | State |
-| --- | --- | --- |
-| T-P1-08-01 | `backend/tumnis/modules/agents/tests/unit/test_missing_fields.py::test_missing_fields_table[case]` (+ 4 helper tests in the same file, also `spec:P1-08`) | XFAIL locally (make check) |
-| T-P1-08-02..14 | `backend/tumnis/modules/agents/tests/integration/test_enrich.py` | not run locally (Docker); expected XFAIL |
-| T-P1-08-15 | `frontend/src/components/common/FirstAction.test.tsx` | expected fail, confirmed |
-| T-P1-08-16 | `frontend/src/components/project/drawer/TaskDrawer.test.tsx` (appended; T-P0-24-16 untouched) | expected fail, confirmed |
+- Unit (`make check` backend part): green except the known local semgrep meta test, which
+  passes with `env SEMGREP_SETTINGS_FILE=/tmp/claude-1002/P1-08-c1/semgrep-settings.yml
+  SEMGREP_LOG_FILE=... SEMGREP_VERSION_CACHE_PATH=... uv run pytest -q tests/meta/test_security_job.py`.
+- Frontend: typecheck, lint and all 183 Vitest tests green (FirstAction + TaskDrawer included).
+- spec_guard: "No locked test was weakened".
+- `make test-int` (run on `5a4d448`, markers still on): **all 13 test_enrich.py tests
+  XPASS(strict)**, i.e. they pass, so their markers were removed in this commit. Other failures
+  in that run:
+  - `search/.../test_index_events.py::test_task_changes_reach_index_through_events` and
+    `tasks/.../test_override_label.py::test_title_edit_relabels_unless_human_chose`: caused by
+    this WP. Projects made through the API get a P1-06 profile row that stays
+    `provisioning`/`not_provisioned` (no runner); the enrichment then wrote status (version
+    bumps → the P1-07 test's PATCH got 409) and a placeholder whose `task.updated` doc is
+    stamped with the system clock (newer than the test's FixedClock rename, so search kept the
+    old title). **Fix committed here, not yet re-verified**: `enrich_load_step` now returns
+    None (writes nothing) when `agent_for_project` says `not_provisioned`.
+  - `search/.../test_typeahead.py::test_typeahead_latency_on_load_fixture` (p95 129 ms > 100 ms
+    under VM load; unrelated), `test_rclone_copy_keeps_files_removed_at_source` (known local
+    timeout), `auth/.../test_lockout.py::test_address_lock_spans_emails` setup ERROR (load; check
+    it in CI).
+- `A1.1` and `A1.4 step 2` keep their `spec:P1-08` markers (Scott item 2). Never remove them.
 
-Red-phase seams to replace (all raise `NotImplementedError("P1-08")`):
-`agents/rules.py` (end: `TaskSnapshot`, `missing_fields`, `needs_enrichment`,
-`merge_enrichment`, `plausibility_flag`), `agents/api.py` (end: `configure_enrichment`),
-`agents/workflows.py` (end: `start_enrichment`), `frontend/src/components/common/FirstAction.tsx`
-(`TaskFirstAction` renders null).
+## Remaining steps
 
-Shared/helper files (not locked): `backend/tests/fakes/fake_runner.py` (TASK_ID_SENTINEL
-substitution from `run.packet.body.task.id`; `script(..., gate=threading.Event)`),
-`backend/tests/fakes/recordings/runner/enrich_{ok_human,ok_hybrid,estimate_for_ai}.result.json`
-(A1.4's `_phase1.runner_result` reads that path), `agents/tests/integration/_enrich.py`.
+1. Re-run `make test-int` (bare, from the worktree root; or rely on CI) and confirm the two
+   P1-08-caused failures above are gone and test_enrich stays green. If `test_index_events`
+   still fails, the cause is the placeholder event's timestamp: consider passing the
+   triggering event's `occurred_at` (as `decisions.label_task` does with `as_of`) through
+   `enrich_task` to `set_enrichment_status(..., now=...)`.
+2. `make check` must pass (only the semgrep env issue locally).
+3. Open the PR: `gh pr create --base main --head wp/P1-08 --title "[P1-08] impl: Enrichment by the
+   project agent" --body-file <body>`; then `gh pr comment <url> --body "@coderabbitai review"`.
+4. Review loop (~/tumnis-coordinator/pr-review-loop.md); when CI green and no open CodeRabbit
+   threads, SendMessage to main: "#<PR> MERGE-READY at <sha>". Then delete this file in a chore
+   commit.
 
-`make check`: everything green except `tests/meta/test_security_job.py::test_semgrep_rules_pass_their_own_tests`,
-the known local-only failure (read-only `~/.semgrep`; set `SEMGREP_SETTINGS_FILE`,
-`SEMGREP_LOG_FILE`, `SEMGREP_VERSION_CACHE_PATH` under `$TMPDIR/P1-08-c1/` to run it; the
-sandbox refused my compound form, so run it as separate plain commands).
+## Design (as built)
 
-## Design decided (follow it; the tests encode it)
+See the draft PR body for the full summary. Key points:
+- Status writes bump the version (touch trigger), so each status shares a statement with its
+  field write: placeholder + `pending`; `running` before dispatch; apply + `done` (one
+  `task_changes` row whose `task_version` is the task's version, so `get_task` returns its
+  `change_id` when `enrichment_status == "done"`).
+- Apply re-reads, merges (`merge_enrichment`) and writes at the read version, retrying on
+  `StaleVersion` (3 attempts); the outlier review item is added in the same transaction when the
+  applied estimate is the flagged one.
+- Run id `uuid5(ENRICH_RUNS, DBOS.workflow_id)`; child `run_skill` under
+  `SetWorkflowID(run_workflow_id(run_id))`.
+- Workflow id `enrich:{task_id}:{event_id}`, partition key `str(project_id)` on `runs`.
+- `enrich_on_update`: only after an ended enrichment; `only=["estimate_minutes"]` after `done`.
+- `TaskOut.first_action_source` / `enrichment_status` are `str | None` (the T-16 spec test uses
+  plain string literals).
 
-Interfaces the tests call:
-- `agents.rules.TaskSnapshot(id, project_id, title, label, label_source, status, first_action,
-  first_action_source, acceptance_criteria, estimate_minutes, version, enrichment_status=None)`
-  (pydantic, frozen). rules.py may import only stdlib/pydantic/core.types (meta-test
-  `tests/meta/test_boundaries.py` RULES_ALLOWED): no `core.limits`, no `skill_io`, no decisions.
-- `missing_fields(t) -> list` in order first_action, acceptance_criteria, estimate_minutes:
-  first action when blank or source `placeholder`; criteria when blank; estimate when label
-  human/hybrid and None. `needs_enrichment = bool(missing) and status != "done"`.
-- `merge_enrichment(current, res, *, requested, estimate_range) -> EnrichmentPatch`
-  (first_action, acceptance_criteria, estimate_minutes, label, label_reason). Fill only
-  requested AND still missing now. Criteria text: `- <line>` per criterion; for hybrid add
-  `AI part: <ai_portion>` and `Your part: <human_portion>` lines after them (only when the
-  criteria are filled by this enrichment). Label revision only when current label is None or
-  label_source in {jev, fallback} (never user/agent); when the revised label is human/hybrid
-  and the task has no estimate, the estimate applies even if not requested. Estimate only for
-  an effective human/hybrid label and inside `estimate_range` (caller passes
-  `skill_io.ESTIMATE_RANGE`).
-- `plausibility_flag(answer_with_.score | None, route: str)`: only route `"applied"`;
-  score <= 0.5 too_low, >= 3.5 too_high.
-- `skill_io.EnrichTask.label` must become `Label | None` (T-01 builds a request with a
-  pending label; the enrich workflow proceeds with a NULL label after the label wait).
-  Regenerate `schemas/enrichment/v1/request.json` with `make gen`.
-- `agents.api.configure_enrichment(*, clock=None, label_wait_s=10.0, run_timeout_s=120)`:
-  called with nothing restores defaults; `clock` is what `agent_for_project(now=...)` uses
-  (tests pass the FixedClock; heartbeats are stamped by the app's clock).
-- `agents.workflows.start_enrichment(workspace_id, task_id, project_id, *, key)`: enqueue
-  `enrich_task` on `RUNS_QUEUE` with `SetWorkflowID(f"enrich:{task_id}:{key}")` and
-  `SetEnqueueOptions(queue_partition_key=str(project_id))`, inside
-  `asyncio.create_task(..., context=contextvars.Context())` exactly like `start_provision`
-  (subscribers run inside a DBOS step). **Deviation for the PR body:** the plan's dedup id
-  `enrich:{task_id}:{version}` is replaced by the deterministic workflow id
-  `enrich:{task_id}:{event_id}` (DBOS 3.1.0: partition keys and deduplication ids cannot be
-  used together — Context7 /dbos-inc/dbos-docs queue tutorial "Partitioning Queues"; a
-  workflow id is an idempotency key — workflow tutorial "Workflow IDs and Idempotency";
-  `TaskUpdatedV1` carries no version).
+## Deviations (for the PR body; 1-8 are in the draft)
 
-Workflow `enrich_task(workspace_id: str, task_id: str, only: list[str] | None = None)`:
-load (NotFound/not needed -> return) and set `enrichment_status = pending`; placeholder step
-(`decisions.generation_api.placeholder_first_action`, only `agents.workflows` may import it)
-written by `tasks.set_placeholder_first_action` only if first action still empty, then
-status `running`; wait for label with `DBOS.sleep_async(0.5)` loop up to `label_wait_s`;
-`agent_for_project` -> `agent_offline` / `not_provisioned`; build request
-(`packet_builder.enrichment_request`: brief via `knowledge.api.get_brief`, "" on NotFound;
-`tasks.estimate_history` 10 newest, titles cut to 120); run_id deterministic
-(`uuid5(NS, DBOS.workflow_id)`) so a replay after a kill writes no second mailbox row; call
-`run_skill` as a child workflow (child id is derived from the parent's; `runs.workflow_id`
-comes from `DBOS.workflow_id` in `hermes._workflow_id`, i.e. the child — correct);
-`TaskPacket(kind="enrich", skill="enrich", output_schema=SchemaRef("enrichment","result",1),
-timeout_s=run_timeout_s, prompt_text=render_prompt(...), body=req)`; validate (schema + 
-`enrichment_errors`; failure -> status `failed`, runs row keeps its error); plausibility via
-`decisions.api.decide(DecisionPoint.ESTIMATE_PLAUSIBILITY, ...)` subject task, and on a flag
-`tasks.add_review_item("estimate_outlier", ...)` (kind already registered by P1-13 in
-`tasks/review.py`, payload `EstimateOutlierPayload`; its edit is applied by
-`tasks.apply_review_decision`); apply via `tasks.apply_enrichment`; status `done`.
-Plausibility runs on the estimate being applied; decisions down routes `deterministic`
-(no `decision_unavailable` item for this point).
-
-tasks module:
-- migration `tasks_0007` after `tasks_0006` (check no open PR adds one: open PRs are #102,
-  #103, #104; P2-02 #104 touches tasks/api.py but adds no tasks migration):
-  `first_action_source text NULL CHECK IN ('placeholder','agent')`,
-  `enrichment_status text NULL CHECK IN ('pending','running','done','agent_offline','not_provisioned','failed')`,
-  `phase = "expand"`. Mirror in `tasks/models.py`; add both to `TaskOut`; `make gen`.
-- `update_task` / `create_task`: writing `first_action` clears `first_action_source` (T-10).
-- `set_placeholder_first_action(s, task_id, text)`: only while first action empty; source
-  placeholder; bumps version (Scott decision 28 pattern); no `task_changes` row; `task.updated`.
-- `apply_enrichment(s, task_id, patch, *, run_id)`: one versioned update, first_action_source
-  `agent`, label_source `agent` when revised, one `task_changes` row by SYSTEM_ACTOR;
-  `first_action_source` rides along with `first_action` in before/after like `_LABEL_META`
-  (do NOT add it to `rules.UNDO_FIELDS`); `undo_task` restores it. `task.updated` with
-  changed_fields.
-- `set_enrichment_status(s, task_id, status)`: no version bump, `mark_changed` only.
-- `estimate_history(s, project_id, *, limit=10)`: P2-02 (#104) adds a function of the same
-  name returning `EstimateSample(task_id, label, estimate_minutes, actual_minutes)`. Write a
-  superset (same class name, plus `title`) so whichever merges second takes it.
-- `get_task`: also answer `change_id` for enrichment writes (first_action_source `agent` or
-  label_source `agent`), additively (T-11 and the drawer's Undo read it).
-- `agents/adapters/hermes.py` dispatch: set `runs.task_id` from `packet.body["task"]["id"]`
-  (T-02 asserts it).
-
-Subscribers (`agents/events.py`, may import workflows like decisions/events.py does):
-- `agents.enrich_on_create` (`task.created`): `start_enrichment(..., key=str(event_id))`.
-- `agents.enrich_on_update` (`task.updated`): only when "label" in changed_fields, the task
-  is human/hybrid without an estimate, and `enrichment_status` is terminal (not NULL, not
-  pending/running); requests the estimate only (`only=["estimate_minutes"]`). This avoids the
-  re-trigger loop on the enrichment's own writes, the create-vs-Jev-label race, and
-  re-enrichment after an undo.
-
-Frontend: `TaskFirstAction({taskId})` reads `taskQueryOptions`; `data-testid="first-action"`,
-`data-state` placeholder | pending | agent | user; pending text `First action pending`; the
-placeholder's text is exactly the placeholder (A1.1 uses `toHaveText`). TaskDrawer: first
-action, a list `aria-label="Acceptance criteria"` of `- ` lines, estimate (`20 min` /
-`No estimate`), and when `first_action_source === "agent"` and `change_id`: `Enriched by
-agent` + button `Undo` posting `/v1/tasks/{id}/undo {change_id, version}` (reuse the undo
-mutation in `lib/undo.ts`/`project/mutations` if it fits) and showing the answer.
-
-## Remaining steps (TDD order)
-
-1. T-01 rules + `EnrichTask.label` nullable; unmark; commit `feat(agents): ...`.
-2. Migration + models + TaskOut + `make gen`; T-02 happy path (workflow, subscriber,
-   `configure_enrichment`, placeholder, apply, hermes task_id); unmark each as it passes.
-3. T-03/04/12 merge + label revision; T-05/06 placeholder; T-07 availability; T-08 request
-   builder; T-09 plausibility; T-10/11 field protection + undo; T-13/14 failure + kill.
-4. T-15/16 UI; `npm --prefix frontend run typecheck`.
-5. Refactor: `packet_builder.enrichment_request(task_id)`; keep P2-02's `build_packet` for
-   P2-02 (it adds one; don't add another — note it in the PR).
-6. `make check`, then bare `make test` and `make test-int` (Docker only as bare commands from
-   the worktree root; or rely on CI when the VM is loaded).
-7. Push `/usr/bin/git push origin HEAD:wp/P1-08`, open the PR (body file in `$TMPDIR/P1-08-c1/`,
-   deviations + Context7 citations + Scott items, ending with the Claude Code line), then
-   `gh pr comment <url> --body "@coderabbitai review"`; run the review loop; send
-   "#<PR> MERGE-READY at <sha>" to main.
+1-8 as in `/tmp/claude-1002/P1-08-c1/pr-body.md`. Add:
+9. **Projects whose agent is not provisioned are skipped entirely** (replaces draft deviation 5):
+   no placeholder, no status; `not_provisioned` is written only when the profile disappears
+   during the wait. Reason: writing to every task of a project without a working agent bumped
+   versions and emitted events that broke P0-20 and P1-07 tests (and would 409 users' edits).
 
 ## Scott items
 
-1. T-P1-08-04: the plan stores the Hybrid split in "the task's description", but tasks have
-   no description column (FR-3.1). Chosen: `AI part:` / `Your part:` lines after the
-   acceptance criteria, written only when the enrichment fills the criteria. Confirm or ask
-   for a description column.
-2. A1.1 (Playwright) and A1.4 step 2 stay red: the seed has no `Acme site` / `Beta app`
-   projects or agent profiles, the `fake_runner` factory has no `.offline()` / `.script()`,
-   and A1.1 needs a fake runner scriptable over REST in the compose stack. That is phase 1
-   seed/test-stack infrastructure no merged WP shipped; leave `spec:P1-08` on A1.4 step 2.
+1. Hybrid split location: no description column; built as `AI part:` / `Your part:` lines after
+   the acceptance criteria.
+2. A1.1 and A1.4 step 2 stay red (seed lacks `Acme site` / `Beta app` projects and agent
+   profiles; A1.1 needs a REST-scriptable fake runner in the compose stack).
+3. Tasks in a project whose agent is not provisioned get no placeholder and no enrichment later
+   (no re-enrichment when provisioning completes). Confirm, or ask for a backfill on
+   provisioning.
+
+## Context7 / docs
+
+DBOS 3.1.0 via Context7 `/dbos-inc/dbos-docs`: queue tutorial + queue reference (partition keys
+and deduplication ids cannot be combined), workflow tutorial (SetWorkflowID idempotency, child
+workflows, `DBOS.sleep_async`), `start_workflow_async` reference. Already cited in the draft.
 
 ## Verify
 
 ```bash
 cd backend && uv run pytest -q -m "not integration and not contract" tumnis/modules/agents/tests/unit/test_missing_fields.py
-make check          # from the worktree root
-make test-int       # bare, from the worktree root (Docker)
+make check
+make test-int      # bare, from the worktree root
 npm --prefix frontend run test -- --run src/components/common/FirstAction.test.tsx src/components/project/drawer/TaskDrawer.test.tsx
+python3 scripts/ci/spec_guard.py --base origin/main --head HEAD --labels ""
 ```
