@@ -49,7 +49,6 @@ def _stored_set(point: str) -> list[LabeledDecision]:
 
 @pytest.mark.req("FR-11.5")
 @pytest.mark.wp("P3-08")
-@pytest.mark.xfail(strict=True, reason="spec:P3-08")
 def test_accuracy_hidden_below_100_labeled() -> None:
     """T-P3-08-01
     99 labeled outcomes give no metrics (None); the 100th gives metrics over all 100.
@@ -70,7 +69,6 @@ def test_accuracy_hidden_below_100_labeled() -> None:
 
 @pytest.mark.req("FR-11.5")
 @pytest.mark.wp("P3-08")
-@pytest.mark.xfail(strict=True, reason="spec:P3-08")
 def test_metric_values_on_fixture() -> None:
     """T-P3-08-02
     The stored project-match set (120 rows): 50 at confidence 0.95 (48 right), 30 at 0.88
@@ -138,7 +136,6 @@ LABEL_CASES = [
 
 @pytest.mark.req("FR-11.5")
 @pytest.mark.wp("P3-08")
-@pytest.mark.xfail(strict=True, reason="spec:P3-08")
 def test_label_outcome_table() -> None:
     """T-P3-08-03
     A decided review item takes the human's answer (their edit, or the model's answer when
@@ -178,7 +175,6 @@ _labeled_rows = st.lists(
 
 @pytest.mark.req("FR-11.5")
 @pytest.mark.wp("P3-08")
-@pytest.mark.xfail(strict=True, reason="spec:P3-08")
 @settings(max_examples=60, deadline=None)
 @given(
     rows=_labeled_rows,

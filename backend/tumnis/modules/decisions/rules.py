@@ -12,7 +12,7 @@ rather than importing them.
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Annotated, Any, Final, Literal, Protocol
 
@@ -383,32 +383,115 @@ class SweepRow(Metrics):
 def answer_text(answer: TypedAnswer) -> str:
     """The main answer as the text a label compares: a Choice's option, a Score's nearest
     level, a Noul's `yes` (at or above 0.5) or `no`."""
-    raise NotImplementedError
+    if isinstance(answer, ChoiceAnswer):
+        return answer.choice
+    if isinstance(answer, ScoreAnswer):
+        return str(round(answer.score))
+    return "yes" if answer.noul >= 0.5 else "no"  # noqa: PLR2004  # the Noul's midpoint
 
 
 def value_text(value: Any) -> str | None:
     """A human's chosen value as the same text: booleans as yes or no, numbers as the
     nearest level, anything else as its string."""
-    raise NotImplementedError
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, int | float):
+        return str(round(value))
+    return str(value)
 
 
 def outcome_of(row: DecisionLogRow, human: HumanDecision | None) -> Outcome:
-    raise NotImplementedError
+    """What happened to the decision: the human overrode or confirmed it, or, before any
+    human act, it was auto-applied or sent to review (or to a deterministic rule or an
+    approval, which count as review)."""
+    if human is not None:
+        return Outcome.overridden if human.overridden else Outcome.confirmed
+    return Outcome.auto_applied if row.route == Route.APPLY else Outcome.sent_to_review
+
+
+_OPPOSITE: Final = {"yes": "no", "no": "yes"}
+
+
+def _override_truth(answer: str, value: str | None) -> str:
+    """The right answer when the human overrode `answer`: the value they chose; without
+    one (a rejection), the other of yes and no, or simply not the answer."""
+    if value is not None and value != answer:
+        return value
+    return _OPPOSITE.get(answer, f"not:{answer}")
 
 
 def label_outcome(
     row: DecisionLogRow, human: HumanDecision | None, now: datetime, settle_days: int = SETTLE_DAYS
 ) -> LabeledDecision | None:
-    raise NotImplementedError
+    """The decision with its truth, or None while it has none (FR-11.5):
+    a human's decision is the truth (their override, or the answer they kept); an answer
+    applied and not overridden within `settle_days` counts as right (an implicit label);
+    anything else, and a decision without an answer, is unlabeled."""
+    if row.answer is None or row.confidence is None:
+        return None
+    outcome = outcome_of(row, human)
+    if outcome is Outcome.overridden and human is not None:
+        truth, explicit = _override_truth(row.answer, human.value), True
+    elif outcome is Outcome.confirmed:
+        truth, explicit = row.answer, True
+    elif outcome is Outcome.auto_applied and now - row.decided_at >= timedelta(days=settle_days):
+        truth, explicit = row.answer, False
+    else:
+        return None
+    return LabeledDecision(
+        decision_point=row.decision_point,
+        model_version=row.model_version,
+        provider=row.provider,
+        answer=row.answer,
+        confidence=row.confidence,
+        truth=truth,
+        explicit=explicit,
+        input_hash=row.input_hash,
+    )
+
+
+def _metrics(rows: Sequence[LabeledDecision], threshold: float) -> Metrics:
+    """What `threshold` would have done with `rows` (at least one): the share it would
+    auto-apply, how often those were right, the share left to review, and how often the
+    model was right overall."""
+    n = len(rows)
+    auto = [r for r in rows if r.confidence >= threshold]
+    right_auto = sum(r.answer == r.truth for r in auto)
+    return Metrics(
+        n=n,
+        auto_rate=len(auto) / n,
+        auto_precision=right_auto / len(auto) if auto else None,
+        review_rate=(n - len(auto)) / n,
+        overall_accuracy=sum(r.answer == r.truth for r in rows) / n,
+    )
 
 
 def accuracy(rows: Sequence[LabeledDecision], threshold: float) -> Metrics | None:
-    raise NotImplementedError
+    """Metrics at `threshold`; None under `MIN_LABELED` labeled rows (FR-11.5)."""
+    if len(rows) < MIN_LABELED:
+        return None
+    return _metrics(rows, threshold)
 
 
 def sweep(rows: Sequence[LabeledDecision], thresholds: Sequence[float] = SWEEP) -> list[SweepRow]:
-    raise NotImplementedError
+    """The metrics at each threshold, in the order given; empty without rows. It shows,
+    and suggests nothing: a human picks the threshold (design decision 8)."""
+    if not rows:
+        return []
+    return [SweepRow(threshold=t, **_metrics(rows, t).model_dump()) for t in thresholds]
 
 
 def confidence_bar(t: Threshold, *, fallback: bool = False) -> float:
-    raise NotImplementedError
+    """The threshold on the logged confidence scale that `accuracy` compares with: a
+    Choice's or Score's `min_confidence`; for a Noul (confidence = |noul - 0.5| * 2) the
+    stricter of its yes and no bands, `2 * t_yes - 1` and `1 - 2 * t_no`. The fallback's
+    stricter threshold for vLLM answers. 1.0 when nothing is ever auto-applied."""
+    eff = effective_threshold(t, fallback=fallback)
+    if eff.min_confidence is not None:
+        return eff.min_confidence
+    bands = [2 * eff.t_yes - 1] if eff.t_yes is not None else []
+    if eff.t_no is not None:
+        bands.append(1 - 2 * eff.t_no)
+    return round(max(bands), 6) if bands else 1.0
