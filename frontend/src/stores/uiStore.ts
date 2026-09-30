@@ -1,5 +1,6 @@
 // Device UI state (P0-22, ADR-0004): what is open on this device, the last view per
-// project (kept in localStorage) and the conflict notice. Server data lives in Query.
+// project (kept in localStorage), the conflict notice and plain notices (P0-24). Server
+// data lives in Query.
 import { createStore } from "@xstate/store";
 import * as z from "zod";
 
@@ -19,6 +20,8 @@ export interface UiContext {
   dragging: string | null;
   lastView: Record<string, ProjectView>;
   conflict: null | { entity: string };
+  /** A plain-words notice, e.g. why a board move was refused (P0-24). */
+  notice: string | null;
 }
 
 const viewSchema = z.enum(projectViews);
@@ -49,6 +52,7 @@ export function createUiStore() {
     dragging: null,
     lastView: loadLastViews(),
     conflict: null,
+    notice: null,
   };
   const store = createStore({
     context: initial,
@@ -72,13 +76,28 @@ export function createUiStore() {
         conflict: { entity: e.entity },
       }),
       clearConflict: (c) => ({ ...c, conflict: null }),
+      setContextSheet: (c, e: { open: boolean }) => ({
+        ...c,
+        contextSheetOpen: e.open,
+      }),
+      showNotice: (c, e: { text: string }) => ({ ...c, notice: e.text }),
+      clearNotice: (c) => ({ ...c, notice: null }),
     },
   });
+  // Persist what changed on top of what storage holds now (another tab may have written
+  // other projects since this one loaded), never the whole in-memory map (P0-24).
   let stored = initial.lastView;
   store.subscribe((snapshot) => {
-    if (snapshot.context.lastView === stored) return;
-    stored = snapshot.context.lastView;
-    safeSetItem(LAST_VIEW_KEY, JSON.stringify(stored));
+    const next = snapshot.context.lastView;
+    if (next === stored) return;
+    const changed = Object.fromEntries(
+      Object.entries(next).filter(([id, view]) => stored[id] !== view),
+    );
+    stored = next;
+    safeSetItem(
+      LAST_VIEW_KEY,
+      JSON.stringify({ ...loadLastViews(), ...changed }),
+    );
   });
   return store;
 }

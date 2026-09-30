@@ -37,6 +37,19 @@
     },
     "to": {
       "$ref": "#/$defs/Status"
+    },
+    "via": {
+      "anyOf": [
+        {
+          "const": "undo",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Via"
     }
   },
   "required": [

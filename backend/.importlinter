@@ -117,9 +117,11 @@ forbidden_modules =
     tumnis.modules.coolify
     tumnis.modules.notifications
 # usage's counter tests create real tasks through tasks' api (P0-21's seam, swapped by
-# P0-18); usage code itself calls no module.
+# P0-18); usage code itself calls no module. search's index test trashes a task through
+# tasks' api (P0-20's seam, swapped by P0-24).
 ignore_imports =
     tumnis.modules.usage.tests.** -> tumnis.modules.tasks.api
+    tumnis.modules.search.tests.** -> tumnis.modules.tasks.api
 unmatched_ignore_imports_alerting = none
 
 # contract.py imports pytest (P0-09). The sources are listed per level because a package

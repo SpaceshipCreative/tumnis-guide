@@ -1,13 +1,15 @@
 // The app shell (P0-22, UX 11): skip link, the rail on a laptop or the bottom bar on a
-// phone, the page in `main`, and the conflict notice. Sign-in and setup get the bare
-// frame (no navigation before a session exists).
+// phone, the page in `main`, the conflict notice, notices and the Undo toast (P0-24).
+// Sign-in and setup get the bare frame (no navigation before a session exists).
 import { Outlet, useRouterState } from "@tanstack/react-router";
 
 import { PUBLIC_PATHS } from "../../lib/session";
 import { BottomBar } from "./BottomBar";
 import { ConflictToast } from "./ConflictToast";
 import { NavRail } from "./NavRail";
+import { NoticeToast } from "./NoticeToast";
 import { MAIN_ID, SkipLink } from "./SkipLink";
+import { UndoToast } from "./UndoToast";
 
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -25,6 +27,8 @@ export function AppShell() {
       </main>
       {!bare && <BottomBar />}
       <ConflictToast />
+      {!bare && <UndoToast />}
+      <NoticeToast />
     </div>
   );
 }

@@ -1,14 +1,13 @@
-// A project (P0-22 route; the header shows its name from P0-17; the views arrive with
-// P0-24).
-import { useQuery } from "@tanstack/react-query";
+// A project (P0-22 route, P0-24 page): `view` (tasks or board; absent means the last one
+// used here, else tasks) and `task` (the open drawer) live in the URL. The loader
+// prefetches the header's reads so the first render has them.
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useSelector } from "@xstate/store-react";
 import * as z from "zod";
 
-import { projectsGetProjectOptions } from "../api/@tanstack/react-query.gen";
-import { Placeholder } from "../components/pages/Placeholder";
+import { ProjectPage } from "../components/project/ProjectPage";
+import { projectQuery, projectTasksQuery } from "../components/project/queries";
+import { workspaceQuery } from "../components/settings/queries";
 import { projectViews } from "../lib/views";
-import { uiStore } from "../stores/uiStore";
 
 export { projectViews };
 
@@ -27,19 +26,35 @@ export const Route = createFileRoute("/projects/$projectId")({
     }
   },
   validateSearch: projectSearch,
-  component: ProjectPage,
+  loader: async ({ context: { queryClient }, params: { projectId } }) => {
+    // A failed read is left for its part of the page to report.
+    const settle = (read: Promise<unknown>) => read.catch(() => undefined);
+    await Promise.all([
+      settle(queryClient.query(projectQuery(projectId))),
+      settle(queryClient.query(projectTasksQuery(projectId))),
+      settle(queryClient.query(workspaceQuery())),
+    ]);
+  },
+  pendingMs: 0,
+  pendingComponent: () => null,
+  component: ProjectRoute,
 });
 
-function ProjectPage() {
+function ProjectRoute() {
   const { projectId } = Route.useParams();
-  const { view } = Route.useSearch();
-  const lastView = useSelector(uiStore, (s) => s.context.lastView[projectId]);
-  const project = useQuery(
-    projectsGetProjectOptions({ path: { project_id: projectId } }),
-  );
+  const { view, task } = Route.useSearch();
+  const navigate = Route.useNavigate();
   return (
-    <Placeholder title={project.data?.name ?? "Project"}>
-      <p className="text-muted">View: {view ?? lastView ?? "tasks"}</p>
-    </Placeholder>
+    <ProjectPage
+      projectId={projectId}
+      view={view}
+      taskId={task}
+      onView={(next) => {
+        void navigate({ search: (s) => ({ ...s, view: next }) });
+      }}
+      onTask={(taskId) => {
+        void navigate({ search: (s) => ({ ...s, task: taskId }) });
+      }}
+    />
   );
 }

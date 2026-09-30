@@ -10,10 +10,10 @@ test bodies, and this module is where later work packages plug in their shapes.
   rows it sent awaited (the other modules' subscribers run too, unawaited).
 - `index_outbox(db)`: every outbox row applied to the index through `search.api`, one
   transaction per workspace, without DBOS (the seed and load sets write thousands).
-- `trash_task(ctx, task_id, at)`: the smallest seam for a task trash until its write
-  lands (P0-24: "delete means trash"): sets `deleted_at` and emits `task.updated` with
-  the deleted doc, as that write will. Built from the event registry, so search imports
-  nothing from tasks.
+- `trash_task(ctx, task_id, at)`: the task trashed through `tasks.api.trash_task`, the
+  write behind `DELETE /v1/tasks/{id}` (P0-24: "delete means trash"), which emits
+  `task.updated` with the deleted doc. Search code itself still imports no module; only
+  its tests reach tasks' api (`.importlinter`).
 - `index_row(db, entity_id)`: the row's title, deleted_at and source_updated_at, read as
   the owner (None when there is no row).
 """
@@ -152,40 +152,12 @@ async def index_outbox(db: DbUrls) -> int:
 
 
 async def trash_task(ctx: WorkspaceContext, task_id: uuid.UUID, at: datetime) -> None:
-    from sqlalchemy import text  # noqa: PLC0415
-
-    from tumnis.core.events import registry  # noqa: PLC0415
-    from tumnis.core.outbox import emit  # noqa: PLC0415
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.tasks import api as tasks  # noqa: PLC0415
 
     async with tenant_session(ctx) as s:
-        row = (
-            (
-                await s.execute(
-                    text(
-                        "UPDATE tasks SET deleted_at = :at, version = version + 1"
-                        " WHERE id = :id RETURNING title, project_id"
-                    ),
-                    {"at": at, "id": task_id},
-                )
-            )
-            .mappings()
-            .one()
-        )
-        model = registry.model("task.updated", 1)
-        payload = model.model_validate(
-            {
-                "task_id": task_id,
-                "changed_fields": ["deleted"],
-                "doc": {
-                    "title": row["title"],
-                    "deleted": True,
-                    "project_id": row["project_id"],
-                    "updated_at": at,
-                },
-            }
-        )
-        await emit(s, payload, occurred_at=at)
+        task = await tasks.get_task(s, task_id)
+        await tasks.trash_task(s, ctx.actor, task_id, task.version, now=at)
 
 
 def index_row(db: DbUrls, entity_id: uuid.UUID) -> dict[str, Any] | None:
