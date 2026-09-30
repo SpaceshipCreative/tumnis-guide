@@ -27,9 +27,6 @@ test(
       await page.reload();
       times.push(await markStartTime(page, "tumnis:dashboard-ready"));
     }
-    console.log(
-      `TIMING ${testInfo.title}: median ${String(median(times))} ms of ${times.join(", ")}`,
-    );
     expect(median(times), `runs: ${times.join(", ")} ms`).toBeLessThan(1_000);
   },
 );
@@ -53,9 +50,6 @@ test(
       times.push(Date.now() - started);
       await cold.close();
     }
-    console.log(
-      `TIMING ${testInfo.title}: median ${String(median(times))} ms of ${times.join(", ")}`,
-    );
     expect(median(times), `runs: ${times.join(", ")} ms`).toBeLessThan(3_000);
   },
 );
@@ -77,9 +71,6 @@ test(
       times.push(await markStartTime(cold, "tumnis:review-ready"));
       await cold.close();
     }
-    console.log(
-      `TIMING ${testInfo.title}: median ${String(median(times))} ms of ${times.join(", ")}`,
-    );
     expect(median(times), `runs: ${times.join(", ")} ms`).toBeLessThan(3_000);
   },
 );
