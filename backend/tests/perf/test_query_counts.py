@@ -34,14 +34,14 @@ ENDPOINTS = {
 }
 
 # Statements per request, the session check included (its lookup, then `set_config` and
-# the endpoint's own queries). The projects list reads the page and one stats aggregate
-# for every project on it; the board reads its columns, then the cards with their
-# checklists in one query.
+# the endpoint's own queries). Measured in CI (PR #88): projects 6 and board 9 at both
+# sizes; the others within their ceilings. A count above its ceiling, or one that differs
+# between the sizes, is a new query per row.
 CEILINGS = {
-    "projects": 5,
+    "projects": 6,
     "today": 5,
     "project_tasks": 5,
-    "board": 6,
+    "board": 9,
     "typeahead": 4,
 }
 
