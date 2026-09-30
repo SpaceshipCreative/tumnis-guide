@@ -46,6 +46,9 @@ from tumnis.core.tenancy import WorkspaceContext, tenant_session, use_workspace
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.core.versioning import NotFound, StaleVersion
 from tumnis.modules.agents import api
+
+# P2-18: importing archive also registers its steps with the project archive workflows.
+from tumnis.modules.agents import archive as _archive
 from tumnis.modules.agents.adapters.hermes import DaemonTransport, McpEndpointTransport
 from tumnis.modules.agents.models import (
     AgentProfile,
@@ -177,6 +180,9 @@ async def dispatch_step(workspace_id: str, packet: dict[str, Any]) -> str | None
     dispatched, and a token already issued is ended), None once the run is queued."""
     ctx = _ctx(workspace_id)
     task = TaskPacket.model_validate(packet)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        if not await _archive.dispatch_allowed(s, task.profile_id):
+            return "project_archived"  # P2-18: none while archived, archiving or unarchiving
     try:
         task = await _with_token(ctx, task)
     except (auth.ScopeEscalation, ValueError) as exc:

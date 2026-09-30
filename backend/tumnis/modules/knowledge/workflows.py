@@ -340,3 +340,7 @@ async def enqueue_folder_extraction(workspace_id: UUID, version_id: UUID, _path:
 
 
 sync.register_extraction(enqueue_folder_extraction)
+
+
+# P2-18: the folder steps of the project archive workflows register with projects.
+from tumnis.modules.knowledge import archive as _archive  # noqa: E402, F401

@@ -20,10 +20,11 @@ import structlog
 from pydantic import BaseModel, Field, StringConstraints
 from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import Table, delete, func, insert, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import rank, tenancy
+from tumnis.core import audit, rank, tenancy
 from tumnis.core.cache import CacheKey, CacheSpec, invalidate_on_commit, register_cache
 from tumnis.core.clock import SystemClock
 from tumnis.core.errors import ProblemError
@@ -41,9 +42,10 @@ from tumnis.modules.projects.events import (
     AgentProfileChoice,
     ProjectArchivedV1,
     ProjectCreatedV1,
+    ProjectPurgedV1,
     ProjectUpdatedV1,
 )
-from tumnis.modules.projects.models import Project, ProjectLink, ProjectPolicy
+from tumnis.modules.projects.models import Project, ProjectArchive, ProjectLink, ProjectPolicy
 from tumnis.modules.projects.rules import (
     ALLOWED_DEFAULT,
     GATED_DEFAULT,
@@ -68,10 +70,12 @@ _log = structlog.get_logger(__name__)
 _projects: Table = Project.__table__  # type: ignore[assignment]
 _links: Table = ProjectLink.__table__  # type: ignore[assignment]
 _policies: Table = ProjectPolicy.__table__  # type: ignore[assignment]
+_archives: Table = ProjectArchive.__table__  # type: ignore[assignment]
 
 LIVE_ENTITY: Final = "project"
 LinkKind = Literal["person", "domain", "repo", "coolify_app"]
 ProjectStatus = Literal["active", "on_hold", "completed"]
+ArchiveState = Literal["archiving", "archived", "unarchiving"]
 Name = Annotated[str, StringConstraints(min_length=1, max_length=120, strip_whitespace=True)]
 Goal = Annotated[str, StringConstraints(max_length=280)]
 Brief = Annotated[str, StringConstraints(max_length=BRIEF_MAX_CHARS)]
@@ -111,6 +115,8 @@ class ProjectOut(ProjectCreate):
     version: int
     sort_key: str
     archived_at: datetime | None
+    # P2-18: null while live; `archiving`, `archived` or `unarchiving` (FR-5.10)
+    archive_state: ArchiveState | None = None
     health: Health
     open_count: int
     next_milestone: date | None
@@ -206,6 +212,7 @@ class _Row(BaseModel):
     repo_url: str | None
     profile_name: str | None
     archived_at: datetime | None
+    archive_state: ArchiveState | None = None  # from project_archives (_ARCHIVE_STATE)
     subtask_threshold_min: int | None
     local_decisions_only: bool = False
 
@@ -268,8 +275,17 @@ def _live() -> Any:
     return _projects.c.deleted_at.is_(None)
 
 
+# The project's archive state (P2-18) read with its row, so a read costs no query more.
+_ARCHIVE_STATE: Final = (
+    select(_archives.c.state)
+    .where(_archives.c.project_id == _projects.c.id, _archives.c.deleted_at.is_(None))
+    .scalar_subquery()
+    .label("archive_state")
+)
+
+
 async def _row(s: AsyncSession, project_id: UUID, *, lock: bool = False) -> _Row:
-    stmt = select(_projects).where(_projects.c.id == project_id, _live())
+    stmt = select(_projects, _ARCHIVE_STATE).where(_projects.c.id == project_id, _live())
     if lock:
         stmt = stmt.with_for_update()
     found = (await s.execute(stmt)).mappings().first()
@@ -297,7 +313,7 @@ async def list_projects(
 ) -> Page[ProjectOut]:
     """Projects in board order (`sort_key`, then id); archived ones only when asked.
     `project_ids` limits the list (a project-limited key, R-28)."""
-    stmt = select(_projects).where(_live())
+    stmt = select(_projects, _ARCHIVE_STATE).where(_live())
     if not include_archived:
         stmt = stmt.where(_projects.c.archived_at.is_(None))
     if project_ids is not None:
@@ -642,7 +658,7 @@ async def _versioned(
         raise StaleVersion(current=current.model_dump(mode="json")) from None
     except IntegrityError as exc:
         raise _name_taken(exc) from None
-    return _Row.model_validate(dict(row))
+    return _Row.model_validate(dict(row) | {"archive_state": await _archive_state(s, project_id)})
 
 
 async def _changed(
@@ -704,8 +720,12 @@ async def archive_project(
     *,
     now: datetime | None = None,
 ) -> ProjectOut:
-    """Hides the project from lists; its data stays. Emits `project.archived`."""
+    """Hides the project from lists; its data stays. Emits `project.archived`, whose
+    subscriber starts `archive_project` (P2-18): `archive_state` is `archiving` until the
+    workflow has compressed the project's data, then `archived`."""
     row = await _versioned(s, project_id, version, {"archived_at": _now(now)}, now)
+    await _set_archive_state(s, project_id, "archiving")
+    row = row.model_copy(update={"archive_state": "archiving"})
     await emit(s, ProjectArchivedV1(project_id=project_id), occurred_at=_now(now))
     mark_changed(s, LIVE_ENTITY, project_id)
     [out] = await _outs(s, [row], now)
@@ -720,9 +740,164 @@ async def unarchive_project(
     *,
     now: datetime | None = None,
 ) -> ProjectOut:
-    """Back in the lists at its old place (its sort key was kept)."""
+    """Back in the lists at its old place (its sort key was kept). A project whose archive
+    moved data (P2-18) turns `unarchiving`; `unarchive_project` then brings the data back
+    and clears `archive_state`."""
     row = await _versioned(s, project_id, version, {"archived_at": None}, now)
+    if row.archive_state is not None:
+        await s.execute(
+            update(_archives)
+            .where(_archives.c.project_id == project_id, _archives.c.deleted_at.is_(None))
+            .values(state="unarchiving")
+        )
+        row = row.model_copy(update={"archive_state": "unarchiving"})
     return await _changed(s, row, ["archived_at"], now)
+
+
+# --- archive and purge (P2-18, FR-5.10, R-37) ----------------------------------------------
+
+# A project's archive state lives in `project_archives`, not on its row: moving it is the
+# workflow's doing, not an edit, so it leaves the project's version alone (T-P0-20-13).
+
+
+async def _archive_state(s: AsyncSession, project_id: UUID) -> ArchiveState | None:
+    state: ArchiveState | None = await s.scalar(
+        select(_archives.c.state).where(
+            _archives.c.project_id == project_id, _archives.c.deleted_at.is_(None)
+        )
+    )
+    return state
+
+
+async def _set_archive_state(s: AsyncSession, project_id: UUID, state: ArchiveState) -> None:
+    await s.execute(
+        pg_insert(_archives)
+        .values(project_id=project_id, state=state)
+        .on_conflict_do_update(index_elements=["workspace_id", "project_id"], set_={"state": state})
+    )
+
+
+# The steps other modules add to the archive workflows, by name (`<module>.<step>`):
+# agents, knowledge and integrations import projects, so projects never imports them; each
+# registers its steps from its workflows module, which the worker loads.
+ArchiveHook = Callable[..., Awaitable[Any]]
+_archive_hooks: dict[str, ArchiveHook] = {}
+
+
+def register_archive_hook(name: str, hook: ArchiveHook) -> None:
+    _archive_hooks[name] = hook
+
+
+def archive_hook(name: str) -> ArchiveHook | None:
+    """The registered step, or None when its module is not loaded (nothing of it to move)."""
+    return _archive_hooks.get(name)
+
+
+class ArchiveFacts(BaseModel):
+    """Where a project's archive stands (`archived`: its `archived_at` is set)."""
+
+    archived: bool
+    archive_state: ArchiveState | None
+    deleted: bool
+
+
+async def archive_facts(s: AsyncSession, project_id: UUID) -> ArchiveFacts | None:
+    """The project's archive facts, soft-deleted (purged) ones included; None: no project."""
+    row = (
+        await s.execute(
+            select(_projects.c.archived_at, _projects.c.deleted_at).where(
+                _projects.c.id == project_id
+            )
+        )
+    ).first()
+    if row is None:
+        return None
+    return ArchiveFacts(
+        archived=row.archived_at is not None,
+        archive_state=await _archive_state(s, project_id),
+        deleted=row.deleted_at is not None,
+    )
+
+
+async def dormant_projects(s: AsyncSession, project_ids: Iterable[UUID]) -> set[UUID]:
+    """The ones of `project_ids` that are archived, being archived or unarchived, or gone:
+    their folders are not synced and their agents not dispatched to (P2-18)."""
+    ids = list(project_ids)
+    if not ids:
+        return set()
+    found: Iterable[UUID] = await s.scalars(
+        select(_projects.c.id).where(
+            _projects.c.id.in_(ids),
+            _projects.c.archived_at.is_not(None)
+            | _projects.c.deleted_at.is_not(None)
+            | _projects.c.id.in_(
+                select(_archives.c.project_id).where(_archives.c.deleted_at.is_(None))
+            ),
+        )
+    )
+    return set(found)
+
+
+async def move_archive_state(
+    s: AsyncSession,
+    project_id: UUID,
+    *,
+    expect: ArchiveState,
+    to: ArchiveState | None,
+) -> bool:
+    """`archive_state` from `expect` to `to` (None: the project is live again, its row in
+    `project_archives` goes) for a project not purged; False when it was not `expect`
+    (another archive or unarchive came first). The move is the workflow's, not an edit:
+    the project's version stays (T-P0-20-13) and no `project.updated` goes out (the
+    routes emitted the archive and the unarchive; a later event would outrank them in
+    the search index). Open views hear of it through the live channel."""
+    try:
+        await _row(s, project_id, lock=True)
+    except NotFound:
+        return False  # purged meanwhile
+    match = (
+        _archives.c.project_id == project_id,
+        _archives.c.deleted_at.is_(None),
+        _archives.c.state == expect,
+    )
+    stmt = (
+        delete(_archives).where(*match)
+        if to is None
+        else update(_archives).where(*match).values(state=to)
+    )
+    moved = await s.scalar(stmt.returning(_archives.c.id))
+    if moved is None:
+        return False
+    mark_changed(s, LIVE_ENTITY, project_id)
+    return True
+
+
+async def purge_project(
+    s: AsyncSession, project_id: UUID, reason: str, *, now: datetime | None = None
+) -> None:
+    """Purge an archived project for good (R-37, session only): 409 `not_archived` for one
+    that is not archived, then the `data.purged` audit row with the reason, the project
+    soft-deleted (reads answer 404) and `project.purged`, whose subscriber drops what the
+    archive kept (the profile archive on the agent server, packed folders, blobs)."""
+    row = await _row(s, project_id, lock=True)
+    if row.archived_at is None or await _archive_state(s, project_id) == "unarchiving":
+        raise ProblemError(409, "not_archived", "Only an archived project can be purged")
+    at = _now(now)
+    await s.execute(
+        update(_projects)
+        .where(_projects.c.id == project_id)
+        .values(deleted_at=at, version=_projects.c.version + 1)
+    )
+    await audit.record(
+        s,
+        "data.purged",
+        target=("project", project_id),
+        reason=reason,
+        details={"scope": "project"},
+        occurred_at=at,
+    )
+    await emit(s, ProjectPurgedV1(project_id=project_id), occurred_at=at)
+    mark_changed(s, LIVE_ENTITY, project_id)
 
 
 async def _neighbour_key(s: AsyncSession, neighbour: UUID | None, moving: UUID) -> str | None:

@@ -67,6 +67,7 @@ from tumnis.modules.knowledge.sync_rules import (
     read_tumnis_id,
     render_note,
 )
+from tumnis.modules.projects import api as projects_api
 from tumnis.modules.tasks import api as tasks
 
 log = logging.getLogger(__name__)
@@ -274,8 +275,14 @@ async def _load(s: AsyncSession, location_id: UUID, scan: _Scan) -> None:
         .mappings()
         .all()
     )
-    records = (
-        (
+    # P2-18: an archived project's folder (or one being archived or unarchived) is left
+    # alone, with its records: its files are packed away, or its index is archived.
+    dormant = await projects_api.dormant_projects(s, [f["project_id"] for f in scan.folders])
+    asleep = tuple(f"{f['root_path']}/" for f in scan.folders if f["project_id"] in dormant)
+    scan.folders = [f for f in scan.folders if f["project_id"] not in dormant]
+    records = [
+        row
+        for row in (
             await s.execute(
                 select(_files).where(
                     _files.c.location_id == location_id, _files.c.deleted_at.is_(None)
@@ -284,7 +291,8 @@ async def _load(s: AsyncSession, location_id: UUID, scan: _Scan) -> None:
         )
         .mappings()
         .all()
-    )
+        if not row["path"].startswith(asleep)
+    ]
     scan.records = {row["path"]: row for row in records}
     linked = {row["document_id"] for row in records if row["document_id"] is not None}
     projects = [f["project_id"] for f in scan.folders]

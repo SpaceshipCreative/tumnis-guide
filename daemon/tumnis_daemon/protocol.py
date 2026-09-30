@@ -9,6 +9,8 @@ Protocol 2 (P2-07) adds `stream`, `status`, `upload_artifact` (daemon to server)
 `archive`, `nack` (server to daemon), batched acks (`ack` version 2) and version-2 `run`
 and `result`. The server picks protocol 2 only for a daemon that lists 2 and advertises
 `stream`, `cancel` and `upload_artifact`; otherwise the session stays on protocol 1.
+P2-18 adds `archive_done`, `restore_done` (daemon to server), `restore` and
+`purge_archive` (server to daemon), all protocol 2 only.
 """
 
 import hashlib
@@ -23,7 +25,7 @@ NAME_RE: Final = r"^[a-z0-9][a-z0-9-]{0,62}$"  # profile and runner names
 SKILL_RE: Final = r"^[a-z][a-z0-9-]{0,40}$"
 PROTOCOL_VERSIONS: Final = (1, 2)  # what this daemon speaks
 PROTOCOL_2: Final = 2
-# Advertised on register; "archive" joins with P2-18's behavior.
+# Advertised on register.
 CAPABILITIES: Final = (
     "run",
     "provision",
@@ -32,6 +34,7 @@ CAPABILITIES: Final = (
     "cancel",
     "upload_artifact",
     "worktree",
+    "archive",
 )
 TEXT_MAX: Final = 65_536
 ERROR_MAX: Final = 4_096
@@ -238,6 +241,34 @@ class UploadArtifact(Envelope):
     content: str
 
 
+ArchiveErrorCode = Literal["active_run", "not_found", "invalid_name", "failed"]
+
+
+class ArchiveDone(Envelope):
+    """P2-18: the answer to `archive`: the pack's path, size and sha256 and the digest of
+    the profile's manifest, or an `error_code`."""
+
+    type: Literal["archive_done"] = "archive_done"
+    archive_id: str = Field(max_length=128)
+    path: str = Field(max_length=4096)
+    size: int = Field(ge=0)
+    sha256: str = Field(max_length=64)
+    manifest_digest: str = Field(max_length=64)
+    error_code: ArchiveErrorCode | None = None
+    error: str | None = Field(default=None, max_length=ERROR_MAX)
+
+
+class RestoreDone(Envelope):
+    """P2-18: the answer to `restore`: ok when the restored tree's manifest digest is the
+    expected one."""
+
+    type: Literal["restore_done"] = "restore_done"
+    archive_id: str = Field(max_length=128)
+    manifest_digest: str = Field(max_length=64)
+    ok: bool
+    error: str | None = Field(default=None, max_length=ERROR_MAX)
+
+
 # --- server -> daemon ------------------------------------------------------------------
 
 
@@ -305,9 +336,26 @@ class Cancel(Envelope):
 
 
 class Archive(Envelope):
-    """Schema only; the behavior arrives with P2-18."""
+    """P2-18: pack a profile's home into one archive and take it out of the live list."""
 
     type: Literal["archive"] = "archive"
+    profile: str = Field(pattern=NAME_RE)
+    archive_id: str = Field(max_length=128)
+
+
+class Restore(Envelope):
+    """P2-18: put an archived profile back, checked against the expected manifest digest."""
+
+    type: Literal["restore"] = "restore"
+    profile: str = Field(pattern=NAME_RE)
+    archive_id: str = Field(max_length=128)
+    expected_manifest_digest: str = Field(max_length=64)
+
+
+class PurgeArchive(Envelope):
+    """P2-18: forget an archived profile for good; its archive is deleted."""
+
+    type: Literal["purge_archive"] = "purge_archive"
     profile: str = Field(pattern=NAME_RE)
     archive_id: str = Field(max_length=128)
 
@@ -330,6 +378,8 @@ DaemonMessage = (
     | Stream
     | Status
     | UploadArtifact
+    | ArchiveDone
+    | RestoreDone
 )
 ServerMessage = (
     Registered
@@ -341,6 +391,8 @@ ServerMessage = (
     | ProtocolError
     | Cancel
     | Archive
+    | Restore
+    | PurgeArchive
     | Nack
 )
 _SERVER: Final[dict[tuple[str, int], type[_Model]]] = {
@@ -354,10 +406,14 @@ _SERVER: Final[dict[tuple[str, int], type[_Model]]] = {
     ("error", 1): ProtocolError,
     ("cancel", 1): Cancel,
     ("archive", 1): Archive,
+    ("restore", 1): Restore,
+    ("purge_archive", 1): PurgeArchive,
     ("nack", 1): Nack,
 }
 # Protocol-2 daemon messages: never sent, nor kept, on a protocol-1 session.
-PROTOCOL_2_ONLY: Final = frozenset({"stream", "status", "upload_artifact"})
+PROTOCOL_2_ONLY: Final = frozenset(
+    {"stream", "status", "upload_artifact", "archive_done", "restore_done"}
+)
 
 
 class InvalidFrame(ValueError):  # noqa: N818  # the protocol's word

@@ -1,4 +1,4 @@
-"""projects event payload models (P0-17, A8, A12). Projects subscribes to nothing.
+"""projects event payload models (P0-17, A8, A12) and the archive subscribers (P2-18).
 
 - `project.created`: a new project, emitted with its row. It carries the brief
   (`brief_md`, capped at 64 KB, plan default) for knowledge to store as the pinned first
@@ -6,21 +6,32 @@
   or link, P1-06) for agents to provision.
 - `project.updated`: fields changed (`changed_fields`), including `archived_at` on
   unarchive and `sort_key` on reorder.
-- `project.archived`: archived; data kept.
+- `project.archived`: archived; data kept (P2-18: then compressed by `archive_project`).
+- `project.purged`: an archived project purged for good (P2-18, R-37): the modules drop
+  what its archive kept.
 - `policy.changed`: the approval policy's `before` and `after` (the policy editor is
   P2-08; the payload is fixed here for the subscribers that react to it).
+
+Subscribers (P2-18, FR-5.10): `projects.start_archive` starts `archive_project` on
+`project.archived`, `projects.start_unarchive` starts `unarchive_project` on the
+`project.updated` of an unarchive (`archived_at` changed, no longer archived), and
+`projects.start_purge` starts `purge_project_archive` on `project.purged`. Each
+workflow id comes from the event id, so a redelivered event starts nothing new. The
+workflows module is imported when a subscriber runs: api imports this module for its
+payloads, and workflows imports api.
 
 `project.created` and `project.updated` also carry what search indexes (P0-20, additive,
 since search may not call projects): the name and goal, and on updates whether the project
 is archived.
 """
 
-from typing import Annotated, ClassVar, Final, Literal
+import importlib
+from typing import Annotated, Any, ClassVar, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
-from tumnis.core.events import EventPayload, event_type
+from tumnis.core.events import EventEnvelope, EventPayload, event_type, subscribe
 
 BRIEF_MAX_CHARS: Final = 65_536  # plan default: 64 KB
 # A Hermes profile name (agents' NAME_RE, repeated here: projects cannot import agents).
@@ -85,3 +96,34 @@ class PolicyChangedV1(EventPayload):
     project_id: UUID
     before: PolicyDoc | None
     after: PolicyDoc
+
+
+@event_type("project.purged", 1)
+class ProjectPurgedV1(EventPayload):
+    event_name: ClassVar[str] = "project.purged"
+    schema_version: Literal[1] = 1
+    project_id: UUID
+
+
+# --- archive subscribers (P2-18) -----------------------------------------------------------
+
+
+def _workflows() -> Any:
+    return importlib.import_module("tumnis.modules.projects.workflows")
+
+
+@subscribe("project.archived", name="projects.start_archive")
+async def start_archive(envelope: EventEnvelope) -> None:
+    await _workflows().start_archive(envelope)
+
+
+@subscribe("project.updated", name="projects.start_unarchive")
+async def start_unarchive(envelope: EventEnvelope) -> None:
+    payload = envelope.payload
+    if "archived_at" in payload.get("changed_fields", []) and payload.get("archived") is False:
+        await _workflows().start_unarchive(envelope)
+
+
+@subscribe("project.purged", name="projects.start_purge")
+async def start_purge(envelope: EventEnvelope) -> None:
+    await _workflows().start_purge(envelope)

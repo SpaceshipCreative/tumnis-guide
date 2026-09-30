@@ -15,6 +15,12 @@ so nothing beats on its own: `heartbeat()` sends one beat, stamped by the server
 `offline(profile)` stops answering for the profile and re-registers without it (the
 server then refuses to dispatch to it); `disconnect()` drops the socket.
 
+P2-18: `connect_v2()` registers on protocol 2 with the `archive` capability. A profile's
+home is an in-memory tree (`homes[profile]`: relative path -> bytes); `archive` moves it
+out of the live list into an archive answered with its manifest digest (or
+`error_code="active_run"` while the profile is `busy`), `restore` puts it back when the
+expected digest matches, and `purge_archive` forgets the archive.
+
 `fake_runner(..., strict=True)` (P2-02) behaves like an agent that uses its packet: it
 validates every `run` packet against schemas/packet/v1/task_packet.json, refuses one
 without `callback.task_token`, and calls `GET /v1/tasks` back with the token before it
@@ -143,6 +149,9 @@ class FakeRunner:
         self._send_lock = threading.Lock()
         self._changed = threading.Condition()
         self._timers: list[threading.Timer] = []
+        self.homes: dict[str, dict[str, bytes]] = {}  # P2-18: each profile's home
+        self.archived: dict[str, tuple[str, dict[str, bytes]]] = {}  # archive id -> home
+        self.busy: set[str] = set()  # profiles with an active run (archive refused)
 
     # --- scripting -----------------------------------------------------------------------
 
@@ -260,6 +269,15 @@ class FakeRunner:
         self._reader.start()
         return first
 
+    def connect_v2(self) -> Registered:
+        """Register on protocol 2 with the `archive` capability (P2-18)."""
+        from tumnis.modules.agents.protocol import PROTOCOL_2_CAPABILITIES  # noqa: PLC0415
+
+        return self.connect(
+            protocol_versions=[1, 2],
+            capabilities=[*self.capabilities, *sorted(PROTOCOL_2_CAPABILITIES), "archive"],
+        )
+
     def reconnect(self) -> Registered:
         self.disconnect()
         return self.connect()
@@ -373,6 +391,12 @@ class FakeRunner:
                     self._answer_health(message)
                 elif isinstance(message, Provision):
                     self._answer_provision(message)
+                elif message.type == "archive":
+                    self._answer_archive(message)
+                elif message.type == "restore":
+                    self._answer_restore(message)
+                elif message.type == "purge_archive":
+                    self.archived.pop(message.archive_id, None)
             except Exception as exc:  # kept for the test to inspect
                 self.errors.append(exc)
 
@@ -512,6 +536,76 @@ class FakeRunner:
         timer.daemon = True
         self._timers.append(timer)
         timer.start()
+
+    @staticmethod
+    def home_digest(home: dict[str, bytes]) -> str:
+        """The manifest digest of an in-memory home, as the daemon reports it."""
+        import hashlib  # noqa: PLC0415
+
+        from tumnis.core.archive_blobs import Manifest  # noqa: PLC0415
+
+        entries = tuple(
+            sorted(
+                (path, len(data), hashlib.sha256(data).hexdigest()) for path, data in home.items()
+            )
+        )
+        return Manifest(entries).digest()
+
+    def _answer_archive(self, message: Any) -> None:
+        import hashlib  # noqa: PLC0415
+
+        from tumnis.modules.agents.protocol import ArchiveDone  # noqa: PLC0415
+
+        profile, archive_id = message.profile, message.archive_id
+        error: dict[str, Any] = {}
+        if profile in self.busy:
+            error = {"error_code": "active_run", "error": "a run is active"}
+        elif archive_id not in self.archived:  # a resent archive gets the same answer
+            self.archived[archive_id] = (profile, self.homes.pop(profile, {}))
+            if profile in self.profiles:
+                self.profiles.remove(profile)
+        home = self.archived[archive_id][1] if archive_id in self.archived else {}
+        packed = repr(sorted(home.items())).encode()
+        self.send(
+            ArchiveDone(
+                **self._envelope(message.correlation_id),
+                archive_id=archive_id,
+                path=f"/var/lib/tumnis-daemon/archives/{archive_id}.tar.zst",
+                size=len(packed),
+                sha256=hashlib.sha256(packed).hexdigest(),
+                manifest_digest=self.home_digest(home),
+                **error,
+            )
+        )
+
+    def _answer_restore(self, message: Any) -> None:
+        from tumnis.modules.agents.protocol import RestoreDone  # noqa: PLC0415
+
+        found = self.archived.get(message.archive_id)
+        digest = self.home_digest(found[1]) if found is not None else ""
+        ok = found is not None and digest == message.expected_manifest_digest
+        if ok and found is not None:
+            self.homes[found[0]] = found[1]
+            if found[0] not in self.profiles:
+                self.profiles.append(found[0])
+            del self.archived[message.archive_id]
+        elif found is None and message.profile in self.homes:  # a resent restore, done already
+            digest = self.home_digest(self.homes[message.profile])
+            ok = digest == message.expected_manifest_digest
+        self.send(
+            RestoreDone(
+                **self._envelope(message.correlation_id),
+                archive_id=message.archive_id,
+                manifest_digest=digest,
+                ok=ok,
+            )
+        )
+
+    def archives(self) -> list[Any]:
+        return [m for m in self.received if m.type == "archive"]
+
+    def restores(self) -> list[Any]:
+        return [m for m in self.received if m.type == "restore"]
 
     # --- waiting -------------------------------------------------------------------------
 

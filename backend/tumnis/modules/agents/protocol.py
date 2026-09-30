@@ -9,7 +9,9 @@ server answers `registered` with the highest version both support, or
 `error{unsupported_protocol_version}` and a close. Protocol 1 acknowledges every message,
 in either direction, with its own `ack{ack_of}`; protocol 2 (P2-07) adds batched acks
 (`ack` version 2, `message_ids`), `stream`, `status`, `cancel`, `upload_artifact`,
-`archive` and `nack` (new types at version 1) and version-2 `run` and `result`. A daemon
+`archive` and `nack` (new types at version 1) and version-2 `run` and `result`; P2-18 adds
+`restore` and `purge_archive` (server to daemon) and their answers `archive_done` and
+`restore_done` (daemon to server). A daemon
 gets protocol 2 only when it lists 2 and advertises `PROTOCOL_2_CAPABILITIES`, so a
 daemon that merely lists the number stays on protocol 1.
 
@@ -30,11 +32,14 @@ from tumnis.modules.agents.rules import MAX_REACH_TARGETS, NAME_RE, SKILL_RE, To
 
 __all__ = [
     "NAME_RE",
+    "PROTOCOL_2",
     "PROTOCOL_2_CAPABILITIES",
     "SERVER_PROTOCOL_VERSIONS",
     "Ack",
     "AckBatch",
     "Archive",
+    "ArchiveDone",
+    "ArchiveErrorCode",
     "Cancel",
     "DaemonMessage",
     "Envelope",
@@ -48,8 +53,11 @@ __all__ = [
     "ProtocolError",
     "Provision",
     "ProvisionResult",
+    "PurgeArchive",
     "Register",
     "Registered",
+    "Restore",
+    "RestoreDone",
     "Result",
     "ResultV2",
     "Run",
@@ -66,6 +74,7 @@ __all__ = [
 ]
 
 SERVER_PROTOCOL_VERSIONS: Final = (1, 2)
+PROTOCOL_2: Final = 2
 # A daemon gets protocol 2 only when it lists 2 and advertises all of these.
 PROTOCOL_2_CAPABILITIES: Final = frozenset({"stream", "cancel", "upload_artifact"})
 TEXT_MAX: Final = 65_536
@@ -272,6 +281,36 @@ class ProvisionResult(Envelope):
     error: str | None = Field(default=None, max_length=ERROR_MAX)
 
 
+ArchiveErrorCode = Literal["active_run", "not_found", "invalid_name", "failed"]
+
+
+@versioned("runner", "archive_done", 1)
+class ArchiveDone(Envelope):
+    """P2-18: the answer to `archive`: the pack's path, size and sha256 and the digest of
+    the profile's manifest, or an `error_code`."""
+
+    type: Literal["archive_done"] = "archive_done"
+    archive_id: str = Field(max_length=128)
+    path: str = Field(max_length=4096)
+    size: int = Field(ge=0)
+    sha256: str = Field(max_length=64)
+    manifest_digest: str = Field(max_length=64)
+    error_code: ArchiveErrorCode | None = None
+    error: str | None = Field(default=None, max_length=ERROR_MAX)
+
+
+@versioned("runner", "restore_done", 1)
+class RestoreDone(Envelope):
+    """P2-18: the answer to `restore`: ok when the restored tree's manifest digest is the
+    expected one."""
+
+    type: Literal["restore_done"] = "restore_done"
+    archive_id: str = Field(max_length=128)
+    manifest_digest: str = Field(max_length=64)
+    ok: bool
+    error: str | None = Field(default=None, max_length=ERROR_MAX)
+
+
 # --- server -> daemon ------------------------------------------------------------------
 
 
@@ -354,9 +393,28 @@ class Cancel(Envelope):
 
 @versioned("runner", "archive", 1)
 class Archive(Envelope):
-    """Protocol 2: the schema only; the behavior and its companions arrive in P2-18."""
+    """P2-18: pack a profile's home into one archive and take it out of the live list."""
 
     type: Literal["archive"] = "archive"
+    profile: str = Field(pattern=NAME_RE)
+    archive_id: str = Field(max_length=128)
+
+
+@versioned("runner", "restore", 1)
+class Restore(Envelope):
+    """P2-18: put an archived profile back, checked against the expected manifest digest."""
+
+    type: Literal["restore"] = "restore"
+    profile: str = Field(pattern=NAME_RE)
+    archive_id: str = Field(max_length=128)
+    expected_manifest_digest: str = Field(max_length=64)
+
+
+@versioned("runner", "purge_archive", 1)
+class PurgeArchive(Envelope):
+    """P2-18: forget an archived profile for good; its archive is deleted."""
+
+    type: Literal["purge_archive"] = "purge_archive"
     profile: str = Field(pattern=NAME_RE)
     archive_id: str = Field(max_length=128)
 
@@ -382,6 +440,8 @@ DaemonMessage = (
     | Stream
     | Status
     | UploadArtifact
+    | ArchiveDone
+    | RestoreDone
 )
 ServerMessage = (
     Registered
@@ -393,6 +453,8 @@ ServerMessage = (
     | ProtocolError
     | Cancel
     | Archive
+    | Restore
+    | PurgeArchive
     | Nack
 )
 
@@ -409,6 +471,8 @@ _DAEMON: Final[_Models] = {
     ("stream", 1): Stream,
     ("status", 1): Status,
     ("upload_artifact", 1): UploadArtifact,
+    ("archive_done", 1): ArchiveDone,
+    ("restore_done", 1): RestoreDone,
 }
 _SERVER: Final[_Models] = {
     ("registered", 1): Registered,
@@ -421,6 +485,8 @@ _SERVER: Final[_Models] = {
     ("error", 1): ProtocolError,
     ("cancel", 1): Cancel,
     ("archive", 1): Archive,
+    ("restore", 1): Restore,
+    ("purge_archive", 1): PurgeArchive,
     ("nack", 1): Nack,
 }
 

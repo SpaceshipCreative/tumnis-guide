@@ -1955,6 +1955,10 @@ export type ProjectLinkIn = {
  */
 export type ProjectOut = {
   /**
+   * Archive State
+   */
+  archive_state?: "archiving" | "archived" | "unarchiving" | null;
+  /**
    * Archived At
    */
   archived_at: string | null;
@@ -2151,6 +2155,45 @@ export type PullRequestOut = {
    * Url
    */
   url: string;
+};
+
+/**
+ * PurgeIn
+ *
+ * `POST /v1/purges`: what to purge and why (the reason goes to the audit row).
+ * P2-18 purges an archived `project`; P3-09 adds `connection`.
+ */
+export type PurgeIn = {
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Reason
+   */
+  reason: string;
+  /**
+   * Scope
+   */
+  scope: "project";
+};
+
+/**
+ * PurgeOut
+ */
+export type PurgeOut = {
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Scope
+   */
+  scope: "project";
+  /**
+   * Status
+   */
+  status?: "accepted";
 };
 
 /**
@@ -7164,6 +7207,60 @@ export type ProjectsUnarchiveProjectResponses = {
 
 export type ProjectsUnarchiveProjectResponse =
   ProjectsUnarchiveProjectResponses[keyof ProjectsUnarchiveProjectResponses];
+
+export type PurgesPurgeData = {
+  body: PurgeIn;
+  path?: never;
+  query?: never;
+  url: "/v1/purges";
+};
+
+export type PurgesPurgeErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesPurgeError = PurgesPurgeErrors[keyof PurgesPurgeErrors];
+
+export type PurgesPurgeResponses = {
+  /**
+   * Successful Response
+   */
+  202: PurgeOut;
+};
+
+export type PurgesPurgeResponse =
+  PurgesPurgeResponses[keyof PurgesPurgeResponses];
 
 export type TasksListRecurrenceData = {
   body?: never;

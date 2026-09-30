@@ -2,7 +2,7 @@
   "$id": "https://tumnis.dev/schemas/runner/v1/archive.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Protocol 2: the schema only; the behavior and its companions arrive in P2-18.",
+  "description": "P2-18: pack a profile's home into one archive and take it out of the live list.",
   "properties": {
     "archive_id": {
       "maxLength": 128,

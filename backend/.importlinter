@@ -33,6 +33,10 @@ ignore_imports =
 # through tasks' api and hand `artifact.updated` to tasks' subscriber (T-P2-13-07), which
 # has no api entry. Module code never imports tasks.
     tumnis.modules.github.tests.** -> tumnis.modules.tasks.events
+# P2-18: the archive tests (projects' integration tests) put a project's folder on a real
+# disk: they open locations as server paths, run a folder sync and log the storage writes
+# of the worker. Module code never imports knowledge.
+    tumnis.modules.projects.tests.** -> tumnis.modules.knowledge.**
 # Until modules call each other, the api ignore matches nothing; that is not an error.
 unmatched_ignore_imports_alerting = none
 
@@ -106,6 +110,8 @@ ignore_imports =
 # tasks' api and subscriber to prove the round trip. Module code never does.
     tumnis.modules.github.tests.** -> tumnis.modules.tasks.api
     tumnis.modules.github.tests.** -> tumnis.modules.tasks.events
+# knowledge builds on projects; the archive tests (P2-18) drive knowledge's folders.
+    tumnis.modules.projects.tests.** -> tumnis.modules.knowledge.**
 # agents builds on auth (P2-02: a task token per dispatch); auth's task-token tests issue
 # tokens the way a dispatch does, through agents' api.
     tumnis.modules.auth.tests.** -> tumnis.modules.agents.api
