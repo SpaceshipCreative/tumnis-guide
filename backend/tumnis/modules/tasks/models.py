@@ -1,5 +1,5 @@
 """tasks SQLAlchemy tables owned by this module (mirrors of revisions tasks_0001,
-tasks_0003, tasks_0004, tasks_0005, tasks_0006 and tasks_0007, P2-04's results).
+tasks_0003, tasks_0004, tasks_0005, tasks_0006, tasks_0007 and tasks_0008, P2-04's results).
 
 `board_rank` and `sort_key` compare bytewise (`COLLATE "C"`), so Postgres orders the
 fractional keys as Python and TypeScript do (core/rank.py)."""
@@ -120,7 +120,7 @@ class ReviewItem(TenantBase, Base):
 
 class Result(TenantBase, Base):
     """A run's result: what an agent reports it did, one per run (P2-04, revision
-    tasks_0007). `run_id` is agents' `runs` row: no cross-module foreign key."""
+    tasks_0008). `run_id` is agents' `runs` row: no cross-module foreign key."""
 
     __tablename__ = "results"
 
