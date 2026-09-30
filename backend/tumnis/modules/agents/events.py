@@ -18,7 +18,9 @@
   the estimate alone after a finished enrichment, for everything missing after one that
   could not run. A task whose enrichment is still pending or running (it waits for the
   label itself), or never started, starts nothing, which keeps the enrichment's own label
-  revision and Jev's label from starting a second one.
+  revision and Jev's label from starting a second one; an enrichment that ends without
+  the estimate its task now needs follows up with an estimate-only one itself
+  (`rules.estimate_follow_up`).
 
 Both enrichment subscribers are direct (the relay runs them; each only reads and starts
 its own workflow keyed on the event): every task write passes through them, and a queued

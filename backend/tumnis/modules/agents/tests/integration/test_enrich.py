@@ -507,6 +507,64 @@ async def test_user_edit_during_run_wins(
     assert row["estimate_minutes"] == result["estimate_minutes"]
 
 
+@pytest.mark.req("FR-4.4")
+@pytest.mark.wp("P1-08")
+async def test_relabel_during_run_gets_estimate_afterwards(
+    dbos: type[DBOS],
+    fake_runner: FakeRunnerFactory,
+    workspace: WorkspaceHandle,
+    clock: FixedClock,
+    db: DbUrls,
+) -> None:
+    """Review of PR #109: an AI task the user relabels Human while its enrichment runs
+    (asked for no estimate; `enrich_on_update` leaves a running enrichment alone) gets its
+    estimate from one estimate-only follow-up once the first result is applied.
+    """
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.tasks import api as tasks  # noqa: PLC0415
+
+    _subscribers()
+    runner = fake_runner(profiles=[ACME])
+    project_id = agent_project(fake_runner, runner, ACME, db)
+    result = recorded("enrich_ok_human")
+    gate = threading.Event()
+    runner.script(ACME, SKILL, {**result, "estimate_minutes": None}, gate=gate)
+
+    with enrichment_settings(clock):
+        task = await new_task(workspace, clock, project_id, "Export the sign-ups", label="ai")
+        await relay()
+        assert await until(runner.runs), "the run was never dispatched"
+        runner.script(ACME, SKILL, result)  # the follow-up's answer; the first is sent
+        ctx = user_ctx(workspace)
+        async with tenant_session(ctx) as s:
+            now = await tasks.get_task(s, task.id)
+            await tasks.update_task(
+                s,
+                ctx.actor,
+                task.id,
+                tasks.TaskPatch(label=tasks.Label.HUMAN, version=now.version),
+                now.version,
+                now=clock.now(),
+            )
+        await relay()  # the relabel's task.updated finds the enrichment running
+        gate.set()
+
+        def estimated() -> bool:
+            return task_row(db, task.id)["estimate_minutes"] is not None
+
+        assert await until(estimated), "no follow-up estimate in time"
+        assert await until(_status(db, task.id, "done", "failed")), "no enrichment in time"
+
+    first, follow_up = runner.runs()
+    assert first.packet["body"]["missing"] == ["first_action", "acceptance_criteria"]
+    assert follow_up.packet["body"]["missing"] == ["estimate_minutes"]
+    row = task_row(db, task.id)
+    assert row["enrichment_status"] == "done"
+    assert (row["label"], row["label_source"]) == ("human", "user")
+    assert row["estimate_minutes"] == result["estimate_minutes"]
+    assert row["first_action"] == result["first_action"]
+
+
 @pytest.mark.req("UX 9")
 @pytest.mark.wp("P1-08")
 async def test_enrichment_undo_restores_previous_values(  # noqa: PLR0917

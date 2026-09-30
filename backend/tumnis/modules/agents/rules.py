@@ -678,6 +678,7 @@ EnrichField = Literal["first_action", "acceptance_criteria", "estimate_minutes"]
 FIRST_ACTION: Final = "first_action"
 CRITERIA: Final = "acceptance_criteria"
 ESTIMATE: Final = "estimate_minutes"
+AGENT_LABEL_SOURCE: Final = "agent"  # a label the enrichment itself revised
 PLACEHOLDER_SOURCE: Final = "placeholder"
 REVISABLE_LABEL_SOURCES: Final = frozenset({"jev", "fallback"})  # the AI's own labels
 AI_PART: Final = "AI part"  # the Hybrid split's fixed headings (no description column)
@@ -745,6 +746,20 @@ def missing_fields(t: TaskSnapshot) -> list[EnrichField]:
 
 def needs_enrichment(t: TaskSnapshot) -> bool:
     return bool(missing_fields(t)) and t.status != "done"
+
+
+def estimate_follow_up(requested: Sequence[str], t: TaskSnapshot) -> bool:
+    """After an enrichment that did not ask for the estimate, whether the task (as it is
+    now) gets an estimate-only follow-up: it was labelled Human or Hybrid while that
+    enrichment was pending or running (`enrich_on_update` starts nothing then), and still
+    has no estimate. A label the enrichment itself revised (`label_source = "agent"`) is
+    left to `enrich_on_update`, which its own `task.updated` reaches once it is `done`."""
+    return (
+        ESTIMATE not in requested
+        and t.label_source != AGENT_LABEL_SOURCE
+        and needs_enrichment(t)
+        and ESTIMATE in missing_fields(t)
+    )
 
 
 class _SplitView(Protocol):

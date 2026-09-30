@@ -68,6 +68,7 @@ from tumnis.modules.agents.packet_builder import (
 from tumnis.modules.agents.protocol import Provision, ProvisionResult, SchemaRef
 from tumnis.modules.agents.review_kinds import DRIFT, DriftPayload, ForeignReach
 from tumnis.modules.agents.rules import (
+    ESTIMATE,
     MASTER_PROFILE_NAME,
     Drift,
     InvalidProfileName,
@@ -77,6 +78,7 @@ from tumnis.modules.agents.rules import (
     TaskSnapshot,
     allowlist_drift,
     enrichment_errors,
+    estimate_follow_up,
     merge_enrichment,
     missing_fields,
     needs_enrichment,
@@ -1233,6 +1235,15 @@ async def enrich_apply_step(
     return "done"  # pragma: no cover  # the loop returns or raises
 
 
+@DBOS.step()
+async def enrich_follow_up_step(workspace_id: str, task_id: str, requested: list[str]) -> bool:
+    """Whether the task, now that this enrichment is applied, gets an estimate-only
+    follow-up (`rules.estimate_follow_up`: relabelled Human or Hybrid while it ran)."""
+    async with tenant_session(_ctx(workspace_id)) as s:
+        snap = await _read_snapshot(s, UUID(task_id))
+    return snap is not None and estimate_follow_up(requested, snap)
+
+
 @DBOS.workflow(name="enrich_task")
 async def enrich_task(workspace_id: str, task_id: str, only: list[str] | None = None) -> str:
     """Enrichment by the project agent (P1-08): a placeholder first action first, a wait
@@ -1284,10 +1295,22 @@ async def enrich_task(workspace_id: str, task_id: str, only: list[str] | None = 
             return "failed"
         as_json = result.model_dump(mode="json")
         outlier = await enrich_plausibility_step(workspace_id, task_id, built["request"], as_json)
-        return await enrich_apply_step(workspace_id, task_id, built["request"], as_json, outlier)
+        ended = await enrich_apply_step(workspace_id, task_id, built["request"], as_json, outlier)
     except Exception:
         await enrich_fail_step(workspace_id, task_id)
         raise
+    if ended == "done" and await enrich_follow_up_step(
+        workspace_id, task_id, list(request.missing)
+    ):
+        # Enqueued from the workflow, so a replay finds its child rather than adding one.
+        with (
+            SetWorkflowID(enrich_workflow_id(UUID(task_id), f"estimate:{run_id}")),
+            SetEnqueueOptions(queue_partition_key=str(snap.project_id)),
+        ):
+            await DBOS.enqueue_workflow_async(
+                RUNS_QUEUE, enrich_task, workspace_id, task_id, [ESTIMATE]
+            )
+    return ended
 
 
 async def start_enrichment(
