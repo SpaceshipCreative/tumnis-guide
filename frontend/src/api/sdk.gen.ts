@@ -199,6 +199,9 @@ import type {
   TasksCreateTaskData,
   TasksCreateTaskErrors,
   TasksCreateTaskResponses,
+  TasksDecideReviewData,
+  TasksDecideReviewErrors,
+  TasksDecideReviewResponses,
   TasksDeleteRecurrenceData,
   TasksDeleteRecurrenceErrors,
   TasksDeleteRecurrenceResponses,
@@ -226,9 +229,12 @@ import type {
   TasksListRecurrenceData,
   TasksListRecurrenceErrors,
   TasksListRecurrenceResponses,
+  TasksListReviewData,
+  TasksListReviewErrors,
   TasksListReviewKindsData,
   TasksListReviewKindsErrors,
   TasksListReviewKindsResponses,
+  TasksListReviewResponses,
   TasksListTasksData,
   TasksListTasksErrors,
   TasksListTasksResponses,
@@ -316,6 +322,7 @@ import {
   zTasksAddCommentResponse,
   zTasksChangeStatusResponse,
   zTasksCreateTaskResponse,
+  zTasksDecideReviewResponse,
   zTasksDeleteRecurrenceResponse,
   zTasksGetBoardResponse,
   zTasksGetColumnsResponse,
@@ -326,6 +333,7 @@ import {
   zTasksListCommentsResponse,
   zTasksListRecurrenceResponse,
   zTasksListReviewKindsResponse,
+  zTasksListReviewResponse,
   zTasksListTasksResponse,
   zTasksMoveTaskResponse,
   zTasksPutColumnsResponse,
@@ -1460,6 +1468,31 @@ export const tasksListRecurrence = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List Review
+ *
+ * The review queue (FR-6.1): open, unsnoozed items by blocking impact (downstream
+ * tasks and human minutes, times Jev's factor when it applied), then age; `kind` keeps
+ * one registered kind.
+ */
+export const tasksListReview = <ThrowOnError extends boolean = false>(
+  options?: Options<TasksListReviewData, ThrowOnError>,
+): RequestResult<
+  TasksListReviewResponses,
+  TasksListReviewErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    TasksListReviewResponses,
+    TasksListReviewErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListReviewResponse.parseAsync(data),
+    url: "/v1/review",
+    ...options,
+  });
+
+/**
  * Get Review Count
  *
  * The badge: review items waiting now (not decided, trashed or snoozed).
@@ -1503,6 +1536,35 @@ export const tasksListReviewKinds = <ThrowOnError extends boolean = false>(
       await zTasksListReviewKindsResponse.parseAsync(data),
     url: "/v1/review/kinds",
     ...options,
+  });
+
+/**
+ * Decide Review
+ *
+ * Decides one item (R-04): 422 `action_not_allowed` for an action its kind lacks,
+ * `invalid_review_payload` or `invalid_snooze`; 409 `already_decided` or
+ * `stale_version`. Emits `human.decided`; the owning module applies the effect.
+ */
+export const tasksDecideReview = <ThrowOnError extends boolean = false>(
+  options: Options<TasksDecideReviewData, ThrowOnError>,
+): RequestResult<
+  TasksDecideReviewResponses,
+  TasksDecideReviewErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TasksDecideReviewResponses,
+    TasksDecideReviewErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksDecideReviewResponse.parseAsync(data),
+    url: "/v1/review/{id}/decide",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**

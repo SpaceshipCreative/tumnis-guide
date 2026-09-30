@@ -10,7 +10,7 @@ tasks module registers a `ProjectStatsSource` at import (P0-18). Until then ever
 counts zero tasks and is on track. Reads ask the source once per page for every id on it.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Annotated, Any, Final, Literal, Protocol
 from uuid import UUID
@@ -386,6 +386,18 @@ async def project_exists(s: AsyncSession, project_id: UUID) -> bool:
     """A live project (archived or not) of the caller's workspace."""
     found = await s.scalar(select(_projects.c.id).where(_projects.c.id == project_id, _live()))
     return found is not None
+
+
+async def project_names(s: AsyncSession, project_ids: Iterable[UUID]) -> dict[UUID, str]:
+    """The names of the live projects among `project_ids` (the review queue titles a
+    project's items with it, P1-13); unknown or deleted ids are left out."""
+    wanted = set(project_ids)
+    if not wanted:
+        return {}
+    rows = await s.execute(
+        select(_projects.c.id, _projects.c.name).where(_projects.c.id.in_(wanted), _live())
+    )
+    return {row.id: row.name for row in rows}
 
 
 # --- Writing -------------------------------------------------------------------------------
