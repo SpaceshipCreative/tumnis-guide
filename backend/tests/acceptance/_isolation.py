@@ -318,12 +318,17 @@ def requests_for(case: RouteCase, tables: Mapping[str, str]) -> Iterator[SweepRe
         if (t := _table(case.path, q.name, tables)) is not None
     }
     # Required query parameters that name no row (a date range, say) get a valid sample,
-    # so the request reaches the route instead of stopping at validation (P0-14).
-    required = {
-        q.alias or q.name: _sample(_annotation(q))
-        for q in route.dependant.query_params
-        if q.field_info.is_required() and q.name not in id_filters
-    }
+    # so the request reaches the route instead of stopping at validation (P0-14). A
+    # required id filter (`?project_id=` on the project week, P1-12) cannot be left out, so
+    # it always names A's row and the read is a row read, like an id in the path.
+    required: dict[str, str] = {}
+    for q in route.dependant.query_params:
+        if not q.field_info.is_required():
+            continue
+        if q.name in id_filters:
+            required[q.name], row_param = id_filters[q.name], True
+        else:
+            required[q.alias or q.name] = _sample(_annotation(q))
     if case.method in READS:
         if row_param:
             yield SweepRequest("row", case.method, url, required, None)
