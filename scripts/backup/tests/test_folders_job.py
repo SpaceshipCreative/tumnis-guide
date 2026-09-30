@@ -37,7 +37,6 @@ def _stub(folder: Path, name: str, body: str) -> None:
 
 @pytest.mark.req("REL-1")
 @pytest.mark.wp("P1-15")
-@pytest.mark.xfail(strict=True, reason="spec:P1-15")
 def test_uses_rclone_copy_never_sync(tmp_path: Path) -> None:
     """T-P1-15-12
     The job runs one copy per manifest source, with checksums, from the source to

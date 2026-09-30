@@ -1,4 +1,4 @@
-"""Command-line entry point: `tumnis api|worker|migrate|seed|gen|drill|audit` (more later).
+"""Command-line entry point: `tumnis api|worker|migrate|seed|gen|drill|audit|knowledge`.
 
 The image runs every process through this CLI. `api` and `worker` load the deployment
 settings and run the boot checks first; a configuration error exits 78 (EX_CONFIG), so a
@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Literal, NoReturn
+from typing import Annotated, Any, Literal, NoReturn
 from uuid import UUID
 
 import typer
@@ -29,6 +29,8 @@ audit_app = typer.Typer(help="Audit log (P0-15).", no_args_is_help=True)
 app.add_typer(audit_app, name="audit")
 admin_app = typer.Typer(help="Account recovery (P0-13).", no_args_is_help=True)
 app.add_typer(admin_app, name="admin")
+knowledge_app = typer.Typer(help="Project folders (P1-15).", no_args_is_help=True)
+app.add_typer(knowledge_app, name="knowledge")
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -426,3 +428,38 @@ def admin_reset_totp(email: Annotated[str, typer.Argument(help="The user's email
         raise typer.Exit(1) from None
     typer.echo("Scan this in the authenticator app; it is shown once:")
     typer.echo(uri)
+
+
+@knowledge_app.command("backup-sources")
+def knowledge_backup_sources(
+    as_json: Annotated[bool, typer.Option("--json", help="Print the manifest as JSON")] = False,
+) -> None:
+    """The nightly folder backup's manifest (REL-1): every Tumnis-made project folder and
+    every existing one whose project opted in, with where `rclone copy` reads it and where
+    it goes under the backup remote (scripts/backup/folders.sh)."""
+    import importlib  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    from tumnis.core import audit, db  # noqa: PLC0415
+
+    # By name, as the worker does: no module's tests reach knowledge through the CLI.
+    knowledge = importlib.import_module("tumnis.modules.knowledge.api")
+
+    settings = load_settings()
+    db.configure(settings.database_direct_url, settings.database_direct_url, pooled=False)
+
+    async def run() -> list[Any]:
+        try:
+            async with db.app_sessionmaker()() as s, s.begin():
+                workspaces = await audit.workspace_ids(s)
+            found: list[Any] = await knowledge.backup_manifest(workspaces)
+            return found
+        finally:
+            await db.dispose()
+
+    sources = asyncio.run(run())
+    if as_json:
+        typer.echo(json.dumps([source.model_dump(mode="json") for source in sources]))
+        return
+    for source in sources:
+        typer.echo(f"{source.source}\t{source.dest}\t{source.mode}")
