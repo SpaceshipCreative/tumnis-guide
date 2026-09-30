@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import "fake-indexeddb/auto";
 
 import { cleanup, configure } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach } from "vitest";
 
 import { configureClient } from "../lib/client";
 import { resetIdb } from "./idb";
@@ -39,11 +39,14 @@ beforeAll(() => {
   });
   server.listen({ onUnhandledFrame: "error" });
 });
+// Each test starts with an empty list, even after a previous hook failed early.
+beforeEach(() => {
+  unhandled.length = 0;
+});
 // Route loads still running finish first, against this test's handlers (routers.ts).
 // If one never settles, the hook still fails, and the teardown below still runs so the
 // next test starts clean.
 afterEach(async () => {
-  let missed: string[] = [];
   try {
     await settleRouters();
   } finally {
@@ -51,8 +54,9 @@ afterEach(async () => {
     cleanup();
     // A fresh IndexedDB per test: the offline queue persists there (P0-25).
     await resetIdb();
-    missed = unhandled.splice(0);
   }
+  // Only reached when settling succeeded; beforeEach clears the list either way.
+  const missed = unhandled.splice(0);
   if (missed.length > 0) {
     throw new Error(
       `Requests without an MSW handler (add them with server.use): ${[...new Set(missed)].join(", ")}`,
