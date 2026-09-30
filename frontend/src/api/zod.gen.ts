@@ -225,26 +225,6 @@ export const zKeyOut = z.object({
 export const zLabel = z.enum(["human", "ai", "hybrid"]);
 
 /**
- * CreateTaskBody
- */
-export const zCreateTaskBody = z.object({
-  acceptance_criteria: z.string().max(8000).nullish(),
-  due_on: z.iso.date().nullish(),
-  estimate_minutes: z.int().gt(0).lte(960).nullish(),
-  first_action: z.string().max(8000).nullish(),
-  label: zLabel.nullish(),
-  parent_id: z.uuid().nullish(),
-  priority: z
-    .enum(["low", "normal", "high", "urgent"])
-    .optional()
-    .default("normal"),
-  project_id: z.uuid(),
-  schema_version: z.int().nullish(),
-  status: z.enum(["backlog", "today"]).optional().default("backlog"),
-  title: z.string().min(1).max(500),
-});
-
-/**
  * LastDeployOut
  */
 export const zLastDeployOut = z.object({
@@ -962,6 +942,29 @@ export const zTaskContextItemOut = z.object({
   target_type: z.string(),
   target_url: z.string().nullable(),
   task_id: z.uuid(),
+});
+
+/**
+ * TaskCreate
+ *
+ * The REST twin's body. Named `TaskCreate` so the published OpenAPI schema (and the
+ * generated `TaskCreate` the frontend's quick-add queue uses) keeps its P0-18 name.
+ */
+export const zTaskCreate = z.object({
+  acceptance_criteria: z.string().max(8000).nullish(),
+  due_on: z.iso.date().nullish(),
+  estimate_minutes: z.int().gt(0).lte(960).nullish(),
+  first_action: z.string().max(8000).nullish(),
+  label: zLabel.nullish(),
+  parent_id: z.uuid().nullish(),
+  priority: z
+    .enum(["low", "normal", "high", "urgent"])
+    .optional()
+    .default("normal"),
+  project_id: z.uuid(),
+  schema_version: z.int().nullish(),
+  status: z.enum(["backlog", "today"]).optional().default("backlog"),
+  title: z.string().min(1).max(500),
 });
 
 /**
@@ -1856,7 +1859,7 @@ export const zTasksListTasksQuery = z.object({
  */
 export const zTasksListTasksResponse = zTaskPage;
 
-export const zTasksCreateTaskBody = zCreateTaskBody;
+export const zTasksCreateTaskBody = zTaskCreate;
 
 /**
  * Successful Response

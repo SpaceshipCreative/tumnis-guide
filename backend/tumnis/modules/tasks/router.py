@@ -161,7 +161,7 @@ async def list_tasks(  # the list_tasks tool's input as query parameters
 @router.post("/tasks", status_code=201)
 @route_policy(CREATE)
 async def create_task(
-    body: tools.CreateTaskBody, request: Request, session: SessionDep
+    body: tools.TaskCreate, request: Request, session: SessionDep
 ) -> api.TaskWithLayoutOut:
     """A task or subtask; the `create_task` tool's twin (P2-01)."""
     return await _written(request, session, tools.CREATE_TASK, body.model_dump())
