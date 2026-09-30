@@ -1785,7 +1785,9 @@ async def download_info(
 ) -> DownloadInfo:
     """The document's file if it may be served: 404 for a document or version that does
     not exist, 409 `not_available` unless it is `ready` (still scanning, quarantined,
-    failed), unless a requested version is the current one (the folder keeps one file per
+    failed), unless the pipeline has released a version of it (a current version: only
+    its last step sets one, so a row `ready` by the column default is never served, #99),
+    unless a requested version is the current one (the folder keeps one file per
     document) and unless no later version is still unreleased."""
     async with tenant_session(ctx) as s:
         doc = (
@@ -1821,7 +1823,12 @@ async def download_info(
             current = doc["current_version_id"]
             if current is not None and ver["id"] != current:
                 status = "replaced"  # the folder keeps the current version's bytes only
-        if status != "ready" or doc["path"] is None or doc["storage_location_id"] is None:
+        if (
+            status != "ready"
+            or doc["current_version_id"] is None
+            or doc["path"] is None
+            or doc["storage_location_id"] is None
+        ):
             raise ProblemError(409, "not_available", "The file is not available yet")
         if await _newer_version_unreleased(s, document_id, doc["current_version_id"]):
             raise ProblemError(409, "not_available", "The file is not available yet")
