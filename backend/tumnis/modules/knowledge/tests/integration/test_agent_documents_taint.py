@@ -75,7 +75,7 @@ async def test_add_document_from_tainted_run_is_tainted(
         run_id = await runs.run_of(task_id)
         caller = await runs.caller(run_id)
         async with tenant_session(caller.principal.workspace_context()) as s:
-            added = await knowledge.add_document(  # type: ignore[attr-defined]
+            added = await knowledge.add_document(
                 s,
                 caller,
                 project_id=world.projects["A"],
