@@ -88,6 +88,17 @@ def _workflow_id() -> str | None:
     return workflow_id
 
 
+def _packet_task(packet: TaskPacket) -> UUID | None:
+    """The task a packet's body names (`task.id`: enrich, task, proposal and stuck
+    packets), recorded on its run; None when it names none (a plan run)."""
+    task = packet.body.get("task")
+    raw = task.get("id") if isinstance(task, dict) else None
+    try:
+        return UUID(str(raw)) if raw is not None else None
+    except ValueError:
+        return None
+
+
 class AgentTransport(Protocol):
     def capabilities(self) -> AgentCapabilities: ...
 
@@ -178,6 +189,7 @@ class DaemonTransport:
                 .values(
                     id=packet.run_id,
                     profile_id=packet.profile_id,
+                    task_id=_packet_task(packet),
                     kind=packet.kind.value,
                     status="running",
                     workflow_id=_workflow_id(),

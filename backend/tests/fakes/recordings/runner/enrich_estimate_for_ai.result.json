@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "task_id": "00000000-0000-0000-0000-000000000000",
+  "first_action": "Export last week's sign-ups to a CSV file",
+  "acceptance_criteria": [
+    "The CSV holds one row per sign-up"
+  ],
+  "estimate_minutes": 30,
+  "label_revision": null,
+  "hybrid_split": null
+}

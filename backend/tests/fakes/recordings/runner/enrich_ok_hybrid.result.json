@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "task_id": "00000000-0000-0000-0000-000000000000",
+  "first_action": "List the five pages that need new screenshots",
+  "acceptance_criteria": [
+    "Every help page shows the new sign-up form",
+    "Old screenshots are removed from the media library"
+  ],
+  "estimate_minutes": 25,
+  "label_revision": null,
+  "hybrid_split": {
+    "ai_portion": "Capture and crop the screenshots",
+    "human_portion": "Check each page and publish it"
+  }
+}
