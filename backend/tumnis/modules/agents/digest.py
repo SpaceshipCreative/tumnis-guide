@@ -49,6 +49,7 @@ from tumnis.modules.agents import rules
 from tumnis.modules.agents.models import DigestCursor, DigestEntry
 from tumnis.modules.agents.rules import ALSO_IN_WORKSPACE, DigestScope, EntrySpec, Pos
 from tumnis.modules.integrations import api as integrations
+from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
 
 DEFAULT_LIMIT: Final = 200  # plan default
@@ -304,8 +305,13 @@ async def read_digest(
     project_ids: frozenset[UUID] | None = None,
 ) -> DigestOut:
     """One page of the consumer's digest (see the module docstring); `s` is a transaction
-    in `ctx`'s workspace, and the acknowledgement commits with it. A caller limited to
-    `project_ids` sees no other project's entries (R-28), in the workspace digest too."""
+    in `ctx`'s workspace, and the acknowledgement commits with it. A project digest of a
+    project the workspace does not have is 404 (A0.3). A caller limited to `project_ids`
+    sees no other project's entries (R-28), in the workspace digest too."""
+    if scope == "project" and (
+        project_id is None or not await projects.project_exists(s, project_id)
+    ):
+        raise ProblemError(404, "not_found", "Not found")  # another workspace's, or none
     key_name = scope_key(scope, project_id)
     key = await settings_store.purpose_key(s, ctx.workspace_id, CURSOR_PURPOSE)
     since_pos = None if since is None else decode_cursor(key, since, consumer_id, key_name)
