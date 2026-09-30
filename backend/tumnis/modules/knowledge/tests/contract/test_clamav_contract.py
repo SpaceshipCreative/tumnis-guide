@@ -5,6 +5,8 @@ container; `FakeClamAV` flags the EICAR test file only (A6) and passes the same 
 
 from __future__ import annotations
 
+import io
+import zipfile
 from typing import TYPE_CHECKING
 
 import pytest
@@ -34,7 +36,15 @@ class ScannerContract(AdapterContract[Scanner]):
         assert "eicar" in result.signature.lower()
 
     async def test_eicar_inside_a_larger_file_is_found(self, subject: Scanner) -> None:
-        body = b"x" * 70_000 + eicar()  # the test string past the first frame
+        # clamd's EICAR signatures match the whole 68-byte file (or offset 0) only, so the
+        # test file travels as a zip member behind 70 KB of padding (Scott decision 12):
+        # stored, not deflated, so the archive itself runs past the first 64 KiB frame.
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr("padding.txt", b"x" * 70_000)
+            archive.writestr("eicar.com", eicar())
+        body = buffer.getvalue()
+        assert len(body) > 64 * 1024
         result = await subject.scan(stream(body))
         assert result.infected is True
 
