@@ -69,7 +69,6 @@ async def _until(what: str, check: Any) -> Any:
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 async def test_real_daemon_streams_to_run_view(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls, tmp_path: Path
 ) -> None:

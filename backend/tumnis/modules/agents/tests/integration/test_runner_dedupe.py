@@ -98,7 +98,6 @@ def _send(runner: FakeRunner, frame: dict[str, Any]) -> uuid.UUID:
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 async def test_artifact_text_only_and_size_capped(
     workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls, fake_runner: FakeRunnerFactory
 ) -> None:
@@ -173,7 +172,6 @@ async def test_artifact_text_only_and_size_capped(
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 async def test_replayed_messages_stored_once(
     workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls, fake_runner: FakeRunnerFactory
 ) -> None:
@@ -201,7 +199,6 @@ async def test_replayed_messages_stored_once(
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 async def test_unacked_commands_resent_on_register(
     workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls, fake_runner: FakeRunnerFactory
 ) -> None:
@@ -242,7 +239,6 @@ async def test_unacked_commands_resent_on_register(
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 async def test_cancel_on_v1_daemon_falls_back(
     workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls, fake_runner: FakeRunnerFactory
 ) -> None:
@@ -292,7 +288,6 @@ async def test_cancel_on_v1_daemon_falls_back(
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 @pytest.mark.parametrize("protocol", [1, 2])
 async def test_ack_style_follows_session_protocol(
     protocol: int, workspace: WorkspaceHandle, clock: FixedClock, fake_runner: FakeRunnerFactory
@@ -332,7 +327,6 @@ def _ids(frame: Any) -> list[uuid.UUID]:
 
 @pytest.mark.req("FR-5.11")
 @pytest.mark.wp("P2-07")
-@pytest.mark.xfail(strict=True, reason="spec:P2-07")
 async def test_status_message_records_profile_version(
     workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls, fake_runner: FakeRunnerFactory
 ) -> None:
