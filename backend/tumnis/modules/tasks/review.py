@@ -22,7 +22,7 @@ from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, StringConstraints
-from sqlalchemy import Table, func, or_, select, text
+from sqlalchemy import Table, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,7 @@ from tumnis.core.errors import ProblemError
 from tumnis.core.live import mark_changed
 from tumnis.core.tenancy import tenant_session
 from tumnis.modules.github import api as github
+from tumnis.modules.tasks import rules
 from tumnis.modules.tasks.models import ReviewItem
 
 _review: Table = ReviewItem.__table__  # type: ignore[assignment]
@@ -164,6 +165,53 @@ async def review_badge_count(s: AsyncSession, now: datetime) -> int:
         )
     )
     return count or 0
+
+
+async def close_open_items(
+    s: AsyncSession, kind: str, target: TargetRef, *, decision: str, at: datetime
+) -> int:
+    """Closes the open items of `kind` on `target` with `decision` (for example
+    `superseded` when the human settled the question another way); returns how many."""
+    closed = (
+        await s.execute(
+            update(_review)
+            .where(
+                _review.c.kind == kind,
+                _review.c.target_type == target.type,
+                _review.c.target_id == target.id,
+                text(OPEN_WHERE),
+            )
+            .values(decided_at=at, decision=decision)
+            .returning(_review.c.id)
+        )
+    ).all()
+    for (item_id,) in closed:
+        mark_changed(s, LIVE_ENTITY, item_id)
+    return len(closed)
+
+
+# --- tasks' own kinds (P1-07 queues it; P1-13 renders and decides it) ------------------------
+
+LABEL_KIND: Final = "low_confidence_label"
+
+
+class LowConfidenceLabelPayload(BaseModel):
+    """Jev's label for a task was not confident enough to apply (P1-07): its suggestion."""
+
+    suggested: rules.Label
+    probabilities: dict[str, float] = {}
+    reason: Annotated[str, StringConstraints(max_length=500)] | None = None
+    decision_id: UUID | None = None
+
+
+LOW_CONFIDENCE_LABEL: Final = ReviewKindSpec(
+    kind=LABEL_KIND,
+    owner_module="tasks",
+    payload_schema=LowConfidenceLabelPayload,
+    actions=("accept", "edit", "reject", "snooze"),  # accept sets the suggested label
+    impact_scope="task",
+)
+register_review_kind(LOW_CONFIDENCE_LABEL)
 
 
 # --- Flags (P2-13) ---------------------------------------------------------------------------
