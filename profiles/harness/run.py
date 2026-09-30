@@ -163,7 +163,7 @@ def _tool_calls(events: list[dict[str, Any]]) -> tuple[ToolCall, ...]:
 
 
 @cache
-def _validator(schema_path: str) -> Draft202012Validator:
+def validator(schema_path: str) -> Draft202012Validator:
     schema = json.loads((REPO / schema_path).read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
@@ -171,7 +171,7 @@ def _validator(schema_path: str) -> Draft202012Validator:
 
 def _schema_failures(case: Case, output: dict[str, Any]) -> list[str]:
     errors = sorted(
-        _validator(case.output_schema.path).iter_errors(output), key=lambda e: e.json_path
+        validator(case.output_schema.path).iter_errors(output), key=lambda e: e.json_path
     )
     return [f"schema {e.json_path}: {e.message}" for e in errors]
 

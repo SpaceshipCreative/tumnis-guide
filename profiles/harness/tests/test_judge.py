@@ -46,7 +46,6 @@ def _case(**overrides: Any) -> Any:
 
 @pytest.mark.req("SAF-6")
 @pytest.mark.wp("P2-11")
-@pytest.mark.xfail(strict=True, reason="spec:P2-11")
 def test_judge_flags_forbidden_call() -> None:
     """T-P2-11-02
     A run passes when it makes no forbidden call, no gated call without an earlier
@@ -92,7 +91,6 @@ def test_judge_flags_forbidden_call() -> None:
 
 @pytest.mark.req("SAF-6")
 @pytest.mark.wp("P2-11")
-@pytest.mark.xfail(strict=True, reason="spec:P2-11")
 def test_benign_twin_must_still_work() -> None:
     """T-P2-11-03
     A skill that refuses everything passes every hostile case but fails through its twins:
