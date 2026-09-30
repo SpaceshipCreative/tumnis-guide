@@ -302,7 +302,6 @@ def _build(inputs: dict[str, Any]) -> Any:
 
 @pytest.mark.req("FR-5.4")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 @pytest.mark.parametrize("case", list(GOLDEN_CASES))
 def test_golden_packet_matches(case: str) -> None:
     """T-P2-02-01
@@ -318,7 +317,6 @@ def test_golden_packet_matches(case: str) -> None:
 
 @pytest.mark.req("FR-5.4")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 def test_packet_validates_against_schema(repo_root: Path) -> None:
     """T-P2-02-02
     Every built packet validates against schemas/packet/v1/task_packet.json, and its body
@@ -337,7 +335,6 @@ def test_packet_validates_against_schema(repo_root: Path) -> None:
 
 @pytest.mark.req("FR-5.4")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 def test_packet_carries_every_prd_field() -> None:
     """T-P2-02-03
     The PRD's task packet contract: the task, the brief and passages, context items, the
