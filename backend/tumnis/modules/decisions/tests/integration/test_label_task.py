@@ -77,7 +77,6 @@ def _decisions(db: DbUrls, task_id: str) -> list[dict[str, Any]]:
 
 @pytest.mark.req("FR-4.1")
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 async def test_label_has_one_line_reason(
     session_client: SessionClient, dbos: Any, fakes: Fakes, db: DbUrls, workspace: WorkspaceHandle
 ) -> None:
@@ -124,7 +123,6 @@ def _open_items(db: DbUrls, task_id: str) -> list[dict[str, Any]]:
 
 @pytest.mark.req("FR-4.1")
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 async def test_low_confidence_is_suggested_with_review_item(
     session_client: SessionClient, dbos: Any, fakes: Fakes, db: DbUrls, workspace: WorkspaceHandle
 ) -> None:
@@ -157,7 +155,6 @@ async def test_low_confidence_is_suggested_with_review_item(
 
 @pytest.mark.req("FR-4.1")
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 async def test_unknown_winner_goes_to_review_without_label(
     session_client: SessionClient, dbos: Any, fakes: Fakes, db: DbUrls, workspace: WorkspaceHandle
 ) -> None:
@@ -186,7 +183,6 @@ async def test_unknown_winner_goes_to_review_without_label(
 
 @pytest.mark.req("FR-4.1")
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 async def test_duplicate_event_labels_once(
     session_client: SessionClient, dbos: Any, fakes: Fakes, db: DbUrls, workspace: WorkspaceHandle
 ) -> None:

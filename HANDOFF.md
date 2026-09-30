@@ -1,98 +1,130 @@
-# P1-07 handoff (Quick-add labels and overrides)
+# P1-07 handoff (c1 -> c2): Quick-add labels and overrides
 
-Stopped on the coordinator's HANDOFF NOW at about 350k tokens, right after the red commit. No PR is open yet.
+c1 stopped on the coordinator's HANDOFF NOW at about 354k tokens. No PR is open yet.
 
 ## State
 
-- Branch: local `wp/P1-07` (renamed from the throwaway branch; the rename was applied but the config write failed on the read-only `.git/config`, which is harmless). It is based on main at `79909cc`. Push with `/usr/bin/git push origin HEAD:wp/P1-07`.
-- Commits:
-  - `81ace5b` test(decisions): P1-07 spec tests (red)
-  - (this file) chore: P1-07 handoff
+- Branch: push with `/usr/bin/git push origin HEAD:wp/P1-07`. From a fresh throwaway worktree: `/usr/bin/git fetch origin`, `/usr/bin/git merge origin/main`, then `/usr/bin/git merge origin/wp/P1-07`.
+- Commits (on top of main at 260d18d):
+  - `81ace5b` test(decisions): P1-07 spec tests (red), by c0.
+  - `af984bc` chore: P1-07 handoff, by c0.
+  - `8fb3a95` feat(tasks): label rules and whitelisted label inputs (T-08, T-14 unmarked).
+  - `a02cde8` feat(decisions): label_task workflow, label columns and AI label writes.
+  - `4b4d2a3` feat(frontend): label chip with override and session undo (T-10..13 unmarked), plus the A1.4 `_phase1.py` helper fixes.
+  - The next commit (this handoff) contains:
+    - The T-02/03/04/05/06/07/09 markers removed. All seven XPASS(strict) in the full `make test-int`.
+    - The `tests/acceptance/conftest.py` `seed` override (it loads after `master_key_file` and `pepper_file`).
+    - This file.
 - CI: none yet. No PR, no CodeRabbit threads.
-- `make check` is green on the red commit. The one exception is `tests/meta/test_security_job.py`, which fails only locally because `~/.semgrep` is read-only. It passes when `SEMGREP_SETTINGS_FILE`, `SEMGREP_LOG_FILE` and `SEMGREP_VERSION_CACHE_PATH` point under /tmp/claude-1002.
-- Unit red is confirmed: T-08 (7 cases) and T-14 xfail. Vitest red is confirmed: T-10..13 show "4 expected fail".
-- Integration red (T-01..07, T-09) has NOT been run locally yet. These tests fail at call time on the missing `decisions.api.use_providers` and the missing columns, so they should xfail. Confirm with `make test-int` or in CI.
 
-## Spec tests written (all red)
+## Spec tests
 
-| ID | File |
+| Test | State |
 | --- | --- |
-| T-01 | backend/tumnis/modules/decisions/tests/integration/test_label_latency.py (slow; real relay via `relay_running`) |
-| T-02, 03, 04, 09 | backend/tumnis/modules/decisions/tests/integration/test_label_task.py |
-| T-05, 06, 07 | backend/tumnis/modules/tasks/tests/integration/test_override_label.py |
-| T-08 | backend/tumnis/modules/tasks/tests/unit/test_label_rules.py |
-| T-14 | backend/tumnis/modules/decisions/tests/unit/test_label_inputs.py |
-| T-10..13 | frontend/src/components/common/LabelChip.test.tsx (stub `LabelChip.tsx` exports `TaskLabelChip`) |
+| T-08, T-14 (unit) | green, unmarked |
+| T-10, 11, 12, 13 (Vitest LabelChip) | green, unmarked; the full Vitest run is 73 files, 148 tests passed |
+| T-02, 03, 04, 05, 06, 07, 09 (integration) | XPASS in the full layer run, unmarked |
+| T-01 latency (`test_label_latency.py`) | STILL RED (xfail kept); see Blocker 2 |
+| A1.4 step 3 (`test_jev_and_vllm_down_sends_label_to_review`) | STILL RED (xfail kept); see Blocker 3 |
+| A1.1 (Playwright) | `test.fail()` stays by coordinator decision |
 
-Shared helpers live in `backend/tests/_labels.py`, outside `tumnis`, so tasks tests don't import decisions and break the import-linter cycle/api-only contracts: `label_answers`, `use_label_fakes`/`reset_label_fakes`, `relay_running`, `quiesce`, `until`, `owner_query`, `Gate`, `gated_jev`.
+## Last `make test-int` (full layer, before the markers came off)
 
-When implementing, remove the `# type: ignore[attr-defined]` on the red imports in test_label_rules.py and test_label_inputs.py (mypy will flag them as unused). That is not an assertion edit.
+11 failed, 996 passed, 8 xfailed, 1 error.
 
-## Decisions taken (coordinator approved the plan)
+- 7 of the failures were our XPASS(strict) tests, now unmarked.
+- 3 were VM noise: `test_rclone_copy_keeps_files_removed_at_source` (a known local-only failure), `test_typeahead_latency_on_load_fixture`, and `test_master_key_file[256]`. The S3 SSRF setup error was a Docker 500. Check these against main CI.
+- 1 was a real regression: `search/tests/integration/test_index_events.py::test_task_changes_reach_index_through_events` (T-P0-20-03). See Blocker 1.
 
-1. **A1.1 label step:** Playwright can't reach it until the shared test-hooks PR lands (coordinator branch `fix/test-fakes-script-hook`: a Postgres-backed fake-script store and `POST /v1/test/fakes/{adapter}/script`) and P1-08 lands. Leave A1.1's `test.fail()` in place. Prove the label step at the API layer (T-01, T-02), in Vitest (T-10..13), and with A1.4 step 3 (`backend/tests/acceptance/test_a1_4_degraded_modes.py::test_jev_and_vllm_down_sends_label_to_review`, marker spec:P1-07, which is ours). Record this as a deviation in the PR body.
-2. **Fake injection:** add a process-level override `decisions.api.use_providers(Providers | None)`. `decide(providers=None)` uses it before `_production_providers`, because `fakes["decisions.jev"]` is a different instance from `_build`'s cached fake. Every test resets it (autouse fixtures call `reset_label_fakes`).
-   - Fix the adjustable helpers in `backend/tests/acceptance/_phase1.py`. `fail_decision_providers` calls `script_failure`, and `script_label` calls `script(answer=, confidence=)`; neither exists on FakeDecisions. Use `fakes[name].script("quick_add_label", fail=AdapterUnavailable(name, "ask", "down"))` plus `use_providers(...)`, and add a reset (an autouse fixture in a new `backend/tests/acceptance/conftest.py`, or reset inside the test's teardown) so the override does not leak.
-3. **Enqueue from the subscriber:** the handler runs inside a DBOS step (`events.run_handler`). dbos 3.1.0 `_context.py::create_start_workflow_child` asserts it is not in a step, so `DBOS.enqueue_workflow_async` cannot be called there. Enqueue in a clean context instead: `await asyncio.create_task(_enqueue(...), context=contextvars.Context())`, with `SetWorkflowID(f"label:{event_id}")` (idempotent per event, which covers T-09) plus `SetEnqueueOptions(deduplication_id=f"label:{task_id}:{version}")`, suppressing `DBOSQueueDeduplicatedError`. The alternative is `deadletter.dbos_client()`, but the worker never configures that client.
-4. **Queue:** register `decisions` in `backend/tumnis/worker.py::register_queues` with `limiter={"limit": 1200, "period": 60}` and `polling_interval_sec=0.1`. Context7 (/dbos-inc/dbos-transact-py) confirms both `register_queue` kwargs exist in 3.1.
-5. **Review kinds:**
-   - Low confidence goes to `low_confidence_label`. Use the same names as PR #80 (P1-13) in `tasks/review.py`: `LABEL_KIND`, `LowConfidenceLabelPayload {suggested: rules.Label, probabilities: dict[str,float] = {}, reason: str<=500 | None, decision_id: UUID | None}`, `LOW_CONFIDENCE_LABEL`, registered. Leave out `action_payloads`, which isn't on main. The merge overlap is textual.
-   - `unknown` winner goes to a `decision_unavailable` item (decisions' own kind; its payload is `{decision_id, point}`, dedupe `decision:quick_add_label:<task>`), because #80's payload requires `suggested` to be a real label. T-04 asserts this.
-6. **Migration:** a new tasks revision chained after `tasks_0004`. #80 adds `tasks_0005`, so use a distinct id (for example `tasks_0006`, file `0006_label_columns.py`) and re-chain after `tasks_0005` if #80 merges first. Columns: `label_reason text`, `label_confidence double precision`, `label_decision_id uuid` (no FK), `label_suggestion task_label`. `phase = "expand"`.
-7. **Undo:** don't add `label_source` to `rules.UNDO_FIELDS`. The locked `test_undo_rules._row` has no `label_source`, so `undo_snapshot` would KeyError. Instead:
-   - `set_ai_label` writes its own change row via `record_change(before={"label": None, "label_source": None}, after={...})`.
-   - `undo_task` also restores `label_source` when the change's `before` holds it.
-   - `_record` adds `label_source` when `label` changed.
-   - `GET /v1/tasks/{id}` (`get_task`) returns `change_id` = the AI label change while `label_source in (jev, fallback)`, the change is not undone, and its `task_version == version` (T-13).
-8. **API signatures:** `set_ai_label(s, task_id, *, label, source, reason, confidence, decision_id, now=None) -> UUID | None` and `set_label_suggestion(s, ...)`. They take `s: AsyncSession` like every tasks api function, which deviates from the plan's session-less signature. `set_ai_label` runs `UPDATE ... WHERE label_source IS DISTINCT FROM 'user'` and returns None if 0 rows. It emits task.updated with changed_fields `[label, label_reason, label_source]`, calls `mark_changed` (the /ws push), and sets `label_decision_id`, `label_confidence` and `label_suggestion=NULL`.
-9. **Override (`update_task`):** when the label changes and the task had `label_decision_id` or `label_suggestion`, emit `human.decided`:
-   - Payload: `{item_kind: "label_override", item_id: task, target_type: "task", target_id: task, decision: <label>, previous: {label, label_source, label_suggestion}, payload: {"value": <label>, "overridden": <label != AI value>}, decision_id}`.
-   - Close open `low_confidence_label` items for the task as `decision = 'superseded'`, `decided_at = now`.
-   - Extend `decisions/events.py::record_outcome` to use `payload["overridden"]` when present (T-05 needs overridden=true and final_value="human").
-   - After #80 merges, its `tasks.apply_review_decision` calls `update_task` too, so skip the emission for that path (a flag or actor check). Flag this to the coordinator.
-10. **Rules:**
-    - Move `LabelSource` into `tasks/rules.py` (re-export it from api).
-    - `may_auto_label(src) = src != "user"`.
-    - `label_state(label, suggestion)`: confirmed, then suggested, then pending.
-    - `decisions/rules.py::label_inputs(task: Mapping, *, parent_title, project: Mapping | None, reserved_judgments) -> dict` returns only title, parent_title, project_name, project_goal and reserved_judgments, and omits None or empty values.
-11. **Workflow:** `decisions/workflows.py`:
-    - `label_task(workspace_id, task_id, task_version)` workflow with steps `load` (task, parent title, project name and goal, setting `triage.reserved_judgments`), `decide` (`decisions.api.decide(QUICK_ADD_LABEL, ..., subject=task, project_id=...)`) and `apply`.
-    - The reason comes from `rules.label_reason(label, companions)`, where companions are the noul values of the decision answers.
-    - Subscribers in `decisions/events.py`:
-      - `decisions.label_on_create` (task.created): skip when the payload label is not None.
-      - `decisions.label_on_title_change` (task.updated): only when `title` is in changed_fields and `may_auto_label`.
-    - Seed setting `triage.reserved_judgments = ["pricing", "hiring"]` (check `backend/fixtures/seed`).
-12. **TaskOut:** add `label_reason` and `label_suggestion`, then run `make gen`. The MSW fakes in `frontend/src/test/msw/project.ts` may need the new fields (update factories, never assertions).
-13. **UI:**
-    - `LabelChip` (presentational) and `TaskLabelChip({taskId})` (useQuery `taskQueryOptions`, `useUpdateTask`, undo via `lib/undo`).
-    - States: pending (`Labeling…`, `aria-busy`), suggested (`Suggested: Hybrid`, `border-dashed`, accessible name starting "Suggested"), confirmed.
-    - Click opens a `listbox` named "Label" with options Human/AI/Hybrid; keys 1/2/3 pick inside it.
-    - The reason is `aria-describedby` text.
-    - Show an "Undo AI label" button when an undo entry for the task's AI change exists (remember it from the GET's `change_id` when the source is jev or fallback).
-    - The chip has `data-testid="label-chip"` and `data-state`.
-    - Add a session-local "Just added" list (listitems with title plus chip) in `quickadd/` (QuickAddHost `onCreated`). Show the chip in `project/TaskRow.tsx`. Keep changes local (DS-01 is restyling the shell).
-14. **Recording:** the plan mentions `quick_add_label__low_confidence.json`; it's optional, because tests script the answers directly.
+## Blocker 1: a locked-test conflict (Scott item; NOT sent yet, send it first)
 
-## Remaining TDD steps (plan order)
+The label writes bump `tasks.version`, as the plan says `set_ai_label` must, and the `app.touch_row` trigger bumps it on every UPDATE, including `set_label_suggestion`. T-P0-20-03 (locked) creates a task, drains the relay and workflows (which now label it), then PATCHes the title with the creation version, so it gets 409 `stale_version`.
 
-1. T-08, T-14: rules. Remove markers.
-2. Migration, models, `set_ai_label`, workflow, subscriber, queue, `use_providers`: T-02.
-3. T-03, T-04 (review routing), then T-09 (dedupe).
-4. T-05, T-06: `update_task` extension, the `record_outcome` tweak, the conditional update.
-5. T-07: title-change subscriber.
-6. T-10..13: LabelChip, TaskRow, the quick-add "just added" row; `make gen`; fix the MSW fakes.
-7. T-01: measure. If over budget, tune the queue polling, never the test.
-8. A1.4 step 3: fix the `_phase1.py` helpers, then remove its spec:P1-07 marker.
-9. `make check`, `make test`, `make test-int`, Vitest. Push, then open the PR:
-   - title `[P1-07] impl: Quick-add labels and overrides`
-   - the body cites Context7 DBOS docs and the dbos 3.1.0 source for the enqueue-in-step limit
-   - the deviations above
-   - Scott items: none so far
-   - comment `@coderabbitai review`, then run the review loop and send `#<PR> MERGE-READY at <sha>` to main.
+The advisor said not to engineer around this. Send it to the coordinator (to `main` via SendMessage) as a Scott item with these options:
+
+- (a) A spec-change PR. T-P0-20-03 reads the task's current version before the rename (a one-line test change). Recommended.
+- (b) Make AI label writes version-transparent to human edits. This is a concurrency rule change touching update, status, move, trash and R-19. It is WP-sized.
+- (c) Whatever Scott prefers.
+
+Product note: with Jev on, any client write within about 1 s of creation that uses the creation version gets a 409 until the /ws refetch lands, and P1-08 widens that window.
+
+Before sending, grep for the same pattern elsewhere: tests using `session_client` + `dbos` that write with a creation-time version after `drain`/`quiesce`/`relay_once`, and Playwright journeys that quick-add and then act with a list-held version. List the hits in the same message.
+
+## Blocker 2: T-01 misses the budget badly
+
+In a local `-n 0` run, the latencies went from 2.6 s up to p95 about 9 s: 40 creates, growing backlog.
+
+Traces from temporary prints (removed) show:
+
+| Stage | Time |
+| --- | --- |
+| Workflow, `wf_start` to `applied` | about 0.5 to 0.7 s |
+| `load` step | 25 to 100 ms |
+| `decide` step (250 ms fake plus about 5 DB round trips: `get_provider_config`, `local_decisions_only`, 2 `get_setting`, cache, threshold, log insert) | 350 to 450 ms |
+| `apply` step | about 100 ms |
+| `enqueued` to `wf_start` (decisions queue hop) | 60 to 230 ms |
+
+The big cost is upstream: from `created` to the subscriber's `handler_start` (relay, then the events queue at 8 concurrency and 0.2 s poll). Each task makes 3 events (`task.created`, `decision.made`, `task.updated`), and every subscriber delivery is a workflow, so the backlog grows.
+
+Ideas, in order. Measure each; never touch the test.
+
+1. Check the relay wakes on NOTIFY for each commit. `relay_running(poll_s=1.0)`: is there a NOTIFY trigger on outbox inserts? Check `core/outbox.py` and the migrations.
+2. Plan fallback (plan's implementation notes): start `label_task` from the relay directly (`DBOS.start_workflow`) instead of via the subscriber and events queue. Or have `label_on_create` enqueue with a higher priority.
+3. Raise the events queue concurrency and poll rate only if needed (a shared core file: edit minimally and list it).
+4. Also measure in CI (the done checklist wants 3 green CI runs); the VM has about 9 agents.
+
+## Blocker 3: A1.4 step 3 is blocked by the seed
+
+Sign-in now works (the acceptance conftest `seed` fixture loads after the master key and pepper). The test then fails with `LookupError: 0 projects named 'Acme site'`. The seed (`fixtures/seed/projects.yaml`) has no "Acme site", and neither does wp/P1-06. The plan's phase 1 seed additions (P1-04 and P1-06) own that. Keep the xfail and record it as a deviation.
+
+## Decisions taken (coordinator approved; c0's list still holds)
+
+1. Prove A1.1's label step at the API layer (T-01, T-02), in Vitest (T-10..13) and with A1.4 step 3. Leave A1.1's `test.fail()`. Record this as a deviation (the shared fake-script hook, branch fix/test-fakes-script-hook, and P1-08 are pending).
+2. `decisions.api.use_providers(Providers | None)`: a process-level override. `decide(providers=None)` uses it before `_production_providers`. Tests reset it (autouse fixtures, and the acceptance conftest).
+3. Enqueue from the subscriber in a fresh context: `asyncio.create_task(..., context=contextvars.Context())`. dbos 3.1.0 `DBOSContext.create_start_workflow_child` asserts it is not in a step. Workflow ID `label:{event_id}`, dedupe `label:{task_id}:{version}`. `enqueue_label` reads the task (skips it when gone or when the user chose the label) for the version.
+4. The `decisions` queue: `worker.register_queues`, limiter 1200/60 s, `polling_interval_sec=0.1`. Constants are in `decisions/workflows.py`. Context7 `/dbos-inc/dbos-transact-py` confirms the kwargs.
+5. Review kinds: `low_confidence_label` is registered in `tasks/review.py`, with names and payload identical to #80 minus `action_payloads`. An `unknown` winner goes to `decision_unavailable` (dedupe `decision:quick_add_label:<task>`), added in `apply_label` when provider != none.
+6. Migration `tasks_0006` (`0006_label_columns.py`), chained after `tasks_0004`, `phase = "expand"`. Re-chain after `tasks_0005` if #80 merges first.
+7. Undo:
+   - `_record` adds `label_source` when the label changed; `undo_task` restores it.
+   - `set_ai_label` writes its own change row as actor `system`.
+   - `get_task` returns the AI change's `change_id` while `label_source` is jev or fallback, the change is not undone, and `task_version == version`.
+8. `set_ai_label(s, task_id, *, label, source, reason, confidence, decision_id, now)` and `set_label_suggestion(s, ..., probabilities=...)` take a session. `set_label_suggestion` adds the review item itself (tasks owns the kind).
+9. Override:
+   - `update_task(..., label_override=True)`: a HUMAN actor changing a label the AI decided (`label_decision_id` or `label_suggestion` set, source not already `user`) emits `human.decided`. Its payload is `{item_kind: label_override, ..., payload: {value, overridden}}`.
+   - It closes open `low_confidence_label` items as `superseded`.
+   - `decisions.record_outcome` uses `payload.overridden` when present.
+   - A label set by a person also clears `label_suggestion`.
+   - **After #80 merges**, its `tasks.apply_review_decision` must pass `label_override=False` to `update_task`. Whoever merges second wires it. Tell the coordinator.
+10. The triage setting is registered as section `triage` (`TriageSettings.reserved_judgments`, at most 10 items of 120 characters) in `decisions/api.py`. **Deviation:** the seed does not set `["pricing", "hiring"]`, because the seed loader has no settings kind.
+11. UI:
+    - `LabelChip` (presentational) with `useLabelOverride` (local optimistic pick plus `useUpdateTask`).
+    - `TaskLabelChip({taskId})` (the task query, and an undo entry via `lib/undo.remember`, labelled "AI label").
+    - `TaskRow` shows the chip for non-pending rows.
+    - **Deviation:** there is no separate "Just added" list in quick add. The just-saved row is the project Tasks row, which carries the chip. BoardCard and TodayItem still say "No label yet" (DS-01 area).
+12. Shared-file edits so far: none (`Makefile` was edited only temporarily for local runs and has been restored). `worker.py` is core but not a listed shared file. Generated: `schemas/openapi.json`, `frontend/src/api/types.gen.ts`, `frontend/src/api/zod.gen.ts`. Also `frontend/src/test/msw/project.ts` (fields added to a factory row).
+
+## Remaining steps
+
+1. Send the Blocker 1 Scott item to the coordinator (SendMessage to `main`).
+2. Blocker 2: fix the T-01 latency (measure, then pick the fallback); unmark T-01 once it passes.
+3. `make check` (with SEMGREP_* env vars pointing under /tmp/claude-1002/P1-07-c2/), `make test` (unit and contract; not run yet this round), then `make test-int` once.
+4. Push, then open the PR:
+   - Title: `[P1-07] impl: Quick-add labels and overrides`.
+   - Body draft: `/tmp/claude-1002/P1-07-c1/pr-body.md` (summary only). Add per-layer results, the deviations above, Blockers 1 and 3, and Scott items.
+   - Cite the Context7 DBOS docs (`register_queue` kwargs, `SetWorkflowID`, `SetEnqueueOptions`), the dbos 3.1.0 `_context.py` step assert, and the TanStack Query v5 optimistic-updates guide.
+   - End the body with a blank line and the 🤖 line.
+   - Then run `gh pr comment <url> --body "@coderabbitai review"`.
+5. Run the review loop (`~/tumnis-coordinator/pr-review-loop.md`). Once green and clean, send `#<PR> MERGE-READY at <sha>` to main. Note: main's `security` job fails on the OpenSSL CVEs until fix/openssl-cves merges. Don't touch the Dockerfile. Merge main after that fix lands.
+6. Delete HANDOFF.md in a chore commit when done.
 
 ## Verify commands
 
-- `make check` (set the SEMGREP_* env vars to files under /tmp/claude-1002 for the semgrep meta test)
-- `cd backend && uv run pytest -q -m "not integration and not contract" tumnis/modules/decisions tumnis/modules/tasks -k label`
-- `make test-int` (bare, from the worktree root)
+- `cd backend && uv run pytest -q -m "not integration and not contract" -n 3`
+- `make test-int` (bare, from the worktree root; about 13 min).
+- To run a single Docker test locally, c1 temporarily edited the `test-int` recipe to `pytest -q -n 0 -m integration --runxfail -s <path>`, ran bare `make test-int`, then restored the Makefile. Never commit that edit.
 - `cd frontend && npx vitest run src/components/common/LabelChip.test.tsx`
+
+## Scott items
+
+- Blocker 1: T-P0-20-03 against the AI label's version bump. Not sent yet.

@@ -68,7 +68,6 @@ def _decision_rows(db: DbUrls, task_id: str) -> list[dict[str, Any]]:
 
 @pytest.mark.req("FR-4.2")
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 async def test_override_emits_human_decided_and_outcome(  # noqa: PLR0917
     session_client: SessionClient,
     dbos: Any,
@@ -131,7 +130,6 @@ async def _is_labelled(db: DbUrls, task_id: str) -> bool:
 
 @pytest.mark.req("FR-4.2")
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 async def test_ai_label_never_overwrites_human_choice(  # noqa: PLR0917
     session_client: SessionClient,
     dbos: Any,
@@ -186,7 +184,6 @@ async def _decided(db: DbUrls, task_id: str) -> list[dict[str, Any]]:
 
 @pytest.mark.req("FR-4.1")
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 async def test_title_edit_relabels_unless_human_chose(  # noqa: PLR0917
     session_client: SessionClient,
     dbos: Any,
