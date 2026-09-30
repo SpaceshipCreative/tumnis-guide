@@ -16,6 +16,9 @@ Folder sync (P1-15):
   event is harmless, and the 15-minute tick is the backstop.
 
 The sync engine itself is `knowledge.sync` (net policy, clock and extraction hook there).
+Every version the sync makes from folder bytes is `pending_scan` and goes to
+`knowledge_extract_document` with `source = "storage"` (`enqueue_folder_extraction`, the
+sync's default hook), so nothing found in a folder is served unscanned (#99).
 
 Extraction (P1-16, SEC-10, FR-15.2, ADR-0007):
 
@@ -39,12 +42,14 @@ Any other final failure of a step ends the workflow in `failed` (`extraction_fai
 """
 
 import asyncio
+import contextvars
 import logging
 import os
 import time
 import uuid
 from datetime import datetime
 from typing import Any, Final
+from uuid import UUID
 
 from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
 
@@ -313,3 +318,25 @@ async def extract_document(workspace_id: str, version_id: str, source: str) -> s
         DBOS.logger.exception("extraction of %s failed", version_id)
         await fail_step(workspace_id, version_id, FAILED)
         return "failed"
+
+
+async def enqueue_folder_extraction(workspace_id: UUID, version_id: UUID, _path: str) -> None:
+    """The folder sync's extraction of a version made from folder bytes: P1-16's pipeline
+    with `source = "storage"` (scanned where the file lies, never placed again), on the
+    `extract` queue under the id the api uses, `extract:<version_id>`, so a repeat returns
+    the workflow already there (DBOS "Workflow IDs and Idempotency").
+
+    The sync calls this inside a DBOS step, and DBOS refuses to start a workflow from a
+    step, so the enqueue runs in a fresh context, as `agents.workflows.start_provision`
+    does; a re-run step enqueues the same id again, which is a no-op."""
+
+    async def enqueue() -> None:
+        with SetWorkflowID(f"extract:{version_id}"):
+            await DBOS.enqueue_workflow_async(
+                api.EXTRACT_QUEUE, extract_document, str(workspace_id), str(version_id), "storage"
+            )
+
+    await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
+
+
+sync.register_extraction(enqueue_folder_extraction)
