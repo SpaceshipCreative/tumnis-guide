@@ -12,6 +12,7 @@ them) because they need `unicodedata` and `json`, which the rules allow-list doe
 include (T-P0-01-09).
 """
 
+import hashlib
 import json
 import math
 import unicodedata
@@ -635,3 +636,15 @@ def build_request(point: DecisionPoint, inputs: Mapping[str, Any]) -> OutboundRe
             point, _tokens(dumped["state"]) + largest, MAX_STATE_PLUS_QUESTION_TOKENS
         )
     return req
+
+
+def input_hash(req: OutboundRequest, model: str) -> bytes:
+    """sha256 of the request's canonical JSON (point, state and questions, keys sorted)
+    and the model it is asked of: the decision log's `input_hash` and the cache key. It
+    lives here, not in `rules.py`, because it needs `hashlib` and `json` (T-P0-01-09)."""
+    body = {
+        "model": model,
+        "request": req.model_dump(mode="json", include={"point", "state", "questions"}),
+    }
+    canonical = json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(canonical.encode()).digest()

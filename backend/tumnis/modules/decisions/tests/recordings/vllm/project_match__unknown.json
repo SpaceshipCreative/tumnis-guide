@@ -1,0 +1,141 @@
+{
+  "point": "project_match",
+  "inputs": {
+    "kind": "email",
+    "sender_email": "news@deals.example.net",
+    "sender_name": "Deals Weekly",
+    "subject": "This week's top software deals",
+    "participants": [
+      "news@deals.example.net",
+      "scott@example.org"
+    ],
+    "body_head": "Save 40% on project management tools this week only. Unsubscribe any time.",
+    "projects": [
+      {
+        "name": "Acme site",
+        "client": "Acme",
+        "goal": "Ship the Acme marketing site redesign by June",
+        "domains": [
+          "acme.example.com"
+        ],
+        "people": [
+          "dana@acme.example.com"
+        ],
+        "keywords": [
+          "redesign",
+          "homepage",
+          "hero"
+        ]
+      },
+      {
+        "name": "Beta app",
+        "client": "Beta Labs",
+        "goal": "Launch the Beta mobile app beta to 50 testers",
+        "domains": [
+          "beta.example.org"
+        ],
+        "people": [
+          "lee@beta.example.org"
+        ],
+        "keywords": [
+          "testflight",
+          "onboarding"
+        ]
+      },
+      {
+        "name": "Tumnis",
+        "goal": "Build the Tumnis Guide v1",
+        "keywords": [
+          "planner",
+          "agents"
+        ]
+      }
+    ]
+  },
+  "exchanges": [
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: Which project does this item belong to? Compare the sender, participants, subject and body with each project's name, client, goal, domains, people and keywords. Unknown: no project fits, or the item does not say enough to tell.\nAllowed answers:\n- p01: {\"client\": \"Acme\", \"domains\": [\"acme.example.com\"], \"goal\": \"Ship the Acme marketing site redesign by June\", \"keywords\": [\"redesign\", \"homepage\", \"hero\"], \"name\": \"Acme site\", \"people\": [\"dana@acme.example.com\"]}\n- p02: {\"client\": \"Beta Labs\", \"domains\": [\"beta.example.org\"], \"goal\": \"Launch the Beta mobile app beta to 50 testers\", \"keywords\": [\"testflight\", \"onboarding\"], \"name\": \"Beta app\", \"people\": [\"lee@beta.example.org\"]}\n- p03: {\"goal\": \"Build the Tumnis Guide v1\", \"keywords\": [\"planner\", \"agents\"], \"name\": \"Tumnis\"}\n- unknown: No project fits, or the item does not say enough to tell.\nState (JSON): {\"body_head\":\"Save 40% on project management tools this week only. Unsubscribe any time.\",\"kind\":\"email\",\"participants\":[\"news@deals.example.net\",\"scott@example.org\"],\"sender_email\":\"news@deals.example.net\",\"sender_name\":\"Deals Weekly\",\"subject\":\"This week's top software deals\"}\nAllowed answers, exactly one of: p01, p02, p03, unknown"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "p01",
+            "p02",
+            "p03",
+            "unknown"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "p03"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "unknown"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "unknown"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "unknown"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "unknown"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    }
+  ],
+  "recorded_at": null,
+  "synthetic": true,
+  "notes": "Synthetic, not from the homelab vLLM: chat completions hand-authored in the OpenAI-compatible wire shape, with five votes per question consistent with the matching Jev recording's answer. Scott to re-record against the homelab vLLM."
+}

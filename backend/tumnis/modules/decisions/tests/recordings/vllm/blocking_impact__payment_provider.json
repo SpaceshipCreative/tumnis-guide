@@ -1,0 +1,98 @@
+{
+  "point": "blocking_impact",
+  "inputs": {
+    "item_kind": "question",
+    "item_summary": "The agent asks which payment provider to use for the Beta app checkout",
+    "project_name": "Beta app",
+    "downstream_task_count": 3,
+    "downstream_human_minutes": 90,
+    "nearest_due_in_days": 4
+  },
+  "exchanges": [
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: How much work does this item block until the user answers it? Use the downstream task count, the human minutes waiting on it and the nearest due date.\nAllowed answers:\n- 0: Blocks nothing else\n- 1: Blocks one small task\n- 2: Blocks several tasks or one important task\n- 3: Blocks a milestone or a client deliverable\n- 4: Blocks the whole project\nState (JSON): {\"downstream_human_minutes\":90,\"downstream_task_count\":3,\"item_kind\":\"question\",\"item_summary\":\"The agent asks which payment provider to use for the Beta app checkout\",\"nearest_due_in_days\":4,\"project_name\":\"Beta app\"}\nAllowed answers, exactly one of: 0, 1, 2, 3, 4"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "2"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "2"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "2"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "3"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "3"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    }
+  ],
+  "recorded_at": null,
+  "synthetic": true,
+  "notes": "Synthetic, not from the homelab vLLM: chat completions hand-authored in the OpenAI-compatible wire shape, with five votes per question consistent with the matching Jev recording's answer. Scott to re-record against the homelab vLLM."
+}

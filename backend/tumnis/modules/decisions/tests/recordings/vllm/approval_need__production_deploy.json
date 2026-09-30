@@ -1,0 +1,101 @@
+{
+  "point": "approval_need",
+  "inputs": {
+    "action_class": "deploy.production",
+    "action_summary": "Deploy the Acme site main branch to production",
+    "target": "acme-site on Coolify",
+    "policy_gated": [
+      "deploy.production",
+      "email.send",
+      "payment"
+    ],
+    "policy_allowed": [
+      "deploy.preview",
+      "git.push_branch"
+    ]
+  },
+  "exchanges": [
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: The action `action_class`, described by `action_summary` on `target`, is one of the actions in `policy_gated`, or equivalent in effect to one of them.\nAllowed answers:\n- yes: The action is gated by the policy, or has the same effect as a gated action.\n- no: The action is none of the gated actions and has none of their effects.\nState (JSON): {\"action_class\":\"deploy.production\",\"action_summary\":\"Deploy the Acme site main branch to production\",\"policy_allowed\":[\"deploy.preview\",\"git.push_branch\"],\"policy_gated\":[\"deploy.production\",\"email.send\",\"payment\"],\"target\":\"acme-site on Coolify\"}\nAllowed answers, exactly one of: yes, no"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    }
+  ],
+  "recorded_at": null,
+  "synthetic": true,
+  "notes": "Synthetic, not from the homelab vLLM: chat completions hand-authored in the OpenAI-compatible wire shape, with five votes per question consistent with the matching Jev recording's answer. Scott to re-record against the homelab vLLM."
+}

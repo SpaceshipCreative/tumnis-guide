@@ -1,0 +1,93 @@
+{
+  "point": "actionability",
+  "inputs": {
+    "kind": "email",
+    "sender_email": "lee@beta.example.org",
+    "subject": "Can you approve the onboarding screens?",
+    "body_head": "Hi Scott, the three onboarding screens are in Figma. Can you approve them by Friday so we can start the build?"
+  },
+  "exchanges": [
+    {
+      "request": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You answer one classification question about the state you are given. Reply with exactly one of the allowed answers and nothing else."
+          },
+          {
+            "role": "user",
+            "content": "Question: This item asks the user to do or decide something, or records a commitment.\nAllowed answers:\n- yes: It asks the user to do or decide something, or records a commitment.\n- no: It is informational: nothing is asked of the user and nothing is promised.\nState (JSON): {\"body_head\":\"Hi Scott, the three onboarding screens are in Figma. Can you approve them by Friday so we can start the build?\",\"kind\":\"email\",\"sender_email\":\"lee@beta.example.org\",\"subject\":\"Can you approve the onboarding screens?\"}\nAllowed answers, exactly one of: yes, no"
+          }
+        ],
+        "n": 5,
+        "temperature": 0.7,
+        "max_tokens": 8,
+        "structured_outputs": {
+          "choice": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-synthetic",
+          "object": "chat.completion",
+          "created": 1773057600,
+          "model": "served-model",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 1,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 2,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 3,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            },
+            {
+              "index": 4,
+              "message": {
+                "role": "assistant",
+                "content": "yes"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 200,
+            "completion_tokens": 5,
+            "total_tokens": 205
+          }
+        }
+      }
+    }
+  ],
+  "recorded_at": null,
+  "synthetic": true,
+  "notes": "Synthetic, not from the homelab vLLM: chat completions hand-authored in the OpenAI-compatible wire shape, with five votes per question consistent with the matching Jev recording's answer. Scott to re-record against the homelab vLLM."
+}

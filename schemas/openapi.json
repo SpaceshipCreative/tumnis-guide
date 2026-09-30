@@ -2336,6 +2336,11 @@
             "title": "Links",
             "type": "array"
           },
+          "local_decisions_only": {
+            "default": false,
+            "title": "Local Decisions Only",
+            "type": "boolean"
+          },
           "name": {
             "maxLength": 120,
             "minLength": 1,
@@ -2491,6 +2496,10 @@
               }
             ],
             "title": "Links"
+          },
+          "local_decisions_only": {
+            "title": "Local Decisions Only",
+            "type": "boolean"
           },
           "name": {
             "anyOf": [
