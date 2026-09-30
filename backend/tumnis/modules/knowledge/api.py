@@ -7,13 +7,18 @@ have no connection or external id, which is why those columns are nullable here 
 canonical unique key is partial.
 """
 
+import asyncio
 import dataclasses
 import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
+import stat
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Final, Literal
 from uuid import UUID
@@ -23,10 +28,11 @@ from sqlalchemy import RowMapping, Table, and_, delete, func, insert, select, te
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import deadletter, settings_store, tenancy
+from tumnis.core import audit, deadletter, settings_store, tenancy
 from tumnis.core.adapters.errors import AdapterError, AdapterRejected, AdapterUnavailable
 from tumnis.core.adapters.registry import current_mode
 from tumnis.core.canonical import CanonicalRecord, UpsertStats, upsert_records
+from tumnis.core.clock import SystemClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.ids import uuid7
 from tumnis.core.live import mark_changed
@@ -47,7 +53,17 @@ from tumnis.modules.knowledge.adapters.s3 import (
     endpoint_policy,
 )
 from tumnis.modules.knowledge.adapters.server_path import ServerPathStorage
+from tumnis.modules.knowledge.adapters.sftp import (
+    ProbedKey,
+    SftpStorage,
+    check_private_key,
+    fingerprint,
+    probe_host_key,
+    sftp_policy,
+    sftp_root,
+)
 from tumnis.modules.knowledge.models import (
+    DeleteConfirmation,
     Document,
     DocumentVersion,
     FolderFile,
@@ -55,11 +71,19 @@ from tumnis.modules.knowledge.models import (
     ProjectFolder,
     StorageLocation,
 )
-from tumnis.modules.knowledge.rules import is_network_fs, safe_rel_path, sanitize_filename
+from tumnis.modules.knowledge.rules import (
+    ActorKind,
+    WritePolicy,
+    is_network_fs,
+    may_delete,
+    safe_rel_path,
+    sanitize_filename,
+)
 from tumnis.modules.knowledge.storage import (
     FileStat,
     Health,
     LocationOffline,
+    Page,
     PathRejected,
     PreconditionFailed,
     StorageBackend,
@@ -256,21 +280,27 @@ register_seed_writer("document", seed_document)
 
 # --- Storage locations and project folders (P1-14, FR-15.7, FR-15.12, SEC-5) -------------
 #
-# A location is a server path or an S3 bucket/prefix; its S3 endpoint and keys are sealed
-# in `config_enc` with the workspace data key. Each project gets a folder
-# (`<project id>/`) on the workspace default location when it is created. A location whose
+# A location is a server path, a share (a mounted SMB or NFS folder, P3-14), an S3
+# bucket/prefix or an SFTP folder; its S3 endpoint and keys, or its SFTP host, user and
+# private key, are sealed in `config_enc` with the workspace data key. An SFTP location
+# is saved `pending_host_key` with the key its server shows, and opened only once the user
+# confirms that key's fingerprint (`confirm_host_key`); a server that later shows another
+# key marks it `host_key_changed` until the user re-pins with a reason. Each project gets
+# a folder (`<project id>/`) on the workspace default location when it is created. A location whose
 # health is degraded (a share without its marker, an unreachable bucket) goes offline:
 # uploads to it answer 409 `location_offline`, note saves (whose text is already in
 # Postgres) queue in `pending_writes`, and the next healthy check drains the queue in
 # insertion order. Every storage call goes through `open_backend`.
 
-LocationKind = Literal["server_path", "s3"]
+LocationKind = Literal["server_path", "s3", "share", "sftp"]
+LocationStatus = Literal["online", "offline", "pending_host_key", "host_key_changed"]
 Row = Mapping[Any, Any]  # a location or folder row (RowMapping), or the dict of one
 
 _locations: Table = StorageLocation.__table__  # type: ignore[assignment]
 _folders: Table = ProjectFolder.__table__  # type: ignore[assignment]
 _versions: Table = DocumentVersion.__table__  # type: ignore[assignment]
 _pending: Table = PendingWrite.__table__  # type: ignore[assignment]
+_confirmations: Table = DeleteConfirmation.__table__  # type: ignore[assignment]
 
 _BUCKET: Final = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 _MOUNTINFO: Final = Path("/proc/self/mountinfo")
@@ -287,11 +317,19 @@ class S3ConfigIn(BaseModel):
     sse: Literal["AES256"] | None = None
 
 
+class SftpConfigIn(BaseModel):
+    host: str = Field(min_length=1, max_length=253)  # checked by the SSRF guard at every use
+    port: int = Field(default=22, ge=1, le=65535)
+    username: str = Field(min_length=1, max_length=64)
+    private_key: str = Field(min_length=1, max_length=16384)  # write-only, sealed, never answered
+
+
 class LocationIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     kind: LocationKind
-    root: str = Field(min_length=1, max_length=1024)  # absolute path, or bucket/prefix
+    root: str = Field(min_length=1, max_length=1024)  # absolute path, bucket/prefix, SFTP folder
     s3: S3ConfigIn | None = None
+    sftp: SftpConfigIn | None = None
     is_default: bool = False
 
 
@@ -301,11 +339,13 @@ class LocationOut(BaseModel):
     kind: str
     root: str
     endpoint: str | None  # S3 only; the keys are never answered
-    status: Literal["online", "offline"]
+    status: LocationStatus
     status_reason: str | None
     is_default: bool
     capabilities: dict[str, bool]
     version: int
+    host_key_sha256: str | None = None  # SFTP: the pinned host key's fingerprint
+    pending_host_key_sha256: str | None = None  # SFTP: the key the server shows, to confirm
 
 
 class ProjectFolderOut(BaseModel):
@@ -358,7 +398,7 @@ def _s3_root(root: str) -> tuple[str, str]:
 def _refuse_hosted_server_path(kind: str, net: NetPolicy) -> None:
     """Hosted mode offers S3 and SFTP only (FR-15.7): a server path there would let one
     workspace reach another's folders on the shared server."""
-    if kind == "server_path" and net.mode == "hosted":
+    if kind in ("server_path", "share") and net.mode == "hosted":
         raise ProblemError(
             422, "invalid_location", "Hosted Tumnis stores files in S3 or SFTP, not server folders."
         )
@@ -402,20 +442,93 @@ def _s3_config(blob: bytes) -> S3Config:
     )
 
 
-async def _open_config(s: AsyncSession, row: Row) -> S3Config:
+@dataclasses.dataclass(frozen=True)
+class SftpConfig:
+    """An SFTP location's sealed settings: where, who, and the private key."""
+
+    host: str
+    port: int
+    username: str
+    private_key: str
+
+
+LocationConfig = S3Config | SftpConfig
+
+
+async def _open_config(s: AsyncSession, row: Row) -> LocationConfig:
     blob = await settings_store.open_for_workspace(
         s, row["workspace_id"], row["config_enc"], aad=_aad(row["id"])
     )
+    if row["kind"] == "sftp":
+        return SftpConfig(**json.loads(blob))
     return _s3_config(blob)
+
+
+async def _sftp_config(s: AsyncSession, row: Row) -> SftpConfig:
+    config = await _open_config(s, row)
+    if not isinstance(config, SftpConfig):  # pragma: no cover  # the kind decides the shape
+        raise ProblemError(422, "invalid_location", "The SFTP settings are missing.")
+    return config
 
 
 def _aad(location_id: UUID) -> bytes:
     return f"storage_locations:{location_id}".encode()
 
 
+class _Unopened:
+    """The backend of an SFTP location whose host key is not pinned (or no longer
+    matches): nothing connects, every write is `LocationOffline`, health says why."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    def _offline(self) -> LocationOffline:
+        return LocationOffline(self.reason)
+
+    async def stat(self, path: str) -> FileStat | None:
+        raise self._offline()
+
+    async def list(self, prefix: str, cursor: str | None) -> Page[FileStat]:
+        raise self._offline()
+
+    async def read(self, path: str) -> AsyncIterator[bytes]:
+        raise self._offline()
+        yield b""  # pragma: no cover  # makes this an async generator
+
+    async def write(self, path: str, data: AsyncIterator[bytes], if_match: str | None) -> FileStat:
+        raise self._offline()
+
+    async def move(self, src: str, dst: str) -> None:
+        raise self._offline()
+
+    async def delete(self, path: str) -> None:
+        raise self._offline()
+
+    async def ensure_folder(self, path: str) -> None:
+        raise self._offline()
+
+    async def health(self) -> Health:
+        return Health.degraded(self.reason)
+
+
+def _sftp_storage(
+    row: Row, config: SftpConfig, pinned: str, *, net: NetPolicy, resolver: Resolver
+) -> SftpStorage:
+    return SftpStorage(
+        host=config.host,
+        port=config.port,
+        username=config.username,
+        private_key_pem=config.private_key.encode(),
+        pinned_host_key=pinned,
+        root=row["root"],
+        net_policy=net,
+        resolver=resolver,
+    )
+
+
 def _backend(
     row: Row,
-    config: S3Config | None,
+    config: LocationConfig | None,
     *,
     net: NetPolicy,
     resolver: Resolver,
@@ -424,9 +537,11 @@ def _backend(
     if current_mode() == "fake":
         return _FAKES.setdefault(row["id"], FakeStorage())
     caps = row["capabilities"] or {}
-    if row["kind"] == "server_path":
-        return ServerPathStorage(row["root"], network_fs=bool(caps.get("network_fs")))
-    if row["kind"] == "s3" and config is not None:
+    if row["kind"] in ("server_path", "share"):
+        return ServerPathStorage(
+            row["root"], kind=row["kind"], network_fs=bool(caps.get("network_fs"))
+        )
+    if row["kind"] == "s3" and isinstance(config, S3Config):
         bucket, prefix = _s3_root(row["root"])
         return S3Storage(
             config,
@@ -437,7 +552,18 @@ def _backend(
             net_policy=net,
             resolver=resolver,
         )
+    if row["kind"] == "sftp" and isinstance(config, SftpConfig):
+        pinned = row.get("host_key_pinned")
+        status = row.get("status")
+        if not pinned or status in ("pending_host_key", "host_key_changed"):
+            return _Unopened(status or "pending_host_key")
+        return _sftp_storage(row, config, pinned, net=net, resolver=resolver)
     raise ProblemError(422, "invalid_location", f"{row['kind']} locations are not supported yet")
+
+
+async def _close(backend: StorageBackend) -> None:
+    if isinstance(backend, S3Storage | SftpStorage):
+        await backend.aclose()
 
 
 BackendHook = Callable[[Row, StorageBackend], StorageBackend]
@@ -450,18 +576,67 @@ def use_backend_hook(fn: BackendHook | None) -> None:
     _backend_hook[0] = fn
 
 
+class _ExistingFolderGuard:
+    """The write rule of an existing folder (FR-15.12), under every writer (the user's
+    edits, agents, the sync engine): inside a folder the user already keeps, Tumnis writes,
+    moves and deletes only under its `Tumnis/` subfolder. A delete the user confirmed in
+    the app is let through once (`allow_delete`, the sync engine's delete at the source)."""
+
+    def __init__(self, inner: StorageBackend, roots: Sequence[str]) -> None:
+        self._inner = inner
+        self._roots = tuple(roots)
+        self._allowed: set[str] = set()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def _check(self, path: str) -> None:
+        for root in self._roots:
+            inside = path == root or path.startswith(root + "/")
+            if inside and not path.startswith(f"{root}/{EXISTING_DIR}/"):
+                raise PathRejected(f"{path!r}: outside {EXISTING_DIR}/ in an existing folder")
+
+    def allow_delete(self, path: str) -> None:
+        self._allowed.add(path)
+
+    async def write(self, path: str, data: AsyncIterator[bytes], if_match: str | None) -> FileStat:
+        self._check(path)
+        return await self._inner.write(path, data, if_match)
+
+    async def move(self, src: str, dst: str) -> None:
+        self._check(src)
+        self._check(dst)
+        await self._inner.move(src, dst)
+
+    async def delete(self, path: str) -> None:
+        if path in self._allowed:
+            self._allowed.discard(path)
+        else:
+            self._check(path)
+        await self._inner.delete(path)
+
+
 @asynccontextmanager
 async def _opened(
     s: AsyncSession, row: RowMapping, *, net: NetPolicy, resolver: Resolver
 ) -> AsyncIterator[StorageBackend]:
     config = await _open_config(s, row) if row["config_enc"] is not None else None
     built = _backend(row, config, net=net, resolver=resolver)
+    existing: list[str] = list(
+        await s.scalars(
+            select(_folders.c.root_path).where(
+                _folders.c.location_id == row["id"],
+                _folders.c.mode == "existing",
+                _folders.c.deleted_at.is_(None),
+            )
+        )
+    )
+    guarded: StorageBackend = _ExistingFolderGuard(built, existing) if existing else built
     hook = _backend_hook[0]
     try:
-        yield hook(row, built) if hook is not None else built
+        yield hook(row, guarded) if hook is not None else guarded
     finally:
-        if isinstance(built, S3Storage):
-            await built.aclose()
+        await _close(built)
 
 
 async def _location_row(s: AsyncSession, location_id: UUID) -> RowMapping:
@@ -507,10 +682,18 @@ async def _health(backend: StorageBackend) -> Health:
         return Health.degraded(getattr(exc, "code", None) or type(exc).__name__)
 
 
+def _sha256_of(openssh: str | None) -> str | None:
+    return fingerprint(openssh) if openssh else None
+
+
 async def _location_out(s: AsyncSession, row: Row) -> LocationOut:
     endpoint = None
-    if row["kind"] == "s3" and row["config_enc"] is not None:
-        endpoint = (await _open_config(s, row)).endpoint
+    if row["config_enc"] is not None:
+        config = await _open_config(s, row)
+        if isinstance(config, S3Config):
+            endpoint = config.endpoint
+        else:
+            endpoint = f"{config.username}@{config.host}:{config.port}"
     return LocationOut(
         id=row["id"],
         name=row["name"],
@@ -522,18 +705,69 @@ async def _location_out(s: AsyncSession, row: Row) -> LocationOut:
         is_default=row["is_default"],
         capabilities={k: bool(v) for k, v in (row["capabilities"] or {}).items()},
         version=row["version"],
+        host_key_sha256=_sha256_of(row.get("host_key_pinned")),
+        pending_host_key_sha256=_sha256_of(row.get("host_key_pending")),
+    )
+
+
+class HostKeyReviewPayload(BaseModel):
+    """An SFTP server showed a host key other than the pinned one: `accept` re-pins
+    through the confirm flow (the fingerprint typed again, with a reason)."""
+
+    location_id: UUID
+    pinned_sha256: str | None = None
+
+
+HOST_KEY_REVIEW_KIND: Final = "storage_host_key_changed"
+tasks.register_review_kind(
+    tasks.ReviewKindSpec(
+        kind=HOST_KEY_REVIEW_KIND,
+        owner_module="knowledge",
+        payload_schema=HostKeyReviewPayload,
+        actions=("accept", "snooze"),
+        impact_scope="workspace",
+    )
+)
+
+
+async def _host_key_mismatch(s: AsyncSession, row: Row) -> None:
+    """Audit `storage.host_key_mismatch` and queue one `storage_host_key_changed` review
+    item (deduplicated per location while it is open)."""
+    pinned = _sha256_of(row.get("host_key_pinned"))
+    await audit.record(
+        s,
+        "storage.host_key_mismatch",
+        target=("storage_locations", row["id"]),
+        details={"pinned_sha256": pinned},
+        occurred_at=SystemClock().now(),
+    )
+    await tasks.add_review_item(
+        HOST_KEY_REVIEW_KIND,
+        target=tasks.TargetRef(type="storage_location", id=row["id"]),
+        project_id=None,
+        payload=HostKeyReviewPayload(location_id=row["id"], pinned_sha256=pinned).model_dump(
+            mode="json"
+        ),
+        dedupe_key=f"{HOST_KEY_REVIEW_KIND}:{row['id']}",
+        session=s,
     )
 
 
 async def _set_status(s: AsyncSession, location_id: UUID, health: Health) -> RowMapping:
+    """The location's status as its health says. A changed SFTP host key is sticky
+    (`host_key_changed`): it is audited and put in the review queue once, and the location
+    is not opened again until the user re-pins."""
     online = health.status == "ok"
+    status = "online" if online else "offline"
+    if health.reason == "host_key_changed":
+        status = "host_key_changed"
+        before = await _location_row(s, location_id)
+        if before["status"] != "host_key_changed":
+            await _host_key_mismatch(s, before)
     stmt = (
         update(_locations)
         .where(_locations.c.id == location_id)
-        .values(
-            status="online" if online else "offline",
-            status_reason=None if online else health.reason,
-        )
+        .values(status=status, status_reason=None if online else health.reason)
         .returning(*_locations.c)
     )
     return (await s.execute(stmt)).mappings().one()
@@ -546,13 +780,65 @@ async def _clear_default(s: AsyncSession, keep: UUID | None) -> None:
     await s.execute(stmt.values(is_default=False))
 
 
-async def create_location(
+def _share_marker_present(root: str) -> bool:
+    """The user's `.tumnis-root` marker is a regular file at the share's root (a share
+    that is not mounted shows the bare mount point, which has none)."""
+    try:
+        return stat.S_ISREG(os.lstat(Path(root) / ServerPathStorage.MARKER).st_mode)
+    except OSError:
+        return False
+
+
+async def _probe(config: SftpConfig, net: NetPolicy, resolver: Resolver) -> ProbedKey:
+    """The host key the SFTP server shows now, through the SSRF guard (422 `ssrf_blocked`,
+    nothing sent) with a short timeout (422 `host_unreachable`)."""
+    try:
+        return await probe_host_key(config.host, config.port, net_policy=net, resolver=resolver)
+    except SsrfBlocked as exc:
+        raise _storage_problem(exc) from exc
+    except AdapterError as exc:
+        raise ProblemError(422, "host_unreachable", "The SFTP server did not answer.") from exc
+
+
+async def _check_sftp_host(config: SftpConfig, net: NetPolicy, resolver: Resolver) -> None:
+    """The SFTP host against the SSRF guard (its name may resolve elsewhere now)."""
+    try:
+        await resolve_and_check(config.host, config.port, sftp_policy(net, config.port), resolver)
+    except SsrfBlocked as exc:
+        raise _storage_problem(exc) from exc
+    except AdapterError as exc:
+        raise ProblemError(422, "invalid_location", "The host does not resolve.") from exc
+
+
+def _sftp_body(body: LocationIn) -> tuple[str, SftpConfig]:
+    """(the normalized root, the settings) of an SFTP location form; 422 when unusable."""
+    if body.sftp is None:
+        raise ProblemError(422, "invalid_location", "An SFTP location needs its host.")
+    try:
+        root = sftp_root(body.root)
+    except PathRejected as exc:
+        raise ProblemError(422, "invalid_location", "The SFTP folder is not a safe path.") from exc
+    try:
+        check_private_key(body.sftp.private_key.encode())
+    except ValueError as exc:
+        raise ProblemError(
+            422,
+            "invalid_location",
+            "The private key is not an OpenSSH or PEM key without a passphrase.",
+        ) from exc
+    return root, SftpConfig(**body.sftp.model_dump())
+
+
+async def create_location(  # one branch per kind
     s: AsyncSession, body: LocationIn, *, net: NetPolicy, resolver: Resolver = system_resolver
 ) -> LocationOut:
-    """Save a location after checking it: the root's shape, the S3 endpoint against the
-    SSRF guard (422 `ssrf_blocked`, nothing saved), then its health and capabilities (a
-    share's filesystem type; whether the provider honours conditional puts). The first
-    location, or one saved with `is_default`, becomes the workspace default."""
+    """Save a location after checking it: the root's shape, the S3 endpoint or SFTP host
+    against the SSRF guard (422 `ssrf_blocked`, nothing saved), then its health and
+    capabilities (a share's filesystem type; whether the provider honours conditional
+    puts). A share needs its `.tumnis-root` marker (422 `marker_missing`, nothing saved).
+    An SFTP location is saved `pending_host_key` with the key its server shows; it opens
+    once `confirm_host_key` pins it. The first location, or one saved with `is_default`,
+    becomes the workspace default."""
     location_id = uuid7()
     taken = await s.scalar(
         select(_locations.c.id).where(
@@ -561,12 +847,24 @@ async def create_location(
     )
     if taken is not None:
         raise ProblemError(409, "name_taken", "A location with that name exists.")
-    config: S3Config | None = None
+    config: LocationConfig | None = None
+    probed: ProbedKey | None = None
     _refuse_hosted_server_path(body.kind, net)
     if body.kind == "server_path":
         root = _server_root(body.root)
         fstype = _fstype(root)
         caps = {"network_fs": fstype is not None and is_network_fs(fstype)}
+    elif body.kind == "share":
+        root = _server_root(body.root)
+        if not await asyncio.to_thread(_share_marker_present, root):
+            raise ProblemError(
+                422, "marker_missing", "Place a .tumnis-root file at the share's root first."
+            )
+        caps = {"network_fs": True}
+    elif body.kind == "sftp":
+        root, config = _sftp_body(body)
+        probed = await _probe(config, net, resolver)
+        caps = {}
     else:
         if body.s3 is None:
             raise ProblemError(422, "invalid_location", "An S3 location needs its endpoint.")
@@ -584,7 +882,11 @@ async def create_location(
         "is_default": False,
         "capabilities": caps,
     }
-    health, caps = await _first_check(row, config, caps, net=net, resolver=resolver)
+    if probed is not None:
+        health = Health.degraded("pending_host_key")
+        row |= {"host_key_pending": probed.openssh}
+    else:
+        health, caps = await _first_check(row, config, caps, net=net, resolver=resolver)
     if config is not None:
         workspace_id = await s.scalar(text("SELECT app.current_workspace_id()"))
         blob = json.dumps(dataclasses.asdict(config)).encode()
@@ -597,10 +899,11 @@ async def create_location(
     if body.is_default:
         await _clear_default(s, None)
     online = health.status == "ok"
+    status = "pending_host_key" if probed is not None else "online" if online else "offline"
     row |= {
         "capabilities": caps,
         "is_default": body.is_default or has_default is None,
-        "status": "online" if online else "offline",
+        "status": status,
         "status_reason": None if online else health.reason,
     }
     saved = (await s.execute(insert(_locations).values(**row).returning(*_locations.c))).mappings()
@@ -624,7 +927,7 @@ async def _check_endpoint(config: S3Config, net: NetPolicy, resolver: Resolver) 
 
 async def _first_check(
     row: Row,
-    config: S3Config | None,
+    config: LocationConfig | None,
     caps: dict[str, bool],
     *,
     net: NetPolicy,
@@ -642,8 +945,7 @@ async def _first_check(
             else:
                 caps = {**caps, "conditional_put": probe.conditional_put}
     finally:
-        if isinstance(backend, S3Storage):
-            await backend.aclose()
+        await _close(backend)
     return health, caps
 
 
@@ -666,18 +968,129 @@ async def check_location(
     s: AsyncSession, location_id: UUID, *, net: NetPolicy, resolver: Resolver = system_resolver
 ) -> LocationOut:
     """Test the connection now: the location's status follows its health, and a healthy
-    location drains its queued writes. An S3 endpoint passes the SSRF guard again first
-    (its name may resolve elsewhere now, or the deployment may run hosted): a blocked one
-    is refused with 422 `ssrf_blocked`, and the location is not opened."""
+    location drains its queued writes. An S3 endpoint or SFTP host passes the SSRF guard
+    again first (its name may resolve elsewhere now, or the deployment may run hosted): a
+    blocked one is refused with 422 `ssrf_blocked`, and the location is not opened.
+
+    An SFTP location whose key is not pinned, or whose server showed another key, is never
+    opened: the test shows the key the server presents now (`pending_host_key_sha256`) and
+    never pins it. A pinned location that meets another key becomes `host_key_changed`."""
     row = await _location_row(s, location_id)
     if row["kind"] == "s3" and row["config_enc"] is not None:
-        await _check_endpoint(await _open_config(s, row), net, resolver)
+        config = await _open_config(s, row)
+        if isinstance(config, S3Config):
+            await _check_endpoint(config, net, resolver)
+    if row["kind"] == "sftp":
+        sftp = await _sftp_config(s, row)
+        await _check_sftp_host(sftp, net, resolver)
+        if row["status"] in ("pending_host_key", "host_key_changed"):
+            return await _location_out(s, await _show_key(s, row, sftp, net, resolver))
     async with _opened(s, row, net=net, resolver=resolver) as backend:
         health = await _health(backend)
         row = await _set_status(s, location_id, health)
         if health.status == "ok":
             await _drain(s, location_id, backend)
+    if row["status"] == "host_key_changed":
+        row = await _show_key(s, row, await _sftp_config(s, row), net, resolver)
     return await _location_out(s, row)
+
+
+async def _show_key(
+    s: AsyncSession, row: Row, config: SftpConfig, net: NetPolicy, resolver: Resolver
+) -> RowMapping:
+    """Record the host key the server shows now as the one to confirm (nothing is pinned);
+    a server that does not answer leaves the last one shown."""
+    try:
+        probed = await probe_host_key(config.host, config.port, net_policy=net, resolver=resolver)
+    except SsrfBlocked as exc:
+        raise _storage_problem(exc) from exc
+    except AdapterError:
+        return await _location_row(s, row["id"])
+    stmt = (
+        update(_locations)
+        .where(_locations.c.id == row["id"])
+        .values(host_key_pending=probed.openssh)
+        .returning(*_locations.c)
+    )
+    return (await s.execute(stmt)).mappings().one()
+
+
+async def confirm_host_key(  # the confirm form, the net policy
+    s: AsyncSession,
+    location_id: UUID,
+    sha256: str,
+    *,
+    reason: str | None = None,
+    net: NetPolicy,
+    resolver: Resolver = system_resolver,
+) -> LocationOut:
+    """Pin the SFTP host key the server shows now, when `sha256` is exactly its
+    fingerprint (`SHA256:…`, as `ssh-keygen -lf` prints it); anything else is 422
+    `fingerprint_mismatch` and pins nothing. Re-pinning after a changed key needs a reason
+    (422 `reason_required`). Audited as `storage.host_key_pinned` (with the reason); the
+    location then comes online when it answers, and its queued writes drain."""
+    row = await _location_row(s, location_id)
+    if row["kind"] != "sftp":
+        raise ProblemError(422, "invalid_location", "Only SFTP locations have a host key.")
+    repin = row["host_key_pinned"] is not None
+    if repin and not (reason and reason.strip()):
+        raise ProblemError(422, "reason_required", "Say why the server's key changed.")
+    config = await _sftp_config(s, row)
+    probed = await _probe(config, net, resolver)
+    if not hmac.compare_digest(sha256.strip().encode(), probed.sha256.encode()):
+        # The key shown now is kept for the form even though the request fails: in its own
+        # transaction, as the caller's rolls back with the 422.
+        pending = (
+            update(_locations)
+            .where(_locations.c.id == location_id)
+            .values(host_key_pending=probed.openssh)
+        )
+        ctx = tenancy.current()
+        if ctx is None:
+            await s.execute(pending)
+        else:
+            async with tenant_session(ctx) as own:
+                await own.execute(pending)
+        raise ProblemError(
+            422, "fingerprint_mismatch", "That fingerprint is not the server's host key."
+        )
+    backend = _sftp_storage(row, config, probed.openssh, net=net, resolver=resolver)
+    try:
+        health = await _health(backend)
+        await audit.record(
+            s,
+            "storage.host_key_pinned",
+            target=("storage_locations", location_id),
+            reason=reason.strip() if reason else None,
+            details={
+                "sha256": probed.sha256,
+                "previous_sha256": _sha256_of(row["host_key_pinned"]),
+            },
+            occurred_at=SystemClock().now(),
+        )
+        online = health.status == "ok"
+        saved = (
+            (
+                await s.execute(
+                    update(_locations)
+                    .where(_locations.c.id == location_id)
+                    .values(
+                        host_key_pinned=probed.openssh,
+                        host_key_pending=None,
+                        status="online" if online else "offline",
+                        status_reason=None if online else health.reason,
+                    )
+                    .returning(*_locations.c)
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if online:
+            await _drain(s, location_id, backend)
+    finally:
+        await backend.aclose()
+    return await _location_out(s, saved)
 
 
 async def _drain(s: AsyncSession, location_id: UUID, backend: StorageBackend) -> None:
@@ -979,7 +1392,7 @@ async def save_note(  # queue, write and record, one branch each
             path = await note_path(
                 s,
                 location["id"],
-                folder["root_path"],
+                work_root(folder),
                 doc["title"],
                 document_id=document_id,
                 backend=backend if online else None,
@@ -1076,6 +1489,31 @@ async def update_text_document(
 
 FOLDER_LAYOUT: Final = ("uploads", "notes", "agent-outputs", ".tumnis")
 TUMNIS_DIR: Final = ".tumnis"
+EXISTING_DIR: Final = "Tumnis"  # an existing folder: Tumnis writes only in here (P3-14)
+EXISTING_LAYOUT: Final = ("uploads", "notes", "agent-outputs", ".trash")
+
+
+def work_root(folder: Mapping[Any, Any]) -> str:
+    """Where Tumnis writes in a project's folder: the folder itself, or its `Tumnis/`
+    subfolder in a folder the user already keeps (FR-15.12)."""
+    root: str = folder["root_path"]
+    return f"{root}/{EXISTING_DIR}" if folder["mode"] == "existing" else root
+
+
+async def upload_dir(s: AsyncSession, project_id: UUID | None) -> str:
+    """Where uploads go, relative to the project's folder: `uploads`, or
+    `Tumnis/uploads` in an existing folder."""
+    if project_id is not None:
+        mode = await s.scalar(
+            select(_folders.c.mode).where(
+                _folders.c.project_id == project_id, _folders.c.deleted_at.is_(None)
+            )
+        )
+        if mode == "existing":
+            return f"{EXISTING_DIR}/uploads"
+    return "uploads"
+
+
 FOLDER_SOURCE: Final = "folder"  # documents.source of a Document made from a folder file
 UPLOAD_SOURCE: Final = "upload"  # ... of an upload Tumnis placed in the folder
 SYNC_REVIEW_KINDS: Final = (
@@ -1417,7 +1855,7 @@ async def place_upload(  # the upload and where it goes
         body = await spool(data)
     except TooLarge as exc:
         raise _storage_problem(exc) from exc
-    wanted = f"{folder['root_path']}/uploads/{sanitize_filename(name)}"
+    wanted = f"{work_root(folder)}/uploads/{sanitize_filename(name)}"
     taken = await taken_paths(s, location["id"])
     placed: FileStat | None = None
     async with _opened(s, location, net=net, resolver=resolver) as backend:
@@ -1699,6 +2137,34 @@ async def enqueue_extract(ctx: WorkspaceContext, version_id: UUID, source: str) 
     )
 
 
+MOVE_QUEUE: Final = "sync"
+MOVE_WORKFLOW: Final = "knowledge_move_project_folder"
+
+
+class MoveStarted(BaseModel):
+    workflow_id: str
+
+
+async def enqueue_move(
+    ctx: WorkspaceContext, project_id: UUID, location_id: UUID, path: str
+) -> MoveStarted:
+    """Start moving the project's folder to `location_id`/`path` (P3-14, the
+    `knowledge_move_project_folder` workflow on the `sync` queue); its record in
+    `folder_moves` and the review item tell how it went."""
+    async with tenant_session(ctx) as s:
+        await _folder_row(s, project_id)
+        await _location_row(s, location_id)
+    workflow_id = f"move:{project_id}:{uuid7()}"
+    await deadletter.dbos_client().enqueue_async(
+        {"queue_name": MOVE_QUEUE, "workflow_name": MOVE_WORKFLOW, "workflow_id": workflow_id},
+        str(ctx.workspace_id),
+        str(project_id),
+        str(location_id),
+        path,
+    )
+    return MoveStarted(workflow_id=workflow_id)
+
+
 async def ingest_folder_file(
     ctx: WorkspaceContext, *, project_id: UUID, path: str, size: int
 ) -> UploadAccepted:
@@ -1864,3 +2330,246 @@ async def stream_file(
     ):
         async for chunk in backend.read(info.path):
             yield chunk
+
+
+# --- SFTP host keys and existing folders (P3-14): red-phase seams --------------------------
+
+
+async def use_existing_folder(
+    s: AsyncSession,
+    project_id: UUID,
+    *,
+    location_id: UUID,
+    path: str,
+    net: NetPolicy,
+    resolver: Resolver = system_resolver,
+) -> ProjectFolderOut:
+    """Make a folder the user already keeps the project's folder (mode `existing`,
+    FR-15.12): Tumnis makes `Tumnis/` with `uploads/`, `notes/`, `agent-outputs/` and
+    `.trash/` inside it and writes nothing else; the next folder sync indexes what it
+    finds as outside files. The location must answer (409 `location_offline`); a folder
+    that already holds this project's files is not re-pointed (409 `folder_not_empty`,
+    moving files is the move job), and a folder that is, holds or sits inside another
+    project's folder on the location is refused (409 `folder_taken`)."""
+    location = await _location_row(s, location_id)
+    if not await projects.project_exists(s, project_id):
+        raise NotFound("projects", project_id)
+    try:  # the rows are found (404) before any rule about the body
+        root = safe_rel_path(path.strip("/"))
+    except PathRejected as exc:
+        raise _storage_problem(exc) from exc
+    _require_online(location)
+    current = (
+        (await s.execute(select(_folders).where(_folders.c.project_id == project_id)))
+        .mappings()
+        .first()
+    )
+    if current is not None and (current["location_id"], current["root_path"]) != (
+        location_id,
+        root,
+    ):
+        prefix = current["root_path"] + "/"
+        held = await s.scalar(
+            select(func.count())
+            .select_from(_files)
+            .where(
+                _files.c.location_id == current["location_id"],
+                _files.c.path.startswith(prefix, autoescape=True),
+                _files.c.deleted_at.is_(None),
+            )
+        )
+        if held:
+            raise ProblemError(409, "folder_not_empty", "The project folder already holds files.")
+    # One claim at a time per location (as `assign_project_folder` names folders), so
+    # two setups cannot both pass the overlap check.
+    await s.execute(_FOLDER_NAME_LOCK, {"key": f"project-folder-name:{location_id}"})
+    others: list[str] = list(
+        await s.scalars(
+            select(_folders.c.root_path).where(
+                _folders.c.location_id == location_id,
+                _folders.c.project_id != project_id,
+                _folders.c.deleted_at.is_(None),
+            )
+        )
+    )
+    for other in others:  # under the lock taken above, held to the upsert
+        if other == root or other.startswith(root + "/") or root.startswith(other + "/"):
+            raise ProblemError(409, "folder_taken", "Another project uses that folder.")
+    async with _opened(s, location, net=net, resolver=resolver) as backend:
+        if (await _health(backend)).status != "ok":
+            raise ProblemError(409, "location_offline", "The location is offline.")
+        try:
+            for sub in EXISTING_LAYOUT:
+                await backend.ensure_folder(f"{root}/{EXISTING_DIR}/{sub}")
+        except (StorageError, AdapterError) as exc:
+            raise _storage_problem(exc) from exc
+    values = {"location_id": location_id, "root_path": root, "mode": "existing"}
+    await s.execute(
+        pg_insert(_folders)
+        .values(project_id=project_id, **values)
+        .on_conflict_do_update(
+            index_elements=[_folders.c.workspace_id, _folders.c.project_id],
+            set_={**values, "version": _folders.c.version + 1, "deleted_at": None},
+        )
+    )
+    mark_changed(s, "project", project_id)
+    return await get_project_folder(s, project_id)
+
+
+async def rename_document(s: AsyncSession, document_id: UUID, *, title: str) -> DocumentDTO:
+    """Rename a document: its title only. No file is renamed (`may_rename`: never an
+    outside file; a note Tumnis wrote keeps its path, its `tumnis_id` identifies it)."""
+    row = (
+        (
+            await s.execute(
+                update(_documents)
+                .where(_documents.c.id == document_id, _documents.c.deleted_at.is_(None))
+                .values(title=title, version=_documents.c.version + 1)
+                .returning(*_documents.c)
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise NotFound("documents", document_id)
+    if row["project_id"] is not None:
+        mark_changed(s, "project", row["project_id"])
+    return DocumentDTO.model_validate(dict(row))
+
+
+EXTERNAL_DELETE_FORBIDDEN: Final = "external_delete_forbidden"
+CONFIRM_TTL: Final = timedelta(minutes=10)  # how long a delete confirmation is good for
+
+
+async def _delete_target(s: AsyncSession, document_id: UUID) -> tuple[WritePolicy, str]:
+    """The document's folder policy and its file's origin (`tumnis` without a file)."""
+    project_id = await s.scalar(
+        select(_documents.c.project_id).where(
+            _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+        )
+    )
+    found = await s.scalar(
+        select(_documents.c.id).where(
+            _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+        )
+    )
+    if found is None:
+        raise NotFound("documents", document_id)
+    mode = await s.scalar(
+        select(_folders.c.mode).where(
+            _folders.c.project_id == project_id, _folders.c.deleted_at.is_(None)
+        )
+    )
+    origin = await s.scalar(
+        select(_files.c.origin).where(
+            _files.c.document_id == document_id, _files.c.deleted_at.is_(None)
+        )
+    )
+    policy = WritePolicy(mode="existing" if mode == "existing" else "tumnis_made")
+    return policy, origin or "tumnis"
+
+
+async def delete_document(s: AsyncSession, document_id: UUID, *, actor: ActorKind) -> str:
+    """Delete a document as `actor` (FR-15.12): the outcome `may_delete` gives without a
+    confirmation. `trash`: Tumnis's own file goes to its trash on the next sync;
+    `index_only`: an outside file is only unindexed, it stays where it is. An agent is
+    refused an outside file whatever its scopes (403 `external_delete_forbidden`)."""
+    policy, origin = await _delete_target(s, document_id)
+    outcome = may_delete(policy, origin, actor, confirmed_by_user=False)
+    if outcome == "refuse":
+        raise ProblemError(403, EXTERNAL_DELETE_FORBIDDEN, "Only you can delete this file.")
+    await trash_document(s, document_id)
+    return outcome
+
+
+async def record_delete_refused(ctx: WorkspaceContext, document_id: UUID) -> None:
+    """Audit an agent's refused delete of an outside file, in its own transaction (the
+    refused request's rolls back)."""
+    async with tenant_session(ctx) as s:
+        await audit.record(
+            s,
+            "knowledge.external_delete_refused",
+            target=("documents", document_id),
+            occurred_at=SystemClock().now(),
+        )
+
+
+class DeleteConfirmationOut(BaseModel):
+    confirm_token: str
+    expires_at: datetime
+
+
+def _token_hash(token: str) -> bytes:
+    return hashlib.sha256(token.encode()).digest()
+
+
+async def issue_delete_confirmation(
+    s: AsyncSession, document_id: UUID, *, user_id: UUID
+) -> DeleteConfirmationOut:
+    """A one-time token for the delete-confirmation dialog: deleting this document's file
+    at its source, by this user, within `CONFIRM_TTL`. Only its hash is stored."""
+    await _delete_target(s, document_id)
+    token = secrets.token_urlsafe(32)
+    expires_at = SystemClock().now() + CONFIRM_TTL
+    await s.execute(
+        insert(_confirmations).values(
+            document_id=document_id,
+            token_sha256=_token_hash(token),
+            issued_to=user_id,
+            expires_at=expires_at,
+        )
+    )
+    return DeleteConfirmationOut(confirm_token=token, expires_at=expires_at)
+
+
+async def delete_at_source(
+    s: AsyncSession, document_id: UUID, *, confirm_token: str, reason: str, user_id: UUID
+) -> str:
+    """Delete an outside file at its source, as the user confirmed it in the app (SEC-3):
+    the token must be one issued to this user for this document, unused and unexpired
+    (422 `confirmation_invalid`). The Document is trashed and its file record marked
+    confirmed; the next folder sync deletes the file (only if it is still what was
+    synced). Audited as `knowledge.deleted_at_source` with the reason."""
+    await _delete_target(s, document_id)
+    now = SystemClock().now()
+    offered = _token_hash(confirm_token)
+    issued = await s.execute(
+        select(_confirmations.c.id, _confirmations.c.token_sha256)
+        .where(
+            _confirmations.c.document_id == document_id,
+            _confirmations.c.issued_to == user_id,
+            _confirmations.c.used_at.is_(None),
+            _confirmations.c.expires_at > now,
+            _confirmations.c.deleted_at.is_(None),
+        )
+        .with_for_update()
+    )
+    match = next(
+        (row.id for row in issued if hmac.compare_digest(bytes(row.token_sha256), offered)),
+        None,
+    )
+    used = None
+    if match is not None:
+        used = await s.scalar(
+            update(_confirmations)
+            .where(_confirmations.c.id == match, _confirmations.c.used_at.is_(None))
+            .values(used_at=now)
+            .returning(_confirmations.c.id)
+        )
+    if used is None:
+        raise ProblemError(422, "confirmation_invalid", "Confirm the delete again.")
+    await s.execute(
+        update(_files)
+        .where(_files.c.document_id == document_id, _files.c.deleted_at.is_(None))
+        .values(delete_confirmed=True)
+    )
+    await trash_document(s, document_id)
+    await audit.record(
+        s,
+        "knowledge.deleted_at_source",
+        target=("documents", document_id),
+        reason=reason,
+        occurred_at=now,
+    )
+    return "delete_at_source"

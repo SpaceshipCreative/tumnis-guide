@@ -1,5 +1,5 @@
 """knowledge SQLAlchemy tables owned by this module (mirrors of revisions knowledge_0001
-to knowledge_0006)."""
+to knowledge_0008)."""
 
 from datetime import datetime
 from typing import Any
@@ -45,7 +45,7 @@ class StorageLocation(TenantBase, Base):
     __tablename__ = "storage_locations"
 
     name: Mapped[str]
-    kind: Mapped[str]  # server_path | s3 | sftp
+    kind: Mapped[str]  # server_path | share | s3 | sftp
     root: Mapped[str]  # absolute path, or bucket/prefix
     config_enc: Mapped[bytes | None] = mapped_column(LargeBinary)
     status: Mapped[str] = mapped_column(server_default=text("'online'"))
@@ -53,6 +53,8 @@ class StorageLocation(TenantBase, Base):
     is_default: Mapped[bool] = mapped_column(server_default=text("false"))
     capabilities: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'"))
     last_sync_at: Mapped[datetime | None]  # knowledge_0005: the last folder sync's end
+    host_key_pinned: Mapped[str | None]  # knowledge_0007: SFTP, the confirmed host key
+    host_key_pending: Mapped[str | None]  # knowledge_0007: SFTP, the key shown to confirm
 
 
 class ProjectFolder(TenantBase, Base):
@@ -143,3 +145,32 @@ class FolderFile(TenantBase, Base):
     synced_version: Mapped[int | None]
     delete_confirmed: Mapped[bool] = mapped_column(server_default=text("false"))
     last_op: Mapped[str | None]
+
+
+class FolderMove(TenantBase, Base):
+    """knowledge_0008: one move of a project's folder to another location (P3-14)."""
+
+    __tablename__ = "folder_moves"
+
+    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"))
+    from_location: Mapped[UUID] = mapped_column(ForeignKey("storage_locations.id"))
+    from_path: Mapped[str]
+    to_location: Mapped[UUID] = mapped_column(ForeignKey("storage_locations.id"))
+    to_path: Mapped[str]
+    status: Mapped[str] = mapped_column(server_default=text("'copying'"))
+    reason: Mapped[str | None]
+    verified_count: Mapped[int] = mapped_column(server_default=text("0"))
+    old_kept: Mapped[bool] = mapped_column(server_default=text("true"))
+
+
+class DeleteConfirmation(TenantBase, Base):
+    """knowledge_0008: a one-time token the delete-confirmation dialog is issued for
+    deleting an outside file at its source (P3-14); only its sha256 is kept."""
+
+    __tablename__ = "delete_confirmations"
+
+    document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id"))
+    token_sha256: Mapped[bytes] = mapped_column(LargeBinary)
+    issued_to: Mapped[UUID]
+    expires_at: Mapped[datetime]
+    used_at: Mapped[datetime | None]

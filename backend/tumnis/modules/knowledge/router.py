@@ -7,6 +7,8 @@ Storage locations (P1-14, FR-15.7), all `auth="session"` (the Settings screen):
 `GET /knowledge/locations` (every location; a workspace has a handful, so a bare list),
 `POST /knowledge/locations` (201), `POST /knowledge/locations/{storage_location_id}/test`
 (test the connection now; drains queued writes when healthy), `POST
+/knowledge/locations/{storage_location_id}/host-key` (P3-14: pin the SFTP server's key
+when the fingerprint typed matches the key it shows; a reason when re-pinning), `POST
 /knowledge/locations/{storage_location_id}/default` (versioned),
 and `PUT /knowledge/projects/{project_id}/folder` (move an empty project folder to another
 location). Each handler finds its row (404) before any rule about the body. Storage calls
@@ -32,7 +34,7 @@ from tumnis.core.routing import RoutePolicy, authorize, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.versioning import Version
 from tumnis.modules.knowledge import api, uploads
-from tumnis.modules.knowledge.rules import MAX_UPLOAD_BYTES
+from tumnis.modules.knowledge.rules import MAX_UPLOAD_BYTES, ActorKind
 
 router = v1_router("knowledge", tags=["knowledge"])
 
@@ -90,6 +92,28 @@ async def test_location(
         return await api.check_location(s, storage_location_id, net=_net(request))
 
 
+class HostKeyIn(BaseModel):
+    sha256: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    reason: Annotated[str, StringConstraints(max_length=500)] | None = None
+
+
+@router.post("/knowledge/locations/{storage_location_id}/host-key")
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason="pinning reads the server's key again, never a replay",
+    )
+)
+async def confirm_host_key(
+    storage_location_id: UUID, body: HostKeyIn, request: Request, ctx: Session
+) -> api.LocationOut:
+    async with tenant_session(ctx) as s:
+        return await api.confirm_host_key(
+            s, storage_location_id, body.sha256, reason=body.reason, net=_net(request)
+        )
+
+
 @router.post("/knowledge/locations/{storage_location_id}/default")
 @route_policy(RoutePolicy(auth="session", idempotent=True))
 async def set_default_location(
@@ -104,6 +128,123 @@ async def set_project_folder(
     project_id: UUID, body: FolderIn, request: Request, _ctx: Session, session: SessionDep
 ) -> api.ProjectFolderOut:
     return await api.set_project_location(session, project_id, body.location_id, net=_net(request))
+
+
+# --- P3-14: existing folders, deletes of outside files, moving a folder --------------------
+
+
+class ExistingFolderIn(BaseModel):
+    location_id: UUID
+    path: Annotated[str, StringConstraints(min_length=1, max_length=1024)]
+
+
+class DeleteOut(BaseModel):
+    outcome: str
+
+
+class DeleteAtSourceIn(BaseModel):
+    confirm_token: Annotated[str, StringConstraints(min_length=16, max_length=200)]
+    reason: Annotated[str, StringConstraints(min_length=1, max_length=500)]
+
+
+@router.post("/knowledge/projects/{project_id}/existing-folder")
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason="setup checks the folder on the location each time",
+    )
+)
+async def use_existing_folder(
+    project_id: UUID, body: ExistingFolderIn, request: Request, ctx: Session
+) -> api.ProjectFolderOut:
+    """Make a folder the user already keeps the project's folder (Tumnis writes only in
+    its `Tumnis/` subfolder)."""
+    async with tenant_session(ctx) as s:
+        return await api.use_existing_folder(
+            s, project_id, location_id=body.location_id, path=body.path, net=_net(request)
+        )
+
+
+@router.post("/knowledge/projects/{project_id}/folder/move", status_code=202)
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason="each call starts a move job; the job refuses a busy target",
+    )
+)
+async def move_project_folder(
+    project_id: UUID, body: ExistingFolderIn, ctx: Session
+) -> api.MoveStarted:
+    """Copy the project's folder to another location, verify every hash, switch; the old
+    copy is kept."""
+    return await api.enqueue_move(ctx, project_id, body.location_id, body.path)
+
+
+@router.delete("/knowledge/documents/{document_id}")
+@route_policy(
+    RoutePolicy(
+        auth="session_or_key",
+        scopes=frozenset({"knowledge:write"}),
+        idempotent=False,
+        not_idempotent_reason="a repeated delete finds no document (404); nothing to replay",
+        project_param="lookup:knowledge",
+    )
+)
+async def delete_document(document_id: UUID, request: Request) -> DeleteOut:
+    """Delete a document: Tumnis's own file goes to its trash, an outside file is only
+    unindexed; an agent may not delete an outside file (403, audited)."""
+    principal = principal_of(request)
+    ctx = principal.workspace_context()
+    actor = ActorKind.user if principal.kind == "session" else ActorKind.agent
+    try:
+        async with tenant_session(ctx) as s:
+            return DeleteOut(outcome=await api.delete_document(s, document_id, actor=actor))
+    except ProblemError as exc:
+        if exc.code == api.EXTERNAL_DELETE_FORBIDDEN:
+            await api.record_delete_refused(ctx, document_id)
+        raise
+
+
+@router.post("/knowledge/documents/{document_id}/delete-confirmation")
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason="each dialog is issued a new one-time token",
+    )
+)
+async def issue_delete_confirmation(
+    document_id: UUID, request: Request, ctx: Session
+) -> api.DeleteConfirmationOut:
+    """A one-time token for the delete-at-source dialog."""
+    user_id = principal_of(request).subject_id
+    assert user_id is not None  # noqa: S101  # a signed-in session has its user
+    async with tenant_session(ctx) as s:
+        return await api.issue_delete_confirmation(s, document_id, user_id=user_id)
+
+
+@router.post("/knowledge/documents/{document_id}/delete-at-source", status_code=202)
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason="the confirmation token is used once",
+    )
+)
+async def delete_at_source(
+    document_id: UUID, body: DeleteAtSourceIn, request: Request, ctx: Session
+) -> DeleteOut:
+    """Delete an outside file at its source, with the dialog's token and a reason; the
+    next folder sync deletes it."""
+    user_id = principal_of(request).subject_id
+    assert user_id is not None  # noqa: S101  # a signed-in session has its user
+    async with tenant_session(ctx) as s:
+        outcome = await api.delete_at_source(
+            s, document_id, confirm_token=body.confirm_token, reason=body.reason, user_id=user_id
+        )
+    return DeleteOut(outcome=outcome)
 
 
 # --- P0-24: the project page's Brief rail -----------------------------------------------

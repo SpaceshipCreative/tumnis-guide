@@ -135,11 +135,16 @@ def _ctx(workspace_id: str) -> WorkspaceContext:
     return WorkspaceContext(UUID(workspace_id), SYSTEM_ACTOR)
 
 
-def ignored(rel_in_folder: str) -> bool:
-    """Tumnis's own `.tumnis/`, its temp files and OS droppings are never synced."""
+EXISTING_TRASH: Final = f"{api.EXISTING_DIR}/.trash/"  # an existing folder's trash (P3-14)
+
+
+def ignored(rel_in_folder: str, mode: str = "tumnis_made") -> bool:
+    """Tumnis's own `.tumnis/` (in an existing folder also its `Tumnis/.trash/`), its temp
+    files and OS droppings are never synced."""
     name = PurePosixPath(rel_in_folder).name
     return (
         rel_in_folder.split("/", 1)[0] == api.TUMNIS_DIR
+        or (mode == "existing" and rel_in_folder.startswith(EXISTING_TRASH))
         or name.startswith(TMP_PREFIX)
         or name in IGNORED_NAMES
         or name.startswith(OFFICE_LOCK)
@@ -231,7 +236,7 @@ async def _list(backend: StorageBackend, folder: Mapping[Any, Any], scan: _Scan)
     while True:
         page = await backend.list(root + "/", cursor)
         for stat in page.items:
-            if not ignored(stat.path[len(root) + 1 :]):
+            if not ignored(stat.path[len(root) + 1 :], folder["mode"]):
                 scan.files[stat.path] = stat
                 scan.project_of[stat.path] = folder["project_id"]
         cursor = page.next_cursor
@@ -359,7 +364,7 @@ async def plan(workspace_id: str, location_id: str) -> list[dict[str, Any]]:
                 if folder["mode"] == "tumnis_made":
                     await api.make_layout(backend, folder["root_path"])
                 await _list(backend, folder, scan)
-            await _hash_changed(backend, scan, etag_is_hash=kind == "server_path")
+            await _hash_changed(backend, scan, etag_is_hash=kind != "s3")
         taken = await api.taken_paths(s, loc)
         taken |= {p.casefold() for p in scan.files}
         roots = {f["project_id"]: f["root_path"] for f in scan.folders}
@@ -433,12 +438,13 @@ async def _unwritten_entries(  # the notes no entry places yet
     for doc_id, doc in sorted(scan.docs.items(), key=lambda kv: str(kv[0])):
         if doc_id in used or doc["deleted_at"] is not None or not api.is_note(doc):
             continue
-        root = roots.get(doc["project_id"])
-        if root is None:
+        folder = next((f for f in scan.folders if f["project_id"] == doc["project_id"]), None)
+        if folder is None or doc["project_id"] not in roots:
             continue
         path = await api.note_path(
-            s, loc, root, doc["title"], document_id=doc_id, backend=None, taken=taken
-        )
+            s, loc, api.work_root(folder), doc["title"], document_id=doc_id, backend=None,
+            taken=taken,
+        )  # fmt: skip
         found.append((path, None, None, _local_of(scan, doc_id, None), None))
     return found
 
@@ -460,7 +466,8 @@ def _decide(
             prev, local, remote, path=path, today_local=today, siblings=frozenset(siblings)
         )
         if decision.conflict_path is not None:
-            siblings.add(decision.conflict_path)
+            decision = _conflict_inside_tumnis(decision, scan)
+            siblings.add(decision.conflict_path or "")
         record = scan.records.get(old or path)
         if decision.action == Action.NOOP and old is None:
             continue
@@ -886,6 +893,9 @@ class _Apply:
                 raise _Stale
             inside = self.path[len(root) + 1 :]
             trash = f"{root}/{api.TUMNIS_DIR}/trash/{inside}"
+            if await self._mode_of(root) == "existing":  # FR-15.12: only inside Tumnis/
+                inside = inside.removeprefix(f"{api.EXISTING_DIR}/")
+                trash = f"{root}/{EXISTING_TRASH}{inside}"
             target = await api.free_path(trash, set(), self.backend)
             await self.backend.move(self.path, target)
         await self.drop_record()
@@ -901,13 +911,35 @@ class _Apply:
             .all()
         )
 
+    async def _mode_of(self, root: str) -> str | None:
+        return next((f["mode"] for f in await self._folders() if f["root_path"] == root), None)
+
     async def delete_at_source(self) -> None:
         stat = await self.backend.stat(self.path)
         if stat is not None:
             if not etag_equal(stat.etag, self.decision.if_match):
                 raise _Stale
+            allow = getattr(self.backend, "allow_delete", None)
+            if allow is not None:  # an existing folder's guard: the user confirmed this one
+                allow(self.path)
             await self.backend.delete(self.path)
         await self.drop_record()
+
+
+def _conflict_inside_tumnis(decision: SyncDecision, scan: _Scan) -> SyncDecision:
+    """In an existing folder a conflict copy goes under `Tumnis/` (FR-15.12: Tumnis writes
+    nowhere else there), at the same place inside it."""
+    wanted = decision.conflict_path or ""
+    for folder in scan.folders:
+        root = folder["root_path"]
+        if folder["mode"] != "existing" or not wanted.startswith(root + "/"):
+            continue
+        work = api.work_root(folder)
+        if not wanted.startswith(work + "/"):
+            return decision.model_copy(
+                update={"conflict_path": f"{work}/{wanted[len(root) + 1 :]}"}
+            )
+    return decision
 
 
 def _unchanged(item: Mapping[Any, Any], record: RowMapping | None, doc: RowMapping | None) -> bool:

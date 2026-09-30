@@ -641,6 +641,44 @@ export type DefaultIn = {
 };
 
 /**
+ * DeleteAtSourceIn
+ */
+export type DeleteAtSourceIn = {
+  /**
+   * Confirm Token
+   */
+  confirm_token: string;
+  /**
+   * Reason
+   */
+  reason: string;
+};
+
+/**
+ * DeleteConfirmationOut
+ */
+export type DeleteConfirmationOut = {
+  /**
+   * Confirm Token
+   */
+  confirm_token: string;
+  /**
+   * Expires At
+   */
+  expires_at: string;
+};
+
+/**
+ * DeleteOut
+ */
+export type DeleteOut = {
+  /**
+   * Outcome
+   */
+  outcome: string;
+};
+
+/**
  * DocumentDTO
  */
 export type DocumentDto = {
@@ -800,6 +838,20 @@ export type Evaluation = {
 };
 
 /**
+ * ExistingFolderIn
+ */
+export type ExistingFolderIn = {
+  /**
+   * Location Id
+   */
+  location_id: string;
+  /**
+   * Path
+   */
+  path: string;
+};
+
+/**
  * FolderIn
  */
 export type FolderIn = {
@@ -868,6 +920,20 @@ export type HealthCheckAccepted = {
    * Request Id
    */
   request_id: string;
+};
+
+/**
+ * HostKeyIn
+ */
+export type HostKeyIn = {
+  /**
+   * Reason
+   */
+  reason?: string | null;
+  /**
+   * Sha256
+   */
+  sha256: string;
 };
 
 /**
@@ -1018,7 +1084,7 @@ export type LocationIn = {
   /**
    * Kind
    */
-  kind: "server_path" | "s3";
+  kind: "server_path" | "s3" | "share" | "sftp";
   /**
    * Name
    */
@@ -1028,6 +1094,7 @@ export type LocationIn = {
    */
   root: string;
   s3?: S3ConfigIn | null;
+  sftp?: SftpConfigIn | null;
 };
 
 /**
@@ -1045,6 +1112,10 @@ export type LocationOut = {
    */
   endpoint: string | null;
   /**
+   * Host Key Sha256
+   */
+  host_key_sha256?: string | null;
+  /**
    * Id
    */
   id: string;
@@ -1061,13 +1132,17 @@ export type LocationOut = {
    */
   name: string;
   /**
+   * Pending Host Key Sha256
+   */
+  pending_host_key_sha256?: string | null;
+  /**
    * Root
    */
   root: string;
   /**
    * Status
    */
-  status: "online" | "offline";
+  status: "online" | "offline" | "pending_host_key" | "host_key_changed";
   /**
    * Status Reason
    */
@@ -1240,6 +1315,16 @@ export type MoveIn = {
    * Version
    */
   version: number;
+};
+
+/**
+ * MoveStarted
+ */
+export type MoveStarted = {
+  /**
+   * Workflow Id
+   */
+  workflow_id: string;
 };
 
 /**
@@ -2758,6 +2843,28 @@ export type SetupTotpIn = {
    * Setup Token
    */
   setup_token: string;
+};
+
+/**
+ * SftpConfigIn
+ */
+export type SftpConfigIn = {
+  /**
+   * Host
+   */
+  host: string;
+  /**
+   * Port
+   */
+  port?: number;
+  /**
+   * Private Key
+   */
+  private_key: string;
+  /**
+   * Username
+   */
+  username: string;
 };
 
 /**
@@ -5864,6 +5971,66 @@ export type KnowledgeUploadDocumentResponses = {
 export type KnowledgeUploadDocumentResponse =
   KnowledgeUploadDocumentResponses[keyof KnowledgeUploadDocumentResponses];
 
+export type KnowledgeDeleteDocumentData = {
+  body?: never;
+  path: {
+    /**
+     * Document Id
+     */
+    document_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/documents/{document_id}";
+};
+
+export type KnowledgeDeleteDocumentErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeDeleteDocumentError =
+  KnowledgeDeleteDocumentErrors[keyof KnowledgeDeleteDocumentErrors];
+
+export type KnowledgeDeleteDocumentResponses = {
+  /**
+   * Successful Response
+   */
+  200: DeleteOut;
+};
+
+export type KnowledgeDeleteDocumentResponse =
+  KnowledgeDeleteDocumentResponses[keyof KnowledgeDeleteDocumentResponses];
+
 export type KnowledgeGetDocumentData = {
   body?: never;
   path: {
@@ -5983,6 +6150,126 @@ export type KnowledgeUpdateDocumentResponses = {
 
 export type KnowledgeUpdateDocumentResponse =
   KnowledgeUpdateDocumentResponses[keyof KnowledgeUpdateDocumentResponses];
+
+export type KnowledgeDeleteAtSourceData = {
+  body: DeleteAtSourceIn;
+  path: {
+    /**
+     * Document Id
+     */
+    document_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/documents/{document_id}/delete-at-source";
+};
+
+export type KnowledgeDeleteAtSourceErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeDeleteAtSourceError =
+  KnowledgeDeleteAtSourceErrors[keyof KnowledgeDeleteAtSourceErrors];
+
+export type KnowledgeDeleteAtSourceResponses = {
+  /**
+   * Successful Response
+   */
+  202: DeleteOut;
+};
+
+export type KnowledgeDeleteAtSourceResponse =
+  KnowledgeDeleteAtSourceResponses[keyof KnowledgeDeleteAtSourceResponses];
+
+export type KnowledgeIssueDeleteConfirmationData = {
+  body?: never;
+  path: {
+    /**
+     * Document Id
+     */
+    document_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/documents/{document_id}/delete-confirmation";
+};
+
+export type KnowledgeIssueDeleteConfirmationErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeIssueDeleteConfirmationError =
+  KnowledgeIssueDeleteConfirmationErrors[keyof KnowledgeIssueDeleteConfirmationErrors];
+
+export type KnowledgeIssueDeleteConfirmationResponses = {
+  /**
+   * Successful Response
+   */
+  200: DeleteConfirmationOut;
+};
+
+export type KnowledgeIssueDeleteConfirmationResponse =
+  KnowledgeIssueDeleteConfirmationResponses[keyof KnowledgeIssueDeleteConfirmationResponses];
 
 export type KnowledgeListLocationsData = {
   body?: never;
@@ -6156,6 +6443,66 @@ export type KnowledgeSetDefaultLocationResponses = {
 export type KnowledgeSetDefaultLocationResponse =
   KnowledgeSetDefaultLocationResponses[keyof KnowledgeSetDefaultLocationResponses];
 
+export type KnowledgeConfirmHostKeyData = {
+  body: HostKeyIn;
+  path: {
+    /**
+     * Storage Location Id
+     */
+    storage_location_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/locations/{storage_location_id}/host-key";
+};
+
+export type KnowledgeConfirmHostKeyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeConfirmHostKeyError =
+  KnowledgeConfirmHostKeyErrors[keyof KnowledgeConfirmHostKeyErrors];
+
+export type KnowledgeConfirmHostKeyResponses = {
+  /**
+   * Successful Response
+   */
+  200: LocationOut;
+};
+
+export type KnowledgeConfirmHostKeyResponse =
+  KnowledgeConfirmHostKeyResponses[keyof KnowledgeConfirmHostKeyResponses];
+
 export type KnowledgeTestLocationData = {
   body?: never;
   path: {
@@ -6216,6 +6563,66 @@ export type KnowledgeTestLocationResponses = {
 export type KnowledgeTestLocationResponse =
   KnowledgeTestLocationResponses[keyof KnowledgeTestLocationResponses];
 
+export type KnowledgeUseExistingFolderData = {
+  body: ExistingFolderIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/projects/{project_id}/existing-folder";
+};
+
+export type KnowledgeUseExistingFolderErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeUseExistingFolderError =
+  KnowledgeUseExistingFolderErrors[keyof KnowledgeUseExistingFolderErrors];
+
+export type KnowledgeUseExistingFolderResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProjectFolderOut;
+};
+
+export type KnowledgeUseExistingFolderResponse =
+  KnowledgeUseExistingFolderResponses[keyof KnowledgeUseExistingFolderResponses];
+
 export type KnowledgeSetProjectFolderData = {
   body: FolderIn;
   path: {
@@ -6275,6 +6682,66 @@ export type KnowledgeSetProjectFolderResponses = {
 
 export type KnowledgeSetProjectFolderResponse =
   KnowledgeSetProjectFolderResponses[keyof KnowledgeSetProjectFolderResponses];
+
+export type KnowledgeMoveProjectFolderData = {
+  body: ExistingFolderIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/projects/{project_id}/folder/move";
+};
+
+export type KnowledgeMoveProjectFolderErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeMoveProjectFolderError =
+  KnowledgeMoveProjectFolderErrors[keyof KnowledgeMoveProjectFolderErrors];
+
+export type KnowledgeMoveProjectFolderResponses = {
+  /**
+   * Successful Response
+   */
+  202: MoveStarted;
+};
+
+export type KnowledgeMoveProjectFolderResponse =
+  KnowledgeMoveProjectFolderResponses[keyof KnowledgeMoveProjectFolderResponses];
 
 export type PlanningGetProjectWeekData = {
   body?: never;

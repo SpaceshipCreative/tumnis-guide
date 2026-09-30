@@ -336,10 +336,11 @@ async def place(workspace_id: str, version_id: str, ref: Ref) -> str:
         if info.location_id is None:
             raise RuntimeError(f"document {info.document_id} has no location")
         root = await api.storage_path(s, info.project_id, "")
+        uploads = await api.upload_dir(s, info.project_id)
         found: tuple[str, FileStat] | None = None
         async with api.open_backend(s, info.location_id, net=_net) as backend:
             for attempt in count(1):
-                rel = f"uploads/{numbered_name(name, attempt)}"
+                rel = f"{uploads}/{numbered_name(name, attempt)}"
                 try:
                     found = (rel, await backend.write(f"{root}{rel}", _file_chunks(path), None))
                 except PreconditionFailed as taken:
