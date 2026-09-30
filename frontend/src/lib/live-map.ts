@@ -30,12 +30,13 @@ export const LIVE_MAP: Record<
       "searchTypeaheadTasks",
     ],
   },
-  // A project's board and columns carry its id in their path: column edits and a new card
-  // threshold (FR-3.8) refresh them, a saved brief its Brief rail section (P0-24); any
-  // project change refreshes search results (P0-20).
+  // A project's board, columns and agent context (P2-01) carry its id in their path:
+  // column edits and a new card threshold (FR-3.8) refresh them, a saved brief its Brief
+  // rail section (P0-24); any project change refreshes search results (P0-20).
   project: {
     details: [
       "projectsGetProject",
+      "projectsGetProjectContext",
       "tasksGetBoard",
       "tasksGetColumns",
       "knowledgeGetBrief",

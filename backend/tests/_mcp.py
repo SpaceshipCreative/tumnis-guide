@@ -20,6 +20,7 @@ registry, the routes and the auth api.
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import json
 import re
@@ -72,10 +73,30 @@ class Outcome:
 
 @asynccontextmanager
 async def mcp_running(app: FastAPI) -> AsyncIterator[None]:
-    """The app's MCP session manager, running (the lifespan enters it in production)."""
+    """The app's MCP session manager, running (the lifespan enters it in production).
+
+    The manager runs in a task of its own: its anyio task group must be entered and left
+    by one task, and pytest-asyncio may tear an async fixture down in another task than
+    the one that set it up."""
     manager = app.state.mcp_session_manager
-    async with manager.run():
+    started, stop = asyncio.Event(), asyncio.Event()
+
+    async def run() -> None:
+        async with manager.run():
+            started.set()
+            await stop.wait()
+
+    task = asyncio.create_task(run())
+    waiter = asyncio.create_task(started.wait())
+    await asyncio.wait({task, waiter}, return_when=asyncio.FIRST_COMPLETED)
+    if task.done():  # it failed to start: raise its error
+        waiter.cancel()
+        await task
+    try:
         yield
+    finally:
+        stop.set()
+        await task
 
 
 def http_for(

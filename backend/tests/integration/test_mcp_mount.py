@@ -26,7 +26,6 @@ INITIALIZE = {
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_post_mcp_is_not_redirected(app: FastAPI, key_client: Any) -> None:
     """T-P2-01-18
     `POST /mcp` initialize (no trailing slash) answers 200 with a JSON body carrying the
@@ -45,7 +44,6 @@ async def test_post_mcp_is_not_redirected(app: FastAPI, key_client: Any) -> None
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_first_request_after_startup_succeeds(app: FastAPI, key_client: Any) -> None:
     """T-P2-01-19
     With only the app's own lifespan run (nothing else starts the session manager), the

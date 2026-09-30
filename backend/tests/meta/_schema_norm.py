@@ -4,7 +4,8 @@ Two schemas that say the same thing in different shapes normalize to the same va
 `$ref`s are inlined (`#/$defs/...` from the MCP tool, `#/components/schemas/...` from the
 OpenAPI document), `title`, `description` and `examples` are dropped, `required` and
 `enum` are sorted, and a nullable type has one form: `anyOf [X, {"type": "null"}]` and
-`type: [X, "null"]` both become X plus `"nullable": true`. A semantic difference (another
+`type: [X, "null"]` both become X plus `"nullable": true`; a `null` default (what an
+optional nullable field means anyway) is dropped. A semantic difference (another
 type, bound or required field) survives normalization.
 """
 
@@ -62,14 +63,14 @@ def norm(
     if defs is None:
         defs = dict(schema.get("$defs", {}))
     components = components or {}
+    schema = _nullable(schema)  # first: a nullable reference is `anyOf [{"$ref"}, null]`
     if "$ref" in schema:
         target = _resolve(schema["$ref"], defs, components)
         extra = {k: v for k, v in schema.items() if k != "$ref"}
         return norm({**target, **extra}, defs, components, _depth + 1)
-    schema = _nullable(schema)
     out: dict[str, Any] = {}
     for key, value in schema.items():
-        if key in DROPPED:
+        if key in DROPPED or (key == "default" and value is None):
             continue
         if key in {"required", "enum"} and isinstance(value, list):
             out[key] = sorted(value, key=str)

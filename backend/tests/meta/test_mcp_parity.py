@@ -84,7 +84,6 @@ async def _listed_tools(app: FastAPI, key: str) -> dict[str, dict[str, Any]]:
 @pytest.mark.enable_socket
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_every_tool_has_a_rest_twin(surface_app: FastAPI, listing_key: str) -> None:
     """T-P2-01-01
     Every registered op maps to exactly one OpenAPI operation at its `rest_method
@@ -108,7 +107,6 @@ async def test_every_tool_has_a_rest_twin(surface_app: FastAPI, listing_key: str
 @pytest.mark.enable_socket
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_tool_input_schema_equals_twin_input(surface_app: FastAPI, listing_key: str) -> None:
     """T-P2-01-02
     For each op, the normalized MCP `inputSchema` equals the twin's path + query + body
@@ -141,7 +139,6 @@ async def test_tool_input_schema_equals_twin_input(surface_app: FastAPI, listing
 @pytest.mark.enable_socket
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_tool_output_schema_equals_twin_response(
     surface_app: FastAPI, listing_key: str
 ) -> None:
@@ -166,7 +163,6 @@ async def test_tool_output_schema_equals_twin_response(
 @pytest.mark.enable_socket
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_same_call_same_result_on_both_doors(
     surface_app: FastAPI, world: World, callers: Callers
 ) -> None:

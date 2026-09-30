@@ -38,7 +38,6 @@ async def _writer(callers: Callers) -> str:
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_keyless_writes_are_tainted(
     surface_app: FastAPI, world: World, callers: Callers
 ) -> None:
@@ -78,7 +77,6 @@ async def test_keyless_writes_are_tainted(
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_write_tools_require_idempotency_key(
     surface_app: FastAPI, world: World, callers: Callers
 ) -> None:
@@ -101,7 +99,6 @@ async def test_write_tools_require_idempotency_key(
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_update_tools_require_version_and_409_on_stale(
     surface_app: FastAPI, world: World, callers: Callers
 ) -> None:
@@ -135,7 +132,6 @@ async def test_update_tools_require_version_and_409_on_stale(
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_replay_returns_original_and_mismatch_rejected(
     surface_app: FastAPI, world: World, callers: Callers
 ) -> None:
@@ -162,7 +158,6 @@ async def test_replay_returns_original_and_mismatch_rejected(
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_schema_version_n_and_n_minus_1_accepted(
     surface_app: FastAPI, world: World, callers: Callers, echo_v2_op: Any
 ) -> None:

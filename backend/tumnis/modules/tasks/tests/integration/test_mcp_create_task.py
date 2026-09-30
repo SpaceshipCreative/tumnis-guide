@@ -36,7 +36,6 @@ async def _subtask(http: Any, world: Any, **fields: Any) -> Any:
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_human_or_hybrid_subtask_without_estimate_rejected(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock, key_client: Any
 ) -> None:
@@ -55,7 +54,6 @@ async def test_human_or_hybrid_subtask_without_estimate_rejected(
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_card_threshold_applied(
     app: FastAPI, workspace: WorkspaceHandle, clock: FixedClock, key_client: Any
 ) -> None:

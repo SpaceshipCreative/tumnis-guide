@@ -99,7 +99,6 @@ async def _both_doors(app: FastAPI, key: str | None, op: Any, world: World) -> t
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_scope_matrix(surface_app: FastAPI, world: World, callers: Callers) -> None:
     """T-P2-01-05
     Every op x caller kind (none, a key with no scopes, exactly the op's scope, every scope
@@ -147,7 +146,6 @@ async def test_project_limited_key_outside_project_is_not_found(
 
 @pytest.mark.req("FR-14.10")
 @pytest.mark.wp("P2-01")
-@pytest.mark.xfail(strict=True, reason="spec:P2-01")
 async def test_cookie_session_rejected_on_mcp(surface_app: FastAPI, session_client: Any) -> None:
     """T-P2-01-07
     `/mcp` with only a session cookie (and its CSRF token) answers 401
