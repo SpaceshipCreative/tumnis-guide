@@ -34,9 +34,11 @@ from tumnis.core.canonical import (
     CANONICAL_KEY,
     CanonicalRecord,
     UpsertStats,
+    content_hash,
     soft_delete_records,
     upsert_records,
 )
+from tumnis.core.outbox import emit
 from tumnis.core.schemas import versioned
 from tumnis.core.settings_store import open_for_workspace, seal_for_workspace
 from tumnis.core.tenancy import WorkspaceContext, session_for
@@ -54,6 +56,7 @@ from tumnis.modules.integrations.models import (
     SyncState,
     Thread,
 )
+from tumnis.modules.integrations.payloads import ArtifactUpdatedV1
 
 ConnectorKind = Literal["email", "notes", "chat", "calendar", "code", "deploy", "knowledge"]
 Capability = Literal["poll", "webhook", "read", "write"]
@@ -905,3 +908,258 @@ async def consume_oauth_grant(
             .where(_pending.c.id == pending_id)
             .values(code_enc=None, verifier_enc=None, deleted_at=func.now())
         )
+
+
+# --- Artifacts: status kept fresh by the modules that read the outside system (P2-13) ---------
+
+_artifacts: Table = _TABLES["artifact"]
+
+
+class ArtifactOut(BaseModel):
+    id: UUID
+    connection_id: UUID
+    kind: str
+    external_id: str
+    url: str | None
+    state: str | None
+    checks: dict[str, Any]
+    fetched_at: datetime
+
+
+def _artifact_out(row: Any) -> ArtifactOut:
+    return ArtifactOut.model_validate(row._mapping)
+
+
+async def upsert_artifact(  # the plan's signature
+    ctx: WorkspaceContext,
+    *,
+    connection_id: UUID,
+    kind: str,
+    external_id: str,
+    url: str | None,
+    now: datetime,
+    session: AsyncSession | None = None,
+) -> ArtifactOut:
+    """The artifact for (connection, external id), created with no state (nothing has read
+    it yet) or, when it exists, left as it is (a soft-deleted one comes back). The status
+    arrives later through `set_artifact_status`."""
+    record = ArtifactRecord(
+        external_id=external_id, provider_url=url, fetched_at=now, kind=kind, url=url
+    )
+    async with session_for(ctx, session) as s:
+        source = await connection_source(s, connection_id)
+        insert = pg_insert(_artifacts).values(
+            connection_id=connection_id,
+            external_id=external_id,
+            provider_url=url,
+            fetched_at=now,
+            content_hash=content_hash(record),
+            source=source,
+            kind=kind,
+            url=url,
+            state=None,
+            checks={},
+        )
+        await s.execute(
+            insert.on_conflict_do_update(
+                index_elements=[_artifacts.c[c] for c in CANONICAL_KEY],
+                set_={"deleted_at": None},
+                where=_artifacts.c.deleted_at.is_not(None),
+            )
+        )
+        row = (
+            await s.execute(
+                select(_artifacts).where(
+                    _artifacts.c.connection_id == connection_id,
+                    _artifacts.c.external_id == external_id,
+                )
+            )
+        ).one()
+    return _artifact_out(row)
+
+
+async def get_artifacts(
+    ctx: WorkspaceContext, ids: Sequence[UUID], *, session: AsyncSession | None = None
+) -> list[ArtifactOut]:
+    """The live artifacts among `ids`, in the order of `ids`."""
+    if not ids:
+        return []
+    async with session_for(ctx, session) as s:
+        rows = (
+            await s.execute(
+                select(_artifacts).where(
+                    _artifacts.c.id.in_(list(ids)), _artifacts.c.deleted_at.is_(None)
+                )
+            )
+        ).all()
+    found = {row.id: _artifact_out(row) for row in rows}
+    return [found[i] for i in ids if i in found]
+
+
+async def find_artifacts(
+    ctx: WorkspaceContext,
+    *,
+    kind: str,
+    external_ids: Sequence[str],
+    session: AsyncSession | None = None,
+) -> list[ArtifactOut]:
+    """The live artifacts of one kind with these external ids (any connection)."""
+    if not external_ids:
+        return []
+    async with session_for(ctx, session) as s:
+        rows = (
+            await s.execute(
+                select(_artifacts).where(
+                    _artifacts.c.kind == kind,
+                    _artifacts.c.external_id.in_(list(external_ids)),
+                    _artifacts.c.deleted_at.is_(None),
+                )
+            )
+        ).all()
+    return [_artifact_out(row) for row in rows]
+
+
+async def list_artifacts(
+    ctx: WorkspaceContext,
+    *,
+    kind: str,
+    open_only: bool = False,
+    session: AsyncSession | None = None,
+) -> list[ArtifactOut]:
+    """The workspace's live artifacts of one kind, oldest read first. `open_only` keeps
+    those never read (no state) or still `open`: the ones worth polling."""
+    stmt = select(_artifacts).where(_artifacts.c.kind == kind, _artifacts.c.deleted_at.is_(None))
+    if open_only:
+        stmt = stmt.where(or_(_artifacts.c.state.is_(None), _artifacts.c.state == "open"))
+    async with session_for(ctx, session) as s:
+        rows = (await s.execute(stmt.order_by(_artifacts.c.fetched_at, _artifacts.c.id))).all()
+    return [_artifact_out(row) for row in rows]
+
+
+async def set_artifact_status(
+    ctx: WorkspaceContext,
+    artifact_id: UUID,
+    *,
+    state: str | None,
+    checks: Mapping[str, Any],
+    fetched_at: datetime,
+    session: AsyncSession | None = None,
+) -> bool:
+    """Stores what the outside system said and when it was read (`fetched_at` moves on
+    every read). When the state or the checks differ from what was stored, emits
+    `artifact.updated` in the same transaction and returns True; a read that changed
+    nothing emits nothing. NotFound for an artifact that is gone."""
+    async with session_for(ctx, session) as s:
+        row = (
+            (
+                await s.execute(
+                    select(_artifacts)
+                    .where(_artifacts.c.id == artifact_id, _artifacts.c.deleted_at.is_(None))
+                    .with_for_update()
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise NotFound("artifacts", artifact_id)
+        new_checks = dict(checks)
+        changed = bool(row["state"] != state or row["checks"] != new_checks)
+        values: dict[str, Any] = {"fetched_at": fetched_at}
+        if changed:
+            record = ArtifactRecord(
+                external_id=row["external_id"],
+                provider_url=row["provider_url"],
+                fetched_at=fetched_at,
+                kind=row["kind"],
+                url=row["url"],
+                state=state,
+                checks=new_checks,
+            )
+            values |= {"state": state, "checks": new_checks, "content_hash": content_hash(record)}
+        await s.execute(update(_artifacts).where(_artifacts.c.id == artifact_id).values(**values))
+        if changed:
+            await emit(
+                s,
+                ArtifactUpdatedV1(
+                    artifact_id=artifact_id,
+                    kind=row["kind"],
+                    url=row["url"],
+                    state=state,
+                    checks=new_checks,
+                ),
+                occurred_at=fetched_at,
+            )
+    return changed
+
+
+async def get_raw_payload(
+    ctx: WorkspaceContext,
+    connection_id: UUID,
+    record_type: str,
+    external_id: str,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any] | None:
+    """The stored provider JSON of one record (what `store_raw_payloads` keeps), or None."""
+    async with session_for(ctx, session) as s:
+        payload: dict[str, Any] | None = await s.scalar(
+            select(_raw.c.payload).where(
+                _raw.c.connection_id == connection_id,
+                _raw.c.record_type == record_type,
+                _raw.c.external_id == external_id,
+                _raw.c.deleted_at.is_(None),
+            )
+        )
+    return payload
+
+
+async def context_owners(
+    ctx: WorkspaceContext,
+    *,
+    target_type: TargetType,
+    target_id: UUID,
+    owner_type: OwnerType,
+    session: AsyncSession | None = None,
+) -> list[UUID]:
+    """The owners (tasks, say) whose live context items point at this target."""
+    async with session_for(ctx, session) as s:
+        owners: Sequence[UUID] = (
+            await s.scalars(
+                select(_context.c.owner_id)
+                .where(
+                    _context.c.target_type == target_type,
+                    _context.c.target_id == target_id,
+                    _context.c.owner_type == owner_type,
+                    _context.c.deleted_at.is_(None),
+                )
+                .order_by(_context.c.created_at, _context.c.id)
+            )
+        ).all()
+        return list(owners)
+
+
+async def context_targets(
+    ctx: WorkspaceContext,
+    *,
+    owner_type: OwnerType,
+    owner_id: UUID,
+    target_type: TargetType,
+    session: AsyncSession | None = None,
+) -> list[UUID]:
+    """The record ids of one type an owner's live context items point at, oldest first."""
+    async with session_for(ctx, session) as s:
+        targets: Sequence[UUID | None] = (
+            await s.scalars(
+                select(_context.c.target_id)
+                .where(
+                    _context.c.owner_type == owner_type,
+                    _context.c.owner_id == owner_id,
+                    _context.c.target_type == target_type,
+                    _context.c.target_id.is_not(None),
+                    _context.c.deleted_at.is_(None),
+                )
+                .order_by(_context.c.created_at, _context.c.id)
+            )
+        ).all()
+        return [target for target in targets if target is not None]

@@ -1,5 +1,5 @@
-"""tasks SQLAlchemy tables owned by this module (mirrors of revisions tasks_0001 and
-tasks_0003).
+"""tasks SQLAlchemy tables owned by this module (mirrors of revisions tasks_0001,
+tasks_0003 and tasks_0004).
 
 `board_rank` and `sort_key` compare bytewise (`COLLATE "C"`), so Postgres orders the
 fractional keys as Python and TypeScript do (core/rank.py)."""
@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, Text, text
-from sqlalchemy.dialects.postgresql import ENUM, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, ENUM, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tumnis.core.base import Base, TenantBase
@@ -107,6 +107,7 @@ class ReviewItem(TenantBase, Base):
     snoozed_until: Mapped[datetime | None]
     decided_at: Mapped[datetime | None]
     decision: Mapped[str | None]
+    flags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
 
 
 class RecurrenceRule(TenantBase, Base):

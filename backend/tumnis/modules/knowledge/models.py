@@ -73,7 +73,7 @@ class DocumentVersion(TenantBase, Base):
     document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id"))
     version_no: Mapped[int]
     content_hash: Mapped[bytes] = mapped_column(LargeBinary)
-    body_md: Mapped[str | None]  # an upload's is its Markdown export, set once extracted
+    body_md: Mapped[str]  # an upload's is '' until its Markdown export is stored
     size: Mapped[int] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(server_default=text("'ready'"))  # knowledge_0006
     status_reason: Mapped[str | None]
