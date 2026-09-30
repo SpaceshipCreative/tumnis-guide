@@ -405,3 +405,76 @@ async def test_reach_probes_stop_at_the_deadline(profile_dir: Path) -> None:
     assert github.token_present is True
     assert github.own_reachable == {}
     assert github.errors == ["github: probes did not finish in 0.2 s"]
+
+
+@pytest.mark.wp("P2-10")
+async def test_deadline_keeps_the_finished_kind(profile_dir: Path) -> None:
+    """When one provider finishes and the other is still running at the deadline, the
+    finished one keeps its answer and only the late one reports the timeout."""
+    from tumnis_daemon.health import token_reach  # noqa: PLC0415
+
+    async def slow(_request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(5)
+        return httpx.Response(200, json={})
+
+    env = profile_dir / ".env"
+    env.write_text(env.read_text() + f"COOLIFY_BASE_URL={COOLIFY}\n")
+    with respx.mock(assert_all_called=False) as fake:
+        fake.get(f"{GITHUB}/repos/acme/site").respond(200, json=_repo(True))
+        fake.get(f"{COOLIFY}/api/v1/applications/app-own").mock(side_effect=slow)
+        github, coolify = await token_reach(
+            profile_dir,
+            own_repos=["acme/site"],
+            foreign_repos=[],
+            own_apps=["app-own"],
+            foreign_apps=[],
+            coolify_base_url=None,
+            deadline_s=0.5,
+        )
+
+    assert github is not None
+    assert github.own_reachable == {"acme/site": True}
+    assert github.errors == []
+    assert coolify is not None
+    assert coolify.own_reachable == {}
+    assert coolify.errors == ["coolify: probes did not finish in 0.5 s"]
+
+
+@pytest.mark.req("SAF-3")
+@pytest.mark.wp("P2-10")
+async def test_cleartext_coolify_is_pinned_to_the_checked_address(
+    profile_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A LAN hostname over http is resolved once, checked, and the request goes to that
+    address with the name in `Host`, so a second lookup cannot send the token elsewhere
+    (DNS rebinding)."""
+    import ipaddress  # noqa: PLC0415
+
+    from tumnis_daemon import health  # noqa: PLC0415
+
+    lookups: list[str] = []
+
+    async def resolve(host: str) -> list[Any]:
+        lookups.append(host)
+        return [ipaddress.ip_address("10.0.0.5")]
+
+    monkeypatch.setattr(health, "_resolve", resolve)
+    env = profile_dir / ".env"
+    env.write_text(env.read_text() + "COOLIFY_BASE_URL=http://coolify.lan:8000\n")
+    with respx.mock(assert_all_called=False) as fake:
+        pinned = fake.get("http://10.0.0.5:8000/api/v1/applications/app-own").respond(200, json={})
+        by_name = fake.route(host="coolify.lan").respond(200, json={})
+        _, coolify = await health.token_reach(
+            profile_dir,
+            own_repos=[],
+            foreign_repos=[],
+            own_apps=["app-own"],
+            foreign_apps=[],
+            coolify_base_url=None,
+        )
+
+    assert lookups == ["coolify.lan"]
+    assert not by_name.called
+    assert pinned.calls.last.request.headers["Host"] == "coolify.lan:8000"
+    assert coolify is not None
+    assert coolify.own_reachable == {"app-own": True}

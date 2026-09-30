@@ -236,15 +236,33 @@ def _origin(url: str) -> tuple[str, str, int | None] | None:
     return parts.scheme, parts.hostname.lower(), port
 
 
-async def _cleartext_allowed(host: str) -> bool:
-    """Plain http only to the LAN (Scott, decision 7): every address the host resolves to
-    is private or loopback. A name that does not resolve is refused."""
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+
+
+async def _resolve(host: str) -> list[IPAddress]:
+    """Every address the host resolves to; [] when it does not resolve."""
     try:
         infos = await asyncio.get_running_loop().getaddrinfo(host, None)
     except OSError:
-        return False
-    addresses = {ipaddress.ip_address(str(info[4][0]).split("%", 1)[0]) for info in infos}
-    return bool(addresses) and all(a.is_private or a.is_loopback for a in addresses)
+        return []
+    found = [ipaddress.ip_address(str(info[4][0]).split("%", 1)[0]) for info in infos]
+    return list(dict.fromkeys(found))
+
+
+async def _lan_base(base_url: str) -> tuple[str, str] | None:
+    """Plain http only to the LAN (Scott, decision 7): when every address the host resolves
+    to is private or loopback, the base URL pinned to the first of them and the `Host`
+    header to send; None otherwise. Pinning means the request cannot resolve the name again
+    to another address (DNS rebinding)."""
+    parts = urlsplit(base_url.strip())
+    host = parts.hostname or ""
+    addresses = await _resolve(host)
+    if not addresses or not all(a.is_private or a.is_loopback for a in addresses):
+        return None
+    pinned = f"[{addresses[0]}]" if addresses[0].version == 6 else str(addresses[0])  # noqa: PLR2004
+    port = f":{parts.port}" if parts.port else ""
+    host_header = (f"[{host}]" if ":" in host else host) + port
+    return f"http://{pinned}{port}{parts.path}".rstrip("/"), host_header
 
 
 async def probe_coolify(
@@ -270,18 +288,21 @@ async def probe_coolify(
     origin = _origin(base_url)
     if origin is None:
         return TokenReach(token_present=True, errors=["coolify: COOLIFY_BASE_URL is not usable"])
-    if origin[0] == "http" and not await _cleartext_allowed(origin[1]):
-        return TokenReach(
-            token_present=True,
-            errors=["coolify: COOLIFY_BASE_URL must use https:// outside the LAN"],
-        )
     if server_base_url is not None and _origin(server_base_url) != origin:
         return TokenReach(
             token_present=True, errors=["coolify: the profile's Coolify is not Tumnis's Coolify"]
         )
     base = base_url.strip().rstrip("/")
-    own, foreign = _targets(own), _targets(foreign)
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    if origin[0] == "http":
+        lan = await _lan_base(base)
+        if lan is None:
+            return TokenReach(
+                token_present=True,
+                errors=["coolify: COOLIFY_BASE_URL must use https:// outside the LAN"],
+            )
+        base, headers["Host"] = lan
+    own, foreign = _targets(own), _targets(foreign)
 
     async def one(app: str) -> Answer:
         if not _APP.fullmatch(app):
@@ -347,15 +368,20 @@ async def token_reach(
                 foreign=foreign_apps,
                 server_base_url=coolify_base_url,
             )
-        try:
-            async with asyncio.timeout(deadline_s):
-                reach = dict(zip(jobs, await asyncio.gather(*jobs.values()), strict=True))
-        except TimeoutError:
+        running = {kind: asyncio.create_task(job) for kind, job in jobs.items()}
+        if running:
+            _, late = await asyncio.wait(running.values(), timeout=deadline_s)
+            for task in late:
+                task.cancel()
+            await asyncio.gather(*late, return_exceptions=True)
+            # A kind that finished keeps its answer; only one still running times out.
             reach = {
                 kind: TokenReach(
                     token_present=bool(tokens[kind]),
                     errors=[f"{kind}: probes did not finish in {deadline_s:g} s"],
                 )
-                for kind in jobs
+                if task in late
+                else task.result()
+                for kind, task in running.items()
             }
     return reach.get("github"), reach.get("coolify")
