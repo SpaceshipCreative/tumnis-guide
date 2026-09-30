@@ -37,7 +37,6 @@ def _written(db: DbUrls, document_id: object) -> tuple[bool, str, str] | None:
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-08")
-@pytest.mark.xfail(strict=True, reason="spec:P2-08")
 async def test_add_document_from_tainted_run_is_tainted(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,

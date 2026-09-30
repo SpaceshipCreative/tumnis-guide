@@ -39,7 +39,6 @@ def _create_ops() -> list[Any]:
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-08")
-@pytest.mark.xfail(strict=True, reason="spec:P2-08")
 async def test_every_create_op_propagates_taint(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,

@@ -25,7 +25,6 @@ pytestmark = [
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-08")
-@pytest.mark.xfail(strict=True, reason="spec:P2-08")
 async def test_linking_tainted_item_taints_task_and_unlinking_keeps_it(
     workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls
 ) -> None:
@@ -83,7 +82,6 @@ async def test_linking_tainted_item_taints_task_and_unlinking_keeps_it(
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-08")
-@pytest.mark.xfail(strict=True, reason="spec:P2-08")
 async def test_task_created_by_tainted_run_is_tainted(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,

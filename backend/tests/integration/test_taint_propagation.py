@@ -204,7 +204,6 @@ async def _add(graph: Graph, step: Step) -> None:  # noqa: PLR0912, PLR0915  # o
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-08")
-@pytest.mark.xfail(strict=True, reason="spec:P2-08")
 @settings(
     max_examples=40,
     deadline=None,
