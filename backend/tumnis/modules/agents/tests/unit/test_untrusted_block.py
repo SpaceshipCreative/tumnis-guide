@@ -36,7 +36,6 @@ def _extra_alphabet() -> list[str]:
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 @pytest.mark.parametrize("example", list(HOSTILE))
 def test_hostile_closing_tags_cannot_close_block(example: str) -> None:
     """T-P2-02-04
@@ -64,7 +63,6 @@ def test_hostile_closing_tags_cannot_close_block(example: str) -> None:
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 @settings(max_examples=1000, deadline=None)
 @given(data=st.data())
 def test_escape_roundtrip_property(data: Any) -> None:
@@ -85,7 +83,6 @@ def test_escape_roundtrip_property(data: Any) -> None:
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-02")
-@pytest.mark.xfail(strict=True, reason="spec:P2-02")
 def test_attribute_injection_is_escaped() -> None:
     """T-P2-02-06
     A `from` value with quotes (and brackets and a newline) cannot add attributes or
