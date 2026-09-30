@@ -93,11 +93,24 @@ jobs:
       - name: Install frontend
         working-directory: frontend
         run: npm ci --no-audit --no-fund
+      # mypy's incremental cache for the toolchain test (T-P0-01): about 36 s cold, about 1 s
+      # warm. mypy checks each cached module's hash, so a stale entry is only rechecked. A
+      # key that changes every run, plus restore-keys, restores the newest cache and saves
+      # an updated one (actions/cache tips-and-workarounds, "Update a cache").
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: backend/.mypy_cache
+          key: mypy-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            mypy-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}-
+            mypy-${{ runner.os }}-
+      # worksteal lets idle workers take queued tests from busy ones, which shortens the
+      # slow tail (the contract job already uses it); --durations shows the slowest tests.
       - name: Backend unit tests with coverage
         working-directory: backend
         run: |
           uv sync
-          uv run pytest -m "not integration and not contract" -n auto --cov --cov-report=json
+          uv run pytest -m "not integration and not contract" -n auto --dist worksteal --durations=15 --cov --cov-report=json
       - name: Coverage gates
         run: uv run --project backend python scripts/ci/coverage_gates.py backend/coverage.json
       - name: Frontend unit tests

@@ -8,6 +8,7 @@ import { beforeEach, expect, test } from "vitest";
 import { rememberProjects } from "../../lib/knownProjects";
 import { makeProject } from "../../test/factories";
 import { server } from "../../test/msw/server";
+import { account } from "../../test/msw/settings";
 import { renderRoute } from "../../test/render";
 
 beforeEach(() => {
@@ -15,6 +16,8 @@ beforeEach(() => {
 });
 
 async function typeProject(text: string) {
+  // The account section's own read (issue #76: every request has a handler).
+  server.use(http.get("/v1/auth/account", () => HttpResponse.json(account())));
   const { user } = await renderRoute("/settings/account", {
     viewport: "laptop",
   });

@@ -12,6 +12,7 @@ from uuid import UUID
 from fastapi import Depends, Query, Request
 from pydantic import BaseModel
 
+from tumnis.core import agent_surface as surface
 from tumnis.core.clock import Clock
 from tumnis.core.idempotency import SessionDep
 from tumnis.core.pagination import Page, PageParams, page_params
@@ -19,6 +20,7 @@ from tumnis.core.principal import principal_of
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.versioning import Version
 from tumnis.modules.projects import api
+from tumnis.modules.projects import mcp as tools
 
 router = v1_router("projects", prefixed=True, tags=["projects"])
 
@@ -66,7 +68,7 @@ async def list_projects(
 @router.post("", status_code=201)
 @route_policy(WRITE)
 async def create_project(
-    body: api.ProjectCreate, request: Request, session: SessionDep
+    body: api.ProjectCreateIn, request: Request, session: SessionDep
 ) -> api.ProjectOut:
     return await api.create_project(
         session, principal_of(request).actor, body, now=_clock(request).now()
@@ -77,6 +79,22 @@ async def create_project(
 @route_policy(READ_ONE)
 async def get_project(project_id: UUID, request: Request, session: SessionDep) -> api.ProjectOut:
     return await api.get_project(session, project_id, now=_clock(request).now())
+
+
+@router.get("/{project_id}/context")
+@route_policy(READ_ONE)
+async def get_project_context(
+    project_id: UUID,
+    request: Request,
+    session: SessionDep,
+    schema_version: Annotated[int | None, Query()] = None,
+) -> api.ProjectContextOut:
+    """The project as an agent starts work in it (brief, code location, policy); the
+    `get_project_context` tool's twin (P2-01)."""
+    raw = {"project_id": project_id, "schema_version": schema_version}
+    found = await surface.rest_twin(request, session, tools.GET_PROJECT_CONTEXT, raw)
+    assert isinstance(found, api.ProjectContextOut)  # noqa: S101  # the op's output model
+    return found
 
 
 @router.patch("/{project_id}")

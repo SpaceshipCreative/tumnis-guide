@@ -36,14 +36,16 @@ export const LIVE_MAP: Record<
       "planningGetProjectWeek", // due dates and the tasks to schedule (P1-12)
     ],
   },
-  // A project's board and columns carry its id in their path: column edits and a new card
-  // threshold (FR-3.8) refresh them, a saved brief its Brief rail section (P0-24); any
-  // project change refreshes search results (P0-20). The Coolify poll announces a linked
-  // project when its deploy status changes, and a link edit changes which apps a project
-  // shows (P2-14) and which calendar events match the project's week (P1-12).
+  // A project's board, columns and agent context (P2-01) carry its id in their path:
+  // column edits and a new card threshold (FR-3.8) refresh them, a saved brief its Brief
+  // rail section (P0-24); any project change refreshes search results (P0-20). The Coolify
+  // poll announces a linked project when its deploy status changes, and a link edit
+  // changes which apps a project shows (P2-14) and which calendar events match the
+  // project's week (P1-12).
   project: {
     details: [
       "projectsGetProject",
+      "projectsGetProjectContext",
       "tasksGetBoard",
       "tasksGetColumns",
       "knowledgeGetBrief",
@@ -85,9 +87,12 @@ export const LIVE_MAP: Record<
     ],
   },
   // Runners register, heartbeat, go offline and get new tokens; profiles get health
-  // checks (P1-04): the Settings agents section refreshes.
+  // checks (P1-04): the Settings agents section refreshes, and a profile's tools (P2-10).
   runner: { details: [], lists: ["agentsListRunners"] },
-  agent_profile: { details: [], lists: ["agentsListProfiles"] },
+  agent_profile: {
+    details: ["agentsGetProfileTools"],
+    lists: ["agentsListProfiles"],
+  },
 };
 
 export const NOT_LIVE = [
@@ -105,4 +110,8 @@ export const NOT_LIVE = [
   "calendarOauthCallback",
   // Storage locations change only from the Settings screen, which refetches after each write.
   "knowledgeListLocations",
+  // An upload's status is polled until extraction settles (P1-16; no document live message
+  // yet), and a file is a download, never a cached query.
+  "knowledgeGetDocument",
+  "knowledgeGetFile",
 ] as const;

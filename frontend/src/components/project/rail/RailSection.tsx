@@ -2,6 +2,8 @@
 // one-line summary; it opens the section in place.
 import { useId, type ReactNode } from "react";
 
+import { BUTTON_DANGER, BUTTON_SECONDARY, FIELD } from "../../common/ui";
+
 export function RailSection({
   title,
   summary,
@@ -37,7 +39,8 @@ export function RailSection({
   );
 }
 
-export const fieldClass =
-  "w-full rounded-md border border-border bg-surface px-3 py-2 text-base md:text-sm";
-export const saveClass =
-  "min-h-11 self-start rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-muted disabled:opacity-60 md:min-h-8";
+// The rail's fields and Save buttons share the app's primitives (DS-01, common/ui.ts);
+// Save stays compact on a laptop, where the rail is a narrow column.
+export const fieldClass = FIELD;
+export const saveClass = `${BUTTON_SECONDARY} self-start px-3 md:min-h-8`;
+export const deleteClass = `${BUTTON_DANGER} self-start px-3 md:min-h-8`;

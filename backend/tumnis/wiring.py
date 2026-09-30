@@ -44,6 +44,12 @@ def load_workflows() -> None:
         importlib.import_module(f"tumnis.modules.{module}.workflows")
 
 
+def load_mcp() -> None:
+    """Import every module's mcp, so its ops (MCP tools and REST twins) register (P2-01)."""
+    for module in MODULES:
+        importlib.import_module(f"tumnis.modules.{module}.mcp")
+
+
 def register_module_health() -> None:
     """A module that defines `async def health() -> Status` in its api degrades readiness
     when it fails, never takes it down."""

@@ -10,7 +10,7 @@ tasks module registers a `ProjectStatsSource` at import (P0-18). Until then ever
 counts zero tasks and is on track. Reads ask the source once per page for every id on it.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Annotated, Any, Final, Literal, Protocol
 from uuid import UUID
@@ -31,12 +31,14 @@ from tumnis.core.limits import MAX_ESTIMATE_MINUTES
 from tumnis.core.live import mark_changed
 from tumnis.core.outbox import emit
 from tumnis.core.pagination import Page, SortKey, paginate
+from tumnis.core.routing import register_project_lookup
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR, ActorRef
 from tumnis.core.versioning import NotFound, StaleVersion, Version, update_versioned
 from tumnis.modules.auth import api as auth
 from tumnis.modules.projects.events import (
     BRIEF_MAX_CHARS,
+    AgentProfileChoice,
     ProjectArchivedV1,
     ProjectCreatedV1,
     ProjectUpdatedV1,
@@ -51,12 +53,15 @@ from tumnis.modules.projects.rules import (
     CodeLocationError,
     Health,
     HealthFacts,
+    effective_tool_allowlist,
     local_today,
     next_milestone,
     project_health,
     validate_code_location,
 )
 from tumnis.seed import ProjectSeed, register_seed_writer
+
+__all__ = ["AgentProfileChoice"]  # re-exported: the create body's agent choice (P1-06)
 
 _log = structlog.get_logger(__name__)
 
@@ -91,6 +96,14 @@ class ProjectCreate(BaseModel):
     links: list[ProjectLinkIn] = []
     profile_name: str | None = None
     brief_md: Brief = ""  # carried to knowledge through project.created; reads return ""
+
+
+class ProjectCreateIn(ProjectCreate):
+    """The body of `POST /v1/projects`: a project and the agent to give it (P1-06), a new
+    profile from the template (the default, also when `profile` is absent) or an existing
+    one. Reads never carry it: the agent is the agents module's."""
+
+    profile: AgentProfileChoice | None = None
 
 
 class ProjectOut(ProjectCreate):
@@ -354,6 +367,40 @@ async def links_of_kind(
     return [ProjectLinkOut(project_id=row.project_id, value=row.value) for row in rows]
 
 
+async def code_repos(s: AsyncSession) -> list[ProjectLinkOut]:
+    """Every live, unarchived project's code repositories (P2-10): its `repo_url`, then
+    its `repo` links, by board order. Values are as stored (a URL or `owner/name`)."""
+    urls = await s.execute(
+        select(_projects.c.id, _projects.c.repo_url)
+        .where(_live(), _projects.c.archived_at.is_(None), _projects.c.repo_url.is_not(None))
+        .order_by(_projects.c.sort_key, _projects.c.id)
+    )
+    found = [ProjectLinkOut(project_id=row.id, value=row.repo_url) for row in urls]
+    return found + await links_of_kind(s, "repo")
+
+
+async def project_names(s: AsyncSession, project_ids: Iterable[UUID]) -> dict[UUID, str]:
+    """The names of these projects (live ones; archived included), for messages."""
+    ids = list(dict.fromkeys(project_ids))
+    if not ids:
+        return {}
+    rows = await s.execute(
+        select(_projects.c.id, _projects.c.name).where(_projects.c.id.in_(ids), _live())
+    )
+    return {row.id: row.name for row in rows}
+
+
+async def tool_allowlist(s: AsyncSession, project_id: UUID) -> tuple[str, ...]:
+    """The MCP servers the project's agent may have (SAF-2, P2-10): its policy's
+    `tool_allowlist`, or the project template's servers while that list is empty."""
+    stored = await s.scalar(
+        select(_policies.c.tool_allowlist).where(
+            _policies.c.project_id == project_id, _policies.c.deleted_at.is_(None)
+        )
+    )
+    return effective_tool_allowlist(stored or [])
+
+
 LOCAL_ONLY_CACHE: Final = register_cache(
     CacheSpec("projects.local_only", "workspace", None, ("update_project (local_decisions_only)",))
 )
@@ -386,6 +433,88 @@ async def project_exists(s: AsyncSession, project_id: UUID) -> bool:
     """A live project (archived or not) of the caller's workspace."""
     found = await s.scalar(select(_projects.c.id).where(_projects.c.id == project_id, _live()))
     return found is not None
+
+
+async def _project_itself(ctx: WorkspaceContext, project_id: UUID) -> UUID | None:
+    """The `projects` project lookup: the project when it is live in the workspace (the
+    agent surface locates a write's project with it, P2-01)."""
+    async with tenant_session(ctx) as s:
+        return project_id if await project_exists(s, project_id) else None
+
+
+register_project_lookup("projects", _project_itself)
+
+
+# --- Project context (the get_project_context tool, P2-01) ------------------------------------
+
+
+class PolicySummary(BaseModel):
+    """What an agent may do in the project without asking, and its run limits (FR-5.6)."""
+
+    gated: list[str]
+    allowed: list[str]
+    tool_allowlist: list[str]
+    max_concurrent_runs: int
+    max_run_minutes: int
+    max_tasks_per_run: int
+
+
+class ProjectContextOut(BaseModel):
+    """A project as an agent starts work in it: who it is for, what it aims at, where its
+    code and domains are, the brief, the card threshold and the approval policy."""
+
+    project_id: UUID
+    name: str
+    client: str | None
+    goal: str | None
+    deadline: date | None
+    status: ProjectStatus
+    archived: bool
+    domains: list[str]
+    code_path: str | None
+    repo_url: str | None
+    subtask_threshold_min: int  # the effective one: the project's, else the workspace's
+    brief_md: str
+    policy: PolicySummary | None
+
+
+# The brief lives in knowledge, which imports projects; knowledge registers its reader here.
+BriefSource = Callable[[AsyncSession, UUID], Awaitable[str | None]]
+_brief_source: list[BriefSource] = []
+
+
+def register_brief_source(src: BriefSource) -> None:
+    """knowledge registers the reader of a project's brief (the last one wins)."""
+    _brief_source[:] = [src]
+
+
+async def project_context(s: AsyncSession, project_id: UUID) -> ProjectContextOut:
+    """The project's context for an agent; NotFound (404) for a project that is not live.
+    The brief is "" until knowledge has it; the policy is None if the project has none."""
+    row = await _row(s, project_id)
+    links = (await _links_of(s, [project_id]))[project_id]
+    try:
+        policy: PolicySummary | None = PolicySummary.model_validate(
+            (await get_policy(s, project_id)).model_dump()
+        )
+    except NotFound:
+        policy = None
+    brief = await _brief_source[0](s, project_id) if _brief_source else None
+    return ProjectContextOut(
+        project_id=row.id,
+        name=row.name,
+        client=row.client,
+        goal=row.goal,
+        deadline=row.deadline,
+        status=row.status,
+        archived=row.archived_at is not None,
+        domains=[link.value for link in links if link.kind == "domain"],
+        code_path=row.code_path,
+        repo_url=row.repo_url,
+        subtask_threshold_min=await effective_subtask_threshold(s, project_id),
+        brief_md=brief or "",
+        policy=policy,
+    )
 
 
 async def project_links(s: AsyncSession, project_id: UUID) -> list[ProjectLinkIn]:
@@ -443,12 +572,20 @@ async def create_project(
 ) -> ProjectOut:
     """Inserts the project (last in board order unless `sort_key` is given), its links
     and its default policy, and emits `project.created` carrying the brief, in the
-    caller's transaction. 422 `code_location_conflict` / `invalid_code_location`; 409
-    `project_name_taken`."""
+    caller's transaction, with the agent to give the project (`ProjectCreateIn.profile`,
+    P1-06). 422 `code_location_conflict` / `invalid_code_location` /
+    `invalid_profile_choice` (a link without a name); 409 `project_name_taken`."""
     _check_location(data.code_path, data.repo_url)
     if sort_key is None:
         sort_key = rank.between(await _last_key(s), None)
-    values = data.model_dump(exclude={"schema_version", "links", "brief_md"})
+    values = data.model_dump(exclude={"schema_version", "links", "brief_md", "profile"})
+    profile = getattr(data, "profile", None) or AgentProfileChoice()
+    if profile.mode == "link" and profile.name is None:
+        raise ProblemError(
+            422, "invalid_profile_choice", "Linking an existing profile needs its name"
+        )
+    if profile.mode == "create":
+        profile = AgentProfileChoice()  # a new profile is named after the project
     try:
         created = (
             (
@@ -480,7 +617,11 @@ async def create_project(
     await emit(
         s,
         ProjectCreatedV1(
-            project_id=project_id, name=data.name, brief_md=data.brief_md, goal=data.goal
+            project_id=project_id,
+            name=data.name,
+            brief_md=data.brief_md,
+            goal=data.goal,
+            profile=profile,
         ),
         occurred_at=_now(now),
     )

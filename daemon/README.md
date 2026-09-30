@@ -11,6 +11,8 @@ The daemon never imports `backend/`. Its protocol models (`tumnis_daemon/protoco
 | `tumnis_daemon/config.py` | `DaemonConfig` and `load_config` (`/etc/tumnis/daemon.toml`) |
 | `tumnis_daemon/protocol.py` | Protocol 1 and 2 messages, `parse_server` and the message builders |
 | `tumnis_daemon/runner.py` | Running a skill with Hermes (argv, query file, clean env, streaming, cancel, result) and the profile health check |
+| `tumnis_daemon/provision.py` | `provision`: a project's Hermes profile, installed from the bundled template or linked (P1-06) |
+| `tumnis_daemon/health.py` | The health check's probes: a profile's MCP servers, and its GitHub and Coolify tokens' reach (P2-10) |
 | `tumnis_daemon/outbox.py` | The SQLite outbox (`state_dir/state.db`) and the seen-set of server commands already taken |
 | `tumnis_daemon/state.py` | `StateStore`: what goes to the outbox, what is replayed after a reconnect, per-run cancel switches |
 | `tumnis_daemon/worktree.py` | Per-run git worktrees: prepare, remove, and clean up leftovers at start-up |
@@ -29,11 +31,15 @@ state_dir = "/var/lib/tumnis-daemon"
 hermes_bin = "hermes"
 profiles = ["tumnis-master", "acme-site"]
 max_concurrent_runs = 2
+template_dir = "/opt/tumnis-daemon/share/profiles/project-template"   # P1-06
+hermes_profiles_dir = "/home/tumnis-agent/.hermes/profiles"
+profile_env_file = "/etc/tumnis/profile.env"   # mode 0600, owned by tumnis-agent
 # Optional (defaults shown)
 agent_home = "/home/tumnis-agent"          # a `path` code location must sit under it...
 paths_dropin = "/etc/systemd/system/tumnis-daemon.service.d/paths.conf"  # ...or be listed here
 kill_grace_s = 10.0                        # SIGTERM to SIGKILL on cancel
 outbox_max_bytes = 52428800                # 50 MiB; past it, the oldest log lines give way
+hermes_home = "/home/tumnis-agent/.hermes" # default: ~/.hermes of the daemon's user
 ```
 
 Create the runner in Settings > Agents, which shows its device token once, and write the token to `token_file`.
@@ -44,9 +50,13 @@ Create the runner in Settings > Agents, which shows its device token once, and w
 - It registers offering protocols 1 and 2. The server picks 2 only when it also sees the protocol-2 capabilities (`stream`, `cancel`, `upload_artifact`); otherwise the session stays on 1 and behaves as P1-04's daemon did.
 - A `run` becomes `hermes -p <profile> chat --query-file <file> -s <skill> --format stream-json --source tool`. No shell is used, the packet's `prompt_text` goes to the query file byte for byte, and Hermes gets only `PATH`, `HOME`, `LANG` and `HERMES_*` from the environment. A run past its timeout is killed with its whole process group.
 - The skill's reply must be one JSON object (bare or in one fenced block); anything else fails the run with `no_json`.
+- A `provision` (P1-06) checks the server's template version against `template_dir/VERSION` first and refuses a mismatch before Hermes runs. `create` answers `exists` when `hermes profile show <n>` finds the profile, otherwise runs `hermes profile install <template_dir> --name <n> --yes` and copies `profile_env_file` to the new profile's `.env` (mode 0600). `link` answers `linked` or `not_found`. Created and linked names are kept in `state_dir/profiles.json` and listed in every register.
+- Install the repo's `profiles/project-template` of the same release at `template_dir`: the server sends the version it expects.
 - On protocol 2, each stream-json record goes to the server as it arrives (`stream`: log, tool call or file), along with `status` messages (started with the profile version, cancelling, gap) and the files the run touched (`git status --porcelain -z`).
 - A `cancel` sends Hermes's process group SIGTERM, then SIGKILL after `kill_grace_s`, and the result is `cancelled`. On a protocol-1 session the server never sends `cancel`.
 - A run with `workdir_policy: worktree` works in a linked git worktree under `state_dir/worktrees/<run id>`, removed when the run ends whatever the outcome; leftovers are removed at start-up. A `path` location must resolve under `agent_home` or a `ReadWritePaths` entry of `paths_dropin`, or the run is refused. A `repo` location is cloned once as a mirror under `state_dir/repos/`.
+- A health check also reads the profile folder `<hermes_home>/profiles/<name>`: its MCP servers from `config.yaml` (`mcp_servers`) and `mcp.json` (`mcpServers`; `config.yaml` wins on a name clash), reported as name, transport and the command's name or the URL's host only (never arguments, env, headers or URL credentials). Tumnis compares them with the project's tool allowlist; a server outside it marks the profile degraded and opens a review item.
+- It then probes what the profile's tokens reach, from the host: each token goes only to its own provider (GitHub, or the profile's own Coolify) for the check, never to Tumnis, which hears back only booleans and target names. It reads them from the profile's `.env`: `GITHUB_TOKEN` or `GITHUB_PERSONAL_ACCESS_TOKEN` (checked against `api.github.com`; a repo counts as reached only with push or admin permission, since any token reads public repos) and `COOLIFY_TOKEN` or `COOLIFY_API_TOKEN`, checked against the Coolify that the same `.env` names in `COOLIFY_BASE_URL`. Every profile that uses Coolify must set `COOLIFY_BASE_URL` (`https://`, or plain `http://` only to a private or loopback address): without it the check reports the Coolify token as not configured and sends nothing, and the token never goes to a URL Tumnis supplies (Tumnis's Coolify URL is only compared with it; a different origin is reported, not probed). A token that reaches another project's repo or app marks the profile degraded. The probes run side by side and stop after 20 seconds, or sooner when Hermes's own checks have used up most of the report's 25-second budget (counted from the check's arrival), so the probes never push the report past the server's 30-second wait; a kind cut short reports the timeout. Give each client project its own fine-grained GitHub token limited to its repos, and its own Coolify team and API token.
 - Every outbound message goes to the outbox before it is sent and stays there until the server acks it; after a reconnect the rest is replayed in order with the same `message_id`, and the server stores each id once. Server commands already taken are remembered, so a resent `run` never starts Hermes twice. Past `outbox_max_bytes` the oldest log lines are dropped and declared by one `status` gap per run; results, tool calls, files and artifacts are never dropped. On the first start after an upgrade, the unacked files the previous daemon kept under `state_dir/unacked/` move into the outbox.
 - Every server message is acked: `ack{ack_of}` on protocol 1, `ack{message_ids}` on protocol 2.
 

@@ -12,6 +12,7 @@ import { client } from "../client.gen";
 import {
   agentsCheckProfileHealth,
   agentsCreateRunner,
+  agentsGetProfileTools,
   agentsListProfiles,
   agentsListRunners,
   agentsRegisterProfile,
@@ -48,11 +49,14 @@ import {
   healthReady,
   knowledgeCreateLocation,
   knowledgeGetBrief,
+  knowledgeGetDocument,
+  knowledgeGetFile,
   knowledgeListLocations,
   knowledgeSetDefaultLocation,
   knowledgeSetProjectFolder,
   knowledgeTestLocation,
   knowledgeUpdateDocument,
+  knowledgeUploadDocument,
   type Options,
   planningGetDayCalendar,
   planningGetProjectWeek,
@@ -60,6 +64,7 @@ import {
   projectsArchiveProject,
   projectsCreateProject,
   projectsGetProject,
+  projectsGetProjectContext,
   projectsListProjects,
   projectsReorderProject,
   projectsUnarchiveProject,
@@ -96,6 +101,7 @@ import {
   tasksPutRecurrence,
   tasksTrashTask,
   tasksUndoTask,
+  tasksUpdateEstimate,
   tasksUpdateTask,
   usageGetUsage,
 } from "../sdk.gen";
@@ -106,6 +112,9 @@ import type {
   AgentsCreateRunnerData,
   AgentsCreateRunnerError,
   AgentsCreateRunnerResponse,
+  AgentsGetProfileToolsData,
+  AgentsGetProfileToolsError,
+  AgentsGetProfileToolsResponse,
   AgentsListProfilesData,
   AgentsListProfilesError,
   AgentsListProfilesResponse,
@@ -209,6 +218,12 @@ import type {
   KnowledgeGetBriefData,
   KnowledgeGetBriefError,
   KnowledgeGetBriefResponse,
+  KnowledgeGetDocumentData,
+  KnowledgeGetDocumentError,
+  KnowledgeGetDocumentResponse,
+  KnowledgeGetFileData,
+  KnowledgeGetFileError,
+  KnowledgeGetFileResponse,
   KnowledgeListLocationsData,
   KnowledgeListLocationsError,
   KnowledgeListLocationsResponse,
@@ -224,6 +239,9 @@ import type {
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentError,
   KnowledgeUpdateDocumentResponse,
+  KnowledgeUploadDocumentData,
+  KnowledgeUploadDocumentError,
+  KnowledgeUploadDocumentResponse,
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarError,
   PlanningGetDayCalendarResponse,
@@ -239,6 +257,9 @@ import type {
   ProjectsCreateProjectData,
   ProjectsCreateProjectError,
   ProjectsCreateProjectResponse,
+  ProjectsGetProjectContextData,
+  ProjectsGetProjectContextError,
+  ProjectsGetProjectContextResponse,
   ProjectsGetProjectData,
   ProjectsGetProjectError,
   ProjectsGetProjectResponse,
@@ -350,6 +371,9 @@ import type {
   TasksUndoTaskData,
   TasksUndoTaskError,
   TasksUndoTaskResponse,
+  TasksUpdateEstimateData,
+  TasksUpdateEstimateError,
+  TasksUpdateEstimateResponse,
   TasksUpdateTaskData,
   TasksUpdateTaskError,
   TasksUpdateTaskResponse,
@@ -455,7 +479,8 @@ export const agentsListProfilesQueryKey = (
 /**
  * List Profiles
  *
- * Agent profiles by name, with their last health check.
+ * Agent profiles by name, with their last health check; `project_id` narrows them to
+ * that project's agent (the project header, P1-06).
  */
 export const agentsListProfilesOptions = (
   options?: Options<AgentsListProfilesData>,
@@ -520,7 +545,8 @@ export const agentsListProfilesInfiniteQueryKey = (
 /**
  * List Profiles
  *
- * Agent profiles by name, with their last health check.
+ * Agent profiles by name, with their last health check; `project_id` narrows them to
+ * that project's agent (the project header, P1-06).
  */
 export const agentsListProfilesInfiniteOptions = (
   options?: Options<AgentsListProfilesData>,
@@ -656,6 +682,37 @@ export const agentsCheckProfileHealthMutation = (
   };
   return mutationOptions;
 };
+
+export const agentsGetProfileToolsQueryKey = (
+  options: Options<AgentsGetProfileToolsData>,
+) => createQueryKey("agentsGetProfileTools", options);
+
+/**
+ * Get Profile Tools
+ *
+ * The profile's MCP servers from its last health check, read-only (FR-5.12): each
+ * matched against its project's allowlist, and its GitHub and Coolify tokens' reach.
+ */
+export const agentsGetProfileToolsOptions = (
+  options: Options<AgentsGetProfileToolsData>,
+) =>
+  queryOptions<
+    AgentsGetProfileToolsResponse,
+    AgentsGetProfileToolsError,
+    AgentsGetProfileToolsResponse,
+    ReturnType<typeof agentsGetProfileToolsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsGetProfileTools({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsGetProfileToolsQueryKey(options),
+  });
 
 export const auditListAuditQueryKey = (options?: Options<AuditListAuditData>) =>
   createQueryKey("auditListAudit", options);
@@ -1389,6 +1446,38 @@ export const deadLettersPostRetryMutation = (
   return mutationOptions;
 };
 
+export const knowledgeGetFileQueryKey = (
+  options: Options<KnowledgeGetFileData>,
+) => createQueryKey("knowledgeGetFile", options);
+
+/**
+ * Get File
+ *
+ * The document's original file, always as a download (`attachment`, octet-stream,
+ * `nosniff`); 409 `not_available` until the document is `ready`. `version` is a version
+ * number.
+ */
+export const knowledgeGetFileOptions = (
+  options: Options<KnowledgeGetFileData>,
+) =>
+  queryOptions<
+    KnowledgeGetFileResponse,
+    KnowledgeGetFileError,
+    KnowledgeGetFileResponse,
+    ReturnType<typeof knowledgeGetFileQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetFile({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetFileQueryKey(options),
+  });
+
 /**
  * Webhook
  */
@@ -1587,6 +1676,67 @@ export const authRotateKeyMutation = (
   };
   return mutationOptions;
 };
+
+/**
+ * Upload Document
+ *
+ * Upload a file (multipart: `file`, and optionally `project_id` and `title`). The
+ * answer is 202 with the document in `pending_scan`: it is scanned, its type read from its
+ * content and its text extracted by the extract worker. 413 `too_large` past 50 MiB.
+ */
+export const knowledgeUploadDocumentMutation = (
+  options?: Partial<Options<KnowledgeUploadDocumentData>>,
+): UseMutationOptions<
+  KnowledgeUploadDocumentResponse,
+  KnowledgeUploadDocumentError,
+  Options<KnowledgeUploadDocumentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeUploadDocumentResponse,
+    KnowledgeUploadDocumentError,
+    Options<KnowledgeUploadDocumentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeUploadDocument({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const knowledgeGetDocumentQueryKey = (
+  options: Options<KnowledgeGetDocumentData>,
+) => createQueryKey("knowledgeGetDocument", options);
+
+/**
+ * Get Document
+ *
+ * A document's state (status, reason, kind, path): what the upload flow polls.
+ */
+export const knowledgeGetDocumentOptions = (
+  options: Options<KnowledgeGetDocumentData>,
+) =>
+  queryOptions<
+    KnowledgeGetDocumentResponse,
+    KnowledgeGetDocumentError,
+    KnowledgeGetDocumentResponse,
+    ReturnType<typeof knowledgeGetDocumentQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetDocument({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetDocumentQueryKey(options),
+  });
 
 /**
  * Update Document
@@ -2143,6 +2293,37 @@ export const tasksPutColumnsMutation = (
   return mutationOptions;
 };
 
+export const projectsGetProjectContextQueryKey = (
+  options: Options<ProjectsGetProjectContextData>,
+) => createQueryKey("projectsGetProjectContext", options);
+
+/**
+ * Get Project Context
+ *
+ * The project as an agent starts work in it (brief, code location, policy); the
+ * `get_project_context` tool's twin (P2-01).
+ */
+export const projectsGetProjectContextOptions = (
+  options: Options<ProjectsGetProjectContextData>,
+) =>
+  queryOptions<
+    ProjectsGetProjectContextResponse,
+    ProjectsGetProjectContextError,
+    ProjectsGetProjectContextResponse,
+    ReturnType<typeof projectsGetProjectContextQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await projectsGetProjectContext({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: projectsGetProjectContextQueryKey(options),
+  });
+
 /**
  * Reorder Project
  *
@@ -2496,6 +2677,7 @@ export const searchSearchQueryKey = (options?: Options<SearchSearchData>) =>
  * Search
  *
  * Tasks and projects matching `q`, best first: text match, recency, project match.
+ * The `search` tool's twin (P2-01).
  */
 export const searchSearchOptions = (options?: Options<SearchSearchData>) =>
   queryOptions<
@@ -2525,6 +2707,7 @@ export const searchSearchInfiniteQueryKey = (
  * Search
  *
  * Tasks and projects matching `q`, best first: text match, recency, project match.
+ * The `search` tool's twin (P2-01).
  */
 export const searchSearchInfiniteOptions = (
   options?: Options<SearchSearchData>,
@@ -2865,9 +3048,10 @@ export const tasksListTasksQueryKey = (options?: Options<TasksListTasksData>) =>
 /**
  * List Tasks
  *
- * Tasks, optionally of one project and one status, and how many match (`total`).
- * `order=created` (default) is creation order; `order=today` is the Today order
- * (priority, then due date, then created time; P0-23).
+ * Tasks, optionally of one project, status, label or parent, and how many match
+ * (`total`). `order=created` (default) is creation order; `order=today` is the Today
+ * order (priority, then due date, then created time; P0-23). The `list_tasks` tool's
+ * twin (P2-01).
  */
 export const tasksListTasksOptions = (options?: Options<TasksListTasksData>) =>
   queryOptions<
@@ -2896,9 +3080,10 @@ export const tasksListTasksInfiniteQueryKey = (
 /**
  * List Tasks
  *
- * Tasks, optionally of one project and one status, and how many match (`total`).
- * `order=created` (default) is creation order; `order=today` is the Today order
- * (priority, then due date, then created time; P0-23).
+ * Tasks, optionally of one project, status, label or parent, and how many match
+ * (`total`). `order=created` (default) is creation order; `order=today` is the Today
+ * order (priority, then due date, then created time; P0-23). The `list_tasks` tool's
+ * twin (P2-01).
  */
 export const tasksListTasksInfiniteOptions = (
   options?: Options<TasksListTasksData>,
@@ -2947,6 +3132,8 @@ export const tasksListTasksInfiniteOptions = (
 
 /**
  * Create Task
+ *
+ * A task or subtask; the `create_task` tool's twin (P2-01).
  */
 export const tasksCreateTaskMutation = (
   options?: Partial<Options<TasksCreateTaskData>>,
@@ -3196,6 +3383,36 @@ export const tasksLinkContextItemMutation = (
 };
 
 /**
+ * Update Estimate
+ *
+ * Re-estimates a Human or Hybrid task with a reason (422 `estimate_not_applicable`
+ * otherwise); the `update_estimate` tool's twin (P2-01).
+ */
+export const tasksUpdateEstimateMutation = (
+  options?: Partial<Options<TasksUpdateEstimateData>>,
+): UseMutationOptions<
+  TasksUpdateEstimateResponse,
+  TasksUpdateEstimateError,
+  Options<TasksUpdateEstimateData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksUpdateEstimateResponse,
+    TasksUpdateEstimateError,
+    Options<TasksUpdateEstimateData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksUpdateEstimate({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Move Task
  *
  * One board drag: column, rank and version in one request (R-20).
@@ -3377,7 +3594,8 @@ export const tasksPutRecurrenceMutation = (
 /**
  * Change Status
  *
- * Moves the task through the state machine (FR-3.2).
+ * Moves the task through the state machine (FR-3.2); the `update_task_status` tool's
+ * twin (P2-01).
  */
 export const tasksChangeStatusMutation = (
   options?: Partial<Options<TasksChangeStatusData>>,

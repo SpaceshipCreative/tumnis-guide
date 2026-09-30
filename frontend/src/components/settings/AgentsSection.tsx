@@ -12,6 +12,7 @@ import type {
   RunnerOut,
 } from "../../api/types.gen";
 import { ApiError, apiWrite, useWrite } from "../../lib/fetch";
+import { AgentTools } from "./AgentTools";
 import { profilesQuery, runnersQuery } from "./queries";
 import {
   BUTTON,
@@ -24,6 +25,7 @@ import {
   SECONDARY,
   SECTION,
 } from "./styles";
+import { DIALOG_BACKDROP, DIALOG_PANEL, DIALOG_TITLE } from "../common/ui";
 
 const CHIP =
   "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium";
@@ -42,6 +44,9 @@ function healthChip(health: ProfileHealth | null): [string, string] {
   if (!health.reachable) return ["Unreachable", BAD];
   if (health.status === "unsupported") return ["Unsupported", NEUTRAL];
   if (health.status === "ok") return ["Healthy", GOOD];
+  // P2-10: a server outside the allowlist or a token reaching another project
+  if (health.status === "degraded") return ["Degraded", BAD];
+  if (health.status === "error") return ["Check failed", BAD];
   return ["Needs attention", BAD];
 }
 
@@ -108,6 +113,7 @@ function ProfileItem({
   checking: boolean;
 }) {
   const nameId = useId();
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [label, chip] = healthChip(profile.health);
   const auth = authChip(profile.health);
   const version = profile.health?.version;
@@ -135,6 +141,18 @@ function ProfileItem({
           ? `Checked ${new Date(profile.health_checked_at).toLocaleString()}`
           : "Never checked"}
       </p>
+      <details
+        className="min-w-0"
+        onToggle={(event) => {
+          setToolsOpen(event.currentTarget.open);
+        }}
+      >
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">
+          Tools and token reach
+        </summary>
+        {/* fetched on first open, so a collapsed list makes no extra reads */}
+        {toolsOpen && <AgentTools profileId={profile.id} />}
+      </details>
       <div>
         <button
           type="button"
@@ -160,14 +178,14 @@ function TokenDialog({
 }) {
   const titleId = useId();
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+    <div className={DIALOG_BACKDROP}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex w-full max-w-md flex-col gap-3 rounded-lg bg-surface p-4 shadow-lg"
+        className={DIALOG_PANEL}
       >
-        <h3 id={titleId} className="text-lg font-semibold">
+        <h3 id={titleId} className={DIALOG_TITLE}>
           Copy the runner's token
         </h3>
         <p>

@@ -1,4 +1,4 @@
-"""Command-line entry point: `tumnis api|worker|migrate|seed|gen|drill|audit|knowledge`.
+"""Command-line entry point: `tumnis api|worker|migrate|seed|gen|drill|audit|knowledge|mcp-stdio`.
 
 The image runs every process through this CLI. `api` and `worker` load the deployment
 settings and run the boot checks first; a configuration error exits 78 (EX_CONFIG), so a
@@ -138,15 +138,24 @@ def api(
 
 
 @app.command()
-def worker() -> None:
-    """Launch DBOS: queues, workflows and schedules."""
+def worker(
+    queues: Annotated[
+        str | None,
+        typer.Option(help="Comma-separated queues to dequeue, e.g. extract (default: all others)"),
+    ] = None,
+) -> None:
+    """Launch DBOS: queues, workflows and schedules. `--queues extract` runs only the
+    extraction worker (no relay, no schedules)."""
     settings = load_settings()
     check_database_tls(settings)
     run_boot_checks(settings)
     start_observability(settings, "worker")
     from tumnis.worker import main as worker_main  # noqa: PLC0415
 
-    worker_main(settings)
+    if queues:
+        worker_main(settings, queues=queues.split(","))
+    else:
+        worker_main(settings)
 
 
 @app.command()
@@ -262,6 +271,7 @@ class GenTarget(StrEnum):
     schemas = "schemas"
     openapi = "openapi"
     contract_tests = "contract-tests"
+    mcp = "mcp"
     all = "all"
 
 
@@ -275,8 +285,9 @@ def gen(
         bool, typer.Option("--check", help="Write nothing; exit 1 listing files that differ")
     ] = False,
 ) -> None:
-    """Generate the JSON Schemas, the OpenAPI document and the schema contract tests from
-    the code (P0-11); `make gen` then runs openapi-ts on the OpenAPI document."""
+    """Generate the JSON Schemas, the OpenAPI document, the schema contract tests (P0-11)
+    and the MCP tool catalogue (P2-01) from the code; `make gen` then runs openapi-ts on
+    the OpenAPI document."""
     from tumnis import gen as generator  # noqa: PLC0415
 
     root = (out or generator.REPO_ROOT).resolve()
@@ -296,6 +307,30 @@ def gen(
 class DrillModeOption(StrEnum):
     prod = "prod"
     rehearsal = "rehearsal"
+
+
+EXIT_USAGE = 2  # no key, or a URL a key may not travel to
+
+
+@app.command("mcp-stdio")
+def mcp_stdio() -> None:
+    """A stdio MCP server for clients that only speak stdio: forwards each line to
+    `$TUMNIS_URL/mcp` (default http://127.0.0.1:8000) with `TUMNIS_API_KEY` as the bearer,
+    so the key's scopes and projects apply (P2-01, FR-14.10)."""
+    from tumnis.core import mcp_stdio as shim  # noqa: PLC0415
+    from tumnis.core.net import check_operator_url  # noqa: PLC0415
+
+    key = os.environ.get("TUMNIS_API_KEY", "").strip()
+    if not key:
+        typer.echo("tumnis mcp-stdio: set TUMNIS_API_KEY to a Tumnis API key", err=True)
+        raise typer.Exit(EXIT_USAGE)
+    base_url = os.environ.get("TUMNIS_URL", "").strip() or shim.DEFAULT_URL
+    try:
+        check_operator_url(base_url)
+    except ValueError as exc:
+        typer.echo(f"tumnis mcp-stdio: TUMNIS_URL {exc}", err=True)
+        raise typer.Exit(EXIT_USAGE) from exc
+    asyncio.run(shim.run(key=key, base_url=base_url))
 
 
 def _aware_datetime(value: str) -> datetime:

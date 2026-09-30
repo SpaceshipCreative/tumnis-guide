@@ -583,7 +583,7 @@ This is the one place that names libraries; the PRD states requirements and poin
 | Editor | Tiptap (MIT core) with its Markdown extension | Brief, notes, descriptions, draft review | Scott | 0008 |
 | Drag and drop | dnd-kit with fractional ordering keys | Kanban on mouse, touch, keyboard | Proposed |  |
 | PWA | vite-plugin-pwa (Workbox), Web Push with VAPID | Offline shell, push | Proposed |  |
-| Components and styling | Not decided | Buttons, dialogs, layout | Open question |  |
+| Components and styling | Tailwind CSS v4 on our own tokens (Mosaic-style look), self-hosted Inter, hand-written menus and drawer (Radix primitives when needed), Chart.js through a lazy import | Buttons, dialogs, layout, charts | Scott | 0012 |
 | Desktop (v1.1) | Tauri | Thin client | PRD |  |
 
 **Tooling and operations**
@@ -644,7 +644,7 @@ Links to the docs the decision relied on.
 None of these blocks the development checklist; each has a default the build can start with.
 
 1. **Proposed libraries.** Approve or swap the rows marked Proposed in Stack and libraries (SQLAlchemy and Alembic, Pydantic, the MCP SDK, uvicorn, uv and Ruff, the security primitives, storage clients, dnd-kit, vite-plugin-pwa, testcontainers, MSW, structlog, rclone). Each approved one gets an ADR with sources.
-2. **Components and styling.** No UI kit is chosen. Default if undecided: Tailwind CSS with accessible headless primitives, decided before phase 0's first screen.
+2. **Components and styling.** Decided (2026-09-30, ADR-0012): no UI kit. Tailwind CSS v4 on our own design tokens with a Mosaic-style look (Cruip's Mosaic Lite as visual inspiration, rebuilt, none of its code), self-hosted Inter, a light, dark or system theme, and hand-written accessible menus and drawer; Radix primitives only when a screen needs one.
 3. **pgBackRest with a no-delete B2 key.** The design assumes pgBackRest can push to a repository it may not delete from, with retention handled by a B2 lifecycle rule. Confirm in the first restore drill; fallback is B2 Object Lock with a key that has delete rights.
 4. **Trace store.** Grafana Tempo or Jaeger behind the OpenTelemetry collector, or ship traces later and start with logs plus GlitchTip.
 5. **PRD change to confirm.** Postgres moves from Coolify-managed to the compose file so pgBackRest can meet REL-1 (ADR-0006); the PRD's Deployment and Data ownership rows need that edit.

@@ -11,6 +11,7 @@ import { useId, useState } from "react";
 import type { ProjectLinkIn, ProjectOut } from "../../api/types.gen";
 import { ApiError, apiWrite, useWrite } from "../../lib/fetch";
 import { formatInstant } from "../dashboard/format";
+import { badge, type BadgeTone, BUTTON_PRIMARY, FIELD } from "../common/ui";
 
 export interface DeployPreview {
   readonly pull_request_id: number;
@@ -68,11 +69,11 @@ export function deployWords(
   }
 }
 
-const TONE: Record<string, string> = {
-  finished: "border-emerald-600/40 text-emerald-700 dark:text-emerald-300",
-  failed: "border-red-600/40 text-red-700 dark:text-red-300",
-  in_progress: "border-amber-600/40 text-amber-700 dark:text-amber-300",
-  queued: "border-amber-600/40 text-amber-700 dark:text-amber-300",
+const TONE: Record<string, BadgeTone> = {
+  finished: "success",
+  failed: "danger",
+  in_progress: "warning",
+  queued: "warning",
 };
 
 function AppStatus({
@@ -83,7 +84,7 @@ function AppStatus({
   timeZone: string;
 }) {
   const sha = shortCommit(app.last?.commit);
-  const tone = TONE[app.last?.status ?? ""] ?? "border-border text-muted";
+  const tone = TONE[app.last?.status ?? ""] ?? "neutral";
   return (
     <li
       aria-label={app.name ?? app.app_uuid}
@@ -96,7 +97,7 @@ function AppStatus({
         <span
           data-testid="deploy-chip"
           data-status={app.last?.status ?? "none"}
-          className={`rounded border px-1.5 ${tone}`}
+          className={badge(tone, { wrap: true })}
         >
           {deployWords(app.last, timeZone)}
         </span>
@@ -245,25 +246,25 @@ export function CoolifyApps({
             aria-invalid={invalid}
             autoComplete="off"
             spellCheck={false}
-            className="rounded border border-border bg-surface px-2 py-1"
+            className={FIELD}
           />
         </label>
         <button
           type="submit"
           disabled={save.isPending}
-          className="rounded bg-accent px-3 py-1 text-white"
+          className={BUTTON_PRIMARY}
         >
           Link app
         </button>
       </form>
       {invalid ? (
-        <p role="alert" className="text-xs text-red-700">
+        <p role="alert" className="text-xs text-danger">
           A Coolify app UUID is letters and digits, as shown in the app&apos;s
           URL.
         </p>
       ) : null}
       {save.error ? (
-        <p role="alert" className="text-xs text-red-700">
+        <p role="alert" className="text-xs text-danger">
           {save.error instanceof ApiError
             ? (save.error.problem.detail ?? save.error.message)
             : save.error.message}

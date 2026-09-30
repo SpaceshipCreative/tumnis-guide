@@ -69,10 +69,13 @@ async def rotate_runner_token(
 @router.get("/agents/profiles")
 @route_policy(RoutePolicy(auth="session", paginated=True))
 async def list_profiles(
-    ctx: Session, session: SessionDep, page: Paging
+    ctx: Session, session: SessionDep, page: Paging, project_id: UUID | None = None
 ) -> Page[api.AgentProfileOut]:
-    """Agent profiles by name, with their last health check."""
-    return await api.list_profiles(session, cursor=page.cursor, limit=page.limit)
+    """Agent profiles by name, with their last health check; `project_id` narrows them to
+    that project's agent (the project header, P1-06)."""
+    return await api.list_profiles(
+        session, cursor=page.cursor, limit=page.limit, project_id=project_id
+    )
 
 
 @router.post("/agents/profiles", status_code=201)
@@ -93,6 +96,14 @@ async def update_profile(
 ) -> api.AgentProfileOut:
     """Move a profile to another runner or endpoint, or pause it. 409 `stale_version`."""
     return await api.update_profile(session, id, body, now=_clock(request).now())
+
+
+@router.get("/agents/profiles/{id}/tools")
+@route_policy(RoutePolicy(auth="session"))
+async def get_profile_tools(id: UUID, ctx: Session, session: SessionDep) -> api.ProfileToolsOut:
+    """The profile's MCP servers from its last health check, read-only (FR-5.12): each
+    matched against its project's allowlist, and its GitHub and Coolify tokens' reach."""
+    return await api.profile_tools(session, id)
 
 
 @router.post("/agents/profiles/{id}/health-check", status_code=202)

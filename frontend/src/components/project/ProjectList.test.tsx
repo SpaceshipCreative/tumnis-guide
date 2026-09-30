@@ -43,6 +43,25 @@ test("[P0-17][FR-2.1] New project saves once and opens the project", async () =>
       return HttpResponse.json(created, { status: 201 });
     }),
     http.get(`/v1/projects/${created.id}`, () => HttpResponse.json(created)),
+    // The new project's page also reads its brief and recurring tasks (issue #76:
+    // every request has a handler).
+    http.get(`/v1/projects/${created.id}/brief`, () =>
+      HttpResponse.json({
+        id: crypto.randomUUID(),
+        project_id: created.id,
+        title: "Acme rebrand brief",
+        kind: "text",
+        role: "brief",
+        body_md: "",
+        trust: "trusted",
+        tainted: false,
+        pinned: true,
+        version: 1,
+      }),
+    ),
+    http.get("/v1/recurrence", () =>
+      HttpResponse.json({ items: [], next_cursor: null }),
+    ),
   );
 
   const { router, user } = await renderRoute("/projects");

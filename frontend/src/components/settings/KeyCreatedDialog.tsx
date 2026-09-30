@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 
 import { BUTTON, SECONDARY } from "./styles";
+import { DIALOG_BACKDROP, DIALOG_PANEL, DIALOG_TITLE } from "../common/ui";
 
 export function KeyCreatedDialog({
   secret,
@@ -14,14 +15,14 @@ export function KeyCreatedDialog({
   const titleId = useId();
   const [copied, setCopied] = useState(false);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+    <div className={DIALOG_BACKDROP}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex w-full max-w-md flex-col gap-3 rounded-lg bg-surface p-4 shadow-lg"
+        className={DIALOG_PANEL}
       >
-        <h3 id={titleId} className="text-lg font-semibold">
+        <h3 id={titleId} className={DIALOG_TITLE}>
           Copy your new key
         </h3>
         <p>It is shown only now. Store it somewhere safe before closing.</p>

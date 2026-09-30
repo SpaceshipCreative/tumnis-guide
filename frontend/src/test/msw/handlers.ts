@@ -44,5 +44,9 @@ export function session(signedIn: boolean): RequestHandler {
 export const handlers: RequestHandler[] = [
   session(true),
   reviewKinds([]),
+  // The project page reads the agent profiles for its header (P1-06): none by default.
+  http.get("/v1/agents/profiles", () =>
+    HttpResponse.json({ items: [], next_cursor: null }),
+  ),
   ...dashboardDefaults,
 ];

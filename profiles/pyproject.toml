@@ -6,8 +6,10 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 # The harness imports the daemon's run path (../daemon) and the backend's pure skill
 # models and rules (../backend/tumnis/modules/agents/{skill_io,rules}.py) from source:
-# harness/__init__.py puts both folders on sys.path, so neither is installed here.
+# harness/__init__.py puts both folders on sys.path, so neither is installed here; their
+# runtime dependencies are pinned below, at the same versions.
 dependencies = [
+  "httpx==0.28.1",  # the daemon's health probes (P2-10), imported with its run path
   "jsonschema==4.26.0",
   "pydantic==2.13.5",
   "pyyaml==6.0.3",

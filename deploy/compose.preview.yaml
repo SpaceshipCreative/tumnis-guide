@@ -57,6 +57,15 @@ services:
   worker:
     <<: *secrets
     environment: *preview
+  # The extract worker scans with the fake scanner in previews, so clamd (which needs a
+  # signature download) stays off unless its profile is asked for.
+  worker-extract:
+    <<: *secrets
+    environment:
+      <<: *preview
+      KNOWLEDGE__CLAMD_HOST: clamd
+  clamd:
+    profiles: [clamd]
   seed:
     image: ghcr.io/spaceshipcreative/tumnis:${TUMNIS_VERSION:-latest}
     command: ["tumnis", "seed"]

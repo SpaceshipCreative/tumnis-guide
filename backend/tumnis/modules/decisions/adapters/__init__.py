@@ -12,7 +12,15 @@ import importlib
 from typing import Any
 
 from tumnis.core.adapters.registry import register_adapter
-from tumnis.modules.decisions.adapters.fake import FakeDecisions, FakeGeneration
+from tumnis.core.fake_scripts import register_fake_script
+from tumnis.modules.decisions.adapters.fake import (
+    GENERATION_HOOK,
+    FakeDecisions,
+    FakeGeneration,
+    fake_vllm,
+    parse_decisions_script,
+    parse_generation_script,
+)
 from tumnis.modules.decisions.adapters.port import DecisionsProvider, GenerationProvider
 
 JEV_MODULE = "tumnis.modules.decisions.adapters.jev"
@@ -42,10 +50,15 @@ def build_vllm_generation(**deps: Any) -> GenerationProvider:
 
 
 register_adapter("decisions.jev", port=DecisionsProvider, real=build_jev, fake=FakeDecisions)
-register_adapter("decisions.vllm", port=DecisionsProvider, real=build_vllm, fake=FakeDecisions)
+register_adapter("decisions.vllm", port=DecisionsProvider, real=build_vllm, fake=fake_vllm)
 register_adapter(
     "decisions.vllm_generation",
     port=GenerationProvider,
     real=build_vllm_generation,
     fake=FakeGeneration,
 )
+
+# Scriptable across processes through POST /v1/test/fakes/{hook}/script (R-37).
+register_fake_script("decisions.jev", parse_decisions_script)
+register_fake_script("decisions.vllm", parse_decisions_script)
+register_fake_script(GENERATION_HOOK, parse_generation_script)

@@ -1,8 +1,9 @@
 // The dashboard (P0-23, FR-1.1, FR-1.2, FR-1.4, FR-1.5, UX 1): "what now?" on one screen.
 // Header with today's date in the workspace timezone and the review badge; today's
 // calendar strip (P1-10), the Today panel and the activity feed beside the project cards on a laptop (5/12 and 7/12, no page
-// scroll at 1280 x 800), one column on a phone with quick add in thumb reach. The route
-// loader has filled the cache, so the first render has data.
+// scroll at 1280 x 800), one column on a phone with quick add in thumb reach. Each part is
+// a card (DS-01, ADR-0012). The route loader has filled the cache, so the first render
+// has data.
 import { useQuery } from "@tanstack/react-query";
 import { useLayoutEffect, useRef } from "react";
 
@@ -66,7 +67,7 @@ export function DashboardPage() {
   }, [ready]);
 
   return (
-    <div className="flex flex-col gap-4 md:h-[calc(100dvh-3rem)]">
+    <div className="flex flex-col gap-4 md:h-[calc(100dvh-3rem-var(--tg-header-h))]">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
@@ -89,7 +90,7 @@ export function DashboardPage() {
             projectNames={projectNames}
             unavailable={today.isError}
             pending={today.isPending}
-            className="md:flex-1 md:overflow-y-auto"
+            className="md:flex-1"
           />
           <ActivityFeed />
         </div>
