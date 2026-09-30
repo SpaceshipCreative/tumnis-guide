@@ -19,7 +19,7 @@ async function load<T>(path: string): Promise<T> {
 }
 
 describe("HostKey", () => {
-  test.fails(
+  test(
     "[P3-14][FR-15.7] T-P3-14-19 fingerprint must be confirmed",
     async () => {
       const { HostKey } = await load<HostKeyModule>("./HostKey");
