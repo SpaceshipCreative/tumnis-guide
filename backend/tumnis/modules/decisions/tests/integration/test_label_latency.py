@@ -44,7 +44,6 @@ def _label_fakes() -> Iterator[None]:
 
 @pytest.mark.req("FR-3.3")
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 async def test_label_p95_under_1s_at_recorded_latency(
     session_client: SessionClient, dbos: Any, fakes: Fakes, db: DbUrls, workspace: WorkspaceHandle
 ) -> None:

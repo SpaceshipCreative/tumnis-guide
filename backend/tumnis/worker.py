@@ -29,11 +29,6 @@ def _agents() -> Any:
     return importlib.import_module("tumnis.modules.agents.workflows")
 
 
-def _decisions() -> Any:
-    """decisions.workflows, imported by name like `_agents`."""
-    return importlib.import_module("tumnis.modules.decisions.workflows")
-
-
 def register_queues() -> None:
     """Register every DBOS queue (A9). DBOS 3.1 persists queues in the system database, so
     this runs right after DBOS.launch(), in the worker and in the test harness alike."""
@@ -50,14 +45,6 @@ def register_queues() -> None:
     agents = _agents()
     DBOS.register_queue(agents.RUNS_QUEUE, partition_concurrency=agents.RUNS_PARTITION_CONCURRENCY)
     DBOS.register_queue(agents.RUNNER_SWEEP_QUEUE, worker_concurrency=1)
-    # The quick-add label (P1-07): polled every 100 ms (the label's 1 s budget, FR-3.3) and
-    # limited to Jev's request rate (FR-11.9).
-    decisions = _decisions()
-    DBOS.register_queue(
-        decisions.DECISIONS_QUEUE,
-        limiter={"limit": decisions.DECISIONS_PER_MINUTE, "period": 60},
-        polling_interval_sec=decisions.DECISIONS_QUEUE_POLL_S,
-    )
     DBOS.register_queue(
         GITHUB_QUEUE,
         worker_concurrency=2,

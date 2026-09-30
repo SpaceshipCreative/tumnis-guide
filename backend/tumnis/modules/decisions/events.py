@@ -6,9 +6,12 @@ overrode it and what they chose (FR-11.5). A label override (P1-07) says in its 
 whether the human's label differs from the AI's (`overridden`).
 
 `decisions.label_on_create` (`task.created` without a label) and
-`decisions.label_on_title_change` (`task.updated` naming `title`) queue the quick-add label
-(`workflows.label_task`, P1-07, FR-4.1) unless the user has chosen the label. Idempotent:
-the workflow is keyed on the event.
+`decisions.label_on_title_change` (`task.updated` naming `title`) start the quick-add label
+(`workflows.label_task`, P1-07, FR-4.1), which skips a task whose label the user chose.
+Idempotent: the workflow is keyed on the event. Both are `direct`: the relay runs them
+itself rather than queueing a delivery behind the events queue, which keeps the label
+within its 1 s budget (FR-3.3; the plan's fallback, "the relay starts `label_task`
+directly").
 
 A subscriber's name is part of every delivery's workflow ID, so it never changes.
 """
@@ -56,22 +59,22 @@ async def record_outcome(envelope: EventEnvelope) -> None:
         )
 
 
-@subscribe("task.created", name="decisions.label_on_create")
+@subscribe("task.created", name="decisions.label_on_create", direct=True)
 async def label_on_create(envelope: EventEnvelope) -> None:
     if envelope.payload.get("label") is not None:
         return  # created with a label (by the user or an agent): nothing to decide
-    await workflows.enqueue_label(
+    await workflows.start_label(
         envelope.workspace_id,
         UUID(str(envelope.payload["task_id"])),
         event_id=envelope.event_id,
     )
 
 
-@subscribe("task.updated", name="decisions.label_on_title_change")
+@subscribe("task.updated", name="decisions.label_on_title_change", direct=True)
 async def label_on_title_change(envelope: EventEnvelope) -> None:
     if "title" not in envelope.payload.get("changed_fields", ()):
         return
-    await workflows.enqueue_label(
+    await workflows.start_label(
         envelope.workspace_id,
         UUID(str(envelope.payload["task_id"])),
         event_id=envelope.event_id,

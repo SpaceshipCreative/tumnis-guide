@@ -1,8 +1,8 @@
 """decisions DBOS workflows and steps.
 
-`label_task` (P1-07, FR-3.3, FR-4.1): the quick-add label. It runs on the `decisions`
-queue, enqueued by the `decisions.label_on_create` and `decisions.label_on_title_change`
-subscribers (events.py), and takes three steps:
+`label_task` (P1-07, FR-3.3, FR-4.1): the quick-add label, started by the
+`decisions.label_on_create` and `decisions.label_on_title_change` subscribers (events.py).
+It takes three steps:
 
 1. `load_label_task`: the task and only the whitelisted context (`rules.label_inputs`:
    title, parent title, project name and goal, the workspace's reserved judgments).
@@ -15,11 +15,15 @@ subscribers (events.py), and takes three steps:
    said `unknown`) asks the human through a `decision_unavailable` item. When no provider
    answered, `decide` has already queued that item.
 
-Enqueueing: the subscriber runs inside the delivery workflow's handler step, and DBOS
-(3.1) starts no workflow from inside a step (`DBOSContext.create_start_workflow_child`
-asserts it is not in one). `enqueue_label` therefore enqueues from a task with a fresh
-context (no DBOS context), keyed on the event (`label:<event_id>`: a redelivered event
-finds the same workflow) and deduplicated per task version while one is queued.
+Starting: the label must land within 1 s of the task's commit (FR-3.3), so it waits on
+no queue. The subscribers are `direct` (core.events): the relay runs them as it reads the
+outbox, and `start_label` starts the workflow at once, on the relay's event loop, keyed on
+the event (`label:<event_id>`). This is the plan's fallback ("the relay starts
+`label_task` directly with `DBOS.start_workflow`"); Jev's request rate is held by the
+credential's limiter in `decide` (R-32). Should the relay fall back to a queued delivery,
+the handler runs inside a DBOS step, and DBOS (3.1) starts no workflow from inside one
+(`DBOSContext.create_start_workflow_child` asserts it), so `start_label` always starts
+from a task with a fresh context.
 """
 
 import asyncio
@@ -28,8 +32,7 @@ import contextvars
 from typing import Any, Final, Literal
 from uuid import UUID
 
-from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
-from dbos._error import DBOSQueueDeduplicatedError  # dbos 3.1.0: not re-exported
+from dbos import DBOS, SetWorkflowID
 
 from tumnis.core.settings_store import get_setting
 from tumnis.core.tenancy import WorkspaceContext, tenant_session, use_workspace
@@ -43,11 +46,6 @@ from tumnis.modules.decisions.rules import Route, label_inputs, label_reason
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
 
-DECISIONS_QUEUE: Final = "decisions"
-# DBOS polls a queue on this interval (default 1 s); the label must land within 1 s of the
-# task's commit (FR-3.3), so the queue hop gets at most 100 ms (plan default).
-DECISIONS_QUEUE_POLL_S: Final = 0.1
-DECISIONS_PER_MINUTE: Final = 1_200  # Jev's request limit per 60 s (FR-11.9, R-32)
 LABELS: Final = frozenset(label.value for label in tasks.Label)
 
 Outcome = Literal["skipped", "applied", "suggested", "review", "unanswered"]
@@ -153,9 +151,8 @@ async def apply_label(
 
 
 @DBOS.workflow(name="decisions.label_task")
-async def label_task(workspace_id: str, task_id: str, task_version: int) -> Outcome:
-    """Label one task (at `task_version`, when it was enqueued) with Jev's answer."""
-    del task_version  # part of the deduplication id; the steps read the current row
+async def label_task(workspace_id: str, task_id: str) -> Outcome:
+    """Label one task with Jev's answer; the steps read the task's current row."""
     loaded = await load_label_task(workspace_id, task_id)
     if loaded is None:
         return "skipped"
@@ -163,29 +160,21 @@ async def label_task(workspace_id: str, task_id: str, task_version: int) -> Outc
     return await apply_label(workspace_id, task_id, loaded["project_id"], decided)
 
 
-async def _enqueue(workspace_id: UUID, task_id: UUID, version: int, event_id: UUID) -> None:
-    with (
-        SetWorkflowID(f"label:{event_id}"),
-        SetEnqueueOptions(deduplication_id=f"label:{task_id}:{version}"),
-        contextlib.suppress(DBOSQueueDeduplicatedError),  # this version is queued already
-    ):
-        await DBOS.enqueue_workflow_async(
-            DECISIONS_QUEUE, label_task, str(workspace_id), str(task_id), version
-        )
+async def _start(workspace_id: UUID, task_id: UUID, event_id: UUID) -> None:
+    with SetWorkflowID(label_workflow_id(event_id)):
+        await DBOS.start_workflow_async(label_task, str(workspace_id), str(task_id))
 
 
-async def enqueue_label(workspace_id: UUID, task_id: UUID, *, event_id: UUID) -> bool:
-    """Queue `label_task` for the task unless it is gone or the user chose its label;
-    idempotent per event. Returns whether it was queued."""
-    async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
-        try:
-            task = await tasks.get_task(s, task_id)
-        except NotFound:
-            return False
-    if not tasks.may_auto_label(task.label_source):
-        return False
-    # A fresh context: DBOS refuses to start a workflow from inside a step (the handler's).
+def label_workflow_id(event_id: UUID) -> str:
+    return f"label:{event_id}"
+
+
+async def start_label(workspace_id: UUID, task_id: UUID, *, event_id: UUID) -> None:
+    """Start `label_task` for the task, keyed on the event: a redelivered event finds the
+    workflow it started (DBOS runs a workflow ID once). The workflow's first step skips a
+    task that is gone or whose label the user chose."""
+    # A fresh context: DBOS refuses to start a workflow from inside a step, which is where
+    # the handler runs when the relay falls back to a queued delivery.
     await asyncio.create_task(
-        _enqueue(workspace_id, task_id, task.version, event_id), context=contextvars.Context()
+        _start(workspace_id, task_id, event_id), context=contextvars.Context()
     )
-    return True
