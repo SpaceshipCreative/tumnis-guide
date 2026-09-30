@@ -53,8 +53,17 @@ def is_case_file(path: str) -> bool:
     return matches_any(path, CASE_GLOBS)
 
 
+# Golden files a contract test compares against (P2-02's task packets): data, locked like a
+# test, so an agent cannot rewrite a golden to make its test pass.
+GOLDEN_GLOBS = ("**/tests/contract/golden/**",)
+
+
+def is_golden_file(path: str) -> bool:
+    return matches_any(path, GOLDEN_GLOBS)
+
+
 def is_test_file(path: str) -> bool:
-    return is_python_test(path) or is_ts_test(path) or is_case_file(path)
+    return is_python_test(path) or is_ts_test(path) or is_case_file(path) or is_golden_file(path)
 
 
 # --- git ------------------------------------------------------------------------------

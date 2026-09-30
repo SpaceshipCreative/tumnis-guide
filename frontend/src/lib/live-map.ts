@@ -26,6 +26,7 @@ export const LIVE_MAP: Record<
       "tasksListComments",
       "tasksGetRecurrence",
       "tasksListPullRequests",
+      "agentsGetTaskPacket", // the task's packet (P2-02) changes with its task
     ],
     lists: [
       "tasksListTasks",

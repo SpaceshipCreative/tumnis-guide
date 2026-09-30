@@ -8,8 +8,9 @@ replay answers without it (`redact_on_replay`).
 from typing import Annotated, Final
 from uuid import UUID
 
-from fastapi import Depends, Request
+from fastapi import Depends, Query, Request
 
+from tumnis.core import agent_surface as surface
 from tumnis.core.audit_router import require_session
 from tumnis.core.clock import Clock
 from tumnis.core.idempotency import SessionDep
@@ -17,6 +18,8 @@ from tumnis.core.pagination import Page, PageParams, page_params
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.modules.agents import api
+from tumnis.modules.agents import mcp as tools
+from tumnis.modules.agents.packet_builder import TaskPacket
 
 router = v1_router("agents", tags=["agents"])
 
@@ -117,3 +120,26 @@ async def check_profile_health(
     return await api.request_health_check(
         ctx, session, id, now=_clock(request).now(), client=hub.client()
     )
+
+
+# --- Task packets (P2-02) ------------------------------------------------------------------
+
+
+@router.get("/tasks/{task_id}/packet")
+@route_policy(
+    RoutePolicy(
+        auth="session_or_key", scopes=frozenset({"tasks:read"}), project_param="lookup:tasks"
+    )
+)
+async def get_task_packet(
+    task_id: UUID,
+    request: Request,
+    session: SessionDep,
+    query: Annotated[tools.TaskPacketQuery, Query()],
+) -> TaskPacket:
+    """The task's packet as a run would get it, with no token; the `get_task_packet`
+    tool's twin. 404 for a task the caller cannot see."""
+    raw = {**query.model_dump(), "task_id": task_id}
+    found = await surface.rest_twin(request, session, tools.GET_TASK_PACKET, raw)
+    assert isinstance(found, TaskPacket)  # noqa: S101  # the op's output model
+    return found

@@ -579,6 +579,44 @@
         "title": "CalendarsIn",
         "type": "object"
       },
+      "Callback": {
+        "additionalProperties": false,
+        "description": "Where the agent calls back, and with what: the run's task token, valid until the\nrun ends (null when the packet is read outside a run, `get_task_packet`).",
+        "properties": {
+          "mcp_url": {
+            "title": "Mcp Url",
+            "type": "string"
+          },
+          "rest_base_url": {
+            "title": "Rest Base Url",
+            "type": "string"
+          },
+          "task_token": {
+            "anyOf": [
+              {
+                "pattern": "^tmt_[a-z2-7]{12}_[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Token"
+          },
+          "token_valid_until": {
+            "const": "run_end",
+            "default": "run_end",
+            "title": "Token Valid Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mcp_url",
+          "rest_base_url"
+        ],
+        "title": "Callback",
+        "type": "object"
+      },
       "CardOut": {
         "properties": {
           "checklist": {
@@ -2400,6 +2438,73 @@
           "end"
         ],
         "title": "PlannedBlockOut",
+        "type": "object"
+      },
+      "PolicySection": {
+        "additionalProperties": false,
+        "description": "What the agent may do without asking, and its run limits (FR-5.6, SAF-5). The action\nclasses are the project policy's own vocabulary (projects.rules.GATED_DEFAULT).",
+        "properties": {
+          "allowed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed",
+            "type": "array"
+          },
+          "gated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gated",
+            "type": "array"
+          },
+          "max_delegation_depth": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Delegation Depth"
+          },
+          "max_tasks_per_run": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tasks Per Run"
+          },
+          "tainted_run_all_gated": {
+            "default": true,
+            "title": "Tainted Run All Gated",
+            "type": "boolean"
+          },
+          "time_cap_minutes": {
+            "minimum": 1.0,
+            "title": "Time Cap Minutes",
+            "type": "integer"
+          },
+          "tool_allowlist": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tool Allowlist",
+            "type": "array"
+          }
+        },
+        "required": [
+          "gated",
+          "allowed",
+          "time_cap_minutes"
+        ],
+        "title": "PolicySection",
         "type": "object"
       },
       "PolicySummary": {
@@ -4262,6 +4367,18 @@
         "title": "RotateIn",
         "type": "object"
       },
+      "RunKind": {
+        "enum": [
+          "enrich",
+          "plan",
+          "task",
+          "proposal",
+          "stuck",
+          "notify"
+        ],
+        "title": "RunKind",
+        "type": "string"
+      },
       "RunnerCreated": {
         "properties": {
           "created_at": {
@@ -4556,6 +4673,34 @@
           "secret_key"
         ],
         "title": "S3ConfigIn",
+        "type": "object"
+      },
+      "SchemaRef": {
+        "additionalProperties": false,
+        "description": "Names a @versioned model, e.g. (\"enrichment\", \"result\", 1).",
+        "properties": {
+          "family": {
+            "maxLength": 32,
+            "title": "Family",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "family",
+          "name",
+          "version"
+        ],
+        "title": "SchemaRef",
         "type": "object"
       },
       "SearchHit": {
@@ -5321,6 +5466,108 @@
           "change_id"
         ],
         "title": "TaskOut",
+        "type": "object"
+      },
+      "TaskPacket": {
+        "additionalProperties": false,
+        "properties": {
+          "block_nonce": {
+            "anyOf": [
+              {
+                "pattern": "^u-[0-9a-f]{16}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Nonce"
+          },
+          "body": {
+            "additionalProperties": true,
+            "title": "Body",
+            "type": "object"
+          },
+          "callback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Callback"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RunKind"
+          },
+          "output_schema": {
+            "$ref": "#/components/schemas/SchemaRef"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicySection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "prompt_text": {
+            "title": "Prompt Text",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "skill": {
+            "pattern": "^[a-z][a-z0-9-]{0,40}$",
+            "title": "Skill",
+            "type": "string"
+          },
+          "tainted": {
+            "default": false,
+            "title": "Tainted",
+            "type": "boolean"
+          },
+          "timeout_s": {
+            "maximum": 3600.0,
+            "minimum": 10.0,
+            "title": "Timeout S",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "run_id",
+          "profile_id",
+          "skill",
+          "output_schema",
+          "correlation_id",
+          "timeout_s",
+          "prompt_text",
+          "body"
+        ],
+        "title": "TaskPacket",
         "type": "object"
       },
       "TaskPage": {
@@ -16730,6 +16977,151 @@
         "summary": "Move Task",
         "tags": [
           "tasks"
+        ]
+      }
+    },
+    "/v1/tasks/{task_id}/packet": {
+      "get": {
+        "description": "The task's packet as a run would get it, with no token; the `get_task_packet`\ntool's twin. 404 for a task the caller cannot see.",
+        "operationId": "agents_get_task_packet",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "schema_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schema Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "task",
+              "enum": [
+                "task",
+                "proposal",
+                "stuck"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskPacket"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Task Packet",
+        "tags": [
+          "agents"
         ]
       }
     },

@@ -1,10 +1,13 @@
 """Task tokens and device tokens (P0-14, R-27, R-28, R-29, FR-14.10).
 
 - A task token (`tmt_`) is bound to one run and one project; its scopes are a subset of
-  the issuing key's (ScopeEscalation otherwise). It lives exactly as long as its run: valid
-  from issue until `revoke_task_tokens_for_run` runs when the run ends, whatever the
-  outcome. `expires_at = now + TASK_TOKEN_CEILING` only guards against a run whose end was
-  never recorded (R-29's wall-clock backstop), never the normal end.
+  the issuing key's (ScopeEscalation otherwise). A master-profile run (plan, notify) gets a
+  workspace-scoped token with no project (P2-02, Scott decision 30): the resolver reads it
+  as an empty project limit, so it reaches no project's rows. A token lives exactly as long
+  as its run: valid from issue until `revoke_task_tokens_for_run` runs when the run ends,
+  whatever the outcome. `expires_at` (TASK_TOKEN_CEILING after the later of the caller's
+  `now` and the database clock) only guards against a run whose end was never recorded
+  (R-29's wall-clock backstop), never the normal end.
 - A device token (`tmd_`) belongs to a runner; issuing again revokes the previous one.
 
 Both are stored like API keys (prefix plus HMAC under the pepper), resolved by the bearer
@@ -16,11 +19,12 @@ from datetime import datetime, timedelta
 from typing import Final, cast
 from uuid import UUID
 
-from sqlalchemy import Table, select, update
+from sqlalchemy import TIMESTAMP, Interval, Table, func, literal, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import crypto
 from tumnis.core.ids import uuid7
-from tumnis.core.tenancy import WorkspaceContext, tenant_session
+from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.modules.auth import keys
 from tumnis.modules.auth.models import ApiKey, DeviceToken, TaskToken
 from tumnis.modules.auth.scopes import unknown_scopes
@@ -35,7 +39,7 @@ class ScopeEscalation(PermissionError):  # noqa: N818  # the plan's name
     """A task token asked for a scope its issuing key does not hold (or the key is gone)."""
 
 
-async def _key_scopes(ctx: WorkspaceContext, key_id: UUID) -> frozenset[str] | None:
+async def key_scopes(ctx: WorkspaceContext, key_id: UUID) -> frozenset[str] | None:
     """The scopes of a live key of the workspace (None when missing or revoked)."""
     async with tenant_session(ctx) as s:
         row = (
@@ -54,14 +58,17 @@ async def issue_task_token(
     ctx: WorkspaceContext,
     *,
     run_id: UUID,
-    project_id: UUID,
+    project_id: UUID | None,
     api_key_id: UUID,
     scopes: frozenset[str],
     now: datetime,
 ) -> keys.NewSecret:
-    """A `tmt_` token for the run, limited to its project and to `scopes`, which must be
-    a subset of the issuing key's."""
-    held = await _key_scopes(ctx, api_key_id)
+    """A `tmt_` token for the run, limited to its project (none for a master-profile run:
+    no project at all) and to `scopes`, which must be a subset of the issuing key's. Its
+    `expires_at` backstop counts from the later of `now` and the database's clock (R-29's
+    wall-clock ceiling, the same for every process), so a caller's clock set in the past
+    cannot issue a token another process already sees as expired."""
+    held = await key_scopes(ctx, api_key_id)
     if held is None or unknown_scopes(scopes) or not scopes <= held:
         extra = sorted(scopes - (held or frozenset()))
         raise ScopeEscalation(f"the issuing key does not hold: {', '.join(extra) or 'the key'}")
@@ -77,17 +84,21 @@ async def issue_task_token(
                 prefix=new.prefix,
                 token_hmac=new.secret_hmac,
                 pepper_version=new.pepper_version,
-                expires_at=now + TASK_TOKEN_CEILING,
+                expires_at=func.greatest(literal(now, TIMESTAMP(timezone=True)), func.now())
+                + literal(TASK_TOKEN_CEILING, Interval()),
             )
         )
         await keys.invalidate(s, "tmt", new.prefix)
     return new
 
 
-async def revoke_task_tokens_for_run(ctx: WorkspaceContext, run_id: UUID, *, now: datetime) -> int:
+async def revoke_task_tokens_for_run(
+    ctx: WorkspaceContext, run_id: UUID, *, now: datetime, session: AsyncSession | None = None
+) -> int:
     """Sets `revoked_at` on every live token of the run and drops their cache entries in
-    every process on commit; returns how many it revoked."""
-    async with tenant_session(ctx) as s:
+    every process on commit; returns how many it revoked. With `session`, in the caller's
+    transaction."""
+    async with session_for(ctx, session) as s:
         result = await s.execute(
             update(TASK_TOKENS)
             .where(

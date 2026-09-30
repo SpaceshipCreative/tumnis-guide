@@ -177,7 +177,8 @@ def _row(raw: Any) -> KeyRow:
         secret_hmac=bytes(raw[2]),
         pepper_version=raw.pepper_version,
         scopes=frozenset(raw.scopes or ()),
-        project_ids=None if projects is None else frozenset(projects),
+        # A task token with no project (a master run) reads {NULL}: no project at all.
+        project_ids=None if projects is None else frozenset(p for p in projects if p is not None),
         expires_at=raw.expires_at,
         revoked_at=raw.revoked_at,
         subject_id=getattr(raw, "subject_id", None),

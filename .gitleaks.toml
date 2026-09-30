@@ -26,3 +26,9 @@ description = "The S3 conditional-write parameter names (IfNoneMatch=, IfMatch=)
 targetRules = ["generic-api-key"]
 regexTarget = "secret"
 regexes = ['''^If(None)?Match=$''']
+
+[[allowlists]]
+description = "The golden task packets' made-up task token (P2-02): tmt_abcdefghijkl_ and 43 A's, never issued"
+targetRules = ["tumnis-token"]
+regexTarget = "secret"
+regexes = ['''^tmt_abcdefghijkl_A{43}$''']

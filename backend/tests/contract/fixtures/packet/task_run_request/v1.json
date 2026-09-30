@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task": {
+    "id": "01950000-0000-7000-8000-000000000401",
+    "parent_id": null,
+    "label": "ai",
+    "estimate_minutes": null,
+    "status": "today",
+    "text": {
+      "trust": "trusted",
+      "tainted": false,
+      "source": "task",
+      "item": "01950000-0000-7000-8000-000000000401",
+      "rendered": "Update the Acme footer year\n\nAcceptance criteria:\nThe footer shows 2026 on every page.",
+      "truncated": false
+    },
+    "comments": []
+  },
+  "project": {
+    "id": "01950000-0000-7000-8000-000000000501",
+    "name": "Acme site",
+    "client": "Acme",
+    "domains": [
+      "acme.example.com"
+    ],
+    "brief": {
+      "trust": "trusted",
+      "tainted": false,
+      "source": "brief",
+      "item": null,
+      "rendered": "Acme's marketing site. Keep it fast and accessible.",
+      "truncated": false
+    },
+    "passages": [],
+    "folder": "Projects/Acme site",
+    "code_location": null
+  },
+  "context_items": [],
+  "metadata": {
+    "estimate_history": [],
+    "capability_hints": [],
+    "declared_workers": []
+  }
+}

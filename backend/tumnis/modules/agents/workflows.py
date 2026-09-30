@@ -51,7 +51,7 @@ from tumnis.modules.agents.models import (
     RunnerMessage,
     RunRow,
 )
-from tumnis.modules.agents.packet_builder import TaskPacket
+from tumnis.modules.agents.packet_builder import MCP_PATH, REST_BASE, Callback, TaskPacket
 from tumnis.modules.agents.protocol import Provision, ProvisionResult
 from tumnis.modules.agents.review_kinds import DRIFT, DriftPayload, ForeignReach
 from tumnis.modules.agents.rules import (
@@ -69,6 +69,7 @@ from tumnis.modules.agents.rules import (
     runner_status,
     validate_profile_name,
 )
+from tumnis.modules.auth import api as auth
 from tumnis.modules.coolify import api as coolify
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
@@ -106,14 +107,62 @@ def run_workflow_id(run_id: UUID) -> str:
 # --- run_skill ------------------------------------------------------------------------------
 
 
+def _packet_project(packet: TaskPacket) -> UUID | None:
+    """The project a packet's body names (`project.id`), None when it names none."""
+    project = packet.body.get("project")
+    raw = project.get("id") if isinstance(project, dict) else None
+    try:
+        return UUID(str(raw)) if raw is not None else None
+    except ValueError:
+        return None
+
+
+async def _with_token(ctx: WorkspaceContext, packet: TaskPacket) -> TaskPacket:
+    """The packet with the run's task token in its callback (P2-02, R-27), issued from the
+    profile's key: limited to the profile's project, or, for a plan or notify run on the
+    master profile, to no project (Scott decision 30). A profile with no key yet dispatches
+    as before (who creates a profile's key is open). The token is set here, inside the
+    step, so it is never a workflow input or a step output."""
+    async with tenant_session(ctx) as s:
+        profile = (
+            await s.execute(
+                select(_profiles.c.role, _profiles.c.project_id, _profiles.c.api_key_id).where(
+                    _profiles.c.id == packet.profile_id, _profiles.c.deleted_at.is_(None)
+                )
+            )
+        ).first()
+    if profile is None or profile.api_key_id is None:
+        return packet  # an unknown profile is refused by the transport
+    project = profile.project_id
+    if project is None and packet.kind not in api.WORKSPACE_RUN_KINDS:
+        project = _packet_project(packet)
+    token = await api.issue_run_token(
+        ctx,
+        run_id=packet.run_id,
+        kind=packet.kind,
+        project_id=project,
+        api_key_id=profile.api_key_id,
+        now=SystemClock().now(),
+    )
+    callback = packet.callback or Callback(mcp_url=MCP_PATH, rest_base_url=REST_BASE)
+    return packet.model_copy(update={"callback": callback.model_copy(update={"task_token": token})})
+
+
 @DBOS.step()
 async def dispatch_step(workspace_id: str, packet: dict[str, Any]) -> str | None:
-    """Dispatch through the daemon transport; the refusal's reason when the agent is
-    unavailable (nothing was written), None once the run is queued."""
+    """Dispatch through the daemon transport with the run's task token; the refusal's
+    reason when the agent is unavailable or no token can be issued (nothing was
+    dispatched, and a token already issued is ended), None once the run is queued."""
+    ctx = _ctx(workspace_id)
     task = TaskPacket.model_validate(packet)
     try:
-        await DaemonTransport(_ctx(workspace_id), SystemClock()).dispatch(task)
+        task = await _with_token(ctx, task)
+    except (auth.ScopeEscalation, ValueError) as exc:
+        return f"no task token: {exc}"
+    try:
+        await DaemonTransport(ctx, SystemClock()).dispatch(task)
     except api.AgentUnavailable as exc:
+        await api.run_ended(ctx, task.run_id, now=SystemClock().now())
         return exc.reason
     faults.killpoint("agents.dispatch_step")  # the mailbox row has committed
     return None
@@ -165,8 +214,16 @@ async def finish_step(
     workspace_id: str, packet: dict[str, Any], message: dict[str, Any] | None
 ) -> dict[str, Any]:
     """The run's outcome, written to its `runs` row (and a `failed` run event when no
-    result ended it)."""
+    result ended it); then the run's task token ends, whatever the outcome (P2-02)."""
     task = TaskPacket.model_validate(packet)
+    ended = await _record_outcome(workspace_id, task, message)
+    await api.run_ended(_ctx(workspace_id), task.run_id, now=SystemClock().now())
+    return ended
+
+
+async def _record_outcome(
+    workspace_id: str, task: TaskPacket, message: dict[str, Any] | None
+) -> dict[str, Any]:
     outcome = _outcome(task, message)
     now = SystemClock().now()
     async with tenant_session(_ctx(workspace_id)) as s:
