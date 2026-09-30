@@ -376,7 +376,8 @@ jobs:
           pull=$!
           npx --yes "$LHCI_CLI" --version > "$RUNNER_TEMP/lhci-install.log" 2>&1 &
           lhci=$!
-          docker compose -f deploy/compose.test.yaml up -d --wait
+          # --build: a persistent homelab runner keeps the last run's tumnis images.
+          docker compose -f deploy/compose.test.yaml up -d --build --wait
           if [ -n "$install" ]; then
             wait "$install" || { cat "$RUNNER_TEMP/install.log"; exit 1; }
           fi
