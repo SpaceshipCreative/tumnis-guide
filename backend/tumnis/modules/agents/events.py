@@ -20,6 +20,11 @@
   label itself), or never started, starts nothing, which keeps the enrichment's own label
   revision and Jev's label from starting a second one.
 
+Both enrichment subscribers are direct (the relay runs them; each only reads and starts
+its own workflow keyed on the event): every task write passes through them, and a queued
+delivery each would add a workflow per `task.created` and per `task.updated` to the
+events queue (a bulk import or the seed's thousands of tasks).
+
 Subscriber names are part of every delivery's workflow id, so they never change.
 """
 
@@ -76,7 +81,7 @@ async def apply_review_decision(envelope: EventEnvelope) -> None:
     await api.retry_provision(UUID(str(payload["target_id"])), ctx=ctx)
 
 
-@subscribe("task.created", name=ENRICH_CREATE_SUBSCRIBER)
+@subscribe("task.created", name=ENRICH_CREATE_SUBSCRIBER, direct=True)
 async def enrich_on_create(envelope: EventEnvelope) -> None:
     payload = envelope.payload
     project_id = UUID(str(payload["project_id"]))
@@ -93,7 +98,7 @@ async def enrich_on_create(envelope: EventEnvelope) -> None:
     )
 
 
-@subscribe("task.updated", name=ENRICH_UPDATE_SUBSCRIBER)
+@subscribe("task.updated", name=ENRICH_UPDATE_SUBSCRIBER, direct=True)
 async def enrich_on_update(envelope: EventEnvelope) -> None:
     if "label" not in (envelope.payload.get("changed_fields") or []):
         return

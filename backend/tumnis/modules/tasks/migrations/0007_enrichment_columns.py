@@ -21,24 +21,19 @@ branch_labels = None
 depends_on = None
 phase = "expand"
 
-FIRST_ACTION_SOURCES = ("placeholder", "agent")
-ENRICHMENT_STATUSES = ("pending", "running", "done", "agent_offline", "not_provisioned", "failed")
-
-
-def _in(column: str, values: tuple[str, ...]) -> str:
-    return f"{column} IN ({', '.join(repr(v) for v in values)})"
-
 
 def upgrade() -> None:
     op.add_column("tasks", sa.Column("first_action_source", sa.Text, nullable=True))
     op.add_column("tasks", sa.Column("enrichment_status", sa.Text, nullable=True))
-    for name, column, values in (
-        ("ck_tasks_first_action_source", "first_action_source", FIRST_ACTION_SOURCES),
-        ("ck_tasks_enrichment_status", "enrichment_status", ENRICHMENT_STATUSES),
-    ):
-        op.execute(
-            f"ALTER TABLE tasks ADD CONSTRAINT {name} CHECK ({_in(column, values)}) NOT VALID"
-        )
+    op.execute(
+        "ALTER TABLE tasks ADD CONSTRAINT ck_tasks_first_action_source"
+        " CHECK (first_action_source IN ('placeholder', 'agent')) NOT VALID"
+    )
+    op.execute(
+        "ALTER TABLE tasks ADD CONSTRAINT ck_tasks_enrichment_status"
+        " CHECK (enrichment_status IN ('pending', 'running', 'done', 'agent_offline',"
+        " 'not_provisioned', 'failed')) NOT VALID"
+    )
 
 
 def downgrade() -> None:
