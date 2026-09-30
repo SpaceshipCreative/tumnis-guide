@@ -32,7 +32,9 @@ export const LIVE_MAP: Record<
   },
   // A project's board and columns carry its id in their path: column edits and a new card
   // threshold (FR-3.8) refresh them, a saved brief its Brief rail section (P0-24); any
-  // project change refreshes search results (P0-20).
+  // project change refreshes search results (P0-20). The Coolify poll announces a linked
+  // project when its deploy status changes, and a link edit changes which apps a project
+  // shows (P2-14).
   project: {
     details: [
       "projectsGetProject",
@@ -40,7 +42,12 @@ export const LIVE_MAP: Record<
       "tasksGetColumns",
       "knowledgeGetBrief",
     ],
-    lists: ["projectsListProjects", "searchSearch", "searchTypeaheadProjects"],
+    lists: [
+      "projectsListProjects",
+      "searchSearch",
+      "searchTypeaheadProjects",
+      "coolifyListDeployStatus",
+    ],
   },
   // The review badge (P0-18); the review queue joins with P1-13.
   review_item: { details: [], lists: ["tasksGetReviewCount"] },
@@ -52,13 +59,19 @@ export const LIVE_MAP: Record<
       "settingsGetWorkspaceSettings",
       "settingsGetSection",
       "settingsListModules",
+      "settingsGetWorkingHours",
+      "planningGetDayCalendar",
     ],
   },
   // Created, rotated and revoked keys (P0-14): the Settings list refreshes.
   api_key: { details: [], lists: ["authListKeys"] },
   dead_letter: { details: [], lists: ["deadLettersGetDeadLetters"] },
-  // Connected Google accounts (P1-09): a sync or a revoked grant refreshes the list.
-  calendar_account: { details: [], lists: ["calendarListAccounts"] },
+  // Connected Google accounts (P1-09): a sync or a revoked grant refreshes the list, and
+  // the day's events and free blocks (P1-10) come from the same synced events.
+  calendar_account: {
+    details: [],
+    lists: ["calendarListAccounts", "planningGetDayCalendar"],
+  },
   // Runners register, heartbeat, go offline and get new tokens; profiles get health
   // checks (P1-04): the Settings agents section refreshes.
   runner: { details: [], lists: ["agentsListRunners"] },

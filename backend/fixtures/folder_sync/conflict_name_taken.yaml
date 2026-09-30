@@ -1,0 +1,16 @@
+id: conflict_name_taken
+proves: Suffix 2 is used when the conflict name exists
+backends: [server_path]
+steps:
+  - tumnis_create_note: {project: acme-site, title: "Plan", body: "v1"}
+  - outside_write: {path: "notes/Plan (conflict 2026-03-09).md", content: "an older conflict copy"}
+  - sync
+  - outside_write: {path: "notes/Plan.md", append: "\noutside edit"}
+  - tumnis_edit_note: {title: "Plan", body: "v2"}
+  - sync
+  - expect:
+      files:
+        "notes/Plan.md": {contains: "v2"}
+        "notes/Plan (conflict 2026-03-09).md": {equals: "an older conflict copy"}
+        "notes/Plan (conflict 2026-03-09) 2.md": {contains: "outside edit"}
+      review_items: [{kind: sync_conflict}]

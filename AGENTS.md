@@ -184,6 +184,13 @@ An adapter whose breaker is not closed reports `health_state() == "degraded"`; `
 - Local times go through `local_to_utc(day, local_time, tz)` in `tumnis/core/clock.py`: a time in a DST gap shifts forward by the gap, an ambiguous time takes the first occurrence.
 - DBOS timeouts that tests must reach take a configurable duration, not a `FixedClock`.
 
+## Third-party libraries and services
+
+- Before writing or changing code that uses a third-party library, framework, SDK, service API or CLI, look up its current documentation in Context7; do not work from memory. If Context7 cannot be reached in your environment, go straight to the first-party sources below and say so in the PR body. Use the docs for the version pinned in `backend/uv.lock`, `daemon/uv.lock`, `profiles/uv.lock` or `frontend/package-lock.json`. The installed, pinned version is the truth: if it differs from what the docs describe, follow that version's docs.
+- Confirm on the web when Context7 has no coverage, is ambiguous or contradicts itself, or when the behaviour is security-, auth-, protocol- or data-loss-sensitive. Use first-party authoritative sources only: the vendor's official docs and API reference, the project's own repository, its release notes and changelog, and standards bodies (IETF RFCs, W3C, WHATWG). Blogs, Q&A sites, forums and AI-generated summaries are never the authority.
+- Never put secrets, credentials, tokens, personal data or proprietary code in a Context7 query or a web search.
+- Cite the documentation you relied on for any non-obvious integration choice in the PR body. If current docs contradict the plan or an ADR, stop and ask Scott; do not silently diverge.
+
 ## Commands
 
 | Command | Does |
@@ -205,5 +212,6 @@ Some targets are filled in by later WPs; if a target is still empty, say so rath
 - Never edit an assertion in, or delete, an existing test; never add the `spec-change` label.
 - Never build an `httpx` client outside `tumnis.core.net`: outbound calls use `guarded_client(settings.net_policy(), timeout=...)` (SSRF guard, pinned IP, redirects re-checked by `follow_redirects`), and non-HTTP clients connect to the address `resolve_and_check` returns. Never import `requests` or `urllib.request` in `tumnis/`. Exception: the Jev SDK (`typesafe-sdk`) builds its own client to its third-party API in `tumnis/modules/decisions/adapters/jev.py` (approved by Scott, 2026-09-29). Exception: `S3Storage` (`tumnis/modules/knowledge/adapters/s3.py`) talks to S3 through aioboto3's own HTTP stack. Its endpoint is checked against the same `NetPolicy` with `resolve_and_check` when a location is saved or tested (a blocked endpoint is refused with 422 `ssrf_blocked`, and nothing is sent), and every connection resolves through that check (approved by Scott, 2026-09-29).
 - Never render HTML with `dangerouslySetInnerHTML` outside `frontend/src/components/common/SafeHtml.tsx`; outside HTML goes through `tumnis.core.sanitize.sanitize_html` on ingest and again on every read.
+- Never rely on memory alone for a third-party API's current behaviour; check it in Context7 and first-party docs (see Third-party libraries and services).
 - Never import `backend/` (the `tumnis` package) from the runner daemon in `daemon/`: it keeps its own copies of the protocol models, and its contract test checks them against `schemas/runner/v1/`.
 - Never log request or message bodies, prompts or tokens (no `body=` or `prompt=` on a logger call); log structured fields that describe them. The `redact` processor is a backstop, not permission. The Security job's Semgrep rules (`.semgrep/tumnis.yml`) enforce these three.

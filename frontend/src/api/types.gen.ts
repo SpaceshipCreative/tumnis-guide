@@ -82,6 +82,33 @@ export type AgentProfileOut = {
 };
 
 /**
+ * AppDeployStatus
+ */
+export type AppDeployStatus = {
+  /**
+   * App Uuid
+   */
+  app_uuid: string;
+  /**
+   * Checked At
+   */
+  checked_at: string | null;
+  /**
+   * Error
+   */
+  error: "unavailable" | "rejected" | null;
+  last: LastDeployOut | null;
+  /**
+   * Name
+   */
+  name: string | null;
+  /**
+   * Previews
+   */
+  previews: Array<PreviewOut>;
+};
+
+/**
  * AuditEntry
  */
 export type AuditEntry = {
@@ -376,6 +403,51 @@ export type ContextItemIn = {
 };
 
 /**
+ * DayCalendarOut
+ */
+export type DayCalendarOut = {
+  /**
+   * Events
+   */
+  events: Array<DayEventOut>;
+  /**
+   * Free Blocks
+   */
+  free_blocks: Array<FreeBlockOut>;
+  /**
+   * Timezone
+   */
+  timezone: string;
+  window: WindowOut | null;
+};
+
+/**
+ * DayEventOut
+ */
+export type DayEventOut = {
+  /**
+   * Account
+   */
+  account: string;
+  /**
+   * Busy
+   */
+  busy: boolean;
+  /**
+   * End
+   */
+  end: string;
+  /**
+   * Start
+   */
+  start: string;
+  /**
+   * Title
+   */
+  title: string | null;
+};
+
+/**
  * DeadLetterOut
  */
 export type DeadLetterOut = {
@@ -485,6 +557,24 @@ export type FolderIn = {
    * Location Id
    */
   location_id: string;
+};
+
+/**
+ * FreeBlockOut
+ */
+export type FreeBlockOut = {
+  /**
+   * End
+   */
+  end: string;
+  /**
+   * Minutes
+   */
+  minutes: number;
+  /**
+   * Start
+   */
+  start: string;
 };
 
 /**
@@ -620,6 +710,28 @@ export type KeyOut = {
  * Label
  */
 export type Label = "human" | "ai" | "hybrid";
+
+/**
+ * LastDeployOut
+ */
+export type LastDeployOut = {
+  /**
+   * Commit
+   */
+  commit: string | null;
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Finished At
+   */
+  finished_at: string | null;
+  /**
+   * Status
+   */
+  status: string;
+};
 
 /**
  * LocationIn
@@ -947,6 +1059,32 @@ export type PageSessionOut = {
 export type Preset = "daily" | "weekdays" | "weekly" | "monthly";
 
 /**
+ * PreviewOut
+ */
+export type PreviewOut = {
+  /**
+   * Commit
+   */
+  commit?: string | null;
+  /**
+   * Finished At
+   */
+  finished_at?: string | null;
+  /**
+   * Pull Request Id
+   */
+  pull_request_id: number;
+  /**
+   * Status
+   */
+  status: string;
+  /**
+   * Url
+   */
+  url: string;
+};
+
+/**
  * Problem
  */
 export type Problem = {
@@ -1119,6 +1257,20 @@ export type ProjectCreate = {
 };
 
 /**
+ * ProjectDeployStatus
+ */
+export type ProjectDeployStatus = {
+  /**
+   * Apps
+   */
+  apps: Array<AppDeployStatus>;
+  /**
+   * Project Id
+   */
+  project_id: string;
+};
+
+/**
  * ProjectFolderOut
  */
 export type ProjectFolderOut = {
@@ -1200,6 +1352,10 @@ export type ProjectOut = {
    */
   links?: Array<ProjectLinkIn>;
   /**
+   * Local Decisions Only
+   */
+  local_decisions_only?: boolean;
+  /**
    * Name
    */
   name: string;
@@ -1268,6 +1424,10 @@ export type ProjectPatch = {
    * Links
    */
   links?: Array<ProjectLinkIn> | null;
+  /**
+   * Local Decisions Only
+   */
+  local_decisions_only?: boolean;
   /**
    * Name
    */
@@ -2200,6 +2360,66 @@ export type UsageRow = {
    * Value
    */
   value: number;
+};
+
+/**
+ * WindowOut
+ */
+export type WindowOut = {
+  /**
+   * End
+   */
+  end: string;
+  /**
+   * Start
+   */
+  start: string;
+};
+
+/**
+ * WorkingDay
+ */
+export type WorkingDay = {
+  /**
+   * End
+   */
+  end: string;
+  /**
+   * Start
+   */
+  start: string;
+  /**
+   * Weekday
+   */
+  weekday: number;
+};
+
+/**
+ * WorkingHoursIn
+ */
+export type WorkingHoursIn = {
+  /**
+   * Days
+   */
+  days: Array<WorkingDay>;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * WorkingHoursOut
+ */
+export type WorkingHoursOut = {
+  /**
+   * Days
+   */
+  days: Array<WorkingDay>;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -3480,6 +3700,68 @@ export type CalendarOauthStartResponses = {
 export type CalendarOauthStartResponse =
   CalendarOauthStartResponses[keyof CalendarOauthStartResponses];
 
+export type CoolifyListDeployStatusData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+  };
+  url: "/v1/coolify/status";
+};
+
+export type CoolifyListDeployStatusErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type CoolifyListDeployStatusError =
+  CoolifyListDeployStatusErrors[keyof CoolifyListDeployStatusErrors];
+
+export type CoolifyListDeployStatusResponses = {
+  /**
+   * Response Coolify List Deploy Status
+   *
+   * Successful Response
+   */
+  200: Array<ProjectDeployStatus>;
+};
+
+export type CoolifyListDeployStatusResponse =
+  CoolifyListDeployStatusResponses[keyof CoolifyListDeployStatusResponses];
+
 export type DeadLettersGetDeadLettersData = {
   body?: never;
   path?: never;
@@ -4254,6 +4536,66 @@ export type KnowledgeSetProjectFolderResponses = {
 
 export type KnowledgeSetProjectFolderResponse =
   KnowledgeSetProjectFolderResponses[keyof KnowledgeSetProjectFolderResponses];
+
+export type PlanningGetDayCalendarData = {
+  body?: never;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+  };
+  query?: never;
+  url: "/v1/plan/{day}/calendar";
+};
+
+export type PlanningGetDayCalendarErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningGetDayCalendarError =
+  PlanningGetDayCalendarErrors[keyof PlanningGetDayCalendarErrors];
+
+export type PlanningGetDayCalendarResponses = {
+  /**
+   * Successful Response
+   */
+  200: DayCalendarOut;
+};
+
+export type PlanningGetDayCalendarResponse =
+  PlanningGetDayCalendarResponses[keyof PlanningGetDayCalendarResponses];
 
 export type ProjectsListProjectsData = {
   body?: never;
@@ -5462,6 +5804,116 @@ export type SettingsSetModuleResponses = {
 
 export type SettingsSetModuleResponse =
   SettingsSetModuleResponses[keyof SettingsSetModuleResponses];
+
+export type SettingsGetWorkingHoursData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/settings/working-hours";
+};
+
+export type SettingsGetWorkingHoursErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type SettingsGetWorkingHoursError =
+  SettingsGetWorkingHoursErrors[keyof SettingsGetWorkingHoursErrors];
+
+export type SettingsGetWorkingHoursResponses = {
+  /**
+   * Successful Response
+   */
+  200: WorkingHoursOut;
+};
+
+export type SettingsGetWorkingHoursResponse =
+  SettingsGetWorkingHoursResponses[keyof SettingsGetWorkingHoursResponses];
+
+export type SettingsPutWorkingHoursData = {
+  body: WorkingHoursIn;
+  path?: never;
+  query?: never;
+  url: "/v1/settings/working-hours";
+};
+
+export type SettingsPutWorkingHoursErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type SettingsPutWorkingHoursError =
+  SettingsPutWorkingHoursErrors[keyof SettingsPutWorkingHoursErrors];
+
+export type SettingsPutWorkingHoursResponses = {
+  /**
+   * Successful Response
+   */
+  200: WorkingHoursOut;
+};
+
+export type SettingsPutWorkingHoursResponse =
+  SettingsPutWorkingHoursResponses[keyof SettingsPutWorkingHoursResponses];
 
 export type SettingsGetWorkspaceSettingsData = {
   body?: never;

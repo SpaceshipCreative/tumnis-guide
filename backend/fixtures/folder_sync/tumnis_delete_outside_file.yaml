@@ -1,0 +1,16 @@
+id: tumnis_delete_outside_file
+proves: Deleting an outside file in Tumnis only unindexes it; the file stays
+backends: [server_path, s3]
+steps:
+  - outside_write: {path: "uploads/theirs.pdf", content: "%PDF-1.4 theirs"}
+  - sync
+  - tumnis_delete: {path: "uploads/theirs.pdf"}
+  - sync
+  - sync
+  - expect:
+      listing: ["uploads/theirs.pdf"]
+      files: {"uploads/theirs.pdf": {equals: "%PDF-1.4 theirs"}}
+      trash: []
+      documents: {count: 0}
+      trashed_documents: {count: 1}
+      deletes: 0

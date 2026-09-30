@@ -1,0 +1,15 @@
+id: outside_rename
+proves: A rename outside keeps the same Document at the new path; no new Document
+backends: [server_path, s3]
+steps:
+  - outside_write: {path: "uploads/a.pdf", content: "%PDF-1.4 a"}
+  - sync
+  - remember: {as: pdf, path: "uploads/a.pdf"}
+  - outside_rename: {from: "uploads/a.pdf", to: "uploads/b.pdf"}
+  - sync
+  - expect:
+      document: {path: "uploads/b.pdf", id: pdf, versions: 1}
+      documents: {count: 1}
+      trashed_documents: {count: 0}
+      extraction_requested: ["uploads/a.pdf"]
+      listing: ["uploads/b.pdf"]

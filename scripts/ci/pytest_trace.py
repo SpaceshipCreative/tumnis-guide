@@ -19,6 +19,10 @@ import pytest
 
 
 def _first_doc_line(item: pytest.Item) -> str | None:
+    """The T-ID: a test function's first docstring line, or a skill case's `test_id`
+    (profiles/harness/pytest_plugin.py)."""
+    if isinstance(test_id := getattr(item, "test_id", None), str):
+        return test_id
     doc = getattr(getattr(item, "function", None), "__doc__", None)
     lines = [line.strip() for line in (doc or "").strip().splitlines()]
     return lines[0] if lines and lines[0] else None

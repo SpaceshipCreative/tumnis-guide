@@ -1,0 +1,75 @@
+{
+  "$defs": {
+    "PlanPick": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "maxLength": 140,
+          "minLength": 3,
+          "title": "Reason",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "reason"
+      ],
+      "title": "PlanPick",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/planning/v1/result.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The `plan` skill's reply: at most five picks, in order, each from the candidates.",
+  "properties": {
+    "alternates": {
+      "default": [],
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "maxItems": 5,
+      "title": "Alternates",
+      "type": "array"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "maxLength": 300,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
+    },
+    "picks": {
+      "items": {
+        "$ref": "#/$defs/PlanPick"
+      },
+      "maxItems": 5,
+      "title": "Picks",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "picks"
+  ],
+  "title": "PlanningResult",
+  "type": "object"
+}

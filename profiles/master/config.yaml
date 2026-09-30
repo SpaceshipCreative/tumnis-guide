@@ -1,0 +1,6 @@
+# The production model. The skill harness passes the same pair with -m and --provider
+# from harness/harness.toml, and harness/tests/test_profile_rules.py keeps the two equal:
+# change both together.
+model:
+  default: UNSET-pinned-homelab-model
+  provider: custom

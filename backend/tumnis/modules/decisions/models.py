@@ -1,6 +1,12 @@
-"""decisions SQLAlchemy tables owned by this module (mirrors of revision decisions_0001)."""
+"""decisions SQLAlchemy tables owned by this module (mirrors of revisions decisions_0001
+and decisions_0002)."""
 
-from sqlalchemy import LargeBinary
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import LargeBinary, Text, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tumnis.core.base import Base, TenantBase
@@ -16,3 +22,41 @@ class ProviderConfig(TenantBase, Base):
     fallback: Mapped[str | None]
     credentials_enc: Mapped[bytes | None] = mapped_column(LargeBinary)
     model_version: Mapped[str]
+
+
+class Threshold(TenantBase, Base):
+    """The routing threshold of one decision point for one pinned model (P1-02)."""
+
+    __tablename__ = "thresholds"
+
+    decision_point: Mapped[str]
+    model_version: Mapped[str]
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    source: Mapped[str] = mapped_column(server_default="default")
+    needs_recheck: Mapped[bool] = mapped_column(server_default=text("false"))
+
+
+class DecisionLog(TenantBase, Base):
+    """One row per decision: typed answers, never the input text (P1-02, FR-11.5)."""
+
+    __tablename__ = "decision_log"
+
+    decision_point: Mapped[str]
+    project_id: Mapped[UUID | None]
+    subject_type: Mapped[str]
+    subject_id: Mapped[UUID]
+    provider: Mapped[str]
+    fallback: Mapped[bool] = mapped_column(server_default=text("false"))
+    fallback_reason: Mapped[str | None]
+    model_version: Mapped[str | None]
+    input_hash: Mapped[bytes] = mapped_column(LargeBinary)
+    fields_sent: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    answer: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    confidence: Mapped[float | None]
+    threshold: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    outcome: Mapped[str]
+    cached: Mapped[bool] = mapped_column(server_default=text("false"))
+    latency_ms: Mapped[int | None]
+    overridden: Mapped[bool | None]
+    final_value: Mapped[Any | None] = mapped_column(JSONB)
+    outcome_at: Mapped[datetime | None]

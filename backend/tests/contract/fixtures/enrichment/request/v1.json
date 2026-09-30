@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "task": {
+    "id": "01950000-0000-7000-8000-000000000711",
+    "title": "Prepare and send Acme the March invoice",
+    "label": "hybrid",
+    "label_reason": "The agent can draft it; sending needs you",
+    "parent_title": null,
+    "due_on": "2026-03-10",
+    "priority": "high",
+    "first_action": null,
+    "acceptance_criteria": null,
+    "estimate_minutes": null
+  },
+  "missing": [
+    "first_action",
+    "acceptance_criteria",
+    "estimate_minutes"
+  ],
+  "project": {
+    "name": "Acme site",
+    "client": "Acme",
+    "goal": "Launch the new marketing site by April"
+  },
+  "brief": "Acme's marketing site rebuild. Invoices go out on the first working day of the month from Wave, as a PDF, to billing@acme.example.com. Contracts are signed in DocuSign.",
+  "passages": [],
+  "estimate_history": [
+    {
+      "title": "Send Acme the February invoice",
+      "label": "hybrid",
+      "estimate_minutes": 20,
+      "actual_minutes": 35
+    },
+    {
+      "title": "Review the homepage copy with Dana",
+      "label": "human",
+      "estimate_minutes": 45,
+      "actual_minutes": 60
+    },
+    {
+      "title": "Sign the Acme hosting renewal",
+      "label": "human",
+      "estimate_minutes": 10,
+      "actual_minutes": 15
+    },
+    {
+      "title": "Check the staging deploy on a phone",
+      "label": "human",
+      "estimate_minutes": 15,
+      "actual_minutes": 15
+    }
+  ]
+}

@@ -15,6 +15,7 @@ check:
 	$(BACKEND) uv run lint-imports
 	$(BACKEND) uv run pytest -q -n auto -m "not integration and not contract"
 	cd daemon && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest -q
+	cd profiles && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest -q
 	@if [ -d frontend/node_modules ]; then \
 		npm --prefix frontend run typecheck & typecheck=$$!; \
 		npm --prefix frontend run lint && wait $$typecheck \

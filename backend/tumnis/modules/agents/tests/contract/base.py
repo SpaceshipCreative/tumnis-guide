@@ -28,7 +28,11 @@ from tumnis.modules.agents.api import (
 )
 
 SKILL = "enrich"
+# A valid enrichment/result/1 (P1-05 registers the schema, and run_skill validates every
+# succeeded output against it).
 SCRIPTED_OUTPUT: dict[str, Any] = {
+    "schema_version": 1,
+    "task_id": "01950000-0000-7000-8000-000000000401",
     "first_action": "Open last month's invoice in Wave and duplicate it",
     "estimate_minutes": 20,
     "acceptance_criteria": ["The March invoice is sent to Acme"],

@@ -37,6 +37,7 @@ name = rules.py imports nothing that does I/O
 type = forbidden
 source_modules =
     tumnis.modules.*.rules
+    tumnis.modules.knowledge.sync_rules
 forbidden_modules =
     tumnis.core.db
     tumnis.core.tenancy
@@ -162,7 +163,9 @@ name = The api process never imports Jev, its SDK or VllmGeneration
 type = forbidden
 # The composition roots (tumnis.app, worker, cli, wiring) and every module's api, router
 # and mcp, as single modules: none reaches an adapter through static imports. The worker
-# builds JevDecisions and VllmGeneration (P1-03) lazily through the adapter registry.
+# builds JevDecisions, VllmDecisions (P1-02) and VllmGeneration (P1-03) lazily through the
+# adapter registry. The name predates VllmDecisions (tests/meta/test_import_contracts.py
+# matches it); the forbidden list below covers all three adapters.
 as_packages = False
 source_modules =
     tumnis.*
@@ -171,6 +174,7 @@ source_modules =
     tumnis.modules.*.mcp
 forbidden_modules =
     tumnis.modules.decisions.adapters.jev
+    tumnis.modules.decisions.adapters.vllm
     tumnis.modules.decisions.adapters.vllm_generation
     typesafe_sdk
 

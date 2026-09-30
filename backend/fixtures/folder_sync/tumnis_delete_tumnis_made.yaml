@@ -1,0 +1,15 @@
+id: tumnis_delete_tumnis_made
+proves: Deleting a Tumnis-made file in Tumnis moves it to .tumnis/trash/
+backends: [server_path, s3]
+steps:
+  - tumnis_create_note: {project: acme-site, title: "Plan", body: "v1"}
+  - sync
+  - tumnis_delete: {title: "Plan"}
+  - sync
+  - sync
+  - expect:
+      listing: []
+      trash: ["notes/Plan.md"]
+      documents: {count: 0}
+      trashed_documents: {count: 1}
+      deletes: 0

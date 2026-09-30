@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "picks": [
+    {
+      "task_id": "01950000-0000-7000-8000-000000000821",
+      "reason": "Urgent and due tomorrow; 15 minutes"
+    },
+    {
+      "task_id": "01950000-0000-7000-8000-000000000822",
+      "reason": "Due Wednesday and blocks the release"
+    }
+  ],
+  "alternates": [],
+  "notes": "A light day: both fit before lunch."
+}

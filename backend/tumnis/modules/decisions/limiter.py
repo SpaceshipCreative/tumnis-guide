@@ -69,14 +69,21 @@ _LIMITERS: dict[str, SlidingWindowLimiter] = {}
 
 
 def limiter_for(
-    fingerprint: str, *, rpm: int = JEV_RPM_DEFAULT, clock: Clock | None = None
+    fingerprint: str,
+    *,
+    rpm: int = JEV_RPM_DEFAULT,
+    clock: Clock | None = None,
+    sleep: Callable[[float], Awaitable[None]] | None = None,
 ) -> SlidingWindowLimiter:
     """The one limiter for this credential in this process. A changed `rpm` updates its
     limit in place, keeping the grants already in the window, so lowering it cannot open a
-    burst over the new limit."""
+    burst over the new limit. `clock` and `sleep` apply when the limiter is first made
+    (tests make it first with a fixed clock and a sleep that advances it)."""
     limiter = _LIMITERS.get(fingerprint)
     if limiter is None:
-        limiter = SlidingWindowLimiter(limit=rpm, clock=clock or SystemClock())
+        limiter = SlidingWindowLimiter(
+            limit=rpm, clock=clock or SystemClock(), sleep=sleep or asyncio.sleep
+        )
         _LIMITERS[fingerprint] = limiter
     elif limiter.limit != rpm:
         if rpm < 1:

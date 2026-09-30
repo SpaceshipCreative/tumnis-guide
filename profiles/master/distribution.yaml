@@ -1,0 +1,11 @@
+# Hermes profile distribution (https://hermes-agent.nousresearch.com/docs/user-guide/profile-distributions).
+# The master agent: one per workspace. `version` must equal VERSION, and any change under
+# this directory needs a VERSION bump (scripts/ci/profile_version_check.py).
+# The repo never holds the profile's .env, memories or sessions.
+name: tumnis-master
+version: 1.0.0
+description: Tumnis master agent (plan skill in phase 1)
+env_requires:
+  - name: TYPESAFE_API_KEY
+    description: TypeSafe API key for the Jev MCP server (mcp.json); set it in the profile's .env
+    required: true

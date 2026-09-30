@@ -1,0 +1,324 @@
+{
+  "$defs": {
+    "EnrichProject": {
+      "additionalProperties": false,
+      "properties": {
+        "client": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client"
+        },
+        "goal": {
+          "anyOf": [
+            {
+              "maxLength": 280,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Goal"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "EnrichProject",
+      "type": "object"
+    },
+    "EnrichTask": {
+      "additionalProperties": false,
+      "description": "The task as it is now; the fields named in `missing` are the ones to fill.",
+      "properties": {
+        "acceptance_criteria": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acceptance Criteria"
+        },
+        "due_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Due On"
+        },
+        "estimate_minutes": {
+          "anyOf": [
+            {
+              "maximum": 960,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimate Minutes"
+        },
+        "first_action": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Action"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "label_reason": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label Reason"
+        },
+        "parent_title": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Title"
+        },
+        "priority": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "label"
+      ],
+      "title": "EnrichTask",
+      "type": "object"
+    },
+    "EstimateHistoryItem": {
+      "additionalProperties": false,
+      "description": "A finished Human or Hybrid task of the project: what was estimated, what it took.",
+      "properties": {
+        "actual_minutes": {
+          "minimum": 0,
+          "title": "Actual Minutes",
+          "type": "integer"
+        },
+        "estimate_minutes": {
+          "maximum": 960,
+          "minimum": 1,
+          "title": "Estimate Minutes",
+          "type": "integer"
+        },
+        "label": {
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "label",
+        "estimate_minutes",
+        "actual_minutes"
+      ],
+      "title": "EstimateHistoryItem",
+      "type": "object"
+    },
+    "Passage": {
+      "additionalProperties": false,
+      "description": "A knowledge passage (P1-17 fills these; an empty list before it lands).",
+      "properties": {
+        "document_id": {
+          "format": "uuid",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "heading_path": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 12,
+          "title": "Heading Path",
+          "type": "array"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Page"
+        },
+        "text": {
+          "maxLength": 8000,
+          "title": "Text",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id",
+        "title",
+        "heading_path",
+        "page",
+        "text"
+      ],
+      "title": "Passage",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/enrichment/v1/request.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "brief": {
+      "maxLength": 8000,
+      "title": "Brief",
+      "type": "string"
+    },
+    "estimate_history": {
+      "items": {
+        "$ref": "#/$defs/EstimateHistoryItem"
+      },
+      "maxItems": 10,
+      "title": "Estimate History",
+      "type": "array"
+    },
+    "missing": {
+      "items": {
+        "enum": [
+          "first_action",
+          "acceptance_criteria",
+          "estimate_minutes"
+        ],
+        "type": "string"
+      },
+      "maxItems": 3,
+      "minItems": 1,
+      "title": "Missing",
+      "type": "array"
+    },
+    "passages": {
+      "items": {
+        "$ref": "#/$defs/Passage"
+      },
+      "maxItems": 8,
+      "title": "Passages",
+      "type": "array"
+    },
+    "project": {
+      "$ref": "#/$defs/EnrichProject"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task": {
+      "$ref": "#/$defs/EnrichTask"
+    }
+  },
+  "required": [
+    "schema_version",
+    "task",
+    "missing",
+    "project",
+    "brief",
+    "passages",
+    "estimate_history"
+  ],
+  "title": "EnrichmentRequest",
+  "type": "object"
+}
