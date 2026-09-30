@@ -35,7 +35,6 @@ NEXT_MONDAY = MONDAY + timedelta(days=7)
 
 @pytest.mark.req("FR-2.6")
 @pytest.mark.wp("P1-12")
-@pytest.mark.xfail(strict=True, reason="spec:P1-12")
 async def test_query_count_fixed(
     app: FastAPI, seed: SeedResult, clock: FixedClock, query_counter: QueryCounter
 ) -> None:
