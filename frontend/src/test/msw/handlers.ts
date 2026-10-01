@@ -3,6 +3,7 @@ import { http, HttpResponse, type RequestHandler } from "msw";
 import type { PageReviewItemOut, PolicyOut } from "../../api/types.gen";
 import { appOpen } from "./closeDay";
 import { dashboardDefaults } from "./dashboard";
+import { focusDefaults } from "./focus";
 import { workingHours } from "./planning";
 
 /**
@@ -91,4 +92,6 @@ export const handlers: RequestHandler[] = [
   // The shell's app-open ping (P1-18), sent on every signed-in start.
   appOpen,
   ...dashboardDefaults,
+  // The focus bar on every page (P2-15): Quiet, nothing to show.
+  ...focusDefaults,
 ];
