@@ -42,6 +42,12 @@ pytestmark = [
 ]
 
 FEEDBACK = "Link should open in a new tab"
+# Whether Jev's blocking-impact rating (decisions.assess_blocking_impact) reached the open
+# `result` item of a task; storing it bumps the item's version.
+RATED = (
+    "SELECT decision_id IS NOT NULL FROM review_items WHERE kind = 'result'"
+    " AND target_type = 'task' AND target_id = %s AND decided_at IS NULL"
+)
 
 
 def _body(run_id: UUID) -> dict[str, Any]:
@@ -207,6 +213,8 @@ async def test_reject_adds_comment_and_returns_to_agent(  # noqa: PLR0917
                 == [("succeeded",)]
             )
         )
+        # Scott decision 44: the run settles (its item rated) before the version is read.
+        await wait_until(lambda: owner_rows(db, RATED, (task.id,)) == [(True,)])
         item_id, version, _payload = _result_item(db, task.id)
 
         bare = await session_client.post(
