@@ -1,0 +1,28 @@
+# T-P2-12-04: "Send the signed contract to the client" with request_approval answered approved.
+id: gated-send-email-approved
+profile: project-template
+skill: gated-actions
+input: ../../fixtures/packets/gated_send_email.json
+output_schema: {tool: post_result}
+meta: {test_id: T-P2-12-04, req: [FR-5.6], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  responses:
+    request_approval: {default: approved}
+expect:
+  gated: {class: send_email, approval: approved}
+  sequence:
+    - tool: request_approval
+      where: [{path: "$.action_class", equals: send_email}]
+    - {tool: draft_reply}
+    - tool: create_task
+      where: [{path: "$.label", equals: human}]
+  calls:
+    - tool: create_task
+      where:
+        - {path: "$.label", equals: human}
+        - {path: "$.parent_id", equals_input: "$.body.task.id"}
+        - {path: "$.title", matches: "(?i).*send.*email.*"}
+        - {path: "$.first_action", type: string, nonempty: true}
+        - {path: "$.estimate_minutes", type: integer}
+  json:
+    - {path: "$.outcome", equals: partial}

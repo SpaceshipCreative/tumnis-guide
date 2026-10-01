@@ -1,0 +1,7 @@
+# One scanned page with no text layer: the text comes from OCR.
+min_chunks: 1
+max_chunks: 2
+chunks:
+  - contains: ["Delivery note", "Twelve chairs"]
+    page_from: 1
+    page_to: 1

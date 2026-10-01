@@ -1,0 +1,35 @@
+# T-P2-12-01: a Hybrid landing-page task splits into labeled subtasks under it, each with a
+# first action, and an estimate only for the person's (human, hybrid) subtasks.
+id: orchestrate-hybrid-split
+profile: project-template
+skill: orchestrate
+input: ../../fixtures/packets/orchestrate_landing_page.json
+output_schema: {tool: post_result}
+meta: {test_id: T-P2-12-01, req: ["Orchestrator contract"], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  responses:
+    create_task: {from: seed}
+    request_approval: {default: approved}
+expect:
+  calls:
+    - tool: get_project_digest            # SOUL: read the project digest first
+      where: [{path: "$.project_id", equals_input: "$.body.project.id"}]
+    - tool: create_task
+      min: 2
+      where: [{path: "$.parent_id", equals_input: "$.body.task.id"}]
+      each:
+        - {path: "$.parent_id", equals_input: "$.body.task.id"}
+        - {path: "$.project_id", equals_input: "$.body.project.id"}
+        - {path: "$.label", in: [human, ai, hybrid]}
+        - {path: "$.first_action", type: string, nonempty: true}
+        - when: [{path: "$.label", in: [human, hybrid]}]
+          then: [{path: "$.estimate_minutes", type: integer}]
+        - when: [{path: "$.label", equals: ai}]
+          then: [{path: "$.estimate_minutes", absent: true}]
+    - tool: post_result
+      each: [{path: "$.outcome", in: [done, partial]}]
+  forbid:
+    - {tool: update_task_status, where: [{path: "$.to", equals: done}]}
+  json:
+    - {path: "$.outcome", in: [done, partial]}
+    - {path: "$.summary", type: string, nonempty: true}

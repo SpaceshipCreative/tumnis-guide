@@ -10,8 +10,11 @@ fake-script store is enabled, each dispatch comes here (`dispatched`):
 - the script stored for the task's title (`fakes.runner.script(title, runs)`) gives this
   run's steps (the n-th run of the task plays `runs[n]`; a run past the list plays
   nothing and waits to be stopped), played in the background after the dispatch returns,
-  as a daemon would: a stream line or an artifact becomes a run event, the result goes
-  through `api.accept_result`, the one result path (never a direct DBOS send).
+  as a daemon would: a stream line or an artifact becomes a run event; a question goes
+  through `api.ask_human` as the run's agent, and the playback waits until it is answered
+  and the run runs again (Scott decision 55); the result goes through
+  `api.accept_result`, the one result path (never a direct DBOS send), with `{answer}`
+  in its summary replaced by the last answer.
 
 Pacing: the steps follow one another STEP_PAUSE_S apart, and a result waits RESULT_HOLD_S
 first, so the run view shows a running run (its lines, its ticking clock, its Stop
@@ -26,6 +29,8 @@ import hashlib
 import logging
 from typing import Any, Final
 from uuid import UUID, uuid5
+
+from pydantic import ValidationError
 
 from tumnis.core import fake_scripts
 from tumnis.core.clock import SystemClock
@@ -43,10 +48,12 @@ _log = logging.getLogger(__name__)
 
 STEP_PAUSE_S: float = 0.1
 RESULT_HOLD_S: float = 4.0
+QUESTION_POLL_S: float = 0.5  # how often a question's playback re-reads the answer
 # The fake runner speaks as a device, as a real runner's handler does (`device:<runner>`);
 # it has no runner row, so the nil id.
 FAKE_RUNNER_ACTOR: Final = ActorRef(f"device:{UUID(int=0)}")
 
+_OPEN: Final = frozenset({"running", "waiting_on_human"})  # a run that may still ask
 _playing: set["asyncio.Task[None]"] = set()  # strong references until each playback ends
 
 
@@ -102,14 +109,19 @@ async def _next_run_steps(title: str) -> list[dict[str, Any]]:
 
 async def _play(ctx: WorkspaceContext, run_id: UUID, steps: list[dict[str, Any]]) -> None:
     seq = 0
+    answer: str | None = None
     for index, step in enumerate(steps):
         message_id = uuid5(run_id, f"fake-step:{index}")
         if "result" in step:
             await asyncio.sleep(RESULT_HOLD_S)
-            await _result(ctx, run_id, step["result"])
+            await _result(ctx, run_id, _with_answer(step["result"], answer))
             return
         await asyncio.sleep(STEP_PAUSE_S)
-        if "stream" in step:
+        if "ask_human" in step:
+            answer = await _ask(ctx, run_id, step["ask_human"])
+            if answer is None:  # refused, or the run ended while it waited
+                return
+        elif "stream" in step:
             seq += 1
             await _stream(ctx, run_id, message_id, seq, step["stream"])
         elif "upload_artifact" in step:
@@ -158,10 +170,50 @@ async def _artifact(
         await api.record_run_event(s, run_id, message_id, "artifact", payload)
 
 
+async def _ask(ctx: WorkspaceContext, run_id: UUID, question: dict[str, Any]) -> str | None:
+    """The question through `api.ask_human`, as the run's agent asks with its task token;
+    then re-sent with its id every QUESTION_POLL_S (as an agent re-sends after a `pending`
+    long poll) until it is answered and the run runs again. None when the ask is refused
+    or the run ends first (a stopped run's question stays pending)."""
+    inp = api.AskHumanIn.model_validate({**question, "run_id": str(run_id)})
+    try:
+        async with tenant_session(ctx) as s:
+            out = await api.ask_human(
+                s, ctx.actor, run_id, inp, caller_key=None, tainted=False, now=SystemClock().now()
+            )
+    except ProblemError as exc:
+        _log.warning("the fake runner's question was refused", extra={"code": exc.code})
+        return None
+    again = inp.model_copy(update={"question_id": out.id})
+    while True:
+        await asyncio.sleep(QUESTION_POLL_S)
+        async with tenant_session(ctx) as s:
+            status = (await api.get_run(s, run_id)).status
+            if status not in _OPEN:
+                return None
+            out = await api.ask_human(
+                s, ctx.actor, run_id, again, caller_key=None, tainted=False, now=SystemClock().now()
+            )
+        if out.status == "answered" and status == "running":
+            return out.answer or ""
+
+
+def _with_answer(result: dict[str, Any], answer: str | None) -> dict[str, Any]:
+    """The scripted result with `{answer}` in its summary replaced by the last answer."""
+    if answer is None:
+        return result
+    return {**result, "summary": str(result["summary"]).replace("{answer}", answer)}
+
+
 async def _result(ctx: WorkspaceContext, run_id: UUID, result: dict[str, Any]) -> None:
     """The run's result through `api.accept_result`, as the runner's handler posts a
-    dispatch_run run's result; a run already ended keeps its log and nothing else."""
-    inp = api.PostResultIn.model_validate({**result, "run_id": str(run_id)})
+    dispatch_run run's result; a run already ended keeps its log and nothing else. A
+    result invalid once `{answer}` is replaced (a summary past its limit) is logged."""
+    try:
+        inp = api.PostResultIn.model_validate({**result, "run_id": str(run_id)})
+    except ValidationError:
+        _log.warning("the fake runner's result was invalid", extra={"code": "invalid_result"})
+        return
     try:
         async with tenant_session(ctx) as s:
             await api.accept_result(s, ctx.actor, run_id, inp, now=SystemClock().now())

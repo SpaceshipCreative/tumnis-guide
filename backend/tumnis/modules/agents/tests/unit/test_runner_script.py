@@ -79,7 +79,6 @@ def test_task_script_is_keyed_by_task_title_and_keeps_every_run() -> None:
     [
         {},
         {"task_title": "", "runs": []},
-        {"task_title": "Fix footer link", "runs": [[{"ask_human": {"prompt": "Which?"}}]]},
         {"task_title": "Fix footer link", "runs": [[{"stream": {"kind": "log"}}]]},
         {"task_title": "Fix footer link", "runs": [[{"stream": {"kind": "shout", "text": "x"}}]]},
         {

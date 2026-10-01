@@ -539,11 +539,12 @@ async def _wait_while_held(workspace_id: str, run_id: str) -> str | None:
 @DBOS.step()
 async def prepare_run(workspace_id: str, run_id: str) -> Prepared:
     """One transaction: the pause again, under the run's row lock (a pause that landed
-    since `check_pause` holds the run: `held`); `can_dispatch` again (the task may have
-    changed while queued); the run queued or held -> running with `started_at` and its
-    workflow id; the task to In progress as the requester; `run.started`. A replay after
-    a crash finds the run running and answers the stored values; an ended run (cancelled
-    while queued) is answered as it is."""
+    since `check_pause` holds the run: `held`); `can_dispatch` again on the task read under
+    its row lock (it may have changed while queued; a write that lands meanwhile waits for
+    this transaction, so the move to In progress is never stale); the run queued or held
+    -> running with `started_at` and its workflow id; the task to In progress as the
+    requester; `run.started`. A replay after a crash finds the run running and answers
+    the stored values; an ended run (cancelled while queued) is answered as it is."""
     run = UUID(run_id)
     now = SystemClock().now()
     async with tenant_session(_ctx(workspace_id)) as s:
@@ -577,7 +578,7 @@ async def prepare_run(workspace_id: str, run_id: str) -> Prepared:
                 used_seconds=row["active_seconds_used"],
             )
         try:
-            task = await tasks.get_task(s, row["task_id"])
+            task = await tasks.get_task(s, row["task_id"], lock=True)
         except NotFound:  # trashed or purged while queued: the run fails, nothing retries
             return Prepared(status=status.value, refusal="task_not_found")
         others: list[str] = list(

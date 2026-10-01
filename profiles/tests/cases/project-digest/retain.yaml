@@ -1,0 +1,47 @@
+# T-P2-12-05: the digest starts from the cursor it retained last time, pages through with
+# each answer's next_cursor (once each, in order), retains the entries and then the newest
+# cursor for the next run.
+id: project-digest-retain
+profile: project-template
+skill: project-digest
+input: ../../fixtures/packets/project_digest.json
+output_schema: {family: harness, name: digest_run, version: 1}
+meta: {test_id: T-P2-12-05, req: [FR-13.2], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  recall: ["Tumnis digest cursor for project 01950000-0000-7000-8000-000000000501: c-1"]
+  responses:
+    get_project_digest:
+      - result:
+          schema_version: 1
+          scope: project
+          entries: [{id: 01950000-0000-7000-8000-000000000901, event_id: 01950000-0000-7000-8000-000000000801, kind: task.created, scope: project, project_id: 01950000-0000-7000-8000-000000000501, task_id: 01950000-0000-7000-8000-000000000411, occurred_at: "2026-03-09T11:00:00Z", data: {title: Draft the launch email 1}, text: null}]
+          next_cursor: c-2
+          has_more: true
+          gap: false
+      - result:
+          schema_version: 1
+          scope: project
+          entries: [{id: 01950000-0000-7000-8000-000000000902, event_id: 01950000-0000-7000-8000-000000000802, kind: task.created, scope: project, project_id: 01950000-0000-7000-8000-000000000501, task_id: 01950000-0000-7000-8000-000000000412, occurred_at: "2026-03-09T12:00:00Z", data: {title: Draft the launch email 2}, text: null}]
+          next_cursor: c-3
+          has_more: false
+          gap: false
+expect:
+  sequence:
+    - tool: get_project_digest
+      where:
+        - {path: "$.project_id", equals_input: "$.body.project.id"}
+        - {path: "$.since", equals: c-1}
+    - tool: get_project_digest
+      where: [{path: "$.since", equals: c-2}]
+    - {server: memory, tool: retain, where: [{path: "$.content", matches: "(?s).*c-3.*"}]}
+  calls:
+    - {tool: get_project_digest, min: 2, max: 2}
+    - {server: memory, tool: retain, min: 3}
+  forbid:
+    - {tool: create_task}
+    - {tool: update_task_status}
+    - {tool: post_result}
+  json:
+    - {path: "$.scope", equals: project}
+    - {path: "$.next_cursor", equals: c-3}
+    - {path: "$.entries_retained", equals: 2}

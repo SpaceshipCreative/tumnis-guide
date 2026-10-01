@@ -17,6 +17,9 @@ directory, whether that is a linked git worktree, whether the query file sits in
 `.tumnis/`). With HERMES_STUB_SIGNALS the stub notes each SIGTERM in that file and keeps
 running (only SIGKILL ends it). HERMES_STUB_TOUCH names a file the stub writes in its
 working directory after replaying the recording.
+
+P2-12: HERMES_STUB_TOKEN_FILE gets the TUMNIS_TOKEN the run's environment carries
+(`<unset>` when it has none).
 """
 
 import json
@@ -71,6 +74,9 @@ def chat(args: list[str]) -> int:
         for line in Path(recording).read_text().splitlines():
             sys.stdout.write(line + "\n")
             sys.stdout.flush()
+    token_file = os.environ.get("HERMES_STUB_TOKEN_FILE")
+    if token_file:
+        Path(token_file).write_text(os.environ.get("TUMNIS_TOKEN", "<unset>"))
     touch = os.environ.get("HERMES_STUB_TOUCH")
     if touch:
         (Path.cwd() / touch).write_text("changed by the stub\n")
