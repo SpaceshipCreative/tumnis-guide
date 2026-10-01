@@ -1,0 +1,87 @@
+# EXPERIMENT ONLY (unit-speed, never merged): unit-job layouts side by side on real runners.
+name: bench
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+  NODE_VERSION: "24"
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        copy: [1, 2]
+        variant: [base, pr-n3, par-n2, par-n2-compile, par-n2-collect, seq-threads]
+        include:
+          - { variant: base, mode: seq, pyn: auto, pool: forks, prewarm: none }
+          - { variant: pr-n3, mode: par, pyn: "3", pool: threads, prewarm: none }
+          - { variant: par-n2, mode: par, pyn: "2", pool: threads, prewarm: none }
+          - { variant: par-n2-compile, mode: par, pyn: "2", pool: threads, prewarm: compile }
+          - { variant: par-n2-collect, mode: par, pyn: "2", pool: threads, prewarm: collect }
+          - { variant: seq-threads, mode: seq, pyn: auto, pool: threads, prewarm: none }
+    steps:
+      - name: CPU
+        run: |
+          nproc
+          lscpu | grep -E "Model name|Thread|Core|Socket"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Start frontend unit tests
+        if: matrix.mode == 'par'
+        working-directory: frontend
+        run: |
+          nohup sh -c 'date -u +"Vitest started %T"; npm run test -- --run --pool=${{ matrix.pool }}; code=$?; date -u +"Vitest finished %T"; echo "$code" > "$RUNNER_TEMP/vitest.exit.tmp" && mv "$RUNNER_TEMP/vitest.exit.tmp" "$RUNNER_TEMP/vitest.exit"' > "$RUNNER_TEMP/vitest.log" 2>&1 < /dev/null &
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: backend/.mypy_cache
+          key: mypy-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            mypy-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}-
+            mypy-${{ runner.os }}-
+      - name: uv sync
+        working-directory: backend
+        run: uv sync
+      - name: Prewarm compile
+        if: matrix.prewarm == 'compile'
+        working-directory: backend
+        run: |
+          uv run python -m compileall -q -j0 .venv/lib tumnis tests ../scripts/release ../scripts/backup/tests > /dev/null || true
+      - name: Prewarm collect
+        if: matrix.prewarm == 'collect'
+        working-directory: backend
+        run: uv run pytest -m "not integration and not contract" --collect-only -q -p no:randomly > /dev/null
+      - name: Backend unit tests with coverage
+        working-directory: backend
+        run: uv run pytest -m "not integration and not contract" -n ${{ matrix.pyn }} --dist worksteal --durations=15 --cov --cov-report=json
+      - name: Coverage gates
+        run: uv run --project backend python scripts/ci/coverage_gates.py backend/coverage.json
+      - name: Frontend unit tests (seq)
+        if: matrix.mode == 'seq'
+        working-directory: frontend
+        run: npm run test -- --run --pool=${{ matrix.pool }}
+      - name: Frontend unit tests (par)
+        if: ${{ !cancelled() && matrix.mode == 'par' }}
+        run: |
+          while [ ! -f "$RUNNER_TEMP/vitest.exit" ]; do sleep 1; done
+          cat "$RUNNER_TEMP/vitest.log"
+          exit "$(cat "$RUNNER_TEMP/vitest.exit")"
