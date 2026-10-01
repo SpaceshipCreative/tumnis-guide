@@ -214,3 +214,42 @@ async def test_stop_ends_a_running_skill_run_cancelled(  # noqa: PLR0917
         assert _run(db, packet.run_id) == ("cancelled", "stopped_by_user")
         assert await wait_until(lambda: cancels(world.runner, packet.run_id) != [])
         assert len(cancels(world.runner, packet.run_id)) == 1
+
+
+@pytest.mark.req("SAF-4", "FR-5.5")
+@pytest.mark.wp("P2-09")
+@pytest.mark.xfail(strict=True, reason="spec:P2-09")
+async def test_stop_ends_a_skill_run_when_its_agent_cannot_be_stopped(  # noqa: PLR0917
+    dbos: type[DBOS],
+    fake_runner: FakeRunnerFactory,
+    workspace: WorkspaceHandle,
+    clock: FixedClock,
+    db: DbUrls,
+    session_client: SessionClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-P2-09-16
+    A Stop on a running enrichment run whose agent cannot be reached to stop (its adapter
+    fails) still ends the run `cancelled` with `stopped_by_user`, rather than leaving it
+    `running` with a live task token.
+    """
+    from tumnis.modules.agents import api, workflows  # noqa: PLC0415
+
+    world = await run_world(fake_runner, workspace, clock)
+    packet = make_packet(world.profile_id)
+    async with relay(db):
+        handle = await workflows.start_run_skill(workspace.id, packet)
+        assert await wait_until(lambda: _status(db, packet.run_id) == "running")
+
+        async def unreachable(*_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("the agent's adapter is unreachable")
+
+        monkeypatch.setattr(api, "adapter_for", unreachable)
+        stopped = await session_client.post(f"/v1/runs/{packet.run_id}/cancel", json={})
+        assert stopped.status_code == 202, stopped.text
+
+        outcome = await asyncio.wait_for(handle.get_result(), OUTCOME_WITHIN_S)
+        assert outcome["status"] == "cancelled"
+        assert outcome["error"] == "stopped_by_user"
+        assert _run(db, packet.run_id) == ("cancelled", "stopped_by_user")
+        assert cancels(world.runner, packet.run_id) == []
