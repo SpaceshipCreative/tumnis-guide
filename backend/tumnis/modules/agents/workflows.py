@@ -56,8 +56,9 @@ from tumnis.modules.agents import api, signals
 # P2-18: importing archive also registers its steps with the project archive workflows.
 from tumnis.modules.agents import archive as _archive
 
-# P2-04: importing fake_play hooks the scripted fake runner into FakeAgent (fakes only).
-from tumnis.modules.agents import fake_play as _fake_play  # noqa: F401
+# P2-04: importing fake_play hooks the scripted fake runner into FakeAgent (fakes only);
+# SEED: `dispatch_step` hands it the phase 1 dispatches it serves.
+from tumnis.modules.agents import fake_play as _fake_play
 from tumnis.modules.agents.adapters.hermes import DaemonTransport, McpEndpointTransport
 from tumnis.modules.agents.models import (
     AgentProfile,
@@ -220,7 +221,8 @@ async def _skill_pause(ctx: WorkspaceContext, profile_id: UUID) -> str | None:
 
 @DBOS.step()
 async def dispatch_step(workspace_id: str, packet: dict[str, Any]) -> str | None:
-    """Dispatch through the daemon transport with the run's task token; the refusal's
+    """Dispatch through the daemon transport with the run's task token (to the fake
+    runner's phase 1 playback instead when it serves the profile: `fake_play`); the refusal's
     reason when the agent is unavailable or no token can be issued (nothing was
     dispatched, and a token already issued is ended), None once the run is queued.
 
@@ -242,7 +244,10 @@ async def dispatch_step(workspace_id: str, packet: dict[str, Any]) -> str | None
     except (auth.ScopeEscalation, ValueError) as exc:
         return f"no task token: {exc}"
     try:
-        await DaemonTransport(ctx, SystemClock()).dispatch(task)
+        if await api.fake_served(task.profile_id, ctx=ctx):  # compose.test: no daemon (SEED)
+            await _fake_play.dispatch_skill(ctx, task)
+        else:
+            await DaemonTransport(ctx, SystemClock()).dispatch(task)
     except api.AgentUnavailable as exc:
         await api.run_ended(ctx, task.run_id, now=SystemClock().now())
         return exc.reason
