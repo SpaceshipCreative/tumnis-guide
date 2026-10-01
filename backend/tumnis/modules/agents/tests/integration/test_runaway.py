@@ -44,7 +44,6 @@ def _run(db: DbUrls, run_id: UUID) -> tuple[str, str | None, int]:
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 async def test_twenty_first_task_stops_run_with_review_item(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,

@@ -7,10 +7,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState, type SyntheticEvent } from "react";
 
-import {
-  agentsGetPausesOptions,
-  agentsGetPausesQueryKey,
-} from "../../api/@tanstack/react-query.gen";
+import { agentsGetPausesQueryKey } from "../../api/@tanstack/react-query.gen";
 import type { OpenPause, PauseOut, ResumeOut } from "../../api/types.gen";
 import { apiWrite, useWrite } from "../../lib/fetch";
 import { dialogKeyDown } from "../../lib/focusTrap";
@@ -25,6 +22,7 @@ import {
   FIELD_LABEL,
   HINT,
 } from "../common/ui";
+import { pausesQuery } from "./queries";
 
 interface Labels {
   pause: string; // the control and the dialog's title
@@ -164,7 +162,7 @@ function PausedBanner({
 export function PauseControl({ projectId }: { projectId?: string }) {
   const labels = projectId === undefined ? WORKSPACE : PROJECT;
   const queryClient = useQueryClient();
-  const pauses = useQuery(agentsGetPausesOptions());
+  const pauses = useQuery(pausesQuery()); // prefetched by the dashboard's loader
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const base =

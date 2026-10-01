@@ -3,8 +3,8 @@
 // mounts the same `PauseControl`.
 import { useQuery } from "@tanstack/react-query";
 
-import { agentsGetPausesOptions } from "../../../api/@tanstack/react-query.gen";
 import { PauseControl } from "../../dashboard/KillSwitch";
+import { pausesQuery } from "../../dashboard/queries";
 import { RailSection } from "./RailSection";
 
 export function AgentPauseSection({
@@ -16,7 +16,7 @@ export function AgentPauseSection({
   open: boolean;
   onToggle: () => void;
 }) {
-  const pauses = useQuery(agentsGetPausesOptions());
+  const pauses = useQuery(pausesQuery());
   const summary = pauses.data?.workspace
     ? "All agents paused"
     : pauses.data?.projects.some((p) => p.project_id === projectId)

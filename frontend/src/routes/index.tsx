@@ -7,6 +7,7 @@ import * as z from "zod";
 import { DashboardPage } from "../components/dashboard/DashboardPage";
 import {
   deployStatusQuery,
+  pausesQuery,
   projectsQuery,
   reviewCountQuery,
   todayQuery,
@@ -32,6 +33,7 @@ export const Route = createFileRoute("/")({
       loaderRead(queryClient, reviewCountQuery()),
       loaderRead(queryClient, workspaceQuery()),
       loaderRead(queryClient, deployStatusQuery()),
+      loaderRead(queryClient, pausesQuery()),
     ]);
   },
   // Commit the match at once while the loader runs (an empty page, not a spinner): the

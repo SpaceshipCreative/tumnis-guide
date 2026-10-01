@@ -65,7 +65,6 @@ def _sent_runs(db: DbUrls, run_id: UUID) -> int:
 
 @pytest.mark.req("SAF-4")
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 async def test_pause_from_app_cancels_running_runs_through_adapter(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -105,7 +104,6 @@ async def test_pause_from_app_cancels_running_runs_through_adapter(  # noqa: PLR
 
 @pytest.mark.req("SAF-4")
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 async def test_pause_from_api_with_master_key(  # noqa: PLR0917
     app: FastAPI,
     fake_runner: FakeRunnerFactory,
@@ -182,7 +180,6 @@ async def test_pause_from_api_with_master_key(  # noqa: PLR0917
 
 @pytest.mark.req("SAF-4")
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 async def test_dispatch_refused_and_queued_runs_held(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -233,7 +230,6 @@ async def test_dispatch_refused_and_queued_runs_held(  # noqa: PLR0917
 
 @pytest.mark.req("SAF-4")
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 async def test_pause_and_resume_audited(
     workspace: WorkspaceHandle,
     db: DbUrls,
@@ -272,7 +268,6 @@ async def test_pause_and_resume_audited(
 
 @pytest.mark.req("SAF-4")
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 async def test_no_key_can_resume(  # noqa: PLR0917
     app: FastAPI,
     fake_runner: FakeRunnerFactory,
@@ -322,7 +317,6 @@ async def test_no_key_can_resume(  # noqa: PLR0917
 
 @pytest.mark.req("SAF-4")
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 async def test_resume_releases_held_runs(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -372,7 +366,6 @@ GUARD_POINTS = {
 @pytest.mark.req("SAF-4")
 @pytest.mark.wp("P2-09")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 @pytest.mark.parametrize("point", list(GUARD_POINTS))
 async def test_pause_guards_before_flip_and_before_send(  # noqa: PLR0917
     point: str,
