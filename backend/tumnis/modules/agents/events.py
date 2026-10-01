@@ -10,6 +10,13 @@
 - `agents.deliver_run_signal` listens to `run.signal` (P2-04): it sends the signal to the
   run's workflow with the event id as the idempotency key, so a redelivery sends nothing
   twice.
+- `agents.cancel_paused_runs` listens to `agents.paused` (P2-09, SAF-4): in one
+  transaction, `run.signal{cancel}` (reason `killswitch`, or `project_paused`) for each
+  running or waiting `dispatch_run` run in the pause's scope; each run's workflow stops
+  its agent through the adapter and ends it `cancelled`.
+- `agents.release_held_runs` listens to `agents.resumed` (P2-09): sends `release` to each
+  held run in scope that no other pause holds (send idempotency key `<event id>:<run>`),
+  and its workflow goes on.
 - `agents.apply_review_decision` listens to `human.decided`: accepting a
   `provisioning_failed` item provisions the project's profile again
   (`api.retry_provision`); accepting a `result` item moves its task to Done, and rejecting
@@ -72,15 +79,18 @@ from tumnis.modules.tasks import api as tasks
 
 __all__ = [
     "APPROVAL_SUBSCRIBER",
+    "CANCEL_PAUSED_SUBSCRIBER",
     "DIGEST_SUBSCRIBERS",
     "DISPATCH_SUBSCRIBER",
     "ENRICH_CREATE_SUBSCRIBER",
     "ENRICH_UPDATE_SUBSCRIBER",
     "PROVISION_SUBSCRIBER",
     "QUESTION_SUBSCRIBER",
+    "RELEASE_HELD_SUBSCRIBER",
     "REVIEW_SUBSCRIBER",
     "SIGNAL_SUBSCRIBER",
     "apply_review_decision",
+    "cancel_paused_runs",
     "deliver_run_signal",
     "digest_subscriber_name",
     "enrich_on_create",
@@ -88,6 +98,7 @@ __all__ = [
     "project_has_agent",
     "provision_project",
     "record_digest_entries",
+    "release_held_runs",
     "start_approval_flow",
     "start_dispatch",
     "start_question_flow",
@@ -101,6 +112,8 @@ DISPATCH_SUBSCRIBER: Final = "agents.start_dispatch"
 SIGNAL_SUBSCRIBER: Final = "agents.deliver_run_signal"
 ENRICH_CREATE_SUBSCRIBER: Final = "agents.enrich_on_create"
 ENRICH_UPDATE_SUBSCRIBER: Final = "agents.enrich_on_update"
+CANCEL_PAUSED_SUBSCRIBER: Final = "agents.cancel_paused_runs"
+RELEASE_HELD_SUBSCRIBER: Final = "agents.release_held_runs"
 QUESTION_SUBSCRIBER: Final = "agents.start_question_flow"
 APPROVAL_SUBSCRIBER: Final = "agents.start_approval_flow"
 
@@ -170,6 +183,37 @@ async def deliver_run_signal(envelope: EventEnvelope) -> None:
         payload.get("reason"),
         key=str(envelope.event_id),
     )
+
+
+@subscribe("agents.paused", name=CANCEL_PAUSED_SUBSCRIBER)
+async def cancel_paused_runs(envelope: EventEnvelope) -> None:
+    payload = envelope.payload
+    scope = str(payload["scope"])
+    project = payload.get("project_id")
+    project_id = None if project is None else UUID(str(project))
+    ctx = WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
+    async with tenant_session(ctx) as s:
+        for run_id in await api.runs_to_cancel(s, scope, project_id):
+            await api.signal_run(
+                ctx,
+                run_id,
+                "cancel",
+                reason=api.CANCEL_REASON[scope],
+                session=s,
+                now=envelope.occurred_at,
+            )
+
+
+@subscribe("agents.resumed", name=RELEASE_HELD_SUBSCRIBER)
+async def release_held_runs(envelope: EventEnvelope) -> None:
+    payload = envelope.payload
+    project = payload.get("project_id")
+    project_id = None if project is None else UUID(str(project))
+    ctx = WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
+    async with tenant_session(ctx) as s:
+        free = await api.held_runs_free(s, str(payload["scope"]), project_id)
+    for run_id in free:
+        await signals.release_held(run_id, key=f"{envelope.event_id}:{run_id}")
 
 
 @subscribe("human.decided", name=REVIEW_SUBSCRIBER)

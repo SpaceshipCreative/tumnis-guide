@@ -10,6 +10,7 @@ from typing import Annotated, Final
 from uuid import UUID
 
 from fastapi import Depends, Query, Request
+from pydantic import BaseModel, StringConstraints
 
 from tumnis.core import agent_surface as surface
 from tumnis.core.audit_router import require_session
@@ -271,6 +272,79 @@ async def request_approval(
     asked = await surface.rest_twin_detached(request, tools.REQUEST_APPROVAL, raw)
     assert isinstance(asked, api.HumanWaitOut)  # noqa: S101  # the op's output model
     return asked
+
+
+# --- The kill switch (P2-09, SAF-4) ------------------------------------------------------------
+
+
+class ProjectPauseIn(BaseModel):
+    reason: api.ReasonText
+
+
+class ProjectResumeIn(BaseModel):
+    reason: Annotated[str, StringConstraints(max_length=500)] | None = None
+
+
+@router.get("/agents/pause")
+@route_policy(RoutePolicy(auth="session"))
+async def get_pauses(ctx: Session, session: SessionDep) -> api.PausesOut:
+    """What is paused now: the whole workspace and each paused project (the kill switch's
+    state in the app)."""
+    return await api.open_pauses(session)
+
+
+@router.post("/agents/pause")
+@route_policy(RoutePolicy(auth="session_or_key", scopes=frozenset({"delegate"}), idempotent=True))
+async def pause_agents(
+    body: tools.PauseBody, request: Request, session: SessionDep
+) -> api.PauseOut:
+    """The kill switch: pause every agent (`scope` workspace) or one project's, with a
+    reason. Running runs are cancelled through their agent, queued runs held, new runs
+    refused (409 `agents_paused`) until a person resumes in the app. The person's control
+    in the app, and the `pause_agents` tool's twin for the master key (403 `master_only`
+    for any other key)."""
+    principal = principal_of(request)
+    if principal.kind == "session":
+        inp = api.PauseIn(scope=body.scope, project_id=body.project_id, reason=body.reason)
+        return await api.pause(
+            principal.workspace_context(), inp, now=_clock(request).now(), session=session
+        )
+    paused = await surface.rest_twin(request, session, tools.PAUSE_AGENTS, body.model_dump())
+    assert isinstance(paused, api.PauseOut)  # noqa: S101  # the op's output model
+    return paused
+
+
+@router.post("/agents/resume")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def resume_agents(
+    body: api.ResumeIn, request: Request, ctx: Session, session: SessionDep
+) -> api.ResumeOut:
+    """Let the agents run again (a person, in the app; no key or tool can): held runs
+    start. Nothing paused: nothing changes."""
+    return await api.resume(ctx, body, now=_clock(request).now(), session=session)
+
+
+@router.post("/projects/{project_id}/pause")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def pause_project(
+    project_id: UUID, body: ProjectPauseIn, request: Request, ctx: Session, session: SessionDep
+) -> api.PauseOut:
+    """Pause one project's agents, with a reason: its running runs are cancelled, its
+    queued runs held and its new runs refused until it is resumed. 404 for an unknown
+    project."""
+    inp = api.PauseIn(scope="project", project_id=project_id, reason=body.reason)
+    return await api.pause(ctx, inp, now=_clock(request).now(), session=session)
+
+
+@router.post("/projects/{project_id}/resume")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def resume_project(
+    project_id: UUID, body: ProjectResumeIn, request: Request, ctx: Session, session: SessionDep
+) -> api.ResumeOut:
+    """Let one project's agents run again: its held runs start, unless all agents are
+    still paused."""
+    inp = api.ResumeIn(scope="project", project_id=project_id, reason=body.reason)
+    return await api.resume(ctx, inp, now=_clock(request).now(), session=session)
 
 
 # --- Digests (P2-03): the get_project_digest and get_workspace_digest tools' twins ----------

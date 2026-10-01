@@ -13,7 +13,7 @@ from uuid import UUID, uuid4, uuid5
 
 from prometheus_client import Gauge
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import RowMapping, Table, insert, select, text, update
+from sqlalchemy import RowMapping, Table, Text, cast, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
@@ -29,7 +29,7 @@ from tumnis.core.outbox import emit
 from tumnis.core.pagination import Page, SortKey, paginate
 from tumnis.core.routing import register_project_lookup
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
-from tumnis.core.types import ActorRef, Interval
+from tumnis.core.types import SYSTEM_ACTOR, ActorRef, Interval
 from tumnis.core.versioning import NotFound, Version, update_versioned
 from tumnis.modules.agents.adapters.port import (
     AgentAdapter,
@@ -65,6 +65,7 @@ from tumnis.modules.agents.human import (
     request_approval,
 )
 from tumnis.modules.agents.models import (
+    AgentPause,
     AgentProfile,
     RunEventRow,
     Runner,
@@ -73,6 +74,8 @@ from tumnis.modules.agents.models import (
 )
 from tumnis.modules.agents.packet_builder import ENRICH_TIMEOUT_S_DEFAULT, TaskPacket
 from tumnis.modules.agents.payloads import (
+    AgentsPausedV1,
+    AgentsResumedV1,
     RunFinishedV1,
     RunRequestedV1,
     RunSignalV1,
@@ -88,11 +91,15 @@ from tumnis.modules.agents.review_kinds import (
 )
 from tumnis.modules.agents.rules import (
     ACTIVE_RUN_STATUSES,
+    MAX_TASKS_PER_RUN_DEFAULT,
     NAME_RE,
     TERMINAL_STATUSES,
     DispatchProfile,
     DispatchTask,
     InvalidProfileName,
+    PauseScope,
+    PauseState,
+    PauseView,
     Refusal,
     RunKind,
     RunnerStatus,
@@ -100,6 +107,8 @@ from tumnis.modules.agents.rules import (
     TokenReach,
     allowlist_drift,
     can_dispatch,
+    over_task_limit,
+    pause_state,
     run_token_scopes,
     run_transition,
     runner_status,
@@ -145,6 +154,7 @@ __all__ = [
     "HumanWaitOut",
     "MasterAgentOut",
     "McpServerInfo",
+    "PauseScope",
     "PlanningRequest",
     "PlanningResult",
     "ProfileIn",
@@ -1131,6 +1141,7 @@ async def profile_key(s: AsyncSession, profile_id: UUID) -> UUID | None:
 # --- Runs (P2-04, FR-5.4, FR-5.5, FR-5.8, SAF-5, R-23, R-29) ---------------------------------
 
 LIVE_RUN: Final = "run"
+LIVE_PAUSE: Final = "agent_pause"  # the kill switch's state in the app (P2-09)
 RUN_EVENTS_LIMIT_DEFAULT: Final = 100
 RUN_EVENTS_LIMIT_MAX: Final = 500
 # A protocol-2 `stream` line's kind -> the run event's kind (the runner's handler and the
@@ -1143,12 +1154,21 @@ TIME_LIMIT: Final = "time_limit"
 WALL_CLOCK_CEILING: Final = "wall_clock_ceiling"
 RUNNER_LOST: Final = "runner_lost"
 STOPPED_BY_USER: Final = "stopped_by_user"
+KILLSWITCH: Final = "killswitch"  # the workspace pause (P2-09)
+PROJECT_PAUSED: Final = "project_paused"  # a project pause (P2-09)
+TASKS_PER_RUN: Final = "tasks_per_run"  # the run created too many tasks (SAF-5, P2-09)
+# Limits that stop a run as `cancelled` with a `run_limit` review item (SAF-5: hitting a
+# limit stops the run and puts it in the review queue).
+CANCEL_LIMITS: Final = frozenset({TASKS_PER_RUN})
 # The system line that closes a run's log, by stop reason (or status when none names one).
 CLOSING_LINES: Final[dict[str, str]] = {
     TIME_LIMIT: "Stopped at the time limit",
     WALL_CLOCK_CEILING: "Stopped at the wall-clock limit",
     RUNNER_LOST: "Stopped: the runner stopped answering",
     STOPPED_BY_USER: "Stopped by you",
+    KILLSWITCH: "Stopped: all agents were paused",
+    PROJECT_PAUSED: "Stopped: the project's agents were paused",
+    TASKS_PER_RUN: "Stopped: the run created more tasks than its limit",
     "cancelled": "Stopped",
     "failed": "Stopped: the run failed",
     "timed_out": "Stopped at the time limit",
@@ -1287,7 +1307,8 @@ async def request_run(  # the plan's signature, plus the context and session
     on the runs queue (R-23: the Run button, reject-and-rerun and every later caller come
     here). 409 `run_already_active` (also when a concurrent request won the partial unique
     index), `status_not_runnable` or `no_ready_profile`, 422 `label_not_runnable`, 404 for
-    a task the caller cannot see."""
+    a task the caller cannot see; 409 `agents_paused` while the workspace or the task's
+    project is paused (P2-09)."""
     from tumnis.core import tenancy  # noqa: PLC0415
     from tumnis.core.clock import SystemClock  # noqa: PLC0415
 
@@ -1297,6 +1318,10 @@ async def request_run(  # the plan's signature, plus the context and session
     at = now or SystemClock().now()
     async with session_for(ctx, session) as s:
         task = await tasks.get_task(s, task_id)
+        if await pause_state_for(s, task.project_id) != "running":
+            raise ProblemError(
+                409, "agents_paused", "Agents are paused; a person resumes them in the app"
+            )
         profile = await _project_profile(s, task.project_id)
         kinds: list[str] = list(
             await s.scalars(
@@ -1482,9 +1507,10 @@ async def finish_run_in(
     """Ends the run in the caller's transaction, once: status, finished_at and stop_reason;
     its task tokens revoked and redacted from what is stored (R-27, decision 31); a closing
     system line in its log for anything but success; `run.finished`; a `run_limit` review
-    item for a time limit. The task keeps its status. A run already ended (the sweep, the
-    protocol-1 cancel fallback, a replayed step) is left as it is: its stored status and
-    seq come back and nothing is emitted twice."""
+    item for a time limit or a cancel at a limit (`CANCEL_LIMITS`, P2-09). The task keeps
+    its status. A run already ended (the sweep, the protocol-1 cancel fallback, a replayed
+    step) is left as it is: its stored status and seq come back and nothing is emitted
+    twice."""
     row = (
         await s.execute(
             select(
@@ -1537,7 +1563,7 @@ async def finish_run_in(
         ),
         occurred_at=now,
     )
-    if status is RunStatus.TIMED_OUT:
+    if status is RunStatus.TIMED_OUT or (status is RunStatus.CANCELLED and reason in CANCEL_LIMITS):
         await tasks.add_review_item(
             RUN_LIMIT,
             target=tasks.TargetRef(type="run", id=run_id),
@@ -1610,6 +1636,10 @@ async def cancel_run(
             raise NotFound("runs", run_id)
         if status in (RunStatus.QUEUED.value, RunStatus.HELD.value):
             await finish_run_in(s, ctx, run_id, RunStatus.CANCELLED, reason, now=now)
+            if status == RunStatus.HELD.value:  # its workflow waits for a release: wake it
+                await emit(
+                    s, RunSignalV1(run_id=run_id, kind="cancel", reason=reason), occurred_at=now
+                )
         elif status in ACTIVE_RUN:
             await emit(s, RunSignalV1(run_id=run_id, kind="cancel", reason=reason), occurred_at=now)
         return await get_run(s, run_id)
@@ -1675,6 +1705,371 @@ async def accept_result(
         )
         await emit(s, RunSignalV1(run_id=inp.run_id, kind="result"), occurred_at=now)
     return result
+
+
+# --- The kill switch and runaway limits (P2-09, SAF-4, SAF-5) --------------------------------
+
+_pauses: Table = AgentPause.__table__  # type: ignore[assignment]
+PAUSE_AUDIT: Final[dict[str, tuple[str, str]]] = {  # scope -> (pause action, resume action)
+    "workspace": ("killswitch.on", "killswitch.off"),
+    "project": ("project.paused", "project.resumed"),
+}
+CANCEL_REASON: Final[dict[str, str]] = {"workspace": KILLSWITCH, "project": PROJECT_PAUSED}
+ReasonText = Annotated[str, StringConstraints(min_length=1, max_length=500, pattern=r"\S")]
+
+
+class PauseIn(BaseModel):
+    """Pause every agent (`scope` workspace) or one project's (`scope` project and its
+    `project_id`), with the reason the audit log keeps."""
+
+    scope: PauseScope
+    project_id: UUID | None = None
+    reason: ReasonText
+
+
+class PauseOut(BaseModel):
+    schema_version: Literal[1] = 1
+    pause_id: UUID
+    cancelled_runs: int  # running or waiting at the time of the request; they end shortly
+    held_runs: int  # queued runs now held until a person resumes
+    tainted: bool = False  # the pause came through a key with no run (R-31, P2-08)
+
+
+class ResumeIn(BaseModel):
+    scope: PauseScope
+    project_id: UUID | None = None
+    reason: Annotated[str, StringConstraints(max_length=500)] | None = None
+
+
+class ResumeOut(BaseModel):
+    schema_version: Literal[1] = 1
+    pause_id: UUID | None  # None: nothing was paused
+    released_runs: int  # held runs nothing holds any more; they start shortly
+
+
+class OpenPause(BaseModel):
+    pause_id: UUID
+    scope: PauseScope
+    project_id: UUID | None
+    reason: str
+    paused_at: datetime
+    paused_by: str
+
+
+class PausesOut(BaseModel):
+    """What is paused now: the workspace (or None), and each paused project."""
+
+    schema_version: Literal[1] = 1
+    workspace: OpenPause | None
+    projects: list[OpenPause]
+
+
+def _open() -> Any:
+    return _pauses.c.resumed_at.is_(None) & _pauses.c.deleted_at.is_(None)
+
+
+def _scope_check(scope: str, project_id: UUID | None) -> None:
+    if (scope == "project") != (project_id is not None):
+        raise ProblemError(
+            422,
+            "validation_error",
+            "A project pause names its project_id; a workspace pause names none",
+        )
+
+
+async def pause_state_for(s: AsyncSession, project_id: UUID | None) -> PauseState:
+    """Whether the project's runs may go on (`rules.pause_state` over the open pauses): read
+    by `request_run`, `check_pause`, `prepare_run` and `send_to_agent`."""
+    rows = (
+        await s.execute(
+            select(_pauses.c.scope, _pauses.c.project_id).where(
+                _open(),
+                (_pauses.c.scope == "workspace") | (_pauses.c.project_id == project_id),
+            )
+        )
+    ).all()
+    return pause_state(
+        [PauseView(scope=r.scope, project_id=r.project_id) for r in rows], project_id
+    )
+
+
+def _runs_in_scope(scope: str, project_id: UUID | None) -> Any:
+    """Runs (with their project) a pause of this scope covers."""
+    stmt = select(_runs.c.id).select_from(
+        _runs.join(_profiles, _profiles.c.id == _runs.c.profile_id)
+    )
+    if scope == "project":
+        stmt = stmt.where(_profiles.c.project_id == project_id)
+    return stmt.where(_runs.c.deleted_at.is_(None))
+
+
+def dispatched(stmt: Any) -> Any:
+    """Only `dispatch_run` runs (its workflow id is the run id) and the `supervise_run`
+    that took one over after a deploy (P2-05, `supervise:<run>:<version>`): a `run_skill`
+    run (P1-04 enrichment and planning) answers on its own timeout and has no cancel path
+    here."""
+    run_text = cast(_runs.c.id, Text)
+    supervised = _runs.c.workflow_id.startswith("supervise:" + run_text + ":")  # a uuid: no %, _
+    return stmt.where((_runs.c.workflow_id == run_text) | supervised)
+
+
+async def runs_to_cancel(s: AsyncSession, scope: str, project_id: UUID | None) -> list[UUID]:
+    """The running or waiting `dispatch_run` runs a pause of this scope stops."""
+    stmt = _runs_in_scope(scope, project_id).where(
+        _runs.c.status.in_((RunStatus.RUNNING.value, RunStatus.WAITING_ON_HUMAN.value))
+    )
+    return list(await s.scalars(dispatched(stmt).order_by(_runs.c.id)))
+
+
+async def _hold_queued(s: AsyncSession, scope: str, project_id: UUID | None) -> int:
+    """Queued runs in scope -> held (their workflow waits for a release when it starts)."""
+    queued = _runs_in_scope(scope, project_id).where(_runs.c.status == RunStatus.QUEUED.value)
+    held = list(
+        await s.scalars(
+            update(_runs)
+            # The status again on the target row: under READ COMMITTED a run that
+            # prepare_run flipped to running while this waited on its lock is rechecked
+            # here, and the subquery's snapshot would not exclude it.
+            .where(
+                _runs.c.id.in_(queued.scalar_subquery()),
+                _runs.c.status == RunStatus.QUEUED.value,
+            )
+            .values(status=RunStatus.HELD.value, state_seq=_runs.c.state_seq + 1)
+            .returning(_runs.c.id)
+        )
+    )
+    for run_id in held:
+        mark_changed(s, LIVE_RUN, run_id)
+    return len(held)
+
+
+async def _open_pause(s: AsyncSession, scope: str, project_id: UUID | None) -> RowMapping | None:
+    return (
+        (
+            await s.execute(
+                select(_pauses).where(
+                    _open(), _pauses.c.scope == scope, _pauses.c.project_id == project_id
+                )
+                if project_id is not None
+                else select(_pauses).where(
+                    _open(), _pauses.c.scope == scope, _pauses.c.project_id.is_(None)
+                )
+            )
+        )
+        .mappings()
+        .first()
+    )
+
+
+async def pause(
+    ctx: WorkspaceContext,
+    inp: PauseIn,
+    *,
+    now: datetime,
+    session: AsyncSession | None = None,
+    tainted: bool = False,
+) -> PauseOut:
+    """The kill switch (SAF-4), from the app or the master's `pause_agents`: in one
+    transaction the pause row, queued runs in scope held, the audit row
+    (`killswitch.on`, or `project.paused` naming the project) and `agents.paused`, whose
+    subscriber cancels the running and waiting runs in scope through their workflows. A
+    scope already paused answers its open pause and changes nothing. `tainted`: a write
+    by a key with no run, such as the master's (R-31), kept on the row and answered.
+    404 for a project the caller cannot see (before anything else); 422 for a scope and
+    project_id that do not match."""
+    async with session_for(ctx, session) as s:
+        # The project first: an id the caller cannot see is 404 whatever the scope (A0.3).
+        if inp.project_id is not None and not await projects.project_exists(s, inp.project_id):
+            raise NotFound("projects", inp.project_id)
+        _scope_check(inp.scope, inp.project_id)
+        existing = await _open_pause(s, inp.scope, inp.project_id)
+        if existing is not None:
+            return PauseOut(
+                pause_id=existing["id"],
+                cancelled_runs=0,
+                held_runs=0,
+                tainted=existing["tainted"],
+            )
+        pause_id = uuid7()
+        try:
+            async with s.begin_nested():
+                await s.execute(
+                    insert(_pauses).values(
+                        id=pause_id,
+                        scope=inp.scope,
+                        project_id=inp.project_id,
+                        paused_at=now,
+                        paused_by=str(ctx.actor),
+                        reason=inp.reason,
+                        tainted=tainted,
+                    )
+                )
+        except IntegrityError:  # a concurrent pause of the same scope won
+            again = await _open_pause(s, inp.scope, inp.project_id)
+            if again is None:
+                raise
+            return PauseOut(
+                pause_id=again["id"], cancelled_runs=0, held_runs=0, tainted=again["tainted"]
+            )
+        mark_changed(s, LIVE_PAUSE, pause_id)
+        held = await _hold_queued(s, inp.scope, inp.project_id)
+        cancelled = len(await runs_to_cancel(s, inp.scope, inp.project_id))
+        await audit.record(
+            s,
+            PAUSE_AUDIT[inp.scope][0],
+            target=None if inp.project_id is None else ("project", inp.project_id),
+            reason=inp.reason,
+            details={"pause_id": str(pause_id), "cancelled_runs": cancelled, "held_runs": held},
+            occurred_at=now,
+        )
+        await emit(
+            s,
+            AgentsPausedV1(
+                pause_id=pause_id,
+                scope=inp.scope,
+                project_id=inp.project_id,
+                reason=inp.reason,
+                paused_at=now,
+            ),
+            occurred_at=now,
+        )
+    return PauseOut(pause_id=pause_id, cancelled_runs=cancelled, held_runs=held, tainted=tainted)
+
+
+async def held_runs_free(s: AsyncSession, scope: str, project_id: UUID | None) -> list[UUID]:
+    """The held runs in scope that no open pause holds any more."""
+    rows = (
+        await s.execute(
+            select(_runs.c.id, _profiles.c.project_id)
+            .select_from(_runs.join(_profiles, _profiles.c.id == _runs.c.profile_id))
+            .where(
+                _runs.c.status == RunStatus.HELD.value,
+                _runs.c.deleted_at.is_(None),
+                *([_profiles.c.project_id == project_id] if scope == "project" else []),
+            )
+            .order_by(_runs.c.id)
+        )
+    ).all()
+    return [r.id for r in rows if await pause_state_for(s, r.project_id) == "running"]
+
+
+async def resume(
+    ctx: WorkspaceContext,
+    inp: ResumeIn,
+    *,
+    now: datetime,
+    session: AsyncSession | None = None,
+) -> ResumeOut:
+    """A person lets the agents run again (session only: no key or tool resumes, SAF-4):
+    the open pause of the scope resumed, the audit row (`killswitch.off`, or
+    `project.resumed`) and `agents.resumed`, whose subscriber releases the held runs no
+    other pause holds. Nothing paused: nothing changes (`pause_id` None)."""
+    async with session_for(ctx, session) as s:
+        # The project first: an id the caller cannot see is 404 whatever the scope (A0.3).
+        if inp.project_id is not None and not await projects.project_exists(s, inp.project_id):
+            raise NotFound("projects", inp.project_id)
+        _scope_check(inp.scope, inp.project_id)
+        existing = await _open_pause(s, inp.scope, inp.project_id)
+        if existing is None:
+            return ResumeOut(pause_id=None, released_runs=0)
+        # Still open on the row itself: of two concurrent resumes, the one that waited on
+        # the other's row lock finds it resumed and changes nothing (one audit row, one
+        # `agents.resumed`).
+        resumed = await s.scalar(
+            update(_pauses)
+            .where(_pauses.c.id == existing["id"], _open())
+            .values(resumed_at=now, resumed_by=str(ctx.actor), resume_reason=inp.reason)
+            .returning(_pauses.c.id)
+        )
+        if resumed is None:
+            return ResumeOut(pause_id=None, released_runs=0)
+        mark_changed(s, LIVE_PAUSE, existing["id"])
+        released = len(await held_runs_free(s, inp.scope, inp.project_id))
+        await audit.record(
+            s,
+            PAUSE_AUDIT[inp.scope][1],
+            target=None if inp.project_id is None else ("project", inp.project_id),
+            reason=inp.reason,
+            details={"pause_id": str(existing["id"]), "released_runs": released},
+            occurred_at=now,
+        )
+        await emit(
+            s,
+            AgentsResumedV1(
+                pause_id=existing["id"],
+                scope=inp.scope,
+                project_id=inp.project_id,
+                resumed_at=now,
+            ),
+            occurred_at=now,
+        )
+    return ResumeOut(pause_id=existing["id"], released_runs=released)
+
+
+async def open_pauses(s: AsyncSession) -> PausesOut:
+    """What is paused now (the kill switch's state in the app)."""
+    rows = (
+        (await s.execute(select(_pauses).where(_open()).order_by(_pauses.c.paused_at)))
+        .mappings()
+        .all()
+    )
+    found = [
+        OpenPause(
+            pause_id=r["id"],
+            scope=r["scope"],
+            project_id=r["project_id"],
+            reason=r["reason"],
+            paused_at=r["paused_at"],
+            paused_by=r["paused_by"],
+        )
+        for r in rows
+    ]
+    workspace = next((p for p in found if p.scope == "workspace"), None)
+    return PausesOut(workspace=workspace, projects=[p for p in found if p.scope == "project"])
+
+
+async def count_run_task(s: AsyncSession, run_id: UUID, *, now: datetime) -> None:
+    """A task (or subtask) created with a run's task token counts against the run's limit
+    (SAF-5): `runs.tasks_created` + 1 in the caller's transaction. Past the project's
+    `max_tasks_per_run` (default 20), a separate transaction sends the run
+    `run.signal{limit, tasks_per_run}` (its workflow stops the agent and ends the run
+    `cancelled` with a `run_limit` review item), and 409 `run_limit_exceeded` rolls the
+    caller's transaction back, so the task is not created. A token whose run has no row
+    counts nothing. Registered with `tasks.api.register_run_task_counter`."""
+    row = (
+        await s.execute(
+            update(_runs)
+            .where(_runs.c.id == run_id)
+            .values(tasks_created=_runs.c.tasks_created + 1)
+            .returning(_runs.c.workspace_id, _runs.c.tasks_created, _runs.c.status)
+        )
+    ).first()
+    if row is None:
+        return
+    project_id = await _run_project_id(s, run_id)
+    limit = (
+        MAX_TASKS_PER_RUN_DEFAULT
+        if project_id is None
+        else (await projects.get_policy(s, project_id)).max_tasks_per_run
+    )
+    if not over_task_limit(row.tasks_created, limit):
+        return
+    if row.status in ACTIVE_RUN:
+        # Only an outbox row: the caller's transaction holds the run's row lock.
+        async with tenant_session(WorkspaceContext(row.workspace_id, SYSTEM_ACTOR)) as own:
+            await emit(
+                own,
+                RunSignalV1(run_id=run_id, kind="limit", reason=TASKS_PER_RUN),
+                occurred_at=now,
+            )
+    raise ProblemError(
+        409,
+        "run_limit_exceeded",
+        f"This run may create at most {limit} tasks; it has been stopped",
+    )
+
+
+tasks.register_run_task_counter(count_run_task)
 
 
 # --- Enrichment (P1-08, R-30) ----------------------------------------------------------------

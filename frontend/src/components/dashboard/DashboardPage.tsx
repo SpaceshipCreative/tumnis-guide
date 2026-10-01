@@ -16,6 +16,7 @@ import { CloseDayPanel } from "./CloseDayPanel";
 import { FitOfferList } from "./FitOfferRow";
 import { FocusLevel } from "./FocusLevel";
 import { formatToday, localDay, localHour } from "./format";
+import { KillSwitch } from "./KillSwitch";
 import { ProjectCardGrid } from "./ProjectCardGrid";
 import {
   deployStatusQuery,
@@ -127,7 +128,8 @@ export function DashboardPage() {
             {formatToday(new Date(), timeZone)}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <KillSwitch />
           <FocusLevel />
           <CloseDayButton
             timeZone={timeZone}

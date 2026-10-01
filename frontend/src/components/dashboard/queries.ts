@@ -5,6 +5,7 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import {
+  agentsGetPausesOptions,
   coolifyListDeployStatusOptions,
   planningGetAlternatesOptions,
   planningGetPlanOptions,
@@ -75,6 +76,14 @@ export function reviewCountQuery() {
 export function deployStatusQuery() {
   return queryOptions({
     ...coolifyListDeployStatusOptions(),
+    retry: retryOnce,
+  });
+}
+
+/** What is paused now (P2-09): the kill switch in the header and the project pause. */
+export function pausesQuery() {
+  return queryOptions({
+    ...agentsGetPausesOptions(),
     retry: retryOnce,
   });
 }
