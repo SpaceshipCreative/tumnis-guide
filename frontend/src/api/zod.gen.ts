@@ -272,6 +272,16 @@ export const zFileTouched = z.object({
 });
 
 /**
+ * FitOffer
+ *
+ * What a task with no big enough gap is offered (J6).
+ */
+export const zFitOffer = z.object({
+  move_to: z.iso.date().nullable(),
+  split: z.array(z.int()).nullable(),
+});
+
+/**
  * FolderIn
  */
 export const zFolderIn = z.object({
@@ -518,10 +528,9 @@ export const zPlanIssueOut = z.object({
   estimate_minutes: z.int().nullable(),
   id: z.uuid(),
   kind: z.string(),
-  move_to: z.iso.date().nullable(),
+  offer: zFitOffer,
   resolved_at: z.iso.datetime().nullable(),
   review_item_id: z.uuid().nullable(),
-  split: z.array(z.int()).nullable(),
   task_id: z.uuid(),
   title: z.string(),
 });

@@ -50,6 +50,7 @@ from tumnis.modules.planning.rules import (
     MOVE_LOOKAHEAD_WORKING_DAYS,
     PRIORITY_RANK,
     EventDTO,
+    FitOffer,
     PlanContext,
     PlannedItem,
     PlanPick,
@@ -1033,8 +1034,7 @@ class PlanIssueOut(BaseModel):
     title: str
     kind: str
     estimate_minutes: int | None
-    split: list[int] | None
-    move_to: date | None
+    offer: FitOffer  # split chunks and the day to move to, as offered when the plan was built
     review_item_id: UUID | None
     resolved_at: datetime | None
 
@@ -1135,8 +1135,7 @@ async def _plan_out(s: AsyncSession, plan: Any, zone: str) -> PlanOut:
                 title=found[row.task_id].title,
                 kind=row.kind,
                 estimate_minutes=found[row.task_id].estimate_minutes,
-                split=row.offer.get("split"),
-                move_to=row.offer.get("move_to"),
+                offer=FitOffer.model_validate(row.offer),
                 review_item_id=row.review_item_id,
                 resolved_at=row.resolved_at,
             )

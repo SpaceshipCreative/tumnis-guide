@@ -359,6 +359,7 @@ export type {
   EstimateBody,
   Evaluation,
   FileTouched,
+  FitOffer,
   FolderIn,
   ForeignReach,
   FreeBlockOut,

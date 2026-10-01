@@ -858,6 +858,22 @@ export type FileTouched = {
 };
 
 /**
+ * FitOffer
+ *
+ * What a task with no big enough gap is offered (J6).
+ */
+export type FitOffer = {
+  /**
+   * Move To
+   */
+  move_to: string | null;
+  /**
+   * Split
+   */
+  split: Array<number> | null;
+};
+
+/**
  * FolderIn
  */
 export type FolderIn = {
@@ -1480,10 +1496,7 @@ export type PlanIssueOut = {
    * Kind
    */
   kind: string;
-  /**
-   * Move To
-   */
-  move_to: string | null;
+  offer: FitOffer;
   /**
    * Resolved At
    */
@@ -1492,10 +1505,6 @@ export type PlanIssueOut = {
    * Review Item Id
    */
   review_item_id: string | null;
-  /**
-   * Split
-   */
-  split: Array<number> | null;
   /**
    * Task Id
    */

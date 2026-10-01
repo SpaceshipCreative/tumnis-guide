@@ -1529,6 +1529,43 @@
         "title": "FileTouched",
         "type": "object"
       },
+      "FitOffer": {
+        "description": "What a task with no big enough gap is offered (J6).",
+        "properties": {
+          "move_to": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Move To"
+          },
+          "split": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split"
+          }
+        },
+        "required": [
+          "split",
+          "move_to"
+        ],
+        "title": "FitOffer",
+        "type": "object"
+      },
       "FolderIn": {
         "properties": {
           "location_id": {
@@ -2665,17 +2702,8 @@
             "title": "Kind",
             "type": "string"
           },
-          "move_to": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Move To"
+          "offer": {
+            "$ref": "#/components/schemas/FitOffer"
           },
           "resolved_at": {
             "anyOf": [
@@ -2701,20 +2729,6 @@
             ],
             "title": "Review Item Id"
           },
-          "split": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "integer"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Split"
-          },
           "task_id": {
             "format": "uuid",
             "title": "Task Id",
@@ -2731,8 +2745,7 @@
           "title",
           "kind",
           "estimate_minutes",
-          "split",
-          "move_to",
+          "offer",
           "review_item_id",
           "resolved_at"
         ],
