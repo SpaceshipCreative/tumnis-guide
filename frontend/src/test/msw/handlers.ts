@@ -2,6 +2,7 @@ import { http, HttpResponse, type RequestHandler } from "msw";
 
 import type { PageReviewItemOut, PolicyOut } from "../../api/types.gen";
 import { dashboardDefaults } from "./dashboard";
+import { focusDefaults } from "./focus";
 import { workingHours } from "./planning";
 
 /**
@@ -88,4 +89,6 @@ export const handlers: RequestHandler[] = [
     } satisfies PolicyOut),
   ),
   ...dashboardDefaults,
+  // The focus bar on every page (P2-15): Quiet, nothing to show.
+  ...focusDefaults,
 ];
