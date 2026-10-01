@@ -263,7 +263,6 @@ async def test_unscripted_fake_dispatch_is_recorded_and_left_running(
 
 
 @pytest.mark.req("A1.2", "A2.6")
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_a_silent_fake_run_ends_when_a_reset_removes_it(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
 ) -> None:
