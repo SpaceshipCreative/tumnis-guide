@@ -23,6 +23,7 @@ SYNC_WORKER_CONCURRENCY = 4  # plan default
 GITHUB_QUEUE = "github"  # pull request status reads (P2-13); its own queue: limiters are per queue
 GITHUB_REFRESHES_PER_MINUTE = 15  # each refresh makes four requests, 304s included
 FOCUS_QUEUE = "focus"  # focus_plan and focus_session (P2-15); each parks on its next instant
+NOTIFICATIONS_QUEUE = "notifications"  # browser pushes (P4-05); each retries on its own
 EXTRACT_QUEUE = "extract"  # upload scanning and extraction (P1-16); only `worker-extract` listens
 
 
@@ -50,6 +51,7 @@ def main_queues() -> list[str]:
         GITHUB_QUEUE,
         _projects().ARCHIVE_QUEUE,
         FOCUS_QUEUE,
+        NOTIFICATIONS_QUEUE,
     ]
 
 
@@ -88,6 +90,8 @@ def register_queues() -> None:
     DBOS.register_queue(projects.ARCHIVE_QUEUE, concurrency=projects.ARCHIVE_CONCURRENCY)
     # Focus workflows (P2-15): no limit, each waits on `recv` for its next instant.
     DBOS.register_queue(FOCUS_QUEUE)
+    # Browser pushes (P4-05): one workflow per notification, waiting between its retries.
+    DBOS.register_queue(NOTIFICATIONS_QUEUE)
 
 
 def register_schedules(settings: Settings) -> None:

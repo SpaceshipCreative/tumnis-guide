@@ -1193,6 +1193,33 @@ export const zPurgeOut = z.object({
 });
 
 /**
+ * PushKeysIn
+ */
+export const zPushKeysIn = z.object({
+  auth: z.string().min(1).max(64),
+  p256dh: z.string().min(1).max(128),
+});
+
+/**
+ * PushSubscriptionIn
+ *
+ * A browser's `PushSubscription.toJSON()`: its endpoint and keys.
+ */
+export const zPushSubscriptionIn = z.object({
+  endpoint: z.string().min(1).max(2048),
+  keys: zPushKeysIn,
+});
+
+/**
+ * PushSubscriptionOut
+ */
+export const zPushSubscriptionOut = z.object({
+  created_at: z.iso.datetime(),
+  endpoint: z.string(),
+  id: z.uuid(),
+});
+
+/**
  * Quota
  *
  * Bytes the workspace's knowledge uses (current file versions plus text entries,
@@ -2348,6 +2375,13 @@ export const zUsageRow = z.object({
 });
 
 /**
+ * VapidPublicKeyOut
+ */
+export const zVapidPublicKeyOut = z.object({
+  public_key: z.string(),
+});
+
+/**
  * WebResultLink
  *
  * A branch, pull request, draft or other web address: always `http(s)://`.
@@ -3420,6 +3454,27 @@ export const zPurgesPurgeBody = zPurgeIn;
  * Successful Response
  */
 export const zPurgesPurgeResponse = zPurgeOut;
+
+export const zNotificationsSubscribeBody = zPushSubscriptionIn;
+
+/**
+ * Successful Response
+ */
+export const zNotificationsSubscribeResponse = zPushSubscriptionOut;
+
+export const zNotificationsUnsubscribePath = z.object({
+  subscription_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zNotificationsUnsubscribeResponse = z.void();
+
+/**
+ * Successful Response
+ */
+export const zNotificationsGetVapidPublicKeyResponse = zVapidPublicKeyOut;
 
 export const zTasksListRecurrenceQuery = z.object({
   project_id: z.uuid().nullish(),

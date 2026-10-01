@@ -31,6 +31,7 @@ PUSH_HOSTS: Final = ("fcm.googleapis.com", "updates.push.services.mozilla.com")
 PUSH_HOST_SUFFIXES: Final = (".push.apple.com", ".notify.windows.com")
 MAX_PUSH_BYTES: Final = 4096  # the encrypted body every push service must accept (RFC 8030)
 ECE_OVERHEAD: Final = 103  # aes128gcm: 86-byte header, 1 padding delimiter, 16-byte tag
+PUSH_TTL_S: Final = 24 * 3600  # how long a push service holds a push for an offline browser
 
 
 class PushPayload(BaseModel):

@@ -248,6 +248,15 @@ import type {
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentErrors,
   KnowledgeUploadDocumentResponses,
+  NotificationsGetVapidPublicKeyData,
+  NotificationsGetVapidPublicKeyErrors,
+  NotificationsGetVapidPublicKeyResponses,
+  NotificationsSubscribeData,
+  NotificationsSubscribeErrors,
+  NotificationsSubscribeResponses,
+  NotificationsUnsubscribeData,
+  NotificationsUnsubscribeErrors,
+  NotificationsUnsubscribeResponses,
   PlanningAcceptAllData,
   PlanningAcceptAllErrors,
   PlanningAcceptAllResponses,
@@ -519,6 +528,9 @@ import {
   zKnowledgeTrashDocumentResponse,
   zKnowledgeUpdateDocumentResponse,
   zKnowledgeUploadDocumentResponse,
+  zNotificationsGetVapidPublicKeyResponse,
+  zNotificationsSubscribeResponse,
+  zNotificationsUnsubscribeResponse,
   zPlanningAcceptAllResponse,
   zPlanningAcceptItemResponse,
   zPlanningGetAlternatesResponse,
@@ -2855,6 +2867,75 @@ export const purgesPurge = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Subscribe
+ */
+export const notificationsSubscribe = <ThrowOnError extends boolean = false>(
+  options: Options<NotificationsSubscribeData, ThrowOnError>,
+): RequestResult<
+  NotificationsSubscribeResponses,
+  NotificationsSubscribeErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    NotificationsSubscribeResponses,
+    NotificationsSubscribeErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zNotificationsSubscribeResponse.parseAsync(data),
+    url: "/v1/push/subscriptions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Unsubscribe
+ */
+export const notificationsUnsubscribe = <ThrowOnError extends boolean = false>(
+  options: Options<NotificationsUnsubscribeData, ThrowOnError>,
+): RequestResult<
+  NotificationsUnsubscribeResponses,
+  NotificationsUnsubscribeErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    NotificationsUnsubscribeResponses,
+    NotificationsUnsubscribeErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zNotificationsUnsubscribeResponse.parseAsync(data),
+    url: "/v1/push/subscriptions/{subscription_id}",
+    ...options,
+  });
+
+/**
+ * Get Vapid Public Key
+ */
+export const notificationsGetVapidPublicKey = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<NotificationsGetVapidPublicKeyData, ThrowOnError>,
+): RequestResult<
+  NotificationsGetVapidPublicKeyResponses,
+  NotificationsGetVapidPublicKeyErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    NotificationsGetVapidPublicKeyResponses,
+    NotificationsGetVapidPublicKeyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zNotificationsGetVapidPublicKeyResponse.parseAsync(data),
+    url: "/v1/push/vapid-public-key",
+    ...options,
   });
 
 /**

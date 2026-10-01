@@ -90,6 +90,9 @@ import {
   knowledgeTrashDocument,
   knowledgeUpdateDocument,
   knowledgeUploadDocument,
+  notificationsGetVapidPublicKey,
+  notificationsSubscribe,
+  notificationsUnsubscribe,
   type Options,
   planningAcceptAll,
   planningAcceptItem,
@@ -392,6 +395,15 @@ import type {
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentError,
   KnowledgeUploadDocumentResponse,
+  NotificationsGetVapidPublicKeyData,
+  NotificationsGetVapidPublicKeyError,
+  NotificationsGetVapidPublicKeyResponse,
+  NotificationsSubscribeData,
+  NotificationsSubscribeError,
+  NotificationsSubscribeResponse,
+  NotificationsUnsubscribeData,
+  NotificationsUnsubscribeError,
+  NotificationsUnsubscribeResponse,
   PlanningAcceptAllData,
   PlanningAcceptAllError,
   PlanningAcceptAllResponse,
@@ -4011,6 +4023,88 @@ export const purgesPurgeMutation = (
   };
   return mutationOptions;
 };
+
+/**
+ * Subscribe
+ */
+export const notificationsSubscribeMutation = (
+  options?: Partial<Options<NotificationsSubscribeData>>,
+): UseMutationOptions<
+  NotificationsSubscribeResponse,
+  NotificationsSubscribeError,
+  Options<NotificationsSubscribeData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    NotificationsSubscribeResponse,
+    NotificationsSubscribeError,
+    Options<NotificationsSubscribeData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await notificationsSubscribe({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Unsubscribe
+ */
+export const notificationsUnsubscribeMutation = (
+  options?: Partial<Options<NotificationsUnsubscribeData>>,
+): UseMutationOptions<
+  NotificationsUnsubscribeResponse,
+  NotificationsUnsubscribeError,
+  Options<NotificationsUnsubscribeData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    NotificationsUnsubscribeResponse,
+    NotificationsUnsubscribeError,
+    Options<NotificationsUnsubscribeData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await notificationsUnsubscribe({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const notificationsGetVapidPublicKeyQueryKey = (
+  options?: Options<NotificationsGetVapidPublicKeyData>,
+) => createQueryKey("notificationsGetVapidPublicKey", options);
+
+/**
+ * Get Vapid Public Key
+ */
+export const notificationsGetVapidPublicKeyOptions = (
+  options?: Options<NotificationsGetVapidPublicKeyData>,
+) =>
+  queryOptions<
+    NotificationsGetVapidPublicKeyResponse,
+    NotificationsGetVapidPublicKeyError,
+    NotificationsGetVapidPublicKeyResponse,
+    ReturnType<typeof notificationsGetVapidPublicKeyQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await notificationsGetVapidPublicKey({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: notificationsGetVapidPublicKeyQueryKey(options),
+  });
 
 export const tasksListRecurrenceQueryKey = (
   options?: Options<TasksListRecurrenceData>,

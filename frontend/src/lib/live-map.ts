@@ -179,4 +179,7 @@ export const NOT_LIVE = [
   // cursor, so the UI never caches or refetches them.
   "agentsGetProjectDigest",
   "agentsGetWorkspaceDigest",
+  // The VAPID public key is read once, when "Enable push" is pressed (P4-05); it never
+  // changes for a workspace.
+  "notificationsGetVapidPublicKey",
 ] as const;
