@@ -77,7 +77,7 @@ async def test_local_only_project_never_sends_text_to_hosted_embedder(
     use_embedders(hosted, local, primary="hosted-embed")
     project_id, doc_id = await _local_project(knowledge_ws.ctx, clock)
 
-    await knowledge.embed_document(knowledge_ws.ctx, doc_id)  # type: ignore[attr-defined]
+    await knowledge.embed_document(knowledge_ws.ctx, doc_id)
     hits = await _search(knowledge_ws.ctx, "where does staging run", project_id, "hybrid")
 
     assert hosted.calls == []
@@ -111,7 +111,7 @@ async def test_no_local_embedder_falls_back_to_fulltext(
     use_embedders(hosted)
     project_id, doc_id = await _local_project(knowledge_ws.ctx, clock)
 
-    written = await knowledge.embed_document(knowledge_ws.ctx, doc_id)  # type: ignore[attr-defined]
+    written = await knowledge.embed_document(knowledge_ws.ctx, doc_id)
     hybrid = await _search(knowledge_ws.ctx, "staging server", project_id, "hybrid")
     fulltext = await _search(knowledge_ws.ctx, "staging server", project_id, "fts")
 

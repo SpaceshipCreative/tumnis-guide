@@ -23,6 +23,7 @@ import gzip
 import hashlib
 import hmac
 import json
+import logging
 import shutil
 import zipfile
 from collections.abc import AsyncGenerator
@@ -52,6 +53,8 @@ from tumnis.modules.knowledge.rules import (
 )
 from tumnis.modules.knowledge.storage import FileStat, PreconditionFailed, StorageBackend
 from tumnis.settings import KnowledgeSettings
+
+log = logging.getLogger(__name__)
 
 STEPS: Final = (
     "read",
@@ -453,7 +456,10 @@ async def chunk(workspace_id: str, version_id: str) -> int:
 
 
 async def index(workspace_id: str, version_id: str) -> int:
-    """8. The chunks become `chunks` rows, once (a rerun replaces them)."""
+    """8. The chunks become `chunks` rows, once (a rerun replaces them), and get their
+    vectors from the Embeddings slot (P3-10): a failed embedding is logged and skipped,
+    never a failed extraction (full-text search still finds the chunks, and a later
+    re-embed fills the gap)."""
     ctx, vid = _ctx(workspace_id), UUID(version_id)
     raw = await _artifact(ctx, version_id, "chunks")
     if raw is None:
@@ -462,6 +468,10 @@ async def index(workspace_id: str, version_id: str) -> int:
     async with tenant_session(ctx) as s:
         info = await records.version_info(s, vid)
         await records.replace_chunks(s, info.document_id, vid, rows)
+    try:
+        await api.embed_document(ctx, info.document_id, vid)
+    except Exception:  # the embedder is an improvement, never a gate
+        log.warning("embedding version %s failed; its chunks stay full-text only", version_id)
     return len(rows)
 
 

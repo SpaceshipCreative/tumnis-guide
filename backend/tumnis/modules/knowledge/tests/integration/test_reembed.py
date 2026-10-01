@@ -42,7 +42,7 @@ async def _corpus(ctx: WorkspaceContext, chunks: int) -> UUID:
 
     async with tenant_session(ctx) as s:
         doc = await knowledge.create_text_entry(s, None, "Contract", _sections(chunks, "invoice"))
-    await knowledge.embed_document(ctx, doc.id)  # type: ignore[attr-defined]
+    await knowledge.embed_document(ctx, doc.id)
     return doc.id
 
 
@@ -51,7 +51,7 @@ async def _models(ctx: WorkspaceContext) -> dict[str, str]:
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
 
     async with tenant_session(ctx) as s:
-        return {m.model: m.status for m in await knowledge.embedding_models(s)}  # type: ignore[attr-defined]
+        return {m.model: m.status for m in await knowledge.embedding_models(s)}
 
 
 def _rows(db: DbUrls, model: str) -> int:
@@ -90,13 +90,13 @@ async def test_model_change_reembeds_in_background(
     assert await _models(ctx) == {"model-a": "active"}
     assert _rows(db, "model-a") == 70
 
-    index = knowledge.create_embedding_index(db.owner, "model-b", 6)  # type: ignore[attr-defined]
+    index = knowledge.create_embedding_index(db.owner, "model-b", 6)
     use_embedders(model_b, model_a)
     model_b.hold = asyncio.Event()  # B answers only when the test lets it
     async with tenant_session(ctx) as s:
-        request = await knowledge.set_embedding_model(s, "model-b", 6, "fake")  # type: ignore[attr-defined]
+        request = await knowledge.set_embedding_model(s, "model-b", 6, "fake")
     assert request.replaces == "model-a"
-    workflow_id = await knowledge.start_reembed(ctx, request)  # type: ignore[attr-defined]
+    workflow_id = await knowledge.start_reembed(ctx, request)
     assert await _models(ctx) == {"model-a": "active", "model-b": "building"}
 
     model_a.calls.clear()
@@ -124,7 +124,7 @@ async def _hybrid(ctx: WorkspaceContext, q: str) -> list[Any]:
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
 
     async with tenant_session(ctx) as s:
-        return await knowledge.search_knowledge(s, q, project_id=None, limit=5, mode="hybrid")  # type: ignore[arg-type]
+        return await knowledge.search_knowledge(s, q, project_id=None, limit=5, mode="hybrid")
 
 
 @pytest.mark.req("REL-3", "FR-11.10")
@@ -155,9 +155,9 @@ async def test_reembed_resumes_after_kill(  # noqa: PLR0917
     ctx = knowledge_ws.ctx
     use_embedders(FakeEmbeddings(model="model-a", dims=4))
     await _corpus(ctx, 150)
-    knowledge.create_embedding_index(db.owner, "model-b", 6)  # type: ignore[attr-defined]
+    knowledge.create_embedding_index(db.owner, "model-b", 6)
     async with tenant_session(ctx) as s:
-        request = await knowledge.set_embedding_model(s, "model-b", 6, "fake")  # type: ignore[attr-defined]
+        request = await knowledge.set_embedding_model(s, "model-b", 6, "fake")
     log = tmp_path / "embedded.log"
     monkeypatch.setenv("KNOWLEDGE_EMBED_LOG", str(log))
     killer = worker_killer("knowledge.reembed.batch_1", events=0, imports=(EMBED_PROBE,))

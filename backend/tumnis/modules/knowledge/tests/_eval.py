@@ -115,4 +115,4 @@ async def embed_corpus(ctx: WorkspaceContext, loaded: EvalCorpus) -> None:
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
 
     for document_id in loaded.documents.values():
-        await knowledge.embed_document(ctx, document_id)  # type: ignore[attr-defined]
+        await knowledge.embed_document(ctx, document_id)

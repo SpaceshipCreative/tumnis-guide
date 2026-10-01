@@ -29,6 +29,7 @@ __all__ = ["DEFAULT_DIMS", "DEFAULT_MODEL", "FakeEmbeddings", "FakeHostedEmbeddi
 DEFAULT_MODEL = "BAAI/bge-m3"  # the slot's default model (knowledge.rules)
 DEFAULT_DIMS = 1024
 RECORDED_FILES = ("chunks.jsonl", "queries.jsonl")
+HOLD_POLL_S = 0.01
 
 
 def text_sha256(text: str) -> str:
@@ -94,8 +95,10 @@ class FakeEmbeddings:
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
             return []
-        if self.hold is not None:
-            await self.hold.wait()
+        # Polled, not awaited: a queued workflow runs on DBOS's own event loop, and an
+        # Event set from the test's loop never wakes a waiter on another loop.
+        while self.hold is not None and not self.hold.is_set():  # noqa: ASYNC110
+            await asyncio.sleep(HOLD_POLL_S)
         self.calls.append(list(texts))
         return [self._vector(text) for text in texts]
 

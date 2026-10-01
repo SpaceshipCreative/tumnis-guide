@@ -139,7 +139,7 @@ async def test_hnsw_index_used(
 
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
-    from tumnis.modules.knowledge import search  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.knowledge import search  # noqa: PLC0415
     from tumnis.modules.knowledge.rules import (  # noqa: PLC0415
         CANDIDATES,
         DEFAULT_EMBEDDING_DIMS,
@@ -235,7 +235,7 @@ async def test_passages_for_task_uses_hybrid_and_brief_first(
             now=clock.now(),
         )
     for doc in made:
-        await knowledge.embed_document(ctx, doc.id)  # type: ignore[attr-defined]
+        await knowledge.embed_document(ctx, doc.id)
     modes: list[str] = []
     real = knowledge.search_knowledge
 
@@ -289,8 +289,8 @@ async def test_results_workspace_and_project_isolated(
     async with tenant_session(other) as s:
         foreign = await knowledge.create_text_entry(s, None, "Foreign", "Invoice terms abroad.")
     for doc in (mine, shared, theirs):
-        await knowledge.embed_document(ctx, doc.id)  # type: ignore[attr-defined]
-    await knowledge.embed_document(other, foreign.id)  # type: ignore[attr-defined]
+        await knowledge.embed_document(ctx, doc.id)
+    await knowledge.embed_document(other, foreign.id)
 
     hits = await _search(ctx, "invoice", p.id, "hybrid", limit=50)
     found = {hit.document_id for hit in hits}
