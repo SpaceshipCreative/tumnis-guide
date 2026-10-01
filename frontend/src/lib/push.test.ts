@@ -50,65 +50,57 @@ describe("push subscribe", () => {
     Reflect.deleteProperty(navigator, "serviceWorker");
   });
 
-  test.fails(
-    "[P4-05][FR-8.3] T-P4-05-09 subscribe posts the subscription with idempotency",
-    async () => {
-      const { requestPermission, subscribe } = browser("default");
-      const posted: { body: unknown; key: string | null }[] = [];
-      server.use(
-        http.get("*/v1/push/vapid-public-key", () =>
-          HttpResponse.json({ public_key: "AQIDBA" }),
-        ),
-        http.post("*/v1/push/subscriptions", async ({ request }) => {
-          posted.push({
-            body: await request.json(),
-            key: request.headers.get("Idempotency-Key"),
-          });
-          return HttpResponse.json(
-            {
-              id: "0199aa00-0000-7000-8000-0000000004b1",
-              endpoint: SUBSCRIPTION.endpoint,
-            },
-            { status: 201 },
-          );
-        }),
-      );
+  test("[P4-05][FR-8.3] T-P4-05-09 subscribe posts the subscription with idempotency", async () => {
+    const { requestPermission, subscribe } = browser("default");
+    const posted: { body: unknown; key: string | null }[] = [];
+    server.use(
+      http.get("*/v1/push/vapid-public-key", () =>
+        HttpResponse.json({ public_key: "AQIDBA" }),
+      ),
+      http.post("*/v1/push/subscriptions", async ({ request }) => {
+        posted.push({
+          body: await request.json(),
+          key: request.headers.get("Idempotency-Key"),
+        });
+        return HttpResponse.json(
+          {
+            id: "0199aa00-0000-7000-8000-0000000004b1",
+            endpoint: SUBSCRIPTION.endpoint,
+          },
+          { status: 201 },
+        );
+      }),
+    );
 
-      render(createElement(PushSettings));
-      const enable = await screen.findByRole("button", { name: "Enable push" });
-      expect(requestPermission).not.toHaveBeenCalled(); // never on load (UX 6)
+    render(createElement(PushSettings));
+    const enable = await screen.findByRole("button", { name: "Enable push" });
+    expect(requestPermission).not.toHaveBeenCalled(); // never on load (UX 6)
 
-      await userEvent.click(enable);
-      expect(
-        await screen.findByText(/Push is on for this device/),
-      ).toBeVisible();
-      expect(requestPermission).toHaveBeenCalledOnce();
-      expect(subscribe).toHaveBeenCalledWith({
-        userVisibleOnly: true,
-        applicationServerKey: new Uint8Array([1, 2, 3, 4]),
-      });
-      expect(posted).toHaveLength(1);
-      expect(posted[0]?.body).toEqual({
-        endpoint: SUBSCRIPTION.endpoint,
-        keys: SUBSCRIPTION.keys,
-      });
-      expect(posted[0]?.key).toMatch(UUID_RE);
-    },
-  );
+    await userEvent.click(enable);
+    expect(await screen.findByText(/Push is on for this device/)).toBeVisible();
+    expect(requestPermission).toHaveBeenCalledOnce();
+    expect(subscribe).toHaveBeenCalledWith({
+      userVisibleOnly: true,
+      applicationServerKey: new Uint8Array([1, 2, 3, 4]),
+    });
+    expect(posted).toHaveLength(1);
+    expect(posted[0]?.body).toEqual({
+      endpoint: SUBSCRIPTION.endpoint,
+      keys: SUBSCRIPTION.keys,
+    });
+    expect(posted[0]?.key).toMatch(UUID_RE);
+  });
 
-  test.fails(
-    "[P4-05][FR-8.3] T-P4-05-09 a denied permission shows the explanation and never re-prompts",
-    async () => {
-      const { requestPermission, subscribe } = browser("denied");
-      render(createElement(PushSettings));
-      expect(
-        await screen.findByText(/Notifications are blocked for this site/),
-      ).toBeVisible();
-      expect(
-        screen.queryByRole("button", { name: "Enable push" }),
-      ).not.toBeInTheDocument();
-      expect(requestPermission).not.toHaveBeenCalled();
-      expect(subscribe).not.toHaveBeenCalled();
-    },
-  );
+  test("[P4-05][FR-8.3] T-P4-05-09 a denied permission shows the explanation and never re-prompts", async () => {
+    const { requestPermission, subscribe } = browser("denied");
+    render(createElement(PushSettings));
+    expect(
+      await screen.findByText(/Notifications are blocked for this site/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Enable push" }),
+    ).not.toBeInTheDocument();
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(subscribe).not.toHaveBeenCalled();
+  });
 });
