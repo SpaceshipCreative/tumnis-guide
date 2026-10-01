@@ -20,7 +20,7 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useQuery } from "@tanstack/react-query";
-import { useRef } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 
 import { useMoveTask } from "../project/mutations";
 import { boardQuery } from "../project/queries";
@@ -136,7 +136,21 @@ export function BoardView({
     }),
   );
 
-  if (board.isPending) return <p className="text-muted">Loading the board…</p>;
+  // The first render of a full board (hundreds of sortable cards) runs as a transition,
+  // which React renders in short slices, rather than in the one long task a query result
+  // gets (PERF-2). Later updates (moves, live changes) render as before.
+  const ready = board.data !== undefined;
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (ready && !shown) {
+      startTransition(() => {
+        setShown(true);
+      });
+    }
+  }, [ready, shown]);
+
+  const loading = <p className="text-muted">Loading the board…</p>;
+  if (board.isPending) return loading;
   if (board.isError) {
     return (
       <p role="alert" className="text-danger">
@@ -144,6 +158,7 @@ export function BoardView({
       </p>
     );
   }
+  if (!shown) return loading;
   const data = board.data;
   const columns = data.columns.map((c) => ({ id: c.id, name: c.name }));
 

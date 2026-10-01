@@ -3,7 +3,7 @@
 // move request without dragging (the phone's and a screen reader's path).
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useEffect, useRef, useState, type SyntheticEvent } from "react";
+import { memo, useEffect, useRef, useState, type SyntheticEvent } from "react";
 
 import { TaintBadge } from "../common/TaintBadge";
 import { formatMinutes } from "../dashboard/format";
@@ -113,57 +113,33 @@ function MoveMenu({
   );
 }
 
-export function BoardCard({
-  card,
-  columnId,
-  columns,
-  onMoveTo,
-  onOpen,
-}: {
+interface CardProps {
   card: Card;
   columnId: string;
   columns: { id: string; name: string }[];
   onMoveTo: (taskId: string, columnId: string) => void;
   onOpen: (taskId: string) => void;
-}) {
+}
+
+/**
+ * What the card shows, memoised apart from the sortable shell: dnd-kit re-renders every
+ * sortable item when its context changes (every card registering on mount, each drag
+ * step), and these props stay the same then, so only the shell runs again.
+ */
+const CardBody = memo(function CardBody({
+  card,
+  columnId,
+  columns,
+  onMoveTo,
+  onOpen,
+}: CardProps) {
   const { task } = card;
-  const {
-    setNodeRef,
-    attributes,
-    listeners,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: task.id,
-    data: { columnId },
-    attributes: { role: "listitem", roleDescription: "draggable task" },
-  });
   const estimate =
     task.label === "ai" || task.estimate_minutes === null
       ? null
       : formatMinutes(task.estimate_minutes);
   return (
-    <li
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      aria-label={task.title}
-      aria-roledescription="draggable task"
-      aria-pressed={undefined}
-      data-board-card
-      data-task-id={task.id}
-      data-task-title={task.title}
-      data-board-rank={task.board_rank}
-      data-dragging={isDragging || undefined}
-      style={{
-        transform: CSS.Translate.toString(transform),
-        transition,
-      }}
-      className={`flex touch-manipulation flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-        isDragging ? "relative z-10 opacity-80 shadow-lg" : ""
-      }`}
-    >
+    <>
       <p className="font-medium break-words">{task.title}</p>
       {task.tainted && (
         <div>
@@ -187,6 +163,51 @@ export function BoardCard({
         />
       </div>
       {card.checklist.length > 0 && <Checklist items={card.checklist} />}
+    </>
+  );
+});
+
+export function BoardCard(props: CardProps) {
+  const { card, columnId } = props;
+  const { task } = card;
+  const {
+    setNodeRef,
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: task.id,
+    data: { columnId },
+    attributes: { role: "listitem", roleDescription: "draggable task" },
+  });
+  // `content-visibility: auto`: the browser skips laying out and painting a card while it
+  // is off screen (most of a long column), sized meanwhile by its last rendered height
+  // or about one card's (PERF-2). It also clips the card's contents, so while the Move
+  // menu is open (it hangs below the card) the card renders normally.
+  return (
+    <li
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      aria-label={task.title}
+      aria-roledescription="draggable task"
+      aria-pressed={undefined}
+      data-board-card
+      data-task-id={task.id}
+      data-task-title={task.title}
+      data-board-rank={task.board_rank}
+      data-dragging={isDragging || undefined}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+      }}
+      className={`flex touch-manipulation flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-sm [contain-intrinsic-size:auto_5.5rem] [content-visibility:auto] outline-none focus-visible:ring-2 focus-visible:ring-accent has-[[role=menu]]:[content-visibility:visible] ${
+        isDragging ? "relative z-10 opacity-80 shadow-lg" : ""
+      }`}
+    >
+      <CardBody {...props} />
     </li>
   );
 }
