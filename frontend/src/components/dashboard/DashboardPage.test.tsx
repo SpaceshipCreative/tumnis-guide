@@ -5,6 +5,7 @@ import { http, HttpResponse } from "msw";
 import { expect, test, vi } from "vitest";
 
 import { makeProject, makeTask } from "../../test/factories";
+import { daySummary, FULL_DAY } from "../../test/msw/closeDay";
 import {
   projectsList,
   reviewCount,
@@ -164,5 +165,56 @@ test("[P1-11][FR-1.2][J6] with a published plan, Today shows its items and the i
     expect(offers).toHaveTextContent("Write Acme proposal");
     expect(offers).toHaveTextContent("No 90-minute gap today");
     unmount();
+  }
+});
+
+// Close the day (P1-18, J7): a dashboard button from 16:00 local (the workspace's zone,
+// America/New_York by default) and the `?panel=close` search param.
+test("[P1-18][J7] Close the day shows from 16:00 local and opens the panel", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    server.use(daySummary(FULL_DAY));
+    // 15:59 in New York: not yet.
+    vi.setSystemTime(new Date("2026-03-09T19:59:00Z"));
+    const early = await renderRoute("/", { viewport: "laptop" });
+    expect(screen.queryByRole("button", { name: "Close the day" })).toBeNull();
+    early.unmount();
+
+    // 17:40: the button opens the panel and sets the search param.
+    vi.setSystemTime(new Date("2026-03-09T21:40:00Z"));
+    for (const viewport of ["phone", "laptop"] as const) {
+      const { user, router, unmount } = await renderRoute("/", { viewport });
+      await user.click(screen.getByRole("button", { name: "Close the day" }));
+      const panel = await screen.findByRole("dialog", {
+        name: "Close the day",
+      });
+      expect(router.state.location.search).toMatchObject({ panel: "close" });
+      await within(panel).findAllByRole("region");
+
+      // Done drops the param and the panel.
+      await user.click(within(panel).getByRole("button", { name: "Done" }));
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      });
+      expect(router.state.location.search).not.toHaveProperty("panel");
+      unmount();
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("[P1-18][J7] ?panel=close opens the panel at any hour", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    vi.setSystemTime(new Date("2026-03-09T14:00:00Z"));
+    server.use(daySummary(FULL_DAY));
+    await renderRoute("/?panel=close");
+    const panel = await screen.findByRole("dialog", { name: "Close the day" });
+    expect(
+      await within(panel).findByRole("region", { name: "Shipped" }),
+    ).toHaveTextContent("Write Acme proposal");
+  } finally {
+    vi.useRealTimers();
   }
 });
