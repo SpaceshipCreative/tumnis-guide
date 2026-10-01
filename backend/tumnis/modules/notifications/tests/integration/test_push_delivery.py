@@ -39,7 +39,6 @@ def _review_pushes(world: PushWorld) -> list[Any]:
 
 @pytest.mark.req("FR-8.4", "FR-8.3")
 @pytest.mark.wp("P4-05")
-@pytest.mark.xfail(strict=True, reason="spec:P4-05")
 async def test_push_follows_focus_level(push: PushWorld) -> None:
     """T-P4-05-04
     At Quiet with a task In progress a new review item is batched and nothing is sent; when
