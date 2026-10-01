@@ -15,6 +15,7 @@ import {
   tasksListTasksOptions,
 } from "../../api/@tanstack/react-query.gen";
 import {
+  tasksGetBoard,
   tasksListComments,
   tasksListRecurrence,
   tasksListTasks,
@@ -24,7 +25,9 @@ import type {
   RecurrenceOut,
   TasksListRecurrenceData,
 } from "../../api/types.gen";
+import { zBoardOut, zCardOut, zTaskOut, zTaskPage } from "../../api/zod.gen";
 import { apiUrl } from "../../lib/fetch";
+import { parseBoardInSlices, parsePageInSlices } from "../../lib/validate";
 
 export const TASK_PAGE_LIMIT = 200; // the API's largest page
 
@@ -34,6 +37,13 @@ export const projectQuery = (projectId: string) =>
 /** The project's approval policy (FR-5.6), which the policy editor edits (P2-05). */
 export const policyQuery = (projectId: string) =>
   projectsGetPolicyOptions({ path: { project_id: projectId } });
+
+// The generated validators check a whole response in one task; these check the same
+// schemas a slice of tasks or cards at a time (lib/validate.ts, PERF-2).
+const validateTaskPage = (data: unknown) =>
+  parsePageInSlices(zTaskPage, zTaskOut, data);
+const validateBoard = (data: unknown) =>
+  parseBoardInSlices(zBoardOut, zCardOut, zTaskOut, data);
 
 /**
  * Every task of the project: follows `next_cursor` through every page and answers one
@@ -49,6 +59,7 @@ export const projectTasksQuery = (projectId: string) => {
         query,
         signal,
         throwOnError: true,
+        responseValidator: validateTaskPage,
       });
       const items = [...first.items];
       let cursor = first.next_cursor;
@@ -57,6 +68,7 @@ export const projectTasksQuery = (projectId: string) => {
           query: { ...query, cursor },
           signal,
           throwOnError: true,
+          responseValidator: validateTaskPage,
         });
         items.push(...page.items);
         cursor = page.next_cursor;
@@ -66,8 +78,20 @@ export const projectTasksQuery = (projectId: string) => {
   });
 };
 
+/** The board's layout, under the generated op's key (LIVE_MAP, the optimistic move). */
 export const boardQuery = (projectId: string) =>
-  tasksGetBoardOptions({ path: { project_id: projectId } });
+  queryOptions({
+    ...tasksGetBoardOptions({ path: { project_id: projectId } }),
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksGetBoard({
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+        responseValidator: validateBoard,
+      });
+      return data;
+    },
+  });
 
 export const briefQuery = (projectId: string) =>
   knowledgeGetBriefOptions({ path: { project_id: projectId } });
