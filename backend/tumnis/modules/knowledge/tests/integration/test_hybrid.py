@@ -204,7 +204,7 @@ async def test_passages_for_task_uses_hybrid_and_brief_first(
     keeps the passages within PASSAGE_CAP_CHARS.
     """
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
-    from tumnis.modules.decisions.adapters.embeddings.fake import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from tumnis.modules.decisions.adapters.embeddings.fake import (  # noqa: PLC0415
         FakeEmbeddings,
     )
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415

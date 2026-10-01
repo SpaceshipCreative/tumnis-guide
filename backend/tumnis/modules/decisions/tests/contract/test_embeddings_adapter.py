@@ -74,7 +74,6 @@ async def _shared_cases(subject: Any, sent: list[dict[str, Any]] | None = None) 
 
 @pytest.mark.req("FR-11.1", "FR-11.10")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_contract_fake_and_recorded_vllm() -> None:
     """T-P3-10-11
     The same cases pass against the fake and against VllmEmbeddings replaying the recorded
@@ -82,10 +81,10 @@ async def test_contract_fake_and_recorded_vllm() -> None:
     """
     from tumnis.core.clock import FixedClock  # noqa: PLC0415
     from tumnis.core.net import NetPolicy  # noqa: PLC0415
-    from tumnis.modules.decisions.adapters.embeddings.fake import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from tumnis.modules.decisions.adapters.embeddings.fake import (  # noqa: PLC0415
         FakeEmbeddings,
     )
-    from tumnis.modules.decisions.adapters.embeddings.vllm import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from tumnis.modules.decisions.adapters.embeddings.vllm import (  # noqa: PLC0415
         VllmEmbeddings,
     )
 

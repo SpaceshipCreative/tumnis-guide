@@ -66,7 +66,7 @@ async def test_local_only_project_never_sends_text_to_hosted_embedder(
     project's chunks and its search queries go to the local fake only: the hosted fake's
     call log stays empty, and the chunks' vectors are the local model's.
     """
-    from tumnis.modules.decisions.adapters.embeddings.fake import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from tumnis.modules.decisions.adapters.embeddings.fake import (  # noqa: PLC0415
         FakeEmbeddings,
     )
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415

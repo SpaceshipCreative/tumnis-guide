@@ -103,7 +103,7 @@ async def load_eval_corpus(ctx: WorkspaceContext, clock: FixedClock) -> EvalCorp
 
 def recorded_embeddings() -> Any:
     """The fake on the recorded vectors: a text it has no vector for raises."""
-    from tumnis.modules.decisions.adapters.embeddings.fake import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from tumnis.modules.decisions.adapters.embeddings.fake import (  # noqa: PLC0415
         FakeEmbeddings,
     )
 

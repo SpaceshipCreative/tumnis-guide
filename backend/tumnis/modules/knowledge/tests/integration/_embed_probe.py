@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from tumnis.modules.decisions import api as decisions
-from tumnis.modules.decisions.adapters.embeddings.fake import (  # type: ignore[import-untyped]
+from tumnis.modules.decisions.adapters.embeddings.fake import (
     FakeEmbeddings,
 )
 
@@ -22,13 +22,13 @@ def _append(path: Path, lines: list[str]) -> None:
         f.writelines(line + "\n" for line in lines)
 
 
-class _LoggedFake(FakeEmbeddings):  # type: ignore[misc]
+class _LoggedFake(FakeEmbeddings):
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         vectors = await super().embed(texts)
         log = os.environ.get("KNOWLEDGE_EMBED_LOG")
         if log:
             _append(Path(log), [text.replace("\n", " ") for text in texts])
-        return vectors  # type: ignore[no-any-return]
+        return vectors
 
 
 decisions.use_embedders(  # type: ignore[attr-defined]

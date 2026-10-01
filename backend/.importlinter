@@ -37,6 +37,10 @@ ignore_imports =
 # disk: they open locations as server paths, run a folder sync and log the storage writes
 # of the worker. Module code never imports knowledge.
     tumnis.modules.projects.tests.** -> tumnis.modules.knowledge.**
+# P3-10: knowledge's hybrid search tests drive the Embeddings slot with decisions' fake
+# (scripted models, recorded eval vectors, call logs). Module code reaches the slot only
+# through decisions.api.
+    tumnis.modules.knowledge.tests.** -> tumnis.modules.decisions.adapters.embeddings.fake
 # Until modules call each other, the api ignore matches nothing; that is not an error.
 unmatched_ignore_imports_alerting = none
 
@@ -197,6 +201,8 @@ forbidden_modules =
     tumnis.modules.decisions.adapters.jev
     tumnis.modules.decisions.adapters.vllm
     tumnis.modules.decisions.adapters.vllm_generation
+    tumnis.modules.decisions.adapters.embeddings.vllm
+    tumnis.modules.decisions.adapters.embeddings.hosted
     tumnis.modules.github.adapters.github_status
     typesafe_sdk
 

@@ -74,7 +74,7 @@ async def test_model_change_reembeds_in_background(
     builds, then B is `active`, A is `retired` and A's rows are gone.
     """
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
-    from tumnis.modules.decisions.adapters.embeddings.fake import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from tumnis.modules.decisions.adapters.embeddings.fake import (  # noqa: PLC0415
         FakeEmbeddings,
     )
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
