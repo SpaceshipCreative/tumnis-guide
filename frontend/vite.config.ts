@@ -8,10 +8,6 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-// Paths the service worker never answers with the shell: the api, the live socket, the
-// MCP endpoint and the probes (the backend's SPA fallback excludes the same prefixes).
-const NOT_THE_SHELL = [/^\/v1\//, /^\/ws/, /^\/mcp/, /^\/health/, /^\/metrics/];
-
 export default defineConfig({
   plugins: [
     // Before the React plugin: it rewrites route files into lazy chunks. Not under Vitest:
@@ -29,8 +25,12 @@ export default defineConfig({
     }),
     react(),
     tailwindcss(),
+    // src/sw.ts is the worker (P4-05: push and notification clicks); vite-plugin-pwa
+    // builds it to /sw.js and injects the precache manifest at `self.__WB_MANIFEST`.
     VitePWA({
-      strategies: "generateSW",
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       registerType: "autoUpdate",
       // main.tsx registers /sw.js itself: no injected inline script (CSP, P0-16).
       injectRegister: false,
@@ -54,17 +54,15 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
+      injectManifest: {
         // Precache the shell and its assets; nothing under /v1 is cached at run time.
         // Inter's Latin file too (DS-01), so the offline shell keeps its font; other
-        // scripts load on first use.
+        // scripts load on first use. src/sw.ts answers navigations with /index.html,
+        // except the paths in its NOT_THE_SHELL list.
         globPatterns: [
           "**/*.{js,css,html,png,svg,webmanifest}",
           "**/inter-latin-wght-normal-*.woff2",
         ],
-        navigateFallback: "/index.html",
-        navigateFallbackDenylist: NOT_THE_SHELL,
-        cleanupOutdatedCaches: true,
       },
     }),
   ],
