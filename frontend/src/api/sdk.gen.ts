@@ -1532,7 +1532,8 @@ export const knowledgeSetTrust = <ThrowOnError extends boolean = false>(
 /**
  * List Versions
  *
- * Every kept version of a live document, oldest first, each with its body.
+ * Every kept version of a live document, oldest first, each with its body once the
+ * file is released (a note's always).
  */
 export const knowledgeListVersions = <ThrowOnError extends boolean = false>(
   options: Options<KnowledgeListVersionsData, ThrowOnError>,

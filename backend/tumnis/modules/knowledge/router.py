@@ -369,9 +369,9 @@ async def set_trust(
     )
 )
 async def list_versions(document_id: UUID, session: SessionDep) -> list[api.DocumentVersionOut]:
-    """Every kept version of a live document, oldest first, each with its body."""
-    await api.get_document(session, document_id)
-    return await api.list_document_versions(session, document_id)
+    """Every kept version of a live document, oldest first, each with its body once the
+    file is released (a note's always)."""
+    return await api.released_versions(session, document_id)
 
 
 @router.get("/knowledge/search")

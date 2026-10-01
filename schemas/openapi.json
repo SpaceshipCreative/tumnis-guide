@@ -13967,7 +13967,7 @@
     },
     "/v1/knowledge/documents/{document_id}/versions": {
       "get": {
-        "description": "Every kept version of a live document, oldest first, each with its body.",
+        "description": "Every kept version of a live document, oldest first, each with its body once the\nfile is released (a note's always).",
         "operationId": "knowledge_list_versions",
         "parameters": [
           {

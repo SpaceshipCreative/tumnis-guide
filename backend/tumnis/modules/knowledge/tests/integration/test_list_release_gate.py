@@ -62,3 +62,47 @@ async def test_list_hides_unreleased_file_text(
     single = await session_client.get(f"/v1/knowledge/documents/{file_id}")
     assert single.status_code == 200, single.text
     assert single.json()["body_md"] is None
+
+
+def _hold_version(db: DbUrls, document_id: str) -> None:
+    """The document is released but its versions are not yet, with text stored."""
+    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+        conn.execute(
+            "UPDATE document_versions SET status = 'pending_scan', body_md = %s"
+            " WHERE document_id = %s",
+            (UNRELEASED, document_id),
+        )
+
+
+@pytest.mark.req("SAF-1", "FR-15.6")
+@pytest.mark.wp("P1-17")
+async def test_versions_hide_unreleased_file_text(
+    extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient, db: DbUrls
+) -> None:
+    """`GET .../versions` serves a file version's text only when the version and the
+    document are both released; a note's versions keep their bodies."""
+    project = str(extract_env.project_id)
+    data = fixture_bytes("brief.docx")
+    uploaded = await upload(session_client, extract_env.project_id, "brief.docx", data)
+    assert uploaded.status_code == 202, uploaded.text
+    file_id = uploaded.json()["id"]
+    assert (await settled(session_client, file_id))["status"] == "ready"
+
+    _hold_version(db, file_id)
+    versions = await session_client.get(f"/v1/knowledge/documents/{file_id}/versions")
+    assert versions.status_code == 200, versions.text
+    assert [v["body_md"] for v in versions.json()] == [None]
+
+    _hold(db, file_id)
+    versions = await session_client.get(f"/v1/knowledge/documents/{file_id}/versions")
+    assert versions.status_code == 200, versions.text
+    assert [v["body_md"] for v in versions.json()] == [None]
+
+    note = await session_client.post(
+        "/v1/knowledge/documents/text",
+        json={"project_id": project, "title": "Kickoff", "body_md": "Logo first."},
+    )
+    assert note.status_code == 201, note.text
+    kept = await session_client.get(f"/v1/knowledge/documents/{note.json()['id']}/versions")
+    assert kept.status_code == 200, kept.text
+    assert [v["body_md"] for v in kept.json()] == ["Logo first."]

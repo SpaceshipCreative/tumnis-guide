@@ -1560,9 +1560,8 @@ def _version_out(row: Row) -> DocumentVersionOut:
     )
 
 
-async def list_document_versions(s: AsyncSession, document_id: UUID) -> list[DocumentVersionOut]:
-    """Every kept version of the Document, oldest first (FR-15.6)."""
-    rows = (
+async def _version_rows(s: AsyncSession, document_id: UUID) -> Sequence[RowMapping]:
+    return (
         (
             await s.execute(
                 select(_versions)
@@ -1573,7 +1572,27 @@ async def list_document_versions(s: AsyncSession, document_id: UUID) -> list[Doc
         .mappings()
         .all()
     )
-    return [_version_out(row) for row in rows]
+
+
+async def list_document_versions(s: AsyncSession, document_id: UUID) -> list[DocumentVersionOut]:
+    """Every kept version of the Document, oldest first (FR-15.6)."""
+    return [_version_out(row) for row in await _version_rows(s, document_id)]
+
+
+async def released_versions(s: AsyncSession, document_id: UUID) -> list[DocumentVersionOut]:
+    """A live document's versions as served (`GET .../versions`, P1-17): like `_dto`, a
+    file's text only once released, so a version's body is shown when that version and
+    the document are both `ready` (a note's always are its own); 404 for a document that
+    is trashed or missing."""
+    doc = await _live_row(s, document_id)
+    note = is_note(doc)
+    out: list[DocumentVersionOut] = []
+    for row in await _version_rows(s, document_id):
+        version = _version_out(row)
+        if not note and (row["status"] != "ready" or doc["status"] != "ready"):
+            version = version.model_copy(update={"body_md": None})
+        out.append(version)
+    return out
 
 
 async def get_document_version(s: AsyncSession, version_id: UUID) -> DocumentVersionOut:
