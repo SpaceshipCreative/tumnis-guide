@@ -13,6 +13,7 @@ once (`dedupe_key`) with its level and rule (FR-10.9) and emitted as `focus.even
 same transaction. Nothing here reads a clock: `now` is passed in.
 """
 
+import contextlib
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -20,7 +21,7 @@ from typing import Any, Final, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Table, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,14 +53,18 @@ from tumnis.modules.tasks import api as tasks
 __all__ = [
     "FOCUS_SECTION",
     "LIVE_ENTITY",
+    "DetourIn",
+    "DetourOut",
     "FocusCurrentOut",
     "FocusMessageOut",
     "FocusSessionOut",
     "FocusSettings",
+    "GuardrailOut",
     "LessIn",
     "LevelIn",
     "PlannedOut",
     "RespondIn",
+    "ReturnIn",
     "SessionStart",
     "check_in",
     "current",
@@ -68,8 +73,10 @@ __all__ = [
     "less_of_this",
     "open_session_workflows",
     "planned_events",
+    "prepare_next",
     "record_activity",
     "respond",
+    "return_detour",
     "session_due",
     "session_workflow_id",
     "set_level",
@@ -82,6 +89,8 @@ FOCUS_SECTION: Final = "focus"
 LIVE_ENTITY: Final = "focus"
 IN_PROGRESS: Final = "in_progress"
 DONE: Final = "done"
+TODAY: Final = "today"
+DETOUR_RULE: Final = "Guardrail · detour"  # the stored attribution of a captured detour
 RECENT_RESPONSES: Final = 5
 
 _sessions: Table = FocusSession.__table__  # type: ignore[assignment]
@@ -126,15 +135,42 @@ class FocusMessageOut(BaseModel):
     response: Response | None  # the latest answer, if any
 
 
+class GuardrailOut(BaseModel):
+    """The one-task dashboard at Guardrail (P4-01, FR-10.6): the task it shows, the one it
+    prepares next, and how many other tasks of today's plan are still to do."""
+
+    current_task_id: UUID | None
+    next_task_id: UUID | None
+    remaining: int
+
+
+class DetourOut(BaseModel):
+    """A captured detour whose return question is still open (P4-01, FR-10.6)."""
+
+    event_id: UUID
+    detour_task_id: UUID
+    detour_title: str
+    return_to_task_id: UUID | None
+    return_to_title: str | None
+    message: str
+    rule: str
+
+
 class FocusCurrentOut(BaseModel):
     """What the focus bar shows: the level in force, the open session and today's
-    messages, oldest first."""
+    messages, oldest first; at Guardrail also the one-task card's tasks, and an open
+    detour's return question (P4-01)."""
+
+    # Every answer carries every field, so the generated client types them as present.
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     level: Level
     workspace_level: Level
     override_level: Level | None
     session: FocusSessionOut | None
     messages: list[FocusMessageOut]
+    guardrail: GuardrailOut | None = None  # set only when the level in force is Guardrail
+    detour: DetourOut | None = None
 
 
 class LevelIn(BaseModel):
@@ -142,11 +178,45 @@ class LevelIn(BaseModel):
     level: Level
 
 
+class DetourIn(BaseModel):
+    """Something not in Today the person switched to, captured as a task (P4-01). The
+    person picks the project (only agents skip it, J2)."""
+
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=200)
+    project_id: UUID
+
+
 class RespondIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     event_id: UUID
     response: Response
     to_task_id: UUID | None = None  # with `switched`: the task the person moved to
+    # With `switched` at Guardrail: capture it (P4-01). The pairing rules are checked in
+    # `respond` (422 `invalid_detour`), after the event is found, so any body the schema
+    # allows builds and an unknown event is still 404.
+    detour: DetourIn | None = None
+
+
+def _check_detour(body: RespondIn) -> None:
+    if body.detour is None:
+        return
+    if body.response != "switched":
+        raise ProblemError(
+            422, "invalid_detour", "A detour comes only with the response 'switched'."
+        )
+    if body.to_task_id is not None:
+        raise ProblemError(422, "invalid_detour", "A detour and to_task_id exclude each other.")
+
+
+class ReturnIn(BaseModel):
+    """The answer to an open detour's return question (P4-01). `version` is the detour
+    task's: Return moves it back to Backlog."""
+
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["return", "stay"]
+    version: int
+    event_id: UUID | None = None  # the question answered, as `GET /current` shows it
 
 
 class LessIn(BaseModel):
@@ -220,10 +290,14 @@ async def _fire(  # noqa: PLR0917  # one event's facts, spelled out
     session_id: UUID | None = None,
     plan_id: UUID | None = None,
     detail: str | None = None,
+    rule: str | None = None,
+    detour_task_id: UUID | None = None,
+    return_to_task_id: UUID | None = None,
 ) -> UUID | None:
     """Writes the event once (a repeat of `dedupe_key` writes nothing) and emits
-    `focus.event` in the same transaction; the new event's id, or None."""
-    rule = rules.attribution(level, kind, detail)
+    `focus.event` in the same transaction; the new event's id, or None. `rule` replaces
+    the level-and-kind attribution (a captured detour's)."""
+    rule = rule or rules.attribution(level, kind, detail)
     event_id: UUID | None = await s.scalar(
         pg_insert(_events)
         .values(
@@ -236,6 +310,8 @@ async def _fire(  # noqa: PLR0917  # one event's facts, spelled out
             rule=rule,
             message=message,
             dedupe_key=dedupe_key,
+            detour_task_id=detour_task_id,
+            return_to_task_id=return_to_task_id,
         )
         .on_conflict_do_nothing(index_elements=["workspace_id", "dedupe_key"])
         .returning(_events.c.id)
@@ -252,6 +328,8 @@ async def _fire(  # noqa: PLR0917  # one event's facts, spelled out
             level=level,
             message=message,
             fired_at=at,
+            detour_task_id=detour_task_id,
+            return_to_task_id=return_to_task_id,
         ),
         occurred_at=at,
     )
@@ -397,6 +475,8 @@ async def _current(
         workspace_level=level.workspace,
         override_level=level.override,
         session=shown,
+        guardrail=await _guardrail(s, ctx, now, level),
+        detour=await _open_detour(s, start, end),
         messages=[
             FocusMessageOut(
                 id=e.id,
@@ -410,6 +490,80 @@ async def _current(
             )
             for e in events
         ],
+    )
+
+
+async def _title(s: AsyncSession, task_id: UUID) -> str:
+    try:
+        return (await tasks.get_task(s, task_id)).title
+    except NotFound:
+        return ""
+
+
+async def _today_plan(
+    s: AsyncSession, ctx: WorkspaceContext, day: date
+) -> tuple[list[rules.PlanItemLite], dict[UUID, rules.TaskLite]]:
+    """The day's live plan items and their tasks' statuses; empty without a plan."""
+    try:
+        plan = await planning.get_plan(ctx, day, session=s)
+    except ProblemError:
+        return [], {}
+    items = [i for i in plan.items if i.removed_at is None]
+    return (
+        [rules.PlanItemLite(i.task_id, i.position, i.accepted_at is not None) for i in items],
+        {i.task_id: rules.TaskLite(i.status) for i in items},
+    )
+
+
+async def _guardrail(
+    s: AsyncSession, ctx: WorkspaceContext, now: datetime, level: _Level
+) -> GuardrailOut | None:
+    """At Guardrail: the one-task card's task, the next one, and how many others of
+    today's plan are left (`rules.guardrail_tasks`)."""
+    if level.effective != "guardrail":
+        return None
+    plan, statuses = await _today_plan(s, ctx, now.astimezone(level.tz).date())
+    current = rules.current_guardrail_task(plan, statuses)
+    left = rules.guardrail_tasks(plan, statuses)
+    return GuardrailOut(
+        current_task_id=current,
+        next_task_id=rules.next_guardrail_task(plan, statuses, current),
+        remaining=len([t for t in left if t != current]),
+    )
+
+
+def _detours() -> Any:
+    """Captured detours whose return question is open, latest first."""
+    return (
+        select(_events)
+        .where(
+            _events.c.kind == "switched",
+            _events.c.detour_task_id.is_not(None),
+            _events.c.return_decision.is_(None),
+            _events.c.deleted_at.is_(None),
+        )
+        .order_by(_events.c.fired_at.desc(), _events.c.created_at.desc())
+    )
+
+
+async def _open_detour(s: AsyncSession, start: datetime, end: datetime) -> DetourOut | None:
+    """Today's latest captured detour whose return question is unanswered."""
+    row = (
+        await s.execute(
+            _detours().where(_events.c.fired_at >= start, _events.c.fired_at < end).limit(1)
+        )
+    ).first()
+    if row is None:
+        return None
+    back = row.return_to_task_id
+    return DetourOut(
+        event_id=row.id,
+        detour_task_id=row.detour_task_id,
+        detour_title=await _title(s, row.detour_task_id),
+        return_to_task_id=back,
+        return_to_title=None if back is None else await _title(s, back),
+        message=row.message,
+        rule=row.rule,
     )
 
 
@@ -507,10 +661,17 @@ async def respond(
     task's open session (`apply_response`: back-off, snooze), `stuck` fires a `stuck` event
     where the level fires one, and `focus.responded` is emitted; `less_of_this` is
     `less_of_this`. 404 for an unknown event."""
-    if body.response == "less_of_this":
-        return await less_of_this(ctx, LessIn(event_id=body.event_id), now=now, session=session)
     s = session
     event = await _event(s, body.event_id)
+    _check_detour(body)
+    if body.response == "less_of_this":
+        return await less_of_this(ctx, LessIn(event_id=body.event_id), now=now, session=session)
+    if body.detour is not None:
+        level = await _level(s, ctx, now)
+        if not rules.captures_detour(level.effective):
+            raise ProblemError(
+                409, "detour_needs_guardrail", "A detour is captured only at Guardrail."
+            )
     row = None if event.task_id is None else await _open_session(s, event.task_id, lock=True)
     if row is not None:
         moved = rules.apply_response(_state(row), body.response, now)
@@ -524,7 +685,10 @@ async def respond(
                 snoozed_until=moved.snoozed_until,
             )
         )
-    await _record(s, event, body.response, now, None if row is None else row.id, body.to_task_id)
+    to_task_id = body.to_task_id
+    if body.detour is not None:
+        to_task_id = await _capture_detour(s, ctx, event, body.detour, now)
+    await _record(s, event, body.response, now, None if row is None else row.id, to_task_id)
     if body.response == "stuck":
         level = await _level(s, ctx, now)
         if rules.fires(level.effective, "stuck"):
@@ -543,6 +707,113 @@ async def respond(
             )
     mark_changed(s, LIVE_ENTITY, event.id)
     return await _current(s, ctx, now)
+
+
+async def _capture_detour(
+    s: AsyncSession, ctx: WorkspaceContext, event: Any, detour: DetourIn, now: datetime
+) -> UUID:
+    """A switch to something not in Today, at Guardrail (P4-01, FR-10.6): the person's
+    task in the project they picked (`source` detour; Jev labels it, P1-07) goes In
+    progress, the task they were on goes back to Today, and `switched` fires naming both,
+    with the return question. The task they were on is the open session's (else the
+    event's). There is no In progress -> Today edge (R-10), so it goes through Backlog:
+    the person's reset, then their plan edge, in this one transaction."""
+    held = await _open_session(s)
+    back_id = held.task_id if held is not None else event.task_id
+    back = None
+    if back_id is not None:
+        with contextlib.suppress(NotFound):
+            back = await tasks.get_task(s, back_id)
+    if back is not None and back.status == IN_PROGRESS:
+        reset = await tasks.change_status(
+            s, ctx.actor, back.id, tasks.Status.BACKLOG, back.version, now=now
+        )
+        back = await tasks.change_status(
+            s, ctx.actor, back.id, tasks.Status.TODAY, reset.version, now=now
+        )
+    made = await tasks.create_task(
+        s,
+        ctx.actor,
+        tasks.TaskCreate(project_id=detour.project_id, title=detour.title),
+        now=now,
+        source="detour",
+    )
+    await tasks.change_status(
+        s, ctx.actor, made.id, tasks.Status.IN_PROGRESS, made.version, now=now
+    )
+    message = "Captured." if back is None else f"Captured. Back to {back.title}?"
+    # start_session's key for the detour's `switched`: that one then writes nothing.
+    await _fire(
+        s,
+        "switched",
+        "guardrail",
+        made.id,
+        now,
+        message,
+        f"switched:{made.id}:{now.isoformat()}",
+        rule=DETOUR_RULE,
+        detour_task_id=made.id,
+        return_to_task_id=None if back is None else back.id,
+    )
+    return made.id
+
+
+async def return_detour(
+    ctx: WorkspaceContext, body: ReturnIn, *, now: datetime, session: AsyncSession
+) -> FocusCurrentOut:
+    """`POST /v1/focus/return`: the answer to the open detour's return question (P4-01).
+    Return: the detour goes to Backlog (at `body.version`, else 409 `stale_version`) and
+    the task to return to, when it is in Today, is In progress again. Stay: nothing
+    moves. The question is answered once, and only today's, the one `GET /current` shows
+    (`body.event_id` when given): 409 `no_open_detour` when none is open."""
+    s = session
+    level = await _level(s, ctx, now)
+    start, end = _day_bounds(now.astimezone(level.tz).date(), level.tz)
+    found = _detours().where(_events.c.fired_at >= start, _events.c.fired_at < end).limit(1)
+    if body.event_id is not None:
+        found = found.where(_events.c.id == body.event_id)
+    event = (await s.execute(found.with_for_update())).first()
+    if event is None:
+        if body.event_id is not None:
+            await _event(s, body.event_id)  # 404 for an unknown event
+        raise ProblemError(409, "no_open_detour", "No detour is waiting for an answer.")
+    if body.decision == "return":
+        await _go_back(s, ctx, event, body.version, now)
+    await s.execute(
+        update(_events)
+        .where(_events.c.id == event.id)
+        .values(return_decision=body.decision, decided_at=now, updated_at=func.now())
+    )
+    mark_changed(s, LIVE_ENTITY, event.id)
+    return await _current(s, ctx, now)
+
+
+async def _go_back(
+    s: AsyncSession, ctx: WorkspaceContext, event: Any, version: int, now: datetime
+) -> None:
+    detour = await tasks.get_task(s, event.detour_task_id)
+    if detour.status == IN_PROGRESS:
+        # Its session ends here, so going back is not counted as another switch.
+        await s.execute(
+            update(_sessions)
+            .where(
+                _sessions.c.task_id == detour.id,
+                _sessions.c.ended_at.is_(None),
+                _sessions.c.deleted_at.is_(None),
+            )
+            .values(ended_at=now, updated_at=func.now())
+        )
+        await tasks.change_status(s, ctx.actor, detour.id, tasks.Status.BACKLOG, version, now=now)
+    if event.return_to_task_id is None:
+        return
+    try:
+        back = await tasks.get_task(s, event.return_to_task_id)
+    except NotFound:
+        return
+    if back.status == TODAY:
+        await tasks.change_status(
+            s, ctx.actor, back.id, tasks.Status.IN_PROGRESS, back.version, now=now
+        )
 
 
 async def less_of_this(
@@ -644,19 +915,27 @@ async def start_session(ctx: WorkspaceContext, task_id: UUID, at: datetime) -> S
 
 
 async def end_sessions(ctx: WorkspaceContext, task_id: UUID, at: datetime) -> list[str]:
-    """The task left In progress: its open session ends; the ended sessions' workflows."""
+    """The task left In progress: its open session ends. The workflows of its sessions
+    that ended at `at`: here, or already in the request that moved it (a detour's
+    Return), so those hear `end` too."""
     async with tenant_session(ctx) as s:
-        ended = list(
+        await s.execute(
+            update(_sessions)
+            .where(
+                _sessions.c.task_id == task_id,
+                _sessions.c.ended_at.is_(None),
+                _sessions.c.deleted_at.is_(None),
+            )
+            .values(ended_at=at, updated_at=func.now())
+        )
+        ended: list[str] = list(
             (
                 await s.scalars(
-                    update(_sessions)
-                    .where(
+                    select(_sessions.c.workflow_id).where(
                         _sessions.c.task_id == task_id,
-                        _sessions.c.ended_at.is_(None),
+                        _sessions.c.ended_at == at,
                         _sessions.c.deleted_at.is_(None),
                     )
-                    .values(ended_at=at, updated_at=func.now())
-                    .returning(_sessions.c.workflow_id)
                 )
             ).all()
         )
@@ -775,6 +1054,32 @@ async def record_activity(ctx: WorkspaceContext, task_ids: list[UUID], at: datet
                 last_activity_at=func.greatest(func.coalesce(_sessions.c.last_activity_at, at), at)
             )
         )
+
+
+async def prepare_next(ctx: WorkspaceContext, task_id: UUID, at: datetime, key: str) -> None:
+    """A task went In progress at `at` (P4-01, FR-10.6): at Guardrail, the next task of
+    today's plan (after the started one when it is in the plan, else after the one-task
+    card's) gets its enrichment run ahead of time when it has no first action, so starting
+    it costs nothing."""
+    async with tenant_session(ctx) as s:
+        level = await _level(s, ctx, at)
+        if level.effective != "guardrail":
+            return
+        try:
+            plan = await planning.get_plan(ctx, at.astimezone(level.tz).date(), session=s)
+        except ProblemError:
+            return
+    items = [i for i in plan.items if i.removed_at is None]
+    lite = [rules.PlanItemLite(i.task_id, i.position, i.accepted_at is not None) for i in items]
+    statuses = {i.task_id: rules.TaskLite(i.status) for i in items}
+    current: UUID | None = task_id
+    if all(i.task_id != task_id for i in lite):
+        current = rules.current_guardrail_task(lite, statuses)
+    ahead = rules.next_guardrail_task(lite, statuses, current)
+    item = next((i for i in items if i.task_id == ahead), None)
+    if item is None or item.first_action:
+        return
+    await agents.enrich_ahead(ctx, item.task_id, item.project_id, key=key, now=at)
 
 
 # --- The worker: the day's plan ------------------------------------------------------------

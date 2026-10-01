@@ -5,10 +5,12 @@
 // a card (DS-01, ADR-0012). The route loader has filled the cache, so the first render
 // has data. From 16:00 local a Close the day button opens the day-close panel (P1-18, J7)
 // through the `?panel=close` search param. The focus level chip (P2-15) sits beside it.
+// At Guardrail (P4-01, FR-10.6) the body is the one-task view instead: the header stays.
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { focusGetCurrentOptions } from "../../api/@tanstack/react-query.gen";
 import { BUTTON_SECONDARY } from "../common/ui";
 import { ActivityFeed } from "./ActivityFeed";
 import { CalendarStrip } from "./CalendarStrip";
@@ -16,6 +18,7 @@ import { CloseDayPanel } from "./CloseDayPanel";
 import { FitOfferList } from "./FitOfferRow";
 import { FocusLevel } from "./FocusLevel";
 import { formatToday, localDay, localHour } from "./format";
+import { GuardrailDashboard } from "./GuardrailDashboard";
 import { KillSwitch } from "./KillSwitch";
 import { ProjectCardGrid } from "./ProjectCardGrid";
 import {
@@ -87,6 +90,8 @@ export function DashboardPage() {
   const reviewCount = useQuery(reviewCountQuery());
   const workspace = useQuery(workspaceQuery());
   const deployStatus = useQuery(deployStatusQuery());
+  const focus = useQuery(focusGetCurrentOptions());
+  const guardrail = focus.data?.level === "guardrail";
   const timeZone = workspace.data?.timezone ?? deviceTimeZone();
   // The day's plan is read for the workspace's own day, once its zone is known (P1-11).
   const planDay = workspace.data
@@ -140,36 +145,40 @@ export function DashboardPage() {
           <ReviewBadge count={reviewCount.data?.count ?? 0} />
         </div>
       </header>
-      <div className="flex flex-col gap-6 md:grid md:min-h-0 md:flex-1 md:grid-cols-12">
-        <div className="flex min-h-0 flex-col gap-4 md:col-span-5">
-          {planDay !== undefined && <CalendarStrip day={planDay} />}
-          <TodayPanel
-            items={today.data?.items ?? []}
-            total={today.data?.total ?? 0}
-            projectNames={projectNames}
-            unavailable={today.isError}
-            pending={today.isPending}
-            {...(planDay === undefined ? {} : { planDay })}
-            className="md:flex-1"
-          />
-          {plan.data && (
-            <FitOfferList
-              issues={plan.data.issues}
-              day={plan.data.day}
-              className="shrink-0"
+      {guardrail ? (
+        <GuardrailDashboard planDay={planDay} />
+      ) : (
+        <div className="flex flex-col gap-6 md:grid md:min-h-0 md:flex-1 md:grid-cols-12">
+          <div className="flex min-h-0 flex-col gap-4 md:col-span-5">
+            {planDay !== undefined && <CalendarStrip day={planDay} />}
+            <TodayPanel
+              items={today.data?.items ?? []}
+              total={today.data?.total ?? 0}
+              projectNames={projectNames}
+              unavailable={today.isError}
+              pending={today.isPending}
+              {...(planDay === undefined ? {} : { planDay })}
+              className="md:flex-1"
             />
-          )}
-          <ActivityFeed />
+            {plan.data && (
+              <FitOfferList
+                issues={plan.data.issues}
+                day={plan.data.day}
+                className="shrink-0"
+              />
+            )}
+            <ActivityFeed />
+          </div>
+          <ProjectCardGrid
+            projects={activeInBoardOrder(allProjects)}
+            timeZone={timeZone}
+            deploy={deploy}
+            unavailable={projects.isError}
+            pending={projects.isPending}
+            className="md:col-span-7"
+          />
         </div>
-        <ProjectCardGrid
-          projects={activeInBoardOrder(allProjects)}
-          timeZone={timeZone}
-          deploy={deploy}
-          unavailable={projects.isError}
-          pending={projects.isPending}
-          className="md:col-span-7"
-        />
-      </div>
+      )}
       {panel === "close" && (
         <CloseDayPanel
           day={closeDay}
