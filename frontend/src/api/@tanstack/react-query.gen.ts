@@ -68,6 +68,7 @@ import {
   focusLess,
   focusPutLevel,
   focusRespond,
+  focusReturnDetour,
   githubWebhook,
   healthLive,
   healthReady,
@@ -329,6 +330,9 @@ import type {
   FocusRespondData,
   FocusRespondError,
   FocusRespondResponse,
+  FocusReturnDetourData,
+  FocusReturnDetourError,
+  FocusReturnDetourResponse,
   GithubWebhookData,
   GithubWebhookError,
   GithubWebhookResponse,
@@ -2059,6 +2063,33 @@ export const focusRespondMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await focusRespond({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Return Detour
+ */
+export const focusReturnDetourMutation = (
+  options?: Partial<Options<FocusReturnDetourData>>,
+): UseMutationOptions<
+  FocusReturnDetourResponse,
+  FocusReturnDetourError,
+  Options<FocusReturnDetourData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    FocusReturnDetourResponse,
+    FocusReturnDetourError,
+    Options<FocusReturnDetourData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await focusReturnDetour({
         ...options,
         ...fnOptions,
         throwOnError: true,

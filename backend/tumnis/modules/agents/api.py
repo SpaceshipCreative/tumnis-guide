@@ -191,6 +191,7 @@ __all__ = [
     "ask_human",
     "check_action",
     "configure_human_waits",
+    "enrich_ahead",
     "issue_run_token",
     "long_poll_decision",
     "master_agent",
@@ -198,6 +199,7 @@ __all__ = [
     "planning_request",
     "read_digest",
     "record_event",
+    "register_enrichment_starter",
     "register_skill_runner",
     "request_approval",
     "retry_provision",
@@ -912,6 +914,44 @@ async def _start_provision(
     if not _starter:
         raise RuntimeError("agents.workflows is not loaded: nothing can start a provision")
     await _starter[0](workspace_id, project_id, mode, link_name, attempt=attempt)
+
+
+class EnrichmentStarter(Protocol):
+    """Enqueues `enrich_task` once per key (`workflows.start_enrichment`)."""
+
+    async def __call__(
+        self,
+        workspace_id: UUID,
+        task_id: UUID,
+        project_id: UUID,
+        *,
+        key: str,
+        only: list[str] | None = None,
+    ) -> None: ...
+
+
+_enrichment_starter: list[EnrichmentStarter] = []
+
+
+def register_enrichment_starter(starter: EnrichmentStarter) -> None:
+    """workflows registers its enqueue at import, as for the provision starter: focus's
+    next-task preparation (P4-01) starts an enrichment through api."""
+    _enrichment_starter[:] = [starter]
+
+
+async def enrich_ahead(
+    ctx: WorkspaceContext, task_id: UUID, project_id: UUID, *, key: str, now: datetime
+) -> bool:
+    """The task's enrichment run ahead of time (P4-01, FR-10.6: Guardrail prepares the next
+    task, so starting it costs nothing): workflow id `enrich:<task id>:<key>`, so a
+    redelivered event starts nothing new. Nothing starts (False) when the project has no
+    provisioned agent."""
+    if await agent_for_project(project_id, now=now, ctx=ctx) == "not_provisioned":
+        return False
+    if not _enrichment_starter:
+        raise RuntimeError("agents.workflows is not loaded: nothing can start an enrichment")
+    await _enrichment_starter[0](ctx.workspace_id, task_id, project_id, key=key)
+    return True
 
 
 async def provision_project(

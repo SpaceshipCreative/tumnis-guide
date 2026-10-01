@@ -3,7 +3,8 @@ can emit them while `events.py` calls `api.py` (the tasks module's pattern).
 
 - `focus.event`: a focus event fired (FR-10.2), with the level and rule that produced it
   (FR-10.9) and the message shown. The only output of P2-15; the bar reads it over `/ws`
-  and P2-16 delivers it further.
+  and P2-16 delivers it further. A `switched` event that captured a detour at Guardrail
+  also names the detour task and the task to return to (P4-01).
 - `focus.responded`: a one-tap answer to a focus event (FR-10.4), "less of this" included;
   it joins the task's project digest (P2-03).
 - `focus.level_changed`: the workspace's focus level (`scope` "workspace") or today's
@@ -36,6 +37,10 @@ class FocusEventV1(EventPayload):
     level: Level
     message: str
     fired_at: datetime
+    # A `switched` event that captured a detour at Guardrail (P4-01, FR-10.6): the task
+    # created for it and the task the return question offers to go back to.
+    detour_task_id: UUID | None = None
+    return_to_task_id: UUID | None = None
 
 
 @event_type("focus.responded", 1)
