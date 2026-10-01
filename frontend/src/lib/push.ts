@@ -82,6 +82,8 @@ export async function enablePush(): Promise<PushStatus> {
     public_key: string;
   };
   const reg = await navigator.serviceWorker.ready;
+  // `subscribe` hands back a subscription that already exists (another tab's, say).
+  const earlier = await reg.pushManager.getSubscription();
   const subscription = await reg.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: base64UrlBytes(publicKey),
@@ -99,9 +101,10 @@ export async function enablePush(): Promise<PushStatus> {
       },
     });
   } catch (error) {
-    // The server kept nothing: drop the browser's subscription too, or Settings would
-    // show push as on (from `getSubscription`) with no way to try again.
-    await subscription.unsubscribe().catch(() => false);
+    // The server kept nothing: drop the subscription made just now too, or Settings
+    // would show push as on (from `getSubscription`) with no way to try again. One the
+    // browser had before is left alone: it may be another tab's working subscription.
+    if (earlier === null) await subscription.unsubscribe().catch(() => false);
     throw error;
   }
   return "on";
