@@ -87,6 +87,20 @@ class EmbeddingsSettings(BaseModel):
     query_timeout_ms: int = Field(default=2000, gt=0)  # a search waits this long, then FTS
 
 
+class SpeechSettings(BaseModel):
+    """The Speech slot (P4-03, FR-11.7): the local Piper HTTP server on the agent server
+    (`python3 -m piper.http_server -m <voice>`, port 5000 by default) and the voice to ask
+    for (unset: the one Piper started with). Unset `piper_url` leaves the server engine
+    off: the PWA speaks with the browser's own voice. Env: `SPEECH__PIPER_URL`,
+    `SPEECH__PIPER_VOICE`. A hosted provider is not configured here (Scott item: its key
+    storage)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    piper_url: str | None = None  # e.g. http://agents.lan:5000
+    piper_voice: str | None = None  # e.g. en_US-lessac-medium
+
+
 class KnowledgeSettings(BaseModel):
     """Upload safety and extraction (P1-16, SEC-10, ADR-0007). Env: `KNOWLEDGE__SPOOL_DIR`
     and so on.
@@ -152,6 +166,7 @@ class Settings(BaseSettings):
     outbound_allowlist: str = ""
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
     embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings)
+    speech: SpeechSettings = Field(default_factory=SpeechSettings)
     knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
     agents: AgentsSettings = Field(default_factory=AgentsSettings)
 

@@ -9,7 +9,6 @@ import pytest
 
 @pytest.mark.req("FR-11.7", "FR-10.8")
 @pytest.mark.wp("P4-03")
-@pytest.mark.xfail(strict=True, reason="spec:P4-03")
 def test_hosted_speech_off_by_default() -> None:
     """T-P4-03-07
     Defaults: no level speaks, the engine is the browser's, the server provider is Piper
