@@ -12,7 +12,8 @@ export default mergeConfig(
     test: {
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
-      include: ["src/**/*.test.{ts,tsx}"],
+      // tests/: whole-build checks (T-P1-17-18 builds the app in memory).
+      include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.ts"],
       restoreMocks: true,
       unstubGlobals: true,
       // Whole-route journeys run past the 5 s default on a loaded machine. P0-24's undo

@@ -1,0 +1,1 @@
+StarterKit does not model tables: this fixture is asserted through canEditSafely (T-P1-17-05), not the byte test.
