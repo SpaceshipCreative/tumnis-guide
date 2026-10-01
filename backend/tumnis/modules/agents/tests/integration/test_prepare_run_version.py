@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Any, Final
 
 import pytest
 
-from tumnis.core.versioning import StaleVersion
 from tumnis.modules.agents.tests.integration._runs import owner_rows, run_world
 
 if TYPE_CHECKING:
@@ -54,7 +53,6 @@ def _bump(db: DbUrls, task_id: UUID) -> list[tuple[Any, ...]]:
 
 @pytest.mark.req("FR-5.4")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, raises=StaleVersion, reason="spec:FIX-prepare-run")
 async def test_prepare_run_survives_a_task_version_bump(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
