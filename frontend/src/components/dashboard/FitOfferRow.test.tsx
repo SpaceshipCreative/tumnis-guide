@@ -16,7 +16,7 @@ import { FitOfferRow } from "./FitOfferRow";
 const VIEWPORTS: readonly Viewport[] = ["phone", "laptop"];
 const MONDAY = "2026-03-09";
 
-test.fails("[P1-11][J6] split or move", async () => {
+test("[P1-11][J6] split or move", async () => {
   const issue = ninetyMinuteIssue();
   for (const viewport of VIEWPORTS) {
     const recorder = new Recorder();

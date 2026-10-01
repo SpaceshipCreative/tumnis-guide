@@ -6,7 +6,13 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { expect, test } from "vitest";
 
 import { makeTask } from "../../test/factories";
-import { ALTERNATES, mondayPlan, planHandlers } from "../../test/msw/planning";
+import {
+  ALTERNATES,
+  mondayPlan,
+  noPlan,
+  planHandlers,
+  planItem,
+} from "../../test/msw/planning";
 import { server } from "../../test/msw/server";
 import { Recorder } from "../../test/msw/settings";
 import { renderWithRouter, type Viewport } from "../../test/render";
@@ -217,77 +223,74 @@ async function renderPlan(
   return result;
 }
 
-test.fails(
-  "[P1-11][FR-1.2] items show project, label, estimate, first action, reason, block",
-  async () => {
-    const expected = [
-      [
-        "Send logo drafts",
-        "Acme site",
-        "Human",
-        "1 h",
-        "Due today",
-        "09:00–10:00",
-      ],
-      [
-        "Book the venue",
-        "Tumnis dogfood",
-        "Hybrid",
-        "30 min",
-        "Client is waiting",
-        "10:00–10:30",
-      ],
-      [
-        "Draft the outline",
-        "Acme site",
-        "AI",
-        null,
-        "Runs while you work",
-        "Runs anytime",
-      ],
-      [
-        "Write the proposal",
-        "Acme site",
-        "Human",
-        "1 h",
-        "Rolled over twice",
-        "13:00–14:00",
-      ],
-    ] as const;
-    for (const viewport of VIEWPORTS) {
-      const { unmount } = await renderPlan(
-        planHandlers(new Recorder()),
-        viewport,
-      );
-      const rows = planRows();
-      expect(rows).toHaveLength(4);
-      rows.forEach((row, i) => {
-        const [title, project, label, estimate, reason, block] =
-          expected[i] ?? [];
-        const at = within(row);
-        expect(at.getByText(title ?? "", { exact: true })).toBeInTheDocument();
-        expect(at.getByTestId("plan-project")).toHaveTextContent(project ?? "");
-        expect(at.getByTestId("label-chip")).toHaveTextContent(label ?? "");
-        if (estimate === null) {
-          expect(at.queryByTestId("estimate-chip")).toBeNull();
-        } else {
-          expect(at.getByTestId("estimate-chip")).toHaveTextContent(
-            estimate ?? "",
-          );
-        }
-        expect(at.getByTestId("first-action")).toHaveTextContent(
-          `First action: First step ${String(i + 1)}`,
+test("[P1-11][FR-1.2] items show project, label, estimate, first action, reason, block", async () => {
+  const expected = [
+    [
+      "Send logo drafts",
+      "Acme site",
+      "Human",
+      "1 h",
+      "Due today",
+      "09:00–10:00",
+    ],
+    [
+      "Book the venue",
+      "Tumnis dogfood",
+      "Hybrid",
+      "30 min",
+      "Client is waiting",
+      "10:00–10:30",
+    ],
+    [
+      "Draft the outline",
+      "Acme site",
+      "AI",
+      null,
+      "Runs while you work",
+      "Runs anytime",
+    ],
+    [
+      "Write the proposal",
+      "Acme site",
+      "Human",
+      "1 h",
+      "Rolled over twice",
+      "13:00–14:00",
+    ],
+  ] as const;
+  for (const viewport of VIEWPORTS) {
+    const { unmount } = await renderPlan(
+      planHandlers(new Recorder()),
+      viewport,
+    );
+    const rows = planRows();
+    expect(rows).toHaveLength(4);
+    rows.forEach((row, i) => {
+      const [title, project, label, estimate, reason, block] =
+        expected[i] ?? [];
+      const at = within(row);
+      expect(at.getByText(title ?? "", { exact: true })).toBeInTheDocument();
+      expect(at.getByTestId("plan-project")).toHaveTextContent(project ?? "");
+      expect(at.getByTestId("label-chip")).toHaveTextContent(label ?? "");
+      if (estimate === null) {
+        expect(at.queryByTestId("estimate-chip")).toBeNull();
+      } else {
+        expect(at.getByTestId("estimate-chip")).toHaveTextContent(
+          estimate ?? "",
         );
-        expect(at.getByTestId("plan-reason")).toHaveTextContent(reason ?? "");
-        expect(at.getByTestId("plan-block")).toHaveTextContent(block ?? "");
-        expect(row).toHaveAttribute("data-state", "proposed");
-      });
-      unmount();
-    }
-  },
-);
+      }
+      expect(at.getByTestId("first-action")).toHaveTextContent(
+        `First action: First step ${String(i + 1)}`,
+      );
+      expect(at.getByTestId("plan-reason")).toHaveTextContent(reason ?? "");
+      expect(at.getByTestId("plan-block")).toHaveTextContent(block ?? "");
+      expect(row).toHaveAttribute("data-state", "proposed");
+    });
+    unmount();
+  }
+});
 
-test.fails("[P1-11][J1] keyboard accept, swap, remove", async () => {
+test("[P1-11][J1] keyboard accept, swap, remove", async () => {
   const recorder = new Recorder();
   const plan = mondayPlan();
   const { user, unmount } = await renderPlan(planHandlers(recorder, plan));
@@ -358,7 +361,7 @@ test.fails("[P1-11][J1] keyboard accept, swap, remove", async () => {
   expect(conflicted.writes()).toHaveLength(1);
 });
 
-test.fails("[P1-11][FR-4.3] fallback notice and blocked badge", async () => {
+test("[P1-11][FR-4.3] fallback notice and blocked badge", async () => {
   const plan = mondayPlan({
     source: "fallback",
     notice: "agent_offline",
@@ -380,4 +383,60 @@ test.fails("[P1-11][FR-4.3] fallback notice and blocked badge", async () => {
     expect(first).not.toHaveTextContent("Waiting on you");
     unmount();
   }
+});
+
+test("[P1-11][FR-1.2] at most five plan items, removed ones left out", async () => {
+  const items = [1, 2, 3, 4, 5, 6, 7].map((n) =>
+    planItem(n, { removed_at: n === 2 ? "2026-03-09T12:40:00Z" : null }),
+  );
+  server.use(...planHandlers(new Recorder(), mondayPlan({ items })));
+  await renderWithRouter(
+    <TodayPanel items={[]} total={0} projectNames={{}} planDay={MONDAY} />,
+  );
+  await screen.findByText("Task 1");
+  const titles = planRows().map(
+    (row) => within(row).getAllByText(/^Task \d$/)[0]?.textContent,
+  );
+  expect(titles).toEqual(["Task 1", "Task 3", "Task 4", "Task 5", "Task 6"]);
+});
+
+test("[P1-11][FR-4.3] a master's plan shows no notice, and Re-plan asks for one", async () => {
+  const recorder = new Recorder();
+  const { user } = await renderPlan(planHandlers(recorder));
+  const panel = screen.getByRole("region", { name: "Today" });
+  expect(panel).not.toHaveTextContent("Planned by due date");
+  await user.click(within(panel).getByRole("button", { name: "Re-plan" }));
+  await waitFor(() => {
+    expect(recorder.writes()).toEqual(["POST /v1/plan/replan"]);
+  });
+  expect(recorder.sent.at(-1)?.body).toEqual({ day: MONDAY });
+});
+
+test("[P1-11][FR-1.2] without a plan for the day the Today tasks show", async () => {
+  server.use(noPlan());
+  const items = [
+    makeTask({
+      project_id: ACME,
+      title: "Tidy the drive",
+      label: "human",
+      estimate_minutes: 20,
+      first_action: "Open the drive",
+      status: "today",
+    }),
+  ];
+  await renderWithRouter(
+    <TodayPanel
+      items={items}
+      total={1}
+      projectNames={PROJECT_NAMES}
+      planDay={MONDAY}
+    />,
+  );
+  expect(await screen.findByText("Tidy the drive")).toBeInTheDocument();
+  expect(
+    within(screen.getByRole("region", { name: "Today" })).queryByRole(
+      "button",
+      { name: "Re-plan" },
+    ),
+  ).toBeInTheDocument();
 });
