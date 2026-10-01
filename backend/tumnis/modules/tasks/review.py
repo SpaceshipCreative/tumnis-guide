@@ -530,15 +530,19 @@ async def list_review_items(
     kind: str | None = None,
     cursor: str | None = None,
     limit: int = 50,
+    project_id: UUID | None = None,
 ) -> Page[ReviewItemOut]:
     """The open queue at `now` (not decided, trashed or snoozed past `now`), optionally of
-    one kind, by weighted impact, then age, then id."""
+    one kind and one project (a project's Inbox, P2-17), by weighted impact, then age,
+    then id."""
     stmt = _select().where(
         OPEN,
         or_(_review.c.snoozed_until.is_(None), _review.c.snoozed_until <= now),
     )
     if kind is not None:
         stmt = stmt.where(_review.c.kind == kind)
+    if project_id is not None:
+        stmt = stmt.where(_review.c.project_id == project_id)
     page = await paginate(
         s,
         stmt,

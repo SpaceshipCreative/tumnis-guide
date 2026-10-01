@@ -117,14 +117,7 @@ def use(
 def net() -> NetPolicy:
     if _Config.net is not None:
         return _Config.net
-    from pydantic import ValidationError  # noqa: PLC0415
-
-    from tumnis.settings import Settings  # noqa: PLC0415
-
-    try:
-        return Settings().net_policy()  # read from the environment
-    except ValidationError:  # no deployment settings (in-process tests): the default mode
-        return NetPolicy(mode="self-hosted")
+    return api.deployment_net()
 
 
 def clock() -> Clock:

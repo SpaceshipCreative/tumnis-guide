@@ -28,6 +28,7 @@ import {
   FIELD_LABEL,
   HINT,
 } from "../common/ui";
+import { Citation, linkHref } from "./Citation";
 
 export type ResultDecide = (
   action: "accept" | "reject",
@@ -72,8 +73,9 @@ function links(payload: Record<string, unknown>): ResultLink[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((entry: unknown) => {
     const link = entry as Partial<ResultLink> | null;
-    // Only web links become links: an agent's text never becomes a script URL.
-    return typeof link?.url === "string" && /^https?:\/\//.test(link.url)
+    // Only web links and document citations (P2-17) become links: an agent's text never
+    // becomes a script URL.
+    return typeof link?.url === "string" && linkHref(link.url) !== null
       ? [
           {
             kind: typeof link.kind === "string" ? link.kind : "url",
@@ -196,14 +198,11 @@ export function ResultItem({
           <ul aria-label="Links" className="flex flex-wrap gap-x-4 gap-y-1">
             {shown.map((link) => (
               <li key={link.url} className="min-w-0">
-                <a
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Citation
+                  url={link.url}
+                  label={link.label}
                   className="text-sm break-all text-accent underline"
-                >
-                  {link.label ?? link.url}
-                </a>
+                />
               </li>
             ))}
           </ul>

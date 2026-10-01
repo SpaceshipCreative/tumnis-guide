@@ -39,6 +39,163 @@
         "title": "AccountOut",
         "type": "object"
       },
+      "ActivityItem": {
+        "description": "One row of a project's Activity: a run (its status now), a result (its summary) or\nan audit row (its action and who did it), at the time it happened.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "actor_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Type"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "run",
+              "result",
+              "audit"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "task_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Title"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "task_id",
+          "task_title",
+          "run_id",
+          "status",
+          "summary",
+          "action",
+          "actor_type"
+        ],
+        "title": "ActivityItem",
+        "type": "object"
+      },
+      "AgentFeedOut": {
+        "description": "The dashboard's agent activity (FR-1.5): the newest task runs in each group.",
+        "properties": {
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/FeedRun"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "finished": {
+            "items": {
+              "$ref": "#/components/schemas/FeedRun"
+            },
+            "title": "Finished",
+            "type": "array"
+          },
+          "running": {
+            "items": {
+              "$ref": "#/components/schemas/FeedRun"
+            },
+            "title": "Running",
+            "type": "array"
+          },
+          "waiting": {
+            "items": {
+              "$ref": "#/components/schemas/FeedRun"
+            },
+            "title": "Waiting",
+            "type": "array"
+          }
+        },
+        "required": [
+          "running",
+          "waiting",
+          "finished",
+          "failed"
+        ],
+        "title": "AgentFeedOut",
+        "type": "object"
+      },
       "AgentProfileChoice": {
         "additionalProperties": false,
         "description": "The project's agent (P1-06): a new Hermes profile from the project template\n(`create`, the default; named after the project, so `name` is ignored), or an existing\nprofile on the agent server, by `name` (`link`; `create_project` answers 422\n`invalid_profile_choice` without one). The agents module provisions it on\n`project.created`.",
@@ -376,6 +533,40 @@
           "prompt"
         ],
         "title": "AskHumanBody",
+        "type": "object"
+      },
+      "AskIn": {
+        "properties": {
+          "question": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskIn",
+        "type": "object"
+      },
+      "AskOut": {
+        "description": "The task the question became, and the run answering it.",
+        "properties": {
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/TaskOut"
+          }
+        },
+        "required": [
+          "task",
+          "run_id"
+        ],
+        "title": "AskOut",
         "type": "object"
       },
       "AuditEntry": {
@@ -1622,6 +1813,40 @@
         "title": "DocumentDTO",
         "type": "object"
       },
+      "DocumentResultLink": {
+        "description": "A document: a web address or a citation of a knowledge-base document and page,\n`tumnis://doc/<id>#page=<n>` (P2-17, FR-15.4).",
+        "properties": {
+          "kind": {
+            "const": "document",
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "url": {
+            "maxLength": 2048,
+            "pattern": "^(https?://\\S+|tumnis://doc/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:#page=([1-9][0-9]{0,5}))?)$",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "url"
+        ],
+        "title": "DocumentResultLink",
+        "type": "object"
+      },
       "DocumentVersionOut": {
         "properties": {
           "body_md": {
@@ -1776,6 +2001,72 @@
           "sweep"
         ],
         "title": "Evaluation",
+        "type": "object"
+      },
+      "FeedRun": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RunKind"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "task_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Title"
+          }
+        },
+        "required": [
+          "run_id",
+          "task_id",
+          "task_title",
+          "project_id",
+          "kind",
+          "status",
+          "at"
+        ],
+        "title": "FeedRun",
         "type": "object"
       },
       "FileTouched": {
@@ -3261,6 +3552,34 @@
         "title": "OpenPause",
         "type": "object"
       },
+      "Page_ActivityItem_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "Page[ActivityItem]",
+        "type": "object"
+      },
       "Page_AgentProfileOut_": {
         "properties": {
           "items": {
@@ -3427,6 +3746,34 @@
           "next_cursor"
         ],
         "title": "Page[KeyOut]",
+        "type": "object"
+      },
+      "Page_KnowledgeHit_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeHit"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "Page[KnowledgeHit]",
         "type": "object"
       },
       "Page_ProjectOut_": {
@@ -6301,43 +6648,16 @@
         "type": "object"
       },
       "ResultLink": {
-        "properties": {
-          "kind": {
-            "enum": [
-              "branch",
-              "pull_request",
-              "document",
-              "draft",
-              "url"
-            ],
-            "title": "Kind",
-            "type": "string"
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/WebResultLink"
           },
-          "label": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Label"
-          },
-          "url": {
-            "maxLength": 2048,
-            "pattern": "^https?://\\S+$",
-            "title": "Url",
-            "type": "string"
+          {
+            "$ref": "#/components/schemas/DocumentResultLink"
           }
-        },
-        "required": [
-          "kind",
-          "url"
         ],
-        "title": "ResultLink",
-        "type": "object"
+        "description": "A link a result names. Only a `document` link may be a `tumnis://` citation: the\nrule is the schema's (one variant per kind; `kind` tells them apart), so OpenAPI, the\ntools' JSON Schema and anything generated from them (zod, test factories) hold it too.\nA plain `anyOf`, not a discriminator: its mapping would name `#/$defs/...` in the tool\nand `#/components/...` in OpenAPI. Built like a model, `ResultLink(kind=..., url=...)`;\n`kind`, `url` and `label` read through.",
+        "title": "ResultLink"
       },
       "ResultOut": {
         "properties": {
@@ -9097,6 +9417,7 @@
         "type": "object"
       },
       "TextEntryIn": {
+        "description": "`add_document`'s twin body (P1-17's text entry, R-36).",
         "properties": {
           "body_md": {
             "default": "",
@@ -9115,6 +9436,26 @@
               }
             ],
             "title": "Project Id"
+          },
+          "schema_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Tags",
+            "type": "array"
           },
           "title": {
             "maxLength": 300,
@@ -9564,6 +9905,45 @@
         "title": "UsageRow",
         "type": "object"
       },
+      "WebResultLink": {
+        "description": "A branch, pull request, draft or other web address: always `http(s)://`.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "branch",
+              "pull_request",
+              "draft",
+              "url"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "url": {
+            "maxLength": 2048,
+            "pattern": "^https?://\\S+$",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "url"
+        ],
+        "title": "WebResultLink",
+        "type": "object"
+      },
       "WebhookOut": {
         "properties": {
           "status": {
@@ -9960,6 +10340,108 @@
         "summary": "Ready",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/v1/agents/feed": {
+      "get": {
+        "description": "The dashboard's agent activity (FR-1.5): task runs running, waiting on the human,\nfinished and failed, the newest ten of each.",
+        "operationId": "agents_get_agent_feed",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentFeedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Agent Feed",
+        "tags": [
+          "agents"
         ]
       }
     },
@@ -13994,7 +14476,7 @@
     },
     "/v1/files/{document_id}": {
       "get": {
-        "description": "The document's original file, always as a download (`attachment`, octet-stream,\n`nosniff`); 409 `not_available` until the document is `ready`. `version` is a version\nnumber.",
+        "description": "The document's original file as a download (`attachment`, octet-stream, `nosniff`);\na PDF by its sniffed bytes is served `inline` as `application/pdf`, so a citation opens\nthe browser's viewer at `#page=n` (RFC 8118; Scott decision 47). Both keep `nosniff`\nand the security headers. 409 `not_available` until the document is `ready`. `version`\nis a version number.",
         "operationId": "knowledge_get_file",
         "parameters": [
           {
@@ -14028,6 +14510,12 @@
           "200": {
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "application/pdf": {
                 "schema": {
                   "format": "binary",
                   "type": "string"
@@ -15536,7 +16024,7 @@
     },
     "/v1/knowledge/documents/text": {
       "post": {
-        "description": "A text entry (Markdown) in a project or the workspace knowledge base: version 1,\nsearchable at once, trusted when a person writes it (FR-15.5, `_origin`); in a project\nwith a folder, also `notes/`.",
+        "description": "A text entry (Markdown) in a project or the workspace knowledge base: version 1,\nsearchable at once; the `add_document` tool's twin (R-36). A person's is a trusted\nnote (in a project with a folder, also `notes/`); any other caller's is untrusted and\nagent-written (FR-15.5), and goes to `agent-outputs/`.",
         "operationId": "knowledge_create_text_entry",
         "requestBody": {
           "content": {
@@ -15753,7 +16241,7 @@
         ]
       },
       "get": {
-        "description": "A document's state (status, reason, kind, path): what the upload flow polls.",
+        "description": "A document's state (status, reason, kind, path) and text: what the upload flow\npolls; the `get_document` tool's twin. A project-limited caller reads its projects'\ndocuments and the workspace knowledge base's (R-28).",
         "operationId": "knowledge_get_document",
         "parameters": [
           {
@@ -15764,6 +16252,22 @@
               "format": "uuid",
               "title": "Document Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "schema_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schema Version"
             }
           }
         ],
@@ -17039,7 +17543,7 @@
     },
     "/v1/knowledge/search": {
       "get": {
-        "description": "Full-text search of a project's items and the workspace knowledge base (none: the\nwhole workspace), citing document, heading path and page (FR-15.3).",
+        "description": "Full-text search of a project's items and the workspace knowledge base (none: every\nproject the caller sees), citing document, heading path and page (FR-15.3), best\nfirst, a page at a time; the `search_knowledge` tool's twin. The parameters are\n`tools.SearchKnowledgeIn`'s, spelled out so the page's `cursor` and `limit` show.",
         "operationId": "knowledge_search",
         "parameters": [
           {
@@ -17081,6 +17585,39 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "schema_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schema Version"
+            }
           }
         ],
         "responses": {
@@ -17088,11 +17625,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/KnowledgeHit"
-                  },
-                  "title": "Response Knowledge Search",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Page_KnowledgeHit_"
                 }
               }
             },
@@ -19336,6 +19869,149 @@
         ]
       }
     },
+    "/v1/projects/{project_id}/activity": {
+      "get": {
+        "description": "The project's Activity view (FR-2.6): its task runs, their results and its audit\ntrail, newest first, a page at a time. 400 `invalid_cursor`; 404 for an unknown\nproject.",
+        "operationId": "agents_list_activity",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ActivityItem_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "List Activity",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/v1/projects/{project_id}/archive": {
       "post": {
         "operationId": "projects_archive_project",
@@ -19456,6 +20132,130 @@
         "summary": "Archive Project",
         "tags": [
           "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/ask": {
+      "post": {
+        "description": "Ask the project's agent (the composer's Ask the agent toggle): the question becomes\nan AI task (source `ask`) and its run starts at once; the run's result is the answer.\n404 for an unknown project; 409 `no_ready_profile` (nothing is kept) when the project\nhas no ready agent.",
+        "operationId": "agents_ask",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Ask",
+        "tags": [
+          "agents"
         ]
       }
     },
@@ -20049,6 +20849,149 @@
         "summary": "Get Project Context",
         "tags": [
           "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/inbox": {
+      "get": {
+        "description": "The project's Inbox (FR-2.6): the tasks its agent proposes, waiting for a decision\n(`proposal` review items; P3-07 fills it). 404 for an unknown project.",
+        "operationId": "tasks_list_inbox",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ReviewItemOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "List Inbox",
+        "tags": [
+          "tasks"
         ]
       }
     },
