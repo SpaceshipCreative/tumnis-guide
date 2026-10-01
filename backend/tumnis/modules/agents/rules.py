@@ -637,7 +637,7 @@ DigestScope = Literal["project", "workspace"]
 DIGEST_KINDS: Final[tuple[str, ...]] = get_args(DigestKind)
 # Project entries of these kinds are also listed in the workspace digest (FR-13.4).
 ALSO_IN_WORKSPACE: Final = frozenset({"label_override"})
-# The events the digest subscribes to (P2-15 adds `focus.responded`).
+# The events the digest subscribes to (`focus.*` are P2-15's).
 DIGEST_EVENTS: Final = (
     "human.decided",
     "task.created",
@@ -647,6 +647,7 @@ DIGEST_EVENTS: Final = (
     "document.changed",
     "context_item.linked",
     "focus.level_changed",
+    "focus.responded",
 )
 # P1-07 names a person's label over the AI's `label_override`; a low-confidence label
 # item decided in review (P1-13) is `label`, an override unless the proposal was kept.
