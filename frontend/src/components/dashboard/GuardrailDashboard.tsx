@@ -206,7 +206,11 @@ export function GuardrailDashboard({
       <Card title="Now">
         {current !== undefined && planDay !== undefined ? (
           <GuardrailCard key={current.task_id} item={current} day={planDay} />
-        ) : plan.isPending && planDay !== undefined ? null : (
+        ) : plan.isPending && planDay !== undefined ? null : plan.isError ? (
+          <p className="text-sm text-muted">
+            Today's plan could not be loaded.
+          </p>
+        ) : (
           planDay !== undefined && <NothingPlanned day={planDay} />
         )}
         {remaining > 0 && (

@@ -1,12 +1,13 @@
 // Detour capture in the focus bar at Guardrail (P4-01, FR-10.6): "Switched" opens the
 // picker, the capture posts the title and the picked project with the answer, and the
-// server's return question is answered with Return (the detour task's version read fresh).
+// server's return question is answered with Return (the detour task's version read fresh,
+// naming the question answered); a failed answer asks the question again.
 import { screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { expect, test } from "vitest";
 
 import type { FocusCurrentOut } from "../../api/types.gen";
-import { makeProject, makeTask } from "../../test/factories";
+import { makeProblem, makeProject, makeTask } from "../../test/factories";
 import { projectsList } from "../../test/msw/dashboard";
 import {
   focusCurrent,
@@ -40,11 +41,12 @@ test("[P4-01][FR-10.6] switched at guardrail captures a detour and answers retur
     session,
     messages: [checkIn],
   };
+  const questionId = crypto.randomUUID();
   const asked: FocusCurrentOut = {
     ...guardrail,
     messages: [{ ...checkIn, response: "switched" }],
     detour: {
-      event_id: crypto.randomUUID(),
+      event_id: questionId,
       detour_task_id: detourTask.id,
       detour_title: BANK,
       return_to_task_id: session.task_id,
@@ -105,11 +107,73 @@ test("[P4-01][FR-10.6] switched at guardrail captures a detour and answers retur
     within(question).getByRole("button", { name: "Return" }),
   );
   await waitFor(() => {
-    expect(returns).toEqual([{ decision: "return", version: 4 }]);
+    expect(returns).toEqual([
+      { decision: "return", version: 4, event_id: questionId },
+    ]);
   });
   await waitFor(() => {
     expect(
       within(bar).queryByRole("group", { name: "Back to your task?" }),
     ).toBeNull();
+  });
+});
+
+test("[P4-01][FR-10.6] a failed return answer asks the question again", async () => {
+  const session = focusSession("Write Acme invoice", 5);
+  const detourTask = makeTask({ title: BANK, version: 2 });
+  const guardrail: FocusCurrentOut = {
+    ...quietFocus(),
+    level: "guardrail",
+    workspace_level: "guardrail",
+    session,
+    messages: [],
+  };
+  const asked: FocusCurrentOut = {
+    ...guardrail,
+    detour: {
+      event_id: crypto.randomUUID(),
+      detour_task_id: detourTask.id,
+      detour_title: BANK,
+      return_to_task_id: session.task_id,
+      return_to_title: session.title,
+      message: `Captured. Back to ${session.title}?`,
+      rule: "Guardrail · detour",
+    },
+  };
+  let answers = 0;
+  server.use(
+    focusCurrent(asked),
+    http.get("*/v1/tasks/:taskId", () => HttpResponse.json(detourTask)),
+    http.post("*/v1/focus/return", () => {
+      answers += 1;
+      if (answers === 1) {
+        return HttpResponse.json(
+          makeProblem({ status: 409, code: "stale_version", title: "stale" }),
+          {
+            status: 409,
+            headers: { "Content-Type": "application/problem+json" },
+          },
+        );
+      }
+      return HttpResponse.json(guardrail);
+    }),
+  );
+  const view = await renderRoute("/review", { viewport: "phone" });
+  const bar = await screen.findByRole("region", { name: "Focus" });
+
+  const question = await within(bar).findByRole("group", {
+    name: "Back to your task?",
+  });
+  await view.user.click(within(question).getByRole("button", { name: "Stay" }));
+
+  expect(
+    await within(bar).findByText("Your answer was not saved. Try again."),
+  ).toBeInTheDocument();
+  const again = await within(bar).findByRole("group", {
+    name: "Back to your task?",
+  });
+  await view.user.click(within(again).getByRole("button", { name: "Stay" }));
+  await waitFor(() => {
+    expect(answers).toBe(2);
   });
 });

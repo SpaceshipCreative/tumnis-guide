@@ -220,7 +220,7 @@ export function FocusBar() {
         kind: "create",
         method: "POST",
         path: "/focus/return",
-        body: { decision, version: task.version },
+        body: { decision, version: task.version, event_id: open.event_id },
         idempotencyKey,
         schema: zFocusCurrentOut,
       });
@@ -310,8 +310,9 @@ export function FocusBar() {
       detourTaskId: detour.detour_task_id,
       returnToTaskId: detour.return_to_task_id ?? "",
     });
-    // A new open question is a new event; the rest of `detour` is the same question.
-  }, [actor, detourId]);
+    // A new open question (or a failed answer to this one) is a new event; the rest of
+    // `detour` is the same question.
+  }, [actor, detourId, failures]);
 
   if (!data || (session === null && messages.length === 0)) return null;
 
