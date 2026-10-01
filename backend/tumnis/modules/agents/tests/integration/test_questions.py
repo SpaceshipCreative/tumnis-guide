@@ -134,7 +134,6 @@ async def test_answer_resumes_run(  # noqa: PLR0917
 @pytest.mark.req("FR-5.7")
 @pytest.mark.wp("P2-05")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_killed_worker_during_wait_answer_still_resumes(  # noqa: PLR0917
     app: FastAPI,
     worker_killer: WorkerKillerFactory,

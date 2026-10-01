@@ -151,7 +151,6 @@ async def test_decision_during_long_poll_returns_immediately(  # noqa: PLR0917
 
 @pytest.mark.req("FR-5.6")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_unknown_action_uses_noul_threshold(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
@@ -313,7 +312,6 @@ async def test_gated_request_writes_gated_action_audit(  # noqa: PLR0917
 
 @pytest.mark.req("FR-5.6")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_api_key_without_run_refused(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],

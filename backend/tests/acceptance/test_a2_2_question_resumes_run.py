@@ -55,7 +55,6 @@ QUESTION = "Which footer color?"
 
 
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_question_mid_run_waits_on_human_and_answer_resumes_run(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,

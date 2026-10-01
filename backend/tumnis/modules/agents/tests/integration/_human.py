@@ -28,6 +28,8 @@ import uuid
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
+import psycopg
+
 from tests._mcp import http_for
 from tumnis.modules.agents.tests.integration._runs import finish, owner_rows, wait_until
 
@@ -159,41 +161,45 @@ async def decide(
     *,
     request_id: str | None = None,
 ) -> httpx.Response:
-    await _fresh_sessions()
-    [(version,)] = await _owner_read(
-        "SELECT version FROM review_items WHERE id = :id", {"id": item["id"]}
-    )
-    body: Json = {"action": action, "version": version}
+    dsn = _owner_dsn(http)
+    _fresh_sessions(dsn)
+
+    def ranked() -> bool:  # Jev's factor stored (or the item already closed)
+        with psycopg.connect(dsn) as conn:
+            row = conn.execute(
+                "SELECT decision_id IS NOT NULL OR decided_at IS NOT NULL FROM review_items"
+                " WHERE id = %s",
+                (item["id"],),
+            ).fetchone()
+        return row is None or bool(row[0])
+
+    await wait_until(ranked, timeout=3)  # bounded: with Decisions down nothing is stored
+    with psycopg.connect(dsn) as conn:
+        found = conn.execute(
+            "SELECT version FROM review_items WHERE id = %s", (item["id"],)
+        ).fetchone()
+    body: Json = {"action": action, "version": item["version"] if found is None else found[0]}
     if payload is not None:
         body["payload"] = payload
     headers = {"X-Request-ID": request_id} if request_id else None
     return await http.post(f"/v1/review/{item['id']}/decide", json=body, headers=headers)
 
 
-async def _owner_read(query: str, params: Json) -> list[tuple[Any, ...]]:
-    """An owner read through the app's database (tumnis.core.db, configured by `app`)."""
-    from sqlalchemy import text  # noqa: PLC0415
-
-    from tumnis.core import db  # noqa: PLC0415
-
-    async with db.owner_sessionmaker()() as s:
-        return [tuple(row) for row in (await s.execute(text(query), params)).all()]
+def _owner_dsn(http: SessionClient) -> str:
+    """The owner database of the app the client talks to (its ASGI transport's app)."""
+    app: Any = http._transport.app  # type: ignore[attr-defined]  # httpx.ASGITransport
+    url: str = app.state.settings.database_owner_url
+    return url.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
-async def _fresh_sessions() -> None:
+def _fresh_sessions(dsn: str) -> None:
     """Sessions last used more than a day ago (by the fixed clock) count as used now, so
     an app on the real clock does not find them idle past 30 days. On the fixed clock a
     later `last_seen_at` changes nothing (no expiry, no slide)."""
-    from sqlalchemy import text  # noqa: PLC0415
-
-    from tumnis.core import db  # noqa: PLC0415
-
-    async with db.owner_sessionmaker()() as s, s.begin():
-        await s.execute(
-            text(
-                "UPDATE sessions SET last_seen_at = now(), expires_at = now() + interval '30 days'"
-                " WHERE revoked_at IS NULL AND last_seen_at < now() - interval '1 day'"
-            )
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        conn.execute(
+            "UPDATE sessions SET last_seen_at = now(), expires_at = now() + interval '30 days'"
+            " WHERE revoked_at IS NULL AND last_seen_at < now() - interval '1 day'"
         )
 
 

@@ -45,7 +45,6 @@ pytestmark = [
 
 
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_gated_action_waits_for_approval_and_tainted_run_gates_everything(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,
