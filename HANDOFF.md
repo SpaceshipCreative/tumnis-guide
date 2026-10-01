@@ -1,5 +1,43 @@
 # P2-17 handoff (Inbox, Activity, Ask the agent and knowledge tools)
 
+## Continuation c1 status (read this first; the c0 notes below still hold)
+
+Status: **backend implemented and committed; frontend half done; no PR opened yet.** All spec markers are still in place (none removed: no layer has run them yet).
+
+- Push with `/usr/bin/git push origin HEAD:wp/P2-17` (never switch branches; work on the throwaway branch after `/usr/bin/git fetch origin; /usr/bin/git merge origin/main; /usr/bin/git merge origin/wp/P2-17`).
+- Scratch folder of c1: `/tmp/claude-1002/P2-17-c1/` (helper scripts; `parity.py` is a no-database check of T-P2-01-02/03 for every op: `cd backend && uv run python /tmp/claude-1002/P2-17-c1/parity.py` should print `bad 0`; `routes_check.py` prints route-convention violations, should be `[]`).
+- Commits of c1: `3893a8e feat(agents): P2-17 knowledge tools, citations, ask, activity, feed and inbox` (backend + `make gen` output), then the WIP frontend + this handoff commit.
+- A local `make test-int` was started in the background by c1 and its result was lost at handoff. Don't run it again this continuation unless needed; open the PR and use CI instead (DOCKER LOAD RULE).
+
+### Backend done in c1 (unit layer green: 1687 passed; ruff, mypy, lint-imports green; static parity `bad 0`; route conventions `[]`)
+- core: `routing.WORKSPACE_ROW = UUID(int=0)`; `project_of_request` and `agent_surface._project` treat it as "no project" (a project-limited caller may read a workspace-KB row). The three knowledge tools removed from `PENDING_TOOLS`. `audit.record(..., project_id=)` puts `project_id` in details; `audit.list_for_project(session, project_id, *, before, limit)` (two literal SQL statements, keyset on `(occurred_at, id)`).
+- knowledge: `mcp.py` registers `search_knowledge` (twin `GET /v1/knowledge/search`, now `Page[KnowledgeHit]`, params spelled out so `cursor`/`limit` show; offset cursor via `api.search_page`, depth cap 500), `get_document` (twin `GET /v1/knowledge/documents/{id}` with `schema_version` query, policy `lookup:knowledge_read` -> `api.readable_scope`), `add_document` (twin `POST /v1/knowledge/documents/text`; `TextEntryIn` moved to mcp.py as a SurfaceInput with `tags`; a session keeps P1-17's trusted note path, any other caller goes to `api.add_document` -> untrusted, source agent, file under `agent-outputs/`). `api.add_document` now inserts then runs `_write_text(..., subfolder=AGENT_OUTPUTS)`; `subfolder` threaded through `_write_text` -> `save_note` -> `note_path`. `create_text_entry(tags=)`. Net for twins: `api.using_net(...)` ContextVar set by the router; MCP falls back to `api.deployment_net()` (and `sync.net()` now calls it). `api.citation_title`. SAMPLES for the three ops in `tests/_mcp.py`; `"knowledge_read": document_row` in `tests/meta/_authz.py`.
+- tasks: `ResultUrl` accepts `tumnis://doc/<uuid>(#page=n)` (plain regex groups: the pattern also goes to JSON Schema/zod), `ResultLink` model_validator (tumnis:// only for kind document), `cited_document(link)`; `results_for_project`; `inbox()` + `list_review_items(project_id=)`; route `GET /v1/projects/{project_id}/inbox` (session, paginated) in tasks router.
+- agents: `_cite` in `accept_result` (422 `invalid_citation`, default label "<title>, page <n>"); `ask` (+ `AskIn`, `AskOut`), `activity` (+ `ActivityItem`, merged keyset over task runs, results, audit; runs filtered to kind `task` so enrichment runs never show), `agent_feed` (+ `FeedRun`, `AgentFeedOut`, kind `task` only). Routes in agents router: `POST /v1/projects/{project_id}/ask` (session, idempotent, 201), `GET /v1/projects/{project_id}/activity` (session, paginated), `GET /v1/agents/feed` (session, unpaginated_reason). `project_id` added to `agent.gated_action` (human.py) and `approval.granted/denied` (review_kinds.py, via new `review_kinds.project_of_run`). Not to `approval.auto` (locked exact-details assert).
+
+### Frontend state (uncommitted work committed as WIP in the handoff commit; typecheck green, lint and Vitest NOT run)
+- Done: `lib/views.ts` (+inbox, activity), `ViewSwitcher.tsx` (labels; phone grid `grid-cols-5`, `text-xs sm:text-sm`; check 375 px, no sideways scroll), `project/InboxView.tsx` (exports `inboxQuery`), `project/ActivityView.tsx` (useInfiniteQuery, `initialPageParam: null`, "Load more").
+- Remaining, in order:
+  1. `ProjectPage.tsx`: render `InboxView` / `ActivityView` when `view` is inbox/activity (they fetch only when shown).
+  2. `Composer.tsx`: "Ask the agent" toggle button (`aria-pressed`), input `aria-label` switches "New task" / "Ask the agent"; ask via `useWrite` + `apiWrite({kind:"create", method:"POST", path:`/projects/${id}/ask`, body:{question}, schema: zAskOut})`, then `invalidateTaskViews(client)` and reset to task mode, clear input; 409 `no_ready_profile` -> `uiStore.trigger.showNotice({text: "This project has no ready agent yet."})`. Task mode must still send exactly `{project_id, title}` through the offline queue (T-P0-24-14). No chat UI, no role=log/dialog.
+  3. `project/AgentRail.tsx` (props `projectId, open, onToggle, pause?`) using `RailSection` title "Agent": summary `"<name> · <Healthy|Degraded|Offline|Warning|Not checked yet>"` from `projectProfileQuery(projectId)` (settings/queries), "No agent yet" without a profile; open: `Hermes <health.version>`, `<ul aria-label="Workers and tools">` of `profileToolsQuery(profile.id)` servers' names (query `enabled: open`), then the `pause` slot. Mount in `rail/RailSections.tsx` (add "agent" section). #118 (P2-09) adds `rail/AgentPauseSection.tsx`; whichever merges second passes `<PauseControl projectId>` as `pause`.
+  4. `dashboard/ActivityFeed.tsx`: feed from `agentsGetAgentFeedOptions()`, groups Running / Waiting on you / Finished / Failed, keep `<details>` collapsed, summary "Agent activity", text "Nothing from the agents yet." whenever empty (locked T-P0-23-07); add a default `/v1/agents/feed` handler (all groups empty) to `test/msw/dashboard.ts` `dashboardDefaults`.
+  5. `review/Citation.tsx`: `tumnis://doc/<id>#page=<n>` -> link to `/v1/files/<id>#page=<n>` (use `apiUrl`) with the label; used by the review `ResultItem.tsx` for document links; never emit `href="tumnis://…"`.
+  6. MSW: default handlers for every new read the project page makes on mount in `test/msw/project.ts` (`ProjectFake.handlers`): `/v1/agents/profiles/:id/tools`, `/v1/projects/:id/inbox`, `/v1/projects/:id/activity` (MSW is `onUnhandledRequest: "error"`).
+  7. Flip `test.fails` -> `test` for T-P2-17-07/08/09 only after each passes (keep the dynamic `import(/* @vite-ignore */ path)` loads). Run `npm --prefix frontend run lint`, typecheck, `npm --prefix frontend run test -- --run --maxWorkers=4`.
+- Then: `make check` (pytest part with `-n 3` by hand; semgrep env vars under `/tmp/claude-1002/P2-17-c1/`), push, open the PR (body: below + Context7 refs: TanStack Query v5.104 `useInfiniteQuery` initialPageParam/getNextPageParam; pydantic 2.13 `model_validator(mode="after")` and Rust-regex patterns (no named groups in JSON Schema patterns); SQLAlchemy 2.1 `tuple_` keyset with typed `literal()` as in core.pagination), comment `@coderabbitai review` once, then let CI run the integration layer: remove the xfail(strict) markers of T-P2-17-01..06 one at a time once CI (or a local run) shows them XPASS. Watch the P2-01 meta sweeps (parity, authz matrix, write rules, taint sweep) and P1-17 knowledge tests in CI: they now cover the three new ops.
+
+### Possible risks for the next agent to check in CI
+- `test_text_trust`/`test_text_taint` (P1-17) post key-written entries to the twin: now `api.add_document` (agent-outputs/); trust/taint/label assertions should still hold.
+- `test_project_limited_key...` T-P2-01-06 for `get_document`: limited-A key reading B's doc -> lookup returns B -> 404 (expected).
+- T-P2-17-02 needs exactly one Acme audit row: if any other audit row with `project_id` is written during the run flow, it would fail.
+- Activity `at` for runs is `created_at`; results `created_at`; audit `occurred_at`.
+
+---
+
+## c0 notes (still valid)
+
+
 Status: spec tests committed red; no implementation yet; **no PR opened**; nothing pushed before this handoff.
 
 - Branch: `wp/P2-17` (renamed from the throwaway; `.git/config` is read-only, so push with `/usr/bin/git push origin HEAD:wp/P2-17`).

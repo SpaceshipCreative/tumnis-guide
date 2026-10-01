@@ -1,5 +1,5 @@
-// Tasks | Board (P0-24, FR-2.6, FR-2.8): tabs on a laptop, a segmented control (radio
-// buttons) on the phone.
+// Tasks | Board | Calendar | Inbox | Activity (P0-24, P2-17, FR-2.6, FR-2.8): tabs on a
+// laptop, a segmented control (radio buttons) on the phone.
 import { useId } from "react";
 
 import type { ProjectView } from "../../lib/views";
@@ -8,6 +8,8 @@ const VIEW_LABELS: Record<ProjectView, string> = {
   tasks: "Tasks",
   board: "Board",
   calendar: "Calendar",
+  inbox: "Inbox",
+  activity: "Activity",
 };
 const VIEWS = Object.keys(VIEW_LABELS) as ProjectView[];
 
@@ -74,12 +76,12 @@ export function ViewSwitcher({
     <div
       role="radiogroup"
       aria-label="Views"
-      className="grid grid-cols-3 rounded-md border border-border bg-surface-muted p-1"
+      className="grid grid-cols-5 rounded-md border border-border bg-surface-muted p-1"
     >
       {VIEWS.map((v) => (
         <label
           key={v}
-          className={`relative flex min-h-11 cursor-pointer items-center justify-center rounded text-sm font-medium has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
+          className={`relative flex min-h-11 cursor-pointer items-center justify-center rounded text-xs font-medium sm:text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
             v === view ? "bg-surface text-text shadow-sm" : "text-muted"
           }`}
         >
