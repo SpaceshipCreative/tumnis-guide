@@ -21,6 +21,7 @@ import importlib
 import json
 import time
 from collections.abc import Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -84,10 +85,12 @@ def outbox(db: DbUrls, name: str) -> list[dict[str, Any]]:
 
 
 def build_runs() -> list[Any]:
-    """The `build_plan` workflows DBOS has started (any status)."""
+    """The `build_plan` workflows DBOS has started (any status). DBOS refuses its sync call
+    inside a running event loop (these tests are async), so it runs on a thread of its own."""
     from dbos import DBOS  # noqa: PLC0415
 
-    return list(DBOS.list_workflows(name="build_plan"))
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return list(pool.submit(DBOS.list_workflows, name="build_plan").result())
 
 
 async def until(
