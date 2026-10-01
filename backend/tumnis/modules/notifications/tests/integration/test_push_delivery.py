@@ -79,7 +79,6 @@ async def test_push_follows_focus_level(push: PushWorld) -> None:
 
 @pytest.mark.req("FR-8.3")
 @pytest.mark.wp("P4-05")
-@pytest.mark.xfail(strict=True, reason="spec:P4-05")
 async def test_same_events_as_discord(push: PushWorld) -> None:
     """T-P4-05-05
     For each event kind in P2-16's delivery table (every focus event kind and a review
