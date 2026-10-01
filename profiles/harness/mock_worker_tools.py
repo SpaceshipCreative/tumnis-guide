@@ -26,17 +26,21 @@ P2-12 adds `registrar` (a domain registrar) and `memory` (Hindsight-style `retai
     python -m harness.mock_worker_tools --server github --record calls.jsonl   # stdio
 """
 
+from __future__ import annotations
+
 import argparse
 import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import anyio
-from mcp.server import Server
 
 from harness.mock_mcp_min import Recorder, build_server, serve_stdio
+
+if TYPE_CHECKING:  # the SDK is imported where a server is built (harness.mock_mcp_min)
+    from mcp.server import Server
 
 _MAIN: Final = re.compile(r"^(refs/heads/)?(main|master)$", re.IGNORECASE)
 _PROD: Final = re.compile(r"prod", re.IGNORECASE)
