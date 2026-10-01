@@ -55,6 +55,8 @@ SKILLS = {
     ("master", "plan"),
     ("master", "orchestrate-master"),
     ("master", "workspace-digest"),
+    ("master", "focus"),
+    ("master", "relay"),
 }
 # The eight gated action classes the plan's fixture table names, in the project policy's
 # vocabulary (projects.rules GATED_DEFAULT; the plan's "proxmox_destructive" row is
