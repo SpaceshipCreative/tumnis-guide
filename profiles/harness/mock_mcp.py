@@ -14,7 +14,9 @@ server would refuse it) and answers from the case's script:
 - `{result: {...}}`: exactly that object.
 
 A tool's script is a list answered call by call; its last entry repeats. Every call is
-recorded (server `tumnis`) like the minimal mock's, one JSON line per call.
+recorded (server `tumnis`) like the minimal mock's, one JSON line per call. With
+`--workdir-state`, files removed from the case's working directory are recorded as they
+are noticed, before the next call (harness.workdir).
 
     python -m harness.mock_mcp --script case-script.json --record calls.jsonl   # stdio
 
@@ -45,6 +47,7 @@ from harness.mock_mcp_min import (
     load_catalogue,
     serve_stdio,
 )
+from harness.workdir import DELETE_TOOL, HARNESS, DeletionWatch
 
 MOCK_TIME: Final = "2026-03-09T12:00:00Z"
 APPROVALS: Final = frozenset({"request_approval", "ask_human"})
@@ -180,14 +183,22 @@ def argument_check(catalogue: Sequence[Mapping[str, Any]]) -> Check:
 
 
 def build_full_server(
-    catalogue: Sequence[Mapping[str, Any]], recorder: Recorder, script: Script
+    catalogue: Sequence[Mapping[str, Any]],
+    recorder: Recorder,
+    script: Script,
+    watch: DeletionWatch | None = None,
 ) -> Server[Any]:
     """The full mock: every catalogue and pending tool, arguments checked, answers from
-    `script`, every call recorded."""
+    `script`, every call recorded. With `watch`, the files the run removed since the last
+    call are recorded (`harness.delete_files`) before the call that follows them."""
     tools = full_catalogue(catalogue)
-    return build_server(
-        tools, recorder, name=TUMNIS, respond=script.respond, check=argument_check(tools)
-    )
+
+    def respond(tool: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
+        if watch is not None and (gone := watch.check()):
+            recorder.record(HARNESS, DELETE_TOOL, {"paths": gone}, None)
+        return script.respond(tool, arguments)
+
+    return build_server(tools, recorder, name=TUMNIS, respond=respond, check=argument_check(tools))
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -195,9 +206,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--record", type=Path, help="append every call here as a JSON line")
     parser.add_argument("--script", type=Path, help="the case's scripted answers (JSON)")
     parser.add_argument("--catalogue", type=Path, default=CATALOGUE)
+    parser.add_argument(
+        "--workdir-state", type=Path, help="the attempt's working directory to watch"
+    )
     args = parser.parse_args(argv)
     server = build_full_server(
-        load_catalogue(args.catalogue), Recorder(args.record), Script.load(args.script)
+        load_catalogue(args.catalogue),
+        Recorder(args.record),
+        Script.load(args.script),
+        DeletionWatch(args.workdir_state),
     )
     anyio.run(serve_stdio, server)
 

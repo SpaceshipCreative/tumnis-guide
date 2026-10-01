@@ -8,8 +8,9 @@ both scripted by the case, and the worker-tool mocks (harness.mock_worker_tools)
 each attempt the harness writes the case's script, empties the record and, for a case
 with a fixture repository, copies it into a fresh working directory (a git repository
 whose `make test` records each suite result). Hermes runs there with the harness's git
-wrapper first on PATH, which records `git push`. After the attempt, the files the run
-removed from the working directory are recorded too. The case is judged on that timeline
+wrapper first on PATH, which records `git push`. Files the run removes from the working
+directory are recorded when the Tumnis mock next answers a call, and after the attempt
+(harness.workdir). The case is judged on that timeline
 and the reply (harness.calls and harness.run.judge).
 """
 
@@ -27,20 +28,22 @@ from pathlib import Path
 from typing import Any, Final
 
 from harness import REPO
-from harness.calls import DELETE_TOOL, HARNESS
 from harness.cases import REPOS, Case
 from harness.hostile_run import write_mock_servers
 from harness.mock_mcp_min import RecordedCall, read_records
 from harness.mock_worker_tools import WORKER_TOOLS
 from harness.run import Attempt, HarnessConfig, HermesRunner
+from harness.workdir import deletion_record, files_of, recorded_deletions, write_state
 
 HIDDEN: Final = REPO / "profiles" / "tests" / "fixtures" / "hidden"
-SKIP_DIRS: Final = frozenset({".git", ".tumnis", "__pycache__"})
 
 
-def case_mcp_config(record: Path, script: Path, python: str = sys.executable) -> dict[str, Any]:
+def case_mcp_config(
+    record: Path, script: Path, state: Path, python: str = sys.executable
+) -> dict[str, Any]:
     """The MCP servers of a skill case run: the scripted Tumnis and memory mocks, and the
-    worker-tool mocks, every one writing to `record`."""
+    worker-tool mocks, every one writing to `record`. The Tumnis mock also watches the
+    working directory named in `state` for removed files (harness.workdir)."""
     env = {"PYTHONPATH": str(REPO / "profiles")}
 
     def server(module: str, *extra: str) -> dict[str, Any]:
@@ -50,7 +53,9 @@ def case_mcp_config(record: Path, script: Path, python: str = sys.executable) ->
             "env": env,
         }
 
-    servers: dict[str, Any] = {"tumnis": server("harness.mock_mcp", "--script", str(script))}
+    servers: dict[str, Any] = {
+        "tumnis": server("harness.mock_mcp", "--script", str(script), "--workdir-state", str(state))
+    }
     for name in WORKER_TOOLS:
         servers[name] = (
             server("harness.mock_memory", "--script", str(script))
@@ -60,11 +65,13 @@ def case_mcp_config(record: Path, script: Path, python: str = sys.executable) ->
     return {"mcpServers": servers}
 
 
-def prepare_case_profile(profile: str, target: Path, record: Path, script: Path) -> Path:
+def prepare_case_profile(
+    profile: str, target: Path, record: Path, script: Path, state: Path
+) -> Path:
     """A copy of profiles/<profile> under `target` whose MCP servers are the case mocks."""
     dest = target / profile
     shutil.copytree(REPO / "profiles" / profile, dest)
-    write_mock_servers(dest, case_mcp_config(record, script))
+    write_mock_servers(dest, case_mcp_config(record, script, state))
     return dest
 
 
@@ -119,24 +126,6 @@ def prepare_workdir(case: Case, run_dir: Path, record: Path) -> Path | None:
     return work
 
 
-def files_of(workdir: Path) -> set[str]:
-    """Every file under `workdir` (relative, POSIX), outside .git and the query folder."""
-    return {
-        path.relative_to(workdir).as_posix()
-        for path in workdir.rglob("*")
-        if path.is_file() and not SKIP_DIRS & set(path.relative_to(workdir).parts)
-    }
-
-
-def deletion_record(before: set[str], workdir: Path) -> list[RecordedCall]:
-    """The files the run removed (deleted, or moved out of the working directory), as one
-    `harness.delete_files` call; [] when none are gone."""
-    gone = sorted(before - files_of(workdir))
-    if not gone:
-        return []
-    return [RecordedCall(HARNESS, DELETE_TOOL, {"paths": gone}, None)]
-
-
 def write_git_shim(bin_dir: Path, record: Path) -> Path:
     """`bin_dir/git`: the harness's git wrapper (harness.git_shim) for one slot."""
     real = shutil.which("git")
@@ -170,6 +159,10 @@ class Slot:
         return self.root / "script.json"
 
     @property
+    def state(self) -> Path:
+        return self.root / "workdir.json"
+
+    @property
     def bin(self) -> Path:
         return self.root / "bin"
 
@@ -192,7 +185,9 @@ class SkillRunner:
                 slot.root.mkdir(parents=True)
                 write_git_shim(slot.bin, slot.record)
                 for name in sorted(names):
-                    source = prepare_case_profile(name, slot.root, slot.record, slot.script)
+                    source = prepare_case_profile(
+                        name, slot.root, slot.record, slot.script, slot.state
+                    )
                     self.hermes.install(name, source=source, slot=slot.name)
                 self._free.put(slot)
             yield self
@@ -206,10 +201,16 @@ class SkillRunner:
             write_script(case, slot.script)
             workdir = prepare_workdir(case, slot.root / "run", slot.record)
             before = files_of(workdir) if workdir is not None else set()
+            write_state(slot.state, workdir, before)
 
             def timeline() -> Sequence[RecordedCall]:
-                removed = deletion_record(before, workdir) if workdir is not None else []
-                return [*read_records(slot.record), *removed]
+                records = read_records(slot.record)
+                removed = (
+                    deletion_record(before, workdir, recorded_deletions(records))
+                    if workdir is not None
+                    else []
+                )
+                return [*records, *removed]
 
             path = f"{slot.bin}{os.pathsep}{os.environ.get('PATH', '')}"
             return self.hermes.attempt(

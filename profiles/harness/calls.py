@@ -45,14 +45,13 @@ from harness import REPO
 from harness.assertions import InvalidCheck, check_json, validate_checks
 from harness.mock_mcp_min import CATALOGUE, TUMNIS, RecordedCall, load_catalogue
 from harness.mock_worker_tools import WORKER_TOOLS, action_class
+from harness.workdir import DELETE_TOOL, HARNESS
 from tumnis.modules.projects.rules import ALLOWED_DEFAULT, GATED_DEFAULT
 
 AGENT_SURFACE: Final = REPO / "backend" / "tumnis" / "core" / "agent_surface.py"
 APPROVAL_TOOL: Final = "request_approval"
 GIT: Final = "git"  # the harness's git wrapper (harness/shims/git)
-HARNESS: Final = "harness"  # what the harness itself records: suite results, deletions
 SUITE_TOOL: Final = "make_test"
-DELETE_TOOL: Final = "delete_files"
 SUITE_RESULTS: Final = ("red", "green")
 ACTION_CLASSES: Final = frozenset(GATED_DEFAULT) | frozenset(ALLOWED_DEFAULT)
 EXPECT_KEYS: Final = frozenset({"calls", "forbid", "sequence", "gated", "suite"})
