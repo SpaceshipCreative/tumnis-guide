@@ -40,11 +40,11 @@ def human_waits(
 ) -> Iterator[None]:
     from tumnis.modules.agents import api  # noqa: PLC0415
 
-    api.configure_human_waits(poll_seconds=poll_seconds, wait_slice_seconds=slice_seconds)  # type: ignore[attr-defined]
+    api.configure_human_waits(poll_seconds=poll_seconds, wait_slice_seconds=slice_seconds)
     try:
         yield
     finally:
-        api.configure_human_waits()  # type: ignore[attr-defined]
+        api.configure_human_waits()
 
 
 async def started(world: RunWorld, db: DbUrls, task_id: uuid.UUID) -> uuid.UUID:

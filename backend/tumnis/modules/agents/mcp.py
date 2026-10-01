@@ -4,6 +4,8 @@
 | --- | --- | --- |
 | `get_task_packet` | tasks:read | `GET /v1/tasks/{task_id}/packet` |
 | `post_result` | tasks:write | `POST /v1/runs/{run_id}/result` |
+| `ask_human` | tasks:write | `POST /v1/runs/{run_id}/questions` |
+| `request_approval` | tasks:write | `POST /v1/runs/{run_id}/approvals` |
 
 `get_task_packet` answers the task's packet as a run of the caller would get it, without a
 token (`callback.task_token: null`): the token exists only in the packet a dispatch sends.
@@ -139,6 +141,115 @@ POST_RESULT = surface.register_op(
         project_resolver=_project_of_run,
         handler=_post_result,
         session_twin_allowed=False,  # a result comes from the run's agent, never a session
+    )
+)
+
+
+# --- Questions and approvals (P2-05, FR-5.6, FR-5.7) ---------------------------------------
+#
+# Both long-poll for the human after the call's transaction commits (`after_commit`), so
+# their twins let `invoke` open the transaction (no route session). A key with no run
+# answers `denied` with rule `run_token_required` (R-31).
+
+
+class AskHumanBody(surface.SurfaceInput, api.HumanQuestion):
+    """The REST twin's body (the run is in the path)."""
+
+
+class AskHumanToolIn(surface.WriteInput, api.AskHumanIn):
+    pass
+
+
+class RequestApprovalBody(surface.SurfaceInput, api.HumanApproval):
+    """The REST twin's body (the run is in the path)."""
+
+
+class RequestApprovalToolIn(surface.WriteInput, api.RequestApprovalIn):
+    pass
+
+
+async def _ask_human(call: surface.SurfaceCall, data: AskHumanToolIn) -> api.HumanWaitOut:
+    inp = api.AskHumanIn.model_validate(data.model_dump(exclude={"idempotency_key"}))
+    return await api.ask_human(
+        call.session,
+        call.actor,
+        call.caller.run_id,
+        inp,
+        caller_key=call.caller.key_id,
+        tainted=call.tainted,
+        now=call.now,
+    )
+
+
+async def _request_approval(
+    call: surface.SurfaceCall, data: RequestApprovalToolIn
+) -> api.HumanWaitOut:
+    inp = api.RequestApprovalIn.model_validate(data.model_dump(exclude={"idempotency_key"}))
+    return await api.request_approval(
+        call.session,
+        call.actor,
+        call.caller.run_id,
+        inp,
+        caller_key=call.caller.key_id,
+        tainted=call.tainted,
+        now=call.now,
+    )
+
+
+def _poll(kind: Literal["question", "approval"]) -> surface.AfterCommit:
+    async def poll(caller: surface.Caller, answer: Any) -> api.HumanWaitOut:
+        ctx = caller.principal.workspace_context()
+        return await api.long_poll_decision(ctx, kind, api.HumanWaitOut.model_validate(answer))
+
+    return poll
+
+
+ASK_HUMAN = surface.register_op(
+    surface.SurfaceOp(
+        name="ask_human",
+        description=(
+            "Ask the human a question with your run's task token; your task waits on the"
+            " human until they answer, with no deadline. Waits up to 10 minutes for the"
+            " answer; if it is still `pending`, call again later with `question_id` to get"
+            " it. `choices` offers one-tap answers."
+        ),
+        scope="tasks:write",
+        input_model=AskHumanToolIn,
+        output_model=api.HumanWaitOut,
+        rest_method="POST",
+        rest_path="/v1/runs/{run_id}/questions",
+        write=True,
+        updates_existing=False,
+        project_arg=None,
+        project_resolver=_project_of_run,
+        handler=_ask_human,
+        session_twin_allowed=False,  # only a run's agent asks
+        after_commit=_poll("question"),
+    )
+)
+REQUEST_APPROVAL = surface.register_op(
+    surface.SurfaceOp(
+        name="request_approval",
+        description=(
+            "Ask before taking an action (action_class: a known class such as merge_main,"
+            " push_main, deploy_production, send_email, delete_files, or a short name of"
+            " your own), with your run's task token. The server decides: `approved` (go"
+            " ahead), `denied` (do not), or `pending` (the human decides; call again with"
+            " `approval_id`, after `retry_after_seconds` when set). Never proceed on"
+            " `pending`."
+        ),
+        scope="tasks:write",
+        input_model=RequestApprovalToolIn,
+        output_model=api.HumanWaitOut,
+        rest_method="POST",
+        rest_path="/v1/runs/{run_id}/approvals",
+        write=True,
+        updates_existing=False,
+        project_arg=None,
+        project_resolver=_project_of_run,
+        handler=_request_approval,
+        session_twin_allowed=False,  # only a run's agent asks
+        after_commit=_poll("approval"),
     )
 )
 

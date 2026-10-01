@@ -30,6 +30,18 @@ export const zAgentProfileChoice = z.object({
 });
 
 /**
+ * AskHumanBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export const zAskHumanBody = z.object({
+  choices: z.array(z.string()).max(20).optional().default([]),
+  prompt: z.string().min(1).max(4000),
+  question_id: z.uuid().nullish(),
+  schema_version: z.int().nullish(),
+});
+
+/**
  * AuditEntry
  */
 export const zAuditEntry = z.object({
@@ -290,6 +302,20 @@ export const zHealth = z.enum(["blocked", "at_risk", "on_track"]);
 export const zHealthCheckAccepted = z.object({
   profile_id: z.uuid(),
   request_id: z.uuid(),
+});
+
+/**
+ * HumanWaitOut
+ */
+export const zHumanWaitOut = z.object({
+  answer: z.string().nullish(),
+  id: z.uuid(),
+  reason: z.string().nullish(),
+  retry_after_seconds: z.int().nullish(),
+  rule: z.string().nullish(),
+  schema_version: z.literal(1).optional().default(1),
+  status: z.enum(["pending", "answered", "approved", "denied"]),
+  tainted: z.boolean().optional().default(false),
 });
 
 /**
@@ -842,6 +868,19 @@ export const zReorderIn = z.object({
   after_id: z.uuid().nullish(),
   before_id: z.uuid().nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * RequestApprovalBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export const zRequestApprovalBody = z.object({
+  action_class: z.string().min(1).max(200),
+  approval_id: z.uuid().nullish(),
+  description: z.string().max(4000),
+  schema_version: z.int().nullish(),
+  target: z.string().max(500).nullish(),
 });
 
 /**
@@ -2510,6 +2549,17 @@ export const zAgentsGetRunPath = z.object({
  */
 export const zAgentsGetRunResponse = zRunOut;
 
+export const zAgentsRequestApprovalBody = zRequestApprovalBody;
+
+export const zAgentsRequestApprovalPath = z.object({
+  run_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsRequestApprovalResponse = zHumanWaitOut;
+
 export const zAgentsCancelRunPath = z.object({
   run_id: z.uuid(),
 });
@@ -2532,6 +2582,17 @@ export const zAgentsListRunEventsQuery = z.object({
  * Successful Response
  */
 export const zAgentsListRunEventsResponse = zRunEventsPage;
+
+export const zAgentsAskHumanBody = zAskHumanBody;
+
+export const zAgentsAskHumanPath = z.object({
+  run_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsAskHumanResponse = zHumanWaitOut;
 
 export const zAgentsPostResultBody = zPostResultBody;
 

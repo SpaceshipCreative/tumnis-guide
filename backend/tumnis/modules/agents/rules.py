@@ -1065,7 +1065,7 @@ class PolicyVerdict:
     rule: VerdictRule
 
 
-def approval_need(
+def approval_need(  # noqa: PLR0911  # one return per row of the plan's rule
     action: str,
     policy: PolicySnapshot,
     *,

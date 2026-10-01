@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "approval_id": "01a0ec82-72d7-7f23-8be6-203712702b12",
+  "run_id": "01a0ec82-72d7-7f23-8be6-203712702a01",
+  "task_id": "01a0ec82-72d7-7f23-8be6-203712702c21",
+  "action_class": "merge_main",
+  "rule": "gated_by_policy",
+  "opened": true
+}

@@ -94,3 +94,14 @@ def echo_v2_op() -> Iterator[Any]:
         yield op
     finally:
         agent_surface.unregister_op(op.name)
+
+
+@pytest.fixture(autouse=True)
+def _no_human_wait() -> Iterator[None]:
+    """The sweeps call every write op, `ask_human` and `request_approval` (P2-05)
+    included: answer at once instead of long-polling for the human."""
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+
+    agents.configure_human_waits(poll_seconds=0)
+    yield
+    agents.configure_human_waits()

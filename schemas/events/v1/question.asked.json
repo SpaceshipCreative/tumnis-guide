@@ -1,0 +1,50 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/question.asked.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A run asked the human (P2-05, FR-5.7): the question row, its review item and the\ntask's move to Waiting on human are in the same transaction; `agents.start_human_wait`\nstarts its `question_flow`.",
+  "properties": {
+    "prompt": {
+      "maxLength": 4000,
+      "title": "Prompt",
+      "type": "string"
+    },
+    "question_id": {
+      "format": "uuid",
+      "title": "Question Id",
+      "type": "string"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Task Id"
+    }
+  },
+  "required": [
+    "schema_version",
+    "question_id",
+    "run_id",
+    "task_id",
+    "prompt"
+  ],
+  "title": "QuestionAskedV1",
+  "type": "object"
+}

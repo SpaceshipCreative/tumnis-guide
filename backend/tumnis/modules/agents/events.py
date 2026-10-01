@@ -17,7 +17,13 @@
   again (`api.request_run` with `rerun_of`), all as the person who decided, in one
   transaction. Idempotent: a second delivery finds the profile already provisioning, or the
   task no longer In review, and changes nothing. It is the one subscriber for agents'
-  review kinds (Scott decision 29).
+  review kinds (Scott decision 29). P2-05: a `question` answered or an `approval`
+  approved or denied wakes the wait's flow (`human_flows.deliver_human_decision`; the
+  row already holds the decision), resuming it on this application version after a
+  deploy. Human answers reach waiting workflows only this way, never from the request.
+- `agents.start_question_flow` (`question.asked`) and `agents.start_approval_flow`
+  (`approval.requested`, P2-05): start the wait's flow on the `human` queue (workflow id
+  `<kind>:<id>:<app version>`, so a redelivery starts nothing new).
 
 - `agents.enrich_on_create` (`task.created`, P1-08): starts `enrich_task` for the new task
   (workflow id `enrich:<task id>:<event id>`) when its project has a provisioned agent;
@@ -53,16 +59,18 @@ from tumnis.core.versioning import NotFound
 
 # The subscribers start `provision_profile` through api's starter seam, which workflows
 # fills at import: loading the subscribers loads the workflow too, in every process.
-from tumnis.modules.agents import api, workflows
-from tumnis.modules.agents.review_kinds import RESULT
+from tumnis.modules.agents import api, human_flows, workflows
+from tumnis.modules.agents.review_kinds import APPROVAL, QUESTION, RESULT
 from tumnis.modules.agents.rules import ESTIMATED_LABELS, enrichment_settled
 from tumnis.modules.tasks import api as tasks
 
 __all__ = [
+    "APPROVAL_SUBSCRIBER",
     "DISPATCH_SUBSCRIBER",
     "ENRICH_CREATE_SUBSCRIBER",
     "ENRICH_UPDATE_SUBSCRIBER",
     "PROVISION_SUBSCRIBER",
+    "QUESTION_SUBSCRIBER",
     "REVIEW_SUBSCRIBER",
     "SIGNAL_SUBSCRIBER",
     "apply_review_decision",
@@ -71,7 +79,9 @@ __all__ = [
     "enrich_on_update",
     "project_has_agent",
     "provision_project",
+    "start_approval_flow",
     "start_dispatch",
+    "start_question_flow",
 ]
 
 _log = logging.getLogger(__name__)
@@ -82,6 +92,8 @@ DISPATCH_SUBSCRIBER: Final = "agents.start_dispatch"
 SIGNAL_SUBSCRIBER: Final = "agents.deliver_run_signal"
 ENRICH_CREATE_SUBSCRIBER: Final = "agents.enrich_on_create"
 ENRICH_UPDATE_SUBSCRIBER: Final = "agents.enrich_on_update"
+QUESTION_SUBSCRIBER: Final = "agents.start_question_flow"
+APPROVAL_SUBSCRIBER: Final = "agents.start_approval_flow"
 
 # How long a project seen without a provisioned agent is taken to still have none. The
 # relay runs the enrichment subscribers for every task write, one after another, so a
@@ -160,6 +172,28 @@ async def apply_review_decision(envelope: EventEnvelope) -> None:
         await api.retry_provision(UUID(str(payload["target_id"])), ctx=ctx)
     elif kind == RESULT and payload.get("target_type") == "task":
         await _apply_result_decision(envelope)
+    elif kind in (QUESTION, APPROVAL) and payload.get("decision") != "snooze":
+        await human_flows.deliver_human_decision(
+            envelope.workspace_id,
+            str(kind),
+            UUID(str(payload["item_id"])),
+            str(payload["decision"]),
+            key=str(envelope.event_id),
+        )
+
+
+@subscribe("question.asked", name=QUESTION_SUBSCRIBER)
+async def start_question_flow(envelope: EventEnvelope) -> None:
+    await human_flows.start_human_wait(
+        envelope.workspace_id, QUESTION, UUID(str(envelope.payload["question_id"]))
+    )
+
+
+@subscribe("approval.requested", name=APPROVAL_SUBSCRIBER)
+async def start_approval_flow(envelope: EventEnvelope) -> None:
+    await human_flows.start_human_wait(
+        envelope.workspace_id, APPROVAL, UUID(str(envelope.payload["approval_id"]))
+    )
 
 
 async def _apply_result_decision(envelope: EventEnvelope) -> None:

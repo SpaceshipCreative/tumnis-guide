@@ -211,7 +211,7 @@ def human_wait_poll_seconds(seconds: int) -> None:
     (fakes mode only)."""
     from tumnis.modules.agents import api as agents  # noqa: PLC0415
 
-    configure = agents.configure_human_waits  # type: ignore[attr-defined]
+    configure = agents.configure_human_waits
     configure(poll_seconds=seconds)
 
 
