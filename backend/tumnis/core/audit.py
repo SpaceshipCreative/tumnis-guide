@@ -29,6 +29,7 @@ from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 
 GENESIS: Final = bytes(32)
+PROJECT_KEY: Final = "project_id"  # the details key a project's rows carry (P2-17)
 SENSITIVE_KEY: Final = re.compile(
     r"(token|secret|password|passwd|hmac|key|authorization|cookie|body|prompt|content|text)",
     re.IGNORECASE,
@@ -187,8 +188,11 @@ async def record(
     reason: str | None = None,
     details: Mapping[str, Any] | None = None,
     occurred_at: datetime,
+    project_id: UUID | None = None,
 ) -> None:
     """Writes one row in the caller's transaction (so it commits with the action).
+    `project_id` goes into the details (P2-17): the row then shows in that project's
+    Activity (`list_for_project`).
 
     Serializes per workspace with pg_advisory_xact_lock(hashtextextended('audit:' ||
     workspace, 0)), reads the head (max seq), computes seq + 1 and the hash, inserts. The
@@ -219,7 +223,9 @@ async def record(
         user_agent=meta.user_agent,
         correlation_id=meta.correlation_id,
         reason=reason,
-        details=redact_details(details or {}),
+        details=redact_details(
+            {**(details or {}), **({} if project_id is None else {PROJECT_KEY: str(project_id)})}
+        ),
     )
     await session.execute(
         _INSERT,
@@ -230,6 +236,52 @@ async def record(
             "hash": chain_hash(prev_hash, row),
         },
     )
+
+
+@dataclass(frozen=True)
+class ProjectAuditRow:
+    """An audit row as a project's Activity shows it (P2-17, FR-2.6)."""
+
+    id: UUID
+    occurred_at: datetime
+    action: str
+    actor_type: str
+    target_type: str | None
+    target_id: UUID | None
+    reason: str | None
+    details: Mapping[str, Any]
+
+
+_PROJECT_FIRST = text(
+    "SELECT id, occurred_at, action, actor_type, target_type, target_id, reason, details"
+    " FROM audit_log WHERE workspace_id = app.current_workspace_id()"
+    " AND details->>'project_id' = :project"
+    " ORDER BY occurred_at DESC, id DESC LIMIT :limit"
+)
+_PROJECT_AFTER = text(
+    "SELECT id, occurred_at, action, actor_type, target_type, target_id, reason, details"
+    " FROM audit_log WHERE workspace_id = app.current_workspace_id()"
+    " AND details->>'project_id' = :project"
+    " AND (occurred_at, id) < (CAST(:at AS timestamptz), CAST(:id AS uuid))"
+    " ORDER BY occurred_at DESC, id DESC LIMIT :limit"
+)
+
+
+async def list_for_project(
+    session: AsyncSession,
+    project_id: UUID,
+    *,
+    before: tuple[datetime, UUID] | None = None,
+    limit: int,
+) -> list[ProjectAuditRow]:
+    """The workspace's rows written for the project (`record(..., project_id=)`), newest
+    first, those before `before` (occurred_at, id) only. Rows written without a project
+    (all before P2-17) are never listed."""
+    params: dict[str, Any] = {"project": str(project_id), "limit": limit}
+    if before is not None:
+        params["at"], params["id"] = before
+    rows = await session.execute(_PROJECT_FIRST if before is None else _PROJECT_AFTER, params)
+    return [ProjectAuditRow(**dict(row._mapping)) for row in rows]
 
 
 def _row(values: Any) -> AuditRow:

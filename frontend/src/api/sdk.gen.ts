@@ -10,9 +10,12 @@ import {
 } from "./client";
 import { client } from "./client.gen";
 import type {
+  AgentsAskData,
+  AgentsAskErrors,
   AgentsAskHumanData,
   AgentsAskHumanErrors,
   AgentsAskHumanResponses,
+  AgentsAskResponses,
   AgentsCancelRunData,
   AgentsCancelRunErrors,
   AgentsCancelRunResponses,
@@ -22,6 +25,9 @@ import type {
   AgentsCreateRunnerData,
   AgentsCreateRunnerErrors,
   AgentsCreateRunnerResponses,
+  AgentsGetAgentFeedData,
+  AgentsGetAgentFeedErrors,
+  AgentsGetAgentFeedResponses,
   AgentsGetPausesData,
   AgentsGetPausesErrors,
   AgentsGetPausesResponses,
@@ -40,6 +46,9 @@ import type {
   AgentsGetWorkspaceDigestData,
   AgentsGetWorkspaceDigestErrors,
   AgentsGetWorkspaceDigestResponses,
+  AgentsListActivityData,
+  AgentsListActivityErrors,
+  AgentsListActivityResponses,
   AgentsListProfilesData,
   AgentsListProfilesErrors,
   AgentsListProfilesResponses,
@@ -389,6 +398,9 @@ import type {
   TasksListCommentsData,
   TasksListCommentsErrors,
   TasksListCommentsResponses,
+  TasksListInboxData,
+  TasksListInboxErrors,
+  TasksListInboxResponses,
   TasksListPullRequestsData,
   TasksListPullRequestsErrors,
   TasksListPullRequestsResponses,
@@ -431,15 +443,18 @@ import type {
 } from "./types.gen";
 import {
   zAgentsAskHumanResponse,
+  zAgentsAskResponse,
   zAgentsCancelRunResponse,
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
+  zAgentsGetAgentFeedResponse,
   zAgentsGetPausesResponse,
   zAgentsGetProfileToolsResponse,
   zAgentsGetProjectDigestResponse,
   zAgentsGetRunResponse,
   zAgentsGetTaskPacketResponse,
   zAgentsGetWorkspaceDigestResponse,
+  zAgentsListActivityResponse,
   zAgentsListProfilesResponse,
   zAgentsListRunEventsResponse,
   zAgentsListRunnersResponse,
@@ -554,6 +569,7 @@ import {
   zTasksLinkContextItemResponse,
   zTasksLinkPullRequestResponse,
   zTasksListCommentsResponse,
+  zTasksListInboxResponse,
   zTasksListPullRequestsResponse,
   zTasksListRecurrenceResponse,
   zTasksListReviewKindsResponse,
@@ -611,6 +627,30 @@ export const healthReady = <ThrowOnError extends boolean = false>(
     HealthReadyErrors,
     ThrowOnError
   >({ url: "/health/ready", ...options });
+
+/**
+ * Get Agent Feed
+ *
+ * The dashboard's agent activity (FR-1.5): task runs running, waiting on the human,
+ * finished and failed, the newest ten of each.
+ */
+export const agentsGetAgentFeed = <ThrowOnError extends boolean = false>(
+  options?: Options<AgentsGetAgentFeedData, ThrowOnError>,
+): RequestResult<
+  AgentsGetAgentFeedResponses,
+  AgentsGetAgentFeedErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    AgentsGetAgentFeedResponses,
+    AgentsGetAgentFeedErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsGetAgentFeedResponse.parseAsync(data),
+    url: "/v1/agents/feed",
+    ...options,
+  });
 
 /**
  * Get Pauses
@@ -1386,9 +1426,11 @@ export const agentsGetWorkspaceDigest = <ThrowOnError extends boolean = false>(
 /**
  * Get File
  *
- * The document's original file, always as a download (`attachment`, octet-stream,
- * `nosniff`); 409 `not_available` until the document is `ready`. `version` is a version
- * number.
+ * The document's original file as a download (`attachment`, octet-stream, `nosniff`);
+ * a PDF by its sniffed bytes is served `inline` as `application/pdf`, so a citation opens
+ * the browser's viewer at `#page=n` (RFC 8118; Scott decision 47). Both keep `nosniff`
+ * and the security headers. 409 `not_available` until the document is `ready`. `version`
+ * is a version number.
  */
 export const knowledgeGetFile = <ThrowOnError extends boolean = false>(
   options: Options<KnowledgeGetFileData, ThrowOnError>,
@@ -1679,8 +1721,9 @@ export const knowledgeAddLink = <ThrowOnError extends boolean = false>(
  * Create Text Entry
  *
  * A text entry (Markdown) in a project or the workspace knowledge base: version 1,
- * searchable at once, trusted when a person writes it (FR-15.5, `_origin`); in a project
- * with a folder, also `notes/`.
+ * searchable at once; the `add_document` tool's twin (R-36). A person's is a trusted
+ * note (in a project with a folder, also `notes/`); any other caller's is untrusted and
+ * agent-written (FR-15.5), and goes to `agent-outputs/`.
  */
 export const knowledgeCreateTextEntry = <ThrowOnError extends boolean = false>(
   options: Options<KnowledgeCreateTextEntryData, ThrowOnError>,
@@ -1730,7 +1773,9 @@ export const knowledgeTrashDocument = <ThrowOnError extends boolean = false>(
 /**
  * Get Document
  *
- * A document's state (status, reason, kind, path): what the upload flow polls.
+ * A document's state (status, reason, kind, path) and text: what the upload flow
+ * polls; the `get_document` tool's twin. A project-limited caller reads its projects'
+ * documents and the workspace knowledge base's (R-28).
  */
 export const knowledgeGetDocument = <ThrowOnError extends boolean = false>(
   options: Options<KnowledgeGetDocumentData, ThrowOnError>,
@@ -1999,8 +2044,10 @@ export const knowledgeGetQuota = <ThrowOnError extends boolean = false>(
 /**
  * Search
  *
- * Full-text search of a project's items and the workspace knowledge base (none: the
- * whole workspace), citing document, heading path and page (FR-15.3).
+ * Full-text search of a project's items and the workspace knowledge base (none: every
+ * project the caller sees), citing document, heading path and page (FR-15.3), best
+ * first, a page at a time; the `search_knowledge` tool's twin. The parameters are
+ * `tools.SearchKnowledgeIn`'s, spelled out so the page's `cursor` and `limit` show.
  */
 export const knowledgeSearch = <ThrowOnError extends boolean = false>(
   options: Options<KnowledgeSearchData, ThrowOnError>,
@@ -2417,6 +2464,31 @@ export const projectsUpdateProject = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List Activity
+ *
+ * The project's Activity view (FR-2.6): its task runs, their results and its audit
+ * trail, newest first, a page at a time. 400 `invalid_cursor`; 404 for an unknown
+ * project.
+ */
+export const agentsListActivity = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsListActivityData, ThrowOnError>,
+): RequestResult<
+  AgentsListActivityResponses,
+  AgentsListActivityErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    AgentsListActivityResponses,
+    AgentsListActivityErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsListActivityResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/activity",
+    ...options,
+  });
+
+/**
  * Archive Project
  */
 export const projectsArchiveProject = <ThrowOnError extends boolean = false>(
@@ -2434,6 +2506,32 @@ export const projectsArchiveProject = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zProjectsArchiveProjectResponse.parseAsync(data),
     url: "/v1/projects/{project_id}/archive",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Ask
+ *
+ * Ask the project's agent (the composer's Ask the agent toggle): the question becomes
+ * an AI task (source `ask`) and its run starts at once; the run's result is the answer.
+ * 404 for an unknown project; 409 `no_ready_profile` (nothing is kept) when the project
+ * has no ready agent.
+ */
+export const agentsAsk = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsAskData, ThrowOnError>,
+): RequestResult<AgentsAskResponses, AgentsAskErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    AgentsAskResponses,
+    AgentsAskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsAskResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/ask",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -2553,6 +2651,26 @@ export const projectsGetProjectContext = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zProjectsGetProjectContextResponse.parseAsync(data),
     url: "/v1/projects/{project_id}/context",
+    ...options,
+  });
+
+/**
+ * List Inbox
+ *
+ * The project's Inbox (FR-2.6): the tasks its agent proposes, waiting for a decision
+ * (`proposal` review items; P3-07 fills it). 404 for an unknown project.
+ */
+export const tasksListInbox = <ThrowOnError extends boolean = false>(
+  options: Options<TasksListInboxData, ThrowOnError>,
+): RequestResult<TasksListInboxResponses, TasksListInboxErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    TasksListInboxResponses,
+    TasksListInboxErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListInboxResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/inbox",
     ...options,
   });
 
