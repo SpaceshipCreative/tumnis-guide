@@ -17,31 +17,28 @@ const EXPECTED = [
   ["done", "Done"],
 ] as const;
 
-test.fails(
-  "[FIX-taskrow-status][FR-2.6] T-FIX-taskrow-status-01 the task row shows its status in words",
-  () => {
-    for (const [status, word] of EXPECTED) {
-      const task = makeTask({
-        parent_id: null,
-        title: "Fix the footer",
-        status,
-        label: "human",
-        due_on: null,
-        estimate_minutes: null,
-      });
-      renderWithProviders(
-        <ul>
-          <TaskRow task={task} subtasksOf={() => []} onOpen={() => undefined} />
-        </ul>,
-      );
-      const row = screen.getByRole("listitem");
-      const chip = within(row).getByText(word, {
-        selector: "[data-task-status]",
-      });
-      expect(chip).toBeVisible();
-      expect(chip).toHaveAttribute("data-task-status", status);
-      expect(row).toHaveTextContent(word);
-      cleanup();
-    }
-  },
-);
+test("[FIX-taskrow-status][FR-2.6] T-FIX-taskrow-status-01 the task row shows its status in words", () => {
+  for (const [status, word] of EXPECTED) {
+    const task = makeTask({
+      parent_id: null,
+      title: "Fix the footer",
+      status,
+      label: "human",
+      due_on: null,
+      estimate_minutes: null,
+    });
+    renderWithProviders(
+      <ul>
+        <TaskRow task={task} subtasksOf={() => []} onOpen={() => undefined} />
+      </ul>,
+    );
+    const row = screen.getByRole("listitem");
+    const chip = within(row).getByText(word, {
+      selector: "[data-task-status]",
+    });
+    expect(chip).toBeVisible();
+    expect(chip).toHaveAttribute("data-task-status", status);
+    expect(row).toHaveTextContent(word);
+    cleanup();
+  }
+});
