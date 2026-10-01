@@ -294,6 +294,57 @@ export const zFitOffer = z.object({
 });
 
 /**
+ * FocusMessageOut
+ */
+export const zFocusMessageOut = z.object({
+  fired_at: z.iso.datetime(),
+  id: z.uuid(),
+  kind: z.enum([
+    "block_start",
+    "not_started",
+    "check_in_due",
+    "switched",
+    "stuck",
+    "block_end",
+    "day_end",
+  ]),
+  level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
+  message: z.string(),
+  response: z
+    .enum(["still_on_it", "switched", "stuck", "snooze", "less_of_this"])
+    .nullable(),
+  rule: z.string(),
+  task_id: z.uuid().nullable(),
+});
+
+/**
+ * FocusSessionOut
+ */
+export const zFocusSessionOut = z.object({
+  cadence_min: z.int(),
+  doubled: z.boolean(),
+  id: z.uuid(),
+  next_check_in_at: z.iso.datetime().nullable(),
+  started_at: z.iso.datetime(),
+  task_id: z.uuid(),
+  title: z.string(),
+});
+
+/**
+ * FocusCurrentOut
+ *
+ * What the focus bar shows: the level in force, the open session and today's
+ * messages, oldest first.
+ */
+export const zFocusCurrentOut = z.object({
+  level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
+  messages: z.array(zFocusMessageOut),
+  override_level: z.enum(["quiet", "nudge", "coach", "guardrail"]).nullable(),
+  session: zFocusSessionOut.nullable(),
+  workspace_level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
+});
+
+/**
  * FolderIn
  */
 export const zFolderIn = z.object({
@@ -402,6 +453,20 @@ export const zLastDeployOut = z.object({
   created_at: z.iso.datetime(),
   finished_at: z.iso.datetime().nullable(),
   status: z.string(),
+});
+
+/**
+ * LessIn
+ */
+export const zLessIn = z.object({
+  event_id: z.uuid().nullish(),
+});
+
+/**
+ * LevelIn
+ */
+export const zLevelIn = z.object({
+  level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
 });
 
 /**
@@ -832,6 +897,7 @@ export const zProjectOut = z.object({
   client: z.string().nullish(),
   code_path: z.string().nullish(),
   deadline: z.iso.date().nullish(),
+  focus_cadence_min: z.int().nullish(),
   goal: z.string().max(280).nullish(),
   health: zHealth,
   id: z.uuid(),
@@ -871,6 +937,7 @@ export const zProjectPatch = z.object({
   client: z.string().nullish(),
   code_path: z.string().nullish(),
   deadline: z.iso.date().nullish(),
+  focus_cadence_min: z.int().gte(5).lte(240).nullish(),
   goal: z.string().max(280).nullish(),
   links: z.array(zProjectLinkIn).nullish(),
   local_decisions_only: z.boolean().optional(),
@@ -1010,6 +1077,21 @@ export const zRequestApprovalBody = z.object({
   description: z.string().max(4000),
   schema_version: z.int().nullish(),
   target: z.string().max(500).nullish(),
+});
+
+/**
+ * RespondIn
+ */
+export const zRespondIn = z.object({
+  event_id: z.uuid(),
+  response: z.enum([
+    "still_on_it",
+    "switched",
+    "stuck",
+    "snooze",
+    "less_of_this",
+  ]),
+  to_task_id: z.uuid().nullish(),
 });
 
 /**
@@ -2319,6 +2401,32 @@ export const zKnowledgeGetFileQuery = z.object({
  * Successful Response
  */
 export const zKnowledgeGetFileResponse = z.instanceof(Blob);
+
+/**
+ * Successful Response
+ */
+export const zFocusGetCurrentResponse = zFocusCurrentOut;
+
+export const zFocusLessBody = zLessIn;
+
+/**
+ * Successful Response
+ */
+export const zFocusLessResponse = zFocusCurrentOut;
+
+export const zFocusPutLevelBody = zLevelIn;
+
+/**
+ * Successful Response
+ */
+export const zFocusPutLevelResponse = zFocusCurrentOut;
+
+export const zFocusRespondBody = zRespondIn;
+
+/**
+ * Successful Response
+ */
+export const zFocusRespondResponse = zFocusCurrentOut;
 
 export const zGithubWebhookPath = z.object({
   workspace_id: z.uuid(),

@@ -322,8 +322,12 @@ class Focus:
 
     def _pending_messages(self) -> int:
         with psycopg.connect(self.sys_db.libpq(APP)) as conn:
+            # Only messages a waiting workflow will still read: one sent to a workflow
+            # that has finished (it saw its session end first) is never consumed.
             row = conn.execute(
-                b"SELECT count(*) FROM dbos.notifications WHERE topic = 'focus'"
+                b"SELECT count(*) FROM dbos.notifications n"
+                b" JOIN dbos.workflow_status w ON w.workflow_uuid = n.destination_uuid"
+                b" WHERE n.topic = 'focus' AND w.status IN ('ENQUEUED', 'PENDING')"
             ).fetchone()
         return int(row[0]) if row else 0
 

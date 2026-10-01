@@ -63,6 +63,12 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("plan_issues", "kind"): "no_gap",  # ck_plan_issues_kind
     ("archived_blobs", "codec"): "zstd",  # ck_archived_blobs_codec
     ("project_archives", "state"): "archived",  # ck_project_archives_state
+    ("focus_sessions", "level"): "coach",  # ck_focus_sessions_level (P2-15)
+    ("focus_sessions", "cadence_min"): 25,  # ck_focus_sessions_cadence
+    ("focus_events", "kind"): "check_in_due",  # ck_focus_events_kind
+    ("focus_events", "level"): "coach",  # ck_focus_events_level
+    ("focus_responses", "response"): "still_on_it",  # ck_focus_responses_response
+    ("focus_overrides", "level"): "nudge",  # ck_focus_overrides_level
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)

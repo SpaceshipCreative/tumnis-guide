@@ -141,6 +141,18 @@ import type {
   DecisionsGetCalibrationData,
   DecisionsGetCalibrationErrors,
   DecisionsGetCalibrationResponses,
+  FocusGetCurrentData,
+  FocusGetCurrentErrors,
+  FocusGetCurrentResponses,
+  FocusLessData,
+  FocusLessErrors,
+  FocusLessResponses,
+  FocusPutLevelData,
+  FocusPutLevelErrors,
+  FocusPutLevelResponses,
+  FocusRespondData,
+  FocusRespondErrors,
+  FocusRespondResponses,
   GithubWebhookData,
   GithubWebhookErrors,
   GithubWebhookResponses,
@@ -403,6 +415,10 @@ import {
   zDeadLettersPostRetryResponse,
   zDecisionsEditThresholdResponse,
   zDecisionsGetCalibrationResponse,
+  zFocusGetCurrentResponse,
+  zFocusLessResponse,
+  zFocusPutLevelResponse,
+  zFocusRespondResponse,
   zGithubWebhookResponse,
   zHealthLiveResponse,
   zKnowledgeCreateLocationResponse,
@@ -1161,6 +1177,90 @@ export const knowledgeGetFile = <ThrowOnError extends boolean = false>(
       await zKnowledgeGetFileResponse.parseAsync(data),
     url: "/v1/files/{document_id}",
     ...options,
+  });
+
+/**
+ * Get Current
+ */
+export const focusGetCurrent = <ThrowOnError extends boolean = false>(
+  options?: Options<FocusGetCurrentData, ThrowOnError>,
+): RequestResult<
+  FocusGetCurrentResponses,
+  FocusGetCurrentErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    FocusGetCurrentResponses,
+    FocusGetCurrentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zFocusGetCurrentResponse.parseAsync(data),
+    url: "/v1/focus/current",
+    ...options,
+  });
+
+/**
+ * Less
+ */
+export const focusLess = <ThrowOnError extends boolean = false>(
+  options: Options<FocusLessData, ThrowOnError>,
+): RequestResult<FocusLessResponses, FocusLessErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    FocusLessResponses,
+    FocusLessErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zFocusLessResponse.parseAsync(data),
+    url: "/v1/focus/less",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Put Level
+ */
+export const focusPutLevel = <ThrowOnError extends boolean = false>(
+  options: Options<FocusPutLevelData, ThrowOnError>,
+): RequestResult<FocusPutLevelResponses, FocusPutLevelErrors, ThrowOnError> =>
+  (options.client ?? client).put<
+    FocusPutLevelResponses,
+    FocusPutLevelErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zFocusPutLevelResponse.parseAsync(data),
+    url: "/v1/focus/level",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Respond
+ */
+export const focusRespond = <ThrowOnError extends boolean = false>(
+  options: Options<FocusRespondData, ThrowOnError>,
+): RequestResult<FocusRespondResponses, FocusRespondErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    FocusRespondResponses,
+    FocusRespondErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zFocusRespondResponse.parseAsync(data),
+    url: "/v1/focus/respond",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
