@@ -146,6 +146,37 @@ export async function apiWrite<TOut>(req: WriteRequest<TOut>): Promise<TOut> {
     credentials: "same-origin",
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+  return writeResult(response, req.schema);
+}
+
+/**
+ * A multipart create (an upload: a file and its form fields, P1-17) with the same
+ * idempotency key and CSRF header as `apiWrite`; the browser sets the multipart
+ * Content-Type with its boundary.
+ */
+export async function apiUpload<TOut>(req: {
+  path: string;
+  form: FormData;
+  idempotencyKey: string;
+  schema?: z.ZodType<TOut>;
+}): Promise<TOut> {
+  const headers = new Headers({ Accept: "application/json" });
+  headers.set("Idempotency-Key", req.idempotencyKey);
+  const csrf = readCookie(CSRF_COOKIE);
+  if (csrf) headers.set("X-CSRF-Token", csrf);
+  const response = await fetch(apiUrl(req.path), {
+    method: "POST",
+    headers,
+    credentials: "same-origin",
+    body: req.form,
+  });
+  return writeResult(response, req.schema);
+}
+
+async function writeResult<TOut>(
+  response: Response,
+  schema: z.ZodType<TOut> | undefined,
+): Promise<TOut> {
   if (response.status === 409) {
     throw new ConflictError(409, await readProblem(response));
   }
@@ -158,7 +189,7 @@ export async function apiWrite<TOut>(req: WriteRequest<TOut>): Promise<TOut> {
   }
   const json: unknown =
     response.status === 204 ? undefined : await response.json();
-  return req.schema ? req.schema.parse(json) : (json as TOut);
+  return schema ? schema.parse(json) : (json as TOut);
 }
 
 type Keyed<TVars> = TVars & { idempotencyKey: string };

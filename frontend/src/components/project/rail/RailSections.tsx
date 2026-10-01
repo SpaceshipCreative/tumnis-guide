@@ -1,14 +1,15 @@
 // The Context sections (P0-24, FR-2.7), shared by the laptop rail and the phone sheet;
-// one opens at a time. Knowledge and Agent join with P1-17 and P1-06.
+// one opens at a time. Agent joins with P1-06.
 import { useState } from "react";
 
 import type { Project } from "../types";
 import { BriefSection } from "./BriefSection";
 import { ConnectionsSection } from "./ConnectionsSection";
+import { KnowledgeSection } from "./KnowledgeSection";
 import { ScheduleSection } from "./ScheduleSection";
 import { SettingsSection } from "./SettingsSection";
 
-type Section = "brief" | "connections" | "schedule" | "settings";
+type Section = "brief" | "knowledge" | "connections" | "schedule" | "settings";
 
 export function RailSections({
   project,
@@ -27,6 +28,11 @@ export function RailSections({
         projectId={project.id}
         open={open === "brief"}
         onToggle={toggle("brief")}
+      />
+      <KnowledgeSection
+        projectId={project.id}
+        open={open === "knowledge"}
+        onToggle={toggle("knowledge")}
       />
       <ConnectionsSection
         project={project}

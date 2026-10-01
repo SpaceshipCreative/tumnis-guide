@@ -1,6 +1,7 @@
 // The context rail (P0-24, FR-2.7): each section is a one-line summary that opens in
 // place; the Brief saves, Schedule lists the recurring tasks and opens one, and the
 // subtask threshold saves. The rail on a laptop, the Context sheet on the phone.
+import type { Editor as TiptapEditor } from "@tiptap/core";
 import { screen, waitFor, within } from "@testing-library/react";
 import { expect, test } from "vitest";
 
@@ -78,10 +79,20 @@ test("[P0-24][FR-2.7] T-P0-24-15 sections summarise and open in place", async ()
     // Brief opens in place and saves with the version read.
     await user.click(brief);
     expect(brief).toHaveAttribute("aria-expanded", "true");
-    const text = within(rail).getByRole("textbox", { name: "Brief" });
-    expect(text).toHaveValue("Logo refresh for Acme\n\nKeep the wordmark.");
-    await user.clear(text);
-    await user.type(text, "Logo and site refresh");
+    // The brief is in the note editor (P1-17, Scott decisions 39 and 50): its Markdown is
+    // read from the editor, and clearing and typing go through the editor's own
+    // transactions (jsdom has no layout for ProseMirror to read typed DOM text).
+    const text = await within(rail).findByRole("textbox", { name: "Brief" });
+    const editor = (text as HTMLElement & { editor: TiptapEditor }).editor;
+    expect(editor.getMarkdown()).toBe(
+      "Logo refresh for Acme\n\nKeep the wordmark.",
+    );
+    editor
+      .chain()
+      .selectAll()
+      .deleteSelection()
+      .insertContent("Logo and site refresh")
+      .run();
     await user.click(within(rail).getByRole("button", { name: "Save brief" }));
     await waitFor(() => {
       expect(
