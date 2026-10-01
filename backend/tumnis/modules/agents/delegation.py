@@ -38,7 +38,6 @@ from tumnis.core import agent_surface as surface
 from tumnis.core import deadletter
 from tumnis.core.errors import ProblemError
 from tumnis.core.ids import uuid7
-from tumnis.core.routing import register_project_lookup
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.versioning import NotFound
 from tumnis.modules.agents import api
@@ -329,8 +328,8 @@ async def mark_accepted(s: AsyncSession, run_id: UUID, at: datetime) -> None:
 
 
 async def delegation_project(ctx: WorkspaceContext, delegation_id: UUID) -> UUID | None:
-    """The delegated task's project; None for a delegation the caller cannot see.
-    Registered as the `lookup:delegations` project lookup."""
+    """The delegated task's project; None for a delegation the caller cannot see (the
+    `wait_for_task` op's project)."""
     async with tenant_session(ctx) as s:
         found: UUID | None = await s.scalar(
             select(_delegations.c.project_id).where(
@@ -338,9 +337,6 @@ async def delegation_project(ctx: WorkspaceContext, delegation_id: UUID) -> UUID
             )
         )
     return found
-
-
-register_project_lookup("delegations", delegation_project)
 
 
 # --- wait_for_task ---------------------------------------------------------------------------

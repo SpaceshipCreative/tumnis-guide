@@ -409,9 +409,9 @@ async def delegate_task(
 
 
 @router.get("/delegations/{delegation_id}/wait")
-@route_policy(
-    RoutePolicy(auth="session_or_key", scopes=_DELEGATE, project_param="lookup:delegations")
-)
+# No project_param: the op finds the delegation's project before `master_only` (404 for
+# one the caller cannot see), and a non-master key never gets past the op.
+@route_policy(RoutePolicy(auth="session_or_key", scopes=_DELEGATE))
 async def wait_for_task(
     delegation_id: UUID,
     request: Request,

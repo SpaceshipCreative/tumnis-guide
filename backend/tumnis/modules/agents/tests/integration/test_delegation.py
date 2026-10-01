@@ -59,7 +59,6 @@ def _ended(db: DbUrls, run_id: UUID) -> bool:
 
 @pytest.mark.req("FR-5.2")
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 async def test_only_master_key_with_delegate_can_delegate(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -90,7 +89,6 @@ async def test_only_master_key_with_delegate_can_delegate(
 
 @pytest.mark.req("FR-5.2")
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 async def test_child_workflow_id_is_delegation_id(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -123,7 +121,6 @@ async def test_child_workflow_id_is_delegation_id(
 
 @pytest.mark.req("Design decision 6")
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 async def test_wait_returns_done_after_result(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -154,7 +151,6 @@ async def test_wait_returns_done_after_result(
 
 @pytest.mark.req("Design decision 6")
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 async def test_wait_returns_waiting_on_human_before_timeout(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -194,7 +190,6 @@ async def test_wait_returns_waiting_on_human_before_timeout(
 
 @pytest.mark.req("Design decision 6")
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 async def test_wait_returns_still_running_at_timeout(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -223,7 +218,6 @@ async def test_wait_returns_still_running_at_timeout(
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 async def test_depth_three_refused_end_to_end(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
