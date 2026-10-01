@@ -1,5 +1,5 @@
 """Command-line entry point: `tumnis api|worker|migrate|seed|gen|drill|audit|knowledge|
-decisions|mcp-stdio`.
+decisions|embeddings|mcp-stdio`.
 
 The image runs every process through this CLI. `api` and `worker` load the deployment
 settings and run the boot checks first; a configuration error exits 78 (EX_CONFIG), so a
@@ -34,6 +34,8 @@ knowledge_app = typer.Typer(help="Project folders (P1-15).", no_args_is_help=Tru
 app.add_typer(knowledge_app, name="knowledge")
 decisions_app = typer.Typer(help="Decision calibration (P3-08).", no_args_is_help=True)
 app.add_typer(decisions_app, name="decisions")
+embeddings_app = typer.Typer(help="Embedding model indexes (P3-10).", no_args_is_help=True)
+app.add_typer(embeddings_app, name="embeddings")
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -501,6 +503,30 @@ def knowledge_backup_sources(
         return
     for source in sources:
         typer.echo(f"{source.source}\t{source.dest}\t{source.mode}")
+
+
+@embeddings_app.command("index")
+def embeddings_index(
+    model: Annotated[str, typer.Argument(help="The embedding model, e.g. BAAI/bge-m3")],
+    dims: Annotated[int, typer.Option("--dims", min=1, max=2000, help="Its dimension")],
+) -> None:
+    """Create a new embedding model's partial HNSW index as the owner role
+    (DATABASE_OWNER_URL), run like `migrate` (P3-10). A model's re-embedding waits until
+    its index exists; the app role never runs DDL. Idempotent; prints the index name."""
+    import importlib  # noqa: PLC0415
+
+    # By name, as the worker does: no module's tests reach knowledge through the CLI.
+    knowledge = importlib.import_module("tumnis.modules.knowledge.api")
+
+    settings = load_settings()
+    check_database_tls(settings)
+    if settings.database_owner_url is None:
+        _config_error("database_owner_url_missing: the index is made as the owner role")
+    try:
+        name = knowledge.create_embedding_index(settings.database_owner_url, model, dims)
+    except ValueError as exc:
+        _config_error(exc)
+    typer.echo(name)
 
 
 @decisions_app.command("eval")

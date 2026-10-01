@@ -201,17 +201,44 @@ async def _with_token(ctx: WorkspaceContext, packet: TaskPacket) -> TaskPacket:
     return packet.model_copy(update={"callback": callback.model_copy(update={"task_token": token})})
 
 
+async def _skill_pause(ctx: WorkspaceContext, profile_id: UUID) -> str | None:
+    """The stop reason of a pause covering the profile's project (`killswitch` or
+    `project_paused`, Scott decision 40), None when its runs may go on or the profile is
+    unknown (the transport refuses that one)."""
+    async with tenant_session(ctx) as s:
+        profile = (
+            await s.execute(
+                select(_profiles.c.project_id).where(
+                    _profiles.c.id == profile_id, _profiles.c.deleted_at.is_(None)
+                )
+            )
+        ).first()
+        if profile is None:
+            return None
+        state = await api.pause_state_for(s, profile.project_id)
+    return None if state == "running" else _PAUSE_REASON[state]
+
+
 @DBOS.step()
 async def dispatch_step(workspace_id: str, packet: dict[str, Any]) -> str | None:
     """Dispatch through the daemon transport with the run's task token (to the fake
     runner's phase 1 playback instead when it serves the profile: `fake_play`); the refusal's
     reason when the agent is unavailable or no token can be issued (nothing was
-    dispatched, and a token already issued is ended), None once the run is queued."""
+    dispatched, and a token already issued is ended), None once the run is queued.
+
+    A pause (P2-09, Scott decision 40) answers its stop reason (`killswitch` or
+    `project_paused`, `_PAUSE_REASONS`): checked first, so nothing is dispatched, and again
+    once the run row exists, since a pause that landed in between found no row to cancel.
+    `run_skill` then stops the agent (a no-op when nothing was sent) and ends the run
+    `cancelled`."""
     ctx = _ctx(workspace_id)
     task = TaskPacket.model_validate(packet)
     async with tenant_session(_ctx(workspace_id)) as s:
         if not await _archive.dispatch_allowed(s, task.profile_id):
             return "project_archived"  # P2-18: none while archived, archiving or unarchiving
+    paused = await _skill_pause(ctx, task.profile_id)
+    if paused is not None:
+        return paused
     try:
         task = await _with_token(ctx, task)
     except (auth.ScopeEscalation, ValueError) as exc:
@@ -233,7 +260,7 @@ async def dispatch_step(workspace_id: str, packet: dict[str, Any]) -> str | None
             _log.exception("ending run %s after a failed dispatch failed too", task.run_id)
         raise
     faults.killpoint("agents.dispatch_step")  # the mailbox row has committed
-    return None
+    return await _skill_pause(ctx, task.profile_id)
 
 
 def _checked_output(packet: TaskPacket, output: dict[str, Any] | None) -> str | None:
@@ -299,12 +326,17 @@ async def _record_outcome(
         # is best effort) stays cancelled: a lost message must not turn it into `timed_out`.
         current = (
             await s.execute(
-                select(_runs.c.status, _runs.c.error)
+                select(_runs.c.status, _runs.c.error, _runs.c.stop_reason)
                 .where(_runs.c.id == task.run_id)
                 .with_for_update()
             )
         ).first()
         if current is not None and current.status == "cancelled":
+            if outcome.status == "cancelled" and current.stop_reason is None:
+                # The protocol-1 fallback ended it on our own stop: the stop's reason too.
+                await s.execute(
+                    update(_runs).where(_runs.c.id == task.run_id).values(stop_reason=outcome.error)
+                )
             return api.RunOutcome(
                 run_id=task.run_id, status="cancelled", error=current.error or "cancelled"
             ).model_dump(mode="json")
@@ -316,6 +348,8 @@ async def _record_outcome(
                 finished_at=now,
                 output=outcome.output_json,
                 error=outcome.error,
+                # A stop (Scott decision 40): its reason, as `dispatch_run` records one.
+                stop_reason=outcome.error if outcome.status == "cancelled" else None,
             )
         )
         if message is None or message.get("status") == "runner_lost":
@@ -332,17 +366,41 @@ async def _record_outcome(
     return outcome.model_dump(mode="json")
 
 
+def _stop_of(message: dict[str, Any] | None) -> str | None:
+    """The reason of a `run.signal` that stops the run (`cancel`: Stop or a pause; `limit`:
+    a runaway limit), None for anything else (the runner's result, `runner_lost`)."""
+    if message is None or message.get("kind") not in {"cancel", "limit"}:
+        return None
+    return str(message.get("reason") or message["kind"])
+
+
 @DBOS.workflow(name="run_skill")
 async def run_skill(workspace_id: str, packet: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch, wait for the result, record the outcome. A stop (Stop, the kill switch or a
+    project pause, Scott decision 40) stops the agent through its adapter (`stop_agent`, as
+    `dispatch_run` does) and ends the run `cancelled` with the stop's reason."""
     task = TaskPacket.model_validate(packet)
     refused = await dispatch_step(workspace_id, packet)
-    if refused is not None:
+    if refused is not None and refused not in _PAUSE_REASONS:
         return api.RunOutcome(
             run_id=task.run_id, status="failed", error=f"agent_unavailable: {refused}"
         ).model_dump(mode="json")
-    message = await DBOS.recv_async(
-        topic=api.run_topic(task.run_id), timeout_seconds=task.timeout_s + RECV_GRACE_S
-    )
+    message: dict[str, Any] | None = None
+    stop = refused
+    if stop is None:
+        message = await DBOS.recv_async(
+            topic=api.run_topic(task.run_id), timeout_seconds=task.timeout_s + RECV_GRACE_S
+        )
+        stop = _stop_of(message)
+    if stop is not None:
+        handle = RunHandleData(
+            run_id=task.run_id, profile_id=task.profile_id, correlation_id=task.correlation_id
+        )
+        try:
+            await stop_agent(workspace_id, handle.model_dump(mode="json"), stop)
+        except Exception:  # the run still ends, and its task token with it (R-27)
+            _log.exception("stopping run %s failed; ending it cancelled", task.run_id)
+        message = {"status": "cancelled", "error": stop}
     return await finish_step(workspace_id, packet, message)
 
 
@@ -429,6 +487,7 @@ _PAUSE_REASON: Final[dict[str, str]] = {
     "paused_workspace": api.KILLSWITCH,
     "paused_project": api.PROJECT_PAUSED,
 }
+_PAUSE_REASONS: Final = frozenset(_PAUSE_REASON.values())
 
 
 async def _hold_if_paused(

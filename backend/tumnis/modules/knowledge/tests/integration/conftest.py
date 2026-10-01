@@ -29,6 +29,28 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
+def use_embedders() -> Iterator[Callable[..., None]]:
+    """`use_embedders(*adapters, primary=None)`: the Embeddings slot answers with these
+    adapters (fakes) in this process, the first (or the one whose model is `primary`)
+    preferred, until the test ends (P3-10). Imported on first use."""
+    used: list[bool] = []
+
+    def use(*adapters: Any, primary: str | None = None) -> None:
+        from tumnis.modules.decisions import api as decisions  # noqa: PLC0415
+
+        used.append(True)
+        decisions.use_embedders(
+            decisions.Embedders(tuple(adapters), primary=primary or adapters[0].model)
+        )
+
+    yield use
+    if used:
+        from tumnis.modules.decisions import api as decisions  # noqa: PLC0415
+
+        decisions.use_embedders(None)
+
+
+@pytest.fixture
 def knowledge_ws(
     db: DbUrls, workspace: WorkspaceHandle, master_key_file: MasterKeyFile
 ) -> WorkspaceHandle:
