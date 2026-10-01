@@ -90,7 +90,6 @@ def _simulate(
 @pytest.mark.wp("P2-15")
 @pytest.mark.parametrize("kind", KINDS)
 @pytest.mark.parametrize("level", LEVELS)
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 def test_level_event_table(level: str, kind: str) -> None:
     """T-P2-15-01
     Every cell of the level by event table: Quiet fires nothing; Nudge fires block_start,
@@ -105,7 +104,6 @@ def test_level_event_table(level: str, kind: str) -> None:
 
 @pytest.mark.req("FR-10.2")
 @pytest.mark.wp("P2-15")
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 def test_not_started_at_15_minutes() -> None:
     """T-P2-15-02
     A planned block gives block_start at its start, not_started 15 minutes later and
@@ -174,7 +172,6 @@ BACKOFF_ROWS = [
 @pytest.mark.req("FR-10.4")
 @pytest.mark.wp("P2-15")
 @pytest.mark.parametrize(("answers", "activity", "expected"), BACKOFF_ROWS)
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 def test_backoff_sequences(
     answers: dict[str, str], activity: tuple[datetime, ...], expected: list[str]
 ) -> None:
@@ -203,7 +200,6 @@ ANSWER = st.sampled_from(["still_on_it", "switched", "stuck", None])
 @pytest.mark.wp("P2-15")
 @settings(deadline=None, max_examples=200)
 @given(base=st.integers(min_value=5, max_value=90), answers=st.lists(ANSWER, max_size=12))
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 def test_backoff_property(base: int, answers: list[str | None]) -> None:
     """T-P2-15-04
     Property: once two consecutive still-on-it answers occur, every later interval between
@@ -236,7 +232,6 @@ def test_backoff_property(base: int, answers: list[str | None]) -> None:
 
 @pytest.mark.req("FR-10.7")
 @pytest.mark.wp("P2-15")
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 def test_activity_suppresses_check_in() -> None:
     """T-P2-15-05
     Git or agent activity on the task inside [window start, now] suppresses the check-in
@@ -280,7 +275,6 @@ DST = {
 @pytest.mark.req("FR-10.1")
 @pytest.mark.wp("P2-15")
 @pytest.mark.parametrize("zone", ["America/New_York", "Australia/Sydney"])
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 def test_today_override_ends_at_day_close(zone: str) -> None:
     """T-P2-15-06
     The today override applies on its local date until that day's close, not after, on
@@ -309,7 +303,6 @@ def test_today_override_ends_at_day_close(zone: str) -> None:
 
 @pytest.mark.req("FR-11.4")
 @pytest.mark.wp("P2-15")
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 def test_gate_can_only_suppress_gateable_kinds() -> None:
     """T-P2-15-07
     The Noul ("is a nudge warranted now?") may only suppress, and only not_started and
