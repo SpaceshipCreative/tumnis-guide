@@ -12,8 +12,9 @@
   twice.
 - `agents.cancel_paused_runs` listens to `agents.paused` (P2-09, SAF-4): in one
   transaction, `run.signal{cancel}` (reason `killswitch`, or `project_paused`) for each
-  running or waiting `dispatch_run` run in the pause's scope; each run's workflow stops
-  its agent through the adapter and ends it `cancelled`.
+  running or waiting run in the pause's scope, `dispatch_run` and `run_skill` runs alike
+  (Scott decision 40); each run's workflow stops its agent through the adapter and ends it
+  `cancelled`.
 - `agents.release_held_runs` listens to `agents.resumed` (P2-09): sends `release` to each
   held run in scope that no other pause holds (send idempotency key `<event id>:<run>`),
   and its workflow goes on.
