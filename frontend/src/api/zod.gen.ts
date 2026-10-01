@@ -1492,6 +1492,7 @@ export const zRunOut = z.object({
   finished_at: z.iso.datetime().nullable(),
   id: z.uuid(),
   kind: zRunKind,
+  profile_version: z.string().nullish(),
   project_id: z.uuid().nullable(),
   rerun_of: z.uuid().nullable(),
   started_at: z.iso.datetime().nullable(),

@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from tumnis_daemon.state import StateStore
 
 ENV_KEEP: Final = frozenset({"PATH", "HOME", "LANG"})
+TUMNIS_TOKEN: Final = "TUMNIS_TOKEN"  # noqa: S105  # the variable's name, not a token
 KILL_GRACE_S: Final = 10.0  # cancel: SIGTERM, then SIGKILL after this (plan default)
 TOOL_RECORDS: Final = frozenset({"tool_call", "tool_use"})
 LINE_LIMIT: Final = 8 * 1024 * 1024  # one stream-json record
@@ -97,6 +98,22 @@ def clean_env(cfg: DaemonConfig, environ: Mapping[str, str] | None = None) -> di
     del cfg  # the token lives in a file, never in the environment
     source = os.environ if environ is None else environ
     return {k: v for k, v in source.items() if k in ENV_KEEP or k.startswith("HERMES_")}
+
+
+def run_env(
+    cfg: DaemonConfig, msg: Run, environ: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """A run's environment for Hermes (P2-12): `clean_env`, plus `TUMNIS_TOKEN` set to the
+    run's task token (`packet.callback.task_token`) when the packet carries one, so the
+    profile's `tumnis` MCP server (`Authorization: Bearer ${TUMNIS_TOKEN}` in its
+    config.yaml) calls back as this run. Whatever TUMNIS_TOKEN the daemon's own
+    environment holds is never passed on; the token is never logged."""
+    env = clean_env(cfg, environ)
+    callback = msg.packet.get("callback")
+    token = callback.get("task_token") if isinstance(callback, Mapping) else None
+    if isinstance(token, str) and token:
+        env[TUMNIS_TOKEN] = token
+    return env
 
 
 def extract_json_object(text: str) -> dict[str, Any] | None:
@@ -262,7 +279,7 @@ async def execute(
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,  # never read: a pipe would only fill memory
-        env=clean_env(cfg),
+        env=run_env(cfg, msg),
         start_new_session=True,
         limit=LINE_LIMIT,
     )

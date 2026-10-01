@@ -1,0 +1,11 @@
+{
+  "jobs": [
+    {
+      "id": "tumnis-project-digest",
+      "name": "Tumnis project digest",
+      "prompt": "Run the project-digest skill now: read what changed in this profile's Tumnis project since your last digest, and retain it in your long-term memory.",
+      "skills": ["project-digest"],
+      "schedule": "0 9-17 * * 1-5"
+    }
+  ]
+}

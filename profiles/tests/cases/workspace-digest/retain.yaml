@@ -1,0 +1,41 @@
+# T-P2-12-05 (master): the workspace digest pages from the retained cursor and retains the
+# newest one, as the project digest does.
+id: workspace-digest-retain
+profile: master
+skill: workspace-digest
+input: ../../fixtures/packets/workspace_digest.json
+output_schema: {family: harness, name: digest_run, version: 1}
+meta: {test_id: T-P2-12-05, req: [FR-13.2], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  recall: ["Tumnis workspace digest cursor: w-1"]
+  responses:
+    get_workspace_digest:
+      - result:
+          schema_version: 1
+          scope: workspace
+          entries: [{id: 01950000-0000-7000-8000-000000000903, event_id: 01950000-0000-7000-8000-000000000803, kind: task.created, scope: workspace, project_id: null, task_id: 01950000-0000-7000-8000-000000000413, occurred_at: "2026-03-09T13:00:00Z", data: {title: Draft the launch email 3}, text: null}]
+          next_cursor: w-2
+          has_more: true
+          gap: false
+      - result:
+          schema_version: 1
+          scope: workspace
+          entries: [{id: 01950000-0000-7000-8000-000000000904, event_id: 01950000-0000-7000-8000-000000000804, kind: task.created, scope: workspace, project_id: null, task_id: 01950000-0000-7000-8000-000000000414, occurred_at: "2026-03-09T14:00:00Z", data: {title: Draft the launch email 4}, text: null}]
+          next_cursor: w-3
+          has_more: false
+          gap: false
+expect:
+  sequence:
+    - {tool: get_workspace_digest, where: [{path: "$.since", equals: w-1}]}
+    - {tool: get_workspace_digest, where: [{path: "$.since", equals: w-2}]}
+    - {server: memory, tool: retain, where: [{path: "$.content", matches: "(?s).*w-3.*"}]}
+  calls:
+    - {tool: get_workspace_digest, min: 2, max: 2}
+    - {server: memory, tool: retain, min: 3}
+  forbid:
+    - {tool: create_task}
+    - {tool: post_result}
+  json:
+    - {path: "$.scope", equals: workspace}
+    - {path: "$.next_cursor", equals: w-3}
+    - {path: "$.entries_retained", equals: 2}

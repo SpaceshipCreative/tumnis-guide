@@ -2,7 +2,8 @@
 runner only.
 
 Each profile the runs need is installed once per parallel slot from a prepared copy whose
-`mcp.json` runs only the recording mocks (harness.mock_mcp_min for Tumnis,
+`mcp.json` and `config.yaml` `mcp_servers` (where Hermes reads its MCP servers) run only the
+recording mocks (harness.mock_mcp_min for Tumnis,
 harness.mock_worker_tools for GitHub, Coolify, Proxmox and Jev), every one writing to the
 slot's own JSON-lines file. A slot runs one attempt at a time: the harness empties the
 file, runs Hermes on the injected packet in a fresh one-shot session (the daemon's own run
@@ -24,6 +25,8 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Final
+
+import yaml
 
 from harness import REPO
 from harness.cases import SchemaName
@@ -66,12 +69,22 @@ def mock_mcp_config(record: Path, python: str = sys.executable) -> dict[str, Any
     return {"mcpServers": servers}
 
 
+def write_mock_servers(dest: Path, config: dict[str, Any]) -> None:
+    """Point a prepared profile copy at the mocks only: `mcp.json` is `config`, and
+    `config.yaml`'s `mcp_servers` (where Hermes reads its MCP servers, P2-12) holds the
+    same servers, so no real server (the GitHub image, Coolify, Tumnis) is started."""
+    (dest / "mcp.json").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    config_yaml = dest / "config.yaml"
+    settings = yaml.safe_load(config_yaml.read_text(encoding="utf-8")) or {}
+    settings["mcp_servers"] = config["mcpServers"]
+    config_yaml.write_text(yaml.safe_dump(settings, sort_keys=False), encoding="utf-8")
+
+
 def prepare_profile(profile: str, target: Path, record: Path) -> Path:
-    """A copy of profiles/<profile> under `target` whose mcp.json runs only the mocks."""
+    """A copy of profiles/<profile> under `target` whose MCP servers are only the mocks."""
     dest = target / profile
     shutil.copytree(REPO / "profiles" / profile, dest)
-    config = json.dumps(mock_mcp_config(record), indent=2)
-    (dest / "mcp.json").write_text(config + "\n", encoding="utf-8")
+    write_mock_servers(dest, mock_mcp_config(record))
     return dest
 
 

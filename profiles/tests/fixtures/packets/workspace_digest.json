@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "kind": "digest",
+  "run_id": "a00828e1-c96a-5fbc-91ed-c64c3af432c2",
+  "profile_id": "01950000-0000-7000-8000-000000000301",
+  "skill": "workspace-digest",
+  "output_schema": {
+    "family": "harness",
+    "name": "digest_run",
+    "version": 1
+  },
+  "correlation_id": "run:a00828e1-c96a-5fbc-91ed-c64c3af432c2",
+  "timeout_s": 600,
+  "prompt_text": "Run the workspace-digest skill now: read the workspace-wide changes in Tumnis since your last digest, and retain them in your long-term memory.\n\nUse the skill workspace-digest. Reply with one JSON object matching harness/digest_run/1.\n\n<packet>\n{\n  \"kind\": \"digest\",\n  \"scope\": \"workspace\",\n  \"entries\": []\n}\n</packet>\n",
+  "body": {
+    "kind": "digest",
+    "scope": "workspace",
+    "entries": []
+  },
+  "tainted": false
+}

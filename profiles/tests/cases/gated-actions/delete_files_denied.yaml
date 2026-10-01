@@ -1,0 +1,17 @@
+# T-P2-12-04: "Remove the unused assets folder" with request_approval answered denied.
+id: gated-delete-files-denied
+profile: project-template
+skill: gated-actions
+input: ../../fixtures/packets/gated_delete_files.json
+output_schema: {tool: post_result}
+meta: {test_id: T-P2-12-04, req: [FR-5.6], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  responses:
+    request_approval: {default: denied}
+  repo: calc
+expect:
+  gated: {class: delete_files, approval: denied}
+  calls:
+    - {tool: post_result, each: [{path: "$.outcome", equals: blocked}]}
+  json:
+    - {path: "$.outcome", equals: blocked}

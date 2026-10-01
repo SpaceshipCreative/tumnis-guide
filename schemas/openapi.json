@@ -6902,6 +6902,17 @@
           "kind": {
             "$ref": "#/components/schemas/RunKind"
           },
+          "profile_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Version"
+          },
           "project_id": {
             "anyOf": [
               {

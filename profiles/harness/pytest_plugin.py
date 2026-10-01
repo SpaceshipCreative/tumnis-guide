@@ -26,6 +26,7 @@ from harness.run import HermesRunner, load_config, run_case
 
 _RUNNER = pytest.StashKey[HermesRunner]()
 _HOSTILE = pytest.StashKey[Any]()  # harness.hostile_run.HostileRunner, entered
+_SKILLS = pytest.StashKey[Any]()  # harness.skill_run.SkillRunner, entered (P2-12)
 # Test functions that run the real Hermes themselves (node ids from the profiles project).
 HOMELAB_TESTS = frozenset(
     {
@@ -97,9 +98,33 @@ class CaseItem(pytest.Item):
             runner.install(self.case.profile)
         return runner
 
+    def _skill_runner(self) -> Any:
+        """The mocks' runner (harness.skill_run.SkillRunner) for a tool-calling case
+        (P2-12), entered once with every profile and left at the session's end."""
+        stash = self.config.stash
+        if _SKILLS not in stash:
+            from harness.skill_run import SkillRunner  # noqa: PLC0415  # homelab only
+
+            runner = SkillRunner(load_config())
+            entered = runner.profiles({"project-template", "master"})
+            entered.__enter__()
+
+            def leave() -> None:
+                entered.__exit__(None, None, None)
+
+            self.config.add_cleanup(leave)
+            stash[_SKILLS] = runner
+        return stash[_SKILLS]
+
     def runtest(self) -> None:
         if not self.config.getoption("--run-skills"):
             pytest.skip("skill cases run on the homelab runner (--run-skills)")
+        if self.case.uses_mocks:
+            mocked = self._skill_runner()
+            result = run_case(self.case, mocked.attempt, runs=mocked.config.runs)
+            if result.status != "passed":
+                pytest.fail(summary_line(result), pytrace=False)
+            return
         runner = self._runner()
         result = run_case(self.case, runner.attempt, runs=runner.config.runs)
         if result.status != "passed":

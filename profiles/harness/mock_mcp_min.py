@@ -19,6 +19,8 @@ on_call_tool handlers returning ListToolsResult and CallToolResult), because the
 schemas come from a JSON file rather than Python signatures.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import sys
@@ -26,26 +28,30 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import anyio
-from mcp.server import Server, ServerRequestContext
-from mcp.server.stdio import stdio_server
-from mcp.types import (
-    CallToolRequestParams,
-    CallToolResult,
-    ListToolsResult,
-    PaginatedRequestParams,
-    TextContent,
-    Tool,
-)
 
 from harness import REPO
+
+# The MCP SDK is imported where a server is built or served, not here: the harness's case
+# loading and judging (harness.calls, harness.cases, harness.run) use this module's records
+# only, and the traceability check collects the profile tests with the backend's
+# environment, whose MCP SDK is an older major version (P2-12).
+if TYPE_CHECKING:
+    from mcp.server import Server, ServerRequestContext
+    from mcp.types import (
+        CallToolRequestParams,
+        CallToolResult,
+        ListToolsResult,
+        PaginatedRequestParams,
+    )
 
 CATALOGUE: Final = REPO / "schemas" / "mcp" / "v1" / "tools.json"
 TUMNIS: Final = "tumnis"
 
 Respond = Callable[[str, Mapping[str, Any]], dict[str, Any]]
+Check = Callable[[str, Mapping[str, Any]], list[str]]  # what is wrong with a call's arguments
 
 
 @dataclass(frozen=True)
@@ -128,9 +134,20 @@ def build_server(
     *,
     name: str = TUMNIS,
     respond: Respond = default_response,
+    check: Check | None = None,
 ) -> Server[Any]:
     """A low-level MCP server listing `catalogue`'s tools and recording every call. No
-    output schema is declared, so a client never checks the canned results against one."""
+    output schema is declared, so a client never checks the canned results against one.
+    With `check` (P2-12's full mock), a call whose arguments it faults is answered as a
+    tool error, and recorded with that error."""
+    from mcp.server import Server  # noqa: PLC0415  # see the note at the imports
+    from mcp.types import (  # noqa: PLC0415
+        CallToolResult,
+        ListToolsResult,
+        TextContent,
+        Tool,
+    )
+
     tools = [
         Tool(
             name=str(tool["name"]),
@@ -150,8 +167,13 @@ def build_server(
         ctx: ServerRequestContext[Any], params: CallToolRequestParams
     ) -> CallToolResult:
         arguments = dict(params.arguments or {})
-        if params.name not in known:
-            result: dict[str, Any] = {"error": f"unknown tool {params.name}"}
+        problems = (
+            [f"unknown tool {params.name}"]
+            if params.name not in known
+            else ([] if check is None else check(params.name, arguments))
+        )
+        if problems:
+            result: dict[str, Any] = {"error": "; ".join(problems)}
             recorder.record(name, params.name, arguments, result)
             return CallToolResult(
                 content=[TextContent(type="text", text=json.dumps(result))], is_error=True
@@ -167,6 +189,8 @@ def build_server(
 
 
 async def serve_stdio(server: Server[Any]) -> None:
+    from mcp.server.stdio import stdio_server  # noqa: PLC0415  # see the note at the imports
+
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
