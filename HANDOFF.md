@@ -217,6 +217,18 @@ check: SQLAlchemy 2.x `UserDefinedType`, DBOS `sleep_async`.
 
 ## Scott items
 
+- (c1) Hybrid search embeds the QUERY: `search_knowledge(mode="hybrid")` runs in the api
+  process (passages_for in packet routes, the MCP tool), so with the slot on it would call
+  the embedder from the api process, which AGENTS.md forbids without an exception. c1 plan:
+  configure the slot in the worker only (api-side hybrid = full text until Scott decides);
+  options for Scott: (a) approve a bounded exception (2 s timeout, FTS fallback) and call
+  `configure_embeddings` in create_app too, or (b) keep query embedding worker-only.
+- (c1) Deviations to list in the PR body: slot logic lives in `decisions/embeddings_slot.py`
+  (re-exported by api.py); env is `EMBEDDINGS__BASE_URL/MODEL/DIMS/QUERY_TIMEOUT_MS`, not
+  `EMBEDDING_DIMS`; `FakeHostedEmbeddings` registered as the hosted fake; `.importlinter`
+  test-only ignore for knowledge tests -> decisions' fake; the Settings screen that shows
+  `tumnis embeddings index <model>` is not built (no UI in this PR).
+
 - Vectors recorded from the bge-m3 ONNX export on CPU, not the homelab vLLM; re-record
   and run the model-swap check on the homelab (done-checklist item).
 - Hosted embedder credential storage/config UI not built (adapter, routing and tests are).
