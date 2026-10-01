@@ -1,10 +1,11 @@
 // The kill switch stays usable when its state cannot be read (P2-09, SAF-4): a failed
 // `GET /v1/agents/pause` still shows "Pause all agents", so a broken read never hides the
 // safety control.
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { expect, test } from "vitest";
 
+import { agentsGetPausesQueryKey } from "../../api/@tanstack/react-query.gen";
 import { server } from "../../test/msw/server";
 import { renderWithProviders } from "../../test/render";
 import { KillSwitch } from "./KillSwitch";
@@ -23,7 +24,16 @@ test("[P2-09][SAF-4] a failed pause-state read still shows the pause control", a
       ),
     ),
   );
-  renderWithProviders(<KillSwitch />);
+  const { queryClient } = renderWithProviders(<KillSwitch />);
+  // The read retries a 5xx once: wait for its terminal error before looking.
+  await waitFor(
+    () => {
+      expect(queryClient.getQueryState(agentsGetPausesQueryKey())?.status).toBe(
+        "error",
+      );
+    },
+    { timeout: 5000 },
+  );
   expect(
     await screen.findByRole("button", { name: "Pause all agents" }),
   ).toBeEnabled();
