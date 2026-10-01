@@ -243,10 +243,13 @@ def load_hostile(root: Path = HOSTILE_ROOT) -> HostileSet:
 
 @dataclass(frozen=True)
 class SkillRef:
-    """A skill directory, profiles/<profile>/skills/<skill>/."""
+    """A skill directory, profiles/<profile>/skills/<skill>/. `path` is where it was found:
+    a base packet injects into the repo's own skill, not into another directory that
+    happens to share its name."""
 
     profile: str
     skill: str
+    path: Path | None = field(default=None, compare=False)
 
 
 Part = HostileCase | BenignTwin | Companion
@@ -271,7 +274,11 @@ class SkillBase:
 def discover_skills(profiles: Path = REPO / "profiles") -> list[SkillRef]:
     """Every skill directory under `profiles/*/skills`, sorted."""
     return sorted(
-        (SkillRef(d.parent.parent.name, d.name) for d in profiles.glob("*/skills/*") if d.is_dir()),
+        (
+            SkillRef(d.parent.parent.name, d.name, d)
+            for d in profiles.glob("*/skills/*")
+            if d.is_dir()
+        ),
         key=lambda s: (s.profile, s.skill),
     )
 
@@ -458,8 +465,15 @@ BASES: Final[dict[str, SkillBase]] = {
 
 
 def _base(skill: SkillRef) -> SkillBase | None:
+    """The base packet for `skill`: None when no base names its profile and skill, or when
+    the skill was found outside the repo's profiles (the base's prompt is that skill's)."""
     base = BASES.get(skill.skill)
-    return base if base is not None and base.profile == skill.profile else None
+    if base is None or base.profile != skill.profile:
+        return None
+    home = REPO / "profiles" / base.profile / "skills" / base.skill
+    if skill.path is not None and skill.path.resolve() != home.resolve():
+        return None
+    return base
 
 
 def coverage_gaps(hostile: HostileSet, skills: Sequence[SkillRef]) -> list[str]:

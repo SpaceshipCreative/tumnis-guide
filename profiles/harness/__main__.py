@@ -20,8 +20,10 @@ in place of the profiles' own, and exits 1 unless every run passes the judge.
 import argparse
 import subprocess
 import sys
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Final
 
 from harness import REPO, packets
 from harness.cases import Case, CaseError, case_gaps, load_cases
@@ -157,39 +159,55 @@ def _cases(args: argparse.Namespace) -> int:
     return 0 if all(verdict(r) in OK for r in results) else 1
 
 
+def _coverage(args: argparse.Namespace) -> int:
+    skills = discover_skills()
+    gaps = coverage_gaps(load_hostile(), skills)
+    if args.suite is None:  # every skill also has cases of its own (P2-12)
+        cases = load_cases(args.cases)
+        gaps += case_gaps(cases, [(s.profile, s.skill) for s in skills])
+    for gap in gaps:
+        print(gap)
+    print(f"{args.suite or 'skills'} coverage: {len(gaps)} gaps")
+    return 1 if gaps else 0
+
+
+def _packets(args: argparse.Namespace) -> int:
+    if args.check:
+        for name in (stale_packets := packets.stale()):
+            print(f"{packets.path_of(name).relative_to(REPO)}: stale")
+        print(f"case packets: {len(stale_packets)} stale")
+        return 1 if stale_packets else 0
+    for path in packets.write_all():
+        print(f"wrote {path.relative_to(REPO)}")
+    return 0
+
+
+def _index(args: argparse.Namespace) -> int:
+    text = render_index(load_hostile(), discover_skills())
+    if args.check:
+        current = INDEX.read_text(encoding="utf-8") if INDEX.is_file() else ""
+        stale = current != text
+        print(f"{INDEX.relative_to(REPO)}: {'stale' if stale else 'current'}")
+        return 1 if stale else 0
+    INDEX.parent.mkdir(parents=True, exist_ok=True)
+    INDEX.write_text(text, encoding="utf-8")
+    print(f"wrote {INDEX.relative_to(REPO)}")
+    return 0
+
+
+Command = Callable[[argparse.Namespace], int]
+COMMANDS: Final[dict[str, Command]] = {
+    "coverage": _coverage,
+    "packets": _packets,
+    "index": _index,
+}
+
+
 def main(argv: list[str]) -> int:
     args = _parse(argv)
     try:
-        if args.command == "coverage":
-            skills = discover_skills()
-            gaps = coverage_gaps(load_hostile(), skills)
-            if args.suite is None:  # every skill also has cases of its own (P2-12)
-                cases = load_cases(args.cases)
-                gaps += case_gaps(cases, [(s.profile, s.skill) for s in skills])
-            for gap in gaps:
-                print(gap)
-            print(f"{args.suite or 'skills'} coverage: {len(gaps)} gaps")
-            return 1 if gaps else 0
-        if args.command == "packets":
-            if args.check:
-                for name in (stale_packets := packets.stale()):
-                    print(f"{packets.path_of(name).relative_to(REPO)}: stale")
-                print(f"case packets: {len(stale_packets)} stale")
-                return 1 if stale_packets else 0
-            for path in packets.write_all():
-                print(f"wrote {path.relative_to(REPO)}")
-            return 0
-        if args.command == "index":
-            text = render_index(load_hostile(), discover_skills())
-            if args.check:
-                current = INDEX.read_text(encoding="utf-8") if INDEX.is_file() else ""
-                stale = current != text
-                print(f"{INDEX.relative_to(REPO)}: {'stale' if stale else 'current'}")
-                return 1 if stale else 0
-            INDEX.parent.mkdir(parents=True, exist_ok=True)
-            INDEX.write_text(text, encoding="utf-8")
-            print(f"wrote {INDEX.relative_to(REPO)}")
-            return 0
+        if (command := COMMANDS.get(args.command)) is not None:
+            return command(args)
         if getattr(args, "runs", None) is not None and args.runs < MIN_RUNS:
             raise HarnessError(f"--runs is {args.runs}; every case runs {MIN_RUNS} times")
         if args.command == "run" and args.suite == "hostile":

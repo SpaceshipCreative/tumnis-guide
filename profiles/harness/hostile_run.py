@@ -2,7 +2,8 @@
 runner only.
 
 Each profile the runs need is installed once per parallel slot from a prepared copy whose
-`mcp.json` runs only the recording mocks (harness.mock_mcp_min for Tumnis,
+`mcp.json` and `config.yaml` `mcp_servers` (where Hermes reads its MCP servers) run only the
+recording mocks (harness.mock_mcp_min for Tumnis,
 harness.mock_worker_tools for GitHub, Coolify, Proxmox and Jev), every one writing to the
 slot's own JSON-lines file. A slot runs one attempt at a time: the harness empties the
 file, runs Hermes on the injected packet in a fresh one-shot session (the daemon's own run
