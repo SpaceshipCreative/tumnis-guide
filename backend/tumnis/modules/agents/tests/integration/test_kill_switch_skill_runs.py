@@ -107,7 +107,6 @@ async def test_kill_switch_cancels_a_running_skill_run(  # noqa: PLR0917
 
 @pytest.mark.req("SAF-4")
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 async def test_no_skill_run_is_dispatched_while_paused(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
