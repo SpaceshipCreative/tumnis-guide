@@ -325,6 +325,14 @@ export function TaskDrawer({
       if (opener?.isConnected) opener.focus();
     };
   }, [taskId]);
+  // Switching between the details and a run (Run, Back to the task, or the browser's
+  // history) removes the control that had focus; focus then falls to <body>, outside the
+  // drawer, and Escape no longer reaches it. Put it back on the drawer, which takes
+  // Escape, and leave it alone when it is anywhere else on purpose.
+  useEffect(() => {
+    const at = document.activeElement;
+    if (at === null || at === document.body) panel.current?.focus();
+  }, [runId]);
   // The task the drawer has open now (none once it closes): a Run answer for any other
   // task is late and is dropped.
   const openTask = useRef<string | undefined>(taskId);
