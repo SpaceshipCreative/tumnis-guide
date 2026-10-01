@@ -142,6 +142,11 @@ PG_TEST_SETTINGS = (
     "synchronous_commit=off",
     "full_page_writes=off",
     "scram_iterations=1",
+    # A login its client abandoned mid-handshake (a test's event loop closed under it) waits
+    # for the client until authentication_timeout. DROP DATABASE waits for every backend
+    # to absorb its smgr-release barrier (PostgreSQL 18 dbcommands.c), so such a login held
+    # a test's `db` teardown for the default minute (59.5 s, seen on agents tests).
+    "authentication_timeout=10s",
 )
 
 
@@ -270,17 +275,27 @@ def workspace(db: DbUrls) -> Iterator[WorkspaceHandle]:
             entered.__exit__(None, None, None)
 
 
+# db_template name -> row_factory's catalog lookups on it (see two_workspaces).
+_TEMPLATE_CATALOGS: dict[str, dict[tuple[str, str], list[Any]]] = {}
+
+
 @pytest.fixture
-def two_workspaces(db: DbUrls) -> tuple[WorkspaceHandle, WorkspaceHandle]:
+def two_workspaces(db: DbUrls, db_template: str) -> tuple[WorkspaceHandle, WorkspaceHandle]:
     """Workspaces A and B, each with at least one row in every fenced table: the seed set
     once its writers exist (P0-17, P0-18), and `minimal_row` for any table it leaves empty.
-    Enters no context: isolation tests choose theirs."""
+    Enters no context: isolation tests choose theirs. `db` is a fresh clone of the worker's
+    template, so the catalog lookups behind `minimal_row` are cached per template: about
+    half of this fixture's time was reading the same catalog again for every test."""
     import psycopg  # noqa: PLC0415
 
     from tests._pg import OWNER  # noqa: PLC0415
     from tests.meta._catalog import fenced_tables, tenant_key  # noqa: PLC0415
     from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
-    from tumnis.core.tests.integration.row_factory import insert_row, minimal_row  # noqa: PLC0415
+    from tumnis.core.tests.integration.row_factory import (  # noqa: PLC0415
+        cached_catalog,
+        insert_row,
+        minimal_row,
+    )
     from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
 
     pair = tuple(
@@ -288,7 +303,11 @@ def two_workspaces(db: DbUrls) -> tuple[WorkspaceHandle, WorkspaceHandle]:
         for name in ("A", "B")
         for ws in [make_workspace(db, name)]
     )
-    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+    catalog = _TEMPLATE_CATALOGS.setdefault(db_template, {})
+    with (
+        psycopg.connect(db.libpq(OWNER), autocommit=True) as conn,
+        cached_catalog(catalog),
+    ):
         for table in fenced_tables(conn):
             if tenant_key(conn, table) != "workspace_id":
                 continue  # the root: each workspace is its own row
