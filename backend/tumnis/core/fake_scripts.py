@@ -88,3 +88,19 @@ async def lookup(name: str, key: str = "") -> dict[str, Any] | None:
     async with db.app_sessionmaker()() as session, session.begin():
         script: dict[str, Any] | None = await session.scalar(stmt)
     return script
+
+
+# --- The fake runner's last packet (P2-04, `GET /v1/test/fakes/runner/last-packet`) ---------
+
+RUNNER = "runner"  # the fake runner's scripts (`POST /v1/test/fakes/runner/script`)
+LAST_PACKET = "runner.last_packet"  # the last `run` packet it received, and how many
+
+
+async def record_run_packet(packet: Mapping[str, Any]) -> None:
+    """Keep `packet` as the fake runner's last one and count it."""
+    raise NotImplementedError
+
+
+async def last_run_packet() -> dict[str, Any] | None:
+    """`{"packet": ..., "run_messages": n}`, or None before any packet (or while disabled)."""
+    raise NotImplementedError

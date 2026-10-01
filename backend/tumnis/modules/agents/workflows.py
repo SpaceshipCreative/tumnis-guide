@@ -1812,6 +1812,11 @@ async def profile_health_sweep(scheduled_at: datetime, context: Any) -> int:
     return started
 
 
+async def reconcile_runs(scheduled_at: datetime, context: Any) -> list[str]:
+    """Fails the runs whose `dispatch_run` workflow ended while the row is active."""
+    raise NotImplementedError
+
+
 def schedules() -> list[Any]:
     """This module's DBOS schedules, applied by the worker after launch (the runner sweep
     has its own registration in `worker.py`)."""

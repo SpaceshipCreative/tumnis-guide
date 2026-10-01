@@ -7,7 +7,7 @@ scripted through `POST /v1/test/fakes/runner/script`.
 """
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID, uuid5
@@ -23,6 +23,11 @@ from tumnis.modules.agents.adapters.port import (
 from tumnis.modules.agents.packet_builder import TaskPacket
 
 ScriptedStatus = Literal["succeeded", "failed", "timed_out"]
+
+
+def parse_runner_script(body: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+    """The fake runner's stored script (R-37): its match key and what is stored."""
+    raise NotImplementedError
 
 
 @dataclass(frozen=True)
