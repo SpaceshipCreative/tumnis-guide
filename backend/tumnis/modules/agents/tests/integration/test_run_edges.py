@@ -4,6 +4,8 @@
   wait ends first; the state table has no direct waiting -> succeeded edge).
 - Rejecting a result keeps the feedback comment and the move back to In progress when the
   task can no longer run (here its label became `human`): no rerun, nothing rolled back.
+- A run whose task went to the trash while queued is refused (`task_not_found`), not
+  retried.
 """
 
 from __future__ import annotations
@@ -143,3 +145,30 @@ async def test_reject_kept_when_the_rerun_is_refused(  # noqa: PLR0917
     comments = owner_rows(db, "SELECT body_md FROM task_comments WHERE task_id = %s", (task.id,))
     assert comments == [("Use the new URL",)]
     assert owner_rows(db, "SELECT count(*) FROM runs WHERE task_id = %s", (task.id,)) == [(1,)]
+
+
+@pytest.mark.wp("P2-04")
+async def test_task_trashed_while_queued_refuses_the_run(
+    dbos: type[DBOS],
+    fake_runner: FakeRunnerFactory,
+    workspace: WorkspaceHandle,
+    clock: FixedClock,
+    db: DbUrls,
+) -> None:
+    """A run whose task went to the trash while it was queued: `prepare_run` answers a
+    refusal (`task_not_found`), which `dispatch_run` ends as `failed`, instead of raising
+    and retrying the step."""
+    from tumnis.modules.agents import workflows  # noqa: PLC0415
+
+    world = await run_world(fake_runner, workspace, clock)
+    task = await world.ai_task("Fix footer link")
+    run_id = await world.request(task.id)  # no relay beside the test: the run stays queued
+    trashed = owner_rows(
+        db, "UPDATE tasks SET deleted_at = now() WHERE id = %s RETURNING id", (task.id,)
+    )
+    assert trashed == [(task.id,)]
+
+    prepared = await workflows.prepare_run(str(workspace.id), str(run_id))
+
+    assert prepared.refusal == "task_not_found"
+    assert _run_status(db, run_id) == "queued"

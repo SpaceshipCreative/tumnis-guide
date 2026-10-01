@@ -428,7 +428,10 @@ async def prepare_run(workspace_id: str, run_id: str) -> Prepared:
                 started_at_s=(row["started_at"] or now).timestamp(),
                 used_seconds=row["active_seconds_used"],
             )
-        task = await tasks.get_task(s, row["task_id"])
+        try:
+            task = await tasks.get_task(s, row["task_id"])
+        except NotFound:  # trashed or purged while queued: the run fails, nothing retries
+            return Prepared(status=status.value, refusal="task_not_found")
         others: list[str] = list(
             await s.scalars(
                 select(_runs.c.kind).where(
