@@ -1,0 +1,32 @@
+Search eval set (P3-10, FR-15.3)
+
+corpus.jsonl    20 invented documents, 68 chunks (heading path, pages, text); projects
+                "acme" (Acme site), "beta" (Beta app) and null (the workspace knowledge
+                base); "paged" says whether the document has pages.
+queries.jsonl   42 queries, 14 each of kind keyword, paraphrase and mixed, with the chunk
+                ids each should find.
+vectors/        chunks.jsonl (one line per chunk) and queries.jsonl (one line per query):
+                {"text_sha256", "model", "vector"}. A chunk is embedded as its
+                context_text, the heading path and the text joined by newlines, exactly
+                as knowledge indexes it; a query as its text.
+
+How the vectors were recorded
+
+Model:    BAAI/bge-m3 (1,024 dimensions, the slot's default model)
+Date:     2026-10-01
+Command:  python scripts/record_eval_vectors.py --onnx-dir <bge-m3 ONNX export> \
+              --model BAAI/bge-m3
+          (run from backend/, with onnxruntime 1.30, tokenizers and numpy installed in
+          the interpreter; none of them is a backend dependency)
+
+The vectors come from the model's ONNX export on CPU (the export's sentence_embedding
+output, the CLS vector, L2-normalised, rounded to 6 decimals), because no vLLM was
+reachable from the build machine. The homelab check re-records them through the real
+endpoint with the same script:
+
+    uv run python scripts/record_eval_vectors.py --endpoint http://<vllm host>:8000/v1 \
+        --model BAAI/bge-m3 --dims 1024
+
+The embeddings fake (FakeEmbeddings(recorded=...)) looks vectors up by the SHA-256 of the
+exact text and raises on a miss, so a changed chunker fails a test instead of silently
+dropping a chunk from the vector list.

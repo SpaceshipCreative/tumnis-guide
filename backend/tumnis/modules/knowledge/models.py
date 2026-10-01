@@ -1,14 +1,17 @@
 """knowledge SQLAlchemy tables owned by this module (mirrors of revisions knowledge_0001
-to knowledge_0006)."""
+to knowledge_0007)."""
 
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import BigInteger, Computed, ForeignKey, LargeBinary, Text, text
+from sqlalchemy import cast as sql_cast
 from sqlalchemy import text as sql_text  # `Chunk.text` shadows `text` inside its class body
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql.elements import BindParameter, ColumnElement
+from sqlalchemy.types import UserDefinedType
 
 from tumnis.core.base import Base, TenantBase
 from tumnis.core.canonical import CanonicalColumns
@@ -143,3 +146,59 @@ class FolderFile(TenantBase, Base):
     synced_version: Mapped[int | None]
     delete_confirmed: Mapped[bool] = mapped_column(server_default=text("false"))
     last_op: Mapped[str | None]
+
+
+class Vector(UserDefinedType[list[float]]):
+    """pgvector's untyped `vector` (knowledge_0007): written as its text form `[x, y, ...]`
+    cast to `vector`, read back from that text form."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **_kw: Any) -> str:
+        return "vector"
+
+    def bind_processor(self, dialect: Any) -> Any:
+        def process(value: list[float] | None) -> str | None:
+            return None if value is None else vector_literal(value)
+
+        return process
+
+    def bind_expression(self, bindvalue: BindParameter[Any]) -> ColumnElement[Any]:
+        return sql_cast(bindvalue, self)
+
+    def result_processor(self, dialect: Any, coltype: Any) -> Any:
+        def process(value: str | None) -> list[float] | None:
+            if value is None:
+                return None
+            return [float(x) for x in value.strip("[]").split(",") if x]
+
+        return process
+
+
+def vector_literal(values: list[float]) -> str:
+    """pgvector's text form of a vector: `[0.1,0.2]`."""
+    return "[" + ",".join(repr(float(x)) for x in values) + "]"
+
+
+class EmbeddingModel(TenantBase, Base):
+    """knowledge_0007: an embedding model of the workspace and its state (building, active,
+    retired); `index_name` once its partial HNSW index exists (P3-10)."""
+
+    __tablename__ = "embedding_models"
+
+    model: Mapped[str]
+    dims: Mapped[int]
+    provider: Mapped[str]
+    status: Mapped[str]
+    index_name: Mapped[str | None]
+
+
+class Embedding(TenantBase, Base):
+    """knowledge_0007: one chunk's vector from one model (P3-10, R-37)."""
+
+    __tablename__ = "embeddings"
+
+    chunk_id: Mapped[UUID] = mapped_column(ForeignKey("chunks.id", ondelete="CASCADE"))
+    project_id: Mapped[UUID | None]
+    model: Mapped[str]
+    embedding: Mapped[list[float]] = mapped_column(Vector())
