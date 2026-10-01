@@ -9,11 +9,14 @@ from (P2-02), never read from the repository.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
 if TYPE_CHECKING:
+    import httpx
+
     from tests._pg import DbUrls
     from tests.fixtures import MasterKeyFile, PepperFile
     from tumnis.core.clock import FixedClock
@@ -99,3 +102,33 @@ async def test_acceptance_set_writes_runner_agents_keys_and_link(
         }
     ]
     assert _rows(db, "SELECT count(*) AS n FROM tasks WHERE status = 'today'") == [{"n": 0}]
+
+
+@pytest.mark.xfail(strict=True, reason="spec:SEED")
+async def test_reset_loads_the_acceptance_set_at_an_anchor(
+    client: httpx.AsyncClient, db: DbUrls
+) -> None:
+    """T-SEED-13
+    `POST /v1/test/reset?set=acceptance&anchor=2026-03-09` (what the e2e journeys send)
+    loads the acceptance set with its dates on that Monday, whatever the server's day:
+    `Write Acme proposal` is due then and Monday's first busy event starts at 09:00 New York
+    time; a bad anchor is 422."""
+    monday = {"set": "acceptance", "anchor": "2026-03-09"}
+    reset = await client.post("/v1/test/reset", params=monday)
+    assert reset.status_code == 204, reset.text
+
+    names = _rows(db, "SELECT name FROM projects WHERE deleted_at IS NULL ORDER BY sort_key")
+    assert [p["name"] for p in names] == ["Acme site", "Beta app", "Gamma ops"]
+    assert _rows(db, "SELECT due_on FROM tasks WHERE title = 'Write Acme proposal'") == [
+        {"due_on": date(2026, 3, 9)}
+    ]
+    first = _rows(
+        db,
+        "SELECT to_char(min(start_at) AT TIME ZONE 'America/New_York', 'YYYY-MM-DD HH24:MI')"
+        " AS at FROM events",
+    )
+    assert first == [{"at": "2026-03-09 09:00"}]
+    agents = _rows(db, "SELECT count(*) AS n FROM agent_profiles WHERE deleted_at IS NULL")
+    assert agents == [{"n": 4}]
+    bad = await client.post("/v1/test/reset", params={"set": "acceptance", "anchor": "Monday"})
+    assert bad.status_code == 422
