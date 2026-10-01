@@ -8,19 +8,16 @@ import { reviewCount } from "../../test/msw/dashboard";
 import { server } from "../../test/msw/server";
 import { renderRoute } from "../../test/render";
 
-test.fails(
-  "[SEED][A2.2] T-SEED-28 the header's review badge carries the count the journeys read",
-  async () => {
-    const empty = await renderRoute("/", { viewport: "laptop" });
-    const none = await screen.findByRole("link", { name: "Review: 0 waiting" });
-    expect(within(none).queryByTestId("review-count")).toBeNull();
-    empty.unmount();
+test("[SEED][A2.2] T-SEED-28 the header's review badge carries the count the journeys read", async () => {
+  const empty = await renderRoute("/", { viewport: "laptop" });
+  const none = await screen.findByRole("link", { name: "Review: 0 waiting" });
+  expect(within(none).queryByTestId("review-count")).toBeNull();
+  empty.unmount();
 
-    server.use(reviewCount(3));
-    await renderRoute("/", { viewport: "laptop" });
-    const review = await screen.findByRole("link", {
-      name: "Review: 3 waiting",
-    });
-    expect(within(review).getByTestId("review-count")).toHaveTextContent("3");
-  },
-);
+  server.use(reviewCount(3));
+  await renderRoute("/", { viewport: "laptop" });
+  const review = await screen.findByRole("link", {
+    name: "Review: 3 waiting",
+  });
+  expect(within(review).getByTestId("review-count")).toHaveTextContent("3");
+});
