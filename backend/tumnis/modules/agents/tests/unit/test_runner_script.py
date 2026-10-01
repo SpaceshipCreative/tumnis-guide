@@ -49,7 +49,6 @@ def _parse(body: dict[str, Any]) -> tuple[str, dict[str, Any]]:
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 def test_phase_one_script_is_keyed_by_profile_and_skill() -> None:
     """The phase 1 body (`runnerScript(profile, skill, result)`) is stored under its
     profile and skill."""
@@ -61,7 +60,6 @@ def test_phase_one_script_is_keyed_by_profile_and_skill() -> None:
 
 @pytest.mark.req("FR-5.5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 def test_task_script_is_keyed_by_task_title_and_keeps_every_run() -> None:
     """The phase 2 body (`script(taskTitle, runs)`) is stored under the task's title with
     its runs in order, none played yet."""
@@ -76,7 +74,6 @@ def test_task_script_is_keyed_by_task_title_and_keeps_every_run() -> None:
 
 @pytest.mark.req("FR-5.5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 @pytest.mark.parametrize(
     "body",
     [

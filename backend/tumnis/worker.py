@@ -146,10 +146,15 @@ def configure_generation(settings: Settings) -> None:
 
 
 def configure_agents(settings: Settings) -> None:
-    """How long profile provisioning waits for the runner (P1-06): only the worker runs
-    `provision_profile`."""
+    """How long profile provisioning waits for the runner (P1-06), and a run's time caps
+    (P2-04, R-30; shortened only with fakes, else the plan defaults): only the worker runs
+    `provision_profile` and `dispatch_run`."""
     agents = importlib.import_module("tumnis.modules.agents.api")
     agents.configure_provisioning(timeout_s=settings.agents.provision_timeout_s)
+    agents.configure_runs(
+        active_cap_seconds=settings.agents.run_active_cap_seconds,
+        wall_clock_ceiling_seconds=settings.agents.run_wall_clock_ceiling_seconds,
+    )
 
 
 def configure_folder_sync(settings: Settings) -> None:

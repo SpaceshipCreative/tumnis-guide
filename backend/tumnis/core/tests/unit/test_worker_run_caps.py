@@ -24,7 +24,6 @@ def _settings(**values: Any) -> Settings:
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 def test_worker_configures_the_run_caps_from_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     """With fakes the worker passes the configured caps on; without them it puts the plan
     defaults back."""
@@ -47,7 +46,6 @@ def test_worker_configures_the_run_caps_from_settings(monkeypatch: pytest.Monkey
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 def test_run_caps_are_refused_without_fakes() -> None:
     """A deployment with real adapters cannot shorten a run's caps; a cap is positive."""
     for field in ("run_active_cap_seconds", "run_wall_clock_ceiling_seconds"):
@@ -60,7 +58,6 @@ def test_run_caps_are_refused_without_fakes() -> None:
 
 @pytest.mark.req("NFR Reliability")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 def test_reconcile_runs_is_scheduled_hourly_on_maintenance() -> None:
     """`reconcile_runs` is one of the agents module's schedules: hourly, on the maintenance
     queue (plan)."""
