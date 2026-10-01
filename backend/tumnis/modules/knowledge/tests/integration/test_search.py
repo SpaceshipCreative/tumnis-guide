@@ -27,7 +27,6 @@ def _hits(found: Any) -> list[dict[str, Any]]:
 
 @pytest.mark.req("FR-15.3", "FR-15.1")
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 async def test_search_cites_document_and_page(
     extract_env: ExtractEnv,
     dbos: type[DBOS],
