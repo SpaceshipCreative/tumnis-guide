@@ -1,0 +1,11 @@
+{
+  "jobs": [
+    {
+      "id": "tumnis-workspace-digest",
+      "name": "Tumnis workspace digest",
+      "prompt": "Run the workspace-digest skill now: read the workspace-wide changes in Tumnis since your last digest, and retain them in your long-term memory.",
+      "skills": ["workspace-digest"],
+      "schedule": "0 9-17 * * 1-5"
+    }
+  ]
+}

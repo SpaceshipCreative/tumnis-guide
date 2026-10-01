@@ -19,7 +19,7 @@ import subprocess
 import tempfile
 import time
 import tomllib
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from functools import cache
@@ -31,7 +31,9 @@ from jsonschema import Draft202012Validator
 
 from harness import REPO
 from harness.assertions import RULES, check_json
+from harness.calls import judge_calls
 from harness.cases import Case
+from harness.mock_mcp_min import RecordedCall
 from tumnis_daemon.config import DaemonConfig
 from tumnis_daemon.protocol import Run, SchemaRef, envelope
 from tumnis_daemon.runner import (
@@ -48,6 +50,7 @@ UNSET_PREFIX: Final = "UNSET"  # harness.toml's placeholder until the homelab mo
 TOOL_RECORDS: Final = frozenset({"tool_use", "tool_call"})
 
 OUTCOMES: Final = frozenset({"pass", "fail"})
+TOOL_SCHEMA_DROP: Final = ("run_id", "idempotency_key")  # a reply carries neither (P2-12)
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,7 @@ class Attempt:
     tool_calls: tuple[ToolCall, ...] = ()
     output: dict[str, Any] | None = None
     duration_ms: int = 0
+    timeline: tuple[RecordedCall, ...] = ()  # what the mocks recorded (P2-12 cases)
 
     def __post_init__(self) -> None:
         if self.outcome not in OUTCOMES:
@@ -162,9 +166,28 @@ def _tool_calls(events: list[dict[str, Any]]) -> tuple[ToolCall, ...]:
     return tuple(calls)
 
 
+def tool_reply_schema(catalogue: Path, tool: str) -> dict[str, Any]:
+    """A catalogue tool's input schema as a skill's reply schema (P2-12): the same object
+    the skill posts with the tool, less what only a call carries (`run_id`,
+    `idempotency_key`)."""
+    tools = json.loads(catalogue.read_text(encoding="utf-8"))
+    found = next((t for t in tools if t.get("name") == tool), None)
+    if found is None:
+        raise HarnessError(f"{catalogue.name} has no tool {tool!r}")
+    schema = json.loads(json.dumps(found["input_schema"]))
+    for name in TOOL_SCHEMA_DROP:
+        schema.get("properties", {}).pop(name, None)
+    schema["required"] = [r for r in schema.get("required", []) if r not in TOOL_SCHEMA_DROP]
+    return dict(schema)
+
+
 @cache
 def validator(schema_path: str) -> Draft202012Validator:
-    schema = json.loads((REPO / schema_path).read_text(encoding="utf-8"))
+    file, _, tool = schema_path.partition("#")
+    if tool:
+        schema = tool_reply_schema(REPO / file, tool)
+    else:
+        schema = json.loads((REPO / file).read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
 
@@ -176,14 +199,21 @@ def _schema_failures(case: Case, output: dict[str, Any]) -> list[str]:
     return [f"schema {e.json_path}: {e.message}" for e in errors]
 
 
-def judge(case: Case, output: dict[str, Any] | None, calls: tuple[ToolCall, ...]) -> list[str]:
-    """Every failure of one reply: unlisted tool calls, then the schema, then (only for
-    a reply the schema accepts) the named rules, and the JSON checks."""
+def judge(
+    case: Case,
+    output: dict[str, Any] | None,
+    calls: tuple[ToolCall, ...],
+    timeline: Sequence[RecordedCall] = (),
+) -> list[str]:
+    """Every failure of one reply: unlisted tool calls, the case's call expectations on
+    the mocks' timeline (P2-12), then the schema, then (only for a reply the schema
+    accepts) the named rules, and the JSON checks."""
     failures = [
         f"tool call {call.name!r} is not in the allow list {list(case.allow)}"
         for call in calls
         if not any(fnmatch.fnmatchcase(call.name, glob) for glob in case.allow)
     ]
+    failures += judge_calls(case.expectations, timeline, case.packet)
     if output is None:
         return failures
     schema = _schema_failures(case, output)
@@ -204,8 +234,10 @@ def attempt_from_stream(
     exit_code: int | None = 0,
     timed_out: bool = False,
     duration_ms: int = 0,
+    timeline: Sequence[RecordedCall] = (),
 ) -> Attempt:
-    """Judge one attempt from Hermes' stream-json output."""
+    """Judge one attempt from Hermes' stream-json output (and, for a case run against the
+    mocks, the calls they recorded)."""
     events, final = read_stream_json(stream_text)
     result = build_result(
         _run_message(case),
@@ -216,7 +248,7 @@ def attempt_from_stream(
         duration_ms=duration_ms,
     )
     calls = _tool_calls(events)
-    failures = judge(case, result.output_json, calls)
+    failures = judge(case, result.output_json, calls, timeline)
     if result.status != "succeeded":
         failures.insert(0, f"run {result.status}: {(result.error or '')[:200]}")
     return Attempt(
@@ -225,6 +257,7 @@ def attempt_from_stream(
         tool_calls=calls,
         output=result.output_json,
         duration_ms=result.duration_ms,
+        timeline=tuple(timeline),
     )
 
 
@@ -311,11 +344,29 @@ class HermesRunner:
         finally:
             self.delete_all()
 
-    def attempt(self, case: Case, number: int, *, slot: str | None = None) -> Attempt:
+    def attempt(
+        self,
+        case: Case,
+        number: int,
+        *,
+        slot: str | None = None,
+        workdir: Path | None = None,
+        extra_env: Mapping[str, str] | None = None,
+        read_timeline: Callable[[], Sequence[RecordedCall]] | None = None,
+    ) -> Attempt:
+        """One attempt. With `workdir` (a case's fixture repository, P2-12) Hermes runs
+        there with the query file in its `.tumnis/`, as the daemon runs a worktree run;
+        `extra_env` adds to the clean environment (the harness's git wrapper on PATH), and
+        `read_timeline` gives what the mocks recorded once Hermes has finished."""
         key = case.profile if slot is None else f"{case.profile}-{slot}"
         msg = _run_message(case).model_copy(update={"profile": self.installed[key]})
-        run_dir = self._work / "runs" / f"{case.id}-{number}" / (slot or "")
-        query = write_query_file(run_dir, str(case.packet["prompt_text"]))
+        if workdir is not None:
+            run_dir = workdir
+            query = write_query_file(workdir / ".tumnis", str(case.packet["prompt_text"]))
+        else:
+            run_dir = self._work / "runs" / f"{case.id}-{number}" / (slot or "")
+            query = write_query_file(run_dir, str(case.packet["prompt_text"]))
+        env = {**clean_env(self._daemon), **(extra_env or {})}
         argv = [
             *hermes_argv(self._daemon, msg, query),
             *("-m", self.config.model, "--provider", self.config.provider),
@@ -327,7 +378,7 @@ class HermesRunner:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            env=clean_env(self._daemon),
+            env=env,
             start_new_session=True,
             text=True,
         )
@@ -348,4 +399,5 @@ class HermesRunner:
             exit_code=None if timed_out else proc.returncode,
             timed_out=timed_out,
             duration_ms=int((time.monotonic() - started) * 1000),
+            timeline=() if read_timeline is None else read_timeline(),
         )

@@ -4,3 +4,44 @@
 model:
   default: UNSET-pinned-homelab-model
   provider: custom
+
+# MCP servers (P2-12, FR-5.3, FR-11.6). Hermes reads them from here and fills every
+# ${VAR} from the profile's own .env (see .env.example); unset variables in a url or
+# header fail the server closed. A project narrows this set through its tool allow-list
+# (projects policy; the default is exactly these four).
+mcp_servers:
+  # Tumnis itself. For a task run the daemon sets TUMNIS_TOKEN to the run's task token;
+  # for a cron job (the project digest) it is the profile's own key from .env.
+  tumnis:
+    url: ${TUMNIS_URL}/mcp
+    headers:
+      Authorization: Bearer ${TUMNIS_TOKEN}
+  # Jev, the same pinned server as mcp.json (profiles/shared/jev-mcp).
+  jev:
+    command: uvx
+    args:
+      - --from
+      - git+https://github.com/SpaceshipCreative/tumnis-guide@jev-mcp-v0.1.0#subdirectory=profiles/shared/jev-mcp
+      - tumnis-jev-mcp
+    env:
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY}
+  # GitHub's official MCP server, pinned by image tag (SEC-7). Hermes gives a stdio
+  # server only the variables in `env`; docker passes the token through by name.
+  github:
+    command: docker
+    args:
+      - run
+      - -i
+      - --rm
+      - -e
+      - GITHUB_PERSONAL_ACCESS_TOKEN
+      - ghcr.io/github/github-mcp-server:v1.12.2
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PERSONAL_ACCESS_TOKEN}
+  # Coolify's own MCP endpoint (Streamable HTTP), served by the project's Coolify
+  # instance, so its version is the instance's. The token only ever goes to the base
+  # URL set in this profile's .env (Scott decision 18).
+  coolify:
+    url: ${COOLIFY_BASE_URL}/mcp
+    headers:
+      Authorization: Bearer ${COOLIFY_TOKEN}

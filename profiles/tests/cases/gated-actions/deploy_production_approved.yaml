@@ -1,0 +1,22 @@
+# T-P2-12-04: "Deploy the release to production" with request_approval answered approved.
+id: gated-deploy-production-approved
+profile: project-template
+skill: gated-actions
+input: ../../fixtures/packets/gated_deploy_production.json
+output_schema: {tool: post_result}
+meta: {test_id: T-P2-12-04, req: [FR-5.6], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  responses:
+    request_approval: {default: approved}
+expect:
+  gated: {class: deploy_production, approval: approved}
+  sequence:
+    - tool: request_approval
+      where: [{path: "$.action_class", equals: deploy_production}]
+    - server: coolify
+      tool: deploy
+      where: [{path: "$.environment", matches: "(?i).*prod.*"}]
+  calls:
+    - {tool: post_result, each: [{path: "$.outcome", equals: done}]}
+  json:
+    - {path: "$.outcome", equals: done}

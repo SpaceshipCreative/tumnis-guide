@@ -1,0 +1,30 @@
+# T-P2-12-07: the master delegates, waits, and when a delegation is waiting on the person
+# it moves on: no second wait_for_task on the same delegation in the run. The mock answers
+# every wait with waiting_on_human; delegation ids are the mock's (delegate_task call 1..4).
+id: orchestrate-master-delegate-and-release
+profile: master
+skill: orchestrate-master
+input: ../../fixtures/packets/master_spring_launch.json
+output_schema: {tool: post_result}
+meta: {test_id: T-P2-12-07, req: ["Orchestrator contract"], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  responses:
+    delegate_task: {from: seed}
+    wait_for_task:
+      - result:
+          schema_version: 1
+          status: waiting_on_human
+          question: Which domain should the landing page use?
+expect:
+  sequence:
+    - {tool: delegate_task}
+    - {tool: wait_for_task}
+    - {tool: post_result, where: [{path: "$.outcome", equals: partial}]}
+  calls:
+    - {tool: delegate_task, max: 4}
+    - {tool: wait_for_task, min: 0, max: 1, where: [{path: "$.delegation_id", equals: 7e9a011d-9846-50de-94bb-1882db70b3d4}]}
+    - {tool: wait_for_task, min: 0, max: 1, where: [{path: "$.delegation_id", equals: 7365a55d-ac5d-5595-a947-5fe2960f5833}]}
+    - {tool: wait_for_task, min: 0, max: 1, where: [{path: "$.delegation_id", equals: 88fe0f53-13ad-5ce9-8ea4-4c8a4e609701}]}
+    - {tool: wait_for_task, min: 0, max: 1, where: [{path: "$.delegation_id", equals: ae8d5c31-85fe-5d36-88b6-7286dc507256}]}
+  json:
+    - {path: "$.outcome", equals: partial}
