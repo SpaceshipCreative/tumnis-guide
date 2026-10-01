@@ -1,5 +1,5 @@
 """decisions SQLAlchemy tables owned by this module (mirrors of revisions decisions_0001
-to decisions_0003)."""
+to decisions_0004)."""
 
 from datetime import datetime
 from typing import Any
@@ -73,6 +73,18 @@ class ThresholdHistory(TenantBase, Base):
     before: Mapped[dict[str, Any]] = mapped_column(JSONB)
     after: Mapped[dict[str, Any]] = mapped_column(JSONB)
     reason: Mapped[str]
+
+
+class SpeechClip(TenantBase, Base):
+    """A focus message spoken by the server engine (P4-03, FR-11.7): one WAV per message,
+    served through the API until `expires_at` (`CLIP_TTL_MIN`)."""
+
+    __tablename__ = "speech_clips"
+
+    message_id: Mapped[UUID]  # the focus event's id; no foreign key: the focus module's row
+    mime: Mapped[str]
+    audio: Mapped[bytes] = mapped_column(LargeBinary)
+    expires_at: Mapped[datetime]
 
 
 class DecisionEval(TenantBase, Base):

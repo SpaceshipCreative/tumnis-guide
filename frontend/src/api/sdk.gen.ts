@@ -183,6 +183,9 @@ import type {
   FocusRespondData,
   FocusRespondErrors,
   FocusRespondResponses,
+  FocusReturnDetourData,
+  FocusReturnDetourErrors,
+  FocusReturnDetourResponses,
   GithubWebhookData,
   GithubWebhookErrors,
   GithubWebhookResponses,
@@ -359,6 +362,9 @@ import type {
   SettingsSetModuleData,
   SettingsSetModuleErrors,
   SettingsSetModuleResponses,
+  SpeechGetClipData,
+  SpeechGetClipErrors,
+  SpeechGetClipResponses,
   TasksAddCommentData,
   TasksAddCommentErrors,
   TasksAddCommentResponses,
@@ -498,6 +504,7 @@ import {
   zFocusLessResponse,
   zFocusPutLevelResponse,
   zFocusRespondResponse,
+  zFocusReturnDetourResponse,
   zGithubWebhookResponse,
   zHealthLiveResponse,
   zKnowledgeAddLinkResponse,
@@ -556,6 +563,7 @@ import {
   zSettingsPutWorkingHoursResponse,
   zSettingsPutWorkspaceSettingsResponse,
   zSettingsSetModuleResponse,
+  zSpeechGetClipResponse,
   zTasksAddCommentResponse,
   zTasksChangeStatusResponse,
   zTasksCreateTaskResponse,
@@ -1527,6 +1535,31 @@ export const focusRespond = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zFocusRespondResponse.parseAsync(data),
     url: "/v1/focus/respond",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Return Detour
+ */
+export const focusReturnDetour = <ThrowOnError extends boolean = false>(
+  options: Options<FocusReturnDetourData, ThrowOnError>,
+): RequestResult<
+  FocusReturnDetourResponses,
+  FocusReturnDetourErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    FocusReturnDetourResponses,
+    FocusReturnDetourErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zFocusReturnDetourResponse.parseAsync(data),
+    url: "/v1/focus/return",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -3466,6 +3499,26 @@ export const authSetupTotp = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Get Clip
+ *
+ * A spoken focus message's clip (P4-03): `audio/wav` with `nosniff`, while it lives
+ * (`CLIP_TTL_MIN`); 404 once expired or in another workspace.
+ */
+export const speechGetClip = <ThrowOnError extends boolean = false>(
+  options: Options<SpeechGetClipData, ThrowOnError>,
+): RequestResult<SpeechGetClipResponses, SpeechGetClipErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    SpeechGetClipResponses,
+    SpeechGetClipErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSpeechGetClipResponse.parseAsync(data),
+    url: "/v1/speech/clips/{speech_clip_id}",
+    ...options,
   });
 
 /**

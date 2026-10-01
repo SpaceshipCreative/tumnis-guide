@@ -16,6 +16,8 @@ export function quietFocus(): FocusCurrentOut {
     override_level: null,
     session: null,
     messages: [],
+    guardrail: null,
+    detour: null,
   };
 }
 
@@ -50,6 +52,8 @@ export function focusMessage(
     message: "Still on it?",
     fired_at: new Date().toISOString(),
     response: null,
+    speak: false,
+    clip_id: null,
     ...overrides,
   };
 }

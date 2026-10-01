@@ -72,6 +72,10 @@ claude mcp add --env TUMNIS_API_KEY=tmn_... --env TUMNIS_URL=https://tumnis.lan 
   tumnis -- uv run --directory /path/to/tumnis-guide/backend tumnis mcp-stdio
 ```
 
+## On the phone
+
+**Voice.** Settings > Voice turns on spoken focus messages per level (off until a level is ticked); the words are exactly the message in the focus bar. By default the phone or laptop speaks with its own voice (the browser's speech synthesis), so the text stays on the device. iOS Safari speaks only after a tap: ticking a level in Settings > Voice is that tap, so turn voice on from the phone itself (and again after the app is reopened from scratch, if it falls silent). For better voices, run Piper's HTTP server on the agent server (`python3 -m piper.http_server -m <voice>`, port 5000), set `SPEECH__PIPER_URL` (and optionally `SPEECH__PIPER_VOICE`) on the worker, and choose "The server's voice"; when Piper is down the device speaks the same text instead. Hosted speech is off by default and never used for a local-only project.
+
 ## Develop
 
 Prerequisites: [uv](https://docs.astral.sh/uv/) (Python 3.13), Node.js 22 or later with npm, [pre-commit](https://pre-commit.com/), and Docker for integration tests.

@@ -210,6 +210,8 @@ forbidden_modules =
     tumnis.modules.decisions.adapters.vllm_generation
     tumnis.modules.decisions.adapters.embeddings.vllm
     tumnis.modules.decisions.adapters.embeddings.hosted
+    tumnis.modules.decisions.adapters.speech.piper
+    tumnis.modules.decisions.adapters.speech.hosted
     tumnis.modules.github.adapters.github_status
     tumnis.modules.knowledge.adapters.vision
     typesafe_sdk

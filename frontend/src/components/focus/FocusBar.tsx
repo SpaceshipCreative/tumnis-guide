@@ -5,6 +5,10 @@
 // cadence and firing; `GET /v1/focus/current` is the state (refreshed live over /ws) and
 // the focusSession machine only mirrors it. Every reply is optional and the bar never
 // blocks the page.
+//
+// At Guardrail (P4-01, FR-10.6, FR-10.9) "Less of this" stays one tap away, "Switched"
+// opens the detour picker (the switch is captured as a task), and the server's return
+// question shows until it is answered or counts as Stay after 2 minutes.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActorRef, useSelector } from "@xstate/react";
 import { useEffect, useState } from "react";
@@ -13,9 +17,15 @@ import {
   focusGetCurrentOptions,
   focusGetCurrentQueryKey,
 } from "../../api/@tanstack/react-query.gen";
-import type { FocusCurrentOut, FocusMessageOut } from "../../api/types.gen";
+import type {
+  DetourOut,
+  FocusCurrentOut,
+  FocusMessageOut,
+} from "../../api/types.gen";
 import { zFocusCurrentOut } from "../../api/zod.gen";
 import { apiWrite, ConflictError, useWrite } from "../../lib/fetch";
+import { LEVEL_TEXT } from "../../lib/levelRules";
+import { useVoiceMode } from "../../lib/speech/useVoiceMode";
 import { taskQueryOptions } from "../../lib/optimistic";
 import { invalidateTaskViews } from "../../lib/task-cache";
 import {
@@ -24,16 +34,10 @@ import {
 } from "../../machines/focusSession";
 import { uiStore } from "../../stores/uiStore";
 import { BUTTON_QUIET, BUTTON_SECONDARY } from "../common/ui";
+import { ReturnPrompt } from "./ReturnPrompt";
+import { SwitchPicker } from "./SwitchPicker";
 
 type Response = "still_on_it" | "switched" | "stuck" | "snooze";
-type Level = FocusCurrentOut["level"];
-
-const LEVEL_TEXT: Record<Level, string> = {
-  quiet: "Quiet",
-  nudge: "Nudge",
-  coach: "Coach",
-  guardrail: "Guardrail",
-};
 
 /** The machine's reply events and the answer each posts. */
 const RESPONSES: Partial<Record<FocusSessionEvent["type"], Response>> = {
@@ -122,6 +126,7 @@ export function FocusBar() {
   const data = current.data;
   const session = data?.session ?? null;
   const messages = data?.messages ?? [];
+  useVoiceMode(data?.messages); // P4-03: speaks new messages when voice is on
   const latest = messages.at(-1);
   const pending = latest?.response === null ? latest : undefined;
   const minutes = useMinutesSince(session?.started_at);
@@ -155,7 +160,7 @@ export function FocusBar() {
     onError: failed,
   });
   const less = useWrite<
-    { event_id: string; idempotencyKey?: string },
+    { event_id?: string; idempotencyKey?: string },
     FocusCurrentOut
   >({
     mutationFn: ({ idempotencyKey, ...body }) =>
@@ -168,6 +173,64 @@ export function FocusBar() {
         schema: zFocusCurrentOut,
       }),
     onSuccess: show,
+    onError: failed,
+  });
+
+  // Guardrail (P4-01): a switch captured as a detour, and the answer to the return
+  // question (`version` is the detour task's, read fresh when the answer is sent).
+  const [picking, setPicking] = useState(false);
+  const detour = data?.detour ?? null;
+  const target = pending ?? latest;
+  const capture = useWrite<
+    {
+      event_id: string;
+      title: string;
+      project_id: string;
+      idempotencyKey?: string;
+    },
+    FocusCurrentOut
+  >({
+    mutationFn: ({ idempotencyKey, event_id, title, project_id }) =>
+      apiWrite({
+        kind: "create",
+        method: "POST",
+        path: "/focus/respond",
+        body: { event_id, response: "switched", detour: { title, project_id } },
+        idempotencyKey,
+        schema: zFocusCurrentOut,
+      }),
+    onSuccess: (answer) => {
+      show(answer);
+      setPicking(false);
+      void invalidateTaskViews(queryClient);
+    },
+    onError: () => {
+      failed();
+      actor.send({ type: "DISMISS" });
+    },
+  });
+  const answerReturn = useWrite<
+    { decision: "return" | "stay"; detour: DetourOut; idempotencyKey?: string },
+    FocusCurrentOut
+  >({
+    mutationFn: async ({ decision, detour: open, idempotencyKey }) => {
+      const task = await queryClient.query({
+        ...taskQueryOptions(open.detour_task_id),
+        staleTime: 0,
+      });
+      return apiWrite({
+        kind: "create",
+        method: "POST",
+        path: "/focus/return",
+        body: { decision, version: task.version, event_id: open.event_id },
+        idempotencyKey,
+        schema: zFocusCurrentOut,
+      });
+    },
+    onSuccess: (answer) => {
+      show(answer);
+      void invalidateTaskViews(queryClient);
+    },
     onError: failed,
   });
 
@@ -185,12 +248,32 @@ export function FocusBar() {
         postLess: () => {
           if (pending) less.mutate({ event_id: pending.id });
         },
+        postDetour: ({ event }) => {
+          if (event.type === "SWITCH_DETOUR" && target) {
+            capture.mutate({
+              event_id: target.id,
+              title: event.title,
+              project_id: event.projectId,
+            });
+          }
+        },
+        postReturn: () => {
+          if (detour) answerReturn.mutate({ decision: "return", detour });
+        },
+        postStay: () => {
+          if (detour) answerReturn.mutate({ decision: "stay", detour });
+        },
       },
     }),
   );
   const state = useSelector(actor, (s) => s.value);
 
-  // The server's state drives the machine: the session first, then the latest message.
+  // The server's state drives the machine: the level, the session, the latest message
+  // and an open return question.
+  const level = data?.level;
+  useEffect(() => {
+    if (level !== undefined) actor.send({ type: "LEVEL", level });
+  }, [actor, level]);
   const sessionTask = session?.task_id;
   const sessionStart = session?.started_at;
   useEffect(() => {
@@ -221,6 +304,17 @@ export function FocusBar() {
     // Only a new message (or a failed reply to this one) is a new event; the rest of
     // `pending` is the same message.
   }, [actor, pendingId, failures]);
+  const detourId = detour?.event_id;
+  useEffect(() => {
+    if (detour === null) return;
+    actor.send({
+      type: "RETURN_PROMPT",
+      detourTaskId: detour.detour_task_id,
+      returnToTaskId: detour.return_to_task_id ?? "",
+    });
+    // A new open question (or a failed answer to this one) is a new event; the rest of
+    // `detour` is the same question.
+  }, [actor, detourId, failures]);
 
   if (!data || (session === null && messages.length === 0)) return null;
 
@@ -230,6 +324,15 @@ export function FocusBar() {
     (pending.kind === "block_start" || pending.kind === "not_started") &&
     pending.task_id !== session?.task_id;
   const earlier = messages.slice(0, -1);
+  const guardrail = data.level === "guardrail";
+  const asking = state === "returnPrompt" && detour !== null;
+  const switchedAt = (open: boolean) => {
+    if (guardrail) {
+      setPicking(open);
+    } else if (open) {
+      actor.send({ type: "SWITCHED", toTaskId: sessionTask ?? "" });
+    }
+  };
 
   return (
     <section
@@ -275,6 +378,54 @@ export function FocusBar() {
           {notice}
         </p>
       )}
+      {asking && (
+        <ReturnPrompt
+          detour={detour}
+          busy={answerReturn.isPending}
+          onReturn={() => {
+            actor.send({ type: "RETURN" });
+          }}
+          onStay={() => {
+            actor.send({ type: "STAY" });
+          }}
+        />
+      )}
+      {picking && guardrail && target !== undefined && (
+        <SwitchPicker
+          busy={capture.isPending}
+          onCapture={(title, projectId) => {
+            actor.send({ type: "SWITCH_DETOUR", title, projectId });
+          }}
+          onCancel={() => {
+            setPicking(false);
+          }}
+        />
+      )}
+      {guardrail && state !== "checkIn" && !asking && !picking && (
+        <div className="flex flex-wrap gap-2">
+          {target !== undefined && state === "active" && (
+            <button
+              type="button"
+              className={BUTTON_SECONDARY}
+              onClick={() => {
+                switchedAt(true);
+              }}
+            >
+              Switched
+            </button>
+          )}
+          <button
+            type="button"
+            className={BUTTON_SECONDARY}
+            disabled={less.isPending}
+            onClick={() => {
+              less.mutate({});
+            }}
+          >
+            Less of this
+          </button>
+        </div>
+      )}
       {(state === "checkIn" || canStart) && pending !== undefined && (
         <div className="flex flex-wrap gap-2">
           {canStart && pending.task_id !== null && (
@@ -288,11 +439,8 @@ export function FocusBar() {
                 className={BUTTON_SECONDARY}
                 disabled={respond.isPending || less.isPending}
                 onClick={() => {
-                  actor.send(
-                    reply.event.type === "SWITCHED"
-                      ? { type: "SWITCHED", toTaskId: sessionTask ?? "" }
-                      : reply.event,
-                  );
+                  if (reply.event.type === "SWITCHED") switchedAt(true);
+                  else actor.send(reply.event);
                 }}
               >
                 {reply.label}
