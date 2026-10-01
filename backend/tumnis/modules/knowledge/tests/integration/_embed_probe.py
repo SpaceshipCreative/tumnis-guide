@@ -31,8 +31,8 @@ class _LoggedFake(FakeEmbeddings):
         return vectors
 
 
-decisions.use_embedders(  # type: ignore[attr-defined]
-    decisions.Embedders(  # type: ignore[attr-defined]
+decisions.use_embedders(
+    decisions.Embedders(
         (_LoggedFake(model=MODEL_B, dims=6), FakeEmbeddings(model=MODEL_A, dims=4)),
         primary=MODEL_B,
     )

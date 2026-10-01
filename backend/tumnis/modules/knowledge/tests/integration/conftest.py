@@ -39,15 +39,15 @@ def use_embedders() -> Iterator[Callable[..., None]]:
         from tumnis.modules.decisions import api as decisions  # noqa: PLC0415
 
         used.append(True)
-        decisions.use_embedders(  # type: ignore[attr-defined]
-            decisions.Embedders(tuple(adapters), primary=primary or adapters[0].model)  # type: ignore[attr-defined]
+        decisions.use_embedders(
+            decisions.Embedders(tuple(adapters), primary=primary or adapters[0].model)
         )
 
     yield use
     if used:
         from tumnis.modules.decisions import api as decisions  # noqa: PLC0415
 
-        decisions.use_embedders(None)  # type: ignore[attr-defined]
+        decisions.use_embedders(None)
 
 
 @pytest.fixture
