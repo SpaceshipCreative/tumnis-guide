@@ -766,7 +766,7 @@ async def agent_for_project(
 # --- Project provisioning (P1-06) ------------------------------------------------------------
 
 TEMPLATE_NAME: Final = "project-template"  # profiles/project-template, shipped by the daemon
-TEMPLATE_VERSION: Final = "1.0.0"  # profiles/project-template/VERSION (a unit test holds them)
+TEMPLATE_VERSION: Final = "1.1.0"  # profiles/project-template/VERSION (a unit test holds them)
 PROVISION_TIMEOUT_S_DEFAULT: Final = 300  # plan default; settings.agents.provision_timeout_s
 PROVISIONING_FAILED: Final = "provisioning_failed"
 ProvisionMode = Literal["create", "link"]

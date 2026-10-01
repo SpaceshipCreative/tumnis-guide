@@ -1,11 +1,27 @@
 # Hermes profile distribution (https://hermes-agent.nousresearch.com/docs/user-guide/profile-distributions).
 # Every project agent is installed from this template. `version` must equal VERSION, and
 # any change under this directory needs a VERSION bump (scripts/ci/profile_version_check.py).
-# The repo never holds the profile's .env, memories or sessions.
+# The repo never holds the profile's .env, memories or sessions; .env.example lists the
+# variables config.yaml's MCP servers read.
 name: tumnis-project-template
-version: 1.0.0
-description: Tumnis project agent template (enrich skill in phase 1)
+version: 1.1.0
+description: Tumnis project agent template (enrich, orchestrate, coding, gated-actions and project-digest skills)
 env_requires:
+  - name: TUMNIS_URL
+    description: Tumnis's base URL, without /mcp (config.yaml's tumnis server)
+    required: true
+  - name: TUMNIS_TOKEN
+    description: The profile's own Tumnis key for cron jobs; a task run gets its task token from the daemon
+    required: true
+  - name: GITHUB_PERSONAL_ACCESS_TOKEN
+    description: The project's GitHub token for the GitHub MCP server
+    required: false
+  - name: COOLIFY_BASE_URL
+    description: The project's Coolify instance, without /mcp
+    required: false
+  - name: COOLIFY_TOKEN
+    description: The project's Coolify API token for Coolify's MCP endpoint
+    required: false
   - name: TYPESAFE_API_KEY
     description: TypeSafe API key for the Jev MCP server (mcp.json); set it in the profile's .env
     required: true

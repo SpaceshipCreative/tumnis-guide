@@ -46,6 +46,7 @@ CATALOGUE: Final = REPO / "schemas" / "mcp" / "v1" / "tools.json"
 TUMNIS: Final = "tumnis"
 
 Respond = Callable[[str, Mapping[str, Any]], dict[str, Any]]
+Check = Callable[[str, Mapping[str, Any]], list[str]]  # what is wrong with a call's arguments
 
 
 @dataclass(frozen=True)
@@ -128,9 +129,12 @@ def build_server(
     *,
     name: str = TUMNIS,
     respond: Respond = default_response,
+    check: Check | None = None,
 ) -> Server[Any]:
     """A low-level MCP server listing `catalogue`'s tools and recording every call. No
-    output schema is declared, so a client never checks the canned results against one."""
+    output schema is declared, so a client never checks the canned results against one.
+    With `check` (P2-12's full mock), a call whose arguments it faults is answered as a
+    tool error, and recorded with that error."""
     tools = [
         Tool(
             name=str(tool["name"]),
@@ -150,8 +154,13 @@ def build_server(
         ctx: ServerRequestContext[Any], params: CallToolRequestParams
     ) -> CallToolResult:
         arguments = dict(params.arguments or {})
-        if params.name not in known:
-            result: dict[str, Any] = {"error": f"unknown tool {params.name}"}
+        problems = (
+            [f"unknown tool {params.name}"]
+            if params.name not in known
+            else ([] if check is None else check(params.name, arguments))
+        )
+        if problems:
+            result: dict[str, Any] = {"error": "; ".join(problems)}
             recorder.record(name, params.name, arguments, result)
             return CallToolResult(
                 content=[TextContent(type="text", text=json.dumps(result))], is_error=True

@@ -327,7 +327,101 @@ def _inject_plan(body: dict[str, Any], parts: Sequence[Part], item_id: str) -> N
         body["candidates"].append(candidate)
 
 
+NONCE: Final = "u-5eed5eed5eed5eed"  # the golden packets' block id (P2-02)
+TARGET_TYPES: Final = {
+    "email": "message",
+    "chat": "message",
+    "note": "note",
+    "document": "document",
+}
+INJECTED_AT: Final = "2026-03-09T12:00:00Z"
+
+
+def untrusted_block(part: Part, item: str) -> str:
+    """A part as the packet builder fences outside text (P2-02), its content unescaped so
+    the payload stays byte for byte."""
+    return (
+        f'<untrusted-data id="{NONCE}" source="{part.source}" item="{item}">\n'
+        f"{outside_text(part)}\n"
+        f'</untrusted-data id="{NONCE}">'
+    )
+
+
+def _inject_task(body: dict[str, Any], parts: Sequence[Part], item_id: str) -> None:
+    """A task packet (P2-12's task skills): a task title replaces the task's text, a
+    passage joins the project's passages, anything else arrives as a context item; every
+    part is untrusted, as the packet builder marks outside text."""
+    for n, part in enumerate(parts):
+        item = _part_id(item_id, n)
+        if part.inject_as == "task_title":
+            body["task"]["text"]["rendered"] = part.content
+            continue
+        block = {
+            "trust": "untrusted",
+            "tainted": False,
+            "source": part.source,
+            "item": item,
+            "rendered": untrusted_block(part, item),
+            "truncated": False,
+        }
+        if part.inject_as == "passage":
+            page = 1 if part.source == "document" else None
+            body["project"]["passages"].append(
+                {
+                    **block,
+                    "document_id": item,
+                    "heading_path": [],
+                    "page_from": page,
+                    "page_to": page,
+                }
+            )
+        else:
+            body["context_items"].append(
+                {**block, "target_type": TARGET_TYPES[part.source], "provider_url": None}
+            )
+
+
+def _inject_digest(body: dict[str, Any], parts: Sequence[Part], item_id: str) -> None:
+    """A digest packet (P2-12's digest skills): each part arrives as a digest entry handed
+    over with the request, a task title as a new task's title, anything else as the
+    entry's outside text."""
+    project = body.get("project") or {}
+    for n, part in enumerate(parts):
+        item = _part_id(item_id, n)
+        title = part.inject_as == "task_title"
+        body["entries"].append(
+            {
+                "id": item,
+                "event_id": _part_id(item_id, n + 100),
+                "kind": "task.created" if title else "context_item.linked",
+                "scope": body["scope"],
+                "project_id": project.get("id"),
+                "task_id": None,
+                "occurred_at": INJECTED_AT,
+                "data": {"title": part.content} if title else {},
+                "text": None if title else untrusted_block(part, item),
+            }
+        )
+
+
 RECORDINGS: Final = REPO / "profiles" / "tests" / "recordings"
+CASE_PACKETS: Final = REPO / "profiles" / "tests" / "fixtures" / "packets"
+TASK_REPLY: Final = SchemaName("tool", "post_result", 1)  # harness.cases.TOOL_FAMILY
+DIGEST_REPLY: Final = SchemaName("harness", "digest_run", 1)
+
+
+def _case_base(profile: str, skill: str, packet: str, reply: SchemaName) -> SkillBase:
+    inject = _inject_digest if reply == DIGEST_REPLY else _inject_task
+    return SkillBase(
+        profile=profile,
+        skill=skill,
+        packet=CASE_PACKETS / f"{packet}.json",
+        output_schema=reply,
+        rules=(),
+        inject=inject,
+    )
+
+
 BASES: Final[dict[str, SkillBase]] = {
     "enrich": SkillBase(
         profile="project-template",
@@ -345,6 +439,21 @@ BASES: Final[dict[str, SkillBase]] = {
         rules=("planning_errors",),
         inject=_inject_plan,
     ),
+    # P2-12: the template's and master's tool-calling skills, from the case packets.
+    "orchestrate": _case_base(
+        "project-template", "orchestrate", "orchestrate_landing_page", TASK_REPLY
+    ),
+    "coding": _case_base("project-template", "coding", "coding_calc_power", TASK_REPLY),
+    "gated-actions": _case_base(
+        "project-template", "gated-actions", "gated_merge_main", TASK_REPLY
+    ),
+    "project-digest": _case_base(
+        "project-template", "project-digest", "project_digest", DIGEST_REPLY
+    ),
+    "orchestrate-master": _case_base(
+        "master", "orchestrate-master", "master_spring_launch", TASK_REPLY
+    ),
+    "workspace-digest": _case_base("master", "workspace-digest", "workspace_digest", DIGEST_REPLY),
 }
 
 

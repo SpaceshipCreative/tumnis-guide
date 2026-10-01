@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DigestRun",
+  "description": "The reply of a digest skill run (project-digest, workspace-digest; P2-12): the harness's own schema, since a cron run's reply goes to no Tumnis endpoint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scope", "entries_retained", "next_cursor"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "scope": {"enum": ["project", "workspace"]},
+    "entries_retained": {"type": "integer", "minimum": 0},
+    "next_cursor": {"anyOf": [{"type": "string", "maxLength": 512}, {"type": "null"}]}
+  }
+}

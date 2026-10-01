@@ -55,6 +55,8 @@ known-first-party = ["harness", "tumnis", "tumnis_daemon", "jev_mcp"]
 # Spec tests import the code under test inside their bodies, so a missing module fails
 # the test (an expected failure while red), not the collection.
 "harness/tests/**" = ["S101", "PLR2004", "PLC0415", "SIM300"]
+# The skill cases' fixture repository and its hidden test (P2-12): plain pytest suites.
+"tests/fixtures/**" = ["S101", "PLR2004"]
 
 [tool.mypy]
 python_version = "3.13"
