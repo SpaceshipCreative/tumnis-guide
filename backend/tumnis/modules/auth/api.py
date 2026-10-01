@@ -241,6 +241,22 @@ async def workspace_timezone(session: AsyncSession, workspace_id: UUID) -> Works
     return WorkspaceTimezone(timezone=row["timezone"], changed_at=row["changed_at"])
 
 
+async def workspace_owner(session: AsyncSession) -> UUID:
+    """The owner of the transaction's workspace (v1 has one person per workspace, role
+    `owner`; the earliest when there are more): the person an answer the master relays
+    from its chat channel is recorded as (P2-16, FR-8.2). NotFound (404) when the
+    workspace has no owner."""
+    owner = await session.scalar(
+        select(MEMBERSHIPS.c.user_id)
+        .where(MEMBERSHIPS.c.role == "owner", MEMBERSHIPS.c.deleted_at.is_(None))
+        .order_by(MEMBERSHIPS.c.created_at, MEMBERSHIPS.c.id)
+        .limit(1)
+    )
+    if owner is None:
+        raise ProblemError(404, "not_found", "The workspace has no owner")
+    return UUID(str(owner))
+
+
 # --- Identity, sign-in and sessions (P0-13, SEC-1, FR-9.1, FR-9.2) -------------------------
 #
 # Sign-in is two steps. The password step (any registered provider) answers a pre-auth

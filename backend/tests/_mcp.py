@@ -426,6 +426,39 @@ async def _pause_agents(world: World, project: str) -> dict[str, Any]:
     }
 
 
+async def _record_human_reply(world: World, project: str) -> dict[str, Any]:
+    """P2-16: the answer to a fresh question of a running run (asked through the agents api
+    as the run's agent), naming the question's review item and an invented chat message."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+
+    run_id = await running_run(world, project)
+    ctx = WorkspaceContext(world.workspace.id, SYSTEM_ACTOR)
+    async with tenant_session(ctx) as s:
+        asked = await agents.ask_human(
+            s,
+            ctx.actor,
+            run_id,
+            agents.AskHumanIn(run_id=run_id, prompt=f"Which colour? {next(_ids)}"),
+            caller_key=None,
+            tainted=False,
+            now=world.clock.now(),
+        )
+        item_id = await s.scalar(
+            text("SELECT review_item_id FROM questions WHERE id = :q"), {"q": asked.id}
+        )
+    return {
+        "item_kind": "question",
+        "item_id": str(item_id),
+        "answer": "Navy",
+        "channel_message_id": f"1290000000000{next(_ids):06d}",
+        "idempotency_key": idem(),
+    }
+
+
 async def _post_result(world: World, project: str) -> dict[str, Any]:
     return {
         "run_id": str(await running_run(world, project)),
@@ -503,6 +536,7 @@ SAMPLES: Final[dict[str, Sample]] = {
     "get_task_packet": _get_task_packet,
     "post_result": _post_result,
     "pause_agents": _pause_agents,
+    "record_human_reply": _record_human_reply,
     "ask_human": _ask_human,
     "request_approval": _request_approval,
     "search_knowledge": _search_knowledge,

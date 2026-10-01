@@ -29,6 +29,7 @@ import {
   agentsPauseAgents,
   agentsPauseProject,
   agentsPostResult,
+  agentsRecordHumanReply,
   agentsRegisterProfile,
   agentsRequestApproval,
   agentsRequestRun,
@@ -219,6 +220,9 @@ import type {
   AgentsPostResultData,
   AgentsPostResultError,
   AgentsPostResultResponse,
+  AgentsRecordHumanReplyData,
+  AgentsRecordHumanReplyError,
+  AgentsRecordHumanReplyResponse,
   AgentsRegisterProfileData,
   AgentsRegisterProfileError,
   AgentsRegisterProfileResponse,
@@ -4224,6 +4228,38 @@ export const tasksListRecurrenceInfiniteOptions = (
     },
   );
   return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Record Human Reply
+ *
+ * A person's answer typed in the master's chat channel, recorded exactly as the same
+ * answer in the app (FR-8.2): a question (its review item) or a focus message. The
+ * `record_human_reply` tool's twin, for the master key only (403 `master_only`); the
+ * person answers in the app itself. Approvals and results: 403 `needs_app`.
+ */
+export const agentsRecordHumanReplyMutation = (
+  options?: Partial<Options<AgentsRecordHumanReplyData>>,
+): UseMutationOptions<
+  AgentsRecordHumanReplyResponse,
+  AgentsRecordHumanReplyError,
+  Options<AgentsRecordHumanReplyData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsRecordHumanReplyResponse,
+    AgentsRecordHumanReplyError,
+    Options<AgentsRecordHumanReplyData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsRecordHumanReply({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
 };
 
 export const tasksListReviewQueryKey = (

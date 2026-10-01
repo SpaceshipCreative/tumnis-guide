@@ -355,6 +355,20 @@ async def pause_agents(
     return paused
 
 
+@router.post("/relay/replies")
+@route_policy(RoutePolicy(auth="session_or_key", scopes=frozenset({"delegate"}), idempotent=True))
+async def record_human_reply(
+    body: tools.RelayReplyBody, request: Request, session: SessionDep
+) -> tools.RelayReplyOut:
+    """A person's answer typed in the master's chat channel, recorded exactly as the same
+    answer in the app (FR-8.2): a question (its review item) or a focus message. The
+    `record_human_reply` tool's twin, for the master key only (403 `master_only`); the
+    person answers in the app itself. Approvals and results: 403 `needs_app`."""
+    replied = await surface.rest_twin(request, session, tools.RECORD_HUMAN_REPLY, body.model_dump())
+    assert isinstance(replied, tools.RelayReplyOut)  # noqa: S101  # the op's output model
+    return replied
+
+
 @router.post("/agents/resume")
 @route_policy(RoutePolicy(auth="session", idempotent=True))
 async def resume_agents(

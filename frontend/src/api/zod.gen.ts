@@ -1322,6 +1322,35 @@ export const zPageRecurrenceOut = z.object({
 });
 
 /**
+ * RelayReplyBody
+ *
+ * The REST twin's body: the item answered, the person's answer and the chat message
+ * it was typed in.
+ */
+export const zRelayReplyBody = z.object({
+  answer: z.string().min(1).max(4000).regex(/\S/),
+  channel_message_id: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[A-Za-z0-9_.:-]+$/),
+  item_id: z.uuid(),
+  item_kind: z.enum(["question", "focus", "approval", "result"]),
+  schema_version: z.int().nullish(),
+});
+
+/**
+ * RelayReplyOut
+ */
+export const zRelayReplyOut = z.object({
+  answer: z.string(),
+  item_id: z.uuid(),
+  item_kind: z.enum(["question", "focus"]),
+  schema_version: z.literal(1).optional().default(1),
+  tainted: z.boolean().optional().default(false),
+});
+
+/**
  * ReorderIn
  */
 export const zReorderIn = z.object({
@@ -3550,6 +3579,13 @@ export const zTasksListRecurrenceQuery = z.object({
  * Successful Response
  */
 export const zTasksListRecurrenceResponse = zPageRecurrenceOut;
+
+export const zAgentsRecordHumanReplyBody = zRelayReplyBody;
+
+/**
+ * Successful Response
+ */
+export const zAgentsRecordHumanReplyResponse = zRelayReplyOut;
 
 export const zTasksListReviewQuery = z.object({
   kind: z.string().max(41).nullish(),

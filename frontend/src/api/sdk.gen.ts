@@ -67,6 +67,9 @@ import type {
   AgentsPostResultData,
   AgentsPostResultErrors,
   AgentsPostResultResponses,
+  AgentsRecordHumanReplyData,
+  AgentsRecordHumanReplyErrors,
+  AgentsRecordHumanReplyResponses,
   AgentsRegisterProfileData,
   AgentsRegisterProfileErrors,
   AgentsRegisterProfileResponses,
@@ -476,6 +479,7 @@ import {
   zAgentsPauseAgentsResponse,
   zAgentsPauseProjectResponse,
   zAgentsPostResultResponse,
+  zAgentsRecordHumanReplyResponse,
   zAgentsRegisterProfileResponse,
   zAgentsRequestApprovalResponse,
   zAgentsRequestRunResponse,
@@ -2992,6 +2996,36 @@ export const tasksListRecurrence = <ThrowOnError extends boolean = false>(
       await zTasksListRecurrenceResponse.parseAsync(data),
     url: "/v1/recurrence",
     ...options,
+  });
+
+/**
+ * Record Human Reply
+ *
+ * A person's answer typed in the master's chat channel, recorded exactly as the same
+ * answer in the app (FR-8.2): a question (its review item) or a focus message. The
+ * `record_human_reply` tool's twin, for the master key only (403 `master_only`); the
+ * person answers in the app itself. Approvals and results: 403 `needs_app`.
+ */
+export const agentsRecordHumanReply = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsRecordHumanReplyData, ThrowOnError>,
+): RequestResult<
+  AgentsRecordHumanReplyResponses,
+  AgentsRecordHumanReplyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsRecordHumanReplyResponses,
+    AgentsRecordHumanReplyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsRecordHumanReplyResponse.parseAsync(data),
+    url: "/v1/relay/replies",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
