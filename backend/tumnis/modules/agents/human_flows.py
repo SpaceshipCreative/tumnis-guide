@@ -129,6 +129,7 @@ async def evaluate_approval(workspace_id: str, approval_id: str) -> dict[str, st
                 target=("approval", wait),
                 details={"action_class": row.action_class, "rule": verdict.rule},
                 occurred_at=now,
+                project_id=run.project_id,  # shows in the project's Activity (P2-17)
             )
             return {"status": "approved", "rule": verdict.rule}
         await human.open_approval_in(s, ActorRef(row.created_by), current, verdict.rule, now=now)

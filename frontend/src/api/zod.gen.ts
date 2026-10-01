@@ -54,6 +54,13 @@ export const zAskHumanBody = z.object({
 });
 
 /**
+ * AskIn
+ */
+export const zAskIn = z.object({
+  question: z.string().min(1).max(4000),
+});
+
+/**
  * AuditEntry
  */
 export const zAuditEntry = z.object({
@@ -281,6 +288,23 @@ export const zDocumentDto = z.object({
   title: z.string(),
   trust: z.enum(["trusted", "untrusted"]),
   version: z.int(),
+});
+
+/**
+ * DocumentResultLink
+ *
+ * A document: a web address or a citation of a knowledge-base document and page,
+ * `tumnis://doc/<id>#page=<n>` (P2-17, FR-15.4).
+ */
+export const zDocumentResultLink = z.object({
+  kind: z.literal("document"),
+  label: z.string().max(200).nullish(),
+  url: z
+    .string()
+    .max(2048)
+    .regex(
+      /^(https?:\/\/\S+|tumnis:\/\/doc\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:#page=([1-9][0-9]{0,5}))?)$/,
+    ),
 });
 
 /**
@@ -723,6 +747,14 @@ export const zPageDocumentDto = z.object({
  */
 export const zPageKeyOut = z.object({
   items: z.array(zKeyOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * Page[KnowledgeHit]
+ */
+export const zPageKnowledgeHit = z.object({
+  items: z.array(zKnowledgeHit),
   next_cursor: z.string().nullable(),
 });
 
@@ -1272,48 +1304,6 @@ export const zRespondIn = z.object({
 });
 
 /**
- * ResultLink
- */
-export const zResultLink = z.object({
-  kind: z.enum(["branch", "pull_request", "document", "draft", "url"]),
-  label: z.string().max(200).nullish(),
-  url: z
-    .string()
-    .max(2048)
-    .regex(/^https?:\/\/\S+$/),
-});
-
-/**
- * PostResultBody
- *
- * The REST twin's body (the run is in the path).
- */
-export const zPostResultBody = z.object({
-  files_touched: z.array(zFileTouched).max(500).optional().default([]),
-  links: z.array(zResultLink).max(50).optional().default([]),
-  outcome: z.enum(["done", "partial", "blocked"]),
-  schema_version: z.int().nullish(),
-  summary: z.string().min(1).max(20000),
-  tests_summary: z.string().max(20000).nullish(),
-});
-
-/**
- * ResultOut
- */
-export const zResultOut = z.object({
-  created_at: z.iso.datetime(),
-  files_touched: z.array(zFileTouched).max(500).optional().default([]),
-  id: z.uuid(),
-  links: z.array(zResultLink).max(50).optional().default([]),
-  outcome: z.enum(["done", "partial", "blocked"]),
-  run_id: z.uuid(),
-  summary: z.string().min(1).max(20000),
-  tainted: z.boolean().optional().default(false),
-  task_id: z.uuid(),
-  tests_summary: z.string().max(20000).nullish(),
-});
-
-/**
  * ResumeIn
  */
 export const zResumeIn = z.object({
@@ -1479,6 +1469,58 @@ export const zRunStatus = z.enum([
   "timed_out",
   "runner_lost",
 ]);
+
+/**
+ * ActivityItem
+ *
+ * One row of a project's Activity: a run (its status now), a result (its summary) or
+ * an audit row (its action and who did it), at the time it happened.
+ */
+export const zActivityItem = z.object({
+  action: z.string().nullable(),
+  actor_type: z.string().nullable(),
+  at: z.iso.datetime(),
+  id: z.uuid(),
+  kind: z.enum(["run", "result", "audit"]),
+  run_id: z.uuid().nullable(),
+  status: zRunStatus.nullable(),
+  summary: z.string().nullable(),
+  task_id: z.uuid().nullable(),
+  task_title: z.string().nullable(),
+});
+
+/**
+ * FeedRun
+ */
+export const zFeedRun = z.object({
+  at: z.iso.datetime(),
+  kind: zRunKind,
+  project_id: z.uuid().nullable(),
+  run_id: z.uuid(),
+  status: zRunStatus,
+  task_id: z.uuid().nullable(),
+  task_title: z.string().nullable(),
+});
+
+/**
+ * AgentFeedOut
+ *
+ * The dashboard's agent activity (FR-1.5): the newest task runs in each group.
+ */
+export const zAgentFeedOut = z.object({
+  failed: z.array(zFeedRun),
+  finished: z.array(zFeedRun),
+  running: z.array(zFeedRun),
+  waiting: z.array(zFeedRun),
+});
+
+/**
+ * Page[ActivityItem]
+ */
+export const zPageActivityItem = z.object({
+  items: z.array(zActivityItem),
+  next_cursor: z.string().nullable(),
+});
 
 /**
  * RunOut
@@ -1846,6 +1888,16 @@ export const zTaskOut = z.object({
 });
 
 /**
+ * AskOut
+ *
+ * The task the question became, and the run answering it.
+ */
+export const zAskOut = z.object({
+  run_id: z.uuid(),
+  task: zTaskOut,
+});
+
+/**
  * CardOut
  */
 export const zCardOut = z.object({
@@ -2041,10 +2093,14 @@ export const zTextDocumentPatch = z.object({
 
 /**
  * TextEntryIn
+ *
+ * `add_document`'s twin body (P1-17's text entry, R-36).
  */
 export const zTextEntryIn = z.object({
   body_md: z.string().max(100000).optional().default(""),
   project_id: z.uuid().nullish(),
+  schema_version: z.int().nullish(),
+  tags: z.array(z.string()).max(20).optional().default([]),
   title: z.string().min(1).max(300),
 });
 
@@ -2292,6 +2348,62 @@ export const zUsageRow = z.object({
 });
 
 /**
+ * WebResultLink
+ *
+ * A branch, pull request, draft or other web address: always `http(s)://`.
+ */
+export const zWebResultLink = z.object({
+  kind: z.enum(["branch", "pull_request", "draft", "url"]),
+  label: z.string().max(200).nullish(),
+  url: z
+    .string()
+    .max(2048)
+    .regex(/^https?:\/\/\S+$/),
+});
+
+/**
+ * ResultLink
+ *
+ * A link a result names. Only a `document` link may be a `tumnis://` citation: the
+ * rule is the schema's (one variant per kind; `kind` tells them apart), so OpenAPI, the
+ * tools' JSON Schema and anything generated from them (zod, test factories) hold it too.
+ * A plain `anyOf`, not a discriminator: its mapping would name `#/$defs/...` in the tool
+ * and `#/components/...` in OpenAPI. Built like a model, `ResultLink(kind=..., url=...)`;
+ * `kind`, `url` and `label` read through.
+ */
+export const zResultLink = z.union([zWebResultLink, zDocumentResultLink]);
+
+/**
+ * PostResultBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export const zPostResultBody = z.object({
+  files_touched: z.array(zFileTouched).max(500).optional().default([]),
+  links: z.array(zResultLink).max(50).optional().default([]),
+  outcome: z.enum(["done", "partial", "blocked"]),
+  schema_version: z.int().nullish(),
+  summary: z.string().min(1).max(20000),
+  tests_summary: z.string().max(20000).nullish(),
+});
+
+/**
+ * ResultOut
+ */
+export const zResultOut = z.object({
+  created_at: z.iso.datetime(),
+  files_touched: z.array(zFileTouched).max(500).optional().default([]),
+  id: z.uuid(),
+  links: z.array(zResultLink).max(50).optional().default([]),
+  outcome: z.enum(["done", "partial", "blocked"]),
+  run_id: z.uuid(),
+  summary: z.string().min(1).max(20000),
+  tainted: z.boolean().optional().default(false),
+  task_id: z.uuid(),
+  tests_summary: z.string().max(20000).nullish(),
+});
+
+/**
  * WebhookOut
  */
 export const zWebhookOut = z.object({
@@ -2412,6 +2524,11 @@ export const zTumnisModulesProjectsRouterVersionIn = z.object({
  * Successful Response
  */
 export const zHealthLiveResponse = z.record(z.string(), z.string());
+
+/**
+ * Successful Response
+ */
+export const zAgentsGetAgentFeedResponse = zAgentFeedOut;
 
 /**
  * Successful Response
@@ -2837,6 +2954,10 @@ export const zKnowledgeGetDocumentPath = z.object({
   document_id: z.uuid(),
 });
 
+export const zKnowledgeGetDocumentQuery = z.object({
+  schema_version: z.int().nullish(),
+});
+
 /**
  * Successful Response
  */
@@ -2942,14 +3063,14 @@ export const zKnowledgeSearchQuery = z.object({
   q: z.string().min(1).max(500),
   project_id: z.uuid().nullish(),
   limit: z.int().gte(1).lte(50).optional().default(10),
+  cursor: z.string().max(2048).nullish(),
+  schema_version: z.int().nullish(),
 });
 
 /**
- * Response Knowledge Search
- *
  * Successful Response
  */
-export const zKnowledgeSearchResponse = z.array(zKnowledgeHit);
+export const zKnowledgeSearchResponse = zPageKnowledgeHit;
 
 /**
  * Successful Response
@@ -3126,6 +3247,20 @@ export const zProjectsUpdateProjectPath = z.object({
  */
 export const zProjectsUpdateProjectResponse = zProjectOut;
 
+export const zAgentsListActivityPath = z.object({
+  project_id: z.uuid(),
+});
+
+export const zAgentsListActivityQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsListActivityResponse = zPageActivityItem;
+
 export const zProjectsArchiveProjectBody =
   zTumnisModulesProjectsRouterVersionIn;
 
@@ -3137,6 +3272,17 @@ export const zProjectsArchiveProjectPath = z.object({
  * Successful Response
  */
 export const zProjectsArchiveProjectResponse = zProjectOut;
+
+export const zAgentsAskBody = zAskIn;
+
+export const zAgentsAskPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsAskResponse = zAskOut;
 
 export const zTasksGetBoardPath = z.object({
   project_id: z.uuid(),
@@ -3188,6 +3334,20 @@ export const zProjectsGetProjectContextQuery = z.object({
  * Successful Response
  */
 export const zProjectsGetProjectContextResponse = zProjectContextOut;
+
+export const zTasksListInboxPath = z.object({
+  project_id: z.uuid(),
+});
+
+export const zTasksListInboxQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksListInboxResponse = zPageReviewItemOut;
 
 export const zAgentsPauseProjectBody = zProjectPauseIn;
 

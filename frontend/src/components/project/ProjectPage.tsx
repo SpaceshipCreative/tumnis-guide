@@ -1,5 +1,5 @@
 // The task-first project page (P0-24, FR-2.2 to FR-2.8): the header, the composer, the
-// Tasks, Board or Calendar (P1-12) view and, on a laptop, the Context rail beside them; on the phone a
+// Tasks, Board, Calendar (P1-12), Inbox or Activity (P2-17) view and, on a laptop, the Context rail beside them; on the phone a
 // segmented control and the Context sheet. View state lives in the URL (`view`, `task`),
 // the last view per project in `uiStore`, server data in Query. Captures still on the
 // offline queue show as pending rows (P0-25), even when the project cannot load offline.
@@ -13,7 +13,9 @@ import type { ProjectView } from "../../lib/views";
 import { uiStore } from "../../stores/uiStore";
 import { BoardView } from "../board/BoardView";
 import { Card } from "../common/Card";
+import { ActivityView } from "./ActivityView";
 import { CalendarView } from "./CalendarView";
+import { InboxView } from "./InboxView";
 import { pendingRow, usePendingTasks } from "../quickadd/queue";
 import { projectProfileQuery, workspaceQuery } from "../settings/queries";
 import { Composer } from "./Composer";
@@ -166,7 +168,11 @@ export function ProjectPage({
           onChange={changeView}
         />
         <ViewPanel laptop={laptop} panelId={panelId} view={view}>
-          {view === "calendar" ? (
+          {view === "inbox" ? (
+            <InboxView projectId={projectId} />
+          ) : view === "activity" ? (
+            <ActivityView projectId={projectId} />
+          ) : view === "calendar" ? (
             <CalendarView
               projectId={projectId}
               week={week ?? mondayOf(now, timezone)}

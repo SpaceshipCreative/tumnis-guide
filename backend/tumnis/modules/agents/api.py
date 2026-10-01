@@ -13,7 +13,19 @@ from uuid import UUID, uuid4, uuid5
 
 from prometheus_client import Gauge
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import RowMapping, Table, Text, cast, insert, select, text, update
+from sqlalchemy import (
+    RowMapping,
+    Table,
+    Text,
+    cast,
+    func,
+    insert,
+    literal,
+    select,
+    text,
+    tuple_,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
@@ -26,7 +38,7 @@ from tumnis.core.live import mark_changed
 from tumnis.core.logging import scrub_text
 from tumnis.core.metrics import REGISTRY
 from tumnis.core.outbox import emit
-from tumnis.core.pagination import Page, SortKey, paginate
+from tumnis.core.pagination import Cursor, Page, SortKey, paginate
 from tumnis.core.routing import register_project_lookup
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR, ActorRef, Interval
@@ -1688,6 +1700,7 @@ async def accept_result(
     if run.task_id is None:
         raise ProblemError(422, "run_has_no_task", "Only a task's run posts a result")
     fields = tasks.ResultFields.model_validate(inp.model_dump(exclude={"run_id"}))
+    fields = await _cite(s, run.task_id, fields)
     result, created = await tasks.post_result(
         s, actor, run.task_id, inp.run_id, fields, tainted=tainted or run.tainted, now=now
     )
@@ -1702,6 +1715,39 @@ async def accept_result(
         )
         await emit(s, RunSignalV1(run_id=inp.run_id, kind="result"), occurred_at=now)
     return result
+
+
+LABEL_MAX: Final = 200  # ResultLink.label's bound
+
+
+async def _cite(s: AsyncSession, task_id: UUID, fields: ResultFields) -> ResultFields:
+    """The result's citations checked and labeled (P2-17, FR-15.4): a document link
+    `tumnis://doc/<id>#page=<n>` names a live document of the task's project or of the
+    workspace knowledge base (else 422 `invalid_citation`, so another project's document
+    never leaks into a result), and gets "<title>, page <n>" (or the title) when it has no
+    label."""
+    if not any(tasks.cited_document(link) for link in fields.links):
+        return fields
+    task = await tasks.get_task(s, task_id)
+    links: list[tasks.ResultLink] = []
+    for link in fields.links:
+        cited = tasks.cited_document(link)
+        if cited is None:
+            links.append(link)
+            continue
+        document_id, page = cited
+        title = await knowledge.citation_title(s, document_id, task.project_id)
+        if title is None:
+            raise ProblemError(
+                422,
+                "invalid_citation",
+                "A citation names a document of the task's project or the workspace's",
+            )
+        label = link.label
+        if label is None:
+            label = title if page is None else f"{title}, page {page}"
+        links.append(link.labelled(label[:LABEL_MAX]))
+    return fields.model_copy(update={"links": links})
 
 
 # --- The kill switch and runaway limits (P2-09, SAF-4, SAF-5) --------------------------------
@@ -2340,6 +2386,250 @@ async def finished_runs(s: AsyncSession, start: datetime, end: datetime) -> list
         )
         for row in rows
     ]
+
+
+# --- Ask the agent, a project's Activity and the dashboard feed (P2-17, FR-2.5, FR-2.6, FR-1.5)
+#
+# Asking keeps the conversation inside a task (PRD non-goal: no general chat): the question
+# becomes an AI task of the project, run at once on the project's agent (R-23); the run's
+# result is the answer. A project's Activity merges its task runs, their results and the
+# audit rows written for it, newest first; the dashboard feed groups the workspace's task
+# runs by what the human cares about.
+
+ASK_FIRST_ACTION: Final = "Answer the question"
+ASK_CRITERIA: Final = "An answer with sources"
+ASK_SOURCE: Final = "ask"  # tasks.source of a task made by Ask the agent
+TITLE_MAX: Final = 500  # tasks.Title's bound
+
+
+class AskIn(BaseModel):
+    question: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)
+    ]
+
+
+class AskOut(BaseModel):
+    """The task the question became, and the run answering it."""
+
+    task: tasks.TaskOut
+    run_id: UUID
+
+
+async def ask(  # the question, plus who, where and when
+    s: AsyncSession,
+    actor: ActorRef,
+    project_id: UUID,
+    question: str,
+    *,
+    ctx: WorkspaceContext,
+    now: datetime,
+) -> AskOut:
+    """Ask the project's agent (FR-2.5) in the caller's transaction: an AI task (source
+    `ask`, the question as its title, cut with an ellipsis past 500 characters and then
+    kept whole in a comment), then `request_run` of it. 404 for a project the caller cannot
+    see; 409 `no_ready_profile` when the project has no ready agent, which rolls the task
+    back with the transaction."""
+    title = question if len(question) <= TITLE_MAX else question[: TITLE_MAX - 1].rstrip() + "…"
+    task = await tasks.create_task(
+        s,
+        actor,
+        tasks.TaskCreate(
+            project_id=project_id,
+            title=title,
+            label="ai",
+            first_action=ASK_FIRST_ACTION,
+            acceptance_criteria=ASK_CRITERIA,
+        ),
+        now=now,
+        source=ASK_SOURCE,
+    )
+    if title != question:
+        await tasks.add_comment(s, actor, task.id, question, now=now)
+    run_id = await request_run(task.id, RunKind.TASK, ctx=ctx, session=s, now=now)
+    return AskOut(task=task, run_id=run_id)
+
+
+ActivityKind = Literal["run", "result", "audit"]
+ACTIVITY_RUN_KINDS: Final = (RunKind.TASK.value,)  # runs a person asked for, not enrichment
+
+
+class ActivityItem(BaseModel):
+    """One row of a project's Activity: a run (its status now), a result (its summary) or
+    an audit row (its action and who did it), at the time it happened."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    kind: ActivityKind
+    id: UUID  # the run's, the result's or the audit row's id
+    at: datetime
+    task_id: UUID | None = None
+    task_title: str | None = None
+    run_id: UUID | None = None
+    status: RunStatus | None = None  # a run's
+    summary: str | None = None  # a result's
+    action: str | None = None  # an audit row's
+    actor_type: str | None = None  # an audit row's
+
+
+def _uuid_or_none(value: Any) -> UUID | None:
+    try:
+        return UUID(str(value)) if value is not None else None
+    except ValueError:
+        return None
+
+
+async def _activity_runs(
+    s: AsyncSession, project_id: UUID, before: tuple[datetime, UUID] | None, limit: int
+) -> list[ActivityItem]:
+    stmt = (
+        select(_runs.c.id, _runs.c.created_at, _runs.c.task_id, _runs.c.status)
+        .select_from(_runs.join(_profiles, _profiles.c.id == _runs.c.profile_id))
+        .where(
+            _profiles.c.project_id == project_id,
+            _runs.c.kind.in_(ACTIVITY_RUN_KINDS),
+            _runs.c.deleted_at.is_(None),
+        )
+    )
+    if before is not None:
+        bound = (literal(before[0], _runs.c.created_at.type), literal(before[1], _runs.c.id.type))
+        stmt = stmt.where(tuple_(_runs.c.created_at, _runs.c.id) < tuple_(*bound))
+    stmt = stmt.order_by(_runs.c.created_at.desc(), _runs.c.id.desc()).limit(limit)
+    return [
+        ActivityItem(
+            kind="run",
+            id=row.id,
+            at=row.created_at,
+            task_id=row.task_id,
+            run_id=row.id,
+            status=RunStatus(row.status),
+        )
+        for row in await s.execute(stmt)
+    ]
+
+
+async def activity(
+    s: AsyncSession, project_id: UUID, *, cursor: str | None, limit: int
+) -> Page[ActivityItem]:
+    """The project's Activity (FR-2.6): its task runs, their results and the audit rows
+    written for it (`audit.record(..., project_id=)`), newest first by (at, id), a page
+    at a time. Each source reads at most `limit + 1` rows past the cursor, so a page costs
+    four statements however busy the project. 404 for a project the caller cannot see;
+    400 `invalid_cursor`."""
+    if not await projects.project_exists(s, project_id):
+        raise NotFound("projects", project_id)
+    before: tuple[datetime, UUID] | None = None
+    if cursor is not None:
+        after = Cursor.decode(cursor, [datetime])
+        before = (after.keys[0], after.id)
+    items = await _activity_runs(s, project_id, before, limit + 1)
+    items += [
+        ActivityItem(
+            kind="result",
+            id=r.id,
+            at=r.created_at,
+            task_id=r.task_id,
+            run_id=r.run_id,
+            summary=r.summary,
+        )
+        for r in await tasks.results_for_project(s, project_id, before=before, limit=limit + 1)
+    ]
+    items += [
+        ActivityItem(
+            kind="audit",
+            id=a.id,
+            at=a.occurred_at,
+            run_id=_uuid_or_none(a.details.get("run_id")),
+            action=a.action,
+            actor_type=a.actor_type,
+        )
+        for a in await audit.list_for_project(s, project_id, before=before, limit=limit + 1)
+    ]
+    items.sort(key=lambda item: (item.at, item.id), reverse=True)
+    page = items[:limit]
+    titles = {
+        t.id: t.title for t in await tasks.tasks_by_ids(s, {i.task_id for i in page if i.task_id})
+    }
+    page = [
+        i.model_copy(update={"task_title": titles.get(i.task_id)}) if i.task_id else i for i in page
+    ]
+    next_cursor = Cursor((page[-1].at,), page[-1].id).encode() if len(items) > limit else None
+    return Page[ActivityItem](items=page, next_cursor=next_cursor)
+
+
+FEED_SIZE: Final = 10  # entries per group (plan default)
+FEED_GROUPS: Final[dict[str, frozenset[RunStatus]]] = {
+    "running": frozenset({RunStatus.QUEUED, RunStatus.RUNNING}),
+    "waiting": frozenset({RunStatus.WAITING_ON_HUMAN, RunStatus.HELD}),
+    "finished": frozenset({RunStatus.SUCCEEDED}),
+    "failed": frozenset({RunStatus.FAILED, RunStatus.TIMED_OUT, RunStatus.RUNNER_LOST}),
+}  # a cancelled run is the human's own doing, so it shows in none
+
+
+class FeedRun(BaseModel):
+    run_id: UUID
+    task_id: UUID | None
+    task_title: str | None
+    project_id: UUID | None
+    kind: RunKind
+    status: RunStatus
+    at: datetime  # when it finished, else started, else was asked for
+
+
+class AgentFeedOut(BaseModel):
+    """The dashboard's agent activity (FR-1.5): the newest task runs in each group."""
+
+    running: list[FeedRun]
+    waiting: list[FeedRun]
+    finished: list[FeedRun]
+    failed: list[FeedRun]
+
+
+async def agent_feed(s: AsyncSession) -> AgentFeedOut:
+    """The workspace's task runs by group, the newest `FEED_SIZE` of each: one statement
+    per group and one for the task titles."""
+    at = func.coalesce(_runs.c.finished_at, _runs.c.started_at, _runs.c.created_at).label("at")
+    groups: dict[str, list[FeedRun]] = {}
+    for name, statuses in FEED_GROUPS.items():
+        rows = await s.execute(
+            select(
+                _runs.c.id,
+                _runs.c.task_id,
+                _runs.c.kind,
+                _runs.c.status,
+                at,
+                _profiles.c.project_id,
+            )
+            .select_from(_runs.join(_profiles, _profiles.c.id == _runs.c.profile_id))
+            .where(
+                _runs.c.kind.in_(ACTIVITY_RUN_KINDS),
+                _runs.c.status.in_([status.value for status in statuses]),
+                _runs.c.deleted_at.is_(None),
+            )
+            .order_by(at.desc(), _runs.c.id.desc())
+            .limit(FEED_SIZE)
+        )
+        groups[name] = [
+            FeedRun(
+                run_id=row.id,
+                task_id=row.task_id,
+                task_title=None,
+                project_id=row.project_id,
+                kind=RunKind(row.kind),
+                status=RunStatus(row.status),
+                at=row.at,
+            )
+            for row in rows
+        ]
+    wanted = {run.task_id for runs in groups.values() for run in runs if run.task_id}
+    titles: dict[UUID | None, str] = {
+        t.id: t.title for t in await tasks.tasks_by_ids(s, {w for w in wanted if w})
+    }
+    return AgentFeedOut(
+        **{
+            name: [r.model_copy(update={"task_title": titles.get(r.task_id)}) for r in runs]
+            for name, runs in groups.items()
+        }
+    )
 
 
 # --- Seed writers (the acceptance seed, Scott decision 37) -----------------------------------
