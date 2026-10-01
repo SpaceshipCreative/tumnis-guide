@@ -61,6 +61,7 @@ export interface BriefStub {
   tainted: boolean;
   pinned: boolean;
   version: number;
+  label: "agent" | null;
 }
 
 type ProjectOut = z.output<typeof zProjectOut>;
@@ -141,6 +142,7 @@ export class ProjectFake {
       tainted: false,
       pinned: true,
       version: 1,
+      label: null,
     };
     this.timezone = init.timezone ?? "America/New_York";
     this.deployApps = init.deployApps ?? [];

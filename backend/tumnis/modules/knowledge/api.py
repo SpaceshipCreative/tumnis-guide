@@ -19,7 +19,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Final, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import RowMapping, Table, and_, delete, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,7 +56,13 @@ from tumnis.modules.knowledge.models import (
     ProjectFolder,
     StorageLocation,
 )
-from tumnis.modules.knowledge.rules import is_network_fs, safe_rel_path, sanitize_filename
+from tumnis.modules.knowledge.rules import (
+    PASSAGE_CAP_CHARS,
+    Passage,
+    is_network_fs,
+    safe_rel_path,
+    sanitize_filename,
+)
 from tumnis.modules.knowledge.storage import (
     FileStat,
     Health,
@@ -151,6 +157,17 @@ class DocumentDTO(BaseModel):
     tainted: bool
     pinned: bool
     version: int
+    label: Literal["agent"] | None  # P1-17: agent-written and not yet marked trusted
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derived(cls, data: Any) -> Any:
+        """A row read from `documents` carries no `label`: it is derived from the row's
+        `source` and `trust`."""
+        if isinstance(data, Mapping) and "label" not in data:
+            agent = data.get("source") == AGENT_SOURCE and data.get("trust") != "trusted"
+            data = {**data, "label": "agent" if agent else None}
+        return data
 
 
 def is_note(doc: Mapping[Any, Any]) -> bool:
@@ -1912,3 +1929,60 @@ async def stream_file(
     ):
         async for chunk in backend.read(info.path):
             yield chunk
+
+
+# --- Knowledge items, search and passages (P1-17, FR-15.1, FR-15.3 to FR-15.6) -----------
+
+
+class SearchHit(BaseModel):
+    """One chunk found by `search_knowledge`, citing its document, heading path and page."""
+
+    chunk_id: UUID
+    document_id: UUID
+    document_title: str
+    project_id: UUID | None
+    heading_path: list[str]
+    page: int | None
+    page_to: int | None
+    snippet: str
+    text: str
+    rank: float
+    trust: Literal["trusted", "untrusted"]
+    tainted: bool
+
+
+async def create_text_entry(
+    s: AsyncSession,
+    project_id: UUID | None,
+    title: str,
+    markdown: str,
+    *,
+    origin: Literal["user_text", "agent"] = "user_text",
+    net: NetPolicy | None = None,
+) -> DocumentDTO:
+    """A text entry in the project's knowledge base (None: the workspace's)."""
+    raise NotImplementedError
+
+
+async def search_knowledge(
+    s: AsyncSession,
+    q: str,
+    *,
+    project_id: UUID | None,
+    limit: int = 10,
+    mode: Literal["fts"] = "fts",
+) -> list[SearchHit]:
+    """Full-text search over the current versions' chunks (R-36)."""
+    raise NotImplementedError
+
+
+async def passages_for(
+    s: AsyncSession, task_id: UUID, *, cap: int = PASSAGE_CAP_CHARS
+) -> list[Passage]:
+    """The task's project brief, then the passages its text finds, within `cap`."""
+    raise NotImplementedError
+
+
+async def purge_trash(s: AsyncSession, cutoff: datetime, *, limit: int) -> int:
+    """Hard-delete documents trashed before `cutoff`; returns how many went."""
+    raise NotImplementedError

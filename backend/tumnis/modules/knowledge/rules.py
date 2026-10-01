@@ -10,9 +10,12 @@ rules may import only their own module's rules (`storage.py` re-exports them).
 
 import re
 import unicodedata
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
 
 
 class StorageError(Exception):
@@ -255,3 +258,42 @@ def numbered_name(name: str, n: int) -> str:
         return name
     stem, ext = split_ext(name)
     return f"{stem} {n}{ext}"
+
+
+# --- Trust and passages (P1-17, FR-15.4, FR-15.5) -----------------------------------------
+
+Origin = Literal["user_text", "upload", "folder_external", "agent", "link"]
+Trust = Literal["trusted", "untrusted"]
+PASSAGE_CAP_CHARS: Final = 6_000  # plan default for the packet's knowledge part
+
+
+class Passage(BaseModel):
+    """A piece of knowledge for a packet: the brief (no chunk) or a chunk, with its
+    citation (document, title, heading path, page)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    chunk_id: UUID | None
+    document_id: UUID
+    title: str
+    heading_path: list[str]
+    page: int | None
+    text: str
+    tainted: bool = False
+
+
+def default_trust(origin: Origin) -> tuple[Trust, bool]:
+    """(trust, tainted) for a new item from `origin` (FR-15.5, SAF-1)."""
+    raise NotImplementedError
+
+
+def select_passages(
+    brief: Passage | None, ranked: Sequence[Passage], cap: int = PASSAGE_CAP_CHARS
+) -> list[Passage]:
+    """The brief, then ranked passages, within `cap` characters."""
+    raise NotImplementedError
+
+
+def passage_query(title: str, criteria: Sequence[str], goal: str | None) -> str:
+    """A `websearch_to_tsquery` query for a task's passages."""
+    raise NotImplementedError

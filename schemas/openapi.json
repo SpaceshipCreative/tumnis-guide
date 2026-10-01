@@ -1144,6 +1144,18 @@
             "title": "Kind",
             "type": "string"
           },
+          "label": {
+            "anyOf": [
+              {
+                "const": "agent",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
           "pinned": {
             "title": "Pinned",
             "type": "boolean"
@@ -1202,7 +1214,8 @@
           "trust",
           "tainted",
           "pinned",
-          "version"
+          "version",
+          "label"
         ],
         "title": "DocumentDTO",
         "type": "object"

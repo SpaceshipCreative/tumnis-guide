@@ -21,6 +21,7 @@ import hashlib
 import json
 import secrets
 from collections.abc import Mapping, Sequence
+from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, cast, get_args
 from uuid import UUID, uuid5
@@ -57,6 +58,7 @@ from tumnis.modules.agents.skill_io import (
     EnrichTask,
     EstimateHistoryItem,
     MissingField,
+    PlanProject,
 )
 from tumnis.modules.auth import api as auth
 from tumnis.modules.integrations import api as integrations
@@ -729,9 +731,10 @@ def _block_source(source: str, target_type: str) -> BlockSource:
 async def build_packet(
     kind: RunKind,
     *,
-    task_id: UUID,
-    run_id: UUID,
-    profile_id: UUID,
+    task_id: UUID | None = None,
+    day: date | None = None,
+    run_id: UUID | None = None,
+    profile_id: UUID | None = None,
     token: str | None = None,
     nonce: str | None = None,
     ctx: WorkspaceContext | None = None,
@@ -740,7 +743,8 @@ async def build_packet(
     """The packet for a task, proposal or stuck run (R-24: the only way one is made). Enrich
     and plan packets are P1-17's (P1-08, P1-11). `nonce` defaults to a fresh random one;
     the token is null until the dispatch step issues one (it is never a step output)."""
-    if kind not in BUILT_KINDS:
+    del day
+    if kind not in BUILT_KINDS or task_id is None or run_id is None or profile_id is None:
         raise ValueError(f"build_packet builds task, proposal and stuck packets, not {kind}")
     context = ctx or tenancy.current()
     if context is None:
@@ -826,6 +830,14 @@ async def enrichment_request(
             for h in history
         ],
     )
+
+
+async def plan_projects(
+    s: AsyncSession, project_ids: Sequence[UUID], *, now: datetime | None = None
+) -> list[PlanProject]:
+    """The planning request's projects, each with its brief excerpt (P1-17's seam for
+    P1-11's `planning_request`)."""
+    raise NotImplementedError
 
 
 async def packet_for_caller(

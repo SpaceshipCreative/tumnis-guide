@@ -657,6 +657,10 @@ export type DocumentDto = {
    */
   kind: string;
   /**
+   * Label
+   */
+  label: "agent" | null;
+  /**
    * Pinned
    */
   pinned: boolean;

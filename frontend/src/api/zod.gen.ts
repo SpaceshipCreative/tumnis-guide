@@ -199,6 +199,7 @@ export const zDocumentDto = z.object({
   body_md: z.string().nullable(),
   id: z.uuid(),
   kind: z.string(),
+  label: z.literal("agent").nullable(),
   pinned: z.boolean(),
   project_id: z.uuid().nullable(),
   role: z.string().nullable(),
