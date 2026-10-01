@@ -1500,6 +1500,90 @@
         "title": "DefaultIn",
         "type": "object"
       },
+      "DetourIn": {
+        "additionalProperties": false,
+        "description": "Something not in Today the person switched to, captured as a task (P4-01). The\nperson picks the project (only agents skip it, J2).",
+        "properties": {
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "project_id"
+        ],
+        "title": "DetourIn",
+        "type": "object"
+      },
+      "DetourOut": {
+        "description": "A captured detour whose return question is still open (P4-01, FR-10.6).",
+        "properties": {
+          "detour_task_id": {
+            "format": "uuid",
+            "title": "Detour Task Id",
+            "type": "string"
+          },
+          "detour_title": {
+            "title": "Detour Title",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "return_to_task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return To Task Id"
+          },
+          "return_to_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return To Title"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "detour_task_id",
+          "detour_title",
+          "return_to_task_id",
+          "return_to_title",
+          "message",
+          "rule"
+        ],
+        "title": "DetourOut",
+        "type": "object"
+      },
       "DigestEntryOut": {
         "properties": {
           "data": {
@@ -2132,8 +2216,28 @@
         "type": "object"
       },
       "FocusCurrentOut": {
-        "description": "What the focus bar shows: the level in force, the open session and today's\nmessages, oldest first.",
+        "description": "What the focus bar shows: the level in force, the open session and today's\nmessages, oldest first; at Guardrail also the one-task card's tasks, and an open\ndetour's return question (P4-01).",
         "properties": {
+          "detour": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DetourOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guardrail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuardrailOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "level": {
             "enum": [
               "quiet",
@@ -2194,7 +2298,9 @@
           "workspace_level",
           "override_level",
           "session",
-          "messages"
+          "messages",
+          "guardrail",
+          "detour"
         ],
         "title": "FocusCurrentOut",
         "type": "object"
@@ -2424,6 +2530,46 @@
           "minutes"
         ],
         "title": "FreeBlockOut",
+        "type": "object"
+      },
+      "GuardrailOut": {
+        "description": "The one-task dashboard at Guardrail (P4-01, FR-10.6): the task it shows, the one it\nprepares next, and how many other tasks of today's plan are still to do.",
+        "properties": {
+          "current_task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Task Id"
+          },
+          "next_task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Task Id"
+          },
+          "remaining": {
+            "title": "Remaining",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "current_task_id",
+          "next_task_id",
+          "remaining"
+        ],
+        "title": "GuardrailOut",
         "type": "object"
       },
       "Health": {
@@ -6680,6 +6826,16 @@
       "RespondIn": {
         "additionalProperties": false,
         "properties": {
+          "detour": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DetourIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "event_id": {
             "format": "uuid",
             "title": "Event Id",
@@ -6883,6 +7039,42 @@
           "released_runs"
         ],
         "title": "ResumeOut",
+        "type": "object"
+      },
+      "ReturnIn": {
+        "additionalProperties": false,
+        "description": "The answer to an open detour's return question (P4-01). `version` is the detour\ntask's: Return moves it back to Backlog.",
+        "properties": {
+          "decision": {
+            "enum": [
+              "return",
+              "stay"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "decision",
+          "version"
+        ],
+        "title": "ReturnIn",
         "type": "object"
       },
       "ReviewCountOut": {
@@ -15122,6 +15314,117 @@
           }
         },
         "summary": "Respond",
+        "tags": [
+          "focus"
+        ]
+      }
+    },
+    "/v1/focus/return": {
+      "post": {
+        "operationId": "focus_return_detour",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FocusCurrentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Return Detour",
         "tags": [
           "focus"
         ]
