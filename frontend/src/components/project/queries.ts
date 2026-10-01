@@ -7,6 +7,7 @@ import { queryOptions } from "@tanstack/react-query";
 
 import {
   knowledgeGetBriefOptions,
+  projectsGetPolicyOptions,
   projectsGetProjectOptions,
   tasksGetBoardOptions,
   tasksListCommentsOptions,
@@ -29,6 +30,10 @@ export const TASK_PAGE_LIMIT = 200; // the API's largest page
 
 export const projectQuery = (projectId: string) =>
   projectsGetProjectOptions({ path: { project_id: projectId } });
+
+/** The project's approval policy (FR-5.6), which the policy editor edits (P2-05). */
+export const policyQuery = (projectId: string) =>
+  projectsGetPolicyOptions({ path: { project_id: projectId } });
 
 /**
  * Every task of the project: follows `next_cursor` through every page and answers one

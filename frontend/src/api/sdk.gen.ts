@@ -221,6 +221,9 @@ import type {
   ProjectsCreateProjectData,
   ProjectsCreateProjectErrors,
   ProjectsCreateProjectResponses,
+  ProjectsGetPolicyData,
+  ProjectsGetPolicyErrors,
+  ProjectsGetPolicyResponses,
   ProjectsGetProjectContextData,
   ProjectsGetProjectContextErrors,
   ProjectsGetProjectContextResponses,
@@ -236,6 +239,9 @@ import type {
   ProjectsUnarchiveProjectData,
   ProjectsUnarchiveProjectErrors,
   ProjectsUnarchiveProjectResponses,
+  ProjectsUpdatePolicyData,
+  ProjectsUpdatePolicyErrors,
+  ProjectsUpdatePolicyResponses,
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectErrors,
   ProjectsUpdateProjectResponses,
@@ -423,11 +429,13 @@ import {
   zPlanningSwapItemResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
+  zProjectsGetPolicyResponse,
   zProjectsGetProjectContextResponse,
   zProjectsGetProjectResponse,
   zProjectsListProjectsResponse,
   zProjectsReorderProjectResponse,
   zProjectsUnarchiveProjectResponse,
+  zProjectsUpdatePolicyResponse,
   zProjectsUpdateProjectResponse,
   zPurgesPurgeResponse,
   zSearchSearchResponse,
@@ -1949,6 +1957,59 @@ export const projectsGetProjectContext = <ThrowOnError extends boolean = false>(
       await zProjectsGetProjectContextResponse.parseAsync(data),
     url: "/v1/projects/{project_id}/context",
     ...options,
+  });
+
+/**
+ * Get Policy
+ *
+ * The project's approval policy (FR-5.6): gated and allowed action classes and the
+ * runaway limits (SAF-5).
+ */
+export const projectsGetPolicy = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsGetPolicyData, ThrowOnError>,
+): RequestResult<
+  ProjectsGetPolicyResponses,
+  ProjectsGetPolicyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ProjectsGetPolicyResponses,
+    ProjectsGetPolicyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsGetPolicyResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/policy",
+    ...options,
+  });
+
+/**
+ * Update Policy
+ *
+ * Replaces the gated and allowed lists at the version read (the policy editor, P2-05);
+ * emits `policy.changed` and writes its audit row. 409 `stale_version` with the current
+ * policy; 422 `policy_conflict` when a class is in both lists.
+ */
+export const projectsUpdatePolicy = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsUpdatePolicyData, ThrowOnError>,
+): RequestResult<
+  ProjectsUpdatePolicyResponses,
+  ProjectsUpdatePolicyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    ProjectsUpdatePolicyResponses,
+    ProjectsUpdatePolicyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsUpdatePolicyResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/policy",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
