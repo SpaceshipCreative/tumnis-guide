@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
@@ -34,7 +35,6 @@ KIND_SLUG = re.compile(r"^[a-z][a-z0-9_]{2,40}$")
 
 @pytest.mark.req("FR-8.3")
 @pytest.mark.wp("P4-05")
-@pytest.mark.xfail(strict=True, reason="spec:P4-05")
 @pytest.mark.parametrize("kind", KINDS)
 def test_deep_link_per_review_kind(kind: str) -> None:
     """T-P4-05-01
@@ -70,7 +70,6 @@ def _items(draw: st.DrawFn) -> tuple[rules.ReviewItemLite, str]:
 
 @pytest.mark.req("Data flow rule 6", "FR-8.3")
 @pytest.mark.wp("P4-05")
-@pytest.mark.xfail(strict=True, reason="spec:P4-05")
 @settings(max_examples=200, deadline=None)
 @given(case=_items(), focus_message=st.text(max_size=200), focus_secret=_sentinel)
 def test_payload_has_no_item_content(
@@ -131,7 +130,6 @@ REFUSED = (
 
 @pytest.mark.req("SEC-5", "FR-8.3")
 @pytest.mark.wp("P4-05")
-@pytest.mark.xfail(strict=True, reason="spec:P4-05")
 def test_endpoint_allowlist() -> None:
     """T-P4-05-03
     Only https endpoints on the push services' hosts are allowed; http, unknown hosts,
@@ -139,3 +137,53 @@ def test_endpoint_allowlist() -> None:
     """
     assert [e for e in ALLOWED if not rules.endpoint_allowed(e)] == []
     assert [e for e in REFUSED if rules.endpoint_allowed(e)] == []
+
+
+# --- P2-16's delivery rules as P4-05 uses them (no spec IDs: the seam's own tests) -------
+
+
+@pytest.mark.req("FR-8.4")
+@pytest.mark.wp("P4-05")
+@pytest.mark.parametrize("level", ["quiet", "nudge", "coach", "guardrail"])
+@pytest.mark.parametrize("in_progress", [False, True])
+@pytest.mark.parametrize("kind", ["approval", "focus.check_in_due"])
+def test_delivery_decision_batches_only_quiet_while_in_progress(
+    level: rules.Level, in_progress: bool, kind: str
+) -> None:
+    expected = "batch" if level == "quiet" and in_progress else "now"
+    assert rules.delivery_decision(level, in_progress, kind) == expected
+
+
+@pytest.mark.req("FR-8.4")
+@pytest.mark.wp("P4-05")
+def test_flush_due_at_the_next_break() -> None:
+    now = datetime(2026, 3, 10, 15, 0, tzinfo=UTC)
+    held = [rules.NotificationView(id=ITEM, kind="approval", created_at=now)]
+    day_end = now + timedelta(hours=3)
+    assert rules.flush_due(held, any_task_in_progress=False, now=now, day_end_at=day_end)
+    assert not rules.flush_due(held, any_task_in_progress=True, now=now, day_end_at=day_end)
+    assert rules.flush_due(held, any_task_in_progress=True, now=day_end, day_end_at=day_end)
+    assert not rules.flush_due([], any_task_in_progress=False, now=now, day_end_at=day_end)
+
+
+@pytest.mark.req("FR-8.3")
+@pytest.mark.wp("P4-05")
+def test_batch_payload_counts_and_links_to_the_queue() -> None:
+    one, three = rules.batch_payload(1), rules.batch_payload(3)
+    assert (one.title, three.title) == ("Waiting on you: 1 item", "Waiting on you: 3 items")
+    assert (three.url, three.tag, three.kind) == ("/review", "batch", "batch")
+
+
+@pytest.mark.req("FR-8.3")
+@pytest.mark.wp("P4-05")
+def test_focus_push_opens_the_dashboard_and_odd_kinds_link_by_item() -> None:
+    focus = rules.push_payload(rules.FocusEventLite(id=ITEM, kind="block_start"))
+    assert (focus.url, focus.kind, focus.title) == (
+        "/",
+        "focus.block_start",
+        "Focus: time to start",
+    )
+    odd = rules.ReviewItemLite(id=ITEM, kind="Not a slug")
+    assert rules.deep_link_for(odd) == f"/review?item={ITEM}"
+    bare = rules.ReviewItemLite(id=ITEM, kind="approval", project_name="ops@example.com")
+    assert rules.push_payload(bare).title == "Waiting on you: approval"

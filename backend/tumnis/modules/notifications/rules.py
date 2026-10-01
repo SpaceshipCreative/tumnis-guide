@@ -12,13 +12,14 @@ Browser push (P4-05, FR-8.3):
 - `endpoint_allowed(endpoint)`: https to a known browser push service only (SEC-5).
 """
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import AnyUrl, BaseModel, ValidationError
 
 Level = Literal["quiet", "nudge", "coach", "guardrail"]
 Decision = Literal["now", "batch"]
@@ -69,14 +70,15 @@ class NotificationView:
 
 def encrypted_size(plaintext_bytes: int) -> int:
     """The aes128gcm body size of a one-record push (RFC 8188, RFC 8291)."""
-    raise NotImplementedError
+    return plaintext_bytes + ECE_OVERHEAD
 
 
 def delivery_decision(level: Level, any_task_in_progress: bool, kind: NotificationKind) -> Decision:
     """Quiet and a task In progress: batch everything (FR-8.4, UX 6). Otherwise focus events
     at levels that fire them go now; review-type items go now unless Quiet with a task In
     progress. The in-app review badge always updates at once (FR-8.1)."""
-    raise NotImplementedError
+    del kind  # every kind follows the same table; focus only emits the events its level fires
+    return "batch" if level == "quiet" and any_task_in_progress else "now"
 
 
 def flush_due(
@@ -86,22 +88,98 @@ def flush_due(
     day_end_at: datetime,
 ) -> bool:
     """Next natural break: no task In progress, or the day's working hours ended."""
-    raise NotImplementedError
+    return bool(batch) and (not any_task_in_progress or now >= day_end_at)
 
 
 def deep_link_for(item: ReviewItemLite) -> str:
-    raise NotImplementedError
+    """The review route's own params (R-05): `/review?kind=<kind>&item=<id>`; a kind that is
+    not a registry slug is left out, so the link still opens the item."""
+    if _KIND.fullmatch(item.kind):
+        return f"/review?kind={item.kind}&item={item.id}"
+    return f"/review?item={item.id}"
 
 
 def push_payload(source: ReviewItemLite | FocusEventLite) -> PushPayload:
-    raise NotImplementedError
+    """The kind and a short label, never the item's content (Data flow rule 6): a review
+    item names its kind and project (email-like words dropped); a focus event names its
+    kind only, since its message names the task. Under the 4 KB push bound encrypted."""
+    if isinstance(source, FocusEventLite):
+        return PushPayload(
+            kind=f"{FOCUS_PREFIX}{source.kind}",
+            title=_FOCUS_TITLES.get(source.kind, "Focus"),
+            body="Open Tumnis to see where you are.",
+            url="/",
+            tag=str(source.id),
+        )
+    title = f"Waiting on you: {_words(source.kind)}"
+    project = _label(source.project_name)
+    if project:
+        title = f"{title} in {project}"
+    return PushPayload(
+        kind=source.kind,
+        title=title,
+        body="Open Tumnis to review it.",
+        url=deep_link_for(source),
+        tag=str(source.id),
+    )
 
 
 def batch_payload(count: int) -> PushPayload:
-    raise NotImplementedError
+    """The one push a flushed batch sends: how many items waited, linking to the queue."""
+    items = "1 item" if count == 1 else f"{count} items"
+    return PushPayload(
+        kind="batch",
+        title=f"Waiting on you: {items}",
+        body="Held while you were busy. Open Tumnis to review.",
+        url="/review",
+        tag="batch",
+    )
 
 
 def endpoint_allowed(endpoint: str) -> bool:
     """https only and host in the push-service allow-list (plan default: fcm.googleapis.com,
     updates.push.services.mozilla.com, *.push.apple.com, *.notify.windows.com)."""
-    raise NotImplementedError
+    try:
+        url = AnyUrl(endpoint)
+    except ValidationError:
+        return False
+    host = url.host or ""
+    if url.scheme != "https" or url.username or url.password or url.port != HTTPS_PORT:
+        return False
+    if host in PUSH_HOSTS:
+        return True
+    return any(
+        host.endswith(suffix) and len(host) > len(suffix) and _LABEL.fullmatch(host[: -len(suffix)])
+        for suffix in PUSH_HOST_SUFFIXES
+    )
+
+
+# --- helpers -------------------------------------------------------------------------------
+
+HTTPS_PORT: Final = 443
+LABEL_MAX: Final = 60  # a project name in a push title, at most
+_KIND: Final = re.compile(r"[a-z][a-z0-9_]{2,40}")
+_LABEL: Final = re.compile(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*")
+_FOCUS_TITLES: Final = {
+    "block_start": "Focus: time to start",
+    "not_started": "Focus: not started yet",
+    "check_in_due": "Focus: check-in",
+    "switched": "Focus: switched tasks",
+    "stuck": "Focus: stuck?",
+    "block_end": "Focus: block ending",
+    "day_end": "Focus: end of the day",
+}
+
+
+def _words(slug: str) -> str:
+    return slug.replace("_", " ")
+
+
+def _label(name: str | None) -> str | None:
+    """A project name fit for a push title: words holding '@' (email-like) dropped, control
+    characters gone, at most LABEL_MAX characters."""
+    if not name:
+        return None
+    words = [w for w in name.split() if "@" not in w]
+    text = "".join(ch for ch in " ".join(words) if ch.isprintable())
+    return text[:LABEL_MAX].strip() or None
