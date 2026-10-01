@@ -4,12 +4,20 @@ spec-guard locks the test bodies, and these helpers adapt to the agents api and 
 - `human_waits(poll_seconds=..., slice_seconds=...)`: the long poll of `ask_human` and
   `request_approval`, and the re-arm interval of the human waits (R-30), for the test;
   put back to the defaults afterwards.
-- `started(world, db, task_id)`: a run of the task, dispatched and running.
+- `started(world, db, task_id)`: a run of the task, dispatched and running. A project
+  runs two at a time (SAF-5, the `runs` queue's partition): when two of the world's runs
+  are open already, the oldest running one first ends as its agent would end it (the
+  daemon's `result`), so a test's third case is not queued behind its first two.
 - `ask(app, token, run_id, prompt, ...)`, `approval(app, token, run_id, action, ...)`: the
   agent's calls through the REST twins (`POST /v1/runs/{run_id}/questions` and
   `/approvals`) with its task token and a fresh Idempotency-Key.
 - `open_items(db, kind)`: the open review items of a kind, as the owner reads them.
 - `decide(session_client, item, action, payload)`: R-04's decide at the item's version.
+  The queue's own ranking (Jev's blocking-impact factor, P1-13) bumps an item's version
+  a moment after it opens, so `decide` acts on the item's current version, as the review
+  screen does after its live refresh. A test that moves the app to the real clock (the
+  worker-kill tests) would find the signed-in session idle since the fixed clock's time:
+  `decide` keeps the sessions fresh on both clocks first.
 - `count(db, sql, params)`, `status_of(db, table, id)`: owner reads.
 """
 
@@ -21,7 +29,7 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
 from tests._mcp import http_for
-from tumnis.modules.agents.tests.integration._runs import owner_rows, wait_until
+from tumnis.modules.agents.tests.integration._runs import finish, owner_rows, wait_until
 
 if TYPE_CHECKING:
     import httpx
@@ -47,8 +55,38 @@ def human_waits(
         api.configure_human_waits()
 
 
+OPEN_RUNS = ("queued", "running", "waiting_on_human")
+
+
+async def _make_room(world: RunWorld, db: DbUrls) -> None:
+    """While the project already has two open runs, the oldest running one ends with the
+    daemon's `result` (its agent finished), freeing its slot on the `runs` queue."""
+    from tumnis.modules.agents import workflows  # noqa: PLC0415
+
+    def open_runs() -> list[tuple[Any, ...]]:
+        return owner_rows(
+            db,
+            "SELECT r.id, r.status FROM runs r JOIN agent_profiles p ON p.id = r.profile_id"
+            " WHERE p.project_id = %s AND r.status = ANY(%s) ORDER BY r.created_at, r.id",
+            (world.project_id, list(OPEN_RUNS)),
+        )
+
+    while len(found := open_runs()) >= workflows.RUNS_PARTITION_CONCURRENCY:
+        running = [run_id for run_id, status in found if status == "running"]
+        if not running:
+            return  # nothing an agent could finish: the request queues, as in production
+        oldest = running[0]
+        finish(world.runner, oldest)
+        await wait_until(
+            lambda oldest=oldest: (
+                owner_rows(db, "SELECT status FROM runs WHERE id = %s", (oldest,)) != [("running",)]
+            )
+        )
+
+
 async def started(world: RunWorld, db: DbUrls, task_id: uuid.UUID) -> uuid.UUID:
     """Requests a run of the task and waits until the runner has it and it runs."""
+    await _make_room(world, db)
     run_id = await world.request(task_id)
     world.runner.wait_for(lambda r: any(m.run_id == run_id for m in r.runs()))
     await wait_until(
@@ -121,11 +159,42 @@ async def decide(
     *,
     request_id: str | None = None,
 ) -> httpx.Response:
-    body: Json = {"action": action, "version": item["version"]}
+    await _fresh_sessions()
+    [(version,)] = await _owner_read(
+        "SELECT version FROM review_items WHERE id = :id", {"id": item["id"]}
+    )
+    body: Json = {"action": action, "version": version}
     if payload is not None:
         body["payload"] = payload
     headers = {"X-Request-ID": request_id} if request_id else None
     return await http.post(f"/v1/review/{item['id']}/decide", json=body, headers=headers)
+
+
+async def _owner_read(query: str, params: Json) -> list[tuple[Any, ...]]:
+    """An owner read through the app's database (tumnis.core.db, configured by `app`)."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from tumnis.core import db  # noqa: PLC0415
+
+    async with db.owner_sessionmaker()() as s:
+        return [tuple(row) for row in (await s.execute(text(query), params)).all()]
+
+
+async def _fresh_sessions() -> None:
+    """Sessions last used more than a day ago (by the fixed clock) count as used now, so
+    an app on the real clock does not find them idle past 30 days. On the fixed clock a
+    later `last_seen_at` changes nothing (no expiry, no slide)."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from tumnis.core import db  # noqa: PLC0415
+
+    async with db.owner_sessionmaker()() as s, s.begin():
+        await s.execute(
+            text(
+                "UPDATE sessions SET last_seen_at = now(), expires_at = now() + interval '30 days'"
+                " WHERE revoked_at IS NULL AND last_seen_at < now() - interval '1 day'"
+            )
+        )
 
 
 def count(db: DbUrls, query: str, params: tuple[Any, ...] = ()) -> int:
@@ -169,10 +238,11 @@ async def taint(world: RunWorld, task_id: uuid.UUID) -> None:
 
 
 def audit_rows(db: DbUrls, action: str) -> list[Json]:
-    """The audit rows of `action`, oldest first."""
+    """The audit rows of `action`, oldest first (ids as text, as the API reports them)."""
     found = owner_rows(
         db,
-        "SELECT actor_type, actor_id, target_type, target_id, reason, correlation_id, details"
+        "SELECT actor_type, actor_id::text, target_type, target_id::text, reason,"
+        " correlation_id, details"
         " FROM audit_log WHERE action = %s ORDER BY seq",
         (action,),
     )

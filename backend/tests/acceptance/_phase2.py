@@ -390,9 +390,15 @@ def _outcome(response: Any) -> Outcome:
 async def tool(runner: FakeRunner, token: str, name: str, args: Json) -> Outcome:
     """One MCP `tools/call` with the bearer `token` (a task token or a key), sent the way
     an agent sends it: a JSON-RPC POST to `/mcp` through the runner's TestClient, on a
-    thread (a long poll must not hold the test's loop)."""
+    thread (a long poll must not hold the test's loop). A write op's arguments carry an
+    `idempotency_key` (every MCP write needs one, P2-01) unless the caller gave one."""
     from tests._mcp import MCP_ACCEPT, MCP_PATH  # noqa: PLC0415
+    from tumnis.core import agent_surface  # noqa: PLC0415
+    from tumnis.wiring import load_mcp  # noqa: PLC0415
 
+    load_mcp()
+    if agent_surface.get_op(name).write and "idempotency_key" not in args:
+        args = {**args, "idempotency_key": f"agent-{uuid.uuid4()}"}
     message = {
         "jsonrpc": "2.0",
         "id": str(uuid.uuid4()),

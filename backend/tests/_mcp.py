@@ -78,8 +78,22 @@ async def mcp_running(app: FastAPI) -> AsyncIterator[None]:
 
     The manager runs in a task of its own: its anyio task group must be entered and left
     by one task, and pytest-asyncio may tear an async fixture down in another task than
-    the one that set it up."""
+    the one that set it up.
+
+    A manager runs once. When the app's lifespan already ran it (a `TestClient` entered
+    the app, as the fake runner's does, on its own event loop), a fresh manager serves
+    this block on the test's loop and the app's own is put back afterwards."""
+    from tumnis.core import mcp_server  # noqa: PLC0415
+
     manager = app.state.mcp_session_manager
+    if getattr(manager, "_has_started", False):  # the SDK's single-use flag (mcp 1.30)
+        app.state.mcp_session_manager = mcp_server.session_manager()
+        try:
+            async with mcp_running(app):
+                yield
+        finally:
+            app.state.mcp_session_manager = manager
+        return
     started, stop = asyncio.Event(), asyncio.Event()
 
     async def run() -> None:
