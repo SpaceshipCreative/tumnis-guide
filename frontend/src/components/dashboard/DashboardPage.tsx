@@ -9,10 +9,12 @@ import { useLayoutEffect, useRef } from "react";
 
 import { ActivityFeed } from "./ActivityFeed";
 import { CalendarStrip } from "./CalendarStrip";
+import { FitOfferList } from "./FitOfferRow";
 import { formatToday, localDay } from "./format";
 import { ProjectCardGrid } from "./ProjectCardGrid";
 import {
   deployStatusQuery,
+  planQuery,
   projectsQuery,
   reviewCountQuery,
   todayQuery,
@@ -48,6 +50,14 @@ export function DashboardPage() {
   const workspace = useQuery(workspaceQuery());
   const deployStatus = useQuery(deployStatusQuery());
   const timeZone = workspace.data?.timezone ?? deviceTimeZone();
+  // The day's plan is read for the workspace's own day, once its zone is known (P1-11).
+  const planDay = workspace.data
+    ? localDay(new Date(), workspace.data.timezone)
+    : undefined;
+  const plan = useQuery({
+    ...planQuery(planDay ?? ""),
+    enabled: planDay !== undefined,
+  });
 
   const allProjects = projects.data?.items ?? [];
   const projectNames = Object.fromEntries(
@@ -79,19 +89,23 @@ export function DashboardPage() {
       </header>
       <div className="flex flex-col gap-6 md:grid md:min-h-0 md:flex-1 md:grid-cols-12">
         <div className="flex min-h-0 flex-col gap-4 md:col-span-5">
-          {workspace.data && (
-            <CalendarStrip
-              day={localDay(new Date(), workspace.data.timezone)}
-            />
-          )}
+          {planDay !== undefined && <CalendarStrip day={planDay} />}
           <TodayPanel
             items={today.data?.items ?? []}
             total={today.data?.total ?? 0}
             projectNames={projectNames}
             unavailable={today.isError}
             pending={today.isPending}
+            {...(planDay === undefined ? {} : { planDay })}
             className="md:flex-1"
           />
+          {plan.data && (
+            <FitOfferList
+              issues={plan.data.issues}
+              day={plan.data.day}
+              className="shrink-0"
+            />
+          )}
           <ActivityFeed />
         </div>
         <ProjectCardGrid

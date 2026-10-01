@@ -5,8 +5,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import * as z from "zod";
 
 import { DashboardPage } from "../components/dashboard/DashboardPage";
+import { localDay } from "../components/dashboard/format";
 import {
   deployStatusQuery,
+  planQuery,
   projectsQuery,
   reviewCountQuery,
   todayQuery,
@@ -30,7 +32,16 @@ export const Route = createFileRoute("/")({
       loaderRead(queryClient, projectsQuery()),
       loaderRead(queryClient, todayQuery()),
       loaderRead(queryClient, reviewCountQuery()),
-      loaderRead(queryClient, workspaceQuery()),
+      // The day's plan (P1-11) is read for the workspace's own day, once its zone is in.
+      loaderRead(queryClient, workspaceQuery()).then(() => {
+        const workspace = queryClient.getQueryData(workspaceQuery().queryKey);
+        return workspace
+          ? loaderRead(
+              queryClient,
+              planQuery(localDay(new Date(), workspace.timezone)),
+            )
+          : undefined;
+      }),
       loaderRead(queryClient, deployStatusQuery()),
     ]);
   },

@@ -68,9 +68,18 @@ import {
   knowledgeUpdateDocument,
   knowledgeUploadDocument,
   type Options,
+  planningAcceptAll,
+  planningAcceptItem,
+  planningGetAlternates,
   planningGetDayCalendar,
+  planningGetPlan,
   planningGetProjectWeek,
+  planningMoveIssue,
+  planningRemoveItem,
+  planningReplan,
   planningSchedulePlanItem,
+  planningSplitIssue,
+  planningSwapItem,
   projectsArchiveProject,
   projectsCreateProject,
   projectsGetProject,
@@ -285,15 +294,42 @@ import type {
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentError,
   KnowledgeUploadDocumentResponse,
+  PlanningAcceptAllData,
+  PlanningAcceptAllError,
+  PlanningAcceptAllResponse,
+  PlanningAcceptItemData,
+  PlanningAcceptItemError,
+  PlanningAcceptItemResponse,
+  PlanningGetAlternatesData,
+  PlanningGetAlternatesError,
+  PlanningGetAlternatesResponse,
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarError,
   PlanningGetDayCalendarResponse,
+  PlanningGetPlanData,
+  PlanningGetPlanError,
+  PlanningGetPlanResponse,
   PlanningGetProjectWeekData,
   PlanningGetProjectWeekError,
   PlanningGetProjectWeekResponse,
+  PlanningMoveIssueData,
+  PlanningMoveIssueError,
+  PlanningMoveIssueResponse,
+  PlanningRemoveItemData,
+  PlanningRemoveItemError,
+  PlanningRemoveItemResponse,
+  PlanningReplanData,
+  PlanningReplanError,
+  PlanningReplanResponse,
   PlanningSchedulePlanItemData,
   PlanningSchedulePlanItemError,
   PlanningSchedulePlanItemResponse,
+  PlanningSplitIssueData,
+  PlanningSplitIssueError,
+  PlanningSplitIssueResponse,
+  PlanningSwapItemData,
+  PlanningSwapItemError,
+  PlanningSwapItemResponse,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectError,
   ProjectsArchiveProjectResponse,
@@ -2015,6 +2051,33 @@ export const knowledgeSetProjectFolderMutation = (
   return mutationOptions;
 };
 
+/**
+ * Replan
+ */
+export const planningReplanMutation = (
+  options?: Partial<Options<PlanningReplanData>>,
+): UseMutationOptions<
+  PlanningReplanResponse,
+  PlanningReplanError,
+  Options<PlanningReplanData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningReplanResponse,
+    PlanningReplanError,
+    Options<PlanningReplanData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningReplan({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const planningGetProjectWeekQueryKey = (
   options: Options<PlanningGetProjectWeekData>,
 ) => createQueryKey("planningGetProjectWeek", options);
@@ -2041,6 +2104,87 @@ export const planningGetProjectWeekOptions = (
       return data;
     },
     queryKey: planningGetProjectWeekQueryKey(options),
+  });
+
+export const planningGetPlanQueryKey = (
+  options: Options<PlanningGetPlanData>,
+) => createQueryKey("planningGetPlan", options);
+
+/**
+ * Get Plan
+ */
+export const planningGetPlanOptions = (options: Options<PlanningGetPlanData>) =>
+  queryOptions<
+    PlanningGetPlanResponse,
+    PlanningGetPlanError,
+    PlanningGetPlanResponse,
+    ReturnType<typeof planningGetPlanQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await planningGetPlan({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: planningGetPlanQueryKey(options),
+  });
+
+/**
+ * Accept All
+ */
+export const planningAcceptAllMutation = (
+  options?: Partial<Options<PlanningAcceptAllData>>,
+): UseMutationOptions<
+  PlanningAcceptAllResponse,
+  PlanningAcceptAllError,
+  Options<PlanningAcceptAllData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningAcceptAllResponse,
+    PlanningAcceptAllError,
+    Options<PlanningAcceptAllData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningAcceptAll({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const planningGetAlternatesQueryKey = (
+  options: Options<PlanningGetAlternatesData>,
+) => createQueryKey("planningGetAlternates", options);
+
+/**
+ * Get Alternates
+ */
+export const planningGetAlternatesOptions = (
+  options: Options<PlanningGetAlternatesData>,
+) =>
+  queryOptions<
+    PlanningGetAlternatesResponse,
+    PlanningGetAlternatesError,
+    PlanningGetAlternatesResponse,
+    ReturnType<typeof planningGetAlternatesQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await planningGetAlternates({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: planningGetAlternatesQueryKey(options),
   });
 
 export const planningGetDayCalendarQueryKey = (
@@ -2072,6 +2216,60 @@ export const planningGetDayCalendarOptions = (
   });
 
 /**
+ * Move Issue
+ */
+export const planningMoveIssueMutation = (
+  options?: Partial<Options<PlanningMoveIssueData>>,
+): UseMutationOptions<
+  PlanningMoveIssueResponse,
+  PlanningMoveIssueError,
+  Options<PlanningMoveIssueData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningMoveIssueResponse,
+    PlanningMoveIssueError,
+    Options<PlanningMoveIssueData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningMoveIssue({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Split Issue
+ */
+export const planningSplitIssueMutation = (
+  options?: Partial<Options<PlanningSplitIssueData>>,
+): UseMutationOptions<
+  PlanningSplitIssueResponse,
+  PlanningSplitIssueError,
+  Options<PlanningSplitIssueData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningSplitIssueResponse,
+    PlanningSplitIssueError,
+    Options<PlanningSplitIssueData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningSplitIssue({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Schedule Plan Item
  */
 export const planningSchedulePlanItemMutation = (
@@ -2088,6 +2286,87 @@ export const planningSchedulePlanItemMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await planningSchedulePlanItem({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Accept Item
+ */
+export const planningAcceptItemMutation = (
+  options?: Partial<Options<PlanningAcceptItemData>>,
+): UseMutationOptions<
+  PlanningAcceptItemResponse,
+  PlanningAcceptItemError,
+  Options<PlanningAcceptItemData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningAcceptItemResponse,
+    PlanningAcceptItemError,
+    Options<PlanningAcceptItemData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningAcceptItem({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Remove Item
+ */
+export const planningRemoveItemMutation = (
+  options?: Partial<Options<PlanningRemoveItemData>>,
+): UseMutationOptions<
+  PlanningRemoveItemResponse,
+  PlanningRemoveItemError,
+  Options<PlanningRemoveItemData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningRemoveItemResponse,
+    PlanningRemoveItemError,
+    Options<PlanningRemoveItemData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningRemoveItem({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Swap Item
+ */
+export const planningSwapItemMutation = (
+  options?: Partial<Options<PlanningSwapItemData>>,
+): UseMutationOptions<
+  PlanningSwapItemResponse,
+  PlanningSwapItemError,
+  Options<PlanningSwapItemData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningSwapItemResponse,
+    PlanningSwapItemError,
+    Options<PlanningSwapItemData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningSwapItem({
         ...options,
         ...fnOptions,
         throwOnError: true,

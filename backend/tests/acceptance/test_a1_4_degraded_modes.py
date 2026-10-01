@@ -71,7 +71,6 @@ def _fallback_key(task: dict[str, Any]) -> tuple[str, int, int, str]:
 
 
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_master_offline_falls_back_to_due_date_order(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,

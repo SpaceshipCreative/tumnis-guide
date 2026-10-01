@@ -444,8 +444,12 @@ async def load_fixture(db: DbUrls, clock: FixedClock) -> SeedResult:
 
 @pytest.fixture(scope="session")
 def dbos_sys_db(pg_container: PostgresContainer, pg_base: DbUrls, worker_id: str) -> DbUrls:
-    """One DBOS system database per xdist worker, owned by the app role."""
+    """One DBOS system database per xdist worker, owned by the app role, with DBOS's tables
+    made up front: a route that enqueues through the api's DBOSClient (which never
+    migrates) works whether or not an earlier test on the worker launched DBOS, as in a
+    deployment whose worker has started (P1-11: `POST /v1/plan/replan` in the A0.3 sweep)."""
     import psycopg  # noqa: PLC0415
+    from dbos import run_dbos_database_migrations  # noqa: PLC0415
     from psycopg import sql  # noqa: PLC0415
 
     name = f"tumnis_dbos_{worker_id}"
@@ -453,7 +457,9 @@ def dbos_sys_db(pg_container: PostgresContainer, pg_base: DbUrls, worker_id: str
         conn.execute(
             sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(name), sql.Identifier(APP))
         )
-    return DbUrls(pg_base.host, pg_base.port, name)
+    urls = DbUrls(pg_base.host, pg_base.port, name)
+    run_dbos_database_migrations(urls.url(APP))
+    return urls
 
 
 @pytest.fixture
