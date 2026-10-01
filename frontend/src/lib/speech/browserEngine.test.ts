@@ -30,7 +30,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test.fails("[P4-03][FR-11.7] T-P4-03-04 uses speechSynthesis", async () => {
+test("[P4-03][FR-11.7] T-P4-03-04 uses speechSynthesis", async () => {
   const spoken: FakeUtterance[] = [];
   const synth = {
     speak: vi.fn((utterance: FakeUtterance) => {
