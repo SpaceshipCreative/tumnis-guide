@@ -36,6 +36,8 @@ export function useNoteSave(
   // Read through a call: a change typed while a save is in flight sets it meanwhile.
   const queued = (): boolean => pending.current !== null;
   const inFlight = useRef(false);
+  // The editor closed while a save was in flight: if that save fails, it is sent once more.
+  const closedInFlight = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSaved = useRef(opts.onSaved);
   onSaved.current = opts.onSaved;
@@ -79,7 +81,11 @@ export function useNoteSave(
     } finally {
       inFlight.current = false;
       // A failed save is not retried at once: that would loop while the server fails.
-      if (!failed && queued()) void flush();
+      // Only when the editor closed meanwhile does it go out once more, its last chance.
+      if (queued() && (!failed || closedInFlight.current)) {
+        closedInFlight.current = false;
+        void flush();
+      }
     }
   }, [doc.id]);
 
@@ -97,6 +103,7 @@ export function useNoteSave(
   // A change still waiting when the editor closes goes out then.
   useEffect(
     () => () => {
+      closedInFlight.current = inFlight.current;
       if (pending.current !== null) void flush();
     },
     [flush],
