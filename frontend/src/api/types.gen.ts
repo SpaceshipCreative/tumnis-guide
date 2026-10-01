@@ -1027,6 +1027,112 @@ export type FitOffer = {
 };
 
 /**
+ * FocusCurrentOut
+ *
+ * What the focus bar shows: the level in force, the open session and today's
+ * messages, oldest first.
+ */
+export type FocusCurrentOut = {
+  /**
+   * Level
+   */
+  level: "quiet" | "nudge" | "coach" | "guardrail";
+  /**
+   * Messages
+   */
+  messages: Array<FocusMessageOut>;
+  /**
+   * Override Level
+   */
+  override_level: "quiet" | "nudge" | "coach" | "guardrail" | null;
+  session: FocusSessionOut | null;
+  /**
+   * Workspace Level
+   */
+  workspace_level: "quiet" | "nudge" | "coach" | "guardrail";
+};
+
+/**
+ * FocusMessageOut
+ */
+export type FocusMessageOut = {
+  /**
+   * Fired At
+   */
+  fired_at: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Kind
+   */
+  kind:
+    | "block_start"
+    | "not_started"
+    | "check_in_due"
+    | "switched"
+    | "stuck"
+    | "block_end"
+    | "day_end";
+  /**
+   * Level
+   */
+  level: "quiet" | "nudge" | "coach" | "guardrail";
+  /**
+   * Message
+   */
+  message: string;
+  /**
+   * Response
+   */
+  response:
+    "still_on_it" | "switched" | "stuck" | "snooze" | "less_of_this" | null;
+  /**
+   * Rule
+   */
+  rule: string;
+  /**
+   * Task Id
+   */
+  task_id: string | null;
+};
+
+/**
+ * FocusSessionOut
+ */
+export type FocusSessionOut = {
+  /**
+   * Cadence Min
+   */
+  cadence_min: number;
+  /**
+   * Doubled
+   */
+  doubled: boolean;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Next Check In At
+   */
+  next_check_in_at: string | null;
+  /**
+   * Started At
+   */
+  started_at: string;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Title
+   */
+  title: string;
+};
+
+/**
  * FolderIn
  */
 export type FolderIn = {
@@ -1326,6 +1432,26 @@ export type LastDeployOut = {
    * Status
    */
   status: string;
+};
+
+/**
+ * LessIn
+ */
+export type LessIn = {
+  /**
+   * Event Id
+   */
+  event_id?: string | null;
+};
+
+/**
+ * LevelIn
+ */
+export type LevelIn = {
+  /**
+   * Level
+   */
+  level: "quiet" | "nudge" | "coach" | "guardrail";
 };
 
 /**
@@ -2644,6 +2770,10 @@ export type ProjectOut = {
    */
   deadline?: string | null;
   /**
+   * Focus Cadence Min
+   */
+  focus_cadence_min?: number | null;
+  /**
    * Goal
    */
   goal?: string | null;
@@ -2725,6 +2855,10 @@ export type ProjectPatch = {
    * Deadline
    */
   deadline?: string | null;
+  /**
+   * Focus Cadence Min
+   */
+  focus_cadence_min?: number | null;
   /**
    * Goal
    */
@@ -3040,6 +3174,24 @@ export type RequestApprovalBody = {
    * Target
    */
   target?: string | null;
+};
+
+/**
+ * RespondIn
+ */
+export type RespondIn = {
+  /**
+   * Event Id
+   */
+  event_id: string;
+  /**
+   * Response
+   */
+  response: "still_on_it" | "switched" | "stuck" | "snooze" | "less_of_this";
+  /**
+   * To Task Id
+   */
+  to_task_id?: string | null;
 };
 
 /**
@@ -6795,6 +6947,222 @@ export type KnowledgeGetFileResponses = {
 
 export type KnowledgeGetFileResponse =
   KnowledgeGetFileResponses[keyof KnowledgeGetFileResponses];
+
+export type FocusGetCurrentData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/focus/current";
+};
+
+export type FocusGetCurrentErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type FocusGetCurrentError =
+  FocusGetCurrentErrors[keyof FocusGetCurrentErrors];
+
+export type FocusGetCurrentResponses = {
+  /**
+   * Successful Response
+   */
+  200: FocusCurrentOut;
+};
+
+export type FocusGetCurrentResponse =
+  FocusGetCurrentResponses[keyof FocusGetCurrentResponses];
+
+export type FocusLessData = {
+  body: LessIn;
+  path?: never;
+  query?: never;
+  url: "/v1/focus/less";
+};
+
+export type FocusLessErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type FocusLessError = FocusLessErrors[keyof FocusLessErrors];
+
+export type FocusLessResponses = {
+  /**
+   * Successful Response
+   */
+  200: FocusCurrentOut;
+};
+
+export type FocusLessResponse = FocusLessResponses[keyof FocusLessResponses];
+
+export type FocusPutLevelData = {
+  body: LevelIn;
+  path?: never;
+  query?: never;
+  url: "/v1/focus/level";
+};
+
+export type FocusPutLevelErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type FocusPutLevelError = FocusPutLevelErrors[keyof FocusPutLevelErrors];
+
+export type FocusPutLevelResponses = {
+  /**
+   * Successful Response
+   */
+  200: FocusCurrentOut;
+};
+
+export type FocusPutLevelResponse =
+  FocusPutLevelResponses[keyof FocusPutLevelResponses];
+
+export type FocusRespondData = {
+  body: RespondIn;
+  path?: never;
+  query?: never;
+  url: "/v1/focus/respond";
+};
+
+export type FocusRespondErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type FocusRespondError = FocusRespondErrors[keyof FocusRespondErrors];
+
+export type FocusRespondResponses = {
+  /**
+   * Successful Response
+   */
+  200: FocusCurrentOut;
+};
+
+export type FocusRespondResponse =
+  FocusRespondResponses[keyof FocusRespondResponses];
 
 export type GithubWebhookData = {
   body?: never;
