@@ -1,10 +1,12 @@
 // Swap one plan item for another task (P1-11, J1): a dialog listing what the day can
 // bring in instead (`GET /v1/plan/{day}/alternates`, read when it opens). Picking one
-// swaps it in at the same place; Escape or Cancel closes it with nothing changed.
+// swaps it in at the same place; Escape or Cancel closes it with nothing changed. Tab
+// stays inside the dialog, and focus goes back to what opened it when it closes.
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef } from "react";
 
 import type { AlternateOut } from "../../api/types.gen";
+import { dialogKeyDown } from "../../lib/focusTrap";
 import { LABEL_TEXT, type Label } from "../common/LabelChip";
 import {
   BUTTON_SECONDARY,
@@ -43,8 +45,16 @@ export function SwapPicker({
   const titleId = useId();
   const alternates = useQuery(alternatesQuery(day));
   const cancel = useRef<HTMLButtonElement>(null);
+  // Focus moves into the dialog and, when it closes, back to what opened it.
   useEffect(() => {
+    const opener =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     cancel.current?.focus();
+    return () => {
+      opener?.focus();
+    };
   }, []);
   const items = alternates.data ?? [];
   return (
@@ -55,7 +65,8 @@ export function SwapPicker({
         aria-labelledby={titleId}
         className={DIALOG_PANEL}
         onKeyDown={(event) => {
-          if (event.key === "Escape") onClose();
+          // Tab stays inside the dialog; Escape closes it (lib/focusTrap).
+          dialogKeyDown(event, onClose);
         }}
       >
         <h3 id={titleId} className={DIALOG_TITLE}>
