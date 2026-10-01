@@ -5,16 +5,16 @@ suite: hostile
 version: 1
 meta: {"test_id": "T-P2-11-01", "req": ["SAF-6"], "wp": "P2-11", "acceptance": "A2.7", "xfail": "spec:P2-11"}
 runs:
-  - {case: email-001-direct-instruction, twin: email-001-benign, skill: focus, profile: master, smoke: false, digest: f607a717d6b2150a}
-  - {case: email-001-direct-instruction, twin: email-001-benign, skill: orchestrate-master, profile: master, smoke: false, digest: f607a717d6b2150a}
-  - {case: email-001-direct-instruction, twin: email-001-benign, skill: plan, profile: master, smoke: false, digest: f607a717d6b2150a}
-  - {case: email-001-direct-instruction, twin: email-001-benign, skill: relay, profile: master, smoke: false, digest: f607a717d6b2150a}
-  - {case: email-001-direct-instruction, twin: email-001-benign, skill: workspace-digest, profile: master, smoke: false, digest: f607a717d6b2150a}
-  - {case: email-001-direct-instruction, twin: email-001-benign, skill: coding, profile: project-template, smoke: false, digest: f607a717d6b2150a}
-  - {case: email-001-direct-instruction, twin: email-001-benign, skill: enrich, profile: project-template, smoke: false, digest: f607a717d6b2150a}
-  - {case: email-001-direct-instruction, twin: email-001-benign, skill: gated-actions, profile: project-template, smoke: false, digest: f607a717d6b2150a}
-  - {case: email-001-direct-instruction, twin: email-001-benign, skill: orchestrate, profile: project-template, smoke: false, digest: f607a717d6b2150a}
-  - {case: email-001-direct-instruction, twin: email-001-benign, skill: project-digest, profile: project-template, smoke: false, digest: f607a717d6b2150a}
+  - {case: email-001-direct-instruction, twin: email-001-benign, skill: focus, profile: master, smoke: false, digest: 965ff237f49a81ee}
+  - {case: email-001-direct-instruction, twin: email-001-benign, skill: orchestrate-master, profile: master, smoke: false, digest: 965ff237f49a81ee}
+  - {case: email-001-direct-instruction, twin: email-001-benign, skill: plan, profile: master, smoke: false, digest: 965ff237f49a81ee}
+  - {case: email-001-direct-instruction, twin: email-001-benign, skill: relay, profile: master, smoke: false, digest: 965ff237f49a81ee}
+  - {case: email-001-direct-instruction, twin: email-001-benign, skill: workspace-digest, profile: master, smoke: false, digest: 965ff237f49a81ee}
+  - {case: email-001-direct-instruction, twin: email-001-benign, skill: coding, profile: project-template, smoke: false, digest: 965ff237f49a81ee}
+  - {case: email-001-direct-instruction, twin: email-001-benign, skill: enrich, profile: project-template, smoke: false, digest: 965ff237f49a81ee}
+  - {case: email-001-direct-instruction, twin: email-001-benign, skill: gated-actions, profile: project-template, smoke: false, digest: 965ff237f49a81ee}
+  - {case: email-001-direct-instruction, twin: email-001-benign, skill: orchestrate, profile: project-template, smoke: false, digest: 965ff237f49a81ee}
+  - {case: email-001-direct-instruction, twin: email-001-benign, skill: project-digest, profile: project-template, smoke: false, digest: 965ff237f49a81ee}
   - {case: email-002-fake-system-block, twin: email-002-benign, skill: focus, profile: master, smoke: true, digest: 500f1cbee2bf10c1}
   - {case: email-002-fake-system-block, twin: email-002-benign, skill: orchestrate-master, profile: master, smoke: true, digest: 500f1cbee2bf10c1}
   - {case: email-002-fake-system-block, twin: email-002-benign, skill: plan, profile: master, smoke: true, digest: 500f1cbee2bf10c1}
@@ -145,16 +145,16 @@ runs:
   - {case: document-014-hidden-text, twin: document-014-benign, skill: gated-actions, profile: project-template, smoke: true, digest: 70d37426b3ec32e9}
   - {case: document-014-hidden-text, twin: document-014-benign, skill: orchestrate, profile: project-template, smoke: true, digest: 70d37426b3ec32e9}
   - {case: document-014-hidden-text, twin: document-014-benign, skill: project-digest, profile: project-template, smoke: true, digest: 70d37426b3ec32e9}
-  - {case: document-015-encoded-payload, twin: document-015-benign, skill: focus, profile: master, smoke: false, digest: 0bbb28b1c2050942}
-  - {case: document-015-encoded-payload, twin: document-015-benign, skill: orchestrate-master, profile: master, smoke: false, digest: 0bbb28b1c2050942}
-  - {case: document-015-encoded-payload, twin: document-015-benign, skill: plan, profile: master, smoke: false, digest: 0bbb28b1c2050942}
-  - {case: document-015-encoded-payload, twin: document-015-benign, skill: relay, profile: master, smoke: false, digest: 0bbb28b1c2050942}
-  - {case: document-015-encoded-payload, twin: document-015-benign, skill: workspace-digest, profile: master, smoke: false, digest: 0bbb28b1c2050942}
-  - {case: document-015-encoded-payload, twin: document-015-benign, skill: coding, profile: project-template, smoke: false, digest: 0bbb28b1c2050942}
-  - {case: document-015-encoded-payload, twin: document-015-benign, skill: enrich, profile: project-template, smoke: false, digest: 0bbb28b1c2050942}
-  - {case: document-015-encoded-payload, twin: document-015-benign, skill: gated-actions, profile: project-template, smoke: false, digest: 0bbb28b1c2050942}
-  - {case: document-015-encoded-payload, twin: document-015-benign, skill: orchestrate, profile: project-template, smoke: false, digest: 0bbb28b1c2050942}
-  - {case: document-015-encoded-payload, twin: document-015-benign, skill: project-digest, profile: project-template, smoke: false, digest: 0bbb28b1c2050942}
+  - {case: document-015-encoded-payload, twin: document-015-benign, skill: focus, profile: master, smoke: false, digest: 525f23c4d0916639}
+  - {case: document-015-encoded-payload, twin: document-015-benign, skill: orchestrate-master, profile: master, smoke: false, digest: 525f23c4d0916639}
+  - {case: document-015-encoded-payload, twin: document-015-benign, skill: plan, profile: master, smoke: false, digest: 525f23c4d0916639}
+  - {case: document-015-encoded-payload, twin: document-015-benign, skill: relay, profile: master, smoke: false, digest: 525f23c4d0916639}
+  - {case: document-015-encoded-payload, twin: document-015-benign, skill: workspace-digest, profile: master, smoke: false, digest: 525f23c4d0916639}
+  - {case: document-015-encoded-payload, twin: document-015-benign, skill: coding, profile: project-template, smoke: false, digest: 525f23c4d0916639}
+  - {case: document-015-encoded-payload, twin: document-015-benign, skill: enrich, profile: project-template, smoke: false, digest: 525f23c4d0916639}
+  - {case: document-015-encoded-payload, twin: document-015-benign, skill: gated-actions, profile: project-template, smoke: false, digest: 525f23c4d0916639}
+  - {case: document-015-encoded-payload, twin: document-015-benign, skill: orchestrate, profile: project-template, smoke: false, digest: 525f23c4d0916639}
+  - {case: document-015-encoded-payload, twin: document-015-benign, skill: project-digest, profile: project-template, smoke: false, digest: 525f23c4d0916639}
   - {case: document-016-fake-policy, twin: document-016-benign, skill: focus, profile: master, smoke: false, digest: 3e3ef643f5b5322b}
   - {case: document-016-fake-policy, twin: document-016-benign, skill: orchestrate-master, profile: master, smoke: false, digest: 3e3ef643f5b5322b}
   - {case: document-016-fake-policy, twin: document-016-benign, skill: plan, profile: master, smoke: false, digest: 3e3ef643f5b5322b}
