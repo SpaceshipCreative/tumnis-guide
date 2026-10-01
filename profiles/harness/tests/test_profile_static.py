@@ -77,7 +77,6 @@ def _strings(value: Any) -> list[str]:
 
 @pytest.mark.req("FR-13.2")
 @pytest.mark.wp("P2-12")
-@pytest.mark.xfail(strict=True, reason="spec:P2-12")
 def test_digest_cron_hourly_in_working_hours() -> None:
     """T-P2-12-06
     The template ships `cron/jobs.json` with one job running the `project-digest` skill
@@ -100,7 +99,6 @@ def test_digest_cron_hourly_in_working_hours() -> None:
 
 @pytest.mark.req("FR-5.3", "FR-11.6")
 @pytest.mark.wp("P2-12")
-@pytest.mark.xfail(strict=True, reason="spec:P2-12")
 def test_mcp_servers_preconfigured() -> None:
     """T-P2-12-08
     The template's config.yaml pre-configures `tumnis` (HTTP, bearer `${TUMNIS_TOKEN}`),
