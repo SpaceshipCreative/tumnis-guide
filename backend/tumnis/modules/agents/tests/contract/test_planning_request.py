@@ -64,7 +64,6 @@ def _task(n: int, project: UUID) -> Any:
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 def test_planning_request_validates_and_includes_registry(repo_root: Path) -> None:
     """T-P1-11-19
     The built request validates against the planning request schema (version 1), carries the
