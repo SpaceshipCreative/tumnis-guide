@@ -31,6 +31,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, Request
+from starlette.convertors import Convertor, register_url_convertor
 
 from tumnis.core.audit_router import require_session
 from tumnis.core.clock import Clock
@@ -39,6 +40,23 @@ from tumnis.core.idempotency import SessionDep
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.modules.planning import api
+
+
+class _IsoDay(Convertor[str]):
+    """A `YYYY-MM-DD` path segment, left as text for FastAPI to parse into a `date`. `GET
+    /{day:isoday}` then never claims `/replan`, so a request there that is not a POST
+    answers 405 with `Allow: POST` only."""
+
+    regex = "[0-9]{4}-[0-9]{2}-[0-9]{2}"
+
+    def convert(self, value: str) -> str:
+        return value
+
+    def to_string(self, value: str) -> str:
+        return value
+
+
+register_url_convertor("isoday", _IsoDay())
 
 router = v1_router("planning", prefix="/plan", tags=["planning"])
 settings_router = v1_router("planning", prefix="/settings", tags=["settings"])
@@ -90,7 +108,7 @@ async def replan(body: api.ReplanIn, request: Request, ctx: Session) -> api.Repl
     return await api.request_replan(ctx, body, now=_clock(request).now())
 
 
-@router.get("/{day}")
+@router.get("/{day:isoday}")
 @route_policy(RoutePolicy(auth="session"))
 async def get_plan(day: date, ctx: Session) -> api.PlanOut:
     return await api.get_plan(ctx, day)
