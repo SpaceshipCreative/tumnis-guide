@@ -116,6 +116,7 @@ from tumnis.modules.auth import api as auth
 from tumnis.modules.knowledge import api as knowledge
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
+from tumnis.seed import AgentSeed, RunnerSeed, SeedWriterUnavailableError, register_seed_writer
 
 if TYPE_CHECKING:
     from dbos import DBOSClient
@@ -1944,3 +1945,74 @@ async def finished_runs(s: AsyncSession, start: datetime, end: datetime) -> list
         )
         for row in rows
     ]
+
+
+# --- Seed writers (the acceptance seed, Scott decision 37) -----------------------------------
+
+
+def _seed_ctx(workspace_id: UUID) -> WorkspaceContext:
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    return WorkspaceContext(workspace_id, SYSTEM_ACTOR)
+
+
+def _seed_secrets_ready() -> None:
+    """A runner's device token and an agent's key are HMACs with the pepper: without one
+    the record is skipped (SeedWriterUnavailableError), like the seed user without a
+    master key."""
+    from tumnis.core import crypto  # noqa: PLC0415
+
+    try:
+        crypto.peppers()
+    except crypto.MasterKeyError as exc:
+        raise SeedWriterUnavailableError(f"seed runner or agent not stored: {exc}") from exc
+
+
+async def seed_runner(workspace_id: UUID, rec: RunnerSeed) -> UUID:
+    """A seed runner, made the way Settings makes one. Its device token (shown once) is
+    dropped: a test that connects as the runner rotates it (tests/fakes/fake_runner.py)."""
+    from tumnis.core.clock import SystemClock  # noqa: PLC0415
+
+    _seed_secrets_ready()
+    ctx = _seed_ctx(workspace_id)
+    async with tenant_session(ctx) as s:
+        created = await create_runner(ctx, s, RunnerIn(name=rec.name), now=SystemClock().now())
+    return created.id
+
+
+async def seed_agent(
+    workspace_id: UUID, runner_id: UUID | None, project_id: UUID | None, rec: AgentSeed
+) -> UUID:
+    """A seed agent profile on its runner (transport `daemon`). A project agent is written
+    provisioned (`ready`), so the `project.created` relay of its project leaves it alone
+    (P1-06). With `key_scopes`, a key of those scopes is made and linked as the key the
+    profile's runs issue task tokens from (P2-02); the key is generated here, never read
+    from the seed file."""
+    from tumnis.core.clock import SystemClock  # noqa: PLC0415
+
+    _seed_secrets_ready()
+    ctx, now = _seed_ctx(workspace_id), SystemClock().now()
+    body = ProfileIn(
+        name=rec.name,
+        role=rec.role,
+        transport="daemon",
+        runner_id=runner_id,
+        project_id=project_id,
+    )
+    async with tenant_session(ctx) as s:
+        profile = await register_profile(s, body, now=now)
+        if rec.role == "project":
+            await s.execute(
+                update(_profiles).where(_profiles.c.id == profile.id).values(status="ready")
+            )
+            mark_changed(s, LIVE_PROFILE, profile.id)
+    if rec.key_scopes:
+        key = await auth.create_key(
+            ctx, auth.KeyIn(name=f"{rec.name} key", scopes=list(rec.key_scopes)), now=now
+        )
+        await set_profile_key(ctx, profile.id, key.id, now=now)
+    return profile.id
+
+
+register_seed_writer("runner", seed_runner)
+register_seed_writer("agent", seed_agent)

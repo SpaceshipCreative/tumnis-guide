@@ -2,11 +2,15 @@
 
 A seed set is one YAML file or a folder of them; each document carries `schema_version: 1`
 and any of the sections `workspace`, `users`, `projects` (tasks nested, subtasks under
-tasks), `day` + `events`, `documents`. Dates are offsets from an anchor day (`+21d`,
-`-3d`) and event times are wall-clock times in the workspace timezone, so the set is the
-same whichever day it loads. Records reach a `SeedSink`: `InMemorySink` for tests,
-`DatabaseSink` for `tumnis seed`, which writes through each module's api as the entity
-writers register (projects P0-17, tasks P0-18, events P0-12, documents P0-17).
+tasks, a task's context `links` under it), `day` + `events`, `documents`, `runners` and
+`agents` (agent profiles, each with the scopes of the key its runs issue task tokens
+from). Dates are offsets from an anchor day (`+21d`, `-3d`) and event times are wall-clock
+times in the workspace timezone, so the set is the same whichever day it loads. Records
+reach a `SeedSink`: `InMemorySink` for tests, `DatabaseSink` for `tumnis seed`, which
+writes through each module's api as the entity writers register (projects P0-17, tasks
+P0-18, events P0-12, documents P0-17; runners, agents and links with the acceptance seed,
+Scott decision 37). No secret is stored in a seed file: a runner's device token and an
+agent's key are generated when the set loads.
 """
 
 from __future__ import annotations
@@ -36,6 +40,8 @@ class SeedSet(StrEnum):
     seed = "seed"
     load = "load"
     ten_projects = "ten_projects"  # the seed plus seven projects (P0-23's dashboard layout)
+    # The seed user with the rows the phase 1 and 2 acceptance journeys name (decision 37).
+    acceptance = "acceptance"
 
 
 # A seed set is a folder or file, or several read in order as one set.
@@ -44,11 +50,23 @@ SEED_PATHS: dict[SeedSet, SeedPath] = {
     SeedSet.seed: FIXTURES / "seed",
     SeedSet.load: FIXTURES / "load" / "load.yaml",
     SeedSet.ten_projects: (FIXTURES / "seed", FIXTURES / "extra" / "ten_projects.yaml"),
+    SeedSet.acceptance: (FIXTURES / "seed" / "workspace.yaml", FIXTURES / "acceptance"),
 }
+# The backend acceptance suites' `seed` (tests/acceptance/conftest.py): the whole seed set,
+# then the acceptance projects and briefs. Its runner and agents (ACCEPTANCE_AGENTS) are made
+# by the acceptance `fake_runner` fixture instead: the seed archive round trip registers
+# `homelab-hermes` and `acme-site` in the seed workspace itself.
+ACCEPTANCE_WORLD: tuple[Path, ...] = (
+    FIXTURES / "seed",
+    FIXTURES / "acceptance" / "projects.yaml",
+    FIXTURES / "acceptance" / "documents.yaml",
+)
+ACCEPTANCE_AGENTS = FIXTURES / "acceptance" / "agents.yaml"
 DayOffset = Annotated[str, StringConstraints(pattern=r"^[+-]\d+d$")]
 LocalTime = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
 TaskStatus = Literal["backlog", "today", "in_progress", "waiting_on_human", "in_review", "done"]
 TaskLabel = Literal["human", "ai", "hybrid"]
+AgentRole = Literal["master", "project"]
 
 
 # --- Records handed to a sink (dates resolved against the anchor) ----------------------
@@ -86,6 +104,7 @@ class TaskSeed(_Record):
     estimate_minutes: int | None = None
     due_on: date | None = None
     first_action: str | None = None
+    acceptance_criteria: str | None = None
     completed_at: datetime | None = None
 
 
@@ -104,6 +123,26 @@ class DocumentSeed(_Record):
     body: str
 
 
+class RunnerSeed(_Record):
+    name: str
+
+
+class AgentSeed(_Record):
+    """An agent profile on a runner (transport `daemon`); a project agent is written
+    provisioned (`ready`). `key_scopes` are the scopes of the API key its runs issue task
+    tokens from (P2-02); the key is generated when the set loads."""
+
+    name: str
+    role: AgentRole
+    key_scopes: tuple[str, ...] = ()
+
+
+class LinkSeed(_Record):
+    """A task's context link to a bare URL (outside content, so tainted: P2-08)."""
+
+    url: str
+
+
 # --- YAML documents (extra="forbid", so a typo fails the load) --------------------------
 
 
@@ -120,6 +159,8 @@ class _TaskYaml(_Yaml):
     estimate_minutes: int | None = Field(default=None, ge=0)
     due: DayOffset | None = None
     first_action: str | None = None
+    acceptance_criteria: str | None = None
+    links: list[LinkSeed] = []
     subtasks: list[_TaskYaml] = []
 
 
@@ -150,6 +191,15 @@ class _DocumentYaml(_Yaml):
     body: str
 
 
+class _AgentYaml(_Yaml):
+    key: str
+    name: str
+    role: AgentRole
+    project: str | None = None  # a project key of the set (a project agent's project)
+    runner: str | None = None  # a runner key of the set
+    key_scopes: list[str] = []
+
+
 class _SeedDocument(_Yaml):
     schema_version: Literal[1]
     workspace: WorkspaceSeed | None = None
@@ -158,6 +208,8 @@ class _SeedDocument(_Yaml):
     day: DayOffset | None = None
     events: list[_EventYaml] = []
     documents: list[_DocumentYaml] = []
+    runners: list[RunnerSeed] = []
+    agents: list[_AgentYaml] = []
 
     @model_validator(mode="after")
     def _events_need_a_day(self) -> _SeedDocument:
@@ -176,6 +228,11 @@ class SeedSink(Protocol):
     async def task(self, ws: UUID, project: UUID, parent: UUID | None, rec: TaskSeed) -> UUID: ...
     async def event(self, ws: UUID, rec: EventSeed) -> UUID: ...
     async def document(self, ws: UUID, project: UUID | None, rec: DocumentSeed) -> UUID: ...
+    async def runner(self, ws: UUID, rec: RunnerSeed) -> UUID: ...
+    async def agent(
+        self, ws: UUID, runner: UUID | None, project: UUID | None, rec: AgentSeed
+    ) -> UUID: ...
+    async def link(self, ws: UUID, task: UUID, rec: LinkSeed) -> UUID: ...
 
 
 @dataclass(frozen=True)
@@ -214,6 +271,17 @@ class InMemorySink:
 
     async def document(self, ws: UUID, project: UUID | None, rec: DocumentSeed) -> UUID:
         return self._add("document", rec, workspace=ws, project=project)
+
+    async def runner(self, ws: UUID, rec: RunnerSeed) -> UUID:
+        return self._add("runner", rec, workspace=ws)
+
+    async def agent(
+        self, ws: UUID, runner: UUID | None, project: UUID | None, rec: AgentSeed
+    ) -> UUID:
+        return self._add("agent", rec, workspace=ws, runner=runner, project=project)
+
+    async def link(self, ws: UUID, task: UUID, rec: LinkSeed) -> UUID:
+        return self._add("link", rec, workspace=ws, task=task)
 
 
 SeedWriter = Callable[..., Awaitable[UUID]]
@@ -287,6 +355,17 @@ class DatabaseSink:
     async def document(self, ws: UUID, project: UUID | None, rec: DocumentSeed) -> UUID:
         return await self._write("document", ws, project, rec)
 
+    async def runner(self, ws: UUID, rec: RunnerSeed) -> UUID:
+        return await self._write("runner", ws, rec)
+
+    async def agent(
+        self, ws: UUID, runner: UUID | None, project: UUID | None, rec: AgentSeed
+    ) -> UUID:
+        return await self._write("agent", ws, runner, project, rec)
+
+    async def link(self, ws: UUID, task: UUID, rec: LinkSeed) -> UUID:
+        return await self._write("link", ws, task, rec)
+
 
 # --- Loader -----------------------------------------------------------------------------
 
@@ -317,6 +396,33 @@ def read_seed(path: SeedPath) -> list[_SeedDocument]:
     ]
 
 
+@dataclass
+class _Loaded:
+    """The ids minted so far by seed key, and the count of each record kind."""
+
+    ids: dict[str, UUID] = field(default_factory=dict)
+    counts: dict[str, int] = field(
+        default_factory=lambda: dict.fromkeys(
+            ("workspace", "user", "project", "task", "event", "document"), 0
+        )
+    )
+
+    def remember(self, kind: str, key: str, new_id: UUID) -> None:
+        if key in self.ids:
+            raise ValueError(f"duplicate seed key {key!r}")
+        self.ids[key] = new_id
+        # runner, agent and link count only when a set holds them (T-P0-02-01's counts)
+        self.counts[kind] = self.counts.get(kind, 0) + 1
+
+    def known(self, owner: str, kind: str, key: str | None) -> UUID | None:
+        """The id of an earlier record named by `key` (None for None)."""
+        if key is None:
+            return None
+        if key not in self.ids:
+            raise ValueError(f"{owner}: unknown {kind} {key!r}")
+        return self.ids[key]
+
+
 def _day(anchor: date, offset: str | None) -> date | None:
     return None if offset is None else anchor + timedelta(days=int(offset[:-1]))
 
@@ -337,14 +443,9 @@ async def load_seed(
     workspace = workspaces[0]
     tz = ZoneInfo(workspace.timezone)
     day0 = anchor or clock.now().astimezone(tz).date()
-    ids: dict[str, UUID] = {}
-    counts = dict.fromkeys(("workspace", "user", "project", "task", "event", "document"), 0)
-
-    def remember(kind: str, key: str, new_id: UUID) -> None:
-        if key in ids:
-            raise ValueError(f"duplicate seed key {key!r}")
-        ids[key] = new_id
-        counts[kind] += 1
+    loaded = _Loaded()
+    remember = loaded.remember
+    links: list[tuple[UUID, LinkSeed]] = []  # written once every task exists
 
     ws = await sink.workspace(workspace)
     remember("workspace", workspace.key, ws)
@@ -363,10 +464,12 @@ async def load_seed(
                 estimate_minutes=task.estimate_minutes,
                 due_on=_day(day0, task.due),
                 first_action=task.first_action,
+                acceptance_criteria=task.acceptance_criteria,
                 completed_at=clock.now() if task.status == "done" else None,
             )
             task_id = await sink.task(ws, project, parent, rec)
             remember("task", task.key, task_id)
+            links.extend((task_id, link) for link in task.links)
             await add_tasks(project, task_id, task.subtasks)
 
     for doc in docs:
@@ -399,11 +502,7 @@ async def load_seed(
 
     for doc in docs:
         for document in doc.documents:
-            doc_project: UUID | None = None
-            if document.project is not None:
-                if document.project not in ids:
-                    raise ValueError(f"{document.key}: unknown project {document.project!r}")
-                doc_project = ids[document.project]
+            doc_project = loaded.known(document.key, "project", document.project)
             document_rec = DocumentSeed(
                 key=document.key,
                 title=document.title,
@@ -413,4 +512,25 @@ async def load_seed(
             )
             remember("document", document.key, await sink.document(ws, doc_project, document_rec))
 
-    return SeedResult(counts=counts, ids=ids)
+    await _load_agents(docs, sink, ws, loaded)
+    for task_id, link in links:
+        remember("link", link.key, await sink.link(ws, task_id, link))
+
+    return SeedResult(counts=loaded.counts, ids=loaded.ids)
+
+
+async def _load_agents(
+    docs: Sequence[_SeedDocument], sink: SeedSink, ws: UUID, loaded: _Loaded
+) -> None:
+    """The runners, then the agents on them (after the projects they name)."""
+    for doc in docs:
+        for runner in doc.runners:
+            loaded.remember("runner", runner.key, await sink.runner(ws, runner))
+    for doc in docs:
+        for agent in doc.agents:
+            rec = AgentSeed(
+                key=agent.key, name=agent.name, role=agent.role, key_scopes=tuple(agent.key_scopes)
+            )
+            runner_id = loaded.known(agent.key, "runner", agent.runner)
+            project_id = loaded.known(agent.key, "project", agent.project)
+            loaded.remember("agent", agent.key, await sink.agent(ws, runner_id, project_id, rec))

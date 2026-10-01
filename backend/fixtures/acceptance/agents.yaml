@@ -1,0 +1,17 @@
+# The runner and the agent profiles of the acceptance seed (P1-04's seed: one runner
+# `homelab-hermes`, the master `tumnis-master` and one project agent per project).
+# No secret lives here: the runner's device token and each agent's API key are generated
+# when the set loads. `key_scopes` are the scopes of that key, from which the agent's runs
+# issue their task tokens (P2-02).
+schema_version: 1
+runners:
+  - {key: r_homelab, name: homelab-hermes}
+agents:
+  - {key: ag_master, name: tumnis-master, role: master, runner: r_homelab,
+     key_scopes: ["tasks:read", "tasks:write", "delegate"]}
+  - {key: ag_acme_site, name: acme-site, role: project, project: p_acme_site,
+     runner: r_homelab, key_scopes: ["tasks:read", "tasks:write", "context:read"]}
+  - {key: ag_beta_app, name: beta-app, role: project, project: p_beta_app,
+     runner: r_homelab, key_scopes: ["tasks:read", "tasks:write", "context:read"]}
+  - {key: ag_gamma_ops, name: gamma-ops, role: project, project: p_gamma_ops,
+     runner: r_homelab, key_scopes: ["tasks:read", "tasks:write", "context:read"]}

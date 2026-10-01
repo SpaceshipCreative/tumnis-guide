@@ -167,7 +167,7 @@ async def test_task_packet_carries_brief_and_table_passage(  # noqa: PLR0917
     async with tenant_session(seed_ctx(seed)) as s:
         brief = await knowledge.get_brief(uuid.UUID(acme), session=s)
 
-    packet = await get_json(http, f"/v1/tasks/{task['id']}/packet")
+    packet = await get_json(http, f"/v1/tasks/{task['id']}/packet", kind="enrich")
 
     assert packet["kind"] == "enrich"
     assert packet["schema_version"] == 1

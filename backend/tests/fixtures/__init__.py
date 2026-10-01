@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from tests._auth import Account, SessionClient
     from tumnis.core.events import EventEnvelope
     from tumnis.core.tenancy import WorkspaceContext
-    from tumnis.seed import SeedResult
+    from tumnis.seed import SeedPath, SeedResult
     from tumnis.settings import Settings
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -406,7 +406,7 @@ async def app_role_session(db: DbUrls) -> AsyncIterator[AsyncSession]:
 # --- Seed and load sets in the per-test database -----------------------------------------
 
 
-async def _load_set(path: Path, db: DbUrls, clock: FixedClock) -> SeedResult:
+async def _load_set(path: SeedPath, db: DbUrls, clock: FixedClock) -> SeedResult:
     """Through DatabaseSink, i.e. each module's api; works once the entity writers exist
     (projects P0-17, tasks P0-18, events P0-12, documents P0-17)."""
     import tumnis.wiring  # noqa: F401, PLC0415  # modules register their seed writers

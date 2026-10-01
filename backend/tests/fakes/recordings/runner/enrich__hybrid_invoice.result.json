@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "task_id": "00000000-0000-0000-0000-000000000000",
+  "first_action": "Open last month's invoice in Wave and duplicate it",
+  "acceptance_criteria": [
+    "The March invoice is sent to Acme",
+    "The total matches the signed rate card"
+  ],
+  "estimate_minutes": 20,
+  "label_revision": null,
+  "hybrid_split": {
+    "ai_portion": "Draft the March line items from the rate card",
+    "human_portion": "Check the totals and send the invoice"
+  }
+}
