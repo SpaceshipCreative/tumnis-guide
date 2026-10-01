@@ -62,7 +62,6 @@ def _status(db: DbUrls, run_id: UUID) -> str | None:
     return rows[0][0] if rows else None
 
 
-@pytest.mark.xfail(strict=True, reason="spec:P4-02")
 @pytest.mark.req("FR-10.5")
 @pytest.mark.wp("P4-02")
 async def test_stuck_routes_to_project_agent(  # noqa: PLR0917
@@ -235,7 +234,6 @@ async def test_agent_takes_step_itself(  # noqa: PLR0917
     assert status == task.status
 
 
-@pytest.mark.xfail(strict=True, reason="spec:P4-02")
 @pytest.mark.req("FR-10.5")
 @pytest.mark.wp("P4-02")
 async def test_stuck_jumps_queue_priority(  # noqa: PLR0917
@@ -279,7 +277,6 @@ async def test_stuck_jumps_queue_priority(  # noqa: PLR0917
         assert _status(db, normal) == "queued"
 
 
-@pytest.mark.xfail(strict=True, reason="spec:P4-02")
 @pytest.mark.req("FR-10.5")
 @pytest.mark.wp("P4-02")
 async def test_no_answer_in_60s_shows_fallback(  # noqa: PLR0917
@@ -340,7 +337,6 @@ async def test_no_answer_in_60s_shows_fallback(  # noqa: PLR0917
     assert late["step"]["title"] == "Open February's invoice"
 
 
-@pytest.mark.xfail(strict=True, reason="spec:P4-02")
 @pytest.mark.req("REL-2")
 @pytest.mark.wp("P4-02")
 async def test_double_stuck_tap_dispatches_once(  # noqa: PLR0917
