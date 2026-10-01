@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
     from tests._auth import SessionClient
     from tests._pg import DbUrls
-    from tests.fixtures import WorkspaceHandle
     from tumnis.modules.knowledge.tests.integration.conftest import ExtractEnv
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
@@ -33,7 +32,6 @@ async def test_search_cites_document_and_page(
     extract_env: ExtractEnv,
     dbos: type[DBOS],
     session_client: SessionClient,
-    two_workspaces: tuple[WorkspaceHandle, WorkspaceHandle],
     db: DbUrls,
 ) -> None:
     """T-P1-17-10
@@ -45,7 +43,9 @@ async def test_search_cites_document_and_page(
     among the hits; the other workspace's entry never is, and its own search never finds
     this workspace's items.
     """
-    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tests.fixtures import WorkspaceHandle, make_workspace  # noqa: PLC0415
+    from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
 
     env = extract_env
@@ -66,7 +66,10 @@ async def test_search_cites_document_and_page(
         json={"title": "Hiring", "body_md": "Ask a senior colleague before you hire a designer."},
     )
     assert shared.status_code == 201, shared.text
-    _, other = two_workspaces
+    # Another workspace made here, not with `two_workspaces`: with that fixture,
+    # `session_client` signs in to its workspace B instead of the project's workspace.
+    other_id = make_workspace(db, "Other")
+    other = WorkspaceHandle(other_id, "Other", WorkspaceContext(other_id, SYSTEM_ACTOR))
     async with tenant_session(other.ctx) as s:
         theirs = await knowledge.create_text_entry(
             s, None, "Their rates", "Senior designer: 90 an hour."
