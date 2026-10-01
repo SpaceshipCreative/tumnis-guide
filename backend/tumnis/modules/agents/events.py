@@ -299,9 +299,17 @@ async def _apply_result_decision(envelope: EventEnvelope) -> None:
             _log.warning("no rerun after a rejected result: %s", exc.code)
 
 
+SEED_SOURCE: Final = "seed"  # `task.created` source of a seeded task (`tasks.api.seed_task`)
+
+
 @subscribe("task.created", name=ENRICH_CREATE_SUBSCRIBER, direct=True)
 async def enrich_on_create(envelope: EventEnvelope) -> None:
     payload = envelope.payload
+    # A seeded task describes a moment, not a history (`tasks.api.seed_task`): it is not
+    # enriched, or every seed reset would queue a run per task on its project's agent
+    # (SEED: the compose.test fake runner serves the acceptance agents).
+    if payload.get("source") == SEED_SOURCE:
+        return
     project_id = UUID(str(payload["project_id"]))
     ctx = WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
     # No workflow at all for a project without a provisioned agent: bulk task writes

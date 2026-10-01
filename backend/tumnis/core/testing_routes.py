@@ -10,9 +10,12 @@ packet the fake runner received and how many (P2-04); `POST /v1/test/tick/{sched
 fires a registered test tick (R-37, tumnis.core.ticks; P2-15's `focus-wake`)."""
 
 import asyncio
-from collections.abc import Callable
+import contextlib
+import logging
+import re
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timedelta
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Final, Self
 from uuid import UUID
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
@@ -22,7 +25,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from tumnis.core import deadletter, fake_scripts, ticks
+from tumnis.core import db, deadletter, fake_scripts, ticks
 from tumnis.core.clock import OverridableClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.ratelimit import RateLimiter
@@ -39,6 +42,28 @@ _LOCK_OUTBOX = text("LOCK TABLE outbox IN ACCESS EXCLUSIVE MODE")
 # SQLSTATE deadlock_detected, and how many times a reset runs its TRUNCATE before giving up.
 DEADLOCK_DETECTED = "40P01"
 DEADLOCK_ATTEMPTS = 3
+# A reset whose TRUNCATE waits this long for one lock may be in a cycle Postgres cannot
+# see: a request holds a later table in its transaction and waits, in Python, on its own
+# second connection, which queues behind the TRUNCATE's lock on an earlier table (J1's swap
+# reads the day calendar that way). The TRUNCATE gives way (SQLSTATE lock_not_available),
+# which lets the request finish, logs who held what (`blocked_report`), and tries again,
+# up to LOCK_WAIT_ATTEMPTS times; then the reset answers 503 with the report (SEED).
+RESET_LOCK_TIMEOUT_S: float = 5.0  # read per attempt (a test shortens it)
+LOCK_WAIT_ATTEMPTS: Final = 4
+LOCK_NOT_AVAILABLE: Final = "55P03"
+_SET_LOCK_TIMEOUT = text("SELECT set_config('lock_timeout', :timeout, true)")
+# The open transactions in this database. As the app role it sees the api's and the
+# worker's statements; another role's rows show without them (Postgres hides those).
+_OPEN_TRANSACTIONS = text(
+    "SELECT pid, usename, application_name, state, wait_event_type, wait_event,"
+    " now() - xact_start AS xact_age, pg_blocking_pids(pid) AS blocked_by,"
+    " left(query, 300) AS query FROM pg_stat_activity"
+    " WHERE datname = current_database() AND pid <> pg_backend_pid()"
+    " AND (xact_start IS NOT NULL OR state IS NULL) ORDER BY xact_start"
+)
+REPORT_TASKS_MAX: Final = 20
+REPORT_DETAIL_MAX: Final = 6000
+_log = logging.getLogger(__name__)
 # The statement-level guards of the append-only tables (pg_trigger.tgtype bit 32).
 _TRUNCATE_GUARDS = text(
     "SELECT c.relname, t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid"
@@ -53,16 +78,31 @@ async def truncate_tables(owner_url: str) -> list[str]:
     The TRUNCATE locks the tables in name order, so a reader that holds a later table and
     then reads an earlier one closes a lock cycle; Postgres aborts the TRUNCATE (P0-29: a
     load-set reset in CI). The reader finishes once the TRUNCATE gives way, so the reset
-    tries again, up to `DEADLOCK_ATTEMPTS` times."""
+    tries again, up to `DEADLOCK_ATTEMPTS` times. A cycle Postgres cannot see ends at the
+    lock timeout instead (see RESET_LOCK_TIMEOUT_S): the reset logs the open transactions
+    and tries again, up to LOCK_WAIT_ATTEMPTS times, then raises ResetBlockedError."""
     engine = create_async_engine(owner_url, poolclass=NullPool)
-    attempt = 1
+    attempt = lock_waits = 1
     try:
         while True:
             try:
                 return await _truncate_once(engine)
             except DBAPIError as error:
-                deadlock = getattr(error.orig, "sqlstate", None) == DEADLOCK_DETECTED
-                if not deadlock or attempt == DEADLOCK_ATTEMPTS:
+                code = getattr(error.orig, "sqlstate", None)
+                if code == LOCK_NOT_AVAILABLE:
+                    report = blocked_report(await _open_transactions(engine), _parked_chains())
+                    _log.warning(
+                        "reset blocked on a lock for %ss (attempt %d of %d):\n%s",
+                        RESET_LOCK_TIMEOUT_S,
+                        lock_waits,
+                        LOCK_WAIT_ATTEMPTS,
+                        report,
+                    )
+                    if lock_waits == LOCK_WAIT_ATTEMPTS:
+                        raise ResetBlockedError(report) from error
+                    lock_waits += 1
+                    continue
+                if code != DEADLOCK_DETECTED or attempt == DEADLOCK_ATTEMPTS:
                     raise
                 attempt += 1
     finally:
@@ -71,6 +111,7 @@ async def truncate_tables(owner_url: str) -> list[str]:
 
 async def _truncate_once(engine: AsyncEngine) -> list[str]:
     async with engine.begin() as conn:
+        await conn.execute(_SET_LOCK_TIMEOUT, {"timeout": f"{int(RESET_LOCK_TIMEOUT_S * 1000)}ms"})
         names = [
             name
             for (name,) in await conn.execute(
@@ -107,6 +148,91 @@ async def _truncate_once(engine: AsyncEngine) -> list[str]:
     return names
 
 
+class ResetBlockedError(Exception):
+    """The reset's TRUNCATE hit its lock timeout LOCK_WAIT_ATTEMPTS times in a row;
+    `report` says who held what the last time (`blocked_report`)."""
+
+    def __init__(self, report: str) -> None:
+        super().__init__(report)
+        self.report = report
+
+
+async def _open_transactions(owner: AsyncEngine) -> list[dict[str, Any]]:
+    """`_OPEN_TRANSACTIONS` as the app role when this process has one (it sees the api's and
+    the worker's statements), else as the owner; empty when neither answers."""
+    engines: list[AsyncEngine] = []
+    with contextlib.suppress(RuntimeError):  # unconfigured: a harness calls truncate alone
+        engines.append(db.app_engine())
+    engines.append(owner)
+    for engine in engines:
+        try:
+            async with engine.connect() as conn:
+                rows = await conn.execute(_OPEN_TRANSACTIONS)
+                return [dict(row._mapping) for row in rows]
+        except DBAPIError:
+            continue
+    return []
+
+
+def await_chain(task: "asyncio.Task[Any]") -> list[str]:
+    """Where `task` is parked: each coroutine from its outermost down its `cr_await` chain,
+    as `file:line function`, ending with the awaited future (a task's own stack shows only
+    its outermost coroutine)."""
+    chain: list[str] = []
+    awaited: Any = task.get_coro()
+    while awaited is not None:
+        frame = (
+            getattr(awaited, "cr_frame", None)
+            or getattr(awaited, "gi_frame", None)
+            or getattr(awaited, "ag_frame", None)
+        )
+        if frame is None:
+            chain.append(repr(awaited)[:200])
+            break
+        chain.append(f"{frame.f_code.co_filename}:{frame.f_lineno} {frame.f_code.co_name}")
+        awaited = (
+            getattr(awaited, "cr_await", None)
+            or getattr(awaited, "gi_yieldfrom", None)
+            or getattr(awaited, "ag_await", None)
+        )
+    return chain
+
+
+def _parked_chains() -> list[list[str]]:
+    """The await chains of this process's other tasks that run tumnis code."""
+    current = asyncio.current_task()
+    chains = [
+        chain
+        for task in asyncio.all_tasks()
+        if task is not current
+        for chain in [await_chain(task)]
+        if any("/tumnis/" in line for line in chain)
+    ]
+    return chains[:REPORT_TASKS_MAX]
+
+
+def _one_line(value: Any) -> str:
+    return re.sub(r"\s+", " ", "" if value is None else str(value)).strip()
+
+
+def blocked_report(activity: Sequence[Mapping[str, Any]], chains: Sequence[Sequence[str]]) -> str:
+    """A stuck reset's report: each open transaction (pid, role, application, state, wait,
+    age, the pids blocking it, its last statement) and each parked task's await chain."""
+    lines = [f"open transactions ({len(activity)}):"]
+    for row in activity:
+        age = row.get("xact_age")
+        seconds = f"{age.total_seconds():.0f}s" if isinstance(age, timedelta) else "?"
+        lines.append(
+            f"  pid {row.get('pid')} {row.get('usename')} app={row.get('application_name')!r}"
+            f" {row.get('state')} wait={row.get('wait_event_type')}/{row.get('wait_event')}"
+            f" for {seconds} blocked by {list(row.get('blocked_by') or [])}"
+            f" last: {_one_line(row.get('query'))}"
+        )
+    lines.append(f"parked api tasks ({len(chains)}):")
+    lines.extend("  " + " -> ".join(chain) for chain in chains)
+    return "\n".join(lines)
+
+
 @router.post("/reset", status_code=204)
 @route_policy(
     RoutePolicy(
@@ -134,6 +260,9 @@ async def reset(
         async with _reset_lock(request.app):
             _refuse_if_superseded(state, generation)
             await truncate_tables(settings.database_owner_url)
+            # The TRUNCATE emptied the outbox, so every delivery queued now is for the
+            # world it removed; the seed's own deliveries come after (SEED, T-SEED-29).
+            await cancel_removed_deliveries()
             clock = state.clock
             if isinstance(clock, OverridableClock):
                 clock.clear()  # a fresh stack reads the real time again
@@ -150,7 +279,45 @@ async def reset(
                 )
     except ResetSupersededError:
         raise HTTPException(status_code=409, detail="superseded by a later reset") from None
+    except ResetBlockedError as blocked:
+        raise HTTPException(status_code=503, detail=blocked.report[:REPORT_DETAIL_MAX]) from None
     return Response(status_code=204)
+
+
+OUTSTANDING: Final = ["ENQUEUED", "PENDING"]  # DBOS statuses of a delivery not yet done
+
+
+async def cancel_removed_deliveries() -> int:
+    """Cancel every event delivery (`deliver_event`) still queued or running; how many
+    (SEED, T-SEED-29).
+
+    A reset empties the tables, not the DBOS events queue. A delivery for the removed
+    world fails on its missing rows and backs off, holding one of the queue's slots, and
+    a few resets leave hundreds queued, so the next test's `run.requested` waited behind
+    them for over a minute (A2.1, A2.2). Cancelling takes a queued delivery off the queue
+    at once and stops a running one at its next step (DBOS: "interrupting it at the
+    beginning of its next step"); one sleeping in its backoff keeps its slot until the
+    sleep ends. Only deliveries: a workflow parked in `recv` keeps its slot when
+    cancelled, and a run or a build has its own way to end (T-SEED-23, T-SEED-24).
+
+    Only in the compose.test shape, where the api serves the fake-script store: a route
+    test's app runs no workflows and may have no DBOS system database to ask (or one with
+    no DBOS tables yet)."""
+    if not (fake_scripts.enabled() and deadletter.dbos_configured()):
+        return 0
+    client = deadletter.dbos_client()
+    try:
+        queued = await client.list_workflows_async(
+            name="deliver_event", status=OUTSTANDING, load_input=False, load_output=False
+        )
+    except DBAPIError as error:
+        _log.info("reset: no DBOS system database to sweep (%s)", type(error.orig).__name__)
+        return 0
+    ids = [workflow.workflow_id for workflow in queued]
+    if ids:
+        await client.cancel_workflows_async(ids)
+        _log.info("reset: cancelled %d event deliveries of the removed world", len(ids))
+    return len(ids)
 
 
 class ResetSupersededError(Exception):
