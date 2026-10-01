@@ -6,7 +6,11 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import * as z from "zod";
 
 import { ProjectPage } from "../components/project/ProjectPage";
-import { projectQuery, projectTasksQuery } from "../components/project/queries";
+import {
+  boardQuery,
+  projectQuery,
+  projectTasksQuery,
+} from "../components/project/queries";
 import { workspaceQuery } from "../components/settings/queries";
 import { isMonday } from "../lib/time";
 import { loaderRead } from "../lib/loader";
@@ -31,7 +35,21 @@ export const Route = createFileRoute("/projects/$projectId")({
     }
   },
   validateSearch: projectSearch,
-  loader: async ({ context: { queryClient }, params: { projectId } }) => {
+  loader: async ({
+    context: { queryClient },
+    params: { projectId },
+    location,
+  }) => {
+    // Opening the board: its read starts beside the page's own instead of after the page
+    // has rendered (PERF-2). Not waited for; it runs as the board's own query would
+    // (paused offline), and the board shows it when it lands.
+    const board = boardQuery(projectId);
+    if (
+      projectSearch.safeParse(location.search).data?.view === "board" &&
+      queryClient.getQueryData(board.queryKey) === undefined
+    ) {
+      queryClient.query(board).catch(() => undefined);
+    }
     // A failed read is left for its part of the page to report, and offline the loader
     // does not wait for the network (lib/loader.ts).
     await Promise.all([
