@@ -70,53 +70,50 @@ test("[P1-17][ADR-0008] opening a note never writes", async () => {
   expect(fake.recorder.writes()).toHaveLength(1);
 });
 
-test.fails(
-  "[P1-17][ADR-0008] a failed save keeps the edit, and closing the editor sends it (#134)",
-  async () => {
-    // CodeRabbit on #134: a save cleared the pending edit before it was sent, and a
-    // failure (not a conflict) never put it back, so closing the editor after a failed
-    // save lost the edit although the error said it could be retried.
-    const note = makeDocument({
-      title: "Moodboard",
-      kind: "text",
-      role: null,
-      body_md: "- Logo\n",
-      version: 1,
-      status: "ready",
-    });
-    const fake = new KnowledgeFake({ documents: [note] });
-    const path = `/v1/knowledge/documents/${note.id}`;
-    server.resetHandlers();
-    server.use(
-      http.patch(
-        path,
-        () =>
-          HttpResponse.json(
-            makeProblem({ status: 500, code: "internal", title: "internal" }),
-            {
-              status: 500,
-              headers: { "Content-Type": "application/problem+json" },
-            },
-          ),
-        { once: true },
-      ),
-      ...fake.handlers,
-    );
+test("[P1-17][ADR-0008] a failed save keeps the edit, and closing the editor sends it (#134)", async () => {
+  // CodeRabbit on #134: a save cleared the pending edit before it was sent, and a
+  // failure (not a conflict) never put it back, so closing the editor after a failed
+  // save lost the edit although the error said it could be retried.
+  const note = makeDocument({
+    title: "Moodboard",
+    kind: "text",
+    role: null,
+    body_md: "- Logo\n",
+    version: 1,
+    status: "ready",
+  });
+  const fake = new KnowledgeFake({ documents: [note] });
+  const path = `/v1/knowledge/documents/${note.id}`;
+  server.resetHandlers();
+  server.use(
+    http.patch(
+      path,
+      () =>
+        HttpResponse.json(
+          makeProblem({ status: 500, code: "internal", title: "internal" }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/problem+json" },
+          },
+        ),
+      { once: true },
+    ),
+    ...fake.handlers,
+  );
 
-    const { result, unmount } = renderHook(() => useNoteSave(note));
-    act(() => {
-      result.current.onChange("- Logos\n");
-    });
-    await waitFor(() => {
-      expect(result.current.status).toBe("error");
-    });
-    expect(fake.sentBodies("PATCH", path)).toEqual([]);
+  const { result, unmount } = renderHook(() => useNoteSave(note));
+  act(() => {
+    result.current.onChange("- Logos\n");
+  });
+  await waitFor(() => {
+    expect(result.current.status).toBe("error");
+  });
+  expect(fake.sentBodies("PATCH", path)).toEqual([]);
 
-    unmount();
-    await waitFor(() => {
-      expect(fake.sentBodies("PATCH", path)).toEqual([
-        { body_md: "- Logos\n", version: 1 },
-      ]);
-    });
-  },
-);
+  unmount();
+  await waitFor(() => {
+    expect(fake.sentBodies("PATCH", path)).toEqual([
+      { body_md: "- Logos\n", version: 1 },
+    ]);
+  });
+});

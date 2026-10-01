@@ -50,6 +50,7 @@ export function useNoteSave(
     if (next === saved.current || next === raw.current) return;
     inFlight.current = true;
     setStatus("saving");
+    let failed = false;
     try {
       const out = await apiWrite({
         kind: "update",
@@ -66,10 +67,19 @@ export function useNoteSave(
       setStatus("saved");
       onSaved.current?.(out);
     } catch (error) {
-      setStatus(error instanceof ConflictError ? "conflict" : "error");
+      if (error instanceof ConflictError) {
+        setStatus("conflict");
+      } else {
+        // The edit can be retried: keep it (unless a newer one came meanwhile), so the
+        // next edit or closing the editor sends it.
+        failed = true;
+        pending.current ??= next;
+        setStatus("error");
+      }
     } finally {
       inFlight.current = false;
-      if (queued()) void flush();
+      // A failed save is not retried at once: that would loop while the server fails.
+      if (!failed && queued()) void flush();
     }
   }, [doc.id]);
 
