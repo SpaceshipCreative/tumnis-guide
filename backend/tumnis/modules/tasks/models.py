@@ -1,5 +1,6 @@
 """tasks SQLAlchemy tables owned by this module (mirrors of revisions tasks_0001,
-tasks_0003, tasks_0004, tasks_0005, tasks_0006, tasks_0007 and tasks_0008).
+tasks_0003, tasks_0004, tasks_0005, tasks_0006, tasks_0007, tasks_0008 and tasks_0009, P2-04's
+results).
 
 `board_rank` and `sort_key` compare bytewise (`COLLATE "C"`), so Postgres orders the
 fractional keys as Python and TypeScript do (core/rank.py)."""
@@ -120,6 +121,22 @@ class ReviewItem(TenantBase, Base):
     decided_at: Mapped[datetime | None]
     decision: Mapped[str | None]
     flags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
+
+
+class Result(TenantBase, Base):
+    """A run's result: what an agent reports it did, one per run (P2-04, revision
+    tasks_0009). `run_id` is agents' `runs` row: no cross-module foreign key."""
+
+    __tablename__ = "results"
+
+    task_id: Mapped[UUID] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"))
+    run_id: Mapped[UUID]
+    outcome: Mapped[str]  # done, partial or blocked (ck_results_outcome)
+    summary: Mapped[str]
+    files_touched: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    links: Mapped[list[Any]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    tests_summary: Mapped[str | None]
+    tainted: Mapped[bool] = mapped_column(server_default=text("false"))
 
 
 class RecurrenceRule(TenantBase, Base):

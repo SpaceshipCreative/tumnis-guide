@@ -55,6 +55,7 @@ ALL_SCOPES: Final = frozenset(
 )
 TOKEN_SCOPES: Final = frozenset({"tasks:read", "tasks:write", "context:read"})
 _ids = itertools.count(1)
+_surface_runs: set[uuid.UUID] = set()  # the runs running_run made (not real runs)
 
 
 @dataclass(frozen=True)
@@ -311,6 +312,101 @@ async def _get_task_packet(world: World, project: str) -> dict[str, Any]:
     return {"task_id": str(world.parents[project])}
 
 
+async def running_run(world: World, project: str) -> uuid.UUID:
+    """A running run in the project for P2-04's `post_result`, written as the owner. A
+    task token only posts for its own run, so the run is a token's run:
+
+    - a real run of the project that a task token was issued for (P2-08's taint sweep
+      calls with a fresh token of a finished `run_skill` run), reopened when it has ended
+      and given the fresh AI task when it has none;
+    - otherwise the run of the newest task token issued for the project (a fresh AI task's
+      run on the project's agent profile, made when there is none);
+    - otherwise a new run. Any other caller (a key without a run) may post for it too."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from tumnis.core import db  # noqa: PLC0415
+
+    project_id = world.projects[project]
+    task = await world.task(project, label="ai", estimate_minutes=None)
+    async with db.owner_sessionmaker()() as s, s.begin():
+        real_run = await s.scalar(
+            text(
+                "SELECT r.id FROM task_tokens t JOIN runs r ON r.id = t.run_id"
+                " WHERE t.workspace_id = :ws AND t.project_id = :p"
+                " AND NOT (r.id = ANY(CAST(:made AS uuid[])))"
+                " ORDER BY t.created_at DESC, t.id DESC LIMIT 1"
+            ),
+            {"ws": world.workspace.id, "p": project_id, "made": [str(r) for r in _surface_runs]},
+        )
+        if real_run is not None:
+            await s.execute(
+                text(
+                    "UPDATE runs SET status = 'running', finished_at = NULL,"
+                    " task_id = COALESCE(task_id, :t)"
+                    " WHERE id = :id AND (status NOT IN ('running', 'waiting_on_human')"
+                    " OR task_id IS NULL)"
+                ),
+                {"id": real_run, "t": task.id},
+            )
+            run_id: uuid.UUID = real_run
+            return run_id
+        token_run = await s.scalar(
+            text(
+                "SELECT run_id FROM task_tokens WHERE workspace_id = :ws AND project_id = :p"
+                " ORDER BY created_at DESC, id DESC LIMIT 1"
+            ),
+            {"ws": world.workspace.id, "p": project_id},
+        )
+        run_id = token_run or uuid.uuid4()
+        _surface_runs.add(run_id)
+        profile_id = await s.scalar(
+            text(
+                "SELECT id FROM agent_profiles WHERE project_id = :p AND role = 'project'"
+                " AND deleted_at IS NULL"
+            ),
+            {"p": project_id},
+        )
+        if profile_id is None:
+            profile_id = await s.scalar(
+                text(
+                    "INSERT INTO agent_profiles"
+                    " (workspace_id, name, role, project_id, transport, status, created_by)"
+                    " VALUES (:ws, :name, 'project', :p, 'daemon', 'ready', 'system')"
+                    " RETURNING id"
+                ),
+                {
+                    "ws": world.workspace.id,
+                    "name": f"surface-{project_id.hex[:12]}",
+                    "p": project_id,
+                },
+            )
+        await s.execute(
+            text(
+                "INSERT INTO runs (id, workspace_id, task_id, profile_id, kind, status,"
+                " started_at, correlation_id, created_by)"
+                " VALUES (:id, :ws, :t, :profile, 'task', 'running', now(), :corr, 'system')"
+                " ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "id": run_id,
+                "ws": world.workspace.id,
+                "t": task.id,
+                "profile": profile_id,
+                "corr": f"run:{run_id}",
+            },
+        )
+    return run_id
+
+
+async def _post_result(world: World, project: str) -> dict[str, Any]:
+    return {
+        "run_id": str(await running_run(world, project)),
+        "outcome": "done",
+        "summary": f"Posted through the surface {next(_ids)}",
+        "idempotency_key": idem(),
+    }
+
+
 # One entry per registered op; the sweeps fail on an op without one ("add a sample").
 SAMPLES: Final[dict[str, Sample]] = {
     "list_tasks": _list_tasks,
@@ -320,6 +416,7 @@ SAMPLES: Final[dict[str, Sample]] = {
     "get_project_context": _get_project_context,
     "search": _search,
     "get_task_packet": _get_task_packet,
+    "post_result": _post_result,
 }
 
 

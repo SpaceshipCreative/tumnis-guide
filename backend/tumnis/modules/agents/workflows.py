@@ -32,18 +32,21 @@ from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID, uuid5
 
 from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
+from dbos._error import DBOSNonExistentWorkflowError  # dbos 3.1.0: not re-exported
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import Table, select, update
+from sqlalchemy import Table, Text, cast, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import audit, db, faults
 from tumnis.core.clock import SystemClock
+from tumnis.core.limits import WAIT_SLICE_S
 from tumnis.core.live import mark_changed
+from tumnis.core.outbox import emit
 from tumnis.core.schemas import registry
 from tumnis.core.tenancy import WorkspaceContext, tenant_session, use_workspace
-from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.core.types import SYSTEM_ACTOR, ActorRef
 from tumnis.core.versioning import NotFound, StaleVersion
 from tumnis.modules.agents import api
 
@@ -62,21 +65,29 @@ from tumnis.modules.agents.packet_builder import (
     REST_BASE,
     Callback,
     TaskPacket,
+    build_packet,
     enrichment_request,
     render_prompt,
 )
+from tumnis.modules.agents.payloads import RunSignalV1, RunStartedV1
 from tumnis.modules.agents.protocol import Provision, ProvisionResult, SchemaRef
 from tumnis.modules.agents.review_kinds import DRIFT, DriftPayload, ForeignReach
 from tumnis.modules.agents.rules import (
     ESTIMATE,
     MASTER_PROFILE_NAME,
+    RUN_TRANSITIONS,
+    TERMINAL_STATUSES,
+    DispatchProfile,
+    DispatchTask,
     Drift,
     InvalidProfileName,
     ReachTargets,
     ReachVerdict,
     RunKind,
+    RunStatus,
     TaskSnapshot,
     allowlist_drift,
+    can_dispatch,
     enrichment_errors,
     estimate_follow_up,
     merge_enrichment,
@@ -88,6 +99,7 @@ from tumnis.modules.agents.rules import (
     provision_outcome,
     reach_targets,
     reach_verdict,
+    run_transition,
     runner_status,
     validate_profile_name,
 )
@@ -106,7 +118,8 @@ _log = logging.getLogger(__name__)
 
 RECV_GRACE_S: Final = 30  # the run's timeout plus this, then timed_out (plan default)
 HEALTH_TIMEOUT_S: Final = 30
-RUNS_PARTITION_CONCURRENCY: Final = 2  # runs at once per profile (plan default)
+RUNS_PARTITION_CONCURRENCY: Final = 2  # runs at once per partition (plan default, SAF-5)
+RUNS_QUEUE_POLL_S: Final = 0.5  # a freed slot is taken within half a second
 RUNNER_SWEEP_SCHEDULE: Final = "* * * * *"
 RUNNER_SWEEP_NAME: Final = "runner-sweep"
 # Its own queue, not maintenance: a long audit or housekeeping run must not delay the
@@ -343,6 +356,401 @@ async def enqueue_run_skill(client: "DBOSClient", workspace_id: UUID, packet: Ta
     return workflow_id
 
 
+# --- dispatch_run (P2-04, FR-5.4, SAF-5, R-23, R-29, R-30) -----------------------------------
+#
+# `DBOS.recv` appears only in workflow bodies, never in a step (R-30). Every step's row
+# writes and events share one transaction guarded by a FOR UPDATE status read, so a step
+# replayed after a crash writes and emits nothing twice.
+
+
+class Prepared(BaseModel):
+    """What `prepare_run` hands the workflow: an ended run, a refusal, or the run's caps."""
+
+    status: str
+    ended: bool = False  # the run had already ended (cancelled while queued)
+    refusal: str | None = None
+    max_active_seconds: float = 0.0
+    ceiling_seconds: float = 0.0
+    started_at_s: float = 0.0
+    used_seconds: float = 0.0
+
+
+class RunHandleData(BaseModel):
+    """The dispatched run, as `stop_agent` needs it (never the token)."""
+
+    run_id: UUID
+    profile_id: UUID
+    correlation_id: str
+    refused: str | None = None  # the agent was unavailable: nothing was dispatched
+
+
+dispatch_workflow_id = api.dispatch_workflow_id
+
+
+def _requester(created_by: str) -> ActorRef | None:
+    """Who moves the task to In progress for the run: the person or agent who asked for it
+    (START is a human or agent edge); None for a system request, which leaves it."""
+    actor = ActorRef(created_by)
+    return None if tasks.actor_kind(actor) is tasks.ActorKind.SYSTEM else actor
+
+
+@DBOS.step()
+async def prepare_run(workspace_id: str, run_id: str) -> Prepared:
+    """One transaction: `can_dispatch` again (the task may have changed while queued); the
+    run queued -> running with `started_at` and its workflow id; the task to In progress as
+    the requester; `run.started`. A replay after a crash finds the run running and answers
+    the stored values; an ended run (cancelled while queued) is answered as it is."""
+    run = UUID(run_id)
+    now = SystemClock().now()
+    async with tenant_session(_ctx(workspace_id)) as s:
+        row = (
+            (
+                await s.execute(
+                    select(*_runs.c, _profiles.c.project_id, _profiles.c.status.label("pstatus"))
+                    .select_from(_runs.join(_profiles, _profiles.c.id == _runs.c.profile_id))
+                    .where(_runs.c.id == run)
+                    .with_for_update(of=_runs)
+                )
+            )
+            .mappings()
+            .one()
+        )
+        status = RunStatus(row["status"])
+        if status in TERMINAL_STATUSES:
+            return Prepared(status=status.value, ended=True)
+        policy = await projects.get_policy(s, row["project_id"])
+        active_cap, ceiling = api.run_caps(policy.max_run_minutes)
+        if status in (RunStatus.RUNNING, RunStatus.WAITING_ON_HUMAN):
+            return Prepared(
+                status=status.value,
+                max_active_seconds=active_cap,
+                ceiling_seconds=ceiling,
+                started_at_s=(row["started_at"] or now).timestamp(),
+                used_seconds=row["active_seconds_used"],
+            )
+        try:
+            task = await tasks.get_task(s, row["task_id"])
+        except NotFound:  # trashed or purged while queued: the run fails, nothing retries
+            return Prepared(status=status.value, refusal="task_not_found")
+        others: list[str] = list(
+            await s.scalars(
+                select(_runs.c.kind).where(
+                    _runs.c.task_id == row["task_id"],
+                    _runs.c.id != run,
+                    _runs.c.status.in_(api.ACTIVE_RUN),
+                )
+            )
+        )
+        refusal = can_dispatch(
+            DispatchTask(
+                label=task.label,
+                status=task.status,
+                active_kinds=frozenset(RunKind(k) for k in others),
+            ),
+            RunKind(row["kind"]),
+            DispatchProfile(status=row["pstatus"]),
+        )
+        if refusal is not None:
+            return Prepared(status=status.value, refusal=refusal.code)
+        run_transition(status, RunStatus.RUNNING)
+        await s.execute(
+            update(_runs)
+            .where(_runs.c.id == run)
+            .values(
+                status=RunStatus.RUNNING.value,
+                started_at=now,
+                workflow_id=DBOS.workflow_id,
+                state_seq=row["state_seq"] + 1,
+            )
+        )
+        actor = _requester(row["created_by"])
+        if actor is not None and task.status in ("backlog", "today"):
+            await tasks.change_status(
+                s, actor, task.id, tasks.Status.IN_PROGRESS, task.version, now=now
+            )
+        await emit(
+            s,
+            RunStartedV1(
+                run_id=run,
+                task_id=row["task_id"],
+                project_id=row["project_id"],
+                kind=RunKind(row["kind"]),
+            ),
+            occurred_at=now,
+        )
+        mark_changed(s, api.LIVE_RUN, run)
+    return Prepared(
+        status=RunStatus.RUNNING.value,
+        max_active_seconds=active_cap,
+        ceiling_seconds=ceiling,
+        started_at_s=now.timestamp(),
+    )
+
+
+def _redacted(packet: TaskPacket) -> dict[str, Any]:
+    stored = packet.model_dump(mode="json")
+    callback = stored.get("callback")
+    if isinstance(callback, dict) and callback.get("task_token") is not None:
+        stored["callback"] = {**callback, "task_token": api.REDACTED}
+    return stored
+
+
+@DBOS.step()
+async def send_to_agent(workspace_id: str, run_id: str) -> RunHandleData:
+    """Builds the run's packet (`build_packet`, P2-02), issues its task token from the
+    profile's key and dispatches it through the profile's adapter, in one step, so the
+    token is never a recorded step output. The runner dedupes `run` by run id (the mailbox
+    row is uuid5(run, "run")), so a replay after a crash dispatches nothing twice. The
+    packet is stored on the run with its token redacted."""
+    ctx = _ctx(workspace_id)
+    run = UUID(run_id)
+    async with tenant_session(ctx) as s:
+        row = (
+            await s.execute(
+                select(
+                    _runs.c.task_id, _runs.c.kind, _runs.c.profile_id, _runs.c.correlation_id
+                ).where(_runs.c.id == run)
+            )
+        ).one()
+        runner_id = await s.scalar(
+            select(_profiles.c.runner_id).where(_profiles.c.id == row.profile_id)
+        )
+    handle = RunHandleData(run_id=run, profile_id=row.profile_id, correlation_id=row.correlation_id)
+    try:
+        packet = await build_packet(
+            RunKind(row.kind), task_id=row.task_id, run_id=run, profile_id=row.profile_id, ctx=ctx
+        )
+        packet = await _with_token(ctx, packet)
+    except (auth.ScopeEscalation, ValueError) as exc:
+        return handle.model_copy(update={"refused": f"no_packet: {exc}"[:200]})
+    try:
+        adapter = await api.adapter_for(row.profile_id, ctx=ctx)
+        await adapter.dispatch(packet)
+    except api.AgentUnavailable as exc:
+        return handle.model_copy(update={"refused": f"agent_unavailable: {exc.reason}"[:200]})
+    faults.killpoint("agents.send_to_agent.after_dispatch")  # dispatched, step not recorded
+    async with tenant_session(ctx) as s:
+        await s.execute(
+            update(_runs)
+            .where(_runs.c.id == run)
+            .values(packet=_redacted(packet), runner_id=runner_id)
+        )
+    return handle
+
+
+@DBOS.step()
+async def now_s() -> float:
+    """The time, through a step (determinism: a replay reads the recorded value)."""
+    return SystemClock().now().timestamp()
+
+
+@DBOS.step()
+async def stop_agent(workspace_id: str, handle: dict[str, Any], reason: str) -> None:
+    """Asks the agent to stop (a `cancel` to a protocol-2 runner; an older runner's run is
+    marked cancelled by the transport, P2-07)."""
+    data = RunHandleData.model_validate(handle)
+    ctx = _ctx(workspace_id)
+    adapter = await api.adapter_for(data.profile_id, ctx=ctx)
+    _log.info("stopping run %s: %s", data.run_id, reason)
+    await adapter.cancel(
+        api.RunHandle(
+            run_id=data.run_id,
+            profile_id=data.profile_id,
+            transport="daemon",
+            correlation_id=data.correlation_id,
+        )
+    )
+
+
+@DBOS.step()
+async def finish_run(
+    workspace_id: str, run_id: str, status: str, reason: str | None
+) -> tuple[str, int]:
+    """Ends the run once (`api.finish_run_in`): its row, tokens, closing log line,
+    `run.finished` and, at a time limit, the `run_limit` review item. An already ended run
+    answers its stored status and seq."""
+    ctx = _ctx(workspace_id)
+    async with tenant_session(ctx) as s:
+        done = await api.finish_run_in(
+            s, ctx, UUID(run_id), RunStatus(status), reason, now=SystemClock().now()
+        )
+    return done.status.value, done.seq
+
+
+@DBOS.step()
+async def park(workspace_id: str, run_id: str, used: float) -> int:
+    """The run waits on a human: running -> waiting_on_human, with the active time used so
+    far (a continuation keeps the budget); the new state seq."""
+    return await _move(workspace_id, run_id, RunStatus.WAITING_ON_HUMAN, used)
+
+
+@DBOS.step()
+async def bump_state(workspace_id: str, run_id: str) -> int:
+    """The human answered: waiting_on_human -> running; the new state seq."""
+    return await _move(workspace_id, run_id, RunStatus.RUNNING, None)
+
+
+async def _move(workspace_id: str, run_id: str, target: RunStatus, used: float | None) -> int:
+    run = UUID(run_id)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        row = (
+            await s.execute(
+                select(_runs.c.status, _runs.c.state_seq).where(_runs.c.id == run).with_for_update()
+            )
+        ).one()
+        current = RunStatus(row.status)
+        if current is target or target not in RUN_TRANSITIONS.get(current, frozenset()):
+            return int(row.state_seq)  # a replay, or a run that already ended
+        values: dict[str, Any] = {"status": target.value, "state_seq": row.state_seq + 1}
+        if used is not None:
+            values["active_seconds_used"] = used
+        await s.execute(update(_runs).where(_runs.c.id == run).values(**values))
+        mark_changed(s, api.LIVE_RUN, run)
+    return int(row.state_seq) + 1
+
+
+async def _end(workspace_id: str, run_id: str, status: RunStatus, reason: str | None) -> str:
+    ended, seq = await finish_run(workspace_id, run_id, status.value, reason)
+    await DBOS.set_event_async(f"state:{seq}", ended)
+    return ended
+
+
+def _signal(message: dict[str, Any]) -> tuple[str, str | None]:
+    """A message on the run's topic as (kind, reason): `run.signal` deliveries, and the
+    older shapes (`{"status": "runner_lost"}` from a run_skill-era sweep, `{"status":
+    "cancelled"}` from the protocol-1 cancel fallback)."""
+    kind = message.get("kind")
+    if isinstance(kind, str):
+        return kind, message.get("reason")
+    status = message.get("status")
+    if status == "runner_lost":
+        return "runner_lost", api.RUNNER_LOST
+    if status == "cancelled":
+        return "cancel", message.get("error") or "cancelled"
+    return "ignored", None
+
+
+async def _supervise(  # noqa: PLR0917  # the plan's one loop over every signal
+    workspace_id: str,
+    run_id: str,
+    handle: RunHandleData,
+    budget: float,
+    ceiling: float,
+    started_at_s: float,
+    used: float = 0.0,
+) -> str:
+    """Waits for the run's end: a result, a cancel or limit, a lost runner, a failed agent,
+    the active-time cap (SAF-5; time waiting on a human does not count) or the wall-clock
+    ceiling (R-29; waiting included). Both caps are enforced here, never by a DBOS
+    workflow timeout, so the agent is stopped and the log and review item are left."""
+    stored = handle.model_dump(mode="json")
+    waiting, mark = False, await now_s()
+    ceiling_at = started_at_s + ceiling
+    faults.killpoint("agents.dispatch_run.waiting_recv")  # parked before the first recv
+    while True:
+        wall_left = max(ceiling_at - mark, 0.0)
+        left = WAIT_SLICE_S if waiting else max(budget - used, 0.0)
+        message = await DBOS.recv_async(
+            api.run_topic(UUID(run_id)), timeout_seconds=min(left, wall_left)
+        )
+        now = await now_s()
+        if not waiting:
+            used += now - mark
+        mark = now
+        if message is None:
+            if now >= ceiling_at:
+                await stop_agent(workspace_id, stored, api.WALL_CLOCK_CEILING)
+                return await _end(workspace_id, run_id, RunStatus.TIMED_OUT, api.WALL_CLOCK_CEILING)
+            if not waiting and used >= budget:
+                await stop_agent(workspace_id, stored, api.TIME_LIMIT)
+                return await _end(workspace_id, run_id, RunStatus.TIMED_OUT, api.TIME_LIMIT)
+            continue
+        kind, reason = _signal(message)
+        if kind == "result":
+            return await _end(workspace_id, run_id, RunStatus.SUCCEEDED, None)
+        if kind == "waiting":
+            waiting = True
+            seq = await park(workspace_id, run_id, used)
+            await DBOS.set_event_async(f"state:{seq}", RunStatus.WAITING_ON_HUMAN.value)
+        elif kind == "resumed":
+            waiting = False
+            seq = await bump_state(workspace_id, run_id)
+            await DBOS.set_event_async(f"state:{seq}", RunStatus.RUNNING.value)
+        elif kind in ("cancel", "limit"):
+            await stop_agent(workspace_id, stored, reason or kind)
+            return await _end(workspace_id, run_id, RunStatus.CANCELLED, reason or kind)
+        elif kind == "runner_lost":
+            return await _end(workspace_id, run_id, RunStatus.RUNNER_LOST, api.RUNNER_LOST)
+        elif kind == "agent_failed":
+            return await _end(workspace_id, run_id, RunStatus.FAILED, reason or "agent_failed")
+
+
+@DBOS.workflow(name="dispatch_run")
+async def dispatch_run(workspace_id: str, run_id: str) -> str:
+    """A run from the queue to its end (P2-04): prepare (running, task In progress), send
+    the packet, then supervise until a result, a stop or a limit; returns the terminal
+    status. Its workflow id is the run id, so a redelivered `run.requested` runs it once."""
+    prep = await prepare_run(workspace_id, run_id)
+    if prep.ended:
+        return prep.status
+    if prep.refusal is not None:
+        return await _end(workspace_id, run_id, RunStatus.FAILED, prep.refusal)
+    handle = await send_to_agent(workspace_id, run_id)
+    faults.killpoint("agents.dispatch_run.after_send")  # send_to_agent's output recorded
+    if handle.refused is not None:
+        return await _end(workspace_id, run_id, RunStatus.FAILED, handle.refused)
+    return await _supervise(
+        workspace_id,
+        run_id,
+        handle,
+        prep.max_active_seconds,
+        prep.ceiling_seconds,
+        prep.started_at_s,
+        prep.used_seconds,
+    )
+
+
+async def start_dispatch(
+    workspace_id: UUID, run_id: UUID, project_id: UUID, priority: int | None
+) -> None:
+    """Enqueue `dispatch_run` on the runs queue, partitioned by project (two at a time per
+    project, SAF-5). DBOS 3.1.0 refuses a deduplication id on a partitioned queue, so the
+    workflow id (the run id) is the guard: DBOS returns the existing workflow for an id in
+    use, finished or not; the partial unique index on active runs refuses a second run of
+    the task and kind. Started in a fresh context: a subscriber runs inside a DBOS step,
+    and DBOS refuses to start a workflow from one."""
+
+    async def enqueue() -> None:
+        options = SetEnqueueOptions(queue_partition_key=str(project_id), priority=priority)
+        with SetWorkflowID(dispatch_workflow_id(run_id)), options:
+            await DBOS.enqueue_workflow_async(
+                RUNS_QUEUE, dispatch_run, str(workspace_id), str(run_id)
+            )
+
+    await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
+
+
+async def deliver_signal(
+    workspace_id: UUID, run_id: UUID, kind: str, reason: str | None, key: str
+) -> None:
+    """Send a `run.signal` to the run's workflow, once per event (`key`). A workflow that
+    does not exist yet is retried (the delivery raises), unless the run already ended."""
+    message = {"kind": kind, "reason": reason}
+    async with tenant_session(_ctx(str(workspace_id))) as s:
+        row = (
+            await s.execute(select(_runs.c.status, _runs.c.workflow_id).where(_runs.c.id == run_id))
+        ).first()
+    if row is None:
+        return
+    target = row.workflow_id or dispatch_workflow_id(run_id)
+    try:
+        await DBOS.send_async(target, message, topic=api.run_topic(run_id), idempotency_key=key)
+    except DBOSNonExistentWorkflowError:
+        if row.status in api.TERMINAL:
+            return
+        raise
+
+
 # --- runner_sweep ---------------------------------------------------------------------------
 
 
@@ -378,10 +786,32 @@ async def sweep_workspace_step(workspace_id: str, now: datetime) -> list[tuple[s
         if not offline:
             return []
         profiles = select(_profiles.c.id).where(_profiles.c.runner_id.in_(offline))
+        # A dispatch_run run (its workflow id is its run id) is ended by its workflow, told
+        # through run.signal in this transaction (P2-04): the log, tokens and run.finished
+        # follow its one end path.
+        dispatched = (
+            await s.execute(
+                select(_runs.c.id).where(
+                    _runs.c.status.in_((RunStatus.RUNNING.value, RunStatus.WAITING_ON_HUMAN.value)),
+                    _runs.c.profile_id.in_(profiles),
+                    _runs.c.workflow_id == cast(_runs.c.id, Text),
+                )
+            )
+        ).all()
+        for (run_id,) in dispatched:
+            await emit(
+                s,
+                RunSignalV1(run_id=run_id, kind="runner_lost", reason=api.RUNNER_LOST),
+                occurred_at=now,
+            )
         lost = (
             await s.execute(
                 update(_runs)
-                .where(_runs.c.status == "running", _runs.c.profile_id.in_(profiles))
+                .where(
+                    _runs.c.status == "running",
+                    _runs.c.profile_id.in_(profiles),
+                    _runs.c.workflow_id.is_distinct_from(cast(_runs.c.id, Text)),
+                )
                 .values(status="runner_lost", finished_at=now, error="runner_lost")
                 .returning(_runs.c.id, _runs.c.workflow_id)
             )

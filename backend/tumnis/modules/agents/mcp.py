@@ -3,9 +3,12 @@
 | Tool | Scope | REST twin |
 | --- | --- | --- |
 | `get_task_packet` | tasks:read | `GET /v1/tasks/{task_id}/packet` |
+| `post_result` | tasks:write | `POST /v1/runs/{run_id}/result` |
 
 `get_task_packet` answers the task's packet as a run of the caller would get it, without a
 token (`callback.task_token: null`): the token exists only in the packet a dispatch sends.
+`post_result` (P2-04) stores the run's result with the run's own task token (403
+`run_mismatch` for another run's); only an agent posts one, so its twin refuses a session.
 
 agents also tells the agent surface which profile a caller acts for (`CallerFacts`): an
 API key linked to a profile (`set_profile_key`) acts for that profile, and the master
@@ -86,6 +89,56 @@ GET_TASK_PACKET = surface.register_op(
         project_arg=None,
         project_resolver=_project_of_task,
         handler=_packet,
+    )
+)
+
+
+# --- Results (P2-04, FR-5.8) -----------------------------------------------------------------
+
+
+class PostResultBody(surface.SurfaceInput, api.ResultFields):
+    """The REST twin's body (the run is in the path)."""
+
+
+class PostResultToolIn(surface.WriteInput, api.PostResultIn):
+    pass
+
+
+async def _post_result(call: surface.SurfaceCall, data: PostResultToolIn) -> api.ResultOut:
+    inp = api.PostResultIn.model_validate(data.model_dump(exclude={"idempotency_key"}))
+    return await api.accept_result(
+        call.session, call.actor, call.caller.run_id, inp, now=call.now, tainted=call.tainted
+    )
+
+
+async def _project_of_run(ctx: WorkspaceContext, raw: Any) -> UUID | None:
+    try:
+        run_id = UUID(str(raw.get("run_id")))
+    except ValueError:
+        return None
+    return await api.run_project(ctx, run_id)
+
+
+POST_RESULT = surface.register_op(
+    surface.SurfaceOp(
+        name="post_result",
+        description=(
+            "Report the result of your run with its task token: outcome (done, partial or"
+            " blocked), a summary, the files you touched and links (branch, pull request,"
+            " document, draft or url). The task moves to In review for the human to accept"
+            " or reject. Posting again for the same run returns the first result."
+        ),
+        scope="tasks:write",
+        input_model=PostResultToolIn,
+        output_model=api.ResultOut,
+        rest_method="POST",
+        rest_path="/v1/runs/{run_id}/result",
+        write=True,
+        updates_existing=False,
+        project_arg=None,
+        project_resolver=_project_of_run,
+        handler=_post_result,
+        session_twin_allowed=False,  # a result comes from the run's agent, never a session
     )
 )
 

@@ -1514,6 +1514,320 @@
     "write": false
   },
   {
+    "description": "Report the result of your run with its task token: outcome (done, partial or blocked), a summary, the files you touched and links (branch, pull request, document, draft or url). The task moves to In review for the human to accept or reject. Posting again for the same run returns the first result.",
+    "input_schema": {
+      "$defs": {
+        "FileTouched": {
+          "properties": {
+            "change": {
+              "enum": [
+                "added",
+                "modified",
+                "deleted"
+              ],
+              "title": "Change",
+              "type": "string"
+            },
+            "path": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "change"
+          ],
+          "title": "FileTouched",
+          "type": "object"
+        },
+        "ResultLink": {
+          "properties": {
+            "kind": {
+              "enum": [
+                "branch",
+                "pull_request",
+                "document",
+                "draft",
+                "url"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Label"
+            },
+            "url": {
+              "maxLength": 2048,
+              "pattern": "^https?://\\S+$",
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "url"
+          ],
+          "title": "ResultLink",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "files_touched": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FileTouched"
+          },
+          "maxItems": 500,
+          "title": "Files Touched",
+          "type": "array"
+        },
+        "idempotency_key": {
+          "maxLength": 255,
+          "minLength": 8,
+          "pattern": "^[A-Za-z0-9_\\-:.]+$",
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "links": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ResultLink"
+          },
+          "maxItems": 50,
+          "title": "Links",
+          "type": "array"
+        },
+        "outcome": {
+          "enum": [
+            "done",
+            "partial",
+            "blocked"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "summary": {
+          "maxLength": 20000,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "tests_summary": {
+          "anyOf": [
+            {
+              "maxLength": 20000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tests Summary"
+        }
+      },
+      "required": [
+        "outcome",
+        "summary",
+        "run_id",
+        "idempotency_key"
+      ],
+      "title": "PostResultToolIn",
+      "type": "object"
+    },
+    "master_only": false,
+    "name": "post_result",
+    "output_schema": {
+      "$defs": {
+        "FileTouched": {
+          "properties": {
+            "change": {
+              "enum": [
+                "added",
+                "modified",
+                "deleted"
+              ],
+              "title": "Change",
+              "type": "string"
+            },
+            "path": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "change"
+          ],
+          "title": "FileTouched",
+          "type": "object"
+        },
+        "ResultLink": {
+          "properties": {
+            "kind": {
+              "enum": [
+                "branch",
+                "pull_request",
+                "document",
+                "draft",
+                "url"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Label"
+            },
+            "url": {
+              "maxLength": 2048,
+              "pattern": "^https?://\\S+$",
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "url"
+          ],
+          "title": "ResultLink",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "files_touched": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FileTouched"
+          },
+          "maxItems": 500,
+          "title": "Files Touched",
+          "type": "array"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "links": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ResultLink"
+          },
+          "maxItems": 50,
+          "title": "Links",
+          "type": "array"
+        },
+        "outcome": {
+          "enum": [
+            "done",
+            "partial",
+            "blocked"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 20000,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "tainted": {
+          "default": false,
+          "title": "Tainted",
+          "type": "boolean"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "tests_summary": {
+          "anyOf": [
+            {
+              "maxLength": 20000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tests Summary"
+        }
+      },
+      "required": [
+        "outcome",
+        "summary",
+        "id",
+        "run_id",
+        "task_id",
+        "created_at"
+      ],
+      "title": "ResultOut",
+      "type": "object"
+    },
+    "rest": {
+      "method": "POST",
+      "path": "/v1/runs/{run_id}/result"
+    },
+    "schema_version": 1,
+    "scope": "tasks:write",
+    "updates_existing": false,
+    "write": true
+  },
+  {
     "description": "Search tasks and projects by text (phrases in quotes, prefixes), best match first; project_id boosts that project's rows. Pages by cursor.",
     "input_schema": {
       "properties": {

@@ -74,6 +74,7 @@ from tumnis.modules.tasks.models import (
     BoardColumn,
     DayClose,
     RecurrenceRule,
+    Result,
     Task,
     TaskChange,
     TaskComment,
@@ -82,6 +83,8 @@ from tumnis.modules.tasks.models import (
 from tumnis.modules.tasks.payloads import (
     DOC_BODY_MAX_BYTES,
     HumanDecidedV1,
+    PostedLink,
+    ResultPostedV1,
     TaskCreatedV1,
     TaskDoc,
     TaskStatusChangedV1,
@@ -168,6 +171,7 @@ _columns: Table = BoardColumn.__table__  # type: ignore[assignment]
 _comments: Table = TaskComment.__table__  # type: ignore[assignment]
 _links: Table = TaskContextItem.__table__  # type: ignore[assignment]
 _changes: Table = TaskChange.__table__  # type: ignore[assignment]
+_results: Table = Result.__table__  # type: ignore[assignment]
 _log = structlog.get_logger(__name__)
 
 LIVE_ENTITY: Final = "task"
@@ -306,6 +310,41 @@ class CommentOut(BaseModel):
     created_by: str
     created_at: datetime
     version: int
+
+
+# --- Results (P2-04, FR-5.8) ------------------------------------------------------------------
+
+ResultOutcome = Literal["done", "partial", "blocked"]
+ResultUrl = Annotated[str, StringConstraints(max_length=2048, pattern=r"^https?://\S+$")]
+
+
+class FileTouched(BaseModel):
+    path: Annotated[str, StringConstraints(min_length=1, max_length=1024)]
+    change: Literal["added", "modified", "deleted"]
+
+
+class ResultLink(BaseModel):
+    kind: Literal["branch", "pull_request", "document", "draft", "url"]
+    url: ResultUrl
+    label: Annotated[str, StringConstraints(max_length=200)] | None = None
+
+
+class ResultFields(BaseModel):
+    """What an agent reports it did in a run."""
+
+    outcome: ResultOutcome
+    summary: Annotated[str, StringConstraints(min_length=1, max_length=20_000)]
+    files_touched: list[FileTouched] = Field(default=[], max_length=500)
+    links: list[ResultLink] = Field(default=[], max_length=50)
+    tests_summary: Annotated[str, StringConstraints(max_length=20_000)] | None = None
+
+
+class ResultOut(ResultFields):
+    id: UUID
+    run_id: UUID
+    task_id: UUID
+    created_at: datetime
+    tainted: bool = False  # posted by a tainted run or a key with no run (P2-08, SAF-1)
 
 
 class TaskContextItemOut(BaseModel):
@@ -1516,6 +1555,76 @@ async def add_comment(
     )
     await _changed(s, row, ["comments"], now)
     return CommentOut.model_validate(dict(created))
+
+
+async def result_of_run(s: AsyncSession, run_id: UUID) -> ResultOut | None:
+    """The run's stored result, None before one was posted."""
+    found = (
+        (await s.execute(select(_results).where(_results.c.run_id == run_id, _live(_results))))
+        .mappings()
+        .first()
+    )
+    return None if found is None else ResultOut.model_validate(dict(found))
+
+
+async def post_result(  # the result, plus who and when
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    run_id: UUID,
+    fields: ResultFields,
+    *,
+    tainted: bool = False,
+    now: datetime | None = None,
+) -> tuple[ResultOut, bool]:
+    """Stores the run's result (P2-04, FR-5.8) in the caller's transaction: the `results`
+    row, the task In progress -> In review as `actor` (an agent), and `result.posted`.
+    Once per run: a second call answers the first result and `False` (nothing changes).
+    A task no longer In progress (a human moved it) keeps its status."""
+    existing = await result_of_run(s, run_id)
+    if existing is not None:
+        return existing, False
+    row = await _row(s, task_id, lock=True)
+    created = (
+        (
+            await s.execute(
+                pg_insert(_results)
+                .values(
+                    task_id=task_id,
+                    run_id=run_id,
+                    tainted=tainted,
+                    **fields.model_dump(mode="json"),
+                )
+                .on_conflict_do_nothing(index_elements=["workspace_id", "run_id"])
+                .returning(*_results.c)
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if created is None:  # a concurrent post won
+        again = await result_of_run(s, run_id)
+        assert again is not None  # noqa: S101  # the conflict names a live row
+        return again, False
+    at = _now(now)
+    if Status(row["status"]) is Status.IN_PROGRESS:
+        await _transition(s, actor, row, Status.IN_REVIEW, row["version"], now=at)
+    await emit(
+        s,
+        ResultPostedV1(
+            result_id=created["id"],
+            run_id=run_id,
+            task_id=task_id,
+            project_id=row["project_id"],
+            outcome=fields.outcome,
+            summary=fields.summary,
+            links=[
+                PostedLink.model_validate(link.model_dump(mode="json")) for link in fields.links
+            ],
+        ),
+        occurred_at=at,
+    )
+    return ResultOut.model_validate(dict(created)), True
 
 
 async def list_comments(

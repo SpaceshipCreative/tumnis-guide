@@ -11,7 +11,8 @@ export type LiveEntity =
   | "dead_letter"
   | "calendar_account"
   | "runner"
-  | "agent_profile";
+  | "agent_profile"
+  | "run";
 
 export const LIVE_MAP: Record<
   LiveEntity,
@@ -96,6 +97,12 @@ export const LIVE_MAP: Record<
   agent_profile: {
     details: ["agentsGetProfileTools"],
     lists: ["agentsListProfiles"],
+  },
+  // A run's status and its log (P2-04): a run message refreshes its header and events
+  // page (the run view pages on from its cursor).
+  run: {
+    details: ["agentsGetRun", "agentsListRunEvents"],
+    lists: [],
   },
 };
 
