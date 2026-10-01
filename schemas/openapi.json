@@ -13978,7 +13978,7 @@
         ]
       }
     },
-    "/v1/plan/{day}/issues/{issue_id}/move": {
+    "/v1/plan/{day}/issues/{plan_issue_id}/move": {
       "post": {
         "operationId": "planning_move_issue",
         "parameters": [
@@ -13994,11 +13994,11 @@
           },
           {
             "in": "path",
-            "name": "issue_id",
+            "name": "plan_issue_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Issue Id",
+              "title": "Plan Issue Id",
               "type": "string"
             }
           }
@@ -14101,7 +14101,7 @@
         ]
       }
     },
-    "/v1/plan/{day}/issues/{issue_id}/split": {
+    "/v1/plan/{day}/issues/{plan_issue_id}/split": {
       "post": {
         "operationId": "planning_split_issue",
         "parameters": [
@@ -14117,11 +14117,11 @@
           },
           {
             "in": "path",
-            "name": "issue_id",
+            "name": "plan_issue_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Issue Id",
+              "title": "Plan Issue Id",
               "type": "string"
             }
           }

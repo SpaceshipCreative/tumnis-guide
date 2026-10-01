@@ -1592,7 +1592,7 @@ export const planningMoveIssue = <ThrowOnError extends boolean = false>(
   >({
     responseValidator: async (data) =>
       await zPlanningMoveIssueResponse.parseAsync(data),
-    url: "/v1/plan/{day}/issues/{issue_id}/move",
+    url: "/v1/plan/{day}/issues/{plan_issue_id}/move",
     ...options,
   });
 
@@ -1613,7 +1613,7 @@ export const planningSplitIssue = <ThrowOnError extends boolean = false>(
   >({
     responseValidator: async (data) =>
       await zPlanningSplitIssueResponse.parseAsync(data),
-    url: "/v1/plan/{day}/issues/{issue_id}/split",
+    url: "/v1/plan/{day}/issues/{plan_issue_id}/split",
     ...options,
   });
 

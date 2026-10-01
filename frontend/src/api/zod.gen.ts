@@ -2437,7 +2437,7 @@ export const zPlanningGetDayCalendarResponse = zDayCalendarOut;
 
 export const zPlanningMoveIssuePath = z.object({
   day: z.iso.date(),
-  issue_id: z.uuid(),
+  plan_issue_id: z.uuid(),
 });
 
 /**
@@ -2447,7 +2447,7 @@ export const zPlanningMoveIssueResponse = zPlanOut;
 
 export const zPlanningSplitIssuePath = z.object({
   day: z.iso.date(),
-  issue_id: z.uuid(),
+  plan_issue_id: z.uuid(),
 });
 
 /**

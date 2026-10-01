@@ -20,7 +20,7 @@ P1-11, the daily plan: `GET /{day}` (the published plan with each item's live ta
 status and `blocked` flag, its issues and notice; 404 when the day has none), `POST
 /replan` (202; enqueues `build_plan` with trigger `replan`), `POST
 /{day}/items/{task_id}/accept|remove|swap` (`{with_task_id}`), `POST /{day}/accept-all`,
-`GET /{day}/alternates` and `POST /{day}/issues/{id}/split|move`. Each write answers the
+`GET /{day}/alternates` and `POST /{day}/issues/{plan_issue_id}/split|move`. Each write answers the
 plan as it now is.
 
 All session-only; every write is idempotent and runs in the request's transaction.
@@ -31,7 +31,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, Request
-from starlette.convertors import Convertor, register_url_convertor
 
 from tumnis.core.audit_router import require_session
 from tumnis.core.clock import Clock
@@ -40,23 +39,6 @@ from tumnis.core.idempotency import SessionDep
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.modules.planning import api
-
-
-class _IsoDay(Convertor[str]):
-    """A `YYYY-MM-DD` path segment, left as text for FastAPI to parse into a `date`. `GET
-    /{day:isoday}` then never claims `/replan`, so a request there that is not a POST
-    answers 405 with `Allow: POST` only."""
-
-    regex = "[0-9]{4}-[0-9]{2}-[0-9]{2}"
-
-    def convert(self, value: str) -> str:
-        return value
-
-    def to_string(self, value: str) -> str:
-        return value
-
-
-register_url_convertor("isoday", _IsoDay())
 
 router = v1_router("planning", prefix="/plan", tags=["planning"])
 settings_router = v1_router("planning", prefix="/settings", tags=["settings"])
@@ -108,7 +90,7 @@ async def replan(body: api.ReplanIn, request: Request, ctx: Session) -> api.Repl
     return await api.request_replan(ctx, body, now=_clock(request).now())
 
 
-@router.get("/{day:isoday}")
+@router.get("/{day}")
 @route_policy(RoutePolicy(auth="session"))
 async def get_plan(day: date, ctx: Session) -> api.PlanOut:
     return await api.get_plan(ctx, day)
@@ -160,23 +142,23 @@ async def swap_item(  # noqa: PLR0917  # path, body and the injected request
     return await api.swap_item(ctx, day, task_id, body, now=_clock(request).now(), session=session)
 
 
-@router.post("/{day}/issues/{issue_id}/split")
+@router.post("/{day}/issues/{plan_issue_id}/split")
 @route_policy(RoutePolicy(auth="session", idempotent=True))
 async def split_issue(
-    day: date, issue_id: UUID, request: Request, ctx: Session, session: SessionDep
+    day: date, plan_issue_id: UUID, request: Request, ctx: Session, session: SessionDep
 ) -> api.PlanOut:
     return await api.resolve_issue(
-        ctx, day, issue_id, "split", now=_clock(request).now(), session=session
+        ctx, day, plan_issue_id, "split", now=_clock(request).now(), session=session
     )
 
 
-@router.post("/{day}/issues/{issue_id}/move")
+@router.post("/{day}/issues/{plan_issue_id}/move")
 @route_policy(RoutePolicy(auth="session", idempotent=True))
 async def move_issue(
-    day: date, issue_id: UUID, request: Request, ctx: Session, session: SessionDep
+    day: date, plan_issue_id: UUID, request: Request, ctx: Session, session: SessionDep
 ) -> api.PlanOut:
     return await api.resolve_issue(
-        ctx, day, issue_id, "move", now=_clock(request).now(), session=session
+        ctx, day, plan_issue_id, "move", now=_clock(request).now(), session=session
     )
 
 

@@ -7166,12 +7166,12 @@ export type PlanningMoveIssueData = {
      */
     day: string;
     /**
-     * Issue Id
+     * Plan Issue Id
      */
-    issue_id: string;
+    plan_issue_id: string;
   };
   query?: never;
-  url: "/v1/plan/{day}/issues/{issue_id}/move";
+  url: "/v1/plan/{day}/issues/{plan_issue_id}/move";
 };
 
 export type PlanningMoveIssueErrors = {
@@ -7230,12 +7230,12 @@ export type PlanningSplitIssueData = {
      */
     day: string;
     /**
-     * Issue Id
+     * Plan Issue Id
      */
-    issue_id: string;
+    plan_issue_id: string;
   };
   query?: never;
-  url: "/v1/plan/{day}/issues/{issue_id}/split";
+  url: "/v1/plan/{day}/issues/{plan_issue_id}/split";
 };
 
 export type PlanningSplitIssueErrors = {
