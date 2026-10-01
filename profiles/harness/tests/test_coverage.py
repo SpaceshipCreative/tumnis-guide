@@ -52,6 +52,7 @@ SKILLS = {
     ("project-template", "coding"),
     ("project-template", "gated-actions"),
     ("project-template", "project-digest"),
+    ("project-template", "stuck"),
     ("master", "plan"),
     ("master", "orchestrate-master"),
     ("master", "workspace-digest"),
