@@ -264,6 +264,11 @@ class _WithMinioLocation:
         self.ready = False
         self.lock = asyncio.Lock()
 
+    @property
+    def state(self) -> Any:
+        """The wrapped app's state (`seed_client` sets the rate limiter there)."""
+        return self.app.state
+
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if scope["type"] == "http" and not self.ready:
             async with self.lock:
