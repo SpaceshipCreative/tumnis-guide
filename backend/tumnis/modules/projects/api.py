@@ -40,6 +40,8 @@ from tumnis.modules.auth import api as auth
 from tumnis.modules.projects.events import (
     BRIEF_MAX_CHARS,
     AgentProfileChoice,
+    PolicyChangedV1,
+    PolicyDoc,
     ProjectArchivedV1,
     ProjectCreatedV1,
     ProjectPurgedV1,
@@ -159,6 +161,19 @@ class PolicyOut(BaseModel):
     max_run_minutes: int
     max_tasks_per_run: int
     version: int
+
+
+# An action class's name: the policy's own vocabulary (FR-5.6), never free text.
+ActionClassName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
+
+
+class PolicyIn(BaseModel):
+    """The policy editor's save (P2-05, FR-5.6): both lists as a whole and the version
+    read. A class in both lists is 422 `policy_conflict`."""
+
+    gated: list[ActionClassName] = Field(max_length=100)
+    allowed: list[ActionClassName] = Field(max_length=100)
+    version: Version
 
 
 # --- Task statistics (registered by tasks, P0-18) -----------------------------------------
@@ -345,6 +360,70 @@ async def get_policy(s: AsyncSession, project_id: UUID) -> PolicyOut:
     if row is None:
         raise NotFound("project_policies", project_id)
     return PolicyOut.model_validate(dict(row))
+
+
+def _policy_doc(policy: PolicyOut) -> PolicyDoc:
+    return PolicyDoc.model_validate(policy.model_dump(exclude={"project_id", "version"}))
+
+
+async def update_policy(
+    s: AsyncSession,
+    actor: ActorRef,
+    project_id: UUID,
+    body: PolicyIn,
+    *,
+    now: datetime | None = None,
+) -> PolicyOut:
+    """Replaces the project's gated and allowed lists at `body.version` (P2-05, FR-5.6).
+    Emits `policy.changed` with the policy before and after and writes the
+    `policy.changed` audit row with both lists (SEC-3), in the caller's transaction. 404
+    for an unknown project; 422 `policy_conflict` when a class is in both lists; 409
+    `stale_version` with the policy as it is now (`current`)."""
+    before = await get_policy(s, project_id)
+    gated = list(dict.fromkeys(body.gated))
+    allowed = list(dict.fromkeys(body.allowed))
+    both = sorted(set(gated) & set(allowed))
+    if both:
+        raise ProblemError(
+            422,
+            "policy_conflict",
+            f"An action is either gated or allowed, not both: {', '.join(both)}",
+        )
+    policy_id: UUID = (
+        await s.execute(
+            select(_policies.c.id).where(
+                _policies.c.project_id == project_id, _policies.c.deleted_at.is_(None)
+            )
+        )
+    ).scalar_one()
+    try:
+        row = await update_versioned(
+            s, _policies, policy_id, body.version, {"gated": gated, "allowed": allowed}
+        )
+    except StaleVersion:
+        current = await get_policy(s, project_id)
+        raise StaleVersion(current=current.model_dump(mode="json")) from None
+    after = PolicyOut.model_validate(dict(row))
+    occurred_at = _now(now)
+    await emit(
+        s,
+        PolicyChangedV1(
+            project_id=project_id, before=_policy_doc(before), after=_policy_doc(after)
+        ),
+        occurred_at=occurred_at,
+    )
+    await audit.record(
+        s,
+        "policy.changed",
+        target=("project", project_id),
+        details={
+            "before": {"gated": before.gated, "allowed": before.allowed},
+            "after": {"gated": after.gated, "allowed": after.allowed},
+        },
+        occurred_at=occurred_at,
+    )
+    mark_changed(s, LIVE_ENTITY, project_id)
+    return after
 
 
 async def effective_subtask_threshold(s: AsyncSession, project_id: UUID) -> int:

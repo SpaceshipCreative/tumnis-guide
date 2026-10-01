@@ -542,6 +542,32 @@ export const zPlannedBlockOut = z.object({
 });
 
 /**
+ * PolicyIn
+ *
+ * The policy editor's save (P2-05, FR-5.6): both lists as a whole and the version
+ * read. A class in both lists is 422 `policy_conflict`.
+ */
+export const zPolicyIn = z.object({
+  allowed: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)).max(100),
+  gated: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)).max(100),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * PolicyOut
+ */
+export const zPolicyOut = z.object({
+  allowed: z.array(z.string()),
+  gated: z.array(z.string()),
+  max_concurrent_runs: z.int(),
+  max_run_minutes: z.int(),
+  max_tasks_per_run: z.int(),
+  project_id: z.uuid(),
+  tool_allowlist: z.array(z.string()),
+  version: z.int(),
+});
+
+/**
  * PolicySection
  *
  * What the agent may do without asking, and its run limits (FR-5.6, SAF-5). The action
@@ -2440,6 +2466,26 @@ export const zProjectsGetProjectContextQuery = z.object({
  * Successful Response
  */
 export const zProjectsGetProjectContextResponse = zProjectContextOut;
+
+export const zProjectsGetPolicyPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsGetPolicyResponse = zPolicyOut;
+
+export const zProjectsUpdatePolicyBody = zPolicyIn;
+
+export const zProjectsUpdatePolicyPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsUpdatePolicyResponse = zPolicyOut;
 
 export const zProjectsReorderProjectBody = zReorderIn;
 

@@ -1543,6 +1543,65 @@ export type PlannedBlockOut = {
 };
 
 /**
+ * PolicyIn
+ *
+ * The policy editor's save (P2-05, FR-5.6): both lists as a whole and the version
+ * read. A class in both lists is 422 `policy_conflict`.
+ */
+export type PolicyIn = {
+  /**
+   * Allowed
+   */
+  allowed: Array<string>;
+  /**
+   * Gated
+   */
+  gated: Array<string>;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * PolicyOut
+ */
+export type PolicyOut = {
+  /**
+   * Allowed
+   */
+  allowed: Array<string>;
+  /**
+   * Gated
+   */
+  gated: Array<string>;
+  /**
+   * Max Concurrent Runs
+   */
+  max_concurrent_runs: number;
+  /**
+   * Max Run Minutes
+   */
+  max_run_minutes: number;
+  /**
+   * Max Tasks Per Run
+   */
+  max_tasks_per_run: number;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Tool Allowlist
+   */
+  tool_allowlist: Array<string>;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
  * PolicySection
  *
  * What the agent may do without asking, and its run limits (FR-5.6, SAF-5). The action
@@ -7427,6 +7486,126 @@ export type ProjectsGetProjectContextResponses = {
 
 export type ProjectsGetProjectContextResponse =
   ProjectsGetProjectContextResponses[keyof ProjectsGetProjectContextResponses];
+
+export type ProjectsGetPolicyData = {
+  body?: never;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/policy";
+};
+
+export type ProjectsGetPolicyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsGetPolicyError =
+  ProjectsGetPolicyErrors[keyof ProjectsGetPolicyErrors];
+
+export type ProjectsGetPolicyResponses = {
+  /**
+   * Successful Response
+   */
+  200: PolicyOut;
+};
+
+export type ProjectsGetPolicyResponse =
+  ProjectsGetPolicyResponses[keyof ProjectsGetPolicyResponses];
+
+export type ProjectsUpdatePolicyData = {
+  body: PolicyIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/policy";
+};
+
+export type ProjectsUpdatePolicyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsUpdatePolicyError =
+  ProjectsUpdatePolicyErrors[keyof ProjectsUpdatePolicyErrors];
+
+export type ProjectsUpdatePolicyResponses = {
+  /**
+   * Successful Response
+   */
+  200: PolicyOut;
+};
+
+export type ProjectsUpdatePolicyResponse =
+  ProjectsUpdatePolicyResponses[keyof ProjectsUpdatePolicyResponses];
 
 export type ProjectsReorderProjectData = {
   body: ReorderIn;

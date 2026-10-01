@@ -73,11 +73,13 @@ import {
   planningSchedulePlanItem,
   projectsArchiveProject,
   projectsCreateProject,
+  projectsGetPolicy,
   projectsGetProject,
   projectsGetProjectContext,
   projectsListProjects,
   projectsReorderProject,
   projectsUnarchiveProject,
+  projectsUpdatePolicy,
   projectsUpdateProject,
   purgesPurge,
   searchSearch,
@@ -300,6 +302,9 @@ import type {
   ProjectsCreateProjectData,
   ProjectsCreateProjectError,
   ProjectsCreateProjectResponse,
+  ProjectsGetPolicyData,
+  ProjectsGetPolicyError,
+  ProjectsGetPolicyResponse,
   ProjectsGetProjectContextData,
   ProjectsGetProjectContextError,
   ProjectsGetProjectContextResponse,
@@ -315,6 +320,9 @@ import type {
   ProjectsUnarchiveProjectData,
   ProjectsUnarchiveProjectError,
   ProjectsUnarchiveProjectResponse,
+  ProjectsUpdatePolicyData,
+  ProjectsUpdatePolicyError,
+  ProjectsUpdatePolicyResponse,
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectError,
   ProjectsUpdateProjectResponse,
@@ -2435,6 +2443,68 @@ export const projectsGetProjectContextOptions = (
     },
     queryKey: projectsGetProjectContextQueryKey(options),
   });
+
+export const projectsGetPolicyQueryKey = (
+  options: Options<ProjectsGetPolicyData>,
+) => createQueryKey("projectsGetPolicy", options);
+
+/**
+ * Get Policy
+ *
+ * The project's approval policy (FR-5.6): gated and allowed action classes and the
+ * runaway limits (SAF-5).
+ */
+export const projectsGetPolicyOptions = (
+  options: Options<ProjectsGetPolicyData>,
+) =>
+  queryOptions<
+    ProjectsGetPolicyResponse,
+    ProjectsGetPolicyError,
+    ProjectsGetPolicyResponse,
+    ReturnType<typeof projectsGetPolicyQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await projectsGetPolicy({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: projectsGetPolicyQueryKey(options),
+  });
+
+/**
+ * Update Policy
+ *
+ * Replaces the gated and allowed lists at the version read (the policy editor, P2-05);
+ * emits `policy.changed` and writes its audit row. 409 `stale_version` with the current
+ * policy; 422 `policy_conflict` when a class is in both lists.
+ */
+export const projectsUpdatePolicyMutation = (
+  options?: Partial<Options<ProjectsUpdatePolicyData>>,
+): UseMutationOptions<
+  ProjectsUpdatePolicyResponse,
+  ProjectsUpdatePolicyError,
+  Options<ProjectsUpdatePolicyData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ProjectsUpdatePolicyResponse,
+    ProjectsUpdatePolicyError,
+    Options<ProjectsUpdatePolicyData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await projectsUpdatePolicy({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 /**
  * Reorder Project
