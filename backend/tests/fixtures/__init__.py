@@ -572,8 +572,23 @@ def _stop_queue_workers(earlier: set[threading.Thread], timeout_s: float = 10) -
         if thread not in earlier and thread.name.startswith("queue-worker-"):
             thread.join(timeout=timeout_s)
     deadline = time.monotonic() + timeout_s
-    while instance._active_workflows_set.activeList() and time.monotonic() < deadline:
+    while time.monotonic() < deadline:
+        active = set(instance._active_workflows_set.activeList())
+        if active <= _parked_in_recv(instance):
+            break
         time.sleep(0.01)
+
+
+def _parked_in_recv(instance: Any) -> set[str]:
+    """IDs of the workflows waiting in `DBOS.recv` right now. Such a workflow (a focus
+    session, a run waiting on its runner) waits for a message no one will send once the
+    test is over, and holds no system-database connection while it waits: recv's setup and
+    its database re-check each run in a transaction of their own (dbos 3.1.0
+    `SystemDatabase.recv_async`), so waiting for it only ran out the timeout (10 s per
+    test). A workflow still running a step, or whose message has arrived (it is about to
+    consume it), is still waited for."""
+    entries = instance._sys_db.notifications_map.snapshot()
+    return {workflow_id for _, (workflow_id, _), event in entries if not event.is_set()}
 
 
 def _close_late_checkins() -> threading.Event:
