@@ -210,6 +210,7 @@ class ReturnIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     decision: Literal["return", "stay"]
     version: int
+    event_id: UUID | None = None  # the question answered, as `GET /current` shows it
 
 
 class LessIn(BaseModel):
@@ -756,9 +757,15 @@ async def return_detour(
     """`POST /v1/focus/return`: the answer to the open detour's return question (P4-01).
     Return: the detour goes to Backlog (at `body.version`, else 409 `stale_version`) and
     the task to return to, when it is in Today, is In progress again. Stay: nothing
-    moves. The question is answered once: 409 `no_open_detour` when none is open."""
+    moves. The question is answered once, and only today's, the one `GET /current` shows
+    (`body.event_id` when given): 409 `no_open_detour` when none is open."""
     s = session
-    event = (await s.execute(_detours().limit(1).with_for_update())).first()
+    level = await _level(s, ctx, now)
+    start, end = _day_bounds(now.astimezone(level.tz).date(), level.tz)
+    found = _detours().where(_events.c.fired_at >= start, _events.c.fired_at < end).limit(1)
+    if body.event_id is not None:
+        found = found.where(_events.c.id == body.event_id)
+    event = (await s.execute(found.with_for_update())).first()
     if event is None:
         raise ProblemError(409, "no_open_detour", "No detour is waiting for an answer.")
     if body.decision == "return":

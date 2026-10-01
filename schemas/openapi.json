@@ -6984,6 +6984,18 @@
             "title": "Decision",
             "type": "string"
           },
+          "event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
           "version": {
             "title": "Version",
             "type": "integer"

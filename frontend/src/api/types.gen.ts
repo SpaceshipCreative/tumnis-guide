@@ -3665,6 +3665,10 @@ export type ReturnIn = {
    */
   decision: "return" | "stay";
   /**
+   * Event Id
+   */
+  event_id?: string | null;
+  /**
    * Version
    */
   version: number;

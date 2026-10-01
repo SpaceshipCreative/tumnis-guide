@@ -1371,6 +1371,7 @@ export const zResumeOut = z.object({
  */
 export const zReturnIn = z.object({
   decision: z.enum(["return", "stay"]),
+  event_id: z.uuid().nullish(),
   version: z.int(),
 });
 
