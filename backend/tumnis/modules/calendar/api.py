@@ -42,7 +42,10 @@ from tumnis.modules.calendar.adapters.port import (
     TokenSet,
 )
 from tumnis.modules.calendar.models import CalendarAccount, Event
-from tumnis.modules.calendar.payloads import CalendarSyncedV1, SyncWindow
+
+# Re-exported: other modules (and their tests) name the payload through this file.
+from tumnis.modules.calendar.payloads import CalendarSyncedV1 as CalendarSyncedV1  # noqa: PLC0414
+from tumnis.modules.calendar.payloads import SyncWindow as SyncWindow  # noqa: PLC0414
 from tumnis.modules.calendar.rules import (
     READONLY_SCOPES,
     AccountStatus,
