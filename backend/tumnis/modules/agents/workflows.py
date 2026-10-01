@@ -2172,11 +2172,11 @@ async def handle_stuck(
 ) -> str:
     """The person tapped "Stuck" (FR-10.5): the project agent's stuck run, then its answer within
     the deadline (`split` or `took_step`), else `pending` with the fallback shown. A request
-    that fell back at once (no agent to ask) answers `fallback`; one another request of the
-    task already covers answers `pending` and adds nothing."""
+    that fell back at once (no agent to ask) answers `fallback`, and a replayed one its
+    recorded state."""
     start = await request_stuck_run_step(workspace_id, task_id, focus_event_id, requested_at, actor)
     if start["state"] != "working":
-        return "fallback" if start["state"] == "fallback" else "pending"
+        return str(start["state"])
     message = await DBOS.recv_async(api.STUCK_TOPIC, timeout_seconds=api.stuck_deadline_s())
     outcome = message.get("outcome") if isinstance(message, dict) else None
     if outcome in ("split", "took_step"):

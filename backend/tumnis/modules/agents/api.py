@@ -1827,11 +1827,11 @@ def stuck_workflow_id(focus_event_id: UUID) -> str:
 
 
 class StuckStart(BaseModel):
-    """What `request_stuck_run` did: the run asked for (None when none could start), and
-    the request's state; None when another stuck request of the task already works on it."""
+    """What `request_stuck_run` did: the run asked for or joined (None when none could
+    start), and the request's state."""
 
     run_id: UUID | None
-    state: StuckState | None
+    state: StuckState
 
 
 class StuckStepOut(BaseModel):
@@ -1869,15 +1869,30 @@ async def _profile_down(s: AsyncSession, run_id: UUID) -> bool:
     return isinstance(health, dict) and health.get("reachable") is False
 
 
+async def _active_stuck_run(s: AsyncSession, task_id: UUID) -> UUID | None:
+    """The task's stuck run still queued or running, if any."""
+    return await s.scalar(
+        select(_runs.c.id)
+        .where(
+            _runs.c.task_id == task_id,
+            _runs.c.kind == RunKind.STUCK.value,
+            _runs.c.status.in_(ACTIVE_RUN),
+        )
+        .order_by(_runs.c.created_at.desc())
+        .limit(1)
+    )
+
+
 async def request_stuck_run(
     ctx: WorkspaceContext, task_id: UUID, focus_event_id: UUID, *, requested_at: datetime
 ) -> StuckStart:
     """The stuck run for a stuck focus event (`request_run(task_id, "stuck",
     priority=STUCK_PRIORITY)`, R-23, any label) and its request row, in one transaction.
-    Idempotent per focus event: a replay answers the row already there. Another stuck run
-    of the task still active means another request is on it: nothing is added (state
-    None). A run that cannot start (paused, no ready agent, a finished task), or an agent
-    whose last health check failed, falls back at once (FR-4.6's degraded mode)."""
+    Idempotent per focus event: a replay answers the row already there. When a stuck run
+    of the task is still active (an earlier check-in's), this request waits on that run's
+    answer as well (both requests take it). A run that cannot start (paused, no ready
+    agent, a finished task), or an agent whose last health check failed, falls back at
+    once (FR-4.6's degraded mode)."""
     async with tenant_session(ctx) as s:
         held = (
             await s.execute(
@@ -1903,9 +1918,13 @@ async def request_stuck_run(
         except NotFound:
             state = "fallback"
         except ProblemError as exc:
-            if exc.code == "run_already_active":
-                return StuckStart(run_id=None, state=None)
-            state = "fallback"
+            # A stuck run of the task already works on it (an earlier check-in's): this
+            # request waits on that run's answer too, or falls back when it has just ended.
+            run_id = (
+                await _active_stuck_run(s, task_id) if exc.code == "run_already_active" else None
+            )
+            if run_id is None:
+                state = "fallback"
         if run_id is not None and await _profile_down(s, run_id):
             state = "fallback"
         await s.execute(
