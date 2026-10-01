@@ -5,9 +5,13 @@ which day. Each emitting work package adds its event's line to `COUNTERS`; the u
 subscribers follow the map (one per key).
 """
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import UTC, date, datetime
 from typing import Any, Final
+from uuid import UUID
+from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel
 
 CounterFn = Callable[[Mapping[str, Any]], int]
 Counters = tuple[tuple[str, CounterFn], ...]
@@ -77,3 +81,45 @@ def usage_day(occurred_at: datetime) -> date:
     if occurred_at.tzinfo is None:
         raise ValueError("occurred_at must be timezone-aware")
     return occurred_at.astimezone(UTC).date()
+
+
+# --- Local success metrics (P1-18, PRD Success metrics) ----------------------------------------
+
+
+class PlannedOutcome(BaseModel, frozen=True):
+    """A task that was on a published plan, and how many nights it has rolled over."""
+
+    task_id: UUID
+    rollover_count: int
+
+
+class PlanDayFacts(BaseModel, frozen=True):
+    """One local day of the exit gate: a plan was published, and the human accepted,
+    swapped or removed at least one of its items."""
+
+    published: bool
+    decided: bool
+
+
+def daily_open_rate(open_days: set[date], start: date, end: date) -> float | None:
+    raise NotImplementedError  # P1-18
+
+
+def tasks_completed_per_working_day(
+    done_at: Sequence[datetime], tz: ZoneInfo, start: date, end: date, weekdays: frozenset[int]
+) -> float | None:
+    raise NotImplementedError  # P1-18
+
+
+def rollover_rate(planned: Sequence[PlannedOutcome]) -> float | None:
+    raise NotImplementedError  # P1-18
+
+
+def estimate_error(pairs: Sequence[tuple[int, int]]) -> float | None:
+    raise NotImplementedError  # P1-18
+
+
+def consecutive_plan_days(
+    days: Mapping[date, PlanDayFacts], end: date, weekdays: frozenset[int]
+) -> int:
+    raise NotImplementedError  # P1-18

@@ -512,3 +512,60 @@ def free_left(free: Sequence[Interval], taken: Sequence[Interval]) -> list[Inter
             pieces = kept
         left += pieces
     return left
+
+
+# --- Close the day (P1-18, J7) -----------------------------------------------------------------
+
+
+class TaskRef(BaseModel, frozen=True):
+    """A task as the close-the-day panel names it."""
+
+    task_id: UUID
+    project_id: UUID
+    title: str
+    label: Label | None
+
+
+class RolloverRef(TaskRef, frozen=True):
+    """A Today task that is not done: the nights it has rolled over so far, and its count
+    after tonight's day close."""
+
+    rollover_count: int
+    tonight: int
+
+
+class TaskFacts(BaseModel, frozen=True):
+    """What `day_summary` needs of one task (read through tasks.api)."""
+
+    task_id: UUID
+    project_id: UUID
+    title: str
+    label: Label | None
+    status: TaskStatus
+    completed_at: datetime | None
+    rollover_count: int
+    result_posted_at: datetime | None = None  # its latest result (P2-04), if any
+
+
+class RunFacts(BaseModel, frozen=True):
+    """What `day_summary` needs of one agent run (read through agents.api)."""
+
+    run_id: UUID
+    task_id: UUID | None
+    kind: str  # enrich, task, plan, ...
+    status: str  # a RunStatus value
+    finished_at: datetime | None
+
+
+class DaySummary(BaseModel, frozen=True):
+    shipped: list[TaskRef]  # moved to Done today (local day) by the human
+    agents_finished: list[TaskRef]  # AI tasks done today, and tasks with a result posted today
+    prepared_by_agents: int  # enrichment runs finished today
+    queued_overnight: list[TaskRef]  # empty until P4-04
+    rolls_over: list[RolloverRef]  # Today tasks not done: rollover_count now and +1 tonight
+
+
+def day_summary(
+    tasks: Sequence[TaskFacts], runs: Sequence[RunFacts], day: date, tz: ZoneInfo
+) -> DaySummary:
+    raise NotImplementedError  # P1-18

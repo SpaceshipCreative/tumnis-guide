@@ -49,6 +49,7 @@ from tumnis.modules.planning.rules import (
     ELIGIBLE_STATUSES,
     MOVE_LOOKAHEAD_WORKING_DAYS,
     PRIORITY_RANK,
+    DaySummary,
     EventDTO,
     FitOffer,
     PlanContext,
@@ -1563,3 +1564,60 @@ async def request_replan(ctx: WorkspaceContext, body: ReplanIn, *, now: datetime
         now.isoformat(),
     )
     return ReplanAccepted(day=day, workflow_id=workflow_id)
+
+
+# --- Close the day and local metrics (P1-18) ---------------------------------------------------
+
+
+class DaySummaryOut(DaySummary, frozen=True):
+    """`GET /v1/day/{day}/summary`: the close-the-day panel's four sections for one local
+    day of the workspace."""
+
+    day: date
+    timezone: str
+
+
+async def day_summary(ctx: WorkspaceContext, day: date) -> DaySummaryOut:
+    raise NotImplementedError  # P1-18
+
+
+MetricKey = Literal[
+    "daily_open_rate",
+    "tasks_completed_per_working_day",
+    "rollover_rate",
+    "estimate_error",
+    "agent_share",
+    "agent_acceptance_rate",
+    "unattended_runs_per_week",
+]
+
+
+class MetricOut(BaseModel):
+    """One PRD success metric: its value over the range (null while there is no data), its
+    target as the PRD states it, and the phase that brings its data when it has none yet."""
+
+    key: MetricKey
+    value: float | None
+    target: str
+    available_after: Literal["phase 2", "phase 4"] | None
+
+
+class MetricsSummaryOut(BaseModel):
+    """`GET /v1/metrics/summary?from=&to=`: the success metrics over the local days `start`
+    to `end`, and the phase 1 exit gate (working days planned in a row, as of today)."""
+
+    start: date
+    end: date
+    plan_days_in_a_row: int
+    exit_gate_days: int
+    metrics: list[MetricOut]
+
+
+async def record_app_open(ctx: WorkspaceContext, *, now: datetime, session: AsyncSession) -> None:
+    raise NotImplementedError  # P1-18
+
+
+async def metrics_summary(
+    ctx: WorkspaceContext, start: date, end: date, *, now: datetime
+) -> MetricsSummaryOut:
+    raise NotImplementedError  # P1-18
