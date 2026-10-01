@@ -13,14 +13,16 @@ location). Each handler finds its row (404) before any rule about the body. Stor
 take the deployment's SSRF policy from the settings.
 """
 
+from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Annotated, Any, Final
 from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import Depends, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import AnyHttpUrl, BaseModel, Field, StringConstraints
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from tumnis.core.audit_router import require_session
 from tumnis.core.clock import Clock
@@ -30,13 +32,36 @@ from tumnis.core.ids import uuid7
 from tumnis.core.net import NetPolicy
 from tumnis.core.pagination import Page, PageParams, page_params
 from tumnis.core.principal import principal_of
-from tumnis.core.routing import RoutePolicy, authorize, route_policy, v1_router
+from tumnis.core.routing import RoutePolicy, TumnisRoute, authorize, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.versioning import Version
 from tumnis.modules.knowledge import api, uploads
 from tumnis.modules.knowledge.rules import MAX_UPLOAD_BYTES
 
+# `POST /knowledge/documents/text` and `.../link` (R-36) sit at the same depth as the
+# GET, PATCH and DELETE `/knowledge/documents/{document_id}` routes, which match the
+# literal segment too. Another method on a literal path answers 405 with `Allow: POST`
+# (RFC 9110, 15.5.6), not a 422 for an id that is not a UUID.
+LITERAL_DOCUMENT_PATHS: Final = frozenset({"text", "link"})
+_DOCUMENT_ROUTE: Final = "/knowledge/documents/{document_id}"
+
+
+class _KnowledgeRoute(TumnisRoute):
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        handler = super().get_route_handler()
+        if not self.path.endswith(_DOCUMENT_ROUTE):
+            return handler
+
+        async def literal_first(request: Request) -> Response:
+            if request.path_params.get("document_id") in LITERAL_DOCUMENT_PATHS:
+                raise StarletteHTTPException(405, headers={"Allow": "POST"})
+            return await handler(request)
+
+        return literal_first
+
+
 router = v1_router("knowledge", tags=["knowledge"])
+router.route_class = _KnowledgeRoute
 
 Session = Annotated[WorkspaceContext, Depends(require_session)]
 
@@ -140,10 +165,7 @@ async def get_brief(project_id: UUID, session: SessionDep) -> api.DocumentDTO:
     return await api.get_brief(project_id, session=session)
 
 
-# `{document_id:uuid}` on the routes at the same depth as `POST /knowledge/documents/text`
-# and `.../link` (R-36): a literal path never matches them, so another method on the
-# literal answers 405, not 422. OpenAPI shows the plain `{document_id}`.
-@router.patch("/knowledge/documents/{document_id:uuid}")
+@router.patch("/knowledge/documents/{document_id}")
 @route_policy(
     RoutePolicy(
         auth="session_or_key",
@@ -266,7 +288,7 @@ async def add_link(body: LinkIn, request: Request, session: SessionDep) -> api.D
     return await api.add_link(session, body.project_id, str(body.url), body.title)
 
 
-@router.delete("/knowledge/documents/{document_id:uuid}", status_code=204)
+@router.delete("/knowledge/documents/{document_id}", status_code=204)
 @route_policy(_WRITE)
 async def trash_document(document_id: UUID, session: SessionDep) -> None:
     """To the trash: hidden from lists, reads and search until restored."""
@@ -437,7 +459,7 @@ async def upload_document(request: Request) -> api.UploadAccepted:
     return accepted
 
 
-@router.get("/knowledge/documents/{document_id:uuid}")
+@router.get("/knowledge/documents/{document_id}")
 @route_policy(
     RoutePolicy(
         auth="session_or_key",
