@@ -183,6 +183,9 @@ import type {
   FocusRespondData,
   FocusRespondErrors,
   FocusRespondResponses,
+  FocusReturnDetourData,
+  FocusReturnDetourErrors,
+  FocusReturnDetourResponses,
   GithubWebhookData,
   GithubWebhookErrors,
   GithubWebhookResponses,
@@ -498,6 +501,7 @@ import {
   zFocusLessResponse,
   zFocusPutLevelResponse,
   zFocusRespondResponse,
+  zFocusReturnDetourResponse,
   zGithubWebhookResponse,
   zHealthLiveResponse,
   zKnowledgeAddLinkResponse,
@@ -1527,6 +1531,31 @@ export const focusRespond = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zFocusRespondResponse.parseAsync(data),
     url: "/v1/focus/respond",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Return Detour
+ */
+export const focusReturnDetour = <ThrowOnError extends boolean = false>(
+  options: Options<FocusReturnDetourData, ThrowOnError>,
+): RequestResult<
+  FocusReturnDetourResponses,
+  FocusReturnDetourErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    FocusReturnDetourResponses,
+    FocusReturnDetourErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zFocusReturnDetourResponse.parseAsync(data),
+    url: "/v1/focus/return",
     ...options,
     headers: {
       "Content-Type": "application/json",

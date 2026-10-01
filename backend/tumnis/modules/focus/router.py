@@ -3,9 +3,11 @@
 - `GET /current`: what the focus bar shows (the level in force, the open session, today's
   messages with their rule attribution).
 - `PUT /level` `{level}`: the workspace's focus level.
-- `POST /respond` `{event_id, response, to_task_id?}`: a one-tap answer (404 for an
-  unknown event).
+- `POST /respond` `{event_id, response, to_task_id?, detour?}`: a one-tap answer (404 for
+  an unknown event); at Guardrail `detour` captures a switch as a task (P4-01).
 - `POST /less` `{event_id?}`: "less of this": today's level one lower until day close.
+- `POST /return` `{decision, version}`: the answer to a captured detour's return question
+  at Guardrail (P4-01; 409 `no_open_detour` when none is open).
 
 Session-only; every write is idempotent and runs in the request's transaction. Each write
 answers what `GET /current` would.
@@ -61,3 +63,11 @@ async def less(
     body: api.LessIn, request: Request, ctx: Session, session: SessionDep
 ) -> api.FocusCurrentOut:
     return await api.less_of_this(ctx, body, now=_clock(request).now(), session=session)
+
+
+@router.post("/return")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def return_detour(
+    body: api.ReturnIn, request: Request, ctx: Session, session: SessionDep
+) -> api.FocusCurrentOut:
+    return await api.return_detour(ctx, body, now=_clock(request).now(), session=session)
