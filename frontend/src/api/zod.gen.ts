@@ -30,6 +30,30 @@ export const zAgentProfileChoice = z.object({
 });
 
 /**
+ * AlternateOut
+ */
+export const zAlternateOut = z.object({
+  due_on: z.iso.date().nullable(),
+  estimate_minutes: z.int().nullable(),
+  id: z.uuid(),
+  label: z.string().nullable(),
+  project_id: z.uuid(),
+  title: z.string(),
+});
+
+/**
+ * AskHumanBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export const zAskHumanBody = z.object({
+  choices: z.array(z.string()).max(20).optional().default([]),
+  prompt: z.string().min(1).max(4000),
+  question_id: z.uuid().nullish(),
+  schema_version: z.int().nullish(),
+});
+
+/**
  * AuditEntry
  */
 export const zAuditEntry = z.object({
@@ -46,6 +70,14 @@ export const zAuditEntry = z.object({
   target_id: z.uuid().nullable(),
   target_type: z.string().nullable(),
   user_agent: z.string().nullable(),
+});
+
+/**
+ * BlockOut
+ */
+export const zBlockOut = z.object({
+  end: z.iso.datetime(),
+  start: z.iso.datetime(),
 });
 
 /**
@@ -197,28 +229,16 @@ export const zDefaultIn = z.object({
  */
 export const zDocumentDto = z.object({
   body_md: z.string().nullable(),
-  id: z.uuid(),
-  kind: z.string(),
-  pinned: z.boolean(),
-  project_id: z.uuid().nullable(),
-  role: z.string().nullable(),
-  tainted: z.boolean(),
-  title: z.string(),
-  trust: z.enum(["trusted", "untrusted"]),
-  version: z.int(),
-});
-
-/**
- * DocumentStatusOut
- *
- * A document's state as the upload flow polls it (P1-17 owns the full read).
- */
-export const zDocumentStatusOut = z.object({
   current_version_id: z.uuid().nullable(),
   id: z.uuid(),
   kind: z.string(),
+  label: z.literal("agent").nullable(),
   path: z.string().nullable(),
+  pinned: z.boolean(),
   project_id: z.uuid().nullable(),
+  provider_url: z.string().nullable(),
+  role: z.string().nullable(),
+  source: z.string().nullable(),
   status: z.enum([
     "pending_scan",
     "extracting",
@@ -227,10 +247,23 @@ export const zDocumentStatusOut = z.object({
     "failed",
   ]),
   status_reason: z.string().nullable(),
+  tags: z.array(z.string()),
   tainted: z.boolean(),
   title: z.string(),
   trust: z.enum(["trusted", "untrusted"]),
   version: z.int(),
+});
+
+/**
+ * DocumentVersionOut
+ */
+export const zDocumentVersionOut = z.object({
+  body_md: z.string().nullable(),
+  content_hash: z.string(),
+  document_id: z.uuid(),
+  id: z.uuid(),
+  size: z.int(),
+  version_no: z.int(),
 });
 
 /**
@@ -249,6 +282,16 @@ export const zEstimateBody = z.object({
 export const zFileTouched = z.object({
   change: z.enum(["added", "modified", "deleted"]),
   path: z.string().min(1).max(1024),
+});
+
+/**
+ * FitOffer
+ *
+ * What a task with no big enough gap is offered (J6).
+ */
+export const zFitOffer = z.object({
+  move_to: z.iso.date().nullable(),
+  split: z.array(z.int()).nullable(),
 });
 
 /**
@@ -293,6 +336,20 @@ export const zHealthCheckAccepted = z.object({
 });
 
 /**
+ * HumanWaitOut
+ */
+export const zHumanWaitOut = z.object({
+  answer: z.string().nullish(),
+  id: z.uuid(),
+  reason: z.string().nullish(),
+  retry_after_seconds: z.int().nullish(),
+  rule: z.string().nullish(),
+  schema_version: z.literal(1).optional().default(1),
+  status: z.enum(["pending", "answered", "approved", "denied"]),
+  tainted: z.boolean().optional().default(false),
+});
+
+/**
  * KeyCreated
  */
 export const zKeyCreated = z.object({
@@ -334,6 +391,26 @@ export const zKeyOut = z.object({
 });
 
 /**
+ * KnowledgeHit
+ *
+ * One chunk found by `search_knowledge`, citing its document, heading path and page.
+ */
+export const zKnowledgeHit = z.object({
+  chunk_id: z.uuid(),
+  document_id: z.uuid(),
+  document_title: z.string(),
+  heading_path: z.array(z.string()),
+  page: z.int().nullable(),
+  page_to: z.int().nullable(),
+  project_id: z.uuid().nullable(),
+  rank: z.number(),
+  snippet: z.string(),
+  tainted: z.boolean(),
+  text: z.string(),
+  trust: z.enum(["trusted", "untrusted"]),
+});
+
+/**
  * Label
  */
 export const zLabel = z.enum(["human", "ai", "hybrid"]);
@@ -346,6 +423,15 @@ export const zLastDeployOut = z.object({
   created_at: z.iso.datetime(),
   finished_at: z.iso.datetime().nullable(),
   status: z.string(),
+});
+
+/**
+ * LinkIn
+ */
+export const zLinkIn = z.object({
+  project_id: z.uuid().nullish(),
+  title: z.string().min(1).max(300).nullish(),
+  url: z.url().min(1),
 });
 
 /**
@@ -406,6 +492,27 @@ export const zMcpServerInfo = z.object({
 });
 
 /**
+ * MetricOut
+ *
+ * One PRD success metric: its value over the range (null while there is no data), its
+ * target as the PRD states it, and the phase that brings its data when it has none yet.
+ */
+export const zMetricOut = z.object({
+  available_after: z.enum(["phase 2", "phase 4"]).nullable(),
+  key: z.enum([
+    "daily_open_rate",
+    "tasks_completed_per_working_day",
+    "rollover_rate",
+    "estimate_error",
+    "agent_share",
+    "agent_acceptance_rate",
+    "unattended_runs_per_week",
+  ]),
+  target: z.string(),
+  value: z.number().nullable(),
+});
+
+/**
  * Metrics
  */
 export const zMetrics = z.object({
@@ -414,6 +521,20 @@ export const zMetrics = z.object({
   n: z.int(),
   overall_accuracy: z.number(),
   review_rate: z.number(),
+});
+
+/**
+ * MetricsSummaryOut
+ *
+ * `GET /v1/metrics/summary?from=&to=`: the success metrics over the local days `start`
+ * to `end`, and the phase 1 exit gate (working days planned in a row, as of today).
+ */
+export const zMetricsSummaryOut = z.object({
+  end: z.iso.date(),
+  exit_gate_days: z.int(),
+  metrics: z.array(zMetricOut),
+  plan_days_in_a_row: z.int(),
+  start: z.iso.date(),
 });
 
 /**
@@ -496,6 +617,14 @@ export const zPageDeadLetterOut = z.object({
 });
 
 /**
+ * Page[DocumentDTO]
+ */
+export const zPageDocumentDto = z.object({
+  items: z.array(zDocumentDto),
+  next_cursor: z.string().nullable(),
+});
+
+/**
  * Page[KeyOut]
  */
 export const zPageKeyOut = z.object({
@@ -523,6 +652,7 @@ export const zPauseOut = z.object({
   held_runs: z.int(),
   pause_id: z.uuid(),
   schema_version: z.literal(1).optional().default(1),
+  tainted: z.boolean().optional().default(false),
 });
 
 /**
@@ -534,6 +664,20 @@ export const zPausesOut = z.object({
   projects: z.array(zOpenPause),
   schema_version: z.literal(1).optional().default(1),
   workspace: zOpenPause.nullable(),
+});
+
+/**
+ * PlanIssueOut
+ */
+export const zPlanIssueOut = z.object({
+  estimate_minutes: z.int().nullable(),
+  id: z.uuid(),
+  kind: z.string(),
+  offer: zFitOffer,
+  resolved_at: z.iso.datetime().nullable(),
+  review_item_id: z.uuid().nullable(),
+  task_id: z.uuid(),
+  title: z.string(),
 });
 
 /**
@@ -551,6 +695,50 @@ export const zPlanItemOut = z.object({
 });
 
 /**
+ * PlanItemViewOut
+ *
+ * One item as the Today panel shows it: the plan's facts plus the task as it is now
+ * (`blocked` from its live status: a task waiting on the person stays at its position,
+ * flagged, until Re-plan).
+ */
+export const zPlanItemViewOut = z.object({
+  accepted_at: z.iso.datetime().nullable(),
+  block: zBlockOut.nullable(),
+  blocked: z.boolean(),
+  estimate_minutes: z.int().nullable(),
+  first_action: z.string().nullable(),
+  id: z.uuid(),
+  label: z.string().nullable(),
+  position: z.int(),
+  project_id: z.uuid(),
+  project_name: z.string(),
+  reason: z.string(),
+  removed_at: z.iso.datetime().nullable(),
+  status: z.string(),
+  swapped_from_task_id: z.uuid().nullable(),
+  task_id: z.uuid(),
+  title: z.string(),
+  version: z.int(),
+});
+
+/**
+ * PlanOut
+ */
+export const zPlanOut = z.object({
+  built_at: z.iso.datetime(),
+  day: z.iso.date(),
+  fallback_reason: z.string().nullable(),
+  id: z.uuid(),
+  issues: z.array(zPlanIssueOut),
+  items: z.array(zPlanItemViewOut),
+  notice: z.string().nullable(),
+  source: z.string(),
+  status: z.string(),
+  timezone: z.string(),
+  trigger: z.string(),
+});
+
+/**
  * PlannedBlockOut
  */
 export const zPlannedBlockOut = z.object({
@@ -558,6 +746,32 @@ export const zPlannedBlockOut = z.object({
   start: z.iso.datetime(),
   task_id: z.uuid().nullable(),
   title: z.string().nullable(),
+});
+
+/**
+ * PolicyIn
+ *
+ * The policy editor's save (P2-05, FR-5.6): both lists as a whole and the version
+ * read. A class in both lists is 422 `policy_conflict`.
+ */
+export const zPolicyIn = z.object({
+  allowed: z.array(z.string().min(1).max(64)).max(100),
+  gated: z.array(z.string().min(1).max(64)).max(100),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * PolicyOut
+ */
+export const zPolicyOut = z.object({
+  allowed: z.array(z.string()),
+  gated: z.array(z.string()),
+  max_concurrent_runs: z.int(),
+  max_run_minutes: z.int(),
+  max_tasks_per_run: z.int(),
+  project_id: z.uuid(),
+  tool_allowlist: z.array(z.string()),
+  version: z.int(),
 });
 
 /**
@@ -851,6 +1065,21 @@ export const zPurgeOut = z.object({
 });
 
 /**
+ * Quota
+ *
+ * Bytes the workspace's knowledge uses (current file versions plus text entries,
+ * trash included until it is purged) against its quota; `count` and `project_bytes` are
+ * the asked scope's (a project, or the workspace knowledge base).
+ */
+export const zQuota = z.object({
+  count: z.int(),
+  project_bytes: z.int(),
+  project_id: z.uuid().nullable(),
+  quota_bytes: z.int(),
+  used_bytes: z.int(),
+});
+
+/**
  * RecurrenceIn
  *
  * `PUT /v1/tasks/{id}/recurrence`: a preset or a 5-field cron (never both), the
@@ -901,6 +1130,34 @@ export const zReorderIn = z.object({
   after_id: z.uuid().nullish(),
   before_id: z.uuid().nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * ReplanAccepted
+ */
+export const zReplanAccepted = z.object({
+  day: z.iso.date(),
+  workflow_id: z.string(),
+});
+
+/**
+ * ReplanIn
+ */
+export const zReplanIn = z.object({
+  day: z.iso.date().nullish(),
+});
+
+/**
+ * RequestApprovalBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export const zRequestApprovalBody = z.object({
+  action_class: z.string().min(1).max(200),
+  approval_id: z.uuid().nullish(),
+  description: z.string().max(4000),
+  schema_version: z.int().nullish(),
+  target: z.string().max(500).nullish(),
 });
 
 /**
@@ -1022,6 +1279,21 @@ export const zReviewKindOut = z.object({
  */
 export const zReviewKindsOut = z.object({
   items: z.array(zReviewKindOut),
+});
+
+/**
+ * RolloverRef
+ *
+ * A Today task that is not done: the nights it has rolled over so far, and its count
+ * after tonight's day close.
+ */
+export const zRolloverRef = z.object({
+  label: z.enum(["human", "ai", "hybrid"]).nullable(),
+  project_id: z.uuid(),
+  rollover_count: z.int(),
+  task_id: z.uuid(),
+  title: z.string(),
+  tonight: z.int(),
 });
 
 /**
@@ -1352,6 +1624,13 @@ export const zStatusBody = z.object({
 });
 
 /**
+ * SwapIn
+ */
+export const zSwapIn = z.object({
+  with_task_id: z.uuid(),
+});
+
+/**
  * SweepRow
  */
 export const zSweepRow = z.object({
@@ -1556,6 +1835,34 @@ export const zTaskRecurrenceOut = z.object({
 });
 
 /**
+ * TaskRef
+ *
+ * A task as the close-the-day panel names it.
+ */
+export const zTaskRef = z.object({
+  label: z.enum(["human", "ai", "hybrid"]).nullable(),
+  project_id: z.uuid(),
+  task_id: z.uuid(),
+  title: z.string(),
+});
+
+/**
+ * DaySummaryOut
+ *
+ * `GET /v1/day/{day}/summary`: the close-the-day panel's four sections for one local
+ * day of the workspace.
+ */
+export const zDaySummaryOut = z.object({
+  agents_finished: z.array(zTaskRef),
+  day: z.iso.date(),
+  prepared_by_agents: z.int(),
+  queued_overnight: z.array(zTaskRef),
+  rolls_over: z.array(zRolloverRef),
+  shipped: z.array(zTaskRef),
+  timezone: z.string(),
+});
+
+/**
  * TaskRefOut
  */
 export const zTaskRefOut = z.object({
@@ -1610,10 +1917,24 @@ export const zTaskWithLayoutOut = z.object({
 
 /**
  * TextDocumentPatch
+ *
+ * A document edit (P0-24's body, P1-17's title, tags and pin); at least one field.
  */
 export const zTextDocumentPatch = z.object({
-  body_md: z.string().max(100000),
+  body_md: z.string().max(100000).nullish(),
+  pinned: z.boolean().nullish(),
+  tags: z.array(z.string()).max(20).nullish(),
+  title: z.string().min(1).max(300).nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * TextEntryIn
+ */
+export const zTextEntryIn = z.object({
+  body_md: z.string().max(100000).optional().default(""),
+  project_id: z.uuid().nullish(),
+  title: z.string().min(1).max(300),
 });
 
 /**
@@ -1821,6 +2142,14 @@ export const zTotpIn = z.object({
  */
 export const zTrashIn = z.object({
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * TrustIn
+ */
+export const zTrustIn = z.object({
+  trusted: z.boolean(),
+  version: z.int().gte(0).lte(2147483647).nullish(),
 });
 
 /**
@@ -2175,6 +2504,15 @@ export const zCoolifyListDeployStatusQuery = z.object({
  */
 export const zCoolifyListDeployStatusResponse = z.array(zProjectDeployStatus);
 
+export const zPlanningGetDaySummaryPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetDaySummaryResponse = zDaySummaryOut;
+
 export const zDeadLettersGetDeadLettersQuery = z.object({
   status: z
     .string()
@@ -2287,6 +2625,17 @@ export const zAuthRotateKeyPath = z.object({
  */
 export const zAuthRotateKeyResponse = zKeyCreated;
 
+export const zKnowledgeListDocumentsQuery = z.object({
+  project_id: z.uuid().nullish(),
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeListDocumentsResponse = zPageDocumentDto;
+
 export const zKnowledgeUploadDocumentBody = z.object({
   file: z.instanceof(Blob),
   project_id: z.uuid().optional(),
@@ -2298,6 +2647,29 @@ export const zKnowledgeUploadDocumentBody = z.object({
  */
 export const zKnowledgeUploadDocumentResponse = zUploadAccepted;
 
+export const zKnowledgeAddLinkBody = zLinkIn;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeAddLinkResponse = zDocumentDto;
+
+export const zKnowledgeCreateTextEntryBody = zTextEntryIn;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeCreateTextEntryResponse = zDocumentDto;
+
+export const zKnowledgeTrashDocumentPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeTrashDocumentResponse = z.void();
+
 export const zKnowledgeGetDocumentPath = z.object({
   document_id: z.uuid(),
 });
@@ -2305,7 +2677,7 @@ export const zKnowledgeGetDocumentPath = z.object({
 /**
  * Successful Response
  */
-export const zKnowledgeGetDocumentResponse = zDocumentStatusOut;
+export const zKnowledgeGetDocumentResponse = zDocumentDto;
 
 export const zKnowledgeUpdateDocumentBody = zTextDocumentPatch;
 
@@ -2317,6 +2689,37 @@ export const zKnowledgeUpdateDocumentPath = z.object({
  * Successful Response
  */
 export const zKnowledgeUpdateDocumentResponse = zDocumentDto;
+
+export const zKnowledgeRestoreDocumentPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeRestoreDocumentResponse = zDocumentDto;
+
+export const zKnowledgeSetTrustBody = zTrustIn;
+
+export const zKnowledgeSetTrustPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeSetTrustResponse = zDocumentDto;
+
+export const zKnowledgeListVersionsPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Response Knowledge List Versions
+ *
+ * Successful Response
+ */
+export const zKnowledgeListVersionsResponse = z.array(zDocumentVersionOut);
 
 /**
  * Response Knowledge List Locations
@@ -2363,6 +2766,50 @@ export const zKnowledgeSetProjectFolderPath = z.object({
  */
 export const zKnowledgeSetProjectFolderResponse = zProjectFolderOut;
 
+export const zKnowledgeGetQuotaQuery = z.object({
+  project_id: z.uuid().nullish(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeGetQuotaResponse = zQuota;
+
+export const zKnowledgeSearchQuery = z.object({
+  q: z.string().min(1).max(500),
+  project_id: z.uuid().nullish(),
+  limit: z.int().gte(1).lte(50).optional().default(10),
+});
+
+/**
+ * Response Knowledge Search
+ *
+ * Successful Response
+ */
+export const zKnowledgeSearchResponse = z.array(zKnowledgeHit);
+
+/**
+ * Successful Response
+ */
+export const zPlanningRecordAppOpenResponse = z.void();
+
+export const zPlanningGetMetricsSummaryQuery = z.object({
+  from: z.iso.date(),
+  to: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetMetricsSummaryResponse = zMetricsSummaryOut;
+
+export const zPlanningReplanBody = zReplanIn;
+
+/**
+ * Successful Response
+ */
+export const zPlanningReplanResponse = zReplanAccepted;
+
 export const zPlanningGetProjectWeekPath = z.object({
   monday: z.iso.date(),
 });
@@ -2376,6 +2823,35 @@ export const zPlanningGetProjectWeekQuery = z.object({
  */
 export const zPlanningGetProjectWeekResponse = zWeekOut;
 
+export const zPlanningGetPlanPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetPlanResponse = zPlanOut;
+
+export const zPlanningAcceptAllPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningAcceptAllResponse = zPlanOut;
+
+export const zPlanningGetAlternatesPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Response Planning Get Alternates
+ *
+ * Successful Response
+ */
+export const zPlanningGetAlternatesResponse = z.array(zAlternateOut);
+
 export const zPlanningGetDayCalendarPath = z.object({
   day: z.iso.date(),
 });
@@ -2384,6 +2860,26 @@ export const zPlanningGetDayCalendarPath = z.object({
  * Successful Response
  */
 export const zPlanningGetDayCalendarResponse = zDayCalendarOut;
+
+export const zPlanningMoveIssuePath = z.object({
+  day: z.iso.date(),
+  plan_issue_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningMoveIssueResponse = zPlanOut;
+
+export const zPlanningSplitIssuePath = z.object({
+  day: z.iso.date(),
+  plan_issue_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningSplitIssueResponse = zPlanOut;
 
 export const zPlanningSchedulePlanItemBody = zManualBlockIn;
 
@@ -2396,6 +2892,38 @@ export const zPlanningSchedulePlanItemPath = z.object({
  * Successful Response
  */
 export const zPlanningSchedulePlanItemResponse = zPlanItemOut;
+
+export const zPlanningAcceptItemPath = z.object({
+  day: z.iso.date(),
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningAcceptItemResponse = zPlanOut;
+
+export const zPlanningRemoveItemPath = z.object({
+  day: z.iso.date(),
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningRemoveItemResponse = zPlanOut;
+
+export const zPlanningSwapItemBody = zSwapIn;
+
+export const zPlanningSwapItemPath = z.object({
+  day: z.iso.date(),
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningSwapItemResponse = zPlanOut;
 
 export const zProjectsListProjectsQuery = z.object({
   include_archived: z.boolean().optional().default(false),
@@ -2508,6 +3036,26 @@ export const zAgentsPauseProjectPath = z.object({
  * Successful Response
  */
 export const zAgentsPauseProjectResponse = zPauseOut;
+
+export const zProjectsGetPolicyPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsGetPolicyResponse = zPolicyOut;
+
+export const zProjectsUpdatePolicyBody = zPolicyIn;
+
+export const zProjectsUpdatePolicyPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsUpdatePolicyResponse = zPolicyOut;
 
 export const zProjectsReorderProjectBody = zReorderIn;
 
@@ -2628,6 +3176,17 @@ export const zAgentsGetRunPath = z.object({
  */
 export const zAgentsGetRunResponse = zRunOut;
 
+export const zAgentsRequestApprovalBody = zRequestApprovalBody;
+
+export const zAgentsRequestApprovalPath = z.object({
+  run_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsRequestApprovalResponse = zHumanWaitOut;
+
 export const zAgentsCancelRunPath = z.object({
   run_id: z.uuid(),
 });
@@ -2650,6 +3209,17 @@ export const zAgentsListRunEventsQuery = z.object({
  * Successful Response
  */
 export const zAgentsListRunEventsResponse = zRunEventsPage;
+
+export const zAgentsAskHumanBody = zAskHumanBody;
+
+export const zAgentsAskHumanPath = z.object({
+  run_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsAskHumanResponse = zHumanWaitOut;
 
 export const zAgentsPostResultBody = zPostResultBody;
 
@@ -2864,7 +3434,10 @@ export const zAgentsGetTaskPacketPath = z.object({
 
 export const zAgentsGetTaskPacketQuery = z.object({
   schema_version: z.int().nullish(),
-  kind: z.enum(["task", "proposal", "stuck"]).optional().default("task"),
+  kind: z
+    .enum(["task", "proposal", "stuck", "enrich"])
+    .optional()
+    .default("task"),
 });
 
 /**

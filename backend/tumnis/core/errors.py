@@ -134,19 +134,34 @@ def _from_http(status: int, detail: Any) -> Problem:
     return problem(status, default, text)
 
 
+def _declines(route: Any, path_params: dict[str, str]) -> bool:
+    """A route may decline a path its pattern matches (`declines(path_params) -> bool`),
+    e.g. `/documents/{document_id}` declines `/documents/text`, which another route
+    serves; it then adds no methods to that path's `Allow`."""
+    declines = getattr(route, "declines", None)
+    return callable(declines) and bool(declines(path_params))
+
+
 def _allowed_methods(request: Request) -> str | None:
     """Every method any route serves at this path. Starlette's 405 names only the first
     route that matched the path, so a path with GET and PUT on separate routes would
-    answer `Allow: GET` (found by the P0-11 fuzzer)."""
+    answer `Allow: GET` (found by the P0-11 fuzzer). A concrete path is matched before a
+    templated one, as OpenAPI's Paths Object says: `/v1/plan/replan` (POST) answers
+    `Allow: POST`, not the methods of `/v1/plan/{day}` too."""
     from starlette.routing import compile_path  # noqa: PLC0415
 
     from tumnis.core.routing import walk_routes  # noqa: PLC0415  # routing imports errors
 
-    methods: set[str] = set()
+    concrete: set[str] = set()
+    templated: set[str] = set()
     for route in walk_routes(request.app):
-        if route.path and route.methods and compile_path(route.path)[0].match(request.url.path):
-            methods |= route.methods
-    return ", ".join(sorted(methods)) or None
+        if not (route.path and route.methods):
+            continue
+        regex, _, convertors = compile_path(route.path)
+        match = regex.match(request.url.path)
+        if match and not _declines(route.original_route, match.groupdict()):
+            (templated if convertors else concrete).update(route.methods)
+    return ", ".join(sorted(concrete or templated)) or None
 
 
 async def http_exception_handler(request: Request, exc: Exception) -> Response:

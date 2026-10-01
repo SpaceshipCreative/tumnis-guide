@@ -6,7 +6,8 @@ Hermes profiles Tumnis may run: one master, one per project).
 """
 
 import json
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Protocol
 from uuid import UUID, uuid4, uuid5
 
@@ -26,7 +27,7 @@ from tumnis.core.outbox import emit
 from tumnis.core.pagination import Page, SortKey, paginate
 from tumnis.core.routing import register_project_lookup
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
-from tumnis.core.types import SYSTEM_ACTOR, ActorRef
+from tumnis.core.types import SYSTEM_ACTOR, ActorRef, Interval
 from tumnis.core.versioning import NotFound, Version, update_versioned
 from tumnis.modules.agents.adapters.port import (
     AgentAdapter,
@@ -36,6 +37,23 @@ from tumnis.modules.agents.adapters.port import (
     RunEvent,
     RunHandle,
 )
+from tumnis.modules.agents.human import (
+    HUMAN_QUEUE,
+    HUMAN_TOPIC,
+    Allowed,
+    ApprovalRequired,
+    AskHumanIn,
+    Denied,
+    HumanApproval,
+    HumanQuestion,
+    HumanWaitOut,
+    RequestApprovalIn,
+    ask_human,
+    check_action,
+    configure_human_waits,
+    long_poll_decision,
+    request_approval,
+)
 from tumnis.modules.agents.models import (
     AgentPause,
     AgentProfile,
@@ -44,7 +62,7 @@ from tumnis.modules.agents.models import (
     RunnerMessage,
     RunRow,
 )
-from tumnis.modules.agents.packet_builder import TaskPacket
+from tumnis.modules.agents.packet_builder import ENRICH_TIMEOUT_S_DEFAULT, TaskPacket
 from tumnis.modules.agents.payloads import (
     AgentsPausedV1,
     AgentsResumedV1,
@@ -94,6 +112,7 @@ from tumnis.modules.agents.skill_io import (
     ProjectAgentEntry,
 )
 from tumnis.modules.auth import api as auth
+from tumnis.modules.knowledge import api as knowledge
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
 
@@ -101,16 +120,26 @@ if TYPE_CHECKING:
     from dbos import DBOSClient
 
 __all__ = [
+    "HUMAN_QUEUE",
+    "HUMAN_TOPIC",
     "AgentAdapter",
     "AgentAvailability",
     "AgentCapabilities",
     "AgentHealth",
     "AgentProfileOut",
     "AgentUnavailable",
+    "Allowed",
+    "ApprovalRequired",
+    "AskHumanIn",
+    "Denied",
     "EnrichmentRequest",
     "EnrichmentResult",
     "ForeignReach",
     "HealthCheckAccepted",
+    "HumanApproval",
+    "HumanQuestion",
+    "HumanWaitOut",
+    "MasterAgentOut",
     "McpServerInfo",
     "PauseScope",
     "PlanningRequest",
@@ -119,6 +148,7 @@ __all__ = [
     "ProfilePatch",
     "ProfileToolsOut",
     "ProjectAgentEntry",
+    "RequestApprovalIn",
     "RunEvent",
     "RunHandle",
     "RunKind",
@@ -128,13 +158,24 @@ __all__ = [
     "RunnerIn",
     "RunnerOut",
     "SchemaRef",
+    "SkillRunner",
     "TaskPacket",
     "TokenReach",
     "ToolServerOut",
+    "ask_human",
+    "check_action",
+    "configure_human_waits",
     "issue_run_token",
+    "long_poll_decision",
+    "master_agent",
+    "plan_packet",
+    "planning_request",
+    "register_skill_runner",
+    "request_approval",
     "retry_provision",
     "run_ended",
     "run_log",
+    "run_plan",
     "run_token_scopes",
     "set_profile_key",
 ]
@@ -1623,6 +1664,7 @@ class PauseOut(BaseModel):
     pause_id: UUID
     cancelled_runs: int  # running or waiting at the time of the request; they end shortly
     held_runs: int  # queued runs now held until a person resumes
+    tainted: bool = False  # the pause came through a key with no run (R-31, P2-08)
 
 
 class ResumeIn(BaseModel):
@@ -1694,9 +1736,13 @@ def _runs_in_scope(scope: str, project_id: UUID | None) -> Any:
 
 
 def dispatched(stmt: Any) -> Any:
-    """Only `dispatch_run` runs (its workflow id is the run id): a `run_skill` run (P1-04
-    enrichment and planning) answers on its own timeout and has no cancel path here."""
-    return stmt.where(_runs.c.workflow_id == cast(_runs.c.id, Text))
+    """Only `dispatch_run` runs (its workflow id is the run id) and the `supervise_run`
+    that took one over after a deploy (P2-05, `supervise:<run>:<version>`): a `run_skill`
+    run (P1-04 enrichment and planning) answers on its own timeout and has no cancel path
+    here."""
+    run_text = cast(_runs.c.id, Text)
+    supervised = _runs.c.workflow_id.startswith("supervise:" + run_text + ":")  # a uuid: no %, _
+    return stmt.where((_runs.c.workflow_id == run_text) | supervised)
 
 
 async def runs_to_cancel(s: AsyncSession, scope: str, project_id: UUID | None) -> list[UUID]:
@@ -1747,20 +1793,28 @@ async def pause(
     *,
     now: datetime,
     session: AsyncSession | None = None,
+    tainted: bool = False,
 ) -> PauseOut:
     """The kill switch (SAF-4), from the app or the master's `pause_agents`: in one
     transaction the pause row, queued runs in scope held, the audit row
     (`killswitch.on`, or `project.paused` naming the project) and `agents.paused`, whose
     subscriber cancels the running and waiting runs in scope through their workflows. A
-    scope already paused answers its open pause and changes nothing. 404 for a project
-    the caller cannot see; 422 for a scope and project_id that do not match."""
+    scope already paused answers its open pause and changes nothing. `tainted`: a write
+    by a key with no run, such as the master's (R-31), kept on the row and answered.
+    404 for a project the caller cannot see; 422 for a scope and project_id that do
+    not match."""
     _scope_check(inp.scope, inp.project_id)
     async with session_for(ctx, session) as s:
         if inp.project_id is not None and not await projects.project_exists(s, inp.project_id):
             raise NotFound("projects", inp.project_id)
         existing = await _open_pause(s, inp.scope, inp.project_id)
         if existing is not None:
-            return PauseOut(pause_id=existing["id"], cancelled_runs=0, held_runs=0)
+            return PauseOut(
+                pause_id=existing["id"],
+                cancelled_runs=0,
+                held_runs=0,
+                tainted=existing["tainted"],
+            )
         pause_id = uuid7()
         try:
             async with s.begin_nested():
@@ -1772,13 +1826,16 @@ async def pause(
                         paused_at=now,
                         paused_by=str(ctx.actor),
                         reason=inp.reason,
+                        tainted=tainted,
                     )
                 )
         except IntegrityError:  # a concurrent pause of the same scope won
             again = await _open_pause(s, inp.scope, inp.project_id)
             if again is None:
                 raise
-            return PauseOut(pause_id=again["id"], cancelled_runs=0, held_runs=0)
+            return PauseOut(
+                pause_id=again["id"], cancelled_runs=0, held_runs=0, tainted=again["tainted"]
+            )
         mark_changed(s, LIVE_PAUSE, pause_id)
         held = await _hold_queued(s, inp.scope, inp.project_id)
         cancelled = len(await runs_to_cancel(s, inp.scope, inp.project_id))
@@ -1801,7 +1858,7 @@ async def pause(
             ),
             occurred_at=now,
         )
-    return PauseOut(pause_id=pause_id, cancelled_runs=cancelled, held_runs=held)
+    return PauseOut(pause_id=pause_id, cancelled_runs=cancelled, held_runs=held, tainted=tainted)
 
 
 async def held_runs_free(s: AsyncSession, scope: str, project_id: UUID | None) -> list[UUID]:
@@ -1936,7 +1993,6 @@ tasks.register_run_task_counter(count_run_task)
 # --- Enrichment (P1-08, R-30) ----------------------------------------------------------------
 
 LABEL_WAIT_S_DEFAULT: Final = 10.0  # how long the enrichment waits for a label (plan default)
-ENRICH_TIMEOUT_S_DEFAULT: Final = 120  # the enrich run's timeout (plan default)
 MIN_RUN_TIMEOUT_S: Final = 10  # TaskPacket.timeout_s's lower bound
 
 
@@ -1971,3 +2027,214 @@ def configure_enrichment(
 def enrichment_config() -> EnrichmentConfig:
     """The enrichment's current settings (read at each step, never captured at enqueue)."""
     return _enrichment[0]
+
+
+# --- The master's plan runs (P1-11, FR-4.3) ------------------------------------------------
+#
+# planning builds the day's plan; agents owns the master profile, the planning packet and
+# the run. `master_agent` judges the master the way the daemon transport does before a
+# dispatch (the runner's status and inventory), so a master this calls ready is one the
+# dispatch accepts; `planning_request` adds what agents knows (project health, briefs,
+# the registry) to what planning gathered; `run_plan` runs the packet as a child
+# `run_skill` of the caller's workflow through the seam workflows fills at import (api may
+# not import workflows).
+
+PLAN_SKILL: Final = "plan"
+PLAN_RESULT: Final = SchemaRef(family="planning", name="result", version=1)
+
+
+class MasterAgentOut(BaseModel):
+    availability: AgentAvailability
+    profile_id: UUID | None = None
+    profile_version: str | None = None  # logged with every plan (PRD risk table)
+
+
+async def master_agent(*, ctx: WorkspaceContext) -> MasterAgentOut:
+    """ready | offline | not_provisioned for the workspace's master profile (the oldest
+    live one): not provisioned without one (or while it is provisioning), offline while
+    paused, its runner is not online or the runner does not list it; an MCP endpoint
+    profile is ready (an unreachable endpoint fails its run instead)."""
+    async with tenant_session(ctx) as s:
+        found = (
+            (
+                await s.execute(
+                    select(_profiles)
+                    .where(_profiles.c.role == "master", _live_profiles())
+                    .order_by(_profiles.c.created_at, _profiles.c.id)
+                    .limit(1)
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if found is None:
+            return MasterAgentOut(availability="not_provisioned")
+        row = _ProfileRow.model_validate(dict(found))
+        runner = (
+            await s.execute(
+                select(_runners.c.status, _runners.c.inventory).where(
+                    _runners.c.id == row.runner_id, _runners.c.deleted_at.is_(None)
+                )
+            )
+        ).first()
+    out = MasterAgentOut(
+        availability="ready", profile_id=row.id, profile_version=row.profile_version
+    )
+    if row.status in ("provisioning", "not_provisioned"):
+        return out.model_copy(update={"availability": "not_provisioned"})
+    if row.status == "paused":
+        return out.model_copy(update={"availability": "offline"})
+    if row.transport == "mcp_endpoint":
+        return out
+    if runner is None:
+        return out.model_copy(update={"availability": "not_provisioned"})
+    listed = row.name in {str(p.get("name")) for p in runner.inventory}
+    return (
+        out
+        if runner.status == "online" and listed
+        else out.model_copy(update={"availability": "offline"})
+    )
+
+
+async def planning_request(  # the request's parts, spelled out
+    ctx: WorkspaceContext,
+    *,
+    day: date,
+    timezone: str,
+    now: datetime,
+    window: Interval | None,
+    free_blocks: Sequence[Interval],
+    events: Sequence[tuple[str | None, datetime, datetime]],
+    candidates: Sequence[tasks.TaskOut],
+) -> PlanningRequest:
+    """The `plan` packet's body (P1-05's schema): planning's day and candidates (in its
+    order), each candidate project's health, next milestone and brief (`knowledge.api.
+    get_brief`; "" before it has one), and the master's registry of project agents."""
+    from tumnis.modules.agents.packet_builder import (  # noqa: PLC0415
+        PlanningProjectIn,
+        assemble_planning_request,
+    )
+    from tumnis.modules.agents.skill_io import MAX_CANDIDATES  # noqa: PLC0415
+
+    ids = list(dict.fromkeys(task.project_id for task in candidates[:MAX_CANDIDATES]))
+    found: list[PlanningProjectIn] = []
+    async with tenant_session(ctx) as s:
+        if ids:
+            page = await projects.list_projects(
+                s, project_ids=frozenset(ids), limit=len(ids), now=now
+            )
+            by_id = {project.id: project for project in page.items}
+            for project_id in ids:
+                project = by_id.get(project_id)
+                if project is None:
+                    continue
+                try:
+                    brief = (await knowledge.get_brief(project_id, session=s)).body_md or ""
+                except NotFound:
+                    brief = ""
+                found.append(
+                    PlanningProjectIn(
+                        id=project.id,
+                        name=project.name,
+                        health=project.health,
+                        next_milestone=project.next_milestone,
+                        brief=brief,
+                    )
+                )
+    registry = await master_registry(ctx=ctx)
+    return assemble_planning_request(
+        day=day,
+        timezone=timezone,
+        now=now,
+        window=window,
+        free_blocks=free_blocks,
+        events=events,
+        candidates=candidates,
+        projects=found,
+        agents=registry,
+    )
+
+
+def plan_packet(
+    *,
+    run_id: UUID,
+    profile_id: UUID,
+    request: PlanningRequest,
+    timeout_s: int,
+    correlation_id: str,
+) -> TaskPacket:
+    """The master's `plan` packet for `request` (R-24): skill `plan`, reply validated
+    against planning/result v1."""
+    from tumnis.modules.agents.packet_builder import render_prompt  # noqa: PLC0415
+
+    body = request.model_dump(mode="json")
+    return TaskPacket(
+        kind=RunKind.PLAN,
+        run_id=run_id,
+        profile_id=profile_id,
+        skill=PLAN_SKILL,
+        output_schema=PLAN_RESULT,
+        correlation_id=correlation_id,
+        timeout_s=timeout_s,
+        prompt_text=render_prompt(PLAN_SKILL, PLAN_RESULT, body),
+        body=body,
+    )
+
+
+class SkillRunner(Protocol):
+    """Runs a packet as a child `run_skill` of the calling workflow (`workflows`)."""
+
+    async def __call__(self, workspace_id: UUID, packet: TaskPacket) -> dict[str, Any]: ...
+
+
+_skill_runner: list[SkillRunner] = []
+
+
+def register_skill_runner(runner: SkillRunner) -> None:
+    """workflows registers `run_skill` at import (the provision starter's pattern)."""
+    _skill_runner[:] = [runner]
+
+
+async def run_plan(workspace_id: UUID, packet: TaskPacket) -> RunOutcome:
+    """Run the plan packet from inside the caller's DBOS workflow: a child `run_skill`
+    with workflow id `run_skill:<run id>`, so a replayed caller dispatches nothing twice."""
+    if not _skill_runner:
+        raise RuntimeError("agents.workflows is not loaded: nothing can run a skill")
+    return RunOutcome.model_validate(await _skill_runner[0](workspace_id, packet))
+
+
+# --- Close the day (P1-18) ----------------------------------------------------------------------
+
+
+class FinishedRunOut(BaseModel):
+    """A run that ended, as the close-the-day panel counts it (planning, P1-18)."""
+
+    run_id: UUID
+    task_id: UUID | None
+    kind: str
+    status: RunStatus
+    finished_at: datetime
+
+
+async def finished_runs(s: AsyncSession, start: datetime, end: datetime) -> list[FinishedRunOut]:
+    """The workspace's runs (in context) that finished within [start, end), in finish
+    order: one statement."""
+    rows = await s.execute(
+        select(_runs.c.id, _runs.c.task_id, _runs.c.kind, _runs.c.status, _runs.c.finished_at)
+        .where(
+            _runs.c.deleted_at.is_(None),
+            _runs.c.finished_at >= start,
+            _runs.c.finished_at < end,
+        )
+        .order_by(_runs.c.finished_at, _runs.c.id)
+    )
+    return [
+        FinishedRunOut(
+            run_id=row.id,
+            task_id=row.task_id,
+            kind=row.kind,
+            status=RunStatus(row.status),
+            finished_at=row.finished_at,
+        )
+        for row in rows
+    ]

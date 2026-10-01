@@ -25,6 +25,12 @@ CASES = [
     ),
     (
         "events",
+        "approval.requested",
+        1,
+        "backend/tests/contract/fixtures/events/approval.requested/v1.json",
+    ),
+    (
+        "events",
         "artifact.updated",
         1,
         "backend/tests/contract/fixtures/events/artifact.updated/v1.json",
@@ -85,6 +91,12 @@ CASES = [
     ),
     (
         "events",
+        "plan.published",
+        1,
+        "backend/tests/contract/fixtures/events/plan.published/v1.json",
+    ),
+    (
+        "events",
         "policy.changed",
         1,
         "backend/tests/contract/fixtures/events/policy.changed/v1.json",
@@ -112,6 +124,12 @@ CASES = [
         "project.updated",
         1,
         "backend/tests/contract/fixtures/events/project.updated/v1.json",
+    ),
+    (
+        "events",
+        "question.asked",
+        1,
+        "backend/tests/contract/fixtures/events/question.asked/v1.json",
     ),
     (
         "events",

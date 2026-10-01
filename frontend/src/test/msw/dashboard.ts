@@ -13,7 +13,7 @@ import type {
   TaskPage,
 } from "../../api/types.gen";
 import type { makeProject } from "../factories";
-import { dayCalendar, NO_WINDOW } from "./planning";
+import { dayCalendar, NO_WINDOW, noPlan } from "./planning";
 import { workspaceSettings } from "./settings";
 
 /** `GET /v1/projects` answering these projects on one page. */
@@ -73,7 +73,7 @@ export function agentPauses(body: Partial<PausesOut> = {}): RequestHandler {
 }
 
 /** The dashboard's reads, empty: no projects, nothing today, nothing to review, no apps,
- * no working hours or events today, no agents paused. */
+ * no working hours or events today, no plan for the day (P1-11) and no agents paused. */
 export const dashboardDefaults: RequestHandler[] = [
   agentPauses(),
   deployStatus(),
@@ -82,4 +82,5 @@ export const dashboardDefaults: RequestHandler[] = [
   reviewCount(0),
   workspaceTimezone("America/New_York"),
   dayCalendar(NO_WINDOW),
+  noPlan(),
 ];

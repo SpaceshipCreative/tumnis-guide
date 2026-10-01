@@ -10,6 +10,7 @@ tasks module registers a `ProjectStatsSource` at import (P0-18). Until then ever
 counts zero tasks and is on track. Reads ask the source once per page for every id on it.
 """
 
+import re
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Annotated, Any, Final, Literal, Protocol
@@ -40,6 +41,8 @@ from tumnis.modules.auth import api as auth
 from tumnis.modules.projects.events import (
     BRIEF_MAX_CHARS,
     AgentProfileChoice,
+    PolicyChangedV1,
+    PolicyDoc,
     ProjectArchivedV1,
     ProjectCreatedV1,
     ProjectPurgedV1,
@@ -159,6 +162,22 @@ class PolicyOut(BaseModel):
     max_run_minutes: int
     max_tasks_per_run: int
     version: int
+
+
+# An action class's name: the policy's own vocabulary (FR-5.6), never free text. The
+# schema bounds only its length; `update_policy` checks the form (422
+# `invalid_action_class`), since a pattern inside a list starves the schema fuzzer (P0-11).
+ActionClassName = Annotated[str, StringConstraints(min_length=1, max_length=64)]
+_ACTION_CLASS_RE: Final = re.compile(r"[a-z][a-z0-9_]{0,63}")
+
+
+class PolicyIn(BaseModel):
+    """The policy editor's save (P2-05, FR-5.6): both lists as a whole and the version
+    read. A class in both lists is 422 `policy_conflict`."""
+
+    gated: list[ActionClassName] = Field(max_length=100)
+    allowed: list[ActionClassName] = Field(max_length=100)
+    version: Version
 
 
 # --- Task statistics (registered by tasks, P0-18) -----------------------------------------
@@ -347,6 +366,82 @@ async def get_policy(s: AsyncSession, project_id: UUID) -> PolicyOut:
     return PolicyOut.model_validate(dict(row))
 
 
+def _policy_doc(policy: PolicyOut) -> PolicyDoc:
+    return PolicyDoc.model_validate(policy.model_dump(exclude={"project_id", "version"}))
+
+
+async def update_policy(
+    s: AsyncSession,
+    actor: ActorRef,
+    project_id: UUID,
+    body: PolicyIn,
+    *,
+    now: datetime | None = None,
+) -> PolicyOut:
+    """Replaces the project's gated and allowed lists at `body.version` (P2-05, FR-5.6).
+    Emits `policy.changed` with the policy before and after and writes the
+    `policy.changed` audit row with both lists (SEC-3), in the caller's transaction. 404
+    for an unknown project; 422 `invalid_action_class` for a malformed name and
+    `policy_conflict` when a class is in both lists; 409
+    `stale_version` with the policy as it is now (`current`), checked first, so a stale
+    write always learns the current policy."""
+    before = await get_policy(s, project_id)
+    if body.version != before.version:
+        raise StaleVersion(current=before.model_dump(mode="json"))
+    odd = sorted({a for a in (*body.gated, *body.allowed) if not _ACTION_CLASS_RE.fullmatch(a)})
+    if odd:
+        raise ProblemError(
+            422,
+            "invalid_action_class",
+            "An action class is lowercase letters, digits and underscores, starting with"
+            f" a letter: {', '.join(odd)}",
+        )
+    gated = list(dict.fromkeys(body.gated))
+    allowed = list(dict.fromkeys(body.allowed))
+    both = sorted(set(gated) & set(allowed))
+    if both:
+        raise ProblemError(
+            422,
+            "policy_conflict",
+            f"An action is either gated or allowed, not both: {', '.join(both)}",
+        )
+    policy_id: UUID = (
+        await s.execute(
+            select(_policies.c.id).where(
+                _policies.c.project_id == project_id, _policies.c.deleted_at.is_(None)
+            )
+        )
+    ).scalar_one()
+    try:
+        row = await update_versioned(
+            s, _policies, policy_id, body.version, {"gated": gated, "allowed": allowed}
+        )
+    except StaleVersion:
+        current = await get_policy(s, project_id)
+        raise StaleVersion(current=current.model_dump(mode="json")) from None
+    after = PolicyOut.model_validate(dict(row))
+    occurred_at = _now(now)
+    await emit(
+        s,
+        PolicyChangedV1(
+            project_id=project_id, before=_policy_doc(before), after=_policy_doc(after)
+        ),
+        occurred_at=occurred_at,
+    )
+    await audit.record(
+        s,
+        "policy.changed",
+        target=("project", project_id),
+        details={
+            "before": {"gated": before.gated, "allowed": before.allowed},
+            "after": {"gated": after.gated, "allowed": after.allowed},
+        },
+        occurred_at=occurred_at,
+    )
+    mark_changed(s, LIVE_ENTITY, project_id)
+    return after
+
+
 async def effective_subtask_threshold(s: AsyncSession, project_id: UUID) -> int:
     """The project's subtask threshold (minutes), else the workspace's (default 30)."""
     row = await _row(s, project_id)
@@ -449,6 +544,17 @@ async def project_exists(s: AsyncSession, project_id: UUID) -> bool:
     """A live project (archived or not) of the caller's workspace."""
     found = await s.scalar(select(_projects.c.id).where(_projects.c.id == project_id, _live()))
     return found is not None
+
+
+async def active_project_ids(s: AsyncSession) -> set[UUID]:
+    """The live, unarchived projects whose status is `active`: one statement (the daily
+    plan's eligible tasks belong to one, P1-11)."""
+    rows = await s.execute(
+        select(_projects.c.id).where(
+            _live(), _projects.c.archived_at.is_(None), _projects.c.status == "active"
+        )
+    )
+    return {row.id for row in rows}
 
 
 async def _project_itself(ctx: WorkspaceContext, project_id: UUID) -> UUID | None:

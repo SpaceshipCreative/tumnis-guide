@@ -91,8 +91,11 @@ class EnrichProject(_Part):
 
 
 class Passage(_Part):
-    """A knowledge passage (P1-17 fills these; an empty list before it lands)."""
+    """A knowledge passage (P1-17 fills these from `knowledge.api.passages_for`): the
+    chunk it was cut from (optional, so a request written by hand without one still reads),
+    and its document, title, heading path and page."""
 
+    chunk_id: UUID | None = None
     document_id: UUID
     title: Title
     heading_path: list[str] = Field(max_length=12)

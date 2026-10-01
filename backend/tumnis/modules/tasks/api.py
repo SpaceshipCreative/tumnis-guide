@@ -93,6 +93,7 @@ from tumnis.modules.tasks.payloads import (
 from tumnis.modules.tasks.review import (
     ESTIMATE_KIND,
     LABEL_KIND,
+    Deciding,
     DuplicateReviewKind,
     EstimateOutlierPayload,
     ImpactFacts,
@@ -135,8 +136,10 @@ __all__ = [
     "ESTIMATE_KIND",
     "LABEL_KIND",
     "ActorKind",
+    "Deciding",
     "DuplicateReviewKind",
     "EstimateOutlierPayload",
+    "HumanDecidedV1",
     "ImpactFacts",
     "Label",
     "LabelSource",
@@ -561,6 +564,28 @@ async def project_tasks(s: AsyncSession, project_id: UUID) -> list[TaskOut]:
     rows = await s.execute(
         select(_tasks)
         .where(_live(_tasks), _tasks.c.project_id == project_id)
+        .order_by(_tasks.c.created_at, _tasks.c.id)
+    )
+    return [_out(row._mapping) for row in rows]
+
+
+async def open_tasks(s: AsyncSession) -> list[TaskOut]:
+    """Every live task that is not Done, in creation order: one statement, for the daily
+    plan's candidates (P1-11)."""
+    rows = await s.execute(
+        select(_tasks)
+        .where(_live(_tasks), _tasks.c.status != Status.DONE)
+        .order_by(_tasks.c.created_at, _tasks.c.id)
+    )
+    return [_out(row._mapping) for row in rows]
+
+
+async def tasks_by_ids(s: AsyncSession, ids: Collection[UUID]) -> list[TaskOut]:
+    """The live tasks among `ids` (any status), in creation order: one statement (the
+    daily plan's read, P1-11)."""
+    rows = await s.execute(
+        select(_tasks)
+        .where(_live(_tasks), _tasks.c.id.in_(list(ids)))
         .order_by(_tasks.c.created_at, _tasks.c.id)
     )
     return [_out(row._mapping) for row in rows]
@@ -2456,3 +2481,76 @@ async def purge_trash(s: AsyncSession, cutoff: datetime, *, limit: int) -> int:
     )
     result = await s.execute(delete(_tasks).where(_tasks.c.id.in_(batch)).returning(_tasks.c.id))
     return len(result.all())
+
+
+# --- Close the day and local metrics (P1-18) ---------------------------------------------------
+
+
+class DayTaskFacts(BaseModel):
+    """A task as the close-the-day panel and the local metrics read it (planning, P1-18)."""
+
+    task_id: UUID
+    project_id: UUID
+    title: str
+    label: Label | None
+    status: Status
+    completed_at: datetime | None
+    rollover_count: int
+    estimate_minutes: int | None
+    actual_minutes: int | None
+    result_posted_at: datetime | None  # the latest result posted within the window
+
+
+async def day_task_facts(s: AsyncSession, start: datetime, end: datetime) -> list[DayTaskFacts]:
+    """The live tasks of the workspace in context that were completed within [start, end),
+    are in Today now, or had a result posted within [start, end): one statement, in
+    creation order."""
+    posted = (
+        select(_results.c.task_id, func.max(_results.c.created_at).label("posted"))
+        .where(_live(_results), _results.c.created_at >= start, _results.c.created_at < end)
+        .group_by(_results.c.task_id)
+        .subquery()
+    )
+    rows = await s.execute(
+        select(
+            _tasks.c.id,
+            _tasks.c.project_id,
+            _tasks.c.title,
+            _tasks.c.label,
+            _tasks.c.status,
+            _tasks.c.completed_at,
+            _tasks.c.rollover_count,
+            _tasks.c.estimate_minutes,
+            _tasks.c.actual_minutes,
+            posted.c.posted,
+        )
+        .outerjoin(posted, posted.c.task_id == _tasks.c.id)
+        .where(
+            _live(_tasks),
+            or_(
+                and_(
+                    _tasks.c.status == Status.DONE,
+                    _tasks.c.completed_at >= start,
+                    _tasks.c.completed_at < end,
+                ),
+                _tasks.c.status == Status.TODAY,
+                posted.c.posted.is_not(None),
+            ),
+        )
+        .order_by(_tasks.c.created_at, _tasks.c.id)
+    )
+    return [
+        DayTaskFacts(
+            task_id=row.id,
+            project_id=row.project_id,
+            title=row.title,
+            label=_label(row.label),
+            status=Status(row.status),
+            completed_at=row.completed_at,
+            rollover_count=row.rollover_count,
+            estimate_minutes=row.estimate_minutes,
+            actual_minutes=row.actual_minutes,
+            result_posted_at=row.posted,
+        )
+        for row in rows
+    ]

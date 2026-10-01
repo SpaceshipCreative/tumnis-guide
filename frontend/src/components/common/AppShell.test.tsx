@@ -7,6 +7,7 @@ import { beforeEach, expect, test } from "vitest";
 
 import type { AccountOut } from "../../api/types.gen";
 import { setUnauthorizedHandler } from "../../lib/fetch";
+import { daySummary, EMPTY_DAY } from "../../test/msw/closeDay";
 import { reviewCount } from "../../test/msw/dashboard";
 import { server } from "../../test/msw/server";
 import { createTestQueryClient, renderRoute } from "../../test/render";
@@ -54,6 +55,21 @@ test("[DS-01][UX 11] T-DS-01-03 the sidebar collapses to icons from the keyboard
     within(sidebar).getByRole("button", { name: "Collapse sidebar" }),
   ).toBeInTheDocument();
   expect(localStorage.getItem(SIDEBAR_KEY)).toBe("false");
+});
+
+test("[P1-18][J7] the account menu opens Close the day at any hour", async () => {
+  server.use(daySummary(EMPTY_DAY));
+  const { user, router } = await renderRoute("/tasks", { viewport: "phone" });
+  await user.click(screen.getByRole("button", { name: "Account" }));
+  const menu = screen.getByRole("menu", { name: "Account" });
+  await user.click(
+    within(menu).getByRole("menuitem", { name: "Close the day" }),
+  );
+  expect(
+    await screen.findByRole("dialog", { name: "Close the day" }),
+  ).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/");
+  expect(router.state.location.search).toMatchObject({ panel: "close" });
 });
 
 test("[DS-01][UX 7] T-DS-01-04 the account menu works from the keyboard", async () => {

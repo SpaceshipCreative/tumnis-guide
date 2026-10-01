@@ -25,8 +25,16 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 async def surface_app(app: FastAPI) -> AsyncIterator[FastAPI]:
+    """The sweeps call every op several times with one key while the clock stands still
+    (T-P2-01-11 makes five calls per op): past nine ops that drains the default burst
+    (50, P0-10) and the next op answers 429. Rate limits are not what the sweeps check
+    (P0-10's own tests do), so this app's per-principal bucket holds enough for any
+    number of ops."""
     from tests._mcp import mcp_running  # noqa: PLC0415
+    from tumnis.core.ratelimit import BUCKETS, Bucket, RateLimiter  # noqa: PLC0415
 
+    sweep = Bucket(rate_per_s=BUCKETS["default"].rate_per_s, burst=10_000)
+    app.state.rate_limiter = RateLimiter(app.state.clock, {**BUCKETS, "default": sweep})
     async with mcp_running(app):
         yield app
 
@@ -94,3 +102,14 @@ def echo_v2_op() -> Iterator[Any]:
         yield op
     finally:
         agent_surface.unregister_op(op.name)
+
+
+@pytest.fixture(autouse=True)
+def _no_human_wait() -> Iterator[None]:
+    """The sweeps call every write op, `ask_human` and `request_approval` (P2-05)
+    included: answer at once instead of long-polling for the human."""
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+
+    agents.configure_human_waits(poll_seconds=0)
+    yield
+    agents.configure_human_waits()

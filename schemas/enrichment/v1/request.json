@@ -215,8 +215,21 @@
     },
     "Passage": {
       "additionalProperties": false,
-      "description": "A knowledge passage (P1-17 fills these; an empty list before it lands).",
+      "description": "A knowledge passage (P1-17 fills these from `knowledge.api.passages_for`): the\nchunk it was cut from (optional, so a request written by hand without one still reads),\nand its document, title, heading path and page.",
       "properties": {
+        "chunk_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chunk Id"
+        },
         "document_id": {
           "format": "uuid",
           "title": "Document Id",

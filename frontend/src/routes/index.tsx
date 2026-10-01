@@ -5,9 +5,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import * as z from "zod";
 
 import { DashboardPage } from "../components/dashboard/DashboardPage";
+import { localDay } from "../components/dashboard/format";
 import {
   deployStatusQuery,
   pausesQuery,
+  planQuery,
   projectsQuery,
   reviewCountQuery,
   todayQuery,
@@ -20,6 +22,8 @@ export const dashboardSearch = z.object({
     .enum(["quiet", "nudge", "coach", "guardrail"])
     .optional()
     .catch(undefined),
+  // Close the day (P1-18, J7): the panel over the dashboard, not a route of its own.
+  panel: z.enum(["close"]).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/")({
@@ -31,7 +35,16 @@ export const Route = createFileRoute("/")({
       loaderRead(queryClient, projectsQuery()),
       loaderRead(queryClient, todayQuery()),
       loaderRead(queryClient, reviewCountQuery()),
-      loaderRead(queryClient, workspaceQuery()),
+      // The day's plan (P1-11) is read for the workspace's own day, once its zone is in.
+      loaderRead(queryClient, workspaceQuery()).then(() => {
+        const workspace = queryClient.getQueryData(workspaceQuery().queryKey);
+        return workspace
+          ? loaderRead(
+              queryClient,
+              planQuery(localDay(new Date(), workspace.timezone)),
+            )
+          : undefined;
+      }),
       loaderRead(queryClient, deployStatusQuery()),
       loaderRead(queryClient, pausesQuery()),
     ]);

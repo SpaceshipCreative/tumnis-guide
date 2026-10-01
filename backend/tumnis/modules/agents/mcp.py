@@ -4,6 +4,8 @@
 | --- | --- | --- |
 | `get_task_packet` | tasks:read | `GET /v1/tasks/{task_id}/packet` |
 | `post_result` | tasks:write | `POST /v1/runs/{run_id}/result` |
+| `ask_human` | tasks:write | `POST /v1/runs/{run_id}/questions` |
+| `request_approval` | tasks:write | `POST /v1/runs/{run_id}/approvals` |
 | `pause_agents` | delegate, master only | `POST /v1/agents/pause` |
 
 `get_task_packet` answers the task's packet as a run of the caller would get it, without a
@@ -30,14 +32,19 @@ from tumnis.core.principal import Principal
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.modules.agents import api
 from tumnis.modules.agents.models import AgentProfile, RunRow
-from tumnis.modules.agents.packet_builder import PacketTooLargeError, TaskPacket, packet_for_caller
+from tumnis.modules.agents.packet_builder import (
+    PacketTooLargeError,
+    TaskPacket,
+    enrich_packet,
+    packet_for_caller,
+)
 from tumnis.modules.auth import api as auth
 from tumnis.modules.tasks import api as tasks
 
 _profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
 _runs: Table = RunRow.__table__  # type: ignore[assignment]
 
-PacketKind = Literal["task", "proposal", "stuck"]
+PacketKind = Literal["task", "proposal", "stuck", "enrich"]
 
 
 class TaskPacketQuery(surface.SurfaceInput):
@@ -52,7 +59,16 @@ class GetTaskPacketIn(TaskPacketQuery):
 
 async def _packet(call: surface.SurfaceCall, data: GetTaskPacketIn) -> TaskPacket:
     """Context items are outside content under `context:read` (FR-14.10): a caller with
-    only `tasks:read` gets the packet without them."""
+    only `tasks:read` gets the packet without them. `kind=enrich` answers the enrich
+    packet `enrich_task` would dispatch now (P1-17), with the configured run timeout."""
+    if data.kind == "enrich":
+        return await enrich_packet(
+            call.session,
+            data.task_id,
+            run_id=call.caller.run_id,
+            profile_id=call.caller.profile_id,
+            timeout_s=api.enrichment_config().run_timeout_s,
+        )
     try:
         return await packet_for_caller(
             call.session,
@@ -80,8 +96,9 @@ GET_TASK_PACKET = surface.register_op(
         description=(
             "The task's packet as a run would get it: the task, its project's brief and"
             " passages, context items (with context:read), the policy and the callback (no"
-            " token), with outside"
-            " text inside untrusted-data blocks. `kind` is task (default), proposal or stuck."
+            " token), with outside text inside untrusted-data blocks. `kind` is task"
+            " (default), proposal or stuck; enrich answers the enrichment request's packet"
+            " with the brief and passages (nothing is dispatched)."
         ),
         scope="tasks:read",
         input_model=GetTaskPacketIn,
@@ -147,6 +164,115 @@ POST_RESULT = surface.register_op(
 )
 
 
+# --- Questions and approvals (P2-05, FR-5.6, FR-5.7) ---------------------------------------
+#
+# Both long-poll for the human after the call's transaction commits (`after_commit`), so
+# their twins let `invoke` open the transaction (no route session). A key with no run
+# answers `denied` with rule `run_token_required` (R-31).
+
+
+class AskHumanBody(surface.SurfaceInput, api.HumanQuestion):
+    """The REST twin's body (the run is in the path)."""
+
+
+class AskHumanToolIn(surface.WriteInput, api.AskHumanIn):
+    pass
+
+
+class RequestApprovalBody(surface.SurfaceInput, api.HumanApproval):
+    """The REST twin's body (the run is in the path)."""
+
+
+class RequestApprovalToolIn(surface.WriteInput, api.RequestApprovalIn):
+    pass
+
+
+async def _ask_human(call: surface.SurfaceCall, data: AskHumanToolIn) -> api.HumanWaitOut:
+    inp = api.AskHumanIn.model_validate(data.model_dump(exclude={"idempotency_key"}))
+    return await api.ask_human(
+        call.session,
+        call.actor,
+        call.caller.run_id,
+        inp,
+        caller_key=call.caller.key_id,
+        tainted=call.tainted,
+        now=call.now,
+    )
+
+
+async def _request_approval(
+    call: surface.SurfaceCall, data: RequestApprovalToolIn
+) -> api.HumanWaitOut:
+    inp = api.RequestApprovalIn.model_validate(data.model_dump(exclude={"idempotency_key"}))
+    return await api.request_approval(
+        call.session,
+        call.actor,
+        call.caller.run_id,
+        inp,
+        caller_key=call.caller.key_id,
+        tainted=call.tainted,
+        now=call.now,
+    )
+
+
+def _poll(kind: Literal["question", "approval"]) -> surface.AfterCommit:
+    async def poll(caller: surface.Caller, answer: Any) -> api.HumanWaitOut:
+        ctx = caller.principal.workspace_context()
+        return await api.long_poll_decision(ctx, kind, api.HumanWaitOut.model_validate(answer))
+
+    return poll
+
+
+ASK_HUMAN = surface.register_op(
+    surface.SurfaceOp(
+        name="ask_human",
+        description=(
+            "Ask the human a question with your run's task token; your task waits on the"
+            " human until they answer, with no deadline. Waits up to 10 minutes for the"
+            " answer; if it is still `pending`, call again later with `question_id` to get"
+            " it. `choices` offers one-tap answers."
+        ),
+        scope="tasks:write",
+        input_model=AskHumanToolIn,
+        output_model=api.HumanWaitOut,
+        rest_method="POST",
+        rest_path="/v1/runs/{run_id}/questions",
+        write=True,
+        updates_existing=False,
+        project_arg=None,
+        project_resolver=_project_of_run,
+        handler=_ask_human,
+        session_twin_allowed=False,  # only a run's agent asks
+        after_commit=_poll("question"),
+    )
+)
+REQUEST_APPROVAL = surface.register_op(
+    surface.SurfaceOp(
+        name="request_approval",
+        description=(
+            "Ask before taking an action (action_class: a known class such as merge_main,"
+            " push_main, deploy_production, send_email, delete_files, or a short name of"
+            " your own), with your run's task token. The server decides: `approved` (go"
+            " ahead), `denied` (do not), or `pending` (the human decides; call again with"
+            " `approval_id`, after `retry_after_seconds` when set). Never proceed on"
+            " `pending`."
+        ),
+        scope="tasks:write",
+        input_model=RequestApprovalToolIn,
+        output_model=api.HumanWaitOut,
+        rest_method="POST",
+        rest_path="/v1/runs/{run_id}/approvals",
+        write=True,
+        updates_existing=False,
+        project_arg=None,
+        project_resolver=_project_of_run,
+        handler=_request_approval,
+        session_twin_allowed=False,  # only a run's agent asks
+        after_commit=_poll("approval"),
+    )
+)
+
+
 # --- The kill switch (P2-09, SAF-4) ---------------------------------------------------------
 
 
@@ -168,7 +294,11 @@ async def _pause(call: surface.SurfaceCall, data: PauseAgentsIn) -> api.PauseOut
         raise ProblemError(404, "not_found", "Not found")
     inp = api.PauseIn(scope=data.scope, project_id=data.project_id, reason=data.reason)
     return await api.pause(
-        call.caller.principal.workspace_context(), inp, now=call.now, session=call.session
+        call.caller.principal.workspace_context(),
+        inp,
+        now=call.now,
+        session=call.session,
+        tainted=call.tainted,
     )
 
 

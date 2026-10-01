@@ -79,6 +79,41 @@ class RunFinishedV1(EventPayload):
     )  # started to finished; None if never started
 
 
+PROMPT_MAX: Final = 4000  # a question's prompt and an approval's description (plan)
+
+
+@event_type("question.asked", 1)
+class QuestionAskedV1(EventPayload):
+    """A run asked the human (P2-05, FR-5.7): the question row, its review item and the
+    task's move to Waiting on human are in the same transaction; `agents.start_human_wait`
+    starts its `question_flow`."""
+
+    event_name: ClassVar[str] = "question.asked"
+    schema_version: Literal[1] = 1
+    question_id: UUID
+    run_id: UUID
+    task_id: UUID | None
+    prompt: str = Field(max_length=PROMPT_MAX)
+
+
+@event_type("approval.requested", 1)
+class ApprovalRequestedV1(EventPayload):
+    """A run asked to take an action that needs a decision (P2-05, FR-5.6): `rule` is the
+    policy's verdict. `opened` is true when the human was asked in the same transaction
+    (review item, task Waiting on human); false while Decisions has yet to judge an action
+    the policy does not name (`unknown_needs_decision`). `agents.start_human_wait` starts
+    its `approval_flow`."""
+
+    event_name: ClassVar[str] = "approval.requested"
+    schema_version: Literal[1] = 1
+    approval_id: UUID
+    run_id: UUID
+    task_id: UUID | None
+    action_class: str = Field(max_length=200)
+    rule: str = Field(max_length=60)
+    opened: bool
+
+
 PauseScope = Literal["workspace", "project"]
 
 

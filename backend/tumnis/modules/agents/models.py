@@ -1,6 +1,6 @@
 """agents SQLAlchemy tables owned by this module (mirrors of revisions agents_0001, P1-04,
-agents_0002, P2-07, agents_0003, P1-06, agents_0004, P2-02, agents_0005, P2-04, and
-agents_0006, P2-09).
+agents_0002, P2-07, agents_0003, P1-06, agents_0004, P2-02, agents_0005, P2-04, agents_0006,
+P2-05, and agents_0007, P2-09).
 
 - runners: one per runner daemon; its device token lives in auth's `device_tokens`.
 - agent_profiles: the Hermes profiles Tumnis may run (one master, one per project);
@@ -102,6 +102,38 @@ class RunEventRow(TenantBase, Base):
     )
 
 
+class QuestionRow(TenantBase, Base):  # P2-05 (agents_0006)
+    __tablename__ = "questions"
+
+    run_id: Mapped[UUID] = mapped_column(ForeignKey("runs.id"))
+    task_id: Mapped[UUID | None]
+    review_item_id: Mapped[UUID | None]
+    workflow_id: Mapped[str | None]
+    decided_by: Mapped[str | None]
+    decided_at: Mapped[datetime | None]
+    prompt: Mapped[str]
+    choices: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    status: Mapped[str] = mapped_column(server_default=text("'pending'"))
+    answer: Mapped[str | None]
+
+
+class ApprovalRow(TenantBase, Base):  # P2-05 (agents_0006)
+    __tablename__ = "approvals"
+
+    run_id: Mapped[UUID] = mapped_column(ForeignKey("runs.id"))
+    task_id: Mapped[UUID | None]
+    review_item_id: Mapped[UUID | None]
+    workflow_id: Mapped[str | None]
+    decided_by: Mapped[str | None]
+    decided_at: Mapped[datetime | None]
+    action_class: Mapped[str]
+    description: Mapped[str] = mapped_column(server_default=text("''"))
+    target: Mapped[str | None]
+    rule: Mapped[str]
+    status: Mapped[str] = mapped_column(server_default=text("'pending'"))
+    reason: Mapped[str | None]
+
+
 class RunnerMessage(TenantBase, Base):
     __tablename__ = "runner_messages"
 
@@ -126,3 +158,4 @@ class AgentPause(TenantBase, Base):
     resumed_at: Mapped[datetime | None]
     resumed_by: Mapped[str | None]
     resume_reason: Mapped[str | None]
+    tainted: Mapped[bool] = mapped_column(server_default=text("false"))  # a key's pause (R-31)

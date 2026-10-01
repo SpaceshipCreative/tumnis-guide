@@ -7,6 +7,8 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import {
   agentsGetPausesOptions,
   coolifyListDeployStatusOptions,
+  planningGetAlternatesOptions,
+  planningGetPlanOptions,
   projectsListProjectsOptions,
   tasksGetReviewCountOptions,
   tasksListTasksOptions,
@@ -39,6 +41,25 @@ function retryOnce(failureCount: number, error: unknown): boolean {
 export function todayQuery() {
   return queryOptions({
     ...tasksListTasksOptions({ query: TODAY_QUERY }),
+    retry: retryOnce,
+  });
+}
+
+/** The day's published plan (P1-11); a 404 (no plan for the day) is not retried, and the
+ * page does not ask again on mount after the loader's answer (the live socket refreshes it
+ * when a plan is published), so a day without a plan shows its Today tasks at once. */
+export function planQuery(day: string) {
+  return queryOptions({
+    ...planningGetPlanOptions({ path: { day } }),
+    retry: retryOnce,
+    retryOnMount: false,
+  });
+}
+
+/** What a swap can bring in for the day (P1-11): read when the picker opens. */
+export function alternatesQuery(day: string) {
+  return queryOptions({
+    ...planningGetAlternatesOptions({ path: { day } }),
     retry: retryOnce,
   });
 }

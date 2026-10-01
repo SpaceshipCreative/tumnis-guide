@@ -10,9 +10,12 @@ rules may import only their own module's rules (`storage.py` re-exports them).
 
 import re
 import unicodedata
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
 
 
 class StorageError(Exception):
@@ -255,3 +258,175 @@ def numbered_name(name: str, n: int) -> str:
         return name
     stem, ext = split_ext(name)
     return f"{stem} {n}{ext}"
+
+
+# --- Trust and passages (P1-17, FR-15.4, FR-15.5) -----------------------------------------
+
+Origin = Literal["user_text", "upload", "folder_external", "agent", "link"]
+Trust = Literal["trusted", "untrusted"]
+PASSAGE_CAP_CHARS: Final = 6_000  # plan default for the packet's knowledge part
+
+
+class Passage(BaseModel):
+    """A piece of knowledge for a packet: the brief (no chunk) or a chunk, with its
+    citation (document, title, heading path, page)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    chunk_id: UUID | None
+    document_id: UUID
+    title: str
+    heading_path: list[str]
+    page: int | None
+    text: str
+    tainted: bool = False
+
+
+_TRUST: Final[Mapping[str, tuple[Trust, bool]]] = {
+    "user_text": ("trusted", False),
+    "upload": ("untrusted", True),
+    "folder_external": ("untrusted", True),
+    "agent": ("untrusted", False),
+    "link": ("trusted", False),
+}
+
+
+def default_trust(origin: Origin) -> tuple[Trust, bool]:
+    """(trust, tainted): user_text -> (trusted, False); upload and folder_external ->
+    (untrusted, True) (FR-15.5, SAF-1); agent -> (untrusted, False) until reviewed; link ->
+    (trusted, False), content not fetched."""
+    return _TRUST[origin]
+
+
+BRIEF_TRUNCATED: Final = "[brief truncated]"
+
+
+def select_passages(
+    brief: Passage | None, ranked: Sequence[Passage], cap: int = PASSAGE_CAP_CHARS
+) -> list[Passage]:
+    """Brief first, cut to cap // 2 with a '[brief truncated]' marker if longer; then ranked
+    passages in order, skipping the brief's document and exact duplicates, stopping at the
+    first passage that would exceed the cap (no partial passages)."""
+    out: list[Passage] = []
+    used = 0
+    if brief is not None:
+        half = cap // 2
+        text = brief.text
+        if len(text) > half:
+            keep = half - len(BRIEF_TRUNCATED) - 1
+            text = text[:keep] + "\n" + BRIEF_TRUNCATED if keep >= 0 else text[:half]
+        out.append(brief.model_copy(update={"text": text}))
+        used = len(text)
+    seen: set[str] = set()
+    for passage in ranked:
+        if brief is not None and passage.document_id == brief.document_id:
+            continue
+        if passage.text in seen:
+            continue
+        if used + len(passage.text) > cap:
+            break
+        seen.add(passage.text)
+        out.append(passage)
+        used += len(passage.text)
+    return out
+
+
+MAX_QUERY_TERMS: Final = 12
+_WORD: Final = re.compile(r"[^\W\d_]+")
+_STOP_WORDS: Final = frozenset(
+    """a about above after again against all also am an and any are as at be because been
+    before being below between both but by can could did do does doing down during each few
+    for from further get got had has have having he her here hers him his how if in into is
+    it its just let me more most must my no nor not now of off on once only or other our
+    ours out over own same she should so some such than that the their them then there these
+    they this those through to too under until up upon very via was we were what when where
+    which while who whom why will with would you your yours""".split()  # noqa: SIM905
+)
+
+
+def passage_query(title: str, criteria: Sequence[str], goal: str | None) -> str:
+    """Up to 12 distinct terms of 3+ letters, stop words removed, joined with ' or ' for
+    websearch_to_tsquery (which reads the word `or` as OR)."""
+    terms: list[str] = []
+    for text in (title, *criteria, goal or ""):
+        for word in _WORD.findall(text.casefold()):
+            if len(word) >= 3 and word not in _STOP_WORDS and word not in terms:  # noqa: PLR2004
+                terms.append(word)
+                if len(terms) == MAX_QUERY_TERMS:
+                    return " or ".join(terms)
+    return " or ".join(terms)
+
+
+# --- Text entries cut into chunks by their Markdown headings (P1-17, FR-15.3) -------------
+
+CHUNK_MAX_CHARS: Final = 2_000  # plan default: about Docling's 512 tokens
+_HEADING: Final = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t#]*$")
+_FENCE: Final = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")  # CommonMark: at most 3 spaces in
+_FRONTMATTER: Final = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
+
+
+def markdown_sections(markdown: str) -> list[tuple[list[str], str]]:
+    """A text entry's Markdown as (heading path, text) sections: ATX headings (outside
+    fenced code) open a section under their parents; leading frontmatter is dropped; a
+    section's text is its body without the heading line, cut at blank lines into pieces of
+    at most CHUNK_MAX_CHARS (a longer paragraph is cut hard). Sections with no text are
+    left out; a heading with nothing under it still makes its path searchable through the
+    next section's path."""
+    body = _FRONTMATTER.sub("", markdown.replace("\r\n", "\n"), count=1)
+    path: list[str] = []
+    sections: list[tuple[list[str], list[str]]] = [([], [])]
+    fence: str | None = None  # the open code fence's marker
+    for line in body.split("\n"):
+        fence = _fence_after(line, fence)
+        heading = None if fence is not None else _HEADING.match(line)
+        if heading is None:
+            sections[-1][1].append(line)
+            continue
+        level = len(heading.group(1))
+        path = [*path[: level - 1], heading.group(2).strip()]
+        sections.append((path, []))
+    out: list[tuple[list[str], str]] = []
+    for heading_path, lines in sections:
+        for piece in _pieces("\n".join(lines).strip()):
+            out.append((heading_path, piece))
+    return out
+
+
+def _fence_after(line: str, fence: str | None) -> str | None:
+    """The open code fence after `line` (CommonMark): a fence opens with 3 or more
+    backticks or tildes (a backtick fence's info string has no backtick) and closes only
+    with the same character, at least as long, and nothing but spaces after it."""
+    found = _FENCE.match(line)
+    if found is None:
+        return fence
+    marker, rest = found.group(1), found.group(2)
+    if fence is None:
+        return None if marker[0] == "`" and "`" in rest else marker
+    if marker[0] == fence[0] and len(marker) >= len(fence) and not rest.strip():
+        return None
+    return fence
+
+
+def _pieces(text: str) -> list[str]:
+    """`text` cut at blank lines into pieces of at most CHUNK_MAX_CHARS."""
+    if not text:
+        return []
+    pieces: list[str] = []
+    current = ""
+    for block in re.split(r"\n\s*\n", text):
+        para = block
+        while len(para) > CHUNK_MAX_CHARS:
+            if current:
+                pieces.append(current)
+                current = ""
+            pieces.append(para[:CHUNK_MAX_CHARS])
+            para = para[CHUNK_MAX_CHARS:]
+        joined = f"{current}\n\n{para}" if current else para
+        if len(joined) > CHUNK_MAX_CHARS:
+            pieces.append(current)
+            current = para
+        else:
+            current = joined
+    if current.strip():
+        pieces.append(current)
+    return pieces

@@ -91,6 +91,7 @@ function Strip({ calendar, now }: { calendar: DayCalendarOut; now: Date }) {
       aria-label={`Free ${range(block)}, ${String(block.minutes)} minutes`}
       title={`Free ${range(block)}`}
       data-kind="free"
+      data-testid="free-block"
       className="absolute inset-y-0 rounded-sm bg-accent/25 ring-1 ring-accent ring-inset"
       style={workWindow === null ? undefined : placement(block, workWindow)}
     />
@@ -117,7 +118,7 @@ function Strip({ calendar, now }: { calendar: DayCalendarOut; now: Date }) {
   });
 
   return (
-    <div className="flex flex-col gap-1">
+    <div data-testid="calendar-strip" className="flex flex-col gap-1">
       {workWindow === null ? (
         <p className="text-sm text-muted">No working hours today.</p>
       ) : (

@@ -73,8 +73,6 @@ NAME_RE: Final = re.compile(r"^_?[a-z][a-z0-9_]*$")
 PENDING_TOOLS: Final[Mapping[str, str]] = {
     "get_project_digest": "P2-03",
     "get_workspace_digest": "P2-03",
-    "ask_human": "P2-05",
-    "request_approval": "P2-05",
     "delegate_task": "P2-06",
     "wait_for_task": "P2-06",
     "record_human_reply": "P2-16",
@@ -218,6 +216,7 @@ class SurfaceCall:
 
 
 Handler = Callable[[SurfaceCall, Any], Awaitable[BaseModel]]
+AfterCommit = Callable[[Caller, BaseModel], Awaitable[BaseModel]]
 ProjectResolver = Callable[[WorkspaceContext, Mapping[str, Any]], Awaitable[UUID | None]]
 
 
@@ -239,6 +238,10 @@ class SurfaceOp:
     session_twin_allowed: bool = True  # the REST twin also takes a session (the web app)
     schema_version: int = 1
     previous_version_adapter: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    # Runs after the call's transaction committed (P2-05's long polls wait on the human
+    # outside it): `invoke` hands it the answer, replayed or not, and answers its result.
+    # Only for an op whose REST twin lets `invoke` open the transaction (no route session).
+    after_commit: "AfterCommit | None" = None
 
 
 class InvalidOpError(ValueError):
@@ -433,7 +436,8 @@ async def invoke(
     ctx = caller.principal.workspace_context()
     if not op.write:
         async with tenant_session(ctx) as s:
-            return await run(s)
+            answer = await run(s)
+        return answer if op.after_commit is None else await op.after_commit(caller, answer)
 
     async def work(s: AsyncSession) -> bytes:
         return (await run(s)).model_dump_json().encode()
@@ -447,7 +451,8 @@ async def invoke(
         now=now,
         work=work,
     )
-    return op.output_model.model_validate_json(body)
+    answer = op.output_model.model_validate_json(body)
+    return answer if op.after_commit is None else await op.after_commit(caller, answer)
 
 
 async def invoke_rest(
@@ -480,4 +485,17 @@ async def rest_twin(
         session=session,
         now=clock.now(),
         idempotency_key=request.headers.get(idempotency.KEY_HEADER),
+    )
+
+
+async def rest_twin_detached(request: Request, op: SurfaceOp, raw: Mapping[str, Any]) -> BaseModel:
+    """A REST twin whose route holds no session (P2-05's long polls): `invoke` opens the
+    transaction (idempotent on the Idempotency-Key header, as on MCP), commits it, then
+    runs the op's `after_commit`, so the wait never holds a transaction open."""
+    clock: Clock = getattr(request.app.state, "clock", None) or SystemClock()
+    data = dict(raw)
+    if op.write:
+        data["idempotency_key"] = request.headers.get(idempotency.KEY_HEADER)
+    return await invoke(
+        op, await resolve_caller(principal_of(request)), data, door="rest", now=clock.now()
     )

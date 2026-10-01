@@ -10,6 +10,9 @@ import {
 } from "./client";
 import { client } from "./client.gen";
 import type {
+  AgentsAskHumanData,
+  AgentsAskHumanErrors,
+  AgentsAskHumanResponses,
   AgentsCancelRunData,
   AgentsCancelRunErrors,
   AgentsCancelRunResponses,
@@ -52,6 +55,9 @@ import type {
   AgentsRegisterProfileData,
   AgentsRegisterProfileErrors,
   AgentsRegisterProfileResponses,
+  AgentsRequestApprovalData,
+  AgentsRequestApprovalErrors,
+  AgentsRequestApprovalResponses,
   AgentsRequestRunData,
   AgentsRequestRunErrors,
   AgentsRequestRunResponses,
@@ -158,9 +164,15 @@ import type {
   HealthReadyData,
   HealthReadyErrors,
   HealthReadyResponses,
+  KnowledgeAddLinkData,
+  KnowledgeAddLinkErrors,
+  KnowledgeAddLinkResponses,
   KnowledgeCreateLocationData,
   KnowledgeCreateLocationErrors,
   KnowledgeCreateLocationResponses,
+  KnowledgeCreateTextEntryData,
+  KnowledgeCreateTextEntryErrors,
+  KnowledgeCreateTextEntryResponses,
   KnowledgeGetBriefData,
   KnowledgeGetBriefErrors,
   KnowledgeGetBriefResponses,
@@ -170,39 +182,99 @@ import type {
   KnowledgeGetFileData,
   KnowledgeGetFileErrors,
   KnowledgeGetFileResponses,
+  KnowledgeGetQuotaData,
+  KnowledgeGetQuotaErrors,
+  KnowledgeGetQuotaResponses,
+  KnowledgeListDocumentsData,
+  KnowledgeListDocumentsErrors,
+  KnowledgeListDocumentsResponses,
   KnowledgeListLocationsData,
   KnowledgeListLocationsErrors,
   KnowledgeListLocationsResponses,
+  KnowledgeListVersionsData,
+  KnowledgeListVersionsErrors,
+  KnowledgeListVersionsResponses,
+  KnowledgeRestoreDocumentData,
+  KnowledgeRestoreDocumentErrors,
+  KnowledgeRestoreDocumentResponses,
+  KnowledgeSearchData,
+  KnowledgeSearchErrors,
+  KnowledgeSearchResponses,
   KnowledgeSetDefaultLocationData,
   KnowledgeSetDefaultLocationErrors,
   KnowledgeSetDefaultLocationResponses,
   KnowledgeSetProjectFolderData,
   KnowledgeSetProjectFolderErrors,
   KnowledgeSetProjectFolderResponses,
+  KnowledgeSetTrustData,
+  KnowledgeSetTrustErrors,
+  KnowledgeSetTrustResponses,
   KnowledgeTestLocationData,
   KnowledgeTestLocationErrors,
   KnowledgeTestLocationResponses,
+  KnowledgeTrashDocumentData,
+  KnowledgeTrashDocumentErrors,
+  KnowledgeTrashDocumentResponses,
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentErrors,
   KnowledgeUpdateDocumentResponses,
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentErrors,
   KnowledgeUploadDocumentResponses,
+  PlanningAcceptAllData,
+  PlanningAcceptAllErrors,
+  PlanningAcceptAllResponses,
+  PlanningAcceptItemData,
+  PlanningAcceptItemErrors,
+  PlanningAcceptItemResponses,
+  PlanningGetAlternatesData,
+  PlanningGetAlternatesErrors,
+  PlanningGetAlternatesResponses,
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarErrors,
   PlanningGetDayCalendarResponses,
+  PlanningGetDaySummaryData,
+  PlanningGetDaySummaryErrors,
+  PlanningGetDaySummaryResponses,
+  PlanningGetMetricsSummaryData,
+  PlanningGetMetricsSummaryErrors,
+  PlanningGetMetricsSummaryResponses,
+  PlanningGetPlanData,
+  PlanningGetPlanErrors,
+  PlanningGetPlanResponses,
   PlanningGetProjectWeekData,
   PlanningGetProjectWeekErrors,
   PlanningGetProjectWeekResponses,
+  PlanningMoveIssueData,
+  PlanningMoveIssueErrors,
+  PlanningMoveIssueResponses,
+  PlanningRecordAppOpenData,
+  PlanningRecordAppOpenErrors,
+  PlanningRecordAppOpenResponses,
+  PlanningRemoveItemData,
+  PlanningRemoveItemErrors,
+  PlanningRemoveItemResponses,
+  PlanningReplanData,
+  PlanningReplanErrors,
+  PlanningReplanResponses,
   PlanningSchedulePlanItemData,
   PlanningSchedulePlanItemErrors,
   PlanningSchedulePlanItemResponses,
+  PlanningSplitIssueData,
+  PlanningSplitIssueErrors,
+  PlanningSplitIssueResponses,
+  PlanningSwapItemData,
+  PlanningSwapItemErrors,
+  PlanningSwapItemResponses,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectErrors,
   ProjectsArchiveProjectResponses,
   ProjectsCreateProjectData,
   ProjectsCreateProjectErrors,
   ProjectsCreateProjectResponses,
+  ProjectsGetPolicyData,
+  ProjectsGetPolicyErrors,
+  ProjectsGetPolicyResponses,
   ProjectsGetProjectContextData,
   ProjectsGetProjectContextErrors,
   ProjectsGetProjectContextResponses,
@@ -218,6 +290,9 @@ import type {
   ProjectsUnarchiveProjectData,
   ProjectsUnarchiveProjectErrors,
   ProjectsUnarchiveProjectResponses,
+  ProjectsUpdatePolicyData,
+  ProjectsUpdatePolicyErrors,
+  ProjectsUpdatePolicyResponses,
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectErrors,
   ProjectsUpdateProjectResponses,
@@ -337,6 +412,7 @@ import type {
   UsageGetUsageResponses,
 } from "./types.gen";
 import {
+  zAgentsAskHumanResponse,
   zAgentsCancelRunResponse,
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
@@ -351,6 +427,7 @@ import {
   zAgentsPauseProjectResponse,
   zAgentsPostResultResponse,
   zAgentsRegisterProfileResponse,
+  zAgentsRequestApprovalResponse,
   zAgentsRequestRunResponse,
   zAgentsResumeAgentsResponse,
   zAgentsResumeProjectResponse,
@@ -384,26 +461,49 @@ import {
   zDecisionsGetCalibrationResponse,
   zGithubWebhookResponse,
   zHealthLiveResponse,
+  zKnowledgeAddLinkResponse,
   zKnowledgeCreateLocationResponse,
+  zKnowledgeCreateTextEntryResponse,
   zKnowledgeGetBriefResponse,
   zKnowledgeGetDocumentResponse,
   zKnowledgeGetFileResponse,
+  zKnowledgeGetQuotaResponse,
+  zKnowledgeListDocumentsResponse,
   zKnowledgeListLocationsResponse,
+  zKnowledgeListVersionsResponse,
+  zKnowledgeRestoreDocumentResponse,
+  zKnowledgeSearchResponse,
   zKnowledgeSetDefaultLocationResponse,
   zKnowledgeSetProjectFolderResponse,
+  zKnowledgeSetTrustResponse,
   zKnowledgeTestLocationResponse,
+  zKnowledgeTrashDocumentResponse,
   zKnowledgeUpdateDocumentResponse,
   zKnowledgeUploadDocumentResponse,
+  zPlanningAcceptAllResponse,
+  zPlanningAcceptItemResponse,
+  zPlanningGetAlternatesResponse,
   zPlanningGetDayCalendarResponse,
+  zPlanningGetDaySummaryResponse,
+  zPlanningGetMetricsSummaryResponse,
+  zPlanningGetPlanResponse,
   zPlanningGetProjectWeekResponse,
+  zPlanningMoveIssueResponse,
+  zPlanningRecordAppOpenResponse,
+  zPlanningRemoveItemResponse,
+  zPlanningReplanResponse,
   zPlanningSchedulePlanItemResponse,
+  zPlanningSplitIssueResponse,
+  zPlanningSwapItemResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
+  zProjectsGetPolicyResponse,
   zProjectsGetProjectContextResponse,
   zProjectsGetProjectResponse,
   zProjectsListProjectsResponse,
   zProjectsReorderProjectResponse,
   zProjectsUnarchiveProjectResponse,
+  zProjectsUpdatePolicyResponse,
   zProjectsUpdateProjectResponse,
   zPurgesPurgeResponse,
   zSearchSearchResponse,
@@ -1068,6 +1168,27 @@ export const coolifyListDeployStatus = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Day Summary
+ */
+export const planningGetDaySummary = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetDaySummaryData, ThrowOnError>,
+): RequestResult<
+  PlanningGetDaySummaryResponses,
+  PlanningGetDaySummaryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetDaySummaryResponses,
+    PlanningGetDaySummaryErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetDaySummaryResponse.parseAsync(data),
+    url: "/v1/day/{day}/summary",
+    ...options,
+  });
+
+/**
  * Get Dead Letters
  */
 export const deadLettersGetDeadLetters = <ThrowOnError extends boolean = false>(
@@ -1318,6 +1439,29 @@ export const authRotateKey = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List Documents
+ *
+ * A project's knowledge items (none: the workspace knowledge base's), oldest first.
+ */
+export const knowledgeListDocuments = <ThrowOnError extends boolean = false>(
+  options?: Options<KnowledgeListDocumentsData, ThrowOnError>,
+): RequestResult<
+  KnowledgeListDocumentsResponses,
+  KnowledgeListDocumentsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    KnowledgeListDocumentsResponses,
+    KnowledgeListDocumentsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeListDocumentsResponse.parseAsync(data),
+    url: "/v1/knowledge/documents",
+    ...options,
+  });
+
+/**
  * Upload Document
  *
  * Upload a file (multipart: `file`, and optionally `project_id` and `title`). The
@@ -1348,6 +1492,85 @@ export const knowledgeUploadDocument = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Add Link
+ *
+ * A link as a knowledge item; its content is never fetched.
+ */
+export const knowledgeAddLink = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeAddLinkData, ThrowOnError>,
+): RequestResult<
+  KnowledgeAddLinkResponses,
+  KnowledgeAddLinkErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeAddLinkResponses,
+    KnowledgeAddLinkErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeAddLinkResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/link",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Create Text Entry
+ *
+ * A text entry (Markdown) in a project or the workspace knowledge base: version 1,
+ * searchable at once, trusted when a person writes it (FR-15.5, `_origin`); in a project
+ * with a folder, also `notes/`.
+ */
+export const knowledgeCreateTextEntry = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeCreateTextEntryData, ThrowOnError>,
+): RequestResult<
+  KnowledgeCreateTextEntryResponses,
+  KnowledgeCreateTextEntryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeCreateTextEntryResponses,
+    KnowledgeCreateTextEntryErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeCreateTextEntryResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/text",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Trash Document
+ *
+ * To the trash: hidden from lists, reads and search until restored.
+ */
+export const knowledgeTrashDocument = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeTrashDocumentData, ThrowOnError>,
+): RequestResult<
+  KnowledgeTrashDocumentResponses,
+  KnowledgeTrashDocumentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    KnowledgeTrashDocumentResponses,
+    KnowledgeTrashDocumentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeTrashDocumentResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}",
+    ...options,
+  });
+
+/**
  * Get Document
  *
  * A document's state (status, reason, kind, path): what the upload flow polls.
@@ -1373,7 +1596,9 @@ export const knowledgeGetDocument = <ThrowOnError extends boolean = false>(
 /**
  * Update Document
  *
- * Replace a text entry's Markdown body; 409 `stale_version` with the current entry.
+ * Edit a document: a text entry's Markdown body (a new version, its note file
+ * rewritten), any document's title, tags or pin. 409 `stale_version` with the current
+ * document; 409 `not_text` for a body on anything but a text entry.
  */
 export const knowledgeUpdateDocument = <ThrowOnError extends boolean = false>(
   options: Options<KnowledgeUpdateDocumentData, ThrowOnError>,
@@ -1395,6 +1620,81 @@ export const knowledgeUpdateDocument = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Restore Document
+ *
+ * Back from the trash; 404 for a document that is not in it.
+ */
+export const knowledgeRestoreDocument = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeRestoreDocumentData, ThrowOnError>,
+): RequestResult<
+  KnowledgeRestoreDocumentResponses,
+  KnowledgeRestoreDocumentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeRestoreDocumentResponses,
+    KnowledgeRestoreDocumentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeRestoreDocumentResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}/restore",
+    ...options,
+  });
+
+/**
+ * Set Trust
+ *
+ * A person marks the document trusted or untrusted (audited); keys and agents
+ * cannot (403 `session_required`).
+ */
+export const knowledgeSetTrust = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeSetTrustData, ThrowOnError>,
+): RequestResult<
+  KnowledgeSetTrustResponses,
+  KnowledgeSetTrustErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeSetTrustResponses,
+    KnowledgeSetTrustErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeSetTrustResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}/trust",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List Versions
+ *
+ * Every kept version of a live document, oldest first, each with its body once the
+ * file is released (a note's always).
+ */
+export const knowledgeListVersions = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeListVersionsData, ThrowOnError>,
+): RequestResult<
+  KnowledgeListVersionsResponses,
+  KnowledgeListVersionsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeListVersionsResponses,
+    KnowledgeListVersionsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeListVersionsResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}/versions",
+    ...options,
   });
 
 /**
@@ -1517,6 +1817,116 @@ export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Quota
+ *
+ * The workspace's knowledge bytes against its quota, and the scope's item count.
+ */
+export const knowledgeGetQuota = <ThrowOnError extends boolean = false>(
+  options?: Options<KnowledgeGetQuotaData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetQuotaResponses,
+  KnowledgeGetQuotaErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    KnowledgeGetQuotaResponses,
+    KnowledgeGetQuotaErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeGetQuotaResponse.parseAsync(data),
+    url: "/v1/knowledge/quota",
+    ...options,
+  });
+
+/**
+ * Search
+ *
+ * Full-text search of a project's items and the workspace knowledge base (none: the
+ * whole workspace), citing document, heading path and page (FR-15.3).
+ */
+export const knowledgeSearch = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeSearchData, ThrowOnError>,
+): RequestResult<
+  KnowledgeSearchResponses,
+  KnowledgeSearchErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeSearchResponses,
+    KnowledgeSearchErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeSearchResponse.parseAsync(data),
+    url: "/v1/knowledge/search",
+    ...options,
+  });
+
+/**
+ * Record App Open
+ */
+export const planningRecordAppOpen = <ThrowOnError extends boolean = false>(
+  options?: Options<PlanningRecordAppOpenData, ThrowOnError>,
+): RequestResult<
+  PlanningRecordAppOpenResponses,
+  PlanningRecordAppOpenErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).post<
+    PlanningRecordAppOpenResponses,
+    PlanningRecordAppOpenErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningRecordAppOpenResponse.parseAsync(data),
+    url: "/v1/metrics/open",
+    ...options,
+  });
+
+/**
+ * Get Metrics Summary
+ */
+export const planningGetMetricsSummary = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetMetricsSummaryData, ThrowOnError>,
+): RequestResult<
+  PlanningGetMetricsSummaryResponses,
+  PlanningGetMetricsSummaryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetMetricsSummaryResponses,
+    PlanningGetMetricsSummaryErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetMetricsSummaryResponse.parseAsync(data),
+    url: "/v1/metrics/summary",
+    ...options,
+  });
+
+/**
+ * Replan
+ */
+export const planningReplan = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningReplanData, ThrowOnError>,
+): RequestResult<PlanningReplanResponses, PlanningReplanErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    PlanningReplanResponses,
+    PlanningReplanErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningReplanResponse.parseAsync(data),
+    url: "/v1/plan/replan",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Get Project Week
  */
 export const planningGetProjectWeek = <ThrowOnError extends boolean = false>(
@@ -1534,6 +1944,69 @@ export const planningGetProjectWeek = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zPlanningGetProjectWeekResponse.parseAsync(data),
     url: "/v1/plan/week/{monday}",
+    ...options,
+  });
+
+/**
+ * Get Plan
+ */
+export const planningGetPlan = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetPlanData, ThrowOnError>,
+): RequestResult<
+  PlanningGetPlanResponses,
+  PlanningGetPlanErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetPlanResponses,
+    PlanningGetPlanErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetPlanResponse.parseAsync(data),
+    url: "/v1/plan/{day}",
+    ...options,
+  });
+
+/**
+ * Accept All
+ */
+export const planningAcceptAll = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningAcceptAllData, ThrowOnError>,
+): RequestResult<
+  PlanningAcceptAllResponses,
+  PlanningAcceptAllErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningAcceptAllResponses,
+    PlanningAcceptAllErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningAcceptAllResponse.parseAsync(data),
+    url: "/v1/plan/{day}/accept-all",
+    ...options,
+  });
+
+/**
+ * Get Alternates
+ */
+export const planningGetAlternates = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetAlternatesData, ThrowOnError>,
+): RequestResult<
+  PlanningGetAlternatesResponses,
+  PlanningGetAlternatesErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetAlternatesResponses,
+    PlanningGetAlternatesErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetAlternatesResponse.parseAsync(data),
+    url: "/v1/plan/{day}/alternates",
     ...options,
   });
 
@@ -1559,6 +2032,48 @@ export const planningGetDayCalendar = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Move Issue
+ */
+export const planningMoveIssue = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningMoveIssueData, ThrowOnError>,
+): RequestResult<
+  PlanningMoveIssueResponses,
+  PlanningMoveIssueErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningMoveIssueResponses,
+    PlanningMoveIssueErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningMoveIssueResponse.parseAsync(data),
+    url: "/v1/plan/{day}/issues/{plan_issue_id}/move",
+    ...options,
+  });
+
+/**
+ * Split Issue
+ */
+export const planningSplitIssue = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningSplitIssueData, ThrowOnError>,
+): RequestResult<
+  PlanningSplitIssueResponses,
+  PlanningSplitIssueErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningSplitIssueResponses,
+    PlanningSplitIssueErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningSplitIssueResponse.parseAsync(data),
+    url: "/v1/plan/{day}/issues/{plan_issue_id}/split",
+    ...options,
+  });
+
+/**
  * Schedule Plan Item
  */
 export const planningSchedulePlanItem = <ThrowOnError extends boolean = false>(
@@ -1576,6 +2091,73 @@ export const planningSchedulePlanItem = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zPlanningSchedulePlanItemResponse.parseAsync(data),
     url: "/v1/plan/{day}/items/{task_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Accept Item
+ */
+export const planningAcceptItem = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningAcceptItemData, ThrowOnError>,
+): RequestResult<
+  PlanningAcceptItemResponses,
+  PlanningAcceptItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningAcceptItemResponses,
+    PlanningAcceptItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningAcceptItemResponse.parseAsync(data),
+    url: "/v1/plan/{day}/items/{task_id}/accept",
+    ...options,
+  });
+
+/**
+ * Remove Item
+ */
+export const planningRemoveItem = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningRemoveItemData, ThrowOnError>,
+): RequestResult<
+  PlanningRemoveItemResponses,
+  PlanningRemoveItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningRemoveItemResponses,
+    PlanningRemoveItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningRemoveItemResponse.parseAsync(data),
+    url: "/v1/plan/{day}/items/{task_id}/remove",
+    ...options,
+  });
+
+/**
+ * Swap Item
+ */
+export const planningSwapItem = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningSwapItemData, ThrowOnError>,
+): RequestResult<
+  PlanningSwapItemResponses,
+  PlanningSwapItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningSwapItemResponses,
+    PlanningSwapItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningSwapItemResponse.parseAsync(data),
+    url: "/v1/plan/{day}/items/{task_id}/swap",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -1839,6 +2421,59 @@ export const agentsPauseProject = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zAgentsPauseProjectResponse.parseAsync(data),
     url: "/v1/projects/{project_id}/pause",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Policy
+ *
+ * The project's approval policy (FR-5.6): gated and allowed action classes and the
+ * runaway limits (SAF-5).
+ */
+export const projectsGetPolicy = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsGetPolicyData, ThrowOnError>,
+): RequestResult<
+  ProjectsGetPolicyResponses,
+  ProjectsGetPolicyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ProjectsGetPolicyResponses,
+    ProjectsGetPolicyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsGetPolicyResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/policy",
+    ...options,
+  });
+
+/**
+ * Update Policy
+ *
+ * Replaces the gated and allowed lists at the version read (the policy editor, P2-05);
+ * emits `policy.changed` and writes its audit row. 409 `stale_version` with the current
+ * policy; 422 `policy_conflict` when a class is in both lists.
+ */
+export const projectsUpdatePolicy = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsUpdatePolicyData, ThrowOnError>,
+): RequestResult<
+  ProjectsUpdatePolicyResponses,
+  ProjectsUpdatePolicyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    ProjectsUpdatePolicyResponses,
+    ProjectsUpdatePolicyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsUpdatePolicyResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/policy",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -2164,6 +2799,35 @@ export const agentsGetRun = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Request Approval
+ *
+ * Ask before an action (the `request_approval` tool's twin): `approved`, `denied`, or
+ * `pending` with the approval's id once the long poll runs out. A key with no run
+ * answers `denied`.
+ */
+export const agentsRequestApproval = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsRequestApprovalData, ThrowOnError>,
+): RequestResult<
+  AgentsRequestApprovalResponses,
+  AgentsRequestApprovalErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsRequestApprovalResponses,
+    AgentsRequestApprovalErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsRequestApprovalResponse.parseAsync(data),
+    url: "/v1/runs/{run_id}/approvals",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Cancel Run
  *
  * Stop (FR-5.5): a queued run ends at once; a running one is stopped by its workflow
@@ -2209,6 +2873,31 @@ export const agentsListRunEvents = <ThrowOnError extends boolean = false>(
       await zAgentsListRunEventsResponse.parseAsync(data),
     url: "/v1/runs/{run_id}/events",
     ...options,
+  });
+
+/**
+ * Ask Human
+ *
+ * Ask the human (the `ask_human` tool's twin): the task waits on the human, and the
+ * call waits up to the long poll for the answer, else answers `pending` with the
+ * question's id for the re-send. A key with no run answers `denied`.
+ */
+export const agentsAskHuman = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsAskHumanData, ThrowOnError>,
+): RequestResult<AgentsAskHumanResponses, AgentsAskHumanErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    AgentsAskHumanResponses,
+    AgentsAskHumanErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsAskHumanResponse.parseAsync(data),
+    url: "/v1/runs/{run_id}/questions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**

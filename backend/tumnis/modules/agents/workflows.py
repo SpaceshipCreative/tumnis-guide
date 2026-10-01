@@ -62,16 +62,19 @@ from tumnis.modules.agents.models import (
     RunRow,
 )
 from tumnis.modules.agents.packet_builder import (
+    ENRICH_RESULT,
+    ENRICH_SKILL,
     MCP_PATH,
     REST_BASE,
     Callback,
     TaskPacket,
     build_packet,
-    enrichment_request,
+    enrichment_request_tainted,
     render_prompt,
+    task_snapshot,
 )
 from tumnis.modules.agents.payloads import RunSignalV1, RunStartedV1
-from tumnis.modules.agents.protocol import Provision, ProvisionResult, SchemaRef
+from tumnis.modules.agents.protocol import Provision, ProvisionResult
 from tumnis.modules.agents.review_kinds import DRIFT, DriftPayload, ForeignReach
 from tumnis.modules.agents.rules import (
     ESTIMATE,
@@ -127,6 +130,7 @@ RUNNER_SWEEP_NAME: Final = "runner-sweep"
 # three-missed-heartbeat detection (FR-5.9).
 RUNNER_SWEEP_QUEUE: Final = "agents-sweep"
 RUNS_QUEUE: Final = api.RUNS_QUEUE
+HUMAN_QUEUE: Final = api.HUMAN_QUEUE  # P2-05: question_flow and approval_flow
 PROFILE_HEALTH_SCHEDULE: Final = "*/15 * * * *"  # every 15 minutes (plan default)
 PROFILE_HEALTH_SCHEDULE_NAME: Final = "profile-health"
 
@@ -328,6 +332,17 @@ async def run_skill(workspace_id: str, packet: dict[str, Any]) -> dict[str, Any]
         topic=api.run_topic(task.run_id), timeout_seconds=task.timeout_s + RECV_GRACE_S
     )
     return await finish_step(workspace_id, packet, message)
+
+
+async def run_child_skill(workspace_id: UUID, packet: TaskPacket) -> dict[str, Any]:
+    """`run_skill` as a child of the calling workflow (P1-11's plan run): workflow id
+    `run_skill:<run id>`, so a replayed caller finds its child instead of dispatching
+    again."""
+    with SetWorkflowID(run_workflow_id(packet.run_id)):
+        return await run_skill(str(workspace_id), packet.model_dump(mode="json"))
+
+
+api.register_skill_runner(run_child_skill)
 
 
 async def start_run_skill(
@@ -715,13 +730,15 @@ async def _supervise(  # noqa: PLR0917  # the plan's one loop over every signal
     ceiling: float,
     started_at_s: float,
     used: float = 0.0,
+    *,
+    waiting: bool = False,
 ) -> str:
     """Waits for the run's end: a result, a cancel or limit, a lost runner, a failed agent,
     the active-time cap (SAF-5; time waiting on a human does not count) or the wall-clock
     ceiling (R-29; waiting included). Both caps are enforced here, never by a DBOS
     workflow timeout, so the agent is stopped and the log and review item are left."""
     stored = handle.model_dump(mode="json")
-    waiting, mark = False, await now_s()
+    mark = await now_s()
     ceiling_at = started_at_s + ceiling
     faults.killpoint("agents.dispatch_run.waiting_recv")  # parked before the first recv
     while True:
@@ -823,15 +840,24 @@ async def deliver_signal(
     workspace_id: UUID, run_id: UUID, kind: str, reason: str | None, key: str
 ) -> None:
     """Send a `run.signal` to the run's workflow, once per event (`key`). A workflow that
-    does not exist yet is retried (the delivery raises), unless the run already ended."""
+    does not exist yet is retried (the delivery raises), unless the run already ended.
+    The run row stays locked from reading its workflow id until a stale one is replaced,
+    so a concurrent delivery waits and then reads the new id instead of sending to the
+    cancelled workflow."""
     message = {"kind": kind, "reason": reason}
     async with tenant_session(_ctx(str(workspace_id))) as s:
         row = (
-            await s.execute(select(_runs.c.status, _runs.c.workflow_id).where(_runs.c.id == run_id))
+            await s.execute(
+                select(_runs.c.status, _runs.c.workflow_id)
+                .where(_runs.c.id == run_id)
+                .with_for_update()
+            )
         ).first()
-    if row is None:
-        return
-    target = row.workflow_id or dispatch_workflow_id(run_id)
+        if row is None:
+            return
+        target = row.workflow_id or dispatch_workflow_id(run_id)
+        if row.status not in api.TERMINAL and await stale_workflow(target):
+            target = await _replace_supervisor(s, workspace_id, run_id, target)
     try:
         await DBOS.send_async(target, message, topic=api.run_topic(run_id), idempotency_key=key)
     except DBOSNonExistentWorkflowError:
@@ -849,6 +875,125 @@ async def release_held(workspace_id: UUID, run_id: UUID, key: str) -> None:
         await DBOS.send_async(
             target, {"kind": "release"}, topic=api.run_topic(run_id), idempotency_key=key
         )
+
+
+# --- supervise_run and version-aware delivery (P2-05, R-30) ---------------------------------
+#
+# DBOS recovers only the workflows of the application version it runs (Context7
+# /dbos-inc/dbos-docs, "application versions"), so a run's `dispatch_run` started before a
+# deploy would never hear its signals again. `deliver_signal` finds such a workflow by its
+# `app_version`, cancels it and starts `supervise_run` on the current version, which picks
+# the run up from its row (handle, budgets, time used, waiting or not).
+
+LIVE_WORKFLOW: Final = frozenset({"PENDING", "ENQUEUED"})
+MASTER_RUN_MINUTES: Final = 60  # a run with no project: the plan default cap (SAF-5)
+
+
+class Supervision(BaseModel):
+    """What `supervise_run` needs to carry on with a run, read from its row."""
+
+    status: str
+    ended: bool = False
+    handle: RunHandleData | None = None
+    max_active_seconds: float = 0.0
+    ceiling_seconds: float = 0.0
+    started_at_s: float = 0.0
+    used_seconds: float = 0.0
+    waiting: bool = False
+
+
+def supervise_workflow_id(run_id: UUID, version: str) -> str:
+    return f"supervise:{run_id}:{version}"
+
+
+@DBOS.step()
+async def load_supervision(workspace_id: str, run_id: str) -> Supervision:
+    run = UUID(run_id)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        row = (
+            (
+                await s.execute(
+                    select(*_runs.c, _profiles.c.project_id)
+                    .select_from(_runs.join(_profiles, _profiles.c.id == _runs.c.profile_id))
+                    .where(_runs.c.id == run)
+                )
+            )
+            .mappings()
+            .one()
+        )
+        status = RunStatus(row["status"])
+        if status in TERMINAL_STATUSES:
+            return Supervision(status=status.value, ended=True)
+        minutes = (
+            MASTER_RUN_MINUTES
+            if row["project_id"] is None
+            else (await projects.get_policy(s, row["project_id"])).max_run_minutes
+        )
+    active_cap, ceiling = api.run_caps(minutes)
+    started = row["started_at"] or SystemClock().now()
+    return Supervision(
+        status=status.value,
+        handle=RunHandleData(
+            run_id=run, profile_id=row["profile_id"], correlation_id=row["correlation_id"]
+        ),
+        max_active_seconds=active_cap,
+        ceiling_seconds=ceiling,
+        started_at_s=started.timestamp(),
+        used_seconds=row["active_seconds_used"],
+        waiting=status is RunStatus.WAITING_ON_HUMAN,
+    )
+
+
+@DBOS.workflow(name="supervise_run")
+async def supervise_run(workspace_id: str, run_id: str) -> str:
+    """Carries on supervising a dispatched run on this application version (P2-05): the
+    run's signals, its active-time cap and its wall-clock ceiling, as `dispatch_run` did."""
+    state = await load_supervision(workspace_id, run_id)
+    if state.ended or state.handle is None:
+        return state.status
+    return await _supervise(
+        workspace_id,
+        run_id,
+        state.handle,
+        state.max_active_seconds,
+        state.ceiling_seconds,
+        state.started_at_s,
+        state.used_seconds,
+        waiting=state.waiting,
+    )
+
+
+async def _start_detached(workflow_id: str, func: Any, *args: Any) -> None:
+    """Starts a workflow from a fresh context: a subscriber runs inside a DBOS step, and
+    DBOS refuses to start a workflow from one."""
+
+    async def start() -> None:
+        with SetWorkflowID(workflow_id):
+            await DBOS.start_workflow_async(func, *args)
+
+    await asyncio.get_running_loop().create_task(start(), context=contextvars.Context())
+
+
+async def stale_workflow(workflow_id: str | None) -> bool | None:
+    """Whether the workflow is live on an older application version (True), live on this
+    one (False); None when there is no live workflow by that id."""
+    if workflow_id is None:
+        return None
+    status = await DBOS.get_workflow_status_async(workflow_id)
+    if status is None or status.status not in LIVE_WORKFLOW:
+        return None
+    return status.app_version != DBOS.application_version
+
+
+async def _replace_supervisor(s: AsyncSession, workspace_id: UUID, run_id: UUID, old: str) -> str:
+    """Cancels the run's workflow of an older version and starts `supervise_run` on this
+    one; the run row (locked by the caller, in `s`) names the new workflow."""
+    new = supervise_workflow_id(run_id, str(DBOS.application_version))
+    await DBOS.cancel_workflow_async(old)
+    await _start_detached(new, supervise_run, str(workspace_id), str(run_id))
+    await s.execute(update(_runs).where(_runs.c.id == run_id).values(workflow_id=new))
+    _log.info("run %s: workflow %s of an older version replaced by %s", run_id, old, new)
+    return new
 
 
 # --- runner_sweep ---------------------------------------------------------------------------
@@ -1507,8 +1652,6 @@ api.register_provision_starter(start_provision)
 ENRICH_RUNS: Final = UUID("6f1e0b8a-3c2d-5e4f-9a8b-7c6d5e4f3a21")  # uuid5 namespace of run ids
 LABEL_POLL_S: Final = 0.5  # how often the enrichment looks for the label (plan default)
 APPLY_ATTEMPTS: Final = 3  # a user write between read and apply: read, merge, try again
-ENRICH_SKILL: Final = "enrich"
-ENRICH_RESULT: Final = SchemaRef(family="enrichment", name="result", version=1)
 
 
 def enrich_workflow_id(task_id: UUID, key: str) -> str:
@@ -1517,26 +1660,9 @@ def enrich_workflow_id(task_id: UUID, key: str) -> str:
     return f"enrich:{task_id}:{key}"
 
 
-def _snapshot(task: tasks.TaskOut) -> TaskSnapshot:
-    return TaskSnapshot(
-        id=task.id,
-        project_id=task.project_id,
-        title=task.title,
-        label=None if task.label is None else task.label.value,
-        label_source=task.label_source,
-        status=task.status.value,
-        first_action=task.first_action,
-        first_action_source=task.first_action_source,
-        acceptance_criteria=task.acceptance_criteria,
-        estimate_minutes=task.estimate_minutes,
-        version=task.version,
-        enrichment_status=task.enrichment_status,
-    )
-
-
 async def _read_snapshot(s: AsyncSession, task_id: UUID) -> TaskSnapshot | None:
     try:
-        return _snapshot(await tasks.get_task(s, task_id))
+        return task_snapshot(await tasks.get_task(s, task_id))
     except NotFound:
         return None
 
@@ -1647,13 +1773,17 @@ async def enrich_request_step(
         if not wanted:
             await tasks.set_enrichment_status(s, snap.id, "done")
             return None
-        request = await enrichment_request(s, snap.id, missing=wanted)
+        request, tainted = await enrichment_request_tainted(s, snap.id, missing=wanted)
         profile_id = await _project_profile(s, UUID(project_id))
         if profile_id is None:  # removed while the enrichment waited
             await tasks.set_enrichment_status(s, snap.id, "not_provisioned")
             return None
         await tasks.set_enrichment_status(s, snap.id, "running")
-    return {"request": request.model_dump(mode="json"), "profile_id": str(profile_id)}
+    return {
+        "request": request.model_dump(mode="json"),
+        "profile_id": str(profile_id),
+        "tainted": tainted,
+    }
 
 
 def _checked_result(request: EnrichmentRequest, outcome: dict[str, Any]) -> EnrichmentResult | None:
@@ -1737,10 +1867,13 @@ async def enrich_apply_step(
     request: dict[str, Any],
     result: dict[str, Any],
     outlier: dict[str, Any] | None,
+    *,
+    tainted: bool = False,
 ) -> str:
     """The result merged into the task as it is now (a user's edit made meanwhile wins,
     UX 9) and applied in one versioned write, `done`; an outlier flag for the estimate it
-    applied queues one `estimate_outlier` item in the same transaction."""
+    applied queues one `estimate_outlier` item in the same transaction. A result from a
+    tainted request (outside text in its passages) taints the task (SAF-1)."""
     req = EnrichmentRequest.model_validate(request)
     res = EnrichmentResult.model_validate(result)
     flagged = None if outlier is None else tasks.EstimateOutlierPayload.model_validate(outlier)
@@ -1756,6 +1889,8 @@ async def enrich_apply_step(
                 await tasks.apply_enrichment(
                     s, snap.id, tasks.EnrichmentWrite(**patch.model_dump()), snap.version
                 )
+                if tainted:
+                    await tasks.raise_taint(s, snap.id)
                 if flagged is not None and patch.estimate_minutes == flagged.estimate_minutes:
                     await tasks.add_estimate_outlier(s, snap.id, flagged)
             return "done"
@@ -1816,6 +1951,7 @@ async def enrich_task(workspace_id: str, task_id: str, only: list[str] | None = 
             timeout_s=loaded["run_timeout_s"],
             prompt_text=render_prompt(ENRICH_SKILL, ENRICH_RESULT, built["request"]),
             body=built["request"],
+            tainted=built.get("tainted", False),
         )
         with SetWorkflowID(run_workflow_id(run_id)):
             outcome = await run_skill(workspace_id, packet.model_dump(mode="json"))
@@ -1825,7 +1961,14 @@ async def enrich_task(workspace_id: str, task_id: str, only: list[str] | None = 
             return "failed"
         as_json = result.model_dump(mode="json")
         outlier = await enrich_plausibility_step(workspace_id, task_id, built["request"], as_json)
-        ended = await enrich_apply_step(workspace_id, task_id, built["request"], as_json, outlier)
+        ended = await enrich_apply_step(
+            workspace_id,
+            task_id,
+            built["request"],
+            as_json,
+            outlier,
+            tainted=built.get("tainted", False),
+        )
     except Exception:
         await enrich_fail_step(workspace_id, task_id)
         raise

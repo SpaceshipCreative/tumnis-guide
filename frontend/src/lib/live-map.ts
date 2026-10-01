@@ -13,6 +13,8 @@ export type LiveEntity =
   | "runner"
   | "agent_profile"
   | "run"
+  | "plan"
+  | "knowledge"
   | "agent_pause";
 
 export const LIVE_MAP: Record<
@@ -37,6 +39,9 @@ export const LIVE_MAP: Record<
       "searchSearch",
       "searchTypeaheadTasks",
       "planningGetProjectWeek", // due dates and the tasks to schedule (P1-12)
+      "planningGetPlan", // an item's live status and blocked flag (P1-11)
+      "planningGetAlternates",
+      "planningGetDaySummary", // what shipped and what rolls over (P1-18)
     ],
   },
   // A project's board, columns and agent context (P2-01) carry its id in their path:
@@ -52,6 +57,7 @@ export const LIVE_MAP: Record<
       "tasksGetBoard",
       "tasksGetColumns",
       "knowledgeGetBrief",
+      "projectsGetPolicy", // a saved approval policy (the policy editor, P2-05)
     ],
     lists: [
       "projectsListProjects",
@@ -59,6 +65,11 @@ export const LIVE_MAP: Record<
       "searchTypeaheadProjects",
       "coolifyListDeployStatus",
       "planningGetProjectWeek", // link edits change which events match (P1-12)
+      // P1-17: a project item's knowledge write marks its project changed (the Knowledge
+      // rail); a workspace item's sends `knowledge` instead (below).
+      "knowledgeListDocuments",
+      "knowledgeGetQuota",
+      "knowledgeSearch",
     ],
   },
   // The review badge (P0-18) and the review queue (P1-13).
@@ -107,6 +118,23 @@ export const LIVE_MAP: Record<
   },
   // A pause or resume (P2-09): the kill switch and every project's pause control refresh.
   agent_pause: { details: [], lists: ["agentsGetPauses"] },
+  // A workspace knowledge base item (no project) written, trashed or restored (P1-17):
+  // its message carries the document id, and every knowledge list, search and quota
+  // includes the workspace items, so they all refresh.
+  knowledge: {
+    details: [],
+    lists: ["knowledgeListDocuments", "knowledgeGetQuota", "knowledgeSearch"],
+  },
+  // A plan published, superseded or acted on (P1-11): its path names the day, not the
+  // plan, so every plan message refreshes the day's plan, its alternates and the week.
+  plan: {
+    details: [],
+    lists: [
+      "planningGetPlan",
+      "planningGetAlternates",
+      "planningGetProjectWeek",
+    ],
+  },
 };
 
 export const NOT_LIVE = [
@@ -128,7 +156,11 @@ export const NOT_LIVE = [
   // yet), and a file is a download, never a cached query.
   "knowledgeGetDocument",
   "knowledgeGetFile",
+  // A document's versions are read on demand when its history is opened (P1-17).
+  "knowledgeListVersions",
   // Calibration is evidence read on demand (P3-08); the Calibration screen refetches after
   // its own threshold edit.
   "decisionsGetCalibration",
+  // The local metrics are a summary over days, read when Settings > Metrics opens (P1-18).
+  "planningGetMetricsSummary",
 ] as const;
