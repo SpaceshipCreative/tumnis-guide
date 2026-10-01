@@ -73,7 +73,6 @@ def _succeeded(db: DbUrls, run_id: uuid.UUID) -> Callable[[], bool]:
 
 @pytest.mark.req("Quality rule 3")
 @pytest.mark.wp("P2-12")
-@pytest.mark.xfail(strict=True, reason="spec:P2-12")
 async def test_profile_version_logged_with_every_run(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
