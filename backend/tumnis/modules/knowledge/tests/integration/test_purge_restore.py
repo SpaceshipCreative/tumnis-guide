@@ -51,3 +51,13 @@ async def test_purge_skips_a_document_being_restored(
     got = await session_client.get(f"/v1/knowledge/documents/{doc_id}")
     assert got.status_code == 200, got.text
     assert got.json()["body_md"] == "Kept."
+
+    # Control: with no restore holding it, the same purge takes the trashed document, so
+    # the skip above came from the lock.
+    again = await session_client.delete(f"/v1/knowledge/documents/{doc_id}")
+    assert again.status_code == 204, again.text
+    async with tenant_session(extract_env.ws.ctx) as purging:
+        purged = await knowledge.purge_trash(purging, datetime(9999, 1, 1, tzinfo=UTC), limit=100)
+    assert purged == 1
+    gone = await session_client.get(f"/v1/knowledge/documents/{doc_id}")
+    assert gone.status_code == 404, gone.text
