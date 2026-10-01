@@ -54,6 +54,13 @@ export const zAskHumanBody = z.object({
 });
 
 /**
+ * AskIn
+ */
+export const zAskIn = z.object({
+  question: z.string().min(1).max(4000),
+});
+
+/**
  * AuditEntry
  */
 export const zAuditEntry = z.object({
@@ -621,6 +628,14 @@ export const zPageKeyOut = z.object({
 });
 
 /**
+ * Page[KnowledgeHit]
+ */
+export const zPageKnowledgeHit = z.object({
+  items: z.array(zKnowledgeHit),
+  next_cursor: z.string().nullable(),
+});
+
+/**
  * PlanIssueOut
  */
 export const zPlanIssueOut = z.object({
@@ -1109,7 +1124,9 @@ export const zResultLink = z.object({
   url: z
     .string()
     .max(2048)
-    .regex(/^https?:\/\/\S+$/),
+    .regex(
+      /^(https?:\/\/\S+|tumnis:\/\/doc\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:#page=([1-9][0-9]{0,5}))?)$/,
+    ),
 });
 
 /**
@@ -1290,6 +1307,58 @@ export const zRunStatus = z.enum([
   "timed_out",
   "runner_lost",
 ]);
+
+/**
+ * ActivityItem
+ *
+ * One row of a project's Activity: a run (its status now), a result (its summary) or
+ * an audit row (its action and who did it), at the time it happened.
+ */
+export const zActivityItem = z.object({
+  action: z.string().nullable(),
+  actor_type: z.string().nullable(),
+  at: z.iso.datetime(),
+  id: z.uuid(),
+  kind: z.enum(["run", "result", "audit"]),
+  run_id: z.uuid().nullable(),
+  status: zRunStatus.nullable(),
+  summary: z.string().nullable(),
+  task_id: z.uuid().nullable(),
+  task_title: z.string().nullable(),
+});
+
+/**
+ * FeedRun
+ */
+export const zFeedRun = z.object({
+  at: z.iso.datetime(),
+  kind: zRunKind,
+  project_id: z.uuid().nullable(),
+  run_id: z.uuid(),
+  status: zRunStatus,
+  task_id: z.uuid().nullable(),
+  task_title: z.string().nullable(),
+});
+
+/**
+ * AgentFeedOut
+ *
+ * The dashboard's agent activity (FR-1.5): the newest task runs in each group.
+ */
+export const zAgentFeedOut = z.object({
+  failed: z.array(zFeedRun),
+  finished: z.array(zFeedRun),
+  running: z.array(zFeedRun),
+  waiting: z.array(zFeedRun),
+});
+
+/**
+ * Page[ActivityItem]
+ */
+export const zPageActivityItem = z.object({
+  items: z.array(zActivityItem),
+  next_cursor: z.string().nullable(),
+});
 
 /**
  * RunOut
@@ -1657,6 +1726,16 @@ export const zTaskOut = z.object({
 });
 
 /**
+ * AskOut
+ *
+ * The task the question became, and the run answering it.
+ */
+export const zAskOut = z.object({
+  run_id: z.uuid(),
+  task: zTaskOut,
+});
+
+/**
  * CardOut
  */
 export const zCardOut = z.object({
@@ -1852,10 +1931,14 @@ export const zTextDocumentPatch = z.object({
 
 /**
  * TextEntryIn
+ *
+ * `add_document`'s twin body (P1-17's text entry, R-36).
  */
 export const zTextEntryIn = z.object({
   body_md: z.string().max(100000).optional().default(""),
   project_id: z.uuid().nullish(),
+  schema_version: z.int().nullish(),
+  tags: z.array(z.string()).max(20).optional().default([]),
   title: z.string().min(1).max(300),
 });
 
@@ -2224,6 +2307,11 @@ export const zTumnisModulesProjectsRouterVersionIn = z.object({
  */
 export const zHealthLiveResponse = z.record(z.string(), z.string());
 
+/**
+ * Successful Response
+ */
+export const zAgentsGetAgentFeedResponse = zAgentFeedOut;
+
 export const zAgentsListProfilesQuery = z.object({
   project_id: z.uuid().nullish(),
   cursor: z.string().max(2048).nullish(),
@@ -2577,6 +2665,10 @@ export const zKnowledgeGetDocumentPath = z.object({
   document_id: z.uuid(),
 });
 
+export const zKnowledgeGetDocumentQuery = z.object({
+  schema_version: z.int().nullish(),
+});
+
 /**
  * Successful Response
  */
@@ -2682,14 +2774,14 @@ export const zKnowledgeSearchQuery = z.object({
   q: z.string().min(1).max(500),
   project_id: z.uuid().nullish(),
   limit: z.int().gte(1).lte(50).optional().default(10),
+  cursor: z.string().max(2048).nullish(),
+  schema_version: z.int().nullish(),
 });
 
 /**
- * Response Knowledge Search
- *
  * Successful Response
  */
-export const zKnowledgeSearchResponse = z.array(zKnowledgeHit);
+export const zKnowledgeSearchResponse = zPageKnowledgeHit;
 
 /**
  * Successful Response
@@ -2866,6 +2958,20 @@ export const zProjectsUpdateProjectPath = z.object({
  */
 export const zProjectsUpdateProjectResponse = zProjectOut;
 
+export const zAgentsListActivityPath = z.object({
+  project_id: z.uuid(),
+});
+
+export const zAgentsListActivityQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsListActivityResponse = zPageActivityItem;
+
 export const zProjectsArchiveProjectBody =
   zTumnisModulesProjectsRouterVersionIn;
 
@@ -2877,6 +2983,17 @@ export const zProjectsArchiveProjectPath = z.object({
  * Successful Response
  */
 export const zProjectsArchiveProjectResponse = zProjectOut;
+
+export const zAgentsAskBody = zAskIn;
+
+export const zAgentsAskPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsAskResponse = zAskOut;
 
 export const zTasksGetBoardPath = z.object({
   project_id: z.uuid(),
@@ -2928,6 +3045,20 @@ export const zProjectsGetProjectContextQuery = z.object({
  * Successful Response
  */
 export const zProjectsGetProjectContextResponse = zProjectContextOut;
+
+export const zTasksListInboxPath = z.object({
+  project_id: z.uuid(),
+});
+
+export const zTasksListInboxQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksListInboxResponse = zPageReviewItemOut;
 
 export const zProjectsGetPolicyPath = z.object({
   project_id: z.uuid(),

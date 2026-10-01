@@ -27,6 +27,7 @@ Also here: the ReviewItem interface (R-03, `review.py`), the `ProjectStatsSource
 health reads (registered at import) and the task seed writer.
 """
 
+import re
 from collections.abc import Collection, Mapping, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Any, Final, Literal
@@ -34,7 +35,14 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import (
     RowMapping,
     Select,
@@ -43,9 +51,11 @@ from sqlalchemy import (
     case,
     delete,
     func,
+    literal,
     or_,
     select,
     true,
+    tuple_,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -318,7 +328,17 @@ class CommentOut(BaseModel):
 # --- Results (P2-04, FR-5.8) ------------------------------------------------------------------
 
 ResultOutcome = Literal["done", "partial", "blocked"]
-ResultUrl = Annotated[str, StringConstraints(max_length=2048, pattern=r"^https?://\S+$")]
+# A link is a web address, or a citation of a knowledge-base document and page (P2-17,
+# FR-15.4): `tumnis://doc/<document id>` with an optional `#page=<n>`.
+DOC_LINK_PREFIX: Final = "tumnis://"
+_DOC_LINK: Final = (
+    r"tumnis://doc/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+    r"(?:#page=([1-9][0-9]{0,5}))?"
+)
+DOC_LINK_RE: Final = re.compile(f"^{_DOC_LINK}$")
+ResultUrl = Annotated[
+    str, StringConstraints(max_length=2048, pattern=rf"^(https?://\S+|{_DOC_LINK})$")
+]
 
 
 class FileTouched(BaseModel):
@@ -328,8 +348,24 @@ class FileTouched(BaseModel):
 
 class ResultLink(BaseModel):
     kind: Literal["branch", "pull_request", "document", "draft", "url"]
-    url: ResultUrl
+    url: ResultUrl  # a document link may cite tumnis://doc/<id>#page=<n> (P2-17)
     label: Annotated[str, StringConstraints(max_length=200)] | None = None
+
+    @model_validator(mode="after")
+    def _citation_is_a_document(self) -> "ResultLink":
+        if self.url.startswith(DOC_LINK_PREFIX) and self.kind != "document":
+            raise ValueError("a tumnis:// link cites a document: its kind is document")
+        return self
+
+
+def cited_document(link: ResultLink) -> tuple[UUID, int | None] | None:
+    """The document and page a link cites (`tumnis://doc/<id>#page=<n>`); None for a web
+    address."""
+    found = DOC_LINK_RE.match(link.url)
+    if found is None:
+        return None
+    document_id, page = found.groups()  # plain groups: the pattern is also JSON Schema's
+    return UUID(document_id), None if page is None else int(page)
 
 
 class ResultFields(BaseModel):
@@ -1590,6 +1626,46 @@ async def result_of_run(s: AsyncSession, run_id: UUID) -> ResultOut | None:
         .first()
     )
     return None if found is None else ResultOut.model_validate(dict(found))
+
+
+async def results_for_project(
+    s: AsyncSession,
+    project_id: UUID,
+    *,
+    before: tuple[datetime, UUID] | None = None,
+    limit: int,
+) -> list[ResultOut]:
+    """The project's run results, newest first (created_at, id), those before `before`
+    only: the results part of the project's Activity (P2-17, FR-2.6)."""
+    stmt = (
+        select(_results)
+        .join(_tasks, _tasks.c.id == _results.c.task_id)
+        .where(_tasks.c.project_id == project_id, _live(_results))
+    )
+    if before is not None:
+        bound = (
+            literal(before[0], _results.c.created_at.type),
+            literal(before[1], _results.c.id.type),
+        )
+        stmt = stmt.where(tuple_(_results.c.created_at, _results.c.id) < tuple_(*bound))
+    stmt = stmt.order_by(_results.c.created_at.desc(), _results.c.id.desc()).limit(limit)
+    rows = (await s.execute(stmt)).mappings().all()
+    return [ResultOut.model_validate(dict(row)) for row in rows]
+
+
+PROPOSAL: Final = "proposal"  # the review kind P3-07 fills a project's Inbox with
+
+
+async def inbox(
+    s: AsyncSession, project_id: UUID, *, now: datetime, cursor: str | None, limit: int
+) -> Page[ReviewItemOut]:
+    """The project's Inbox (P2-17, FR-2.6): its open `proposal` review items (tasks an
+    agent suggests from the project's email, chat and notes; none until P3-07). 404 for a
+    project the caller cannot see."""
+    await _require_project(s, project_id)
+    return await list_review_items(
+        s, now=now, kind=PROPOSAL, cursor=cursor, limit=limit, project_id=project_id
+    )
 
 
 async def post_result(  # the result, plus who and when

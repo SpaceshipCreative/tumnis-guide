@@ -21,7 +21,7 @@ from uuid import UUID
 
 from fastapi import Depends, Query, Request
 from fastapi.responses import Response, StreamingResponse
-from pydantic import AnyHttpUrl, BaseModel, Field, StringConstraints
+from pydantic import AnyHttpUrl, BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from tumnis.core import agent_surface
@@ -37,6 +37,8 @@ from tumnis.core.routing import RoutePolicy, TumnisRoute, authorize, route_polic
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.versioning import Version
 from tumnis.modules.knowledge import api, uploads
+from tumnis.modules.knowledge import mcp as tools
+from tumnis.modules.knowledge.mcp import Markdown, TextEntryIn, Title
 from tumnis.modules.knowledge.rules import MAX_UPLOAD_BYTES
 
 # `POST /knowledge/documents/text` and `.../link` (R-36) sit at the same depth as the
@@ -163,10 +165,6 @@ async def set_project_folder(
 # /v1/knowledge/documents/{id}. Keep this block separate.
 
 
-Markdown = Annotated[str, StringConstraints(max_length=100_000)]
-Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
-
-
 class TextDocumentPatch(BaseModel):
     """A document edit (P0-24's body, P1-17's title, tags and pin); at least one field."""
 
@@ -232,12 +230,6 @@ _WRITE = RoutePolicy(
 )
 
 
-class TextEntryIn(BaseModel):
-    project_id: UUID | None = None  # None: the workspace knowledge base
-    title: Title
-    body_md: Markdown = ""
-
-
 class LinkIn(BaseModel):
     project_id: UUID | None = None
     url: AnyHttpUrl
@@ -296,18 +288,15 @@ async def create_text_entry(
     body: TextEntryIn, request: Request, session: SessionDep
 ) -> api.DocumentDTO:
     """A text entry (Markdown) in a project or the workspace knowledge base: version 1,
-    searchable at once, trusted when a person writes it (FR-15.5, `_origin`); in a project
-    with a folder, also `notes/`."""
-    _scoped_ctx(request, body.project_id)
-    return await api.create_text_entry(
-        session,
-        body.project_id,
-        body.title,
-        body.body_md,
-        origin=_origin(request),
-        net=_net(request),
-        tainted=await _tainted(request),
-    )
+    searchable at once; the `add_document` tool's twin (R-36). A person's is a trusted
+    note (in a project with a folder, also `notes/`); any other caller's is untrusted and
+    agent-written (FR-15.5), and goes to `agent-outputs/`."""
+    with api.using_net(_net(request)):
+        made = await agent_surface.rest_twin(
+            request, session, tools.ADD_DOCUMENT, body.model_dump()
+        )
+    assert isinstance(made, api.DocumentDTO)  # noqa: S101  # the op's output model
+    return made
 
 
 @router.post("/knowledge/documents/link", status_code=201)
@@ -379,26 +368,34 @@ async def list_versions(document_id: UUID, session: SessionDep) -> list[api.Docu
     RoutePolicy(
         auth="session_or_key",
         scopes=frozenset({"context:read"}),
+        paginated=True,
         project_param="query:project_id",
-        unpaginated_reason="the top ranked hits, at most 50 (`limit`)",
     )
 )
 async def search(
     request: Request,
     session: SessionDep,
+    *,
     q: Annotated[str, Query(min_length=1, max_length=500)],
     project_id: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=api.SEARCH_LIMIT_MAX)] = 10,
-) -> list[api.KnowledgeHit]:
-    """Full-text search of a project's items and the workspace knowledge base (none: the
-    whole workspace), citing document, heading path and page (FR-15.3)."""
-    return await api.search_knowledge(
-        session,
-        q,
-        project_id=project_id,
-        limit=limit,
-        project_ids=principal_of(request).project_ids,
-    )
+    cursor: Annotated[str | None, Query(max_length=2048)] = None,
+    schema_version: int | None = None,
+) -> Page[api.KnowledgeHit]:
+    """Full-text search of a project's items and the workspace knowledge base (none: every
+    project the caller sees), citing document, heading path and page (FR-15.3), best
+    first, a page at a time; the `search_knowledge` tool's twin. The parameters are
+    `tools.SearchKnowledgeIn`'s, spelled out so the page's `cursor` and `limit` show."""
+    raw = {
+        "q": q,
+        "project_id": project_id,
+        "limit": limit,
+        "cursor": cursor,
+        "schema_version": schema_version,
+    }
+    found = await agent_surface.rest_twin(request, session, tools.SEARCH_KNOWLEDGE, raw)
+    assert isinstance(found, Page)  # noqa: S101  # the op's output model
+    return found
 
 
 @router.get("/knowledge/quota")
@@ -503,12 +500,22 @@ async def upload_document(request: Request) -> api.UploadAccepted:
     RoutePolicy(
         auth="session_or_key",
         scopes=frozenset({"context:read"}),
-        project_param="lookup:knowledge",
+        project_param="lookup:knowledge_read",
     )
 )
-async def get_document(document_id: UUID, session: SessionDep) -> api.DocumentDTO:
-    """A document's state (status, reason, kind, path): what the upload flow polls."""
-    return await api.get_document(session, document_id)
+async def get_document(
+    document_id: UUID,
+    request: Request,
+    session: SessionDep,
+    query: Annotated[agent_surface.SurfaceInput, Query()],
+) -> api.DocumentDTO:
+    """A document's state (status, reason, kind, path) and text: what the upload flow
+    polls; the `get_document` tool's twin. A project-limited caller reads its projects'
+    documents and the workspace knowledge base's (R-28)."""
+    raw = {**query.model_dump(), "document_id": document_id}
+    found = await agent_surface.rest_twin(request, session, tools.GET_DOCUMENT, raw)
+    assert isinstance(found, api.DocumentDTO)  # noqa: S101  # the op's output model
+    return found
 
 
 @router.get(

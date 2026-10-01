@@ -77,9 +77,6 @@ PENDING_TOOLS: Final[Mapping[str, str]] = {
     "wait_for_task": "P2-06",
     "pause_agents": "P2-09",
     "record_human_reply": "P2-16",
-    "search_knowledge": "P2-17",
-    "get_document": "P2-17",
-    "add_document": "P2-17",
     "ingest_items": "P3-02",
     "get_context_item": "P3-03",
     "draft_reply": "P3-07",
@@ -356,7 +353,7 @@ async def _project(op: SurfaceOp, caller: Caller, raw: Mapping[str, Any]) -> UUI
     found = await op.project_resolver(ctx, raw)
     if found is None:
         raise _not_found()
-    return found
+    return None if found == routing.WORKSPACE_ROW else found
 
 
 def validation_problem(exc: ValidationError) -> ProblemError:

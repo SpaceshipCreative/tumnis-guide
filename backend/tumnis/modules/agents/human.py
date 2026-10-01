@@ -52,6 +52,7 @@ from tumnis.modules.agents.review_kinds import (
     QUESTION,
     ApprovalPayload,
     QuestionPayload,
+    project_of_run,
 )
 from tumnis.modules.agents.rules import (
     DEFAULT_POLICY,
@@ -290,6 +291,7 @@ async def open_approval_in(  # the approval's facts, spelled out
         target=("approval", row.id),
         details={"action_class": row.action_class, "rule": rule, "run_id": str(row.run_id)},
         occurred_at=now,
+        project_id=await project_of_run(s, row.run_id),
     )
 
 

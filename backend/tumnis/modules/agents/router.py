@@ -270,3 +270,44 @@ async def request_approval(
     asked = await surface.rest_twin_detached(request, tools.REQUEST_APPROVAL, raw)
     assert isinstance(asked, api.HumanWaitOut)  # noqa: S101  # the op's output model
     return asked
+
+
+# --- Ask the agent, Activity and the dashboard feed (P2-17, FR-2.5, FR-2.6, FR-1.5) ---------
+
+
+@router.post("/projects/{project_id}/ask", status_code=201)
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def ask(
+    project_id: UUID, body: api.AskIn, request: Request, ctx: Session, session: SessionDep
+) -> api.AskOut:
+    """Ask the project's agent (the composer's Ask the agent toggle): the question becomes
+    an AI task (source `ask`) and its run starts at once; the run's result is the answer.
+    404 for an unknown project; 409 `no_ready_profile` (nothing is kept) when the project
+    has no ready agent."""
+    return await api.ask(
+        session, ctx.actor, project_id, body.question, ctx=ctx, now=_clock(request).now()
+    )
+
+
+@router.get("/projects/{project_id}/activity")
+@route_policy(RoutePolicy(auth="session", paginated=True))
+async def list_activity(
+    project_id: UUID, ctx: Session, session: SessionDep, page: Paging
+) -> Page[api.ActivityItem]:
+    """The project's Activity view (FR-2.6): its task runs, their results and its audit
+    trail, newest first, a page at a time. 400 `invalid_cursor`; 404 for an unknown
+    project."""
+    return await api.activity(session, project_id, cursor=page.cursor, limit=page.limit)
+
+
+@router.get("/agents/feed")
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        unpaginated_reason="four groups of at most ten runs each, the dashboard's feed",
+    )
+)
+async def get_agent_feed(ctx: Session, session: SessionDep) -> api.AgentFeedOut:
+    """The dashboard's agent activity (FR-1.5): task runs running, waiting on the human,
+    finished and failed, the newest ten of each."""
+    return await api.agent_feed(session)
