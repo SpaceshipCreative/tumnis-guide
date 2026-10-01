@@ -6,7 +6,8 @@ clock; `GET /v1/test/requests` lists the last write requests (P0-10); `POST
 the browser's installed clock, so the server must check it at the same instant); `POST
 /v1/test/fakes/{adapter}/script` scripts a fake in every process (R-37, through
 tumnis.core.fake_scripts); `GET /v1/test/fakes/runner/last-packet` answers the last `run`
-packet the fake runner received and how many (P2-04)."""
+packet the fake runner received and how many (P2-04); `POST /v1/test/tick/{schedule_name}`
+fires a registered test tick (R-37, tumnis.core.ticks; P2-15's `focus-wake`)."""
 
 import asyncio
 from collections.abc import Callable
@@ -21,7 +22,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from tumnis.core import fake_scripts
+from tumnis.core import deadletter, fake_scripts, ticks
 from tumnis.core.clock import OverridableClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.ratelimit import RateLimiter
@@ -273,3 +274,24 @@ async def runner_last_packet() -> LastPacket:
     if stored is None:
         return LastPacket(packet=None, run_messages=0)
     return LastPacket.model_validate(stored)
+
+
+class TickOut(BaseModel):
+    woken: int  # how many waiting workflows the tick reached
+
+
+@router.post("/tick/{schedule_name}")
+@route_policy(
+    RoutePolicy(
+        auth="none", idempotent=False, not_idempotent_reason="test-only firing of a schedule"
+    )
+)
+async def fire_tick(request: Request, schedule_name: str) -> TickOut:
+    """Fires the test tick named `schedule_name` at the server clock's time (P2-15:
+    `focus-wake` wakes every waiting focus workflow, which then reads that time). 404
+    `unknown_tick` for a name no module registered."""
+    found = ticks.tick(schedule_name)
+    if found is None:
+        raise ProblemError(404, "unknown_tick", f"no test tick is named {schedule_name!r}")
+    woken = await found(deadletter.dbos_client(), request.app.state.clock.now())
+    return TickOut(woken=woken)

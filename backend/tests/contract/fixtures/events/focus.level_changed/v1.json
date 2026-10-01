@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "from": "coach",
+  "to": "nudge",
+  "scope": "today"
+}

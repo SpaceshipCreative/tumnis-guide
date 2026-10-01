@@ -55,6 +55,24 @@ CASES = [
     ),
     (
         "events",
+        "focus.event",
+        1,
+        "backend/tests/contract/fixtures/events/focus.event/v1.json",
+    ),
+    (
+        "events",
+        "focus.level_changed",
+        1,
+        "backend/tests/contract/fixtures/events/focus.level_changed/v1.json",
+    ),
+    (
+        "events",
+        "focus.responded",
+        1,
+        "backend/tests/contract/fixtures/events/focus.responded/v1.json",
+    ),
+    (
+        "events",
         "github.fetched",
         1,
         "backend/tests/contract/fixtures/events/github.fetched/v1.json",

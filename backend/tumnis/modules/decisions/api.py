@@ -86,7 +86,9 @@ from tumnis.modules.decisions.payloads import (
     DecisionValueEdit,
 )
 from tumnis.modules.decisions.questions import approval_need as _approval_need
+from tumnis.modules.decisions.questions import nudge_warranted as _nudge_warranted
 from tumnis.modules.decisions.questions.approval_need import ApprovalNeed
+from tumnis.modules.decisions.questions.nudge_warranted import NudgeWarranted
 from tumnis.modules.decisions.rules import (
     DEFAULT_THRESHOLDS,
     MIN_LABELED,
@@ -125,6 +127,7 @@ __all__ = [
     "LabeledDecision",
     "Metrics",
     "NoulAnswer",
+    "NudgeWarranted",
     "ProviderConfig",
     "ProviderConfigIn",
     "ProviderResponse",
@@ -142,6 +145,7 @@ __all__ = [
     "TypedAnswer",
     "VllmSettings",
     "ask_approval_need",
+    "ask_nudge_warranted",
     "ask_raw",
     "assess_blocking_impact",
     "calibration",
@@ -1150,3 +1154,39 @@ async def ask_approval_need(  # the Noul's fields, spelled out
     threshold = (await thresholds_in_force(ctx))[DecisionPoint.APPROVAL_NEED.value]
     eff = effective_threshold(threshold, fallback=decision.fallback)
     return _approval_need.read_answer(decision.answers, fallback=decision.fallback, t_no=eff.t_no)
+
+
+async def ask_nudge_warranted(  # the Noul's fields, spelled out
+    *,
+    level: str,
+    event_kind: str,
+    minutes_into_block: int | None,
+    task_status: str | None,
+    recent_responses: Iterable[str],
+    minutes_since_last_nudge: int | None,
+    subject: SubjectRef,
+    project_id: UUID | None,
+) -> NudgeWarranted | None:
+    """Worker-only (P2-15): asks the nudge-warranted Noul (`questions/nudge_warranted.py`)
+    before a gateable focus event fires, and reads its answer with the confidence a "no"
+    needs to suppress it; None when nobody answered (Decisions unavailable). Runs in the
+    current workspace context."""
+    ctx = _context()
+    decision = await decide(
+        DecisionPoint.NUDGE_WARRANTED,
+        _nudge_warranted.inputs(
+            level=level,
+            event_kind=event_kind,
+            minutes_into_block=minutes_into_block,
+            task_status=task_status,
+            recent_responses=recent_responses,
+            minutes_since_last_nudge=minutes_since_last_nudge,
+        ),
+        subject=subject,
+        project_id=project_id,
+    )
+    if decision.provider == "none":
+        return None
+    threshold = (await thresholds_in_force(ctx))[DecisionPoint.NUDGE_WARRANTED.value]
+    eff = effective_threshold(threshold, fallback=decision.fallback)
+    return _nudge_warranted.read_answer(decision.answers, fallback=decision.fallback, t_no=eff.t_no)
