@@ -94,6 +94,12 @@ async def lookup(name: str, key: str = "") -> dict[str, Any] | None:
     return script
 
 
+async def claim_play(name: str, key: str) -> tuple[dict[str, Any], int] | None:
+    """Count one more play of the script stored for exactly (name, key); the script and
+    how many plays came before this one. None while disabled or with no such script."""
+    raise NotImplementedError  # P2-04: spec test first
+
+
 # --- The fake runner's last packet (P2-04, `GET /v1/test/fakes/runner/last-packet`) ---------
 
 RUNNER = "runner"  # the fake runner's scripts (`POST /v1/test/fakes/runner/script`)

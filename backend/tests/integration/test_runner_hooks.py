@@ -5,6 +5,7 @@ each run of a task, by title); `GET /v1/test/fakes/runner/last-packet` answers t
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
@@ -79,3 +80,29 @@ async def test_last_packet_counts_run_messages_and_reset_clears_it(
 
     assert (await client.post("/v1/test/reset")).status_code == 204
     assert (await client.get(LAST_PACKET)).json() == {"packet": None, "run_messages": 0}
+
+
+@pytest.mark.req("REL-7")
+@pytest.mark.wp("P2-04")
+@pytest.mark.xfail(strict=True, reason="spec:P2-04")
+async def test_two_dispatches_at_once_play_two_different_runs(
+    client: httpx.AsyncClient, stored_scripts: None
+) -> None:
+    """Each dispatch of a scripted task claims the next of its runs in one atomic count:
+    two dispatches at once play runs 0 and 1, never the same run twice. A title with no
+    script claims nothing."""
+    from tumnis.core import fake_scripts  # noqa: PLC0415
+
+    key = "task:Fix footer link"
+    task = {"task_title": "Fix footer link", "runs": [[{"result": RESULT}], [{"result": RESULT}]]}
+    assert (await client.post(SCRIPT, json=task)).status_code == 204
+
+    claims = await asyncio.gather(
+        fake_scripts.claim_play(fake_scripts.RUNNER, key),
+        fake_scripts.claim_play(fake_scripts.RUNNER, key),
+    )
+    assert sorted(claim[1] for claim in claims if claim is not None) == [0, 1]
+    stored = await fake_scripts.lookup(fake_scripts.RUNNER, key)
+    assert stored is not None
+    assert stored["played"] == 2
+    assert await fake_scripts.claim_play(fake_scripts.RUNNER, "task:Nothing scripted") is None
