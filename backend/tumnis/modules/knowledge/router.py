@@ -140,7 +140,10 @@ async def get_brief(project_id: UUID, session: SessionDep) -> api.DocumentDTO:
     return await api.get_brief(project_id, session=session)
 
 
-@router.patch("/knowledge/documents/{document_id}")
+# `{document_id:uuid}` on the routes at the same depth as `POST /knowledge/documents/text`
+# and `.../link` (R-36): a literal path never matches them, so another method on the
+# literal answers 405, not 422. OpenAPI shows the plain `{document_id}`.
+@router.patch("/knowledge/documents/{document_id:uuid}")
 @route_policy(
     RoutePolicy(
         auth="session_or_key",
@@ -263,7 +266,7 @@ async def add_link(body: LinkIn, request: Request, session: SessionDep) -> api.D
     return await api.add_link(session, body.project_id, str(body.url), body.title)
 
 
-@router.delete("/knowledge/documents/{document_id}", status_code=204)
+@router.delete("/knowledge/documents/{document_id:uuid}", status_code=204)
 @route_policy(_WRITE)
 async def trash_document(document_id: UUID, session: SessionDep) -> None:
     """To the trash: hidden from lists, reads and search until restored."""
@@ -434,7 +437,7 @@ async def upload_document(request: Request) -> api.UploadAccepted:
     return accepted
 
 
-@router.get("/knowledge/documents/{document_id}")
+@router.get("/knowledge/documents/{document_id:uuid}")
 @route_policy(
     RoutePolicy(
         auth="session_or_key",

@@ -21,6 +21,7 @@ import enum
 import importlib
 import inspect
 import json
+import re
 import uuid
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
@@ -311,7 +312,8 @@ def requests_for(case: RouteCase, tables: Mapping[str, str]) -> Iterator[SweepRe
             raise LookupError(f"{case.method} {case.path}: no A row for {{{param.name}}}")
         else:
             value = _sample(annotation)
-        url = url.replace(f"{{{param.name}}}", value)
+        # `{name}` or `{name:convertor}` (a Starlette path convertor such as `:uuid`)
+        url = re.sub(rf"\{{{param.name}(?::[^}}]*)?\}}", value, url)
     id_filters = {
         q.name: tables[t]
         for q in route.dependant.query_params
