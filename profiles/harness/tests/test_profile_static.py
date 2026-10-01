@@ -287,7 +287,6 @@ def _env_example(profile: Path) -> dict[str, str]:
 
 @pytest.mark.req("FR-8.2")
 @pytest.mark.wp("P2-16")
-@pytest.mark.xfail(strict=True, reason="spec:P2-16")
 def test_only_master_has_discord_gateway() -> None:
     """T-P2-16-06
     Only the master talks to Discord (FR-8.2): the template's config has no messaging
