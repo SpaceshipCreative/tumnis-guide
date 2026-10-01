@@ -91,8 +91,10 @@ from tumnis.modules.tasks.payloads import (
     TaskUpdatedV1,
 )
 from tumnis.modules.tasks.review import (
+    ESTIMATE_KIND,
     LABEL_KIND,
     DuplicateReviewKind,
+    EstimateOutlierPayload,
     ImpactFacts,
     LowConfidenceLabelPayload,
     ReviewAction,
@@ -130,9 +132,11 @@ from tumnis.modules.tasks.rules_recurrence import Preset
 from tumnis.seed import TaskSeed, register_seed_writer
 
 __all__ = [
+    "ESTIMATE_KIND",
     "LABEL_KIND",
     "ActorKind",
     "DuplicateReviewKind",
+    "EstimateOutlierPayload",
     "ImpactFacts",
     "Label",
     "LabelSource",
@@ -177,6 +181,10 @@ TaskOrder = Literal["created", "today"]
 Title = Annotated[str, StringConstraints(min_length=1, max_length=500, strip_whitespace=True)]
 Estimate = Annotated[int, Field(gt=0, le=MAX_ESTIMATE_MINUTES)]
 LongText = Annotated[str, StringConstraints(max_length=8_000)]
+FirstActionSource = Literal["placeholder", "agent"]  # P1-08; NULL: a person's or none
+EnrichmentStatus = Literal[
+    "pending", "running", "done", "agent_offline", "not_provisioned", "failed"
+]
 ColumnName = Annotated[str, StringConstraints(min_length=1, max_length=60, strip_whitespace=True)]
 BoardRank = Annotated[str, StringConstraints(min_length=1, max_length=rank.MAX_KEY_LEN)]
 
@@ -240,7 +248,12 @@ class TaskOut(BaseModel):
     due_on: date | None
     estimate_minutes: int | None
     first_action: str | None
+    # P1-08: `placeholder` (the Generation slot's stand-in while the project agent works)
+    # or `agent` (its enrichment); null for a first action a person wrote, or none.
+    first_action_source: str | None = None  # FirstActionSource (the column CHECK holds it)
     acceptance_criteria: str | None
+    # P1-08: the project agent's enrichment of the task; null before one starts.
+    enrichment_status: str | None = None  # EnrichmentStatus (the column CHECK holds it)
     assigned_agent_id: UUID | None
     column_id: UUID | None
     board_rank: str
@@ -486,11 +499,12 @@ AI_LABEL_SOURCES: Final = frozenset({"jev", "fallback"})
 
 
 async def get_task(s: AsyncSession, task_id: UUID) -> TaskOut:
-    """The task. While its label is still the AI's own write (P1-07), `change_id` names
-    that write, so the open UI can offer to undo it for the session (UX 9)."""
+    """The task. While its label is still the AI's own write (P1-07), or its latest write
+    is the project agent's enrichment (P1-08), `change_id` names that write, so the open
+    UI can offer to undo it for the session (UX 9)."""
     row = await _row(s, task_id)
     change_id = None
-    if row["label_source"] in AI_LABEL_SOURCES:
+    if row["label_source"] in AI_LABEL_SOURCES or row["enrichment_status"] == "done":
         change_id = await s.scalar(
             select(_changes.c.change_id)
             .where(
@@ -751,6 +765,9 @@ async def _record(
     if "label" in before:  # the label's metadata goes back with it on undo (P1-07)
         before |= _label_meta(before_row)
         after |= _label_meta(after_row)
+    if "first_action" in before:  # and where the first action came from (P1-08)
+        before[FIRST_ACTION_SOURCE] = before_row[FIRST_ACTION_SOURCE]
+        after[FIRST_ACTION_SOURCE] = after_row[FIRST_ACTION_SOURCE]
     return await record_change(s, actor, after_row["id"], before, after)
 
 
@@ -763,6 +780,9 @@ _LABEL_META: Final = (
     "label_decision_id",
     "label_suggestion",
 )
+
+
+FIRST_ACTION_SOURCE: Final = "first_action_source"  # goes back with the first action (P1-08)
 
 
 def _label_meta(row: Mapping[Any, Any]) -> dict[str, object]:
@@ -949,6 +969,8 @@ async def update_task(
         )
     if values.get("label") is not None:  # a person's (or agent's) label ends the suggestion
         values["label_suggestion"] = None
+    if "first_action" in values:  # written here: no longer the placeholder or the agent's
+        values[FIRST_ACTION_SOURCE] = None
     changed = [field for field, value in values.items() if row[field] != value]
     updated = await _versioned(s, task_id, version, values or {"updated_at": func.now()})
     if changed:
@@ -1117,6 +1139,116 @@ async def set_label_suggestion(
         session=s,
     )
     return True
+
+
+# --- Enrichment by the project agent (P1-08, FR-4.4, FR-4.6, UX 9) ----------------------------
+
+
+class EnrichmentWrite(BaseModel):
+    """What an enrichment writes (agents' merge decided it): None leaves a field alone."""
+
+    first_action: LongText | None = None
+    acceptance_criteria: LongText | None = None
+    estimate_minutes: Estimate | None = None
+    label: Label | None = None
+    label_reason: Annotated[str, StringConstraints(max_length=200)] | None = None
+
+
+def _blank(text: str | None) -> bool:
+    return text is None or not text.strip()
+
+
+async def set_enrichment_status(
+    s: AsyncSession,
+    task_id: UUID,
+    status: EnrichmentStatus,
+    *,
+    placeholder: str | None = None,
+    now: datetime | None = None,
+) -> bool:
+    """The enrichment's status, and the Generation slot's `placeholder` first action
+    (`first_action_source = "placeholder"`) when given and the task still has none, in one
+    write (every write bumps the version, so they share it). A placeholder is nobody's
+    change: it records no `task_changes` row, and `task.updated` names it; a status alone
+    only refreshes the live views. False (nothing written) for a task that is gone."""
+    try:
+        row = await _row(s, task_id, lock=True)
+    except NotFound:
+        return False
+    values: dict[str, Any] = {"enrichment_status": status}
+    written = placeholder is not None and _blank(row["first_action"])
+    if written:
+        values |= {"first_action": placeholder, FIRST_ACTION_SOURCE: "placeholder"}
+    if not written and row["enrichment_status"] == status:
+        return True
+    updated = await _versioned(s, task_id, row["version"], values)
+    if written:
+        await _changed(s, updated, ["first_action", FIRST_ACTION_SOURCE, "enrichment_status"], now)
+    else:
+        mark_changed(s, LIVE_ENTITY, task_id)
+    return True
+
+
+async def apply_enrichment(
+    s: AsyncSession,
+    task_id: UUID,
+    write: EnrichmentWrite,
+    version: int,
+    *,
+    now: datetime | None = None,
+) -> UUID | None:
+    """The project agent's enrichment at `version` (409 `stale_version` when the task
+    changed since it was read: read, merge and write again): one versioned write with
+    `enrichment_status = "done"`, `first_action_source = "agent"` with a first action,
+    `label_source = "agent"` with a revised label (which drops an estimate when it is AI,
+    and closes an open `low_confidence_label` item as superseded, since it clears the
+    suggestion that item asked about). One `task_changes` row by the system
+    (R-09), undone through `POST /v1/tasks/{id}/undo`, whose id this returns (None when the
+    write filled nothing); `task.updated` names the changed fields (R-06)."""
+    row = await _row(s, task_id, lock=True)
+    values: dict[str, Any] = {"enrichment_status": "done"}
+    if write.first_action is not None:
+        values |= {"first_action": write.first_action, FIRST_ACTION_SOURCE: "agent"}
+    if write.acceptance_criteria is not None:
+        values["acceptance_criteria"] = write.acceptance_criteria
+    if write.estimate_minutes is not None:
+        values["estimate_minutes"] = write.estimate_minutes
+    if write.label is not None:
+        values |= {
+            "label": write.label,
+            "label_source": "agent",
+            "label_reason": write.label_reason,
+            "label_confidence": None,
+            "label_decision_id": None,
+            "label_suggestion": None,
+        }
+        if write.label is Label.AI:  # AI work carries no estimate (normalize_estimate)
+            values["estimate_minutes"] = None
+    changed = [field for field, value in values.items() if row[field] != value]
+    updated = await _versioned(s, task_id, version, values)
+    if changed:
+        await _changed(s, updated, changed, now)
+    if write.label is not None:  # the suggestion it answered is gone with its review item
+        await close_open_items(
+            s, LABEL_KIND, TargetRef(type="task", id=task_id), decision="superseded", at=_now(now)
+        )
+    return await _record(s, SYSTEM_ACTOR, row, updated)
+
+
+async def add_estimate_outlier(
+    s: AsyncSession, task_id: UUID, payload: EstimateOutlierPayload
+) -> None:
+    """One open `estimate_outlier` review item for the task (P1-08, FR-11.4): accept keeps
+    the estimate, edit sets another."""
+    row = await _row(s, task_id)
+    await add_review_item(
+        ESTIMATE_KIND,
+        target=TargetRef(type="task", id=task_id),
+        project_id=row["project_id"],
+        payload=payload.model_dump(mode="json"),
+        dedupe_key=f"{ESTIMATE_KIND}:{task_id}",
+        session=s,
+    )
 
 
 async def _transition(  # one path for /status and /move
@@ -1370,6 +1502,8 @@ async def undo_task(
     values = rules.restore_values(change["before"], row["completed_at"], at)
     if "label" in values:
         values |= _restored_meta(change["before"])
+    if "first_action" in values:
+        values[FIRST_ACTION_SOURCE] = change["before"].get(FIRST_ACTION_SOURCE)
     if "status" in values or "column_id" in values:
         await _restored_column(s, row, values)
     updated = (
@@ -1628,12 +1762,17 @@ async def context_item_ids(s: AsyncSession, task_id: UUID) -> list[UUID]:
 
 
 class EstimateSample(BaseModel):
-    """A finished Human or Hybrid task's estimate beside its actual time (P2-02)."""
+    """A finished Human or Hybrid task's estimate beside its actual time (P2-02); its
+    title too, cut to ESTIMATE_TITLE_CHARS, for the enrichment request (P1-08)."""
 
     task_id: UUID
+    title: str = ""
     label: Label
     estimate_minutes: int
     actual_minutes: int
+
+
+ESTIMATE_TITLE_CHARS: Final = 120  # skill_io.EstimateHistoryItem's title limit
 
 
 ESTIMATE_HISTORY_LIMIT: Final = 10  # finished tasks a task packet carries (plan default)
@@ -1645,7 +1784,13 @@ async def estimate_history(
     """The project's most recently finished Human and Hybrid tasks that have both an
     estimate and an actual time, newest first (the task packet's estimate history)."""
     rows = await s.execute(
-        select(_tasks.c.id, _tasks.c.label, _tasks.c.estimate_minutes, _tasks.c.actual_minutes)
+        select(
+            _tasks.c.id,
+            _tasks.c.title,
+            _tasks.c.label,
+            _tasks.c.estimate_minutes,
+            _tasks.c.actual_minutes,
+        )
         .where(
             _tasks.c.project_id == project_id,
             _live(_tasks),
@@ -1660,6 +1805,7 @@ async def estimate_history(
     return [
         EstimateSample(
             task_id=row.id,
+            title=row.title[:ESTIMATE_TITLE_CHARS],
             label=row.label,
             estimate_minutes=row.estimate_minutes,
             actual_minutes=row.actual_minutes,

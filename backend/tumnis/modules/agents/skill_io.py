@@ -74,7 +74,7 @@ class EnrichTask(_Part):
 
     id: UUID
     title: Title
-    label: Label
+    label: Label | None  # None: still pending (R-08); no estimate is asked for then
     label_reason: str | None = Field(default=None, max_length=200)
     parent_title: Title | None = None
     due_on: date | None = None

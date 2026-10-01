@@ -12,7 +12,7 @@ row, with no foreign key (runs belong to agents). `ux_results_ws_run` keeps one 
 replayed report lands once; `ix_results_ws_task` lists a task's results. `workspace_id`
 leads both indexes.
 
-Chained after P2-08's taint_keeps_version (tasks_0007).
+Chained after P1-08's enrichment columns (tasks_0008).
 """
 
 import sqlalchemy as sa
@@ -20,8 +20,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from tumnis.core.migration_helpers import create_tenant_table, drop_tenant_table
 
-revision = "tasks_0008"
-down_revision = "tasks_0007"
+revision = "tasks_0009"
+down_revision = "tasks_0008"
 branch_labels = None
 depends_on = None
 phase = "expand"

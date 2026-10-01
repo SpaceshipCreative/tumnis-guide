@@ -341,7 +341,7 @@ class _EnrichTaskView(Protocol):
     @property
     def id(self) -> UUID: ...
     @property
-    def label(self) -> Label: ...
+    def label(self) -> Label | None: ...
 
 
 class EnrichmentRequestView(Protocol):
@@ -775,3 +775,212 @@ RUN_TOKEN_SCOPES: Final[dict[RunKind, frozenset[str]]] = {
 def run_token_scopes(kind: RunKind, key_scopes: frozenset[str]) -> frozenset[str]:
     """The kind's token scopes that the issuing key also holds."""
     return RUN_TOKEN_SCOPES[kind] & frozenset(key_scopes)
+
+
+# --- Enrichment (P1-08, FR-4.4) ------------------------------------------------------------
+#
+# What the project agent fills, in one place with `enrichment_errors` above (one test table
+# feeds all three): a first action when there is none or only the placeholder, acceptance
+# criteria when there are none, and an estimate of human time only for a Human or Hybrid
+# task without one. A pending label (NULL, R-08) asks for no estimate.
+
+EnrichField = Literal["first_action", "acceptance_criteria", "estimate_minutes"]
+FIRST_ACTION: Final = "first_action"
+CRITERIA: Final = "acceptance_criteria"
+ESTIMATE: Final = "estimate_minutes"
+AGENT_LABEL_SOURCE: Final = "agent"  # a label the enrichment itself revised
+PLACEHOLDER_SOURCE: Final = "placeholder"
+REVISABLE_LABEL_SOURCES: Final = frozenset({"jev", "fallback"})  # the AI's own labels
+AI_PART: Final = "AI part"  # the Hybrid split's fixed headings (no description column)
+YOUR_PART: Final = "Your part"
+TOO_LOW_AT: Final = 0.5  # plausibility levels 0..4: at or below "too low" (plan default)
+TOO_HIGH_AT: Final = 3.5  # at or above "too high"
+APPLIED_ROUTE: Final = "applied"
+EnrichmentStatus = Literal[
+    "pending", "running", "done", "agent_offline", "not_provisioned", "failed"
+]
+ENRICHMENT_BUSY: Final = frozenset({"pending", "running"})
+
+
+class TaskSnapshot(BaseModel):
+    """The task as the enrichment reads it (P1-08)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    project_id: UUID
+    title: str
+    label: Label | None
+    label_source: str | None
+    status: str
+    first_action: str | None
+    first_action_source: str | None
+    acceptance_criteria: str | None
+    estimate_minutes: int | None
+    version: int
+    enrichment_status: str | None = None
+
+
+class EnrichmentPatch(BaseModel):
+    """What an enrichment writes: None leaves a field as it is."""
+
+    model_config = ConfigDict(frozen=True)
+
+    first_action: str | None = None
+    acceptance_criteria: str | None = None
+    estimate_minutes: int | None = None
+    label: Label | None = None
+    label_reason: str | None = None
+
+    def is_empty(self) -> bool:
+        return all(value is None for value in self.model_dump().values())
+
+
+def _blank(text: str | None) -> bool:
+    return text is None or not text.strip()
+
+
+def missing_fields(t: TaskSnapshot) -> list[EnrichField]:
+    """first_action when empty or still the placeholder; acceptance_criteria when empty;
+    estimate_minutes when the label is human or hybrid and there is none. AI tasks and
+    pending labels never list the estimate."""
+    missing: list[EnrichField] = []
+    if _blank(t.first_action) or t.first_action_source == PLACEHOLDER_SOURCE:
+        missing.append("first_action")
+    if _blank(t.acceptance_criteria):
+        missing.append("acceptance_criteria")
+    if t.label in ESTIMATED_LABELS and t.estimate_minutes is None:
+        missing.append("estimate_minutes")
+    return missing
+
+
+def needs_enrichment(t: TaskSnapshot) -> bool:
+    return bool(missing_fields(t)) and t.status != "done"
+
+
+def estimate_follow_up(requested: Sequence[str], t: TaskSnapshot) -> bool:
+    """After an enrichment that did not ask for the estimate, whether the task (as it is
+    now) gets an estimate-only follow-up: it was labelled Human or Hybrid while that
+    enrichment was pending or running (`enrich_on_update` starts nothing then), and still
+    has no estimate. A label the enrichment itself revised (`label_source = "agent"`) is
+    left to `enrich_on_update`, which its own `task.updated` reaches once it is `done`."""
+    return (
+        ESTIMATE not in requested
+        and t.label_source != AGENT_LABEL_SOURCE
+        and needs_enrichment(t)
+        and ESTIMATE in missing_fields(t)
+    )
+
+
+class _SplitView(Protocol):
+    @property
+    def ai_portion(self) -> str: ...
+    @property
+    def human_portion(self) -> str: ...
+
+
+class _RevisionView(Protocol):
+    @property
+    def label(self) -> Label: ...
+    @property
+    def reason(self) -> str: ...
+
+
+class EnrichmentAnswerView(Protocol):
+    """What `merge_enrichment` reads of an `EnrichmentResult` (skill_io.py)."""
+
+    @property
+    def first_action(self) -> str: ...
+    @property
+    def acceptance_criteria(self) -> Sequence[str]: ...
+    @property
+    def estimate_minutes(self) -> int | None: ...
+    @property
+    def label_revision(self) -> _RevisionView | None: ...
+    @property
+    def hybrid_split(self) -> _SplitView | None: ...
+
+
+def may_revise_label(label: Label | None, label_source: str | None) -> bool:
+    """The agent may revise a pending label or the AI's own (`jev`, `fallback`), never
+    the user's or another agent's (FR-4.1, R-08)."""
+    return label is None or label_source in REVISABLE_LABEL_SOURCES
+
+
+def criteria_text(criteria: Sequence[str], split: _SplitView | None) -> str:
+    """The criteria as `- ` lines; a Hybrid task's split follows them under the fixed
+    headings `AI part` and `Your part`."""
+    lines = [f"- {line}" for line in criteria]
+    if split is not None:
+        lines += ["", f"{AI_PART}: {split.ai_portion}", f"{YOUR_PART}: {split.human_portion}"]
+    return "\n".join(lines)
+
+
+def merge_enrichment(
+    current: TaskSnapshot,
+    res: EnrichmentAnswerView,
+    *,
+    requested: Sequence[str],
+    estimate_range: tuple[int, int],
+) -> EnrichmentPatch:
+    """Fill only the fields that were requested AND are still missing now (a user edit in
+    between wins, UX 9). A label revision applies over a pending label or the AI's own;
+    revised to human or hybrid, a task without an estimate takes the result's. An estimate
+    only for an effective human or hybrid label, and only within `estimate_range` (R-11)."""
+    missing = set(missing_fields(current))
+    wanted = missing & set(requested)
+    revision = res.label_revision
+    revised = (
+        revision is not None
+        and may_revise_label(current.label, current.label_source)
+        and revision.label != current.label
+    )
+    label = revision.label if revised and revision is not None else current.label
+    first_action = res.first_action if FIRST_ACTION in wanted else None
+    criteria = None
+    if CRITERIA in wanted:
+        split = res.hybrid_split if label == "hybrid" else None
+        criteria = criteria_text(res.acceptance_criteria, split)
+    estimate = None
+    low, high = estimate_range
+    wants_estimate = ESTIMATE in wanted or revised
+    if (
+        wants_estimate
+        and label in ESTIMATED_LABELS
+        and current.estimate_minutes is None
+        and res.estimate_minutes is not None
+        and low <= res.estimate_minutes <= high
+    ):
+        estimate = res.estimate_minutes
+    return EnrichmentPatch(
+        first_action=first_action,
+        acceptance_criteria=criteria,
+        estimate_minutes=estimate,
+        label=label if revised else None,
+        label_reason=revision.reason if revised and revision is not None else None,
+    )
+
+
+class _ScoreView(Protocol):
+    @property
+    def score(self) -> float: ...
+
+
+PlausibilityFlag = Literal["too_low", "too_high"]
+
+
+def plausibility_flag(answer: _ScoreView | None, route: str) -> PlausibilityFlag | None:
+    """Only an applied Score flags, and only at the outer levels: <= 0.5 too low, >= 3.5
+    too high."""
+    if answer is None or route != APPLIED_ROUTE:
+        return None
+    if answer.score <= TOO_LOW_AT:
+        return "too_low"
+    if answer.score >= TOO_HIGH_AT:
+        return "too_high"
+    return None
+
+
+def enrichment_settled(status: str | None) -> bool:
+    """Whether an enrichment has run and ended (not NULL, not pending or running)."""
+    return status is not None and status not in ENRICHMENT_BUSY

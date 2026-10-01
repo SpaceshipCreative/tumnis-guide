@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Protocol
 from uuid import UUID, uuid4, uuid5
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import RowMapping, Table, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -1566,3 +1566,43 @@ async def accept_result(
         )
         await emit(s, RunSignalV1(run_id=inp.run_id, kind="result"), occurred_at=now)
     return result
+
+
+# --- Enrichment (P1-08, R-30) ----------------------------------------------------------------
+
+LABEL_WAIT_S_DEFAULT: Final = 10.0  # how long the enrichment waits for a label (plan default)
+ENRICH_TIMEOUT_S_DEFAULT: Final = 120  # the enrich run's timeout (plan default)
+MIN_RUN_TIMEOUT_S: Final = 10  # TaskPacket.timeout_s's lower bound
+
+
+class EnrichmentConfig(BaseModel):
+    """The enrichment's clock (None: the system clock) and timeouts (R-30)."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    clock: Any = None
+    label_wait_s: float = LABEL_WAIT_S_DEFAULT
+    run_timeout_s: int = ENRICH_TIMEOUT_S_DEFAULT
+
+
+_enrichment: list[EnrichmentConfig] = [EnrichmentConfig()]
+
+
+def configure_enrichment(
+    *,
+    clock: Any = None,
+    label_wait_s: float = LABEL_WAIT_S_DEFAULT,
+    run_timeout_s: int = ENRICH_TIMEOUT_S_DEFAULT,
+) -> None:
+    """The enrichment's clock and timeouts (R-30); called with nothing, the defaults. The
+    clock judges the project agent's heartbeats (`agent_for_project`)."""
+    if label_wait_s < 0 or run_timeout_s < MIN_RUN_TIMEOUT_S:
+        raise ValueError("the label wait is not negative and the run timeout at least 10 s")
+    _enrichment[0] = EnrichmentConfig(
+        clock=clock, label_wait_s=label_wait_s, run_timeout_s=run_timeout_s
+    )
+
+
+def enrichment_config() -> EnrichmentConfig:
+    """The enrichment's current settings (read at each step, never captured at enqueue)."""
+    return _enrichment[0]

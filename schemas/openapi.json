@@ -6090,6 +6090,17 @@
             ],
             "title": "Due On"
           },
+          "enrichment_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment Status"
+          },
           "estimate_minutes": {
             "anyOf": [
               {
@@ -6111,6 +6122,17 @@
               }
             ],
             "title": "First Action"
+          },
+          "first_action_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Action Source"
           },
           "id": {
             "format": "uuid",
@@ -6254,7 +6276,9 @@
           "due_on",
           "estimate_minutes",
           "first_action",
+          "first_action_source",
           "acceptance_criteria",
+          "enrichment_status",
           "assigned_agent_id",
           "column_id",
           "board_rank",
@@ -6797,6 +6821,17 @@
             ],
             "title": "Due On"
           },
+          "enrichment_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment Status"
+          },
           "estimate_minutes": {
             "anyOf": [
               {
@@ -6818,6 +6853,17 @@
               }
             ],
             "title": "First Action"
+          },
+          "first_action_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Action Source"
           },
           "id": {
             "format": "uuid",
@@ -6977,7 +7023,9 @@
           "due_on",
           "estimate_minutes",
           "first_action",
+          "first_action_source",
           "acceptance_criteria",
+          "enrichment_status",
           "assigned_agent_id",
           "column_id",
           "board_rank",
