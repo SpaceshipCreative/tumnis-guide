@@ -26,7 +26,7 @@ function withNextStep(
   return { ...body, next_step: nextStep } as unknown as FocusCurrentOut;
 }
 
-test.fails("[P4-02][FR-10.5] shows waiting then the step", async () => {
+test("[P4-02][FR-10.5] shows waiting then the step", async () => {
   vi.stubGlobal("WebSocket", FakeSocket);
   const session = focusSession("Send the March invoice", 30);
   const stuck = focusMessage({

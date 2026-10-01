@@ -34,6 +34,7 @@ import {
 import { uiStore } from "../../stores/uiStore";
 import { BUTTON_QUIET, BUTTON_SECONDARY } from "../common/ui";
 import { ReturnPrompt } from "./ReturnPrompt";
+import { StuckPanel } from "./StuckPanel";
 import { SwitchPicker } from "./SwitchPicker";
 
 type Response = "still_on_it" | "switched" | "stuck" | "snooze";
@@ -371,6 +372,7 @@ export function FocusBar() {
           <Message message={latest} />
         </ul>
       )}
+      {data.next_step && <StuckPanel step={data.next_step} />}
       {notice !== null && (
         <p role="alert" className="text-sm text-danger">
           {notice}
