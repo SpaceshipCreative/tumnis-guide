@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 
 import type { ReviewItemOut } from "../../api/types.gen";
@@ -26,6 +27,8 @@ import {
   reviewCountQuery,
   reviewQueueQuery,
 } from "./queries";
+import { ApprovalItem } from "./ApprovalItem";
+import { QuestionItem } from "./QuestionItem";
 import { ResultItem } from "./ResultItem";
 import {
   canOpen,
@@ -89,6 +92,27 @@ function isTyping(target: EventTarget): boolean {
     (target.isContentEditable ||
       ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
   );
+}
+
+interface KindItemProps {
+  item: ReviewItemOut;
+  current: boolean;
+  busy: boolean;
+  articleRef: (node: HTMLElement | null) => void;
+  onFocus: () => void;
+  onDecide: (
+    action: DecideAction["action"],
+    payload?: Record<string, unknown>,
+  ) => void;
+  onSnooze: () => void;
+  children: ReactNode;
+}
+
+/** The kinds with a card of their own: results (P2-04), approvals and questions (P2-05). */
+function KindItem({ item, ...props }: KindItemProps) {
+  if (item.kind === "approval") return <ApprovalItem item={item} {...props} />;
+  if (item.kind === "question") return <QuestionItem item={item} {...props} />;
+  return <ResultItem item={item} confirmReject {...props} />;
 }
 
 interface Decision extends DecideAction {
@@ -303,10 +327,11 @@ export function ReviewQueue({
       >
         {items.map((item) => (
           <li key={item.id}>
-            {item.kind === "result" ? (
-              <ResultItem
+            {item.kind === "result" ||
+            item.kind === "approval" ||
+            item.kind === "question" ? (
+              <KindItem
                 item={item}
-                confirmReject
                 current={item.id === chosen && item.id === focusedId}
                 busy={decide.isPending}
                 articleRef={(node) => {
@@ -341,7 +366,7 @@ export function ReviewQueue({
                     }}
                   />
                 )}
-              </ResultItem>
+              </KindItem>
             ) : (
               <ReviewItemCard
                 item={item}

@@ -44,7 +44,7 @@ function approvalItem() {
   });
 }
 
-test.fails("[P2-05][SEC-3] deny needs a reason", async () => {
+test("[P2-05][SEC-3] deny needs a reason", async () => {
   const { ApprovalItem } = await load<ApprovalItemModule>("./ApprovalItem");
   const onDecide = vi.fn<Decide>();
   const { user } = renderWithProviders(

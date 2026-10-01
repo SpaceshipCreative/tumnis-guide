@@ -51,6 +51,7 @@ export const LIVE_MAP: Record<
       "tasksGetBoard",
       "tasksGetColumns",
       "knowledgeGetBrief",
+      "projectsGetPolicy", // a saved approval policy (the policy editor, P2-05)
     ],
     lists: [
       "projectsListProjects",
