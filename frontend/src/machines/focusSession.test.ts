@@ -180,7 +180,7 @@ const RETURN_PROMPT: FocusSessionEvent = {
   returnToTaskId: TASK,
 };
 
-test.fails("[P4-01][FR-10.6] T-P4-01-11 detour then return path", () => {
+test("[P4-01][FR-10.6] T-P4-01-11 detour then return path", () => {
   vi.useFakeTimers();
 
   // Guardrail: a switch to something else opens the detour (and posts it); the server's

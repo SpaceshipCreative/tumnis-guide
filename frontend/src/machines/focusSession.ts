@@ -5,6 +5,11 @@
 // `postResponse` and "less of this" through `postLess`, both replaced with
 // `machine.provide()` in the app and the tests (R-38: every guard, action and delay the
 // config names is declared here).
+//
+// Guardrail (P4-01, FR-10.6): a switch to something not in Today is captured (`detour`,
+// posted through `postDetour`); the server's return question (`returnPrompt`) is answered
+// with Return or Stay (`postReturn`, `postStay`) and counts as Stay after 2 minutes
+// (FR-10.9: nothing waits on an answer).
 import { assign, setup } from "xstate";
 
 export type FocusLevel = "quiet" | "nudge" | "coach" | "guardrail";
@@ -18,6 +23,7 @@ export type FocusEventKind =
   | "day_end";
 
 export const SNOOZE_MS = 15 * 60 * 1000; // FR-10.4: a snooze is 15 minutes
+export const RETURN_PROMPT_MS = 2 * 60 * 1000; // P4-01: the return question's plan default
 
 export interface FocusContext {
   taskId?: string;
@@ -69,6 +75,7 @@ export const focusSession = setup({
     isCheckInOrSwitched: ({ event }) =>
       event.type === "FOCUS_EVENT" &&
       (event.kind === "check_in_due" || event.kind === "switched"),
+    isGuardrail: ({ context }) => context.guardrail === true,
   },
   actions: {
     show: assign(({ event }) =>
@@ -89,15 +96,34 @@ export const focusSession = setup({
     retarget: assign(({ event }) =>
       event.type === "SWITCHED" ? { taskId: event.toTaskId } : {},
     ),
+    setLevel: assign(({ event }) =>
+      event.type === "LEVEL"
+        ? { level: event.level, guardrail: event.level === "guardrail" }
+        : {},
+    ),
+    askReturn: assign(({ event }) =>
+      event.type === "RETURN_PROMPT"
+        ? { taskId: event.detourTaskId, returnToTaskId: event.returnToTaskId }
+        : {},
+    ),
+    goBack: assign(({ context }) => ({
+      taskId: context.returnToTaskId ?? context.taskId,
+      returnToTaskId: undefined,
+    })),
+    stayOn: assign({ returnToTaskId: undefined }),
     // Replaced through machine.provide() in the app and the tests.
     postResponse: () => undefined,
     postLess: () => undefined,
+    postDetour: () => undefined,
+    postReturn: () => undefined,
+    postStay: () => undefined,
   },
-  delays: { snooze: SNOOZE_MS },
+  delays: { snooze: SNOOZE_MS, returnPrompt: RETURN_PROMPT_MS },
 }).createMachine({
   id: "focusSession",
   initial: "idle",
   context: { level: "quiet" },
+  on: { LEVEL: { actions: "setLevel" } },
   states: {
     idle: {
       on: {
@@ -106,6 +132,7 @@ export const focusSession = setup({
           { guard: "isNotStarted", target: "checkIn", actions: "show" },
         ],
         TASK_STARTED: { target: "active", actions: "startTimer" },
+        RETURN_PROMPT: { target: "returnPrompt", actions: "askReturn" },
       },
     },
     blockPending: {
@@ -127,6 +154,32 @@ export const focusSession = setup({
           actions: "show",
         },
         TASK_LEFT: "idle",
+        SWITCH_DETOUR: {
+          guard: "isGuardrail",
+          target: "detour",
+          actions: "postDetour",
+        },
+        // A question already open when the bar loads (the server's state).
+        RETURN_PROMPT: { target: "returnPrompt", actions: "askReturn" },
+      },
+    },
+    // P4-01: the detour is being captured; the server answers with the return question,
+    // or the capture failed and the bar goes back to the task it shows.
+    detour: {
+      on: {
+        RETURN_PROMPT: { target: "returnPrompt", actions: "askReturn" },
+        TASK_STARTED: { actions: "startTimer" },
+        DISMISS: "active",
+      },
+    },
+    returnPrompt: {
+      after: {
+        returnPrompt: { target: "active", actions: ["postStay", "stayOn"] },
+      },
+      on: {
+        RETURN: { target: "active", actions: ["postReturn", "goBack"] },
+        STAY: { target: "active", actions: ["postStay", "stayOn"] },
+        TASK_STARTED: { actions: "startTimer" },
       },
     },
     checkIn: {
