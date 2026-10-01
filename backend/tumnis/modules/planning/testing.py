@@ -21,7 +21,7 @@ from tumnis.modules.planning import api
 _log = logging.getLogger(__name__)
 
 TICK_NAME: Final = "planner-tick"  # workflows.PLANNER_TICK_NAME
-TICK_WAIT_S: float = 25.0  # how long the tick waits for the builds it started (read per call)
+TICK_WAIT_S: float = 8.0  # under the e2e request timeout (10 s); read per call
 TRIGGER: Final = "morning"
 
 

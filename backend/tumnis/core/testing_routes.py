@@ -10,9 +10,10 @@ packet the fake runner received and how many (P2-04); `POST /v1/test/tick/{sched
 fires a registered test tick (R-37, tumnis.core.ticks; P2-15's `focus-wake`)."""
 
 import asyncio
+import logging
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Final, Self
 from uuid import UUID
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
@@ -30,6 +31,7 @@ from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.seed import SEED_PATHS, DatabaseSink, SeedSet, load_seed, writers_registered
 
 router = v1_router("core", prefix="/test", tags=["test"])
+_log = logging.getLogger(__name__)
 
 # Deployment-level tables a reset keeps: the marker says which deployment this database is.
 KEEP_TABLES = frozenset({"deployment_marker"})
@@ -134,6 +136,9 @@ async def reset(
         async with _reset_lock(request.app):
             _refuse_if_superseded(state, generation)
             await truncate_tables(settings.database_owner_url)
+            # After the TRUNCATE, which emptied the outbox: no old-world workflow is
+            # enqueued from here on, so this sweeps them all (SEED, T-SEED-23).
+            await cancel_outstanding_workflows()
             clock = state.clock
             if isinstance(clock, OverridableClock):
                 clock.clear()  # a fresh stack reads the real time again
@@ -151,6 +156,39 @@ async def reset(
     except ResetSupersededError:
         raise HTTPException(status_code=409, detail="superseded by a later reset") from None
     return Response(status_code=204)
+
+
+OUTSTANDING: Final = ["PENDING", "ENQUEUED"]  # DBOS statuses a reset cancels
+
+
+async def cancel_outstanding_workflows() -> int:
+    """Cancel every DBOS workflow still pending or enqueued; how many (SEED, T-SEED-23).
+
+    A reset starts a fresh world, its workflows included. A workflow from the last test
+    still works on rows the TRUNCATE removed, and it holds its queue's slot while it waits
+    (a morning build waiting on an unscripted fake master holds the one-at-a-time
+    maintenance queue for the run timeout). Cancelling takes it off its queue at once,
+    and a workflow parked in `recv` is interrupted.
+
+    Only in the compose.test shape, where the api serves the fake-script store (its
+    lifespan turns it on; the acceptance harness tests turn it on themselves): a route
+    test's app runs no workflows and may have no DBOS system database to ask (nor does a
+    store-on route test whose worker never ran: its system database has no DBOS tables,
+    so there is nothing to cancel either)."""
+    if not (fake_scripts.enabled() and deadletter.dbos_configured()):
+        return 0
+    client = deadletter.dbos_client()
+    try:
+        outstanding = await client.list_workflows_async(
+            status=OUTSTANDING, load_input=False, load_output=False
+        )
+    except DBAPIError as error:
+        _log.info("reset: no DBOS system database to sweep (%s)", type(error.orig).__name__)
+        return 0
+    ids = [workflow.workflow_id for workflow in outstanding]
+    if ids:
+        await client.cancel_workflows_async(ids)
+    return len(ids)
 
 
 class ResetSupersededError(Exception):
