@@ -25,6 +25,10 @@ export interface FocusContext {
   rule?: string;
   message?: string;
   startedAt?: number;
+  // P4-01: the level in force is Guardrail (detours are captured), and the task a
+  // captured detour offers to return to.
+  guardrail?: boolean;
+  returnToTaskId?: string;
 }
 
 export type FocusSessionEvent =
@@ -43,7 +47,14 @@ export type FocusSessionEvent =
   | { type: "STUCK" }
   | { type: "SNOOZE" }
   | { type: "LESS_OF_THIS" }
-  | { type: "DISMISS" };
+  | { type: "DISMISS" }
+  // P4-01 (Guardrail): the level in force, a switch to something not in Today, the
+  // server's return question, and its answers.
+  | { type: "LEVEL"; level: FocusLevel }
+  | { type: "SWITCH_DETOUR"; title: string; projectId: string }
+  | { type: "RETURN_PROMPT"; detourTaskId: string; returnToTaskId: string }
+  | { type: "RETURN" }
+  | { type: "STAY" };
 
 export const focusSession = setup({
   types: {
