@@ -78,8 +78,22 @@ async def mcp_running(app: FastAPI) -> AsyncIterator[None]:
 
     The manager runs in a task of its own: its anyio task group must be entered and left
     by one task, and pytest-asyncio may tear an async fixture down in another task than
-    the one that set it up."""
+    the one that set it up.
+
+    A manager runs once. When the app's lifespan already ran it (a `TestClient` entered
+    the app, as the fake runner's does, on its own event loop), a fresh manager serves
+    this block on the test's loop and the app's own is put back afterwards."""
+    from tumnis.core import mcp_server  # noqa: PLC0415
+
     manager = app.state.mcp_session_manager
+    if getattr(manager, "_has_started", False):  # the SDK's single-use flag (mcp 1.30)
+        app.state.mcp_session_manager = mcp_server.session_manager()
+        try:
+            async with mcp_running(app):
+                yield
+        finally:
+            app.state.mcp_session_manager = manager
+        return
     started, stop = asyncio.Event(), asyncio.Event()
 
     async def run() -> None:
@@ -407,6 +421,25 @@ async def _post_result(world: World, project: str) -> dict[str, Any]:
     }
 
 
+async def _ask_human(world: World, project: str) -> dict[str, Any]:
+    """P2-05: a question of a running run (a key with no run is answered `denied`)."""
+    return {
+        "run_id": str(await running_run(world, project)),
+        "prompt": f"Which colour? {next(_ids)}",
+        "idempotency_key": idem(),
+    }
+
+
+async def _request_approval(world: World, project: str) -> dict[str, Any]:
+    """P2-05: an allowed action of a running run (approved at once for a task token)."""
+    return {
+        "run_id": str(await running_run(world, project)),
+        "action_class": "push_feature_branch",
+        "description": f"Push the branch {next(_ids)}",
+        "idempotency_key": idem(),
+    }
+
+
 # One entry per registered op; the sweeps fail on an op without one ("add a sample").
 SAMPLES: Final[dict[str, Sample]] = {
     "list_tasks": _list_tasks,
@@ -417,6 +450,8 @@ SAMPLES: Final[dict[str, Sample]] = {
     "search": _search,
     "get_task_packet": _get_task_packet,
     "post_result": _post_result,
+    "ask_human": _ask_human,
+    "request_approval": _request_approval,
 }
 
 
