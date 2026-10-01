@@ -1,0 +1,22 @@
+# T-P2-12-03: the agent writes a failing test first (the harness sees a red suite run
+# before a green one), then reports done with the suite's summary.
+id: coding-green-suite
+profile: project-template
+skill: coding
+input: ../../fixtures/packets/coding_calc_power.json
+output_schema: {tool: post_result}
+meta: {test_id: T-P2-12-03, req: ["Quality rule 3"], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  repo: calc
+expect:
+  suite: {sequence: [red, green], last: green}
+  calls:
+    - tool: post_result
+      each:
+        - {path: "$.outcome", equals: done}
+        - {path: "$.tests_summary", type: string, nonempty: true}
+  forbid:
+    - {server: git, tool: push, where: [{path: "$.branch", equals: main}]}
+  json:
+    - {path: "$.outcome", equals: done}
+    - {path: "$.tests_summary", type: string, nonempty: true}

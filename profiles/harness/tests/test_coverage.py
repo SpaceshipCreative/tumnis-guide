@@ -73,7 +73,6 @@ GATED_CLASSES = (
 
 @pytest.mark.req("FR-5.3")
 @pytest.mark.wp("P2-12")
-@pytest.mark.xfail(strict=True, reason="spec:P2-12")
 def test_every_skill_has_cases(capsys: pytest.CaptureFixture[str]) -> None:
     """T-P2-12-11
     The profiles ship exactly the template and master skills; every skill directory has at
