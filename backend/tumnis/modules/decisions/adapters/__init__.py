@@ -5,7 +5,8 @@
 process wires the registry but never imports the SDK (import-linter `api-never-calls-out`).
 `decisions.vllm`, the fallback (P1-02), is built the same lazy way; its fake is a second
 `FakeDecisions`. `decisions.vllm_generation` (P1-03) too: only `generation_api` asks it
-(import-linter `generation-callers`), and only the worker makes its outbound call.
+(import-linter `generation-callers`), and only the worker makes its outbound call. The
+Speech slot's engines (P4-03), `decisions.speech_piper` and `decisions.speech_hosted`, too.
 """
 
 import importlib
@@ -27,12 +28,16 @@ from tumnis.modules.decisions.adapters.fake import (
     parse_generation_script,
 )
 from tumnis.modules.decisions.adapters.port import DecisionsProvider, GenerationProvider
+from tumnis.modules.decisions.adapters.speech.base import SpeechTTS
+from tumnis.modules.decisions.adapters.speech.fake import FakeHostedTTS, FakeTTS
 
 JEV_MODULE = "tumnis.modules.decisions.adapters.jev"
 EMBEDDINGS_VLLM_MODULE = "tumnis.modules.decisions.adapters.embeddings.vllm"
 EMBEDDINGS_HOSTED_MODULE = "tumnis.modules.decisions.adapters.embeddings.hosted"
 VLLM_MODULE = "tumnis.modules.decisions.adapters.vllm"
 VLLM_GENERATION_MODULE = "tumnis.modules.decisions.adapters.vllm_generation"
+SPEECH_PIPER_MODULE = "tumnis.modules.decisions.adapters.speech.piper"
+SPEECH_HOSTED_MODULE = "tumnis.modules.decisions.adapters.speech.hosted"
 
 
 def build_jev(**deps: Any) -> DecisionsProvider:
@@ -70,6 +75,20 @@ def build_embeddings_hosted(**deps: Any) -> EmbeddingsAdapter:
     return adapter
 
 
+def build_speech_piper(**deps: Any) -> SpeechTTS:
+    """PiperTTS(base_url, clock=..., net_policy=..., voice=...), on first use (P4-03)."""
+    piper = importlib.import_module(SPEECH_PIPER_MODULE)
+    engine: SpeechTTS = piper.PiperTTS(**deps)
+    return engine
+
+
+def build_speech_hosted(**deps: Any) -> SpeechTTS:
+    """HostedTTS(base_url, model=..., api_key=..., ...), on first use (P4-03)."""
+    hosted = importlib.import_module(SPEECH_HOSTED_MODULE)
+    engine: SpeechTTS = hosted.HostedTTS(**deps)
+    return engine
+
+
 register_adapter("decisions.jev", port=DecisionsProvider, real=build_jev, fake=FakeDecisions)
 register_adapter(
     "decisions.embeddings_vllm",
@@ -89,6 +108,11 @@ register_adapter(
     port=GenerationProvider,
     real=build_vllm_generation,
     fake=FakeGeneration,
+)
+
+register_adapter("decisions.speech_piper", port=SpeechTTS, real=build_speech_piper, fake=FakeTTS)
+register_adapter(
+    "decisions.speech_hosted", port=SpeechTTS, real=build_speech_hosted, fake=FakeHostedTTS
 )
 
 # Scriptable across processes through POST /v1/test/fakes/{hook}/script (R-37).

@@ -4,7 +4,8 @@
 lint
 unit
 contract
-integration
+integration-a
+integration-b
 daemon
 e2e
 skills
