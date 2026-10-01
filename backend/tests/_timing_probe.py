@@ -159,7 +159,6 @@ def _cpu_sampler() -> None:
 def pytest_sessionstart(session: pytest.Session) -> None:
     if not _DIR or _WORKER == "main":
         return
-    threading.Thread(target=_sampler, args=(threading.get_ident(),), daemon=True).start()
     if _WORKER == "gw0":
         threading.Thread(target=_cpu_sampler, daemon=True).start()
 
