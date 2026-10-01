@@ -1,0 +1,49 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/focus.level_changed.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "from": {
+      "enum": [
+        "quiet",
+        "nudge",
+        "coach",
+        "guardrail"
+      ],
+      "title": "From",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "scope": {
+      "enum": [
+        "workspace",
+        "today"
+      ],
+      "title": "Scope",
+      "type": "string"
+    },
+    "to": {
+      "enum": [
+        "quiet",
+        "nudge",
+        "coach",
+        "guardrail"
+      ],
+      "title": "To",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "from",
+    "to",
+    "scope"
+  ],
+  "title": "FocusLevelChangedV1",
+  "type": "object"
+}

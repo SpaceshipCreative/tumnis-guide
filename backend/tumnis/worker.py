@@ -22,6 +22,7 @@ SYNC_QUEUE = "sync"  # connector syncs and OAuth exchanges (A9; P1-09)
 SYNC_WORKER_CONCURRENCY = 4  # plan default
 GITHUB_QUEUE = "github"  # pull request status reads (P2-13); its own queue: limiters are per queue
 GITHUB_REFRESHES_PER_MINUTE = 15  # each refresh makes four requests, 304s included
+FOCUS_QUEUE = "focus"  # focus_plan and focus_session (P2-15); each parks on its next instant
 EXTRACT_QUEUE = "extract"  # upload scanning and extraction (P1-16); only `worker-extract` listens
 
 
@@ -48,6 +49,7 @@ def main_queues() -> list[str]:
         agents.RUNNER_SWEEP_QUEUE,
         GITHUB_QUEUE,
         _projects().ARCHIVE_QUEUE,
+        FOCUS_QUEUE,
     ]
 
 
@@ -84,6 +86,8 @@ def register_queues() -> None:
     # Not partitioned: DBOS then requires a partition key on every enqueue.
     projects = _projects()
     DBOS.register_queue(projects.ARCHIVE_QUEUE, concurrency=projects.ARCHIVE_CONCURRENCY)
+    # Focus workflows (P2-15): no limit, each waits on `recv` for its next instant.
+    DBOS.register_queue(FOCUS_QUEUE)
 
 
 def register_schedules(settings: Settings) -> None:
