@@ -62,7 +62,6 @@ def _latest(current: dict[str, Any], kind: str) -> dict[str, Any]:
 
 @pytest.mark.req("FR-10.8")
 @pytest.mark.wp("P4-03")
-@pytest.mark.xfail(strict=True, reason="spec:P4-03")
 async def test_spoken_text_equals_in_app_text(
     focus: Any, session_client: SessionClient, fake_tts: Any
 ) -> None:

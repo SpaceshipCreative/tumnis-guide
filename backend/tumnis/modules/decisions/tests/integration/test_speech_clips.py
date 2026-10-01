@@ -52,7 +52,6 @@ async def _server_voice(workspace_id: Any) -> Any:
 
 @pytest.mark.req("FR-11.7")
 @pytest.mark.wp("P4-03")
-@pytest.mark.xfail(strict=True, reason="spec:P4-03")
 async def test_clip_served_and_expires(  # noqa: PLR0917  # the fixtures it stands on
     core_db: None,
     db: DbUrls,
