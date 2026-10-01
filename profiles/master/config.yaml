@@ -26,3 +26,17 @@ mcp_servers:
       - tumnis-jev-mcp
     env:
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY}
+
+# The one Discord channel (P2-16, FR-8.2): only the master talks to the person in chat.
+# The bot answers every message in its channel inline, without a mention and without
+# threads. The bot token, the allowed users and the channel id live in the profile's .env
+# (DISCORD_*; see .env.example), never here: DISCORD_ALLOWED_CHANNELS and
+# DISCORD_HOME_CHANNEL hold the same one channel id, so the bot listens only there and
+# posts its focus messages there (send_message to target `discord`).
+# Docs: hermes-agent website/docs/user-guide/messaging/discord.md.
+platforms:
+  discord:
+    enabled: true
+discord:
+  require_mention: false
+  auto_thread: false

@@ -411,6 +411,38 @@ def _inject_digest(body: dict[str, Any], parts: Sequence[Part], item_id: str) ->
         )
 
 
+def _inject_notify(body: dict[str, Any], parts: Sequence[Part], item_id: str) -> None:
+    """A notify packet (P2-16's focus skill): a task title replaces the task's title, and
+    any other part arrives in the task's first action (the notify packet's only long
+    outside text, often written from outside content by enrichment)."""
+    texts = []
+    for part in parts:
+        if part.inject_as == "task_title":
+            body["task"]["title"] = part.content
+        else:
+            texts.append(outside_text(part))
+    if texts:
+        body["task"]["first_action"] = "\n\n".join(texts)
+
+
+def _inject_relay(body: dict[str, Any], parts: Sequence[Part], item_id: str) -> None:
+    """A chat message for P2-16's relay skill: a task title arrives in the earlier focus
+    message the person replies to (which names the task); any other part is outside text
+    the person pasted into their message."""
+    message = body["message"]
+    for n, part in enumerate(parts):
+        if part.inject_as == "task_title":
+            event = _part_id(item_id, n)
+            snowflake = 10**18 + uuid5(NAMESPACE_URL, event).int % 10**18  # a Discord id
+            message["reply_to"] = {
+                "id": str(snowflake),
+                "author": "tumnis-master",
+                "content": f"Time for {part.content}.\nref focus:{event}",
+            }
+        else:
+            message["content"] += f"\n\n{outside_text(part)}"
+
+
 RECORDINGS: Final = REPO / "profiles" / "tests" / "recordings"
 CASE_PACKETS: Final = REPO / "profiles" / "tests" / "fixtures" / "packets"
 TASK_REPLY: Final = SchemaName("tool", "post_result", 1)  # harness.cases.TOOL_FAMILY
@@ -462,6 +494,23 @@ BASES: Final[dict[str, SkillBase]] = {
         "master", "orchestrate-master", "master_spring_launch", TASK_REPLY
     ),
     "workspace-digest": _case_base("master", "workspace-digest", "workspace_digest", DIGEST_REPLY),
+    # P2-16: the master's focus message and the chat channel's relay.
+    "focus": SkillBase(
+        profile="master",
+        skill="focus",
+        packet=CASE_PACKETS / "focus_block_start.json",
+        output_schema=SchemaName("harness", "focus_message", 1),
+        rules=(),
+        inject=_inject_notify,
+    ),
+    "relay": SkillBase(
+        profile="master",
+        skill="relay",
+        packet=CASE_PACKETS / "relay_chat_message.json",
+        output_schema=SchemaName("harness", "relay_reply", 1),
+        rules=(),
+        inject=_inject_relay,
+    ),
 }
 
 

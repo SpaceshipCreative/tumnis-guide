@@ -6753,6 +6753,101 @@
         "title": "RecurrenceOut",
         "type": "object"
       },
+      "RelayReplyBody": {
+        "description": "The REST twin's body: the item answered, the person's answer and the chat message\nit was typed in.",
+        "properties": {
+          "answer": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Answer",
+            "type": "string"
+          },
+          "channel_message_id": {
+            "description": "For the audit",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.:-]+$",
+            "title": "Channel Message Id",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "The question's review item id, or the focus message id",
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_kind": {
+            "description": "question or focus; approval and result are answered 403 needs_app",
+            "enum": [
+              "question",
+              "focus",
+              "approval",
+              "result"
+            ],
+            "title": "Item Kind",
+            "type": "string"
+          },
+          "schema_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
+          }
+        },
+        "required": [
+          "item_kind",
+          "item_id",
+          "answer",
+          "channel_message_id"
+        ],
+        "title": "RelayReplyBody",
+        "type": "object"
+      },
+      "RelayReplyOut": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_kind": {
+            "enum": [
+              "question",
+              "focus"
+            ],
+            "title": "Item Kind",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "tainted": {
+            "default": false,
+            "title": "Tainted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "item_kind",
+          "item_id",
+          "answer"
+        ],
+        "title": "RelayReplyOut",
+        "type": "object"
+      },
       "ReorderIn": {
         "properties": {
           "after_id": {
@@ -22462,6 +22557,118 @@
         "summary": "List Recurrence",
         "tags": [
           "tasks"
+        ]
+      }
+    },
+    "/v1/relay/replies": {
+      "post": {
+        "description": "A person's answer typed in the master's chat channel, recorded exactly as the same\nanswer in the app (FR-8.2): a question (its review item) or a focus message. The\n`record_human_reply` tool's twin, for the master key only (403 `master_only`); the\nperson answers in the app itself. Approvals and results: 403 `needs_app`.",
+        "operationId": "agents_record_human_reply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelayReplyBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayReplyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Record Human Reply",
+        "tags": [
+          "agents"
         ]
       }
     },

@@ -73,7 +73,6 @@ NAME_RE: Final = re.compile(r"^_?[a-z][a-z0-9_]*$")
 PENDING_TOOLS: Final[Mapping[str, str]] = {
     "delegate_task": "P2-06",
     "wait_for_task": "P2-06",
-    "record_human_reply": "P2-16",
     "ingest_items": "P3-02",
     "get_context_item": "P3-03",
     "draft_reply": "P3-07",

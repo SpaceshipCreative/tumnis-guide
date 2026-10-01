@@ -3528,6 +3528,67 @@ export type RecurrenceOut = {
 };
 
 /**
+ * RelayReplyBody
+ *
+ * The REST twin's body: the item answered, the person's answer and the chat message
+ * it was typed in.
+ */
+export type RelayReplyBody = {
+  /**
+   * Answer
+   */
+  answer: string;
+  /**
+   * Channel Message Id
+   *
+   * For the audit
+   */
+  channel_message_id: string;
+  /**
+   * Item Id
+   *
+   * The question's review item id, or the focus message id
+   */
+  item_id: string;
+  /**
+   * Item Kind
+   *
+   * question or focus; approval and result are answered 403 needs_app
+   */
+  item_kind: "question" | "focus" | "approval" | "result";
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+};
+
+/**
+ * RelayReplyOut
+ */
+export type RelayReplyOut = {
+  /**
+   * Answer
+   */
+  answer: string;
+  /**
+   * Item Id
+   */
+  item_id: string;
+  /**
+   * Item Kind
+   */
+  item_kind: "question" | "focus";
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Tainted
+   */
+  tainted?: boolean;
+};
+
+/**
  * ReorderIn
  */
 export type ReorderIn = {
@@ -11440,6 +11501,61 @@ export type TasksListRecurrenceResponses = {
 
 export type TasksListRecurrenceResponse =
   TasksListRecurrenceResponses[keyof TasksListRecurrenceResponses];
+
+export type AgentsRecordHumanReplyData = {
+  body: RelayReplyBody;
+  path?: never;
+  query?: never;
+  url: "/v1/relay/replies";
+};
+
+export type AgentsRecordHumanReplyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsRecordHumanReplyError =
+  AgentsRecordHumanReplyErrors[keyof AgentsRecordHumanReplyErrors];
+
+export type AgentsRecordHumanReplyResponses = {
+  /**
+   * Successful Response
+   */
+  200: RelayReplyOut;
+};
+
+export type AgentsRecordHumanReplyResponse =
+  AgentsRecordHumanReplyResponses[keyof AgentsRecordHumanReplyResponses];
 
 export type TasksListReviewData = {
   body?: never;
