@@ -613,7 +613,9 @@ async def prepare_run(workspace_id: str, run_id: str) -> Prepared:
             )
         )
         actor = _requester(row["created_by"])
-        if actor is not None and task.status in ("backlog", "today"):
+        # A stuck run (P4-02) works on one step for the person: the task keeps its status.
+        stuck = row["kind"] == RunKind.STUCK.value
+        if actor is not None and not stuck and task.status in ("backlog", "today"):
             await tasks.change_status(
                 s, actor, task.id, tasks.Status.IN_PROGRESS, task.version, now=now
             )
