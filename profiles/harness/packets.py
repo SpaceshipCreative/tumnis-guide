@@ -32,6 +32,11 @@ REDACTED: Final = "redacted"  # the golden packets' task token never reaches a c
 TASK_SCHEMA: Final = "result/task_result/1"  # what production names for a task run
 DIGEST_SCHEMA: Final[Mapping[str, Any]] = {"family": "harness", "name": "digest_run", "version": 1}
 INSTRUCTION: Final = "Use the skill"
+# A stuck packet (P4-02) as packet_builder emits it: one first step per run, the task's
+# newest comments and the first step's limits in the body.
+STUCK_TASKS_PER_RUN: Final = 1
+STUCK_RECENT_COMMENTS: Final = 5
+STUCK_MAX_MINUTES: Final = 10
 
 
 def render(head: str, body: Mapping[str, Any]) -> str:
@@ -55,6 +60,7 @@ class TaskSpec:
     label: str = "ai"
     estimate_minutes: int | None = None
     golden: str = "plain_ai"
+    kind: str = "task"  # "stuck" adds the stuck body fields (P4-02)
 
 
 @dataclass(frozen=True)
@@ -137,6 +143,23 @@ SPECS: Final[Mapping[str, TaskSpec | DigestSpec]] = {
         label="hybrid",
         estimate_minutes=60,
     ),
+    "stuck_invoice": TaskSpec(
+        skill="stuck",
+        title="Send the March invoice to Acme",
+        acceptance="Acme has the March invoice, with the hours from the timesheet.",
+        label="human",
+        estimate_minutes=30,
+        kind="stuck",
+    ),
+    "stuck_faq_draft": TaskSpec(
+        skill="stuck",
+        title="Draft the FAQ answers from last week's support questions",
+        acceptance=(
+            "A draft FAQ answers the five most asked support questions from last week, "
+            "ready for the person to review."
+        ),
+        kind="stuck",
+    ),
     "project_digest": DigestSpec(
         skill="project-digest", profile="project-template", scope="project"
     ),
@@ -152,22 +175,30 @@ def _golden(name: str) -> dict[str, Any]:
 def task_packet(name: str, spec: TaskSpec) -> dict[str, Any]:
     golden = _golden(spec.golden)
     packet = copy.deepcopy(golden)
+    stuck = spec.kind == "stuck"
     policy = {
         **golden["policy"],
         "gated": list(GATED_DEFAULT),
         "allowed": list(ALLOWED_DEFAULT),
     }
+    if stuck:
+        policy["max_tasks_per_run"] = STUCK_TASKS_PER_RUN
     body = copy.deepcopy(golden["body"])
     task = body["task"]
     task.update(label=spec.label, estimate_minutes=spec.estimate_minutes)
     task["text"]["rendered"] = f"{spec.title}\n\nAcceptance criteria:\n{spec.acceptance}"
     run_id = _id(name, "run")
-    data = {"kind": golden["kind"], "run_id": run_id, "tainted": False, "policy": policy, **body}
+    kind = spec.kind if stuck else golden["kind"]
+    data = {"kind": kind, "run_id": run_id, "tainted": False, "policy": policy, **body}
+    if stuck:
+        data["recent_comments"] = task["comments"][-STUCK_RECENT_COMMENTS:]
+        data["stuck_step"] = {"max_minutes": STUCK_MAX_MINUTES}
     head = golden["prompt_text"].split(INSTRUCTION, 1)[0]
     instruction = (
         f"{INSTRUCTION} {spec.skill}. Reply with one JSON object matching {TASK_SCHEMA}.\n\n"
     )
     packet.update(
+        kind=kind,
         run_id=run_id,
         correlation_id=f"run:{run_id}",
         skill=spec.skill,
