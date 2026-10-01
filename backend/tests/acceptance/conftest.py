@@ -107,7 +107,13 @@ def _seed_factory(
         project = None if agent.project is None else seed.ids[agent.project]
         run_async(partial(agents.seed_agent, workspace_id, runner.runner_id, project, rec))
     _mark_outbox_sent(db)
-    runner.connect()
+    try:
+        runner.connect()
+    except BaseException:
+        # Not yielded yet, so the fixture's teardown won't run: close the half-open
+        # socket here, or the server's login holds up the test database's drop.
+        factory.disconnect_all()
+        raise
     factory.runner = runner
     return factory
 
