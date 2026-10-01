@@ -260,6 +260,9 @@ async def reset(
         async with _reset_lock(request.app):
             _refuse_if_superseded(state, generation)
             await truncate_tables(settings.database_owner_url)
+            # The TRUNCATE emptied the outbox, so every delivery queued now is for the
+            # world it removed; the seed's own deliveries come after (SEED, T-SEED-29).
+            await cancel_removed_deliveries()
             clock = state.clock
             if isinstance(clock, OverridableClock):
                 clock.clear()  # a fresh stack reads the real time again
@@ -279,6 +282,42 @@ async def reset(
     except ResetBlockedError as blocked:
         raise HTTPException(status_code=503, detail=blocked.report[:REPORT_DETAIL_MAX]) from None
     return Response(status_code=204)
+
+
+OUTSTANDING: Final = ["ENQUEUED", "PENDING"]  # DBOS statuses of a delivery not yet done
+
+
+async def cancel_removed_deliveries() -> int:
+    """Cancel every event delivery (`deliver_event`) still queued or running; how many
+    (SEED, T-SEED-29).
+
+    A reset empties the tables, not the DBOS events queue. A delivery for the removed
+    world fails on its missing rows and backs off, holding one of the queue's slots, and
+    a few resets leave hundreds queued, so the next test's `run.requested` waited behind
+    them for over a minute (A2.1, A2.2). Cancelling takes a queued delivery off the queue
+    at once and stops a running one at its next step (DBOS: "interrupting it at the
+    beginning of its next step"); one sleeping in its backoff keeps its slot until the
+    sleep ends. Only deliveries: a workflow parked in `recv` keeps its slot when
+    cancelled, and a run or a build has its own way to end (T-SEED-23, T-SEED-24).
+
+    Only in the compose.test shape, where the api serves the fake-script store: a route
+    test's app runs no workflows and may have no DBOS system database to ask (or one with
+    no DBOS tables yet)."""
+    if not (fake_scripts.enabled() and deadletter.dbos_configured()):
+        return 0
+    client = deadletter.dbos_client()
+    try:
+        queued = await client.list_workflows_async(
+            name="deliver_event", status=OUTSTANDING, load_input=False, load_output=False
+        )
+    except DBAPIError as error:
+        _log.info("reset: no DBOS system database to sweep (%s)", type(error.orig).__name__)
+        return 0
+    ids = [workflow.workflow_id for workflow in queued]
+    if ids:
+        await client.cancel_workflows_async(ids)
+        _log.info("reset: cancelled %d event deliveries of the removed world", len(ids))
+    return len(ids)
 
 
 class ResetSupersededError(Exception):
