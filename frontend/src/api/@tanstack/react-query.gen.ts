@@ -72,9 +72,12 @@ import {
   planningAcceptItem,
   planningGetAlternates,
   planningGetDayCalendar,
+  planningGetDaySummary,
+  planningGetMetricsSummary,
   planningGetPlan,
   planningGetProjectWeek,
   planningMoveIssue,
+  planningRecordAppOpen,
   planningRemoveItem,
   planningReplan,
   planningSchedulePlanItem,
@@ -308,6 +311,12 @@ import type {
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarError,
   PlanningGetDayCalendarResponse,
+  PlanningGetDaySummaryData,
+  PlanningGetDaySummaryError,
+  PlanningGetDaySummaryResponse,
+  PlanningGetMetricsSummaryData,
+  PlanningGetMetricsSummaryError,
+  PlanningGetMetricsSummaryResponse,
   PlanningGetPlanData,
   PlanningGetPlanError,
   PlanningGetPlanResponse,
@@ -317,6 +326,9 @@ import type {
   PlanningMoveIssueData,
   PlanningMoveIssueError,
   PlanningMoveIssueResponse,
+  PlanningRecordAppOpenData,
+  PlanningRecordAppOpenError,
+  PlanningRecordAppOpenResponse,
   PlanningRemoveItemData,
   PlanningRemoveItemError,
   PlanningRemoveItemResponse,
@@ -1407,6 +1419,34 @@ export const coolifyListDeployStatusOptions = (
     queryKey: coolifyListDeployStatusQueryKey(options),
   });
 
+export const planningGetDaySummaryQueryKey = (
+  options: Options<PlanningGetDaySummaryData>,
+) => createQueryKey("planningGetDaySummary", options);
+
+/**
+ * Get Day Summary
+ */
+export const planningGetDaySummaryOptions = (
+  options: Options<PlanningGetDaySummaryData>,
+) =>
+  queryOptions<
+    PlanningGetDaySummaryResponse,
+    PlanningGetDaySummaryError,
+    PlanningGetDaySummaryResponse,
+    ReturnType<typeof planningGetDaySummaryQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await planningGetDaySummary({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: planningGetDaySummaryQueryKey(options),
+  });
+
 export const deadLettersGetDeadLettersQueryKey = (
   options?: Options<DeadLettersGetDeadLettersData>,
 ) => createQueryKey("deadLettersGetDeadLetters", options);
@@ -2058,6 +2098,61 @@ export const knowledgeSetProjectFolderMutation = (
   };
   return mutationOptions;
 };
+
+/**
+ * Record App Open
+ */
+export const planningRecordAppOpenMutation = (
+  options?: Partial<Options<PlanningRecordAppOpenData>>,
+): UseMutationOptions<
+  PlanningRecordAppOpenResponse,
+  PlanningRecordAppOpenError,
+  Options<PlanningRecordAppOpenData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningRecordAppOpenResponse,
+    PlanningRecordAppOpenError,
+    Options<PlanningRecordAppOpenData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningRecordAppOpen({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const planningGetMetricsSummaryQueryKey = (
+  options: Options<PlanningGetMetricsSummaryData>,
+) => createQueryKey("planningGetMetricsSummary", options);
+
+/**
+ * Get Metrics Summary
+ */
+export const planningGetMetricsSummaryOptions = (
+  options: Options<PlanningGetMetricsSummaryData>,
+) =>
+  queryOptions<
+    PlanningGetMetricsSummaryResponse,
+    PlanningGetMetricsSummaryError,
+    PlanningGetMetricsSummaryResponse,
+    ReturnType<typeof planningGetMetricsSummaryQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await planningGetMetricsSummary({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: planningGetMetricsSummaryQueryKey(options),
+  });
 
 /**
  * Replan

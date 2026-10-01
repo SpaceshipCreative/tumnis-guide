@@ -512,3 +512,125 @@ def free_left(free: Sequence[Interval], taken: Sequence[Interval]) -> list[Inter
             pieces = kept
         left += pieces
     return left
+
+
+# --- Close the day (P1-18, J7) -----------------------------------------------------------------
+
+
+class TaskRef(BaseModel, frozen=True):
+    """A task as the close-the-day panel names it."""
+
+    task_id: UUID
+    project_id: UUID
+    title: str
+    label: Label | None
+
+
+class RolloverRef(TaskRef, frozen=True):
+    """A Today task that is not done: the nights it has rolled over so far, and its count
+    after tonight's day close."""
+
+    rollover_count: int
+    tonight: int
+
+
+class TaskFacts(BaseModel, frozen=True):
+    """What `day_summary` needs of one task (read through tasks.api)."""
+
+    task_id: UUID
+    project_id: UUID
+    title: str
+    label: Label | None
+    status: TaskStatus
+    completed_at: datetime | None
+    rollover_count: int
+    result_posted_at: datetime | None = None  # its latest result (P2-04), if any
+
+
+class RunFacts(BaseModel, frozen=True):
+    """What `day_summary` needs of one agent run (read through agents.api)."""
+
+    run_id: UUID
+    task_id: UUID | None
+    kind: str  # enrich, task, plan, ...
+    status: str  # a RunStatus value
+    finished_at: datetime | None
+
+
+class DaySummary(BaseModel, frozen=True):
+    shipped: list[TaskRef]  # moved to Done today (local day) by the human
+    agents_finished: list[TaskRef]  # AI tasks done today, and tasks with a result posted today
+    prepared_by_agents: int  # enrichment runs finished today
+    queued_overnight: list[TaskRef]  # empty until P4-04
+    rolls_over: list[RolloverRef]  # Today tasks not done: rollover_count now and +1 tonight
+
+
+ENRICH_RUN: Final = "enrich"  # P1-08's run kind: a task prepared by its project agent
+_SUCCEEDED: Final = "succeeded"
+
+
+def _ref(task: TaskFacts) -> TaskRef:
+    return TaskRef(
+        task_id=task.task_id, project_id=task.project_id, title=task.title, label=task.label
+    )
+
+
+def day_summary(
+    tasks: Sequence[TaskFacts], runs: Sequence[RunFacts], day: date, tz: ZoneInfo
+) -> DaySummary:
+    """The close-the-day panel for local `day` in `tz` (J7, REL-6): its bounds are local
+    midnight to the next local midnight, so a task done at 23:30 counts today even when it
+    is tomorrow in UTC.
+
+    - shipped: tasks Done within the day, in completion order (only a person moves a task
+      to Done, FR-5.8, so every one was shipped by the human);
+    - agents_finished: AI tasks Done within the day and tasks whose result was posted within
+      it, each once, in the order the work finished (the earlier of the two);
+    - prepared_by_agents: enrichment runs that succeeded within the day;
+    - queued_overnight: empty until unattended windows (P4-04);
+    - rolls_over: tasks still in Today, by title, with their rollover count now and after
+      tonight's day close (+1)."""
+    start = local_to_utc(day, time(0), tz)
+    end = local_to_utc(day + timedelta(days=1), time(0), tz)
+
+    def within(at: datetime | None) -> bool:
+        return at is not None and start <= at < end
+
+    done = sorted(
+        (t for t in tasks if t.status == "done" and within(t.completed_at)),
+        key=lambda t: (t.completed_at, t.title),
+    )
+    finished: dict[UUID, tuple[datetime, TaskFacts]] = {}
+    for task in tasks:
+        times = [
+            at
+            for at, counts in (
+                (task.completed_at, task.status == "done" and task.label == "ai"),
+                (task.result_posted_at, True),
+            )
+            if counts and at is not None and within(at)
+        ]
+        if times:
+            finished[task.task_id] = (min(times), task)
+    prepared = sum(
+        1
+        for run in runs
+        if run.kind == ENRICH_RUN and run.status == _SUCCEEDED and within(run.finished_at)
+    )
+    today = sorted((t for t in tasks if t.status == "today"), key=lambda t: t.title)
+    return DaySummary(
+        shipped=[_ref(t) for t in done],
+        agents_finished=[
+            _ref(t) for _, t in sorted(finished.values(), key=lambda pair: (pair[0], pair[1].title))
+        ],
+        prepared_by_agents=prepared,
+        queued_overnight=[],
+        rolls_over=[
+            RolloverRef(
+                **_ref(t).model_dump(),
+                rollover_count=t.rollover_count,
+                tonight=t.rollover_count + 1,
+            )
+            for t in today
+        ],
+    )

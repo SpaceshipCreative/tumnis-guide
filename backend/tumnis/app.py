@@ -129,7 +129,8 @@ def operation_id(route: Any) -> str:
 
 def module_routers(name: str = "router") -> list[APIRouter]:
     """Each module's `router` (tumnis.modules.<m>.router.router), when it declares one;
-    `name="settings_router"` gives the modules' routers under /v1/settings instead."""
+    `name="settings_router"` gives the modules' routers under /v1/settings instead, and
+    `name="root_router"` their routes outside the module's own prefix (P1-18)."""
     found = []
     for module in modules.MODULES:
         router = getattr(importlib.import_module(f"tumnis.modules.{module}.router"), name, None)
@@ -152,6 +153,7 @@ def v1_routers(settings: Settings, extra_routers: Sequence[APIRouter] = ()) -> l
     ]
     routers.append(settings_router.router)  # P0-26: after the modules' own sections
     routers += module_routers()
+    routers += module_routers("root_router")  # P1-18: a module's routes outside its prefix
     if settings.tumnis_adapters == "fake":
         routers.append(testing_routes.router)
     routers += extra_routers

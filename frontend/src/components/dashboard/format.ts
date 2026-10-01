@@ -51,3 +51,14 @@ export function localDay(now: Date, timeZone: string): string {
     timeZone,
   }).format(now);
 }
+
+/** The hour of the day (0 to 23) `now` falls on in `timeZone`. */
+export function localHour(now: Date, timeZone: string): number {
+  return Number(
+    new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      hourCycle: "h23",
+      timeZone,
+    }).format(now),
+  );
+}

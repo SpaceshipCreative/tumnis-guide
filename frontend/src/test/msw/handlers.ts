@@ -1,6 +1,7 @@
 import { http, HttpResponse, type RequestHandler } from "msw";
 
 import type { PageReviewItemOut, PolicyOut } from "../../api/types.gen";
+import { appOpen } from "./closeDay";
 import { dashboardDefaults } from "./dashboard";
 import { workingHours } from "./planning";
 
@@ -87,5 +88,7 @@ export const handlers: RequestHandler[] = [
       version: 1,
     } satisfies PolicyOut),
   ),
+  // The shell's app-open ping (P1-18), sent on every signed-in start.
+  appOpen,
   ...dashboardDefaults,
 ];

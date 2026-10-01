@@ -11,13 +11,14 @@ locks the test bodies, and this module is where later work packages plug in thei
 - `counter_value(db, workspace_id, day, counter)`: `usage_counters.value`, read as the
   owner (None when there is no row).
 - `ledger_rows(db, workspace_id, event_id)`: how many ledger rows hold that event.
+- `outbound_blocked()` (P1-18): sockets refused for everything but loopback.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from typing import TYPE_CHECKING
 
 import psycopg
@@ -88,6 +89,20 @@ def counter_value(db: DbUrls, workspace_id: uuid.UUID, day: date, counter: str) 
             (workspace_id, day, counter),
         ).fetchone()
     return None if row is None else int(row[0])
+
+
+@contextmanager
+def outbound_blocked() -> Iterator[None]:
+    """P1-18: no Python socket may connect anywhere but loopback while inside. The database
+    is reached through libpq, which pytest-socket does not guard, so Postgres still works
+    and anything else (a metrics service, a CDN) fails the request."""
+    import pytest_socket  # noqa: PLC0415
+
+    pytest_socket.socket_allow_hosts(["127.0.0.1", "::1"], allow_unix_socket=True)
+    try:
+        yield
+    finally:
+        pytest_socket._remove_restrictions()  # its public enable leaves connect guarded
 
 
 def ledger_rows(db: DbUrls, workspace_id: uuid.UUID, event_id: uuid.UUID) -> int:

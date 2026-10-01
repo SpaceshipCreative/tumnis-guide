@@ -1,0 +1,19 @@
+# Fixture event stream (P1-18, T-P1-18-03): events as the metric functions read them,
+# and the metrics they must give. Format (usage/tests/streams.py loads it):
+#   timezone, range {from, to} (local days, both inclusive), optional weekdays (0 = Monday;
+#   default Monday to Friday) and events, each with `at` (UTC) and `type`:
+#   app_open; plan.published {day, task_ids}; human.decided {item_kind, decision} (counts
+#   on the local day of `at`); task.status_changed {task, to, from?, actor?, label?,
+#   estimate?, actual?}: `to: done` is a completion, `from: today, to: backlog, actor:
+#   system` is a night's rollover.
+#
+# No events at all: every rate is null (no data yet), the run of planned days 0.
+timezone: America/New_York
+range: {from: 2026-03-09, to: 2026-03-13}
+expect:
+  daily_open_rate: null
+  tasks_completed_per_working_day: null
+  rollover_rate: null
+  estimate_error: null
+  consecutive_plan_days: 0
+events: []
