@@ -10,9 +10,26 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
-      environment: "jsdom",
-      setupFiles: ["./src/test/setup.ts"],
-      include: ["src/**/*.test.{ts,tsx}"],
+      // Two projects, each inheriting the options below: the app's tests in jsdom with
+      // the MSW harness, and whole-build checks in tests/ (T-P1-17-18 builds the app in
+      // memory) in plain Node, where `URL` and the build tools are Node's own.
+      projects: [
+        {
+          test: {
+            name: "app",
+            environment: "jsdom",
+            setupFiles: ["./src/test/setup.ts"],
+            include: ["src/**/*.test.{ts,tsx}"],
+          },
+        },
+        {
+          test: {
+            name: "build",
+            environment: "node",
+            include: ["tests/**/*.test.ts"],
+          },
+        },
+      ],
       restoreMocks: true,
       unstubGlobals: true,
       // Whole-route journeys run past the 5 s default on a loaded machine. P0-24's undo

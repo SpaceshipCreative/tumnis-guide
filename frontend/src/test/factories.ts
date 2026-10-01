@@ -7,7 +7,13 @@
 // makeProject is generated from ProjectOut (P0-17), makeTask from TaskOut (P0-18).
 import * as z from "zod";
 
-import { zBoardOut, zProblem, zProjectOut, zTaskOut } from "../api/zod.gen";
+import {
+  zBoardOut,
+  zDocumentDto,
+  zProblem,
+  zProjectOut,
+  zTaskOut,
+} from "../api/zod.gen";
 import { nKeys } from "../lib/rank";
 
 // The backend's FixedClock start (A5): factories are deterministic but for ids.
@@ -88,6 +94,9 @@ export const makeProblem = factoryFor(zProblem);
 export const makeProject = factoryFor(zProjectOut);
 
 export const makeTask = factoryFor(zTaskOut);
+
+// makeDocument from DocumentDTO (P1-17): knowledge items, the brief among them.
+export const makeDocument = factoryFor(zDocumentDto);
 
 // --- Boards (P0-24) -----------------------------------------------------------
 
