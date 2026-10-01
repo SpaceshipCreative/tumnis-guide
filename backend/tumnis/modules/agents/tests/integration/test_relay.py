@@ -80,7 +80,6 @@ def _answered(db: DbUrls, item_id: Any) -> dict[str, Any]:
 
 @pytest.mark.req("FR-8.2")
 @pytest.mark.wp("P2-16")
-@pytest.mark.xfail(strict=True, reason="spec:P2-16")
 async def test_discord_answer_equals_app_answer(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
@@ -145,7 +144,6 @@ async def test_discord_answer_equals_app_answer(  # noqa: PLR0917
 
 @pytest.mark.req("FR-8.2")
 @pytest.mark.wp("P2-16")
-@pytest.mark.xfail(strict=True, reason="spec:P2-16")
 async def test_relay_refuses_approvals_and_results(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],

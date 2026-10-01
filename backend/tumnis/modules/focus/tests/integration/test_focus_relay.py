@@ -75,7 +75,6 @@ async def _relay(focus: Focus, key: str, event_id: Any, answer: str) -> Any:
 
 @pytest.mark.req("FR-8.2", "FR-10.4")
 @pytest.mark.wp("P2-16")
-@pytest.mark.xfail(strict=True, reason="spec:P2-16")
 async def test_relayed_focus_reply_equals_app_response(dbos: Any, focus: Focus) -> None:
     """A check-in answered `still_on_it` through the relay leaves one `focus_responses` row
     and one `focus.responded` event, both the person's (`user:<id>`), as the app's answer
