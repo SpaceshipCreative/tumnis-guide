@@ -2,9 +2,14 @@
 // count and the quota; opened, it adds a text entry, an upload and a link, pins an item
 // and moves one to the trash with Undo. The same section is in the phone Context sheet.
 import { screen, waitFor, within } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { expect, test } from "vitest";
 
-import { makeDocument, makeProject } from "../../../test/factories";
+import {
+  makeDocument,
+  makeProblem,
+  makeProject,
+} from "../../../test/factories";
 import { KnowledgeFake } from "../../../test/msw/knowledge";
 import { ProjectFake } from "../../../test/msw/project";
 import { server } from "../../../test/msw/server";
@@ -140,3 +145,41 @@ test("[P1-17][FR-15.6] the phone Context sheet has the Knowledge section", async
   await user.click(section);
   expect(await within(sheet).findByText("Rate card")).toBeVisible();
 });
+
+test.fails(
+  "[P1-17][FR-15.6] a failed trash keeps the item and offers no Undo (#134)",
+  async () => {
+    // CodeRabbit on #134: the item was marked trashed before the DELETE answered, so a
+    // failed trash still said "moved to trash" with Undo beside the error.
+    const { project, rateCard } = setup();
+    server.use(
+      http.delete(`/v1/knowledge/documents/${rateCard.id}`, () =>
+        HttpResponse.json(
+          makeProblem({ status: 500, code: "internal", title: "internal" }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/problem+json" },
+          },
+        ),
+      ),
+    );
+    const { user } = await renderRoute(`/projects/${project.id}?view=tasks`, {
+      viewport: "laptop",
+    });
+    const rail = await screen.findByRole("complementary", { name: "Context" });
+    await user.click(
+      await within(rail).findByRole("button", { name: /^Knowledge/ }),
+    );
+    expect(await within(rail).findByText("Rate card")).toBeVisible();
+
+    await user.click(
+      within(rail).getByRole("button", { name: "Move Rate card to trash" }),
+    );
+    expect(
+      await within(rail).findByText("Could not move Rate card to the trash."),
+    ).toBeVisible();
+    expect(within(rail).queryByText(/moved to trash/)).toBeNull();
+    expect(within(rail).queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(within(rail).getByText("Rate card")).toBeVisible();
+  },
+);
