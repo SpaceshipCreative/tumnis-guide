@@ -13,7 +13,7 @@ location). Each handler finds its row (404) before any rule about the body. Stor
 take the deployment's SSRF policy from the settings.
 """
 
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal
 from urllib.parse import quote
@@ -22,10 +22,11 @@ from uuid import UUID
 from fastapi import Depends, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import AnyHttpUrl, BaseModel, Field, StringConstraints
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from tumnis.core.audit_router import require_session
 from tumnis.core.clock import Clock
-from tumnis.core.errors import FixedAllow, ProblemError
+from tumnis.core.errors import ProblemError
 from tumnis.core.idempotency import SessionDep
 from tumnis.core.ids import uuid7
 from tumnis.core.net import NetPolicy
@@ -39,21 +40,28 @@ from tumnis.modules.knowledge.rules import MAX_UPLOAD_BYTES
 
 # `POST /knowledge/documents/text` and `.../link` (R-36) sit at the same depth as the
 # GET, PATCH and DELETE `/knowledge/documents/{document_id}` routes, which match the
-# literal segment too. Another method on a literal path answers 405 with `Allow: POST`
-# (RFC 9110, 15.5.6), not a 422 for an id that is not a UUID.
+# literal segment too. The id routes decline the literal paths, so another method there
+# answers 405 with `Allow: POST` (RFC 9110, 15.5.6), not a 422 for an id that is not a
+# UUID, and the 405 handler leaves their methods out of `Allow`.
 LITERAL_DOCUMENT_PATHS: Final = frozenset({"text", "link"})
 _DOCUMENT_ROUTE: Final = "/knowledge/documents/{document_id}"
 
 
 class _KnowledgeRoute(TumnisRoute):
+    def declines(self, path_params: Mapping[str, Any]) -> bool:
+        return (
+            self.path.endswith(_DOCUMENT_ROUTE)
+            and path_params.get("document_id") in LITERAL_DOCUMENT_PATHS
+        )
+
     def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
         handler = super().get_route_handler()
         if not self.path.endswith(_DOCUMENT_ROUTE):
             return handler
 
         async def literal_first(request: Request) -> Response:
-            if request.path_params.get("document_id") in LITERAL_DOCUMENT_PATHS:
-                raise FixedAllow("POST")
+            if self.declines(request.path_params):
+                raise StarletteHTTPException(405)
             return await handler(request)
 
         return literal_first

@@ -134,12 +134,12 @@ def _from_http(status: int, detail: Any) -> Problem:
     return problem(status, default, text)
 
 
-class FixedAllow(StarletteHTTPException):
-    """A 405 raised by a route that knows its own `Allow` (RFC 9110, 15.5.6); the
-    handler keeps it instead of naming every method served at the path."""
-
-    def __init__(self, allow: str) -> None:
-        super().__init__(HTTPStatus.METHOD_NOT_ALLOWED, headers={"Allow": allow})
+def _declines(route: Any, path_params: dict[str, str]) -> bool:
+    """A route may decline a path its pattern matches (`declines(path_params) -> bool`),
+    e.g. `/documents/{document_id}` declines `/documents/text`, which another route
+    serves; it then adds no methods to that path's `Allow`."""
+    declines = getattr(route, "declines", None)
+    return callable(declines) and bool(declines(path_params))
 
 
 def _allowed_methods(request: Request) -> str | None:
@@ -152,7 +152,10 @@ def _allowed_methods(request: Request) -> str | None:
 
     methods: set[str] = set()
     for route in walk_routes(request.app):
-        if route.path and route.methods and compile_path(route.path)[0].match(request.url.path):
+        if not (route.path and route.methods):
+            continue
+        match = compile_path(route.path)[0].match(request.url.path)
+        if match and not _declines(route.original_route, match.groupdict()):
             methods |= route.methods
     return ", ".join(sorted(methods)) or None
 
@@ -160,11 +163,7 @@ def _allowed_methods(request: Request) -> str | None:
 async def http_exception_handler(request: Request, exc: Exception) -> Response:
     assert isinstance(exc, StarletteHTTPException)  # noqa: S101
     headers = dict(exc.headers or {})
-    if (
-        exc.status_code == HTTPStatus.METHOD_NOT_ALLOWED
-        and not isinstance(exc, FixedAllow)
-        and (allow := _allowed_methods(request))
-    ):
+    if exc.status_code == HTTPStatus.METHOD_NOT_ALLOWED and (allow := _allowed_methods(request)):
         headers["Allow"] = allow
     return problem_response(_from_http(exc.status_code, exc.detail), headers)
 
