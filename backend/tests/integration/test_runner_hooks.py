@@ -84,7 +84,6 @@ async def test_last_packet_counts_run_messages_and_reset_clears_it(
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_two_dispatches_at_once_play_two_different_runs(
     client: httpx.AsyncClient, stored_scripts: None
 ) -> None:

@@ -88,14 +88,13 @@ async def _task_title(ctx: WorkspaceContext, packet: TaskPacket) -> str | None:
 
 
 async def _next_run_steps(title: str) -> list[dict[str, Any]]:
-    """This run's steps from the task's script, counting the run as played."""
-    key = task_script_key(title)
-    stored = await fake_scripts.lookup(fake_scripts.RUNNER, key)
-    if stored is None or "runs" not in stored:
+    """This run's steps from the task's script, counting the run as played (atomically, so
+    two dispatches at once play two different runs)."""
+    claimed = await fake_scripts.claim_play(fake_scripts.RUNNER, task_script_key(title))
+    if claimed is None or "runs" not in claimed[0]:
         return []
+    stored, played = claimed
     script = TaskScript.model_validate({k: v for k, v in stored.items() if k != "played"})
-    played = int(stored.get("played", 0))
-    await fake_scripts.put(fake_scripts.RUNNER, key, {**stored, "played": played + 1})
     if played >= len(script.runs):
         return []
     return [step.model_dump(mode="json", exclude_none=True) for step in script.runs[played]]

@@ -96,8 +96,25 @@ async def lookup(name: str, key: str = "") -> dict[str, Any] | None:
 
 async def claim_play(name: str, key: str) -> tuple[dict[str, Any], int] | None:
     """Count one more play of the script stored for exactly (name, key); the script and
-    how many plays came before this one. None while disabled or with no such script."""
-    raise NotImplementedError  # P2-04: spec test first
+    how many plays came before this one. None while disabled or with no such script.
+
+    One UPDATE ... RETURNING: Postgres locks the row, so two plays at once are counted
+    one after the other and each gets its own count."""
+    if not _enabled:
+        return None
+    played = func.coalesce(cast(_t.c.script["played"].astext, Integer), 0)
+    played_path = literal(["played"], ARRAY(Text))
+    stmt = (
+        update(_t)
+        .where(_t.c.adapter == name, _t.c.match_key == key)
+        .values(script=func.jsonb_set(_t.c.script, played_path, func.to_jsonb(played + 1)))
+        .returning(_t.c.script)
+    )
+    async with db.app_sessionmaker()() as session, session.begin():
+        script: dict[str, Any] | None = await session.scalar(stmt)
+    if script is None:
+        return None
+    return script, int(script["played"]) - 1
 
 
 # --- The fake runner's last packet (P2-04, `GET /v1/test/fakes/runner/last-packet`) ---------
