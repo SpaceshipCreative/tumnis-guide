@@ -24,7 +24,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-1.5")
 @pytest.mark.wp("P2-17")
-@pytest.mark.xfail(strict=True, reason="spec:P2-17")
 async def test_dashboard_feed_statuses(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,

@@ -55,7 +55,6 @@ async def _pages(http: SessionClient, url: str, limit: int) -> list[dict[str, An
 
 @pytest.mark.req("FR-2.6")
 @pytest.mark.wp("P2-17")
-@pytest.mark.xfail(strict=True, reason="spec:P2-17")
 async def test_activity_lists_runs_results_and_audit(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],

@@ -26,7 +26,6 @@ PDF_NAME = "Brand guide \N{EN DASH} 2026.pdf"
 
 @pytest.mark.req("FR-15.4")
 @pytest.mark.wp("P2-17")
-@pytest.mark.xfail(strict=True, reason="P2-17: PDFs are served inline (Scott decision 47)")
 async def test_pdf_served_inline_for_citations(
     extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient
 ) -> None:

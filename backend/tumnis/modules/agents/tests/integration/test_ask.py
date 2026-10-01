@@ -41,7 +41,6 @@ ANSWER = "Inter for headings and Source Serif for body text (Brand guide, page 4
 
 @pytest.mark.req("FR-2.5")
 @pytest.mark.wp("P2-17")
-@pytest.mark.xfail(strict=True, reason="spec:P2-17")
 async def test_ask_creates_ai_task_and_answer_lands_on_task_and_review(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],

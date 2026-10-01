@@ -39,7 +39,6 @@ async def _note(http: Any, project_id: object | None, title: str, body_md: str) 
 
 @pytest.mark.req("FR-15.4")
 @pytest.mark.wp("P2-17")
-@pytest.mark.xfail(strict=True, reason="spec:P2-17")
 async def test_add_document_saves_to_agent_outputs_untrusted(
     extract_env: ExtractEnv,
     dbos: type[DBOS],
@@ -104,7 +103,6 @@ async def test_add_document_saves_to_agent_outputs_untrusted(
 
 @pytest.mark.req("FR-15.4")
 @pytest.mark.wp("P2-17")
-@pytest.mark.xfail(strict=True, reason="spec:P2-17")
 async def test_search_and_get_respect_project_scope(
     extract_env: ExtractEnv,
     dbos: type[DBOS],
@@ -165,7 +163,6 @@ async def test_search_and_get_respect_project_scope(
 
 @pytest.mark.req("FR-15.4")
 @pytest.mark.wp("P2-17")
-@pytest.mark.xfail(strict=True, reason="spec:P2-17")
 async def test_agent_cites_document_and_page(
     knowledge_ws: WorkspaceHandle,
     clock: FixedClock,
