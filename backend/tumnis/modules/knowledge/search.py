@@ -54,8 +54,11 @@ EF_SEARCH: Final = 100  # plan default (pgvector's default is 40)
 async def tune_session(s: AsyncSession) -> None:
     """HNSW search settings for this transaction only (`SET LOCAL`, safe behind PgBouncer's
     transaction pooling): a wider candidate list, and iterative scans so a project filter
-    that drops rows still leaves enough results (pgvector 0.8 `relaxed_order`)."""
-    await s.execute(text(f"SET LOCAL hnsw.ef_search = {int(EF_SEARCH)}"))
+    that drops rows still leaves enough results (pgvector 0.8 `relaxed_order`).
+    `set_config(..., true)` is `SET LOCAL` with the value bound."""
+    await s.execute(
+        text("SELECT set_config('hnsw.ef_search', :value, true)"), {"value": str(EF_SEARCH)}
+    )
     await s.execute(text("SET LOCAL hnsw.iterative_scan = relaxed_order"))
 
 
