@@ -259,3 +259,43 @@ async def test_unscripted_fake_dispatch_is_recorded_and_left_running(
     kinds = _rows(db, "SELECT kind FROM run_events WHERE run_id = %s", runs[0]["id"])
     assert [k["kind"] for k in kinds] == ["dispatched"]
     assert _rows(db, "SELECT id FROM daily_plans") == []
+
+
+@pytest.mark.req("A1.2", "A2.6")
+@pytest.mark.xfail(strict=True, reason="spec:SEED")
+async def test_reset_cancels_the_last_tests_workflows(
+    client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
+) -> None:
+    """T-SEED-23
+    A reset starts a fresh world, workflows included. A morning build left waiting on an
+    unscripted master holds the one-at-a-time maintenance queue for the run timeout; the
+    next test's reset cancels it (and anything else still pending or enqueued), so the
+    next test's planner tick builds its plan at once instead of queueing behind it."""
+    from tumnis.modules.planning import api as planning  # noqa: PLC0415
+    from tumnis.modules.planning import testing as planning_testing  # noqa: PLC0415
+
+    await _reset(client)
+    clock = await client.post("/v1/test/clock", json={"time": MONDAY_PLAN_TIME})
+    assert clock.status_code == 200, clock.text
+    stale = planning.plan_workflow_id(_ctx(db).workspace_id, MONDAY, "morning")
+    bound = planning_testing.TICK_WAIT_S
+    planning_testing.TICK_WAIT_S = 1.0
+    try:
+        tick = await client.post("/v1/test/tick/planner-tick")
+    finally:
+        planning_testing.TICK_WAIT_S = bound
+    assert tick.json() == {"woken": 1}
+    assert await _until(lambda: _rows(db, "SELECT id FROM runs WHERE status = 'running'"))
+
+    await _reset(client)
+    [status] = await dbos.list_workflows_async(workflow_ids=[stale], load_input=False)
+    assert status.status == "CANCELLED"
+
+    await _script(client, "tumnis-master", "plan", "plan__monday_four_picks")
+    clock = await client.post("/v1/test/clock", json={"time": MONDAY_PLAN_TIME})
+    assert clock.status_code == 200, clock.text
+    tick = await client.post("/v1/test/tick/planner-tick")
+    assert tick.status_code == 200, tick.text
+    assert tick.json() == {"woken": 1}
+    plans = _rows(db, "SELECT source, status FROM daily_plans WHERE day = %s", MONDAY)
+    assert plans == [{"source": "master", "status": "published"}]
