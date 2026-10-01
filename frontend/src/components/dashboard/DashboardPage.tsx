@@ -10,6 +10,7 @@ import { useLayoutEffect, useRef } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import { CalendarStrip } from "./CalendarStrip";
 import { formatToday, localDay } from "./format";
+import { KillSwitch } from "./KillSwitch";
 import { ProjectCardGrid } from "./ProjectCardGrid";
 import {
   deployStatusQuery,
@@ -75,7 +76,10 @@ export function DashboardPage() {
             {formatToday(new Date(), timeZone)}
           </p>
         </div>
-        <ReviewBadge count={reviewCount.data?.count ?? 0} />
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <KillSwitch />
+          <ReviewBadge count={reviewCount.data?.count ?? 0} />
+        </div>
       </header>
       <div className="flex flex-col gap-6 md:grid md:min-h-0 md:flex-1 md:grid-cols-12">
         <div className="flex min-h-0 flex-col gap-4 md:col-span-5">

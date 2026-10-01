@@ -6,6 +6,7 @@
 import { http, HttpResponse, type RequestHandler } from "msw";
 
 import type {
+  PausesOut,
   ProjectDeployStatus,
   ReviewCountOut,
   TaskOut,
@@ -60,9 +61,21 @@ export function deployStatus(
   return http.get("/v1/coolify/status", () => HttpResponse.json(entries));
 }
 
+/** `GET /v1/agents/pause`: the kill switch's state (P2-09); nothing paused by default. */
+export function agentPauses(body: Partial<PausesOut> = {}): RequestHandler {
+  const pauses: PausesOut = {
+    schema_version: 1,
+    workspace: null,
+    projects: [],
+    ...body,
+  };
+  return http.get("*/v1/agents/pause", () => HttpResponse.json(pauses));
+}
+
 /** The dashboard's reads, empty: no projects, nothing today, nothing to review, no apps,
- * no working hours or events today. */
+ * no working hours or events today, no agents paused. */
 export const dashboardDefaults: RequestHandler[] = [
+  agentPauses(),
   deployStatus(),
   projectsList([]),
   todayTasks([]),

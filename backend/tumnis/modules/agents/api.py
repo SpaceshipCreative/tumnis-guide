@@ -1068,6 +1068,7 @@ async def profile_key(s: AsyncSession, profile_id: UUID) -> UUID | None:
 # --- Runs (P2-04, FR-5.4, FR-5.5, FR-5.8, SAF-5, R-23, R-29) ---------------------------------
 
 LIVE_RUN: Final = "run"
+LIVE_PAUSE: Final = "agent_pause"  # the kill switch's state in the app (P2-09)
 RUN_EVENTS_LIMIT_DEFAULT: Final = 100
 RUN_EVENTS_LIMIT_MAX: Final = 500
 LOG_LINE_MAX_BYTES: Final = 8 * 1024  # a longer line is cut with a marker (plan default)
@@ -1778,6 +1779,7 @@ async def pause(
             if again is None:
                 raise
             return PauseOut(pause_id=again["id"], cancelled_runs=0, held_runs=0)
+        mark_changed(s, LIVE_PAUSE, pause_id)
         held = await _hold_queued(s, inp.scope, inp.project_id)
         cancelled = len(await runs_to_cancel(s, inp.scope, inp.project_id))
         await audit.record(
@@ -1842,6 +1844,7 @@ async def resume(
             .where(_pauses.c.id == existing["id"])
             .values(resumed_at=now, resumed_by=str(ctx.actor), resume_reason=inp.reason)
         )
+        mark_changed(s, LIVE_PAUSE, existing["id"])
         released = len(await held_runs_free(s, inp.scope, inp.project_id))
         await audit.record(
             s,

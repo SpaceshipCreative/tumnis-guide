@@ -32,95 +32,90 @@ function openPause(reason: string) {
   };
 }
 
-test.fails(
-  "[P2-09][SAF-4] pause needs a reason and shows paused state",
-  async () => {
-    const { KillSwitch } = await load<KillSwitchModule>("./KillSwitch");
-    let reason: string | null = null;
-    const recorder = new Recorder();
-    server.use(
-      http.get("*/v1/agents/pause", () =>
-        HttpResponse.json({
+test("[P2-09][SAF-4] pause needs a reason and shows paused state", async () => {
+  const { KillSwitch } = await load<KillSwitchModule>("./KillSwitch");
+  let reason: string | null = null;
+  const recorder = new Recorder();
+  server.use(
+    http.get("*/v1/agents/pause", () =>
+      HttpResponse.json({
+        schema_version: 1,
+        workspace: reason === null ? null : openPause(reason),
+        projects: [],
+      }),
+    ),
+    http.post("*/v1/agents/pause", async ({ request }) => {
+      const sent = await recorder.record(request);
+      reason = (sent.body as { reason: string }).reason;
+      return HttpResponse.json(
+        {
           schema_version: 1,
-          workspace: reason === null ? null : openPause(reason),
-          projects: [],
-        }),
-      ),
-      http.post("*/v1/agents/pause", async ({ request }) => {
-        const sent = await recorder.record(request);
-        reason = (sent.body as { reason: string }).reason;
-        return HttpResponse.json(
-          {
-            schema_version: 1,
-            pause_id: PAUSE_ID,
-            cancelled_runs: 2,
-            held_runs: 1,
-          },
-          { status: 202 },
-        );
-      }),
-      http.post("*/v1/agents/resume", async ({ request }) => {
-        await recorder.record(request);
-        reason = null;
-        return HttpResponse.json(
-          { schema_version: 1, pause_id: PAUSE_ID, released_runs: 1 },
-          { status: 202 },
-        );
-      }),
-    );
-    const { user } = renderWithProviders(<KillSwitch />);
+          pause_id: PAUSE_ID,
+          cancelled_runs: 2,
+          held_runs: 1,
+        },
+        { status: 202 },
+      );
+    }),
+    http.post("*/v1/agents/resume", async ({ request }) => {
+      await recorder.record(request);
+      reason = null;
+      return HttpResponse.json(
+        { schema_version: 1, pause_id: PAUSE_ID, released_runs: 1 },
+        { status: 202 },
+      );
+    }),
+  );
+  const { user } = renderWithProviders(<KillSwitch />);
 
-    // Running: one control, no banner.
-    const pauseAll = await screen.findByRole("button", {
-      name: "Pause all agents",
-    });
-    expect(screen.queryByRole("status", { name: "Agents paused" })).toBeNull();
+  // Running: one control, no banner.
+  const pauseAll = await screen.findByRole("button", {
+    name: "Pause all agents",
+  });
+  expect(screen.queryByRole("status", { name: "Agents paused" })).toBeNull();
 
-    // The confirm dialog: Pause stays disabled until a reason is typed.
-    await user.click(pauseAll);
-    const dialog = screen.getByRole("dialog", { name: "Pause all agents" });
-    const confirm = within(dialog).getByRole("button", { name: "Pause" });
-    expect(confirm).toBeDisabled();
-    const field = within(dialog).getByRole("textbox", { name: "Reason" });
-    await user.type(field, "   ");
-    expect(confirm).toBeDisabled();
-    await user.clear(field);
-    await user.type(field, "The agent is looping");
-    expect(confirm).toBeEnabled();
-    await user.click(confirm);
+  // The confirm dialog: Pause stays disabled until a reason is typed.
+  await user.click(pauseAll);
+  const dialog = screen.getByRole("dialog", { name: "Pause all agents" });
+  const confirm = within(dialog).getByRole("button", { name: "Pause" });
+  expect(confirm).toBeDisabled();
+  const field = within(dialog).getByRole("textbox", { name: "Reason" });
+  await user.type(field, "   ");
+  expect(confirm).toBeDisabled();
+  await user.clear(field);
+  await user.type(field, "The agent is looping");
+  expect(confirm).toBeEnabled();
+  await user.click(confirm);
 
-    await waitFor(() => {
-      expect(recorder.writes()).toEqual(["POST /v1/agents/pause"]);
-    });
-    const pause = recorder.sent[0];
-    expect(pause?.body).toEqual({
-      scope: "workspace",
-      reason: "The agent is looping",
-    });
-    expect(pause?.idempotencyKey).toBeTruthy();
+  await waitFor(() => {
+    expect(recorder.writes()).toEqual(["POST /v1/agents/pause"]);
+  });
+  const pause = recorder.sent[0];
+  expect(pause?.body).toEqual({
+    scope: "workspace",
+    reason: "The agent is looping",
+  });
+  expect(pause?.idempotencyKey).toBeTruthy();
 
-    // Paused: a banner with the reason, and Resume in place of the pause control.
-    const banner = await screen.findByRole("status", { name: "Agents paused" });
-    expect(banner).toHaveTextContent("The agent is looping");
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Pause all agents" }),
-    ).toBeNull();
+  // Paused: a banner with the reason, and Resume in place of the pause control.
+  const banner = await screen.findByRole("status", { name: "Agents paused" });
+  expect(banner).toHaveTextContent("The agent is looping");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Pause all agents" })).toBeNull();
 
-    await user.click(
-      within(banner).getByRole("button", { name: "Resume agents" }),
-    );
-    await waitFor(() => {
-      expect(recorder.writes()).toEqual([
-        "POST /v1/agents/pause",
-        "POST /v1/agents/resume",
-      ]);
-    });
-    expect(recorder.sent[1]?.body).toMatchObject({ scope: "workspace" });
-    expect(recorder.sent[1]?.idempotencyKey).toBeTruthy();
-    expect(
-      await screen.findByRole("button", { name: "Pause all agents" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("status", { name: "Agents paused" })).toBeNull();
-  },
-);
+  await user.click(
+    within(banner).getByRole("button", { name: "Resume agents" }),
+  );
+  await waitFor(() => {
+    expect(recorder.writes()).toEqual([
+      "POST /v1/agents/pause",
+      "POST /v1/agents/resume",
+    ]);
+  });
+  expect(recorder.sent[1]?.body).toMatchObject({ scope: "workspace" });
+  expect(recorder.sent[1]?.idempotencyKey).toBeTruthy();
+  expect(
+    await screen.findByRole("button", { name: "Pause all agents" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("status", { name: "Agents paused" })).toBeNull();
+});

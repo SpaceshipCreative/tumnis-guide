@@ -12,7 +12,8 @@ export type LiveEntity =
   | "calendar_account"
   | "runner"
   | "agent_profile"
-  | "run";
+  | "run"
+  | "agent_pause";
 
 export const LIVE_MAP: Record<
   LiveEntity,
@@ -104,6 +105,8 @@ export const LIVE_MAP: Record<
     details: ["agentsGetRun", "agentsListRunEvents"],
     lists: [],
   },
+  // A pause or resume (P2-09): the kill switch and every project's pause control refresh.
+  agent_pause: { details: [], lists: ["agentsGetPauses"] },
 };
 
 export const NOT_LIVE = [
