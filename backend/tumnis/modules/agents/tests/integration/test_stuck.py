@@ -161,7 +161,8 @@ async def test_split_step_posted_within_a_minute(  # noqa: PLR0917
         assert await wait_until(shown)
         elapsed = loop.time() - tapped
         step = await next_step(session_client)
-        await asyncio.sleep(0.5)  # the notification of the step's commit reaches LISTEN
+        # the notification of the step's commit reaches LISTEN (polled, not a fixed sleep)
+        await wait_until(lambda: any(m["entity"] == "focus" for m in live))
     assert elapsed < STUCK_DEADLINE_S
     assert step is not None
     assert step["task_id"] == str(task.id)
