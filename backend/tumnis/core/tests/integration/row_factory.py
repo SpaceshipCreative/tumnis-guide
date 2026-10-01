@@ -11,6 +11,9 @@ Run it on an owner connection: the owner bypasses row-level security, so it can 
 create rows in any workspace.
 """
 
+import contextlib
+from collections.abc import Iterator
+from contextvars import ContextVar
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -120,6 +123,35 @@ WHERE c.contype = 'f' AND n.nspname = 'public' AND t.relname = %s
 """
 
 
+# (query, table) -> its rows, while `cached_catalog` is active (None: no cache).
+_CATALOG: ContextVar[dict[tuple[str, str], list[Any]] | None] = ContextVar(
+    "row_factory_catalog", default=None
+)
+
+
+@contextlib.contextmanager
+def cached_catalog(cache: dict[tuple[str, str], list[Any]]) -> Iterator[None]:
+    """Inside the block, the column and foreign-key lookups are answered from `cache` (and
+    fill it). Only for databases with one schema: the shared fixtures pass one cache per
+    xdist worker's template, whose clones all have the schema the template has, so the
+    catalog is read once per table and worker instead of once per table and test."""
+    token = _CATALOG.set(cache)
+    try:
+        yield
+    finally:
+        _CATALOG.reset(token)
+
+
+def _catalog(conn: Conn, query: str, table: str) -> list[Any]:
+    cache = _CATALOG.get()
+    if cache is None:
+        return list(conn.execute(query, (table,)))
+    key = (query, table)
+    if key not in cache:
+        cache[key] = list(conn.execute(query, (table,)))
+    return cache[key]
+
+
 def _type_value(table: str, column: str, data_type: str, udt: str) -> Any:
     if data_type == "ARRAY":
         return []
@@ -135,7 +167,7 @@ def _type_value(table: str, column: str, data_type: str, udt: str) -> Any:
 
 
 def _has_workspace(conn: Conn, table: str) -> bool:
-    return any(name == "workspace_id" for name, *_ in conn.execute(_COLUMNS, (table,)))
+    return any(name == "workspace_id" for name, *_ in _catalog(conn, _COLUMNS, table))
 
 
 def _parent(
@@ -162,9 +194,9 @@ def _parent(
 def _build(
     conn: Conn, table: str, workspace_id: UUID | None, seen: frozenset[str]
 ) -> dict[str, Any]:
-    foreign = {col: (ref, ref_col) for col, ref, ref_col in conn.execute(_FOREIGN_KEYS, (table,))}
+    foreign = {col: (ref, ref_col) for col, ref, ref_col in _catalog(conn, _FOREIGN_KEYS, table)}
     row: dict[str, Any] = {}
-    for column, data_type, udt, nullable, default, generated in conn.execute(_COLUMNS, (table,)):
+    for column, data_type, udt, nullable, default, generated in _catalog(conn, _COLUMNS, table):
         if generated:
             continue
         if column == "workspace_id":
