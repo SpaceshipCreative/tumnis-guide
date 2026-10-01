@@ -117,3 +117,59 @@ test("[P1-17][ADR-0008] a failed save keeps the edit, and closing the editor sen
     ]);
   });
 });
+
+test.fails(
+  "[P1-17][ADR-0008] closing the editor during a save that then fails still sends the edit (#143)",
+  async () => {
+    // CodeRabbit on #143: closing the editor while a save was in flight found nothing
+    // pending, and the failed save kept the edit but did not send it again, so it was lost.
+    const note = makeDocument({
+      title: "Moodboard",
+      kind: "text",
+      role: null,
+      body_md: "- Logo\n",
+      version: 1,
+      status: "ready",
+    });
+    const fake = new KnowledgeFake({ documents: [note] });
+    const path = `/v1/knowledge/documents/${note.id}`;
+    let answer: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    server.resetHandlers();
+    server.use(
+      http.patch(
+        path,
+        async () => {
+          await answered;
+          return HttpResponse.json(
+            makeProblem({ status: 500, code: "internal", title: "internal" }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/problem+json" },
+            },
+          );
+        },
+        { once: true },
+      ),
+      ...fake.handlers,
+    );
+
+    const { result, unmount } = renderHook(() => useNoteSave(note));
+    act(() => {
+      result.current.onChange("- Logos\n");
+    });
+    await waitFor(() => {
+      expect(result.current.status).toBe("saving");
+    });
+
+    unmount();
+    answer();
+    await waitFor(() => {
+      expect(fake.sentBodies("PATCH", path)).toEqual([
+        { body_md: "- Logos\n", version: 1 },
+      ]);
+    });
+  },
+);
