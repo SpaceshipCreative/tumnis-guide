@@ -142,7 +142,6 @@ CASES = {
 
 @pytest.mark.req("J7")
 @pytest.mark.wp("P1-18")
-@pytest.mark.xfail(strict=True, reason="spec:P1-18")
 @pytest.mark.parametrize("case", list(CASES))
 def test_sections(case: str) -> None:
     """T-P1-18-01
@@ -156,7 +155,6 @@ def test_sections(case: str) -> None:
 
 @pytest.mark.req("J7", "REL-6")
 @pytest.mark.wp("P1-18")
-@pytest.mark.xfail(strict=True, reason="spec:P1-18")
 def test_day_boundary_uses_workspace_timezone() -> None:
     """T-P1-18-02
     A task done at 23:30 local counts today even though it is already tomorrow in UTC.

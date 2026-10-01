@@ -565,7 +565,72 @@ class DaySummary(BaseModel, frozen=True):
     rolls_over: list[RolloverRef]  # Today tasks not done: rollover_count now and +1 tonight
 
 
+ENRICH_RUN: Final = "enrich"  # P1-08's run kind: a task prepared by its project agent
+_SUCCEEDED: Final = "succeeded"
+
+
+def _ref(task: TaskFacts) -> TaskRef:
+    return TaskRef(
+        task_id=task.task_id, project_id=task.project_id, title=task.title, label=task.label
+    )
+
+
 def day_summary(
     tasks: Sequence[TaskFacts], runs: Sequence[RunFacts], day: date, tz: ZoneInfo
 ) -> DaySummary:
-    raise NotImplementedError  # P1-18
+    """The close-the-day panel for local `day` in `tz` (J7, REL-6): its bounds are local
+    midnight to the next local midnight, so a task done at 23:30 counts today even when it
+    is tomorrow in UTC.
+
+    - shipped: tasks Done within the day, in completion order (only a person moves a task
+      to Done, FR-5.8, so every one was shipped by the human);
+    - agents_finished: AI tasks Done within the day and tasks whose result was posted within
+      it, each once, in the order the work finished (the earlier of the two);
+    - prepared_by_agents: enrichment runs that succeeded within the day;
+    - queued_overnight: empty until unattended windows (P4-04);
+    - rolls_over: tasks still in Today, by title, with their rollover count now and after
+      tonight's day close (+1)."""
+    start = local_to_utc(day, time(0), tz)
+    end = local_to_utc(day + timedelta(days=1), time(0), tz)
+
+    def within(at: datetime | None) -> bool:
+        return at is not None and start <= at < end
+
+    done = sorted(
+        (t for t in tasks if t.status == "done" and within(t.completed_at)),
+        key=lambda t: (t.completed_at, t.title),
+    )
+    finished: dict[UUID, tuple[datetime, TaskFacts]] = {}
+    for task in tasks:
+        times = [
+            at
+            for at, counts in (
+                (task.completed_at, task.status == "done" and task.label == "ai"),
+                (task.result_posted_at, True),
+            )
+            if counts and at is not None and within(at)
+        ]
+        if times:
+            finished[task.task_id] = (min(times), task)
+    prepared = sum(
+        1
+        for run in runs
+        if run.kind == ENRICH_RUN and run.status == _SUCCEEDED and within(run.finished_at)
+    )
+    today = sorted((t for t in tasks if t.status == "today"), key=lambda t: t.title)
+    return DaySummary(
+        shipped=[_ref(t) for t in done],
+        agents_finished=[
+            _ref(t) for _, t in sorted(finished.values(), key=lambda pair: (pair[0], pair[1].title))
+        ],
+        prepared_by_agents=prepared,
+        queued_overnight=[],
+        rolls_over=[
+            RolloverRef(
+                **_ref(t).model_dump(),
+                rollover_count=t.rollover_count,
+                tonight=t.rollover_count + 1,
+            )
+            for t in today
+        ],
+    )
