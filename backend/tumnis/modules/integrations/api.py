@@ -59,6 +59,7 @@ from tumnis.modules.integrations.models import (
 )
 from tumnis.modules.integrations.payloads import ArtifactUpdatedV1
 from tumnis.modules.projects import api as projects
+from tumnis.seed import LinkSeed, register_seed_writer
 
 ConnectorKind = Literal["email", "notes", "chat", "calendar", "code", "deploy", "knowledge"]
 Capability = Literal["poll", "webhook", "read", "write"]
@@ -1326,3 +1327,25 @@ async def purge(s: AsyncSession, body: PurgeIn, *, now: datetime) -> PurgeOut:
     (`project.purged` starts `purge_project_archive`)."""
     await projects.purge_project(s, body.id, body.reason, now=now)
     return PurgeOut(scope=body.scope, id=body.id)
+
+
+# --- Seed writer (the acceptance seed, Scott decision 37) -------------------------------------
+
+
+async def seed_link(workspace_id: UUID, task_id: UUID, rec: LinkSeed) -> UUID:
+    """A seed task's link to a bare URL, as the system actor: outside content, so the link
+    and its task are tainted (P2-08)."""
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    item = await link_context(
+        WorkspaceContext(workspace_id, SYSTEM_ACTOR),
+        owner_type="task",
+        owner_id=task_id,
+        target_type="url",
+        target_url=rec.url,
+        added_by=SYSTEM_ACTOR,
+    )
+    return item.id
+
+
+register_seed_writer("link", seed_link)

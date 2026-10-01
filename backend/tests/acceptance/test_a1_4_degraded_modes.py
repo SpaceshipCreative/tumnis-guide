@@ -114,7 +114,6 @@ async def test_master_offline_falls_back_to_due_date_order(  # noqa: PLR0917
 
 
 @pytest.mark.wp("P1-08")
-@pytest.mark.xfail(strict=True, reason="spec:P1-08")
 async def test_one_project_agent_offline_keeps_others_working(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,
@@ -164,7 +163,6 @@ async def test_one_project_agent_offline_keeps_others_working(  # noqa: PLR0917
 
 
 @pytest.mark.wp("P1-07")
-@pytest.mark.xfail(strict=True, reason="spec:P1-07")
 async def test_jev_and_vllm_down_sends_label_to_review(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,

@@ -1,0 +1,20 @@
+# The acceptance days (wall-clock times in the workspace timezone). Monday is A1.2's day:
+# busy 09:00-10:00, 12:00-13:00 and 15:00-15:30. Tuesday and Wednesday are busy 09:00-10:00,
+# so the first free minute after the 08:30 plan is 10:00 (A2.6: `Write proposal` blocked
+# 10:00 to 10:50).
+schema_version: 1
+day: +0d
+events:
+  - {key: ea_mon_call, title: Client call with Acme, start: "09:00", end: "10:00", busy: true}
+  - {key: ea_mon_lunch, title: Lunch, start: "12:00", end: "13:00", busy: true}
+  - {key: ea_mon_standup, title: Beta standup, start: "15:00", end: "15:30", busy: true}
+---
+schema_version: 1
+day: +1d
+events:
+  - {key: ea_tue_planning, title: Weekly planning, start: "09:00", end: "10:00", busy: true}
+---
+schema_version: 1
+day: +2d
+events:
+  - {key: ea_wed_review, title: Design review, start: "09:00", end: "10:00", busy: true}

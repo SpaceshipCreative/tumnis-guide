@@ -1,0 +1,53 @@
+# The projects and tasks the phase 1 and phase 2 acceptance journeys name (Scott decision
+# 37), dates as offsets from the anchor (the journeys reset with anchor 2026-03-09, a
+# Monday). Titles the runner recordings pick (`title:<task>` in
+# backend/tests/fakes/recordings/runner/plan__*.result.json) are here once each.
+# No task is in Today: A1.6's `Rolls over` lists every Today task, and must hold only the
+# two plan items left open. `Fix footer link` is in the backlog for that reason (A2.1's
+# precondition says Today; its Run button shows for backlog, today and in progress).
+schema_version: 1
+projects:
+  - key: p_acme_site
+    name: Acme site
+    sort_key: b0
+    client: Acme
+    goal: Ship the new site and the phase one invoice
+    deadline: +30d
+    tasks:
+      - {key: t_as_invoice, title: Invoice Acme for phase one, label: human,
+         estimate_minutes: 60, first_action: Open last month's invoice template}
+      - {key: t_as_logos, title: Send logo drafts to Acme, label: hybrid,
+         estimate_minutes: 30, first_action: Export the three drafts as PDF}
+      - {key: t_as_proposal, title: Write Acme proposal, label: human, estimate_minutes: 90,
+         due: +0d, first_action: Outline the three proposal sections}
+      - key: t_as_footer
+        title: Fix footer link
+        label: ai
+        first_action: Open the footer component
+        acceptance_criteria: The footer link opens the right page
+        links:
+          # The client's email about the link: outside content, so tainted (an invented
+          # address).
+          - {key: l_footer_email, url: "https://mail.example.com/acme/threads/footer-link"}
+
+  - key: p_beta_app
+    name: Beta app
+    sort_key: b1
+    client: Beta
+    goal: Open the beta to the first hundred users
+    deadline: +45d
+    tasks:
+      - {key: t_ba_proposal, title: Write proposal, label: human, estimate_minutes: 50,
+         first_action: List the three things Beta asked for}
+
+  - key: p_gamma_ops
+    name: Gamma ops
+    sort_key: b2
+    goal: Run the course and the monthly reports
+    tasks:
+      - {key: t_go_record, title: Record lesson one, label: human, estimate_minutes: 90,
+         first_action: Set up the microphone and the lesson notes}
+      - {key: t_go_guest, title: Book a guest for lesson three, label: human,
+         estimate_minutes: 30, first_action: Email the two guests on the shortlist}
+      - {key: t_go_report, title: Generate March analytics report, label: ai,
+         first_action: Pull the March traffic export}

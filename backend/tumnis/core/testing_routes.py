@@ -11,7 +11,7 @@ fires a registered test tick (R-37, tumnis.core.ticks; P2-15's `focus-wake`)."""
 
 import asyncio
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Annotated, Any, Self
 from uuid import UUID
 
@@ -114,8 +114,13 @@ async def _truncate_once(engine: AsyncEngine) -> list[str]:
     )
 )
 async def reset(
-    request: Request, seed_set: Annotated[SeedSet, Query(alias="set")] = SeedSet.seed
+    request: Request,
+    seed_set: Annotated[SeedSet, Query(alias="set")] = SeedSet.seed,
+    anchor: Annotated[date | None, Query()] = None,
 ) -> Response:
+    """Empties the database and loads `set` (default the seed set) with its dates offset
+    from `anchor` (default today in the workspace timezone): the acceptance journeys anchor
+    on their Monday, 2026-03-09, whatever day the stack runs."""
     settings = request.app.state.settings
     if settings.database_owner_url is None:
         raise HTTPException(status_code=500, detail="reset needs DATABASE_OWNER_URL")
@@ -140,6 +145,7 @@ async def reset(
                 await load_seed(
                     SEED_PATHS[seed_set],
                     _ResetSink(lambda: _refuse_if_superseded(state, generation)),
+                    anchor=anchor,
                     clock=state.clock,
                 )
     except ResetSupersededError:
