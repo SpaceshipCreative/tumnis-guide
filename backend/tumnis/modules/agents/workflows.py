@@ -1959,6 +1959,9 @@ async def start_enrichment(
     await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
 
 
+api.register_enrichment_starter(start_enrichment)
+
+
 # --- profile_health_sweep ---------------------------------------------------------------------
 
 

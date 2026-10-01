@@ -252,6 +252,11 @@ def _eligible(plan: Sequence[PlanItemLite], tasks: Mapping[UUID, TaskLite]) -> l
     )
 
 
+def guardrail_tasks(plan: Sequence[PlanItemLite], tasks: Mapping[UUID, TaskLite]) -> list[UUID]:
+    """The tasks still to do in today's plan, in order: what "N more today" counts."""
+    return [item.task_id for item in _eligible(plan, tasks)]
+
+
 def current_guardrail_task(
     plan: Sequence[PlanItemLite], tasks: Mapping[UUID, TaskLite]
 ) -> UUID | None:

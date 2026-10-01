@@ -225,6 +225,32 @@ export const zDefaultIn = z.object({
 });
 
 /**
+ * DetourIn
+ *
+ * Something not in Today the person switched to, captured as a task (P4-01). The
+ * person picks the project (only agents skip it, J2).
+ */
+export const zDetourIn = z.object({
+  project_id: z.uuid(),
+  title: z.string().min(1).max(200),
+});
+
+/**
+ * DetourOut
+ *
+ * A captured detour whose return question is still open (P4-01, FR-10.6).
+ */
+export const zDetourOut = z.object({
+  detour_task_id: z.uuid(),
+  detour_title: z.string(),
+  event_id: z.uuid(),
+  message: z.string(),
+  return_to_task_id: z.uuid().nullable(),
+  return_to_title: z.string().nullable(),
+  rule: z.string(),
+});
+
+/**
  * DigestEntryOut
  */
 export const zDigestEntryOut = z.object({
@@ -361,20 +387,6 @@ export const zFocusSessionOut = z.object({
 });
 
 /**
- * FocusCurrentOut
- *
- * What the focus bar shows: the level in force, the open session and today's
- * messages, oldest first.
- */
-export const zFocusCurrentOut = z.object({
-  level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
-  messages: z.array(zFocusMessageOut),
-  override_level: z.enum(["quiet", "nudge", "coach", "guardrail"]).nullable(),
-  session: zFocusSessionOut.nullable(),
-  workspace_level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
-});
-
-/**
  * FolderIn
  */
 export const zFolderIn = z.object({
@@ -400,6 +412,35 @@ export const zFreeBlockOut = z.object({
   end: z.iso.datetime(),
   minutes: z.int(),
   start: z.iso.datetime(),
+});
+
+/**
+ * GuardrailOut
+ *
+ * The one-task dashboard at Guardrail (P4-01, FR-10.6): the task it shows, the one it
+ * prepares next, and how many other tasks of today's plan are still to do.
+ */
+export const zGuardrailOut = z.object({
+  current_task_id: z.uuid().nullable(),
+  next_task_id: z.uuid().nullable(),
+  remaining: z.int(),
+});
+
+/**
+ * FocusCurrentOut
+ *
+ * What the focus bar shows: the level in force, the open session and today's
+ * messages, oldest first; at Guardrail also the one-task card's tasks, and an open
+ * detour's return question (P4-01).
+ */
+export const zFocusCurrentOut = z.object({
+  detour: zDetourOut.nullable(),
+  guardrail: zGuardrailOut.nullable(),
+  level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
+  messages: z.array(zFocusMessageOut),
+  override_level: z.enum(["quiet", "nudge", "coach", "guardrail"]).nullable(),
+  session: zFocusSessionOut.nullable(),
+  workspace_level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
 });
 
 /**
@@ -1260,6 +1301,7 @@ export const zRequestApprovalBody = z.object({
  * RespondIn
  */
 export const zRespondIn = z.object({
+  detour: zDetourIn.nullish(),
   event_id: z.uuid(),
   response: z.enum([
     "still_on_it",
@@ -1329,6 +1371,17 @@ export const zResumeOut = z.object({
   pause_id: z.uuid().nullable(),
   released_runs: z.int(),
   schema_version: z.literal(1).optional().default(1),
+});
+
+/**
+ * ReturnIn
+ *
+ * The answer to an open detour's return question (P4-01). `version` is the detour
+ * task's: Return moves it back to Backlog.
+ */
+export const zReturnIn = z.object({
+  decision: z.enum(["return", "stay"]),
+  version: z.int(),
 });
 
 /**
@@ -2741,6 +2794,13 @@ export const zFocusRespondBody = zRespondIn;
  * Successful Response
  */
 export const zFocusRespondResponse = zFocusCurrentOut;
+
+export const zFocusReturnDetourBody = zReturnIn;
+
+/**
+ * Successful Response
+ */
+export const zFocusReturnDetourResponse = zFocusCurrentOut;
 
 export const zGithubWebhookPath = z.object({
   workspace_id: z.uuid(),
