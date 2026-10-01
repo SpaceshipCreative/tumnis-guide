@@ -1759,7 +1759,13 @@ async def _hold_queued(s: AsyncSession, scope: str, project_id: UUID | None) -> 
     held = list(
         await s.scalars(
             update(_runs)
-            .where(_runs.c.id.in_(queued.scalar_subquery()))
+            # The status again on the target row: under READ COMMITTED a run that
+            # prepare_run flipped to running while this waited on its lock is rechecked
+            # here, and the subquery's snapshot would not exclude it.
+            .where(
+                _runs.c.id.in_(queued.scalar_subquery()),
+                _runs.c.status == RunStatus.QUEUED.value,
+            )
             .values(status=RunStatus.HELD.value, state_seq=_runs.c.state_seq + 1)
             .returning(_runs.c.id)
         )
