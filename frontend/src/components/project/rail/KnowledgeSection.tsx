@@ -180,12 +180,14 @@ function ItemRow({
   onOpen,
   onPin,
   onTrash,
+  onSaved,
 }: {
   doc: DocumentDto;
   open: boolean;
   onOpen: () => void;
   onPin: () => void;
   onTrash: () => void;
+  onSaved: (saved: DocumentDto) => void;
 }) {
   const canEdit = doc.kind === "text" && doc.status === "ready";
   return (
@@ -233,10 +235,13 @@ function ItemRow({
         </button>
       </div>
       {open && canEdit && (
+        // Keyed by id only: a save's new version must not remount it while typing
+        // (useNoteSave keeps the version it last saved).
         <LazyEditor
-          key={`${doc.id}:${String(doc.version)}`}
+          key={doc.id}
           document={doc}
           projectId={doc.project_id}
+          onSaved={onSaved}
         />
       )}
     </li>
@@ -326,6 +331,19 @@ export function KnowledgeSection({
               key={doc.id}
               doc={doc}
               open={editing === doc.id}
+              onSaved={(saved) => {
+                // The list keeps the saved text and version, for reopening and Pin.
+                client.setQueryData(
+                  knowledgeListDocumentsOptions(listArgs).queryKey,
+                  (old) =>
+                    old && {
+                      ...old,
+                      items: old.items.map((d) =>
+                        d.id === saved.id ? saved : d,
+                      ),
+                    },
+                );
+              }}
               onOpen={() => {
                 setEditing((current) => (current === doc.id ? null : doc.id));
               }}

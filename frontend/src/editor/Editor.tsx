@@ -170,6 +170,7 @@ function RichField({
 }: MarkdownFieldProps) {
   const [menu, setMenu] = useState<SuggestOpen | null>(null);
   const [active, setActive] = useState(0);
+  const [taskFailed, setTaskFailed] = useState(false);
   const menuRef = useRef<{ menu: SuggestOpen | null; active: number }>({
     menu: null,
     active: 0,
@@ -221,7 +222,10 @@ function RichField({
         ...(projectId
           ? {
               makeTask: (e: TiptapEditor) => {
-                void makeTask(e, { projectId });
+                setTaskFailed(false);
+                makeTask(e, { projectId }).catch(() => {
+                  setTaskFailed(true);
+                });
               },
             }
           : {}),
@@ -260,6 +264,11 @@ function RichField({
     <div className="flex flex-col gap-1">
       <EditorContent editor={editor} />
       {menu && <SuggestMenu menu={menu} active={active} />}
+      {taskFailed && (
+        <p role="alert" className="text-sm text-danger">
+          Could not make the task. Try again.
+        </p>
+      )}
     </div>
   );
 }

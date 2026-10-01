@@ -312,7 +312,7 @@ function TaskDetails({
       </div>
       <RecurrencePicker task={task} />
       <PullRequests taskId={task.id} />
-      <PacketToggle taskId={task.id} />
+      <PacketToggle key={task.id} taskId={task.id} />
       <CommentList taskId={task.id} />
     </div>
   );

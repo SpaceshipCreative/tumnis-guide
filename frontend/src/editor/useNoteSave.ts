@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DocumentDto } from "../api/types.gen";
 import { zDocumentDto } from "../api/zod.gen";
 import { apiWrite, ConflictError } from "../lib/fetch";
-import { roundTrip } from "./markdown";
+import { editorMode, roundTrip } from "./markdown";
 
 export const SAVE_DEBOUNCE_MS = 400;
 
@@ -27,7 +27,9 @@ export function useNoteSave(
   const loaded = doc.body_md ?? "";
   // What the note already is, as far as a save is concerned.
   const saved = useRef<string | null>(null);
-  saved.current ??= roundTrip(loaded);
+  // A rich note's baseline is its canonical form (opening never rewrites it); a note
+  // shown as source is compared with its text as stored.
+  saved.current ??= editorMode(loaded) === "rich" ? roundTrip(loaded) : loaded;
   const raw = useRef(loaded);
   const version = useRef(doc.version);
   const pending = useRef<string | null>(null);
