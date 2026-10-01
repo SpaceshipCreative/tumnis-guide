@@ -23,9 +23,13 @@ export default mergeConfig(
       // setup.ts's afterEach waits up to asyncUtilTimeout (15 s) for route loads to finish,
       // so hooks get more than the 10 s default.
       hookTimeout: 30_000,
-      // Vitest's default is one worker fewer than the CPUs, so a single worker on CI's
-      // 2-vCPU runner, and every file then sets up jsdom in turn. Two workers keep the
-      // frontend suite inside the 3-minute unit budget; bigger machines keep the default.
+      // Worker threads instead of the default child processes: each test file still gets
+      // its own worker and jsdom (per-file isolation stays), but a thread starts and
+      // loads jsdom faster than a process. About 30% less time on a 4-CPU machine
+      // (Vitest guide, "Improving Performance": pool threads).
+      pool: "threads",
+      // Vitest's default is one worker fewer than the CPUs, which is a single worker on a
+      // 2-vCPU machine, where every file then sets up jsdom in turn; keep at least two.
       maxWorkers: Math.max(2, availableParallelism() - 1),
       coverage: {
         provider: "v8",
