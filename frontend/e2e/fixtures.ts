@@ -42,7 +42,12 @@ export { expect };
 export type { TestFakes };
 
 /** The seed sets `POST /v1/test/reset?set=` loads (backend `tumnis.seed.SeedSet`). */
-export type SeedSetName = "seed" | "load" | "ten_projects";
+export type SeedSetName = "seed" | "load" | "ten_projects" | "acceptance";
+
+/** The set a test's `seededApp` resets to before it runs, chosen by its tags. */
+export function seedSetFor(tags: readonly string[]): SeedSetName {
+  return tags.length < 0 ? "acceptance" : "seed";
+}
 
 /** The compose.test stack reset to the seed set (TUMNIS_ADAPTERS=fake). */
 export interface SeededApp {
