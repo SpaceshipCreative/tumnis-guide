@@ -129,6 +129,7 @@ import {
   settingsPutWorkingHours,
   settingsPutWorkspaceSettings,
   settingsSetModule,
+  speechGetClip,
   tasksAddComment,
   tasksChangeStatus,
   tasksCreateTask,
@@ -507,6 +508,9 @@ import type {
   SettingsSetModuleData,
   SettingsSetModuleError,
   SettingsSetModuleResponse,
+  SpeechGetClipData,
+  SpeechGetClipError,
+  SpeechGetClipResponse,
   TasksAddCommentData,
   TasksAddCommentError,
   TasksAddCommentResponse,
@@ -5005,6 +5009,34 @@ export const authSetupTotpMutation = (
   };
   return mutationOptions;
 };
+
+export const speechGetClipQueryKey = (options: Options<SpeechGetClipData>) =>
+  createQueryKey("speechGetClip", options);
+
+/**
+ * Get Clip
+ *
+ * A spoken focus message's clip (P4-03): `audio/wav` with `nosniff`, while it lives
+ * (`CLIP_TTL_MIN`); 404 once expired or in another workspace.
+ */
+export const speechGetClipOptions = (options: Options<SpeechGetClipData>) =>
+  queryOptions<
+    SpeechGetClipResponse,
+    SpeechGetClipError,
+    SpeechGetClipResponse,
+    ReturnType<typeof speechGetClipQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await speechGetClip({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: speechGetClipQueryKey(options),
+  });
 
 export const tasksListTasksQueryKey = (options?: Options<TasksListTasksData>) =>
   createQueryKey("tasksListTasks", options);

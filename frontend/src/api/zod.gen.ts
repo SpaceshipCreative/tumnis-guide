@@ -377,6 +377,7 @@ export const zFitOffer = z.object({
  * FocusMessageOut
  */
 export const zFocusMessageOut = z.object({
+  clip_id: z.uuid().nullable(),
   fired_at: z.iso.datetime(),
   id: z.uuid(),
   kind: z.enum([
@@ -394,6 +395,7 @@ export const zFocusMessageOut = z.object({
     .enum(["still_on_it", "switched", "stuck", "snooze", "less_of_this"])
     .nullable(),
   rule: z.string(),
+  speak: z.boolean(),
   task_id: z.uuid().nullable(),
 });
 
@@ -3700,6 +3702,15 @@ export const zAuthSetupTotpBody = zSetupTotpIn;
  * Successful Response
  */
 export const zAuthSetupTotpResponse = zSignedInOut;
+
+export const zSpeechGetClipPath = z.object({
+  speech_clip_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zSpeechGetClipResponse = z.instanceof(Blob);
 
 export const zTasksListTasksQuery = z.object({
   project_id: z.uuid().nullish(),
