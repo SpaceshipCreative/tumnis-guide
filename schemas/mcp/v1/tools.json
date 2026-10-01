@@ -720,7 +720,7 @@
     "write": false
   },
   {
-    "description": "The task's packet as a run would get it: the task, its project's brief and passages, context items (with context:read), the policy and the callback (no token), with outside text inside untrusted-data blocks. `kind` is task (default), proposal or stuck.",
+    "description": "The task's packet as a run would get it: the task, its project's brief and passages, context items (with context:read), the policy and the callback (no token), with outside text inside untrusted-data blocks. `kind` is task (default), proposal or stuck; enrich answers the enrichment request's packet with the brief and passages (nothing is dispatched).",
     "input_schema": {
       "properties": {
         "kind": {
@@ -728,7 +728,8 @@
           "enum": [
             "task",
             "proposal",
-            "stuck"
+            "stuck",
+            "enrich"
           ],
           "title": "Kind",
           "type": "string"

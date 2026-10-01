@@ -152,7 +152,11 @@ def _allowed_methods(request: Request) -> str | None:
 async def http_exception_handler(request: Request, exc: Exception) -> Response:
     assert isinstance(exc, StarletteHTTPException)  # noqa: S101
     headers = dict(exc.headers or {})
-    if exc.status_code == HTTPStatus.METHOD_NOT_ALLOWED and (allow := _allowed_methods(request)):
+    if (
+        exc.status_code == HTTPStatus.METHOD_NOT_ALLOWED
+        and "Allow" not in headers  # a route that answers 405 itself knows its Allow
+        and (allow := _allowed_methods(request))
+    ):
         headers["Allow"] = allow
     return problem_response(_from_http(exc.status_code, exc.detail), headers)
 

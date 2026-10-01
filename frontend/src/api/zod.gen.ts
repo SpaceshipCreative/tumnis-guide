@@ -197,28 +197,16 @@ export const zDefaultIn = z.object({
  */
 export const zDocumentDto = z.object({
   body_md: z.string().nullable(),
-  id: z.uuid(),
-  kind: z.string(),
-  pinned: z.boolean(),
-  project_id: z.uuid().nullable(),
-  role: z.string().nullable(),
-  tainted: z.boolean(),
-  title: z.string(),
-  trust: z.enum(["trusted", "untrusted"]),
-  version: z.int(),
-});
-
-/**
- * DocumentStatusOut
- *
- * A document's state as the upload flow polls it (P1-17 owns the full read).
- */
-export const zDocumentStatusOut = z.object({
   current_version_id: z.uuid().nullable(),
   id: z.uuid(),
   kind: z.string(),
+  label: z.literal("agent").nullable(),
   path: z.string().nullable(),
+  pinned: z.boolean(),
   project_id: z.uuid().nullable(),
+  provider_url: z.string().nullable(),
+  role: z.string().nullable(),
+  source: z.string().nullable(),
   status: z.enum([
     "pending_scan",
     "extracting",
@@ -227,10 +215,23 @@ export const zDocumentStatusOut = z.object({
     "failed",
   ]),
   status_reason: z.string().nullable(),
+  tags: z.array(z.string()),
   tainted: z.boolean(),
   title: z.string(),
   trust: z.enum(["trusted", "untrusted"]),
   version: z.int(),
+});
+
+/**
+ * DocumentVersionOut
+ */
+export const zDocumentVersionOut = z.object({
+  body_md: z.string().nullable(),
+  content_hash: z.string(),
+  document_id: z.uuid(),
+  id: z.uuid(),
+  size: z.int(),
+  version_no: z.int(),
 });
 
 /**
@@ -334,6 +335,26 @@ export const zKeyOut = z.object({
 });
 
 /**
+ * KnowledgeHit
+ *
+ * One chunk found by `search_knowledge`, citing its document, heading path and page.
+ */
+export const zKnowledgeHit = z.object({
+  chunk_id: z.uuid(),
+  document_id: z.uuid(),
+  document_title: z.string(),
+  heading_path: z.array(z.string()),
+  page: z.int().nullable(),
+  page_to: z.int().nullable(),
+  project_id: z.uuid().nullable(),
+  rank: z.number(),
+  snippet: z.string(),
+  tainted: z.boolean(),
+  text: z.string(),
+  trust: z.enum(["trusted", "untrusted"]),
+});
+
+/**
  * Label
  */
 export const zLabel = z.enum(["human", "ai", "hybrid"]);
@@ -346,6 +367,15 @@ export const zLastDeployOut = z.object({
   created_at: z.iso.datetime(),
   finished_at: z.iso.datetime().nullable(),
   status: z.string(),
+});
+
+/**
+ * LinkIn
+ */
+export const zLinkIn = z.object({
+  project_id: z.uuid().nullish(),
+  title: z.string().min(1).max(300).nullish(),
+  url: z.url().min(1),
 });
 
 /**
@@ -480,6 +510,14 @@ export const zPageCommentOut = z.object({
  */
 export const zPageDeadLetterOut = z.object({
   items: z.array(zDeadLetterOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * Page[DocumentDTO]
+ */
+export const zPageDocumentDto = z.object({
+  items: z.array(zDocumentDto),
   next_cursor: z.string().nullable(),
 });
 
@@ -789,6 +827,21 @@ export const zPurgeOut = z.object({
   id: z.uuid(),
   scope: z.literal("project"),
   status: z.literal("accepted").optional().default("accepted"),
+});
+
+/**
+ * Quota
+ *
+ * Bytes the workspace's knowledge uses (current file versions plus text entries,
+ * trash included until it is purged) against its quota; `count` and `project_bytes` are
+ * the asked scope's (a project, or the workspace knowledge base).
+ */
+export const zQuota = z.object({
+  count: z.int(),
+  project_bytes: z.int(),
+  project_id: z.uuid().nullable(),
+  quota_bytes: z.int(),
+  used_bytes: z.int(),
 });
 
 /**
@@ -1533,10 +1586,24 @@ export const zTaskWithLayoutOut = z.object({
 
 /**
  * TextDocumentPatch
+ *
+ * A document edit (P0-24's body, P1-17's title, tags and pin); at least one field.
  */
 export const zTextDocumentPatch = z.object({
-  body_md: z.string().max(100000),
+  body_md: z.string().max(100000).nullish(),
+  pinned: z.boolean().nullish(),
+  tags: z.array(z.string()).max(20).nullish(),
+  title: z.string().min(1).max(300).nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * TextEntryIn
+ */
+export const zTextEntryIn = z.object({
+  body_md: z.string().max(100000).optional().default(""),
+  project_id: z.uuid().nullish(),
+  title: z.string().min(1).max(300),
 });
 
 /**
@@ -1744,6 +1811,13 @@ export const zTotpIn = z.object({
  */
 export const zTrashIn = z.object({
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * TrustIn
+ */
+export const zTrustIn = z.object({
+  trusted: z.boolean(),
 });
 
 /**
@@ -2191,6 +2265,17 @@ export const zAuthRotateKeyPath = z.object({
  */
 export const zAuthRotateKeyResponse = zKeyCreated;
 
+export const zKnowledgeListDocumentsQuery = z.object({
+  project_id: z.uuid().nullish(),
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeListDocumentsResponse = zPageDocumentDto;
+
 export const zKnowledgeUploadDocumentBody = z.object({
   file: z.instanceof(Blob),
   project_id: z.uuid().optional(),
@@ -2202,6 +2287,29 @@ export const zKnowledgeUploadDocumentBody = z.object({
  */
 export const zKnowledgeUploadDocumentResponse = zUploadAccepted;
 
+export const zKnowledgeAddLinkBody = zLinkIn;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeAddLinkResponse = zDocumentDto;
+
+export const zKnowledgeCreateTextEntryBody = zTextEntryIn;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeCreateTextEntryResponse = zDocumentDto;
+
+export const zKnowledgeTrashDocumentPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeTrashDocumentResponse = z.void();
+
 export const zKnowledgeGetDocumentPath = z.object({
   document_id: z.uuid(),
 });
@@ -2209,7 +2317,7 @@ export const zKnowledgeGetDocumentPath = z.object({
 /**
  * Successful Response
  */
-export const zKnowledgeGetDocumentResponse = zDocumentStatusOut;
+export const zKnowledgeGetDocumentResponse = zDocumentDto;
 
 export const zKnowledgeUpdateDocumentBody = zTextDocumentPatch;
 
@@ -2221,6 +2329,37 @@ export const zKnowledgeUpdateDocumentPath = z.object({
  * Successful Response
  */
 export const zKnowledgeUpdateDocumentResponse = zDocumentDto;
+
+export const zKnowledgeRestoreDocumentPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeRestoreDocumentResponse = zDocumentDto;
+
+export const zKnowledgeSetTrustBody = zTrustIn;
+
+export const zKnowledgeSetTrustPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeSetTrustResponse = zDocumentDto;
+
+export const zKnowledgeListVersionsPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Response Knowledge List Versions
+ *
+ * Successful Response
+ */
+export const zKnowledgeListVersionsResponse = z.array(zDocumentVersionOut);
 
 /**
  * Response Knowledge List Locations
@@ -2266,6 +2405,28 @@ export const zKnowledgeSetProjectFolderPath = z.object({
  * Successful Response
  */
 export const zKnowledgeSetProjectFolderResponse = zProjectFolderOut;
+
+export const zKnowledgeGetQuotaQuery = z.object({
+  project_id: z.uuid().nullish(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeGetQuotaResponse = zQuota;
+
+export const zKnowledgeSearchQuery = z.object({
+  q: z.string().min(1).max(500),
+  project_id: z.uuid().nullish(),
+  limit: z.int().gte(1).lte(50).optional().default(10),
+});
+
+/**
+ * Response Knowledge Search
+ *
+ * Successful Response
+ */
+export const zKnowledgeSearchResponse = z.array(zKnowledgeHit);
 
 export const zPlanningGetProjectWeekPath = z.object({
   monday: z.iso.date(),
@@ -2746,7 +2907,10 @@ export const zAgentsGetTaskPacketPath = z.object({
 
 export const zAgentsGetTaskPacketQuery = z.object({
   schema_version: z.int().nullish(),
-  kind: z.enum(["task", "proposal", "stuck"]).optional().default("task"),
+  kind: z
+    .enum(["task", "proposal", "stuck", "enrich"])
+    .optional()
+    .default("task"),
 });
 
 /**

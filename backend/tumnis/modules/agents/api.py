@@ -43,7 +43,7 @@ from tumnis.modules.agents.models import (
     RunnerMessage,
     RunRow,
 )
-from tumnis.modules.agents.packet_builder import TaskPacket
+from tumnis.modules.agents.packet_builder import ENRICH_TIMEOUT_S_DEFAULT, TaskPacket
 from tumnis.modules.agents.payloads import (
     RunFinishedV1,
     RunRequestedV1,
@@ -1571,7 +1571,6 @@ async def accept_result(
 # --- Enrichment (P1-08, R-30) ----------------------------------------------------------------
 
 LABEL_WAIT_S_DEFAULT: Final = 10.0  # how long the enrichment waits for a label (plan default)
-ENRICH_TIMEOUT_S_DEFAULT: Final = 120  # the enrich run's timeout (plan default)
 MIN_RUN_TIMEOUT_S: Final = 10  # TaskPacket.timeout_s's lower bound
 
 
