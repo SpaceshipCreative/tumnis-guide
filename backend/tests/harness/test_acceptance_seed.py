@@ -29,7 +29,6 @@ if TYPE_CHECKING:
 pytestmark = [
     pytest.mark.req("A1.4", "A1.6", "A2.1", "A2.6"),
     pytest.mark.wp("SEED"),
-    pytest.mark.xfail(strict=True, reason="spec:SEED"),
 ]
 
 ANCHOR = date(2026, 3, 9)  # Monday, the journeys' day

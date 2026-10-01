@@ -49,7 +49,7 @@ async def test_acceptance_set_writes_runner_agents_keys_and_link(
     from tumnis.seed import SEED_PATHS, SeedSet  # noqa: PLC0415
 
     del master_key_file, pepper_file  # the user's TOTP secret and the keys need them
-    result = await _load_set(SEED_PATHS[SeedSet("acceptance")], db, clock)  # type: ignore[arg-type]
+    result = await _load_set(SEED_PATHS[SeedSet("acceptance")], db, clock)
 
     assert result.counts["agent"] == 4
     assert [r["name"] for r in _rows(db, "SELECT name FROM runners")] == ["homelab-hermes"]

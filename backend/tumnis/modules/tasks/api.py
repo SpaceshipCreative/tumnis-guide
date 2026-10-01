@@ -2008,6 +2008,7 @@ async def seed_task(
             _label(rec.label), rec.estimate_minutes or None, ActorKind.SYSTEM
         ),
         "first_action": rec.first_action,
+        "acceptance_criteria": rec.acceptance_criteria,
         "completed_at": rec.completed_at,
     }
     async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
