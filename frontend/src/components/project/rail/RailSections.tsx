@@ -1,6 +1,7 @@
 // The Context sections (P0-24, FR-2.7), shared by the laptop rail and the phone sheet;
-// one opens at a time. Agent (P2-17) shows the project's profile, health and tools, and
-// holds the project's agent pause (P2-09, SAF-4).
+// one opens at a time. Knowledge (P1-17) lists and edits the project's documents; Agent
+// (P2-17) shows the project's profile, health and tools, and holds the project's agent
+// pause (P2-09, SAF-4).
 import { useState } from "react";
 
 import { PauseControl } from "../../dashboard/KillSwitch";
@@ -8,10 +9,12 @@ import { AgentRail } from "../AgentRail";
 import type { Project } from "../types";
 import { BriefSection } from "./BriefSection";
 import { ConnectionsSection } from "./ConnectionsSection";
+import { KnowledgeSection } from "./KnowledgeSection";
 import { ScheduleSection } from "./ScheduleSection";
 import { SettingsSection } from "./SettingsSection";
 
-type Section = "brief" | "connections" | "schedule" | "agent" | "settings";
+type Section =
+  "brief" | "knowledge" | "connections" | "schedule" | "agent" | "settings";
 
 export function RailSections({
   project,
@@ -30,6 +33,11 @@ export function RailSections({
         projectId={project.id}
         open={open === "brief"}
         onToggle={toggle("brief")}
+      />
+      <KnowledgeSection
+        projectId={project.id}
+        open={open === "knowledge"}
+        onToggle={toggle("knowledge")}
       />
       <ConnectionsSection
         project={project}

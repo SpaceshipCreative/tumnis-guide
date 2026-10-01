@@ -7,7 +7,11 @@ import { afterAll, afterEach, beforeAll, beforeEach } from "vitest";
 import { configureClient } from "../lib/client";
 import { resetIdb } from "./idb";
 import { server } from "./msw/server";
+import { useNodeFileClasses } from "./nodeFile";
 import { settleRouters } from "./routers";
+
+// File uploads in the jsdom environment (nodeFile.ts); before MSW wraps Request.
+await useNodeFileClasses();
 
 // The generated client, as main.tsx configures it (absolute URLs on jsdom's origin).
 configureClient();
