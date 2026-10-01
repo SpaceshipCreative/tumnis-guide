@@ -18,6 +18,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   // A flaky test is a broken test (operating rule 12).
   retries: 0,
+  // A stalled stack fails the run before CI's e2e job budget (10 minutes, about 1.5 of
+  // them setup) cancels it, so the failure steps still upload the stack logs (SEED).
+  globalTimeout: process.env.CI ? 7 * 60_000 : 0,
   reporter: [["list"], ["junit", { outputFile: "test-results/junit.xml" }]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8080",
