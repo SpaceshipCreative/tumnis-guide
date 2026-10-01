@@ -917,6 +917,27 @@ export type DocumentDto = {
 };
 
 /**
+ * DocumentResultLink
+ *
+ * A document: a web address or a citation of a knowledge-base document and page,
+ * `tumnis://doc/<id>#page=<n>` (P2-17, FR-15.4).
+ */
+export type DocumentResultLink = {
+  /**
+   * Kind
+   */
+  kind: "document";
+  /**
+   * Label
+   */
+  label?: string | null;
+  /**
+   * Url
+   */
+  url: string;
+};
+
+/**
  * DocumentVersionOut
  */
 export type DocumentVersionOut = {
@@ -3263,21 +3284,19 @@ export type RespondIn = {
 
 /**
  * ResultLink
+ *
+ * A link a result names. Only a `document` link may be a `tumnis://` citation: the
+ * rule is the schema's (one variant per kind), so OpenAPI, the tools' JSON Schema and
+ * anything generated from them (zod, test factories) hold it too. Built like a model,
+ * `ResultLink(kind=..., url=...)`; `kind`, `url` and `label` read through.
  */
-export type ResultLink = {
-  /**
-   * Kind
-   */
-  kind: "branch" | "pull_request" | "document" | "draft" | "url";
-  /**
-   * Label
-   */
-  label?: string | null;
-  /**
-   * Url
-   */
-  url: string;
-};
+export type ResultLink =
+  | ({
+      kind: "branch" | "draft" | "pull_request" | "url";
+    } & WebResultLink)
+  | ({
+      kind: "document";
+    } & DocumentResultLink);
 
 /**
  * ResultOut
@@ -4904,6 +4923,26 @@ export type UsageRow = {
    * Value
    */
   value: number;
+};
+
+/**
+ * WebResultLink
+ *
+ * A branch, pull request, draft or other web address: always `http(s)://`.
+ */
+export type WebResultLink = {
+  /**
+   * Kind
+   */
+  kind: "branch" | "pull_request" | "draft" | "url";
+  /**
+   * Label
+   */
+  label?: string | null;
+  /**
+   * Url
+   */
+  url: string;
 };
 
 /**

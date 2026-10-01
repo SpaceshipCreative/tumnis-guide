@@ -1674,7 +1674,7 @@ async def _cite(s: AsyncSession, task_id: UUID, fields: ResultFields) -> ResultF
         label = link.label
         if label is None:
             label = title if page is None else f"{title}, page {page}"
-        links.append(link.model_copy(update={"label": label[:LABEL_MAX]}))
+        links.append(link.labelled(label[:LABEL_MAX]))
     return fields.model_copy(update={"links": links})
 
 

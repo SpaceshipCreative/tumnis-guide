@@ -262,6 +262,23 @@ export const zDocumentDto = z.object({
 });
 
 /**
+ * DocumentResultLink
+ *
+ * A document: a web address or a citation of a knowledge-base document and page,
+ * `tumnis://doc/<id>#page=<n>` (P2-17, FR-15.4).
+ */
+export const zDocumentResultLink = z.object({
+  kind: z.literal("document"),
+  label: z.string().max(200).nullish(),
+  url: z
+    .string()
+    .max(2048)
+    .regex(
+      /^(https?:\/\/\S+|tumnis:\/\/doc\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:#page=([1-9][0-9]{0,5}))?)$/,
+    ),
+});
+
+/**
  * DocumentVersionOut
  */
 export const zDocumentVersionOut = z.object({
@@ -1195,50 +1212,6 @@ export const zRespondIn = z.object({
     "less_of_this",
   ]),
   to_task_id: z.uuid().nullish(),
-});
-
-/**
- * ResultLink
- */
-export const zResultLink = z.object({
-  kind: z.enum(["branch", "pull_request", "document", "draft", "url"]),
-  label: z.string().max(200).nullish(),
-  url: z
-    .string()
-    .max(2048)
-    .regex(
-      /^(https?:\/\/\S+|tumnis:\/\/doc\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:#page=([1-9][0-9]{0,5}))?)$/,
-    ),
-});
-
-/**
- * PostResultBody
- *
- * The REST twin's body (the run is in the path).
- */
-export const zPostResultBody = z.object({
-  files_touched: z.array(zFileTouched).max(500).optional().default([]),
-  links: z.array(zResultLink).max(50).optional().default([]),
-  outcome: z.enum(["done", "partial", "blocked"]),
-  schema_version: z.int().nullish(),
-  summary: z.string().min(1).max(20000),
-  tests_summary: z.string().max(20000).nullish(),
-});
-
-/**
- * ResultOut
- */
-export const zResultOut = z.object({
-  created_at: z.iso.datetime(),
-  files_touched: z.array(zFileTouched).max(500).optional().default([]),
-  id: z.uuid(),
-  links: z.array(zResultLink).max(50).optional().default([]),
-  outcome: z.enum(["done", "partial", "blocked"]),
-  run_id: z.uuid(),
-  summary: z.string().min(1).max(20000),
-  tainted: z.boolean().optional().default(false),
-  task_id: z.uuid(),
-  tests_summary: z.string().max(20000).nullish(),
 });
 
 /**
@@ -2265,6 +2238,66 @@ export const zUsageRow = z.object({
   counter: z.string(),
   day: z.iso.date(),
   value: z.int(),
+});
+
+/**
+ * WebResultLink
+ *
+ * A branch, pull request, draft or other web address: always `http(s)://`.
+ */
+export const zWebResultLink = z.object({
+  kind: z.enum(["branch", "pull_request", "draft", "url"]),
+  label: z.string().max(200).nullish(),
+  url: z
+    .string()
+    .max(2048)
+    .regex(/^https?:\/\/\S+$/),
+});
+
+/**
+ * ResultLink
+ *
+ * A link a result names. Only a `document` link may be a `tumnis://` citation: the
+ * rule is the schema's (one variant per kind), so OpenAPI, the tools' JSON Schema and
+ * anything generated from them (zod, test factories) hold it too. Built like a model,
+ * `ResultLink(kind=..., url=...)`; `kind`, `url` and `label` read through.
+ */
+export const zResultLink = z.discriminatedUnion("kind", [
+  zWebResultLink.extend({ kind: z.literal("branch") }),
+  zWebResultLink.extend({ kind: z.literal("draft") }),
+  zWebResultLink.extend({ kind: z.literal("pull_request") }),
+  zWebResultLink.extend({ kind: z.literal("url") }),
+  zDocumentResultLink,
+]);
+
+/**
+ * PostResultBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export const zPostResultBody = z.object({
+  files_touched: z.array(zFileTouched).max(500).optional().default([]),
+  links: z.array(zResultLink).max(50).optional().default([]),
+  outcome: z.enum(["done", "partial", "blocked"]),
+  schema_version: z.int().nullish(),
+  summary: z.string().min(1).max(20000),
+  tests_summary: z.string().max(20000).nullish(),
+});
+
+/**
+ * ResultOut
+ */
+export const zResultOut = z.object({
+  created_at: z.iso.datetime(),
+  files_touched: z.array(zFileTouched).max(500).optional().default([]),
+  id: z.uuid(),
+  links: z.array(zResultLink).max(50).optional().default([]),
+  outcome: z.enum(["done", "partial", "blocked"]),
+  run_id: z.uuid(),
+  summary: z.string().min(1).max(20000),
+  tainted: z.boolean().optional().default(false),
+  task_id: z.uuid(),
+  tests_summary: z.string().max(20000).nullish(),
 });
 
 /**

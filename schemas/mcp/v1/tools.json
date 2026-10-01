@@ -2151,41 +2151,11 @@
     "description": "Report the result of your run with its task token: outcome (done, partial or blocked), a summary, the files you touched and links (branch, pull request, document, draft or url). The task moves to In review for the human to accept or reject. Posting again for the same run returns the first result.",
     "input_schema": {
       "$defs": {
-        "FileTouched": {
-          "properties": {
-            "change": {
-              "enum": [
-                "added",
-                "modified",
-                "deleted"
-              ],
-              "title": "Change",
-              "type": "string"
-            },
-            "path": {
-              "maxLength": 1024,
-              "minLength": 1,
-              "title": "Path",
-              "type": "string"
-            }
-          },
-          "required": [
-            "path",
-            "change"
-          ],
-          "title": "FileTouched",
-          "type": "object"
-        },
-        "ResultLink": {
+        "DocumentResultLink": {
+          "description": "A document: a web address or a citation of a knowledge-base document and page,\n`tumnis://doc/<id>#page=<n>` (P2-17, FR-15.4).",
           "properties": {
             "kind": {
-              "enum": [
-                "branch",
-                "pull_request",
-                "document",
-                "draft",
-                "url"
-              ],
+              "const": "document",
               "title": "Kind",
               "type": "string"
             },
@@ -2213,7 +2183,94 @@
             "kind",
             "url"
           ],
-          "title": "ResultLink",
+          "title": "DocumentResultLink",
+          "type": "object"
+        },
+        "FileTouched": {
+          "properties": {
+            "change": {
+              "enum": [
+                "added",
+                "modified",
+                "deleted"
+              ],
+              "title": "Change",
+              "type": "string"
+            },
+            "path": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "change"
+          ],
+          "title": "FileTouched",
+          "type": "object"
+        },
+        "ResultLink": {
+          "description": "A link a result names. Only a `document` link may be a `tumnis://` citation: the\nrule is the schema's (one variant per kind), so OpenAPI, the tools' JSON Schema and\nanything generated from them (zod, test factories) hold it too. Built like a model,\n`ResultLink(kind=..., url=...)`; `kind`, `url` and `label` read through.",
+          "discriminator": {
+            "mapping": {
+              "branch": "#/$defs/WebResultLink",
+              "document": "#/$defs/DocumentResultLink",
+              "draft": "#/$defs/WebResultLink",
+              "pull_request": "#/$defs/WebResultLink",
+              "url": "#/$defs/WebResultLink"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/WebResultLink"
+            },
+            {
+              "$ref": "#/$defs/DocumentResultLink"
+            }
+          ],
+          "title": "ResultLink"
+        },
+        "WebResultLink": {
+          "description": "A branch, pull request, draft or other web address: always `http(s)://`.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "branch",
+                "pull_request",
+                "draft",
+                "url"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Label"
+            },
+            "url": {
+              "maxLength": 2048,
+              "pattern": "^https?://\\S+$",
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "url"
+          ],
+          "title": "WebResultLink",
           "type": "object"
         }
       },
@@ -2302,41 +2359,11 @@
     "name": "post_result",
     "output_schema": {
       "$defs": {
-        "FileTouched": {
-          "properties": {
-            "change": {
-              "enum": [
-                "added",
-                "modified",
-                "deleted"
-              ],
-              "title": "Change",
-              "type": "string"
-            },
-            "path": {
-              "maxLength": 1024,
-              "minLength": 1,
-              "title": "Path",
-              "type": "string"
-            }
-          },
-          "required": [
-            "path",
-            "change"
-          ],
-          "title": "FileTouched",
-          "type": "object"
-        },
-        "ResultLink": {
+        "DocumentResultLink": {
+          "description": "A document: a web address or a citation of a knowledge-base document and page,\n`tumnis://doc/<id>#page=<n>` (P2-17, FR-15.4).",
           "properties": {
             "kind": {
-              "enum": [
-                "branch",
-                "pull_request",
-                "document",
-                "draft",
-                "url"
-              ],
+              "const": "document",
               "title": "Kind",
               "type": "string"
             },
@@ -2364,7 +2391,94 @@
             "kind",
             "url"
           ],
-          "title": "ResultLink",
+          "title": "DocumentResultLink",
+          "type": "object"
+        },
+        "FileTouched": {
+          "properties": {
+            "change": {
+              "enum": [
+                "added",
+                "modified",
+                "deleted"
+              ],
+              "title": "Change",
+              "type": "string"
+            },
+            "path": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "change"
+          ],
+          "title": "FileTouched",
+          "type": "object"
+        },
+        "ResultLink": {
+          "description": "A link a result names. Only a `document` link may be a `tumnis://` citation: the\nrule is the schema's (one variant per kind), so OpenAPI, the tools' JSON Schema and\nanything generated from them (zod, test factories) hold it too. Built like a model,\n`ResultLink(kind=..., url=...)`; `kind`, `url` and `label` read through.",
+          "discriminator": {
+            "mapping": {
+              "branch": "#/$defs/WebResultLink",
+              "document": "#/$defs/DocumentResultLink",
+              "draft": "#/$defs/WebResultLink",
+              "pull_request": "#/$defs/WebResultLink",
+              "url": "#/$defs/WebResultLink"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/WebResultLink"
+            },
+            {
+              "$ref": "#/$defs/DocumentResultLink"
+            }
+          ],
+          "title": "ResultLink"
+        },
+        "WebResultLink": {
+          "description": "A branch, pull request, draft or other web address: always `http(s)://`.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "branch",
+                "pull_request",
+                "draft",
+                "url"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Label"
+            },
+            "url": {
+              "maxLength": 2048,
+              "pattern": "^https?://\\S+$",
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "url"
+          ],
+          "title": "WebResultLink",
           "type": "object"
         }
       },

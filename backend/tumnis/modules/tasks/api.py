@@ -39,10 +39,11 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    RootModel,
     StringConstraints,
     field_validator,
-    model_validator,
 )
+from pydantic_core import PydanticUndefined
 from sqlalchemy import (
     RowMapping,
     Select,
@@ -330,15 +331,16 @@ class CommentOut(BaseModel):
 ResultOutcome = Literal["done", "partial", "blocked"]
 # A link is a web address, or a citation of a knowledge-base document and page (P2-17,
 # FR-15.4): `tumnis://doc/<document id>` with an optional `#page=<n>`.
-DOC_LINK_PREFIX: Final = "tumnis://"
 _DOC_LINK: Final = (
     r"tumnis://doc/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
     r"(?:#page=([1-9][0-9]{0,5}))?"
 )
 DOC_LINK_RE: Final = re.compile(f"^{_DOC_LINK}$")
-ResultUrl = Annotated[
+WebUrl = Annotated[str, StringConstraints(max_length=2048, pattern=r"^https?://\S+$")]
+DocumentUrl = Annotated[
     str, StringConstraints(max_length=2048, pattern=rf"^(https?://\S+|{_DOC_LINK})$")
 ]
+LinkLabel = Annotated[str, StringConstraints(max_length=200)]
 
 
 class FileTouched(BaseModel):
@@ -346,16 +348,50 @@ class FileTouched(BaseModel):
     change: Literal["added", "modified", "deleted"]
 
 
-class ResultLink(BaseModel):
-    kind: Literal["branch", "pull_request", "document", "draft", "url"]
-    url: ResultUrl  # a document link may cite tumnis://doc/<id>#page=<n> (P2-17)
-    label: Annotated[str, StringConstraints(max_length=200)] | None = None
+class WebResultLink(BaseModel):
+    """A branch, pull request, draft or other web address: always `http(s)://`."""
 
-    @model_validator(mode="after")
-    def _citation_is_a_document(self) -> "ResultLink":
-        if self.url.startswith(DOC_LINK_PREFIX) and self.kind != "document":
-            raise ValueError("a tumnis:// link cites a document: its kind is document")
-        return self
+    kind: Literal["branch", "pull_request", "draft", "url"]
+    url: WebUrl
+    label: LinkLabel | None = None
+
+
+class DocumentResultLink(BaseModel):
+    """A document: a web address or a citation of a knowledge-base document and page,
+    `tumnis://doc/<id>#page=<n>` (P2-17, FR-15.4)."""
+
+    kind: Literal["document"]
+    url: DocumentUrl
+    label: LinkLabel | None = None
+
+
+class ResultLink(
+    RootModel[Annotated[WebResultLink | DocumentResultLink, Field(discriminator="kind")]]
+):
+    """A link a result names. Only a `document` link may be a `tumnis://` citation: the
+    rule is the schema's (one variant per kind), so OpenAPI, the tools' JSON Schema and
+    anything generated from them (zod, test factories) hold it too. Built like a model,
+    `ResultLink(kind=..., url=...)`; `kind`, `url` and `label` read through."""
+
+    def __init__(self, root: Any = PydanticUndefined, **data: Any) -> None:
+        # RootModel takes keyword fields as its root; spelled out for type checkers.
+        super().__init__(root, **data)
+
+    @property
+    def kind(self) -> str:
+        return self.root.kind
+
+    @property
+    def url(self) -> str:
+        return self.root.url
+
+    @property
+    def label(self) -> str | None:
+        return self.root.label
+
+    def labelled(self, label: str) -> "ResultLink":
+        """The same link with this label."""
+        return ResultLink(root=self.root.model_copy(update={"label": label}))
 
 
 def cited_document(link: ResultLink) -> tuple[UUID, int | None] | None:
