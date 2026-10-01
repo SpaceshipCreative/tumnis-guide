@@ -24,6 +24,8 @@ GITHUB_QUEUE = "github"  # pull request status reads (P2-13); its own queue: lim
 GITHUB_REFRESHES_PER_MINUTE = 15  # each refresh makes four requests, 304s included
 FOCUS_QUEUE = "focus"  # focus_plan and focus_session (P2-15); each parks on its next instant
 EXTRACT_QUEUE = "extract"  # upload scanning and extraction (P1-16); only `worker-extract` listens
+EMBED_QUEUE = "embed"  # re-embedding on a model change (P3-10; knowledge.rules.EMBED_QUEUE)
+EMBED_WORKER_CONCURRENCY = 2  # plan default
 
 
 def _agents() -> Any:
@@ -50,6 +52,7 @@ def main_queues() -> list[str]:
         GITHUB_QUEUE,
         _projects().ARCHIVE_QUEUE,
         FOCUS_QUEUE,
+        EMBED_QUEUE,
     ]
 
 
@@ -88,6 +91,8 @@ def register_queues() -> None:
     DBOS.register_queue(projects.ARCHIVE_QUEUE, concurrency=projects.ARCHIVE_CONCURRENCY)
     # Focus workflows (P2-15): no limit, each waits on `recv` for its next instant.
     DBOS.register_queue(FOCUS_QUEUE)
+    # Re-embedding (P3-10): two batches at a time, so a build never starves the embedder.
+    DBOS.register_queue(EMBED_QUEUE, worker_concurrency=EMBED_WORKER_CONCURRENCY)
 
 
 def register_schedules(settings: Settings) -> None:
@@ -150,6 +155,9 @@ def configure_generation(settings: Settings) -> None:
     decisions = importlib.import_module("tumnis.modules.decisions.api")
     decisions.configure_generation(settings.generation, net_policy=settings.net_policy())
     decisions.configure_net_policy(settings.net_policy())
+    # The Embeddings slot (P3-10): only the worker embeds chunks and search queries; the
+    # api process never calls out, so its hybrid searches answer with full text.
+    decisions.configure_embeddings(settings.embeddings, net_policy=settings.net_policy())
 
 
 def configure_agents(settings: Settings) -> None:

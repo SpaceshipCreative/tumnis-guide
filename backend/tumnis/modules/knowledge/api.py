@@ -57,7 +57,8 @@ from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.core.versioning import NotFound, StaleVersion, update_versioned
 from tumnis.modules.integrations import api as integrations
-from tumnis.modules.knowledge import store
+from tumnis.modules.knowledge import embeddings as _embeddings
+from tumnis.modules.knowledge import search, store
 from tumnis.modules.knowledge.adapters.fake import FakeStorage
 from tumnis.modules.knowledge.adapters.port import ChunkRow
 from tumnis.modules.knowledge.adapters.s3 import (
@@ -80,6 +81,7 @@ from tumnis.modules.knowledge.models import (
 )
 from tumnis.modules.knowledge.payloads import DocumentAddedV1, DocumentChangedV1
 from tumnis.modules.knowledge.rules import (
+    CANDIDATES,
     PASSAGE_CAP_CHARS,
     Passage,
     default_trust,
@@ -109,6 +111,15 @@ from tumnis.modules.tasks import api as tasks
 from tumnis.seed import DocumentSeed, register_seed_writer
 
 _documents: Table = Document.__table__  # type: ignore[assignment]
+
+# Chunk embeddings (P3-10, R-37): other modules, the CLI and the tests reach them here.
+EmbeddingModelOut = _embeddings.EmbeddingModelOut
+ReembedRequest = _embeddings.ReembedRequest
+create_embedding_index = _embeddings.create_embedding_index
+embed_document = _embeddings.embed_document
+embedding_models = _embeddings.embedding_models
+set_embedding_model = _embeddings.set_embedding_model
+start_reembed = _embeddings.start_reembed
 
 
 @versioned("entities", "document", 1)
@@ -2602,9 +2613,12 @@ def _search_stmt(
     project_ids: frozenset[UUID] | None,
     *,
     agent_written: bool = True,
+    chunk_ids: Sequence[UUID] | None = None,
 ) -> Select[Any]:
     """The ranked hits of `q` in the reader's scope (`_scope`), best first, unlimited;
-    without the documents agents added (`source` "agent") when `agent_written` is False."""
+    without the documents agents added (`source` "agent") when `agent_written` is False.
+    With `chunk_ids` (hybrid search's vector hits, P3-10): those chunks, under the same
+    filters, whether or not they match `q`."""
     query = func.websearch_to_tsquery(TS_CONFIG, q)
     rank = func.ts_rank_cd(_chunks.c.tsv, query).label("rank")
     stmt = (
@@ -2630,7 +2644,11 @@ def _search_stmt(
             ),
         )
         .where(
-            _chunks.c.tsv.bool_op("@@")(query),
+            (
+                _chunks.c.tsv.bool_op("@@")(query)
+                if chunk_ids is None
+                else _chunks.c.id.in_(chunk_ids)
+            ),
             _chunks.c.deleted_at.is_(None),
             _documents.c.deleted_at.is_(None),
             _documents.c.status == "ready",
@@ -2655,21 +2673,66 @@ async def search_knowledge(  # R-36's parameters, plus the caller's limit
     *,
     project_id: UUID | None,
     limit: int = 10,
-    mode: Literal["fts"] = "fts",
+    mode: Literal["fts", "hybrid"] = "fts",
     project_ids: frozenset[UUID] | None = None,
     agent_written: bool = True,
 ) -> list[KnowledgeHit]:
-    """Full-text search (R-36; P3-10 adds `mode="hybrid"`) over the current versions'
-    chunks of live, ready documents: a project's items and the workspace knowledge base
-    (FR-15.1), ranked by cover density, then pinned and recently changed documents first.
-    Row-level security scopes it to the workspace first."""
-    if mode != "fts":
-        raise ProblemError(422, "invalid_mode", "Only full-text search is available")
+    """Full-text search (R-36) over the current versions' chunks of live, ready documents:
+    a project's items and the workspace knowledge base (FR-15.1), ranked by cover density,
+    then pinned and recently changed documents first. Row-level security scopes it to the
+    workspace first. `mode="hybrid"` (P3-10, FR-15.3) fuses it with the vector search
+    (`knowledge.search`), and answers the full-text hits when no query vector exists."""
+    if mode not in {"fts", "hybrid"}:
+        raise ProblemError(422, "invalid_mode", "Search mode is 'fts' or 'hybrid'")
     if not q.strip():
         return []
-    stmt = _search_stmt(q, project_id, project_ids, agent_written=agent_written).limit(
-        max(1, min(limit, SEARCH_LIMIT_MAX))
+    size = max(1, min(limit, SEARCH_LIMIT_MAX))
+
+    async def hits(limit: int, chunk_ids: Sequence[UUID] | None = None) -> list[KnowledgeHit]:
+        return await _fulltext_hits(
+            s,
+            q,
+            project_id,
+            project_ids,
+            agent_written=agent_written,
+            limit=limit,
+            chunk_ids=chunk_ids,
+        )
+
+    if mode == "fts":
+        return await hits(limit=size)
+    # Hybrid: never through `search_knowledge` itself, so a search is one call of it.
+    fulltext = await hits(limit=max(CANDIDATES, size))
+    fused = await search.fuse(
+        s, q, [h.chunk_id for h in fulltext], project_id=project_id, project_ids=project_ids
     )
+    if fused is None:  # no query vector: exactly the full-text answer
+        return fulltext[:size]
+    found = {h.chunk_id: h for h in fulltext}
+    vector_only = [f.chunk_id for f in fused if f.chunk_id not in found]
+    if vector_only:  # read back under the full-text path's filters (scope, live, ready)
+        found |= {h.chunk_id: h for h in await hits(limit=len(vector_only), chunk_ids=vector_only)}
+    fused_hits = [
+        found[f.chunk_id].model_copy(update={"rank": f.score}) for f in fused if f.chunk_id in found
+    ]
+    return fused_hits[:size]
+
+
+async def _fulltext_hits(  # _search_stmt's arguments, and how many
+    s: AsyncSession,
+    q: str,
+    project_id: UUID | None,
+    project_ids: frozenset[UUID] | None,
+    *,
+    agent_written: bool,
+    limit: int,
+    chunk_ids: Sequence[UUID] | None = None,
+) -> list[KnowledgeHit]:
+    """The first `limit` full-text hits (with `chunk_ids`: those chunks, read through the
+    same filters, whether or not they match `q`)."""
+    stmt = _search_stmt(
+        q, project_id, project_ids, agent_written=agent_written, chunk_ids=chunk_ids
+    ).limit(limit)
     rows = (await s.execute(stmt)).mappings().all()
     return [KnowledgeHit.model_validate(dict(row)) for row in rows]
 
@@ -2734,8 +2797,14 @@ async def passages_for(
     q = passage_query(task.title, criteria, context.goal)
     # What agents added stays out of packets (an agent finds it with `search_knowledge`),
     # so one run's output never feeds the next run's packet on its own (P2-17, T-P2-08-06).
+    # Hybrid (P3-10): full text and vectors fused; full text alone without a query vector.
     hits = await search_knowledge(
-        s, q, project_id=task.project_id, limit=PASSAGE_SEARCH_LIMIT, agent_written=False
+        s,
+        q,
+        project_id=task.project_id,
+        limit=PASSAGE_SEARCH_LIMIT,
+        agent_written=False,
+        mode="hybrid",
     )
     ranked = [
         Passage(

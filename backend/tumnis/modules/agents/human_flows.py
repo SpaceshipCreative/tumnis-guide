@@ -139,8 +139,9 @@ async def evaluate_approval(workspace_id: str, approval_id: str) -> dict[str, st
 @DBOS.step()
 async def close_human_wait(workspace_id: str, kind: str, wait_id: str) -> bool:
     """The human decided: once no other wait of the run is open, the task back In progress
-    (as the system, W -> P) and `run.signal{resumed}`, in one transaction. Answers whether
-    the run was resumed."""
+    (as the system, W -> P) and `run.signal{resumed}`, in one transaction. The task is read
+    under its row lock, so a write that lands meanwhile waits and the move is never stale.
+    Answers whether the run was resumed."""
     table = _TABLES[kind]
     wait = UUID(wait_id)
     now = SystemClock().now()
@@ -159,7 +160,7 @@ async def close_human_wait(workspace_id: str, kind: str, wait_id: str) -> bool:
         if others is not None:
             return False
         if row.task_id is not None:
-            task = await tasks.get_task(s, row.task_id)
+            task = await tasks.get_task(s, row.task_id, lock=True)
             if task.status == tasks.Status.WAITING_ON_HUMAN:
                 await tasks.change_status(
                     s, SYSTEM_ACTOR, task.id, tasks.Status.IN_PROGRESS, task.version, now=now
