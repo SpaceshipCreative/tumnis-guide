@@ -440,6 +440,36 @@ async def _request_approval(world: World, project: str) -> dict[str, Any]:
     }
 
 
+async def _search_knowledge(world: World, project: str) -> dict[str, Any]:
+    """P2-17: a search of the project's documents and the workspace knowledge base."""
+    return {"q": "surface", "project_id": str(world.projects[project]), "limit": 20}
+
+
+async def _get_document(world: World, project: str) -> dict[str, Any]:
+    """P2-17: a fresh text entry of the project, written by the workspace's user."""
+    from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+    from tumnis.core.types import ActorRef  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+
+    actor = ActorRef(f"user:{world.workspace.user_id}")
+    async with tenant_session(WorkspaceContext(world.workspace.id, actor)) as s:
+        made = await knowledge.create_text_entry(
+            s, world.projects[project], f"Surface notes {next(_ids)}", "Notes on the surface."
+        )
+    return {"document_id": str(made.id)}
+
+
+async def _add_document(world: World, project: str) -> dict[str, Any]:
+    """P2-17: a Markdown document for the project's knowledge base."""
+    return {
+        "project_id": str(world.projects[project]),
+        "title": f"Added through the surface {next(_ids)}",
+        "body_md": "# Findings\n\nWhat the surface found.",
+        "tags": ["surface"],
+        "idempotency_key": idem(),
+    }
+
+
 # One entry per registered op; the sweeps fail on an op without one ("add a sample").
 SAMPLES: Final[dict[str, Sample]] = {
     "list_tasks": _list_tasks,
@@ -452,6 +482,9 @@ SAMPLES: Final[dict[str, Sample]] = {
     "post_result": _post_result,
     "ask_human": _ask_human,
     "request_approval": _request_approval,
+    "search_knowledge": _search_knowledge,
+    "get_document": _get_document,
+    "add_document": _add_document,
 }
 
 
