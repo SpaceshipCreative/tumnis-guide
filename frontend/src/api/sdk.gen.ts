@@ -149,9 +149,15 @@ import type {
   HealthReadyData,
   HealthReadyErrors,
   HealthReadyResponses,
+  KnowledgeAddLinkData,
+  KnowledgeAddLinkErrors,
+  KnowledgeAddLinkResponses,
   KnowledgeCreateLocationData,
   KnowledgeCreateLocationErrors,
   KnowledgeCreateLocationResponses,
+  KnowledgeCreateTextEntryData,
+  KnowledgeCreateTextEntryErrors,
+  KnowledgeCreateTextEntryResponses,
   KnowledgeGetBriefData,
   KnowledgeGetBriefErrors,
   KnowledgeGetBriefResponses,
@@ -161,18 +167,39 @@ import type {
   KnowledgeGetFileData,
   KnowledgeGetFileErrors,
   KnowledgeGetFileResponses,
+  KnowledgeGetQuotaData,
+  KnowledgeGetQuotaErrors,
+  KnowledgeGetQuotaResponses,
+  KnowledgeListDocumentsData,
+  KnowledgeListDocumentsErrors,
+  KnowledgeListDocumentsResponses,
   KnowledgeListLocationsData,
   KnowledgeListLocationsErrors,
   KnowledgeListLocationsResponses,
+  KnowledgeListVersionsData,
+  KnowledgeListVersionsErrors,
+  KnowledgeListVersionsResponses,
+  KnowledgeRestoreDocumentData,
+  KnowledgeRestoreDocumentErrors,
+  KnowledgeRestoreDocumentResponses,
+  KnowledgeSearchData,
+  KnowledgeSearchErrors,
+  KnowledgeSearchResponses,
   KnowledgeSetDefaultLocationData,
   KnowledgeSetDefaultLocationErrors,
   KnowledgeSetDefaultLocationResponses,
   KnowledgeSetProjectFolderData,
   KnowledgeSetProjectFolderErrors,
   KnowledgeSetProjectFolderResponses,
+  KnowledgeSetTrustData,
+  KnowledgeSetTrustErrors,
+  KnowledgeSetTrustResponses,
   KnowledgeTestLocationData,
   KnowledgeTestLocationErrors,
   KnowledgeTestLocationResponses,
+  KnowledgeTrashDocumentData,
+  KnowledgeTrashDocumentErrors,
+  KnowledgeTrashDocumentResponses,
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentErrors,
   KnowledgeUpdateDocumentResponses,
@@ -414,14 +441,23 @@ import {
   zDecisionsGetCalibrationResponse,
   zGithubWebhookResponse,
   zHealthLiveResponse,
+  zKnowledgeAddLinkResponse,
   zKnowledgeCreateLocationResponse,
+  zKnowledgeCreateTextEntryResponse,
   zKnowledgeGetBriefResponse,
   zKnowledgeGetDocumentResponse,
   zKnowledgeGetFileResponse,
+  zKnowledgeGetQuotaResponse,
+  zKnowledgeListDocumentsResponse,
   zKnowledgeListLocationsResponse,
+  zKnowledgeListVersionsResponse,
+  zKnowledgeRestoreDocumentResponse,
+  zKnowledgeSearchResponse,
   zKnowledgeSetDefaultLocationResponse,
   zKnowledgeSetProjectFolderResponse,
+  zKnowledgeSetTrustResponse,
   zKnowledgeTestLocationResponse,
+  zKnowledgeTrashDocumentResponse,
   zKnowledgeUpdateDocumentResponse,
   zKnowledgeUploadDocumentResponse,
   zPlanningAcceptAllResponse,
@@ -1300,6 +1336,29 @@ export const authRotateKey = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List Documents
+ *
+ * A project's knowledge items (none: the workspace knowledge base's), oldest first.
+ */
+export const knowledgeListDocuments = <ThrowOnError extends boolean = false>(
+  options?: Options<KnowledgeListDocumentsData, ThrowOnError>,
+): RequestResult<
+  KnowledgeListDocumentsResponses,
+  KnowledgeListDocumentsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    KnowledgeListDocumentsResponses,
+    KnowledgeListDocumentsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeListDocumentsResponse.parseAsync(data),
+    url: "/v1/knowledge/documents",
+    ...options,
+  });
+
+/**
  * Upload Document
  *
  * Upload a file (multipart: `file`, and optionally `project_id` and `title`). The
@@ -1330,6 +1389,85 @@ export const knowledgeUploadDocument = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Add Link
+ *
+ * A link as a knowledge item; its content is never fetched.
+ */
+export const knowledgeAddLink = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeAddLinkData, ThrowOnError>,
+): RequestResult<
+  KnowledgeAddLinkResponses,
+  KnowledgeAddLinkErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeAddLinkResponses,
+    KnowledgeAddLinkErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeAddLinkResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/link",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Create Text Entry
+ *
+ * A text entry (Markdown) in a project or the workspace knowledge base: version 1,
+ * searchable at once, trusted when a person writes it (FR-15.5, `_origin`); in a project
+ * with a folder, also `notes/`.
+ */
+export const knowledgeCreateTextEntry = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeCreateTextEntryData, ThrowOnError>,
+): RequestResult<
+  KnowledgeCreateTextEntryResponses,
+  KnowledgeCreateTextEntryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeCreateTextEntryResponses,
+    KnowledgeCreateTextEntryErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeCreateTextEntryResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/text",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Trash Document
+ *
+ * To the trash: hidden from lists, reads and search until restored.
+ */
+export const knowledgeTrashDocument = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeTrashDocumentData, ThrowOnError>,
+): RequestResult<
+  KnowledgeTrashDocumentResponses,
+  KnowledgeTrashDocumentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    KnowledgeTrashDocumentResponses,
+    KnowledgeTrashDocumentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeTrashDocumentResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}",
+    ...options,
+  });
+
+/**
  * Get Document
  *
  * A document's state (status, reason, kind, path): what the upload flow polls.
@@ -1355,7 +1493,9 @@ export const knowledgeGetDocument = <ThrowOnError extends boolean = false>(
 /**
  * Update Document
  *
- * Replace a text entry's Markdown body; 409 `stale_version` with the current entry.
+ * Edit a document: a text entry's Markdown body (a new version, its note file
+ * rewritten), any document's title, tags or pin. 409 `stale_version` with the current
+ * document; 409 `not_text` for a body on anything but a text entry.
  */
 export const knowledgeUpdateDocument = <ThrowOnError extends boolean = false>(
   options: Options<KnowledgeUpdateDocumentData, ThrowOnError>,
@@ -1377,6 +1517,81 @@ export const knowledgeUpdateDocument = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Restore Document
+ *
+ * Back from the trash; 404 for a document that is not in it.
+ */
+export const knowledgeRestoreDocument = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeRestoreDocumentData, ThrowOnError>,
+): RequestResult<
+  KnowledgeRestoreDocumentResponses,
+  KnowledgeRestoreDocumentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeRestoreDocumentResponses,
+    KnowledgeRestoreDocumentErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeRestoreDocumentResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}/restore",
+    ...options,
+  });
+
+/**
+ * Set Trust
+ *
+ * A person marks the document trusted or untrusted (audited); keys and agents
+ * cannot (403 `session_required`).
+ */
+export const knowledgeSetTrust = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeSetTrustData, ThrowOnError>,
+): RequestResult<
+  KnowledgeSetTrustResponses,
+  KnowledgeSetTrustErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeSetTrustResponses,
+    KnowledgeSetTrustErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeSetTrustResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}/trust",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List Versions
+ *
+ * Every kept version of a live document, oldest first, each with its body once the
+ * file is released (a note's always).
+ */
+export const knowledgeListVersions = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeListVersionsData, ThrowOnError>,
+): RequestResult<
+  KnowledgeListVersionsResponses,
+  KnowledgeListVersionsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeListVersionsResponses,
+    KnowledgeListVersionsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeListVersionsResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}/versions",
+    ...options,
   });
 
 /**
@@ -1496,6 +1711,53 @@ export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Get Quota
+ *
+ * The workspace's knowledge bytes against its quota, and the scope's item count.
+ */
+export const knowledgeGetQuota = <ThrowOnError extends boolean = false>(
+  options?: Options<KnowledgeGetQuotaData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetQuotaResponses,
+  KnowledgeGetQuotaErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    KnowledgeGetQuotaResponses,
+    KnowledgeGetQuotaErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeGetQuotaResponse.parseAsync(data),
+    url: "/v1/knowledge/quota",
+    ...options,
+  });
+
+/**
+ * Search
+ *
+ * Full-text search of a project's items and the workspace knowledge base (none: the
+ * whole workspace), citing document, heading path and page (FR-15.3).
+ */
+export const knowledgeSearch = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeSearchData, ThrowOnError>,
+): RequestResult<
+  KnowledgeSearchResponses,
+  KnowledgeSearchErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeSearchResponses,
+    KnowledgeSearchErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeSearchResponse.parseAsync(data),
+    url: "/v1/knowledge/search",
+    ...options,
   });
 
 /**

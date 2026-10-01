@@ -13,8 +13,8 @@ The injection paths, as far as the merged modules reach today:
 - `context_item`: an email or chat message (a `message` record) or a note (`note`),
   ingested through `integrations.api.ingest_page` and linked to the task with
   `link_context`.
-- `passage`: a tainted document passage added to the task's gathered inputs (P1-17's
-  `passages_for` does not join passages into the packet yet).
+- `passage`: a tainted document passage added to the task's gathered inputs, after the
+  ones `knowledge.api.passages_for` chose (P1-17).
 - `task_title`: a tainted task whose title is the text (a task made from outside content).
 - `digest_entry`: a comment written by an API key, which is how a digest's
   `task_commented` entry reaches a packet (P2-03 renders it the same way).

@@ -45,7 +45,9 @@ from tumnis.modules.agents.rules import (
     Block,
     BlockSource,
     RunKind,
+    TaskSnapshot,
     comment_tainted,
+    missing_fields,
     packet_tainted,
     render_block,
     render_task_prompt,
@@ -56,6 +58,7 @@ from tumnis.modules.agents.skill_io import (
     BRIEF_MAX,
     MAX_CANDIDATES,
     MAX_HISTORY,
+    MAX_PASSAGES,
     EnrichmentRequest,
     EnrichProject,
     EnrichTask,
@@ -69,6 +72,7 @@ from tumnis.modules.agents.skill_io import (
     PlanProject,
     ProjectAgentEntry,
 )
+from tumnis.modules.agents.skill_io import Passage as RequestPassage
 from tumnis.modules.auth import api as auth
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.knowledge import api as knowledge
@@ -93,10 +97,14 @@ __all__ = [
     "build_packet",
     "code_location",
     "code_location_of",
+    "enrich_packet",
     "enrichment_request",
+    "enrichment_request_tainted",
     "packet_blocks",
     "packet_for_caller",
+    "plan_projects",
     "render_prompt",
+    "task_snapshot",
     "workdir_policy",
 ]
 
@@ -647,8 +655,8 @@ async def gather_inputs(
     s: AsyncSession, task_id: UUID, *, profile_id: UUID | None = None
 ) -> PacketInputs:
     """A task's packet inputs, read through the owning modules' apis in the caller's
-    transaction (404 for a task the caller cannot see). Passages join when P1-17's
-    `knowledge.api.passages_for` lands; until then the packet carries none."""
+    transaction (404 for a task the caller cannot see). The passages are the ones
+    `knowledge.api.passages_for` chooses, less the brief (the project section carries it)."""
     task = await tasks.get_task(s, task_id)
     comments = (await tasks.list_comments(s, task_id, limit=COMMENTS_LIMIT)).items
     tainted_tokens = await _tainted_token_authors(s, {c.created_by for c in comments})
@@ -662,6 +670,7 @@ async def gather_inputs(
     owned = await integrations.owned_context_item_ids(s, "task", task_id)
     items = await integrations.context_item_texts(s, [*linked, *owned])
     history = await tasks.estimate_history(s, task.project_id)
+    chosen = await knowledge.passages_for(s, task_id)
     hints: list[str] = []
     if profile_id is not None:
         hints = list(
@@ -701,6 +710,17 @@ async def gather_inputs(
             folder=folder,
             code_location=code_location(context.code_path, context.repo_url),
         ),
+        passages=[
+            PassageInput(
+                document_id=str(p.document_id),
+                text=p.text,
+                heading_path=p.heading_path,
+                page_from=p.page,
+                tainted=p.tainted,
+            )
+            for p in chosen
+            if p.chunk_id is not None
+        ],
         context_items=[
             ContextInput(
                 id=str(item.id),
@@ -742,22 +762,31 @@ def _block_source(source: str, target_type: str) -> BlockSource:
 async def build_packet(
     kind: RunKind,
     *,
-    task_id: UUID,
-    run_id: UUID,
-    profile_id: UUID,
+    task_id: UUID | None = None,
+    day: date | None = None,
+    run_id: UUID | None = None,
+    profile_id: UUID | None = None,
     token: str | None = None,
     nonce: str | None = None,
     ctx: WorkspaceContext | None = None,
     session: AsyncSession | None = None,
 ) -> TaskPacket:
-    """The packet for a task, proposal or stuck run (R-24: the only way one is made). Enrich
-    and plan packets are P1-17's (P1-08, P1-11). `nonce` defaults to a fresh random one;
-    the token is null until the dispatch step issues one (it is never a step output)."""
-    if kind not in BUILT_KINDS:
-        raise ValueError(f"build_packet builds task, proposal and stuck packets, not {kind}")
+    """The packet for a task, proposal, stuck or enrich run (R-24: the only way one is
+    made). An enrich packet (P1-17) is `enrich_packet`'s: `enrichment_request`'s body with
+    the brief and passages; its run and profile default to the preview ones. The plan
+    packet is P1-11's (`day`). `nonce` defaults to a fresh random one; the token is null
+    until the dispatch step issues one (it is never a step output)."""
+    del day
     context = ctx or tenancy.current()
     if context is None:
         raise RuntimeError("build_packet needs a workspace context (ctx= or tenant_session)")
+    if kind == RunKind.ENRICH and task_id is not None:
+        async with session_for(context, session) as s:
+            return await enrich_packet(s, task_id, run_id=run_id, profile_id=profile_id)
+    if kind not in BUILT_KINDS or task_id is None or run_id is None or profile_id is None:
+        raise ValueError(
+            f"build_packet builds task, proposal, stuck and enrich packets, not {kind}"
+        )
     async with session_for(context, session) as s:
         inputs = await gather_inputs(s, task_id, profile_id=profile_id)
     return assemble(
@@ -779,6 +808,10 @@ LABEL_REASON_MAX: Final = 200
 LONG_TEXT_MAX: Final = 8_000
 PROJECT_TEXT_MAX: Final = 120
 GOAL_MAX: Final = 280
+HEADINGS_MAX: Final = 12
+ENRICH_SKILL: Final = "enrich"
+ENRICH_RESULT: Final = SchemaRef(family="enrichment", name="result", version=1)
+ENRICH_TIMEOUT_S_DEFAULT: Final = 120  # the enrich run's timeout (plan default)
 
 
 def _cut(text: str | None, limit: int) -> str | None:
@@ -789,10 +822,21 @@ async def enrichment_request(
     s: AsyncSession, task_id: UUID, *, missing: Sequence[str]
 ) -> EnrichmentRequest:
     """The `enrich` packet's body (P1-05's schema): the task as it is now, the fields to
-    fill, the project, its brief (`knowledge.api.get_brief`, R-13; "" before it has one)
-    and its 10 most recently finished Human or Hybrid tasks with estimate and actual time.
-    P1-17 adds the passages here. 404 for a task the caller cannot see; ValueError for no
-    missing field (a request always asks for one)."""
+    fill, the project, its brief and passages (`knowledge.api.passages_for`, R-13, FR-15.4:
+    the brief first, "" before the project has one, then the passages in order, at most
+    MAX_PASSAGES) and its 10 most recently finished Human or Hybrid tasks with estimate
+    and actual time. 404 for a task the caller cannot see; ValueError for no missing field
+    (a request always asks for one)."""
+    request, _tainted = await enrichment_request_tainted(s, task_id, missing=missing)
+    return request
+
+
+async def enrichment_request_tainted(
+    s: AsyncSession, task_id: UUID, *, missing: Sequence[str]
+) -> tuple[EnrichmentRequest, bool]:
+    """`enrichment_request` and whether it carries outside text (SAF-1, P2-08): a tainted
+    task, or a tainted brief or passage in it (an upload, a synced outside file). The
+    enrichment run is then tainted, and so is the task it writes."""
     if not missing:
         raise ValueError("an enrichment request names at least one missing field")
     task = await tasks.get_task(s, task_id)
@@ -803,12 +847,13 @@ async def enrichment_request(
         except NotFound:
             parent_title = None
     context = await projects.project_context(s, task.project_id)
-    try:
-        brief = (await knowledge.get_brief(task.project_id, session=s)).body_md or ""
-    except NotFound:
-        brief = ""
+    chosen = await knowledge.passages_for(s, task_id)
+    brief = chosen[0].text if chosen and chosen[0].chunk_id is None else ""
+    passages = [p for p in chosen if p.chunk_id is not None][:MAX_PASSAGES]
+    used = [p for p in chosen if p.chunk_id is None and brief] + passages
+    tainted = task.tainted or any(p.tainted for p in used)
     history = await tasks.estimate_history(s, task.project_id, limit=MAX_HISTORY)
-    return EnrichmentRequest(
+    request = EnrichmentRequest(
         task=EnrichTask(
             id=task.id,
             title=task.title[:TITLE_MAX],
@@ -828,7 +873,17 @@ async def enrichment_request(
             goal=_cut(context.goal, GOAL_MAX),
         ),
         brief=brief[:BRIEF_MAX],
-        passages=[],
+        passages=[
+            RequestPassage(
+                chunk_id=p.chunk_id,
+                document_id=p.document_id,
+                title=(p.title or "(untitled)")[:TITLE_MAX],
+                heading_path=[h[:TITLE_MAX] for h in p.heading_path[:HEADINGS_MAX]],
+                page=p.page if p.page is not None and p.page >= 1 else None,
+                text=p.text[:LONG_TEXT_MAX],
+            )
+            for p in passages
+        ],
         estimate_history=[
             EstimateHistoryItem(
                 title=h.title or "(untitled)",
@@ -839,6 +894,93 @@ async def enrichment_request(
             for h in history
         ],
     )
+    return request, tainted
+
+
+def task_snapshot(task: tasks.TaskOut) -> TaskSnapshot:
+    """The task as the enrichment reads it (P1-08's `rules.TaskSnapshot`)."""
+    return TaskSnapshot(
+        id=task.id,
+        project_id=task.project_id,
+        title=task.title,
+        label=None if task.label is None else task.label.value,
+        label_source=task.label_source,
+        status=task.status.value,
+        first_action=task.first_action,
+        first_action_source=task.first_action_source,
+        acceptance_criteria=task.acceptance_criteria,
+        estimate_minutes=task.estimate_minutes,
+        version=task.version,
+        enrichment_status=task.enrichment_status,
+    )
+
+
+async def _first_profile(s: AsyncSession, project_id: UUID | None) -> UUID | None:
+    if project_id is None:
+        return None
+    found: UUID | None = await s.scalar(
+        select(_profiles.c.id)
+        .where(_profiles.c.project_id == project_id, _profiles.c.deleted_at.is_(None))
+        .order_by(_profiles.c.created_at, _profiles.c.id)
+        .limit(1)
+    )
+    return found
+
+
+async def enrich_packet(
+    s: AsyncSession,
+    task_id: UUID,
+    *,
+    run_id: UUID | None = None,
+    profile_id: UUID | None = None,
+    timeout_s: int = ENRICH_TIMEOUT_S_DEFAULT,
+) -> TaskPacket:
+    """The enrich packet for a task (P1-17, R-24): `enrichment_request`'s body for the
+    fields the task is missing now (`rules.missing_fields`; all three when none is, since a
+    request always asks for one) and its prompt text. The run defaults to the stable
+    preview id and the profile to the project's first; nothing is dispatched here."""
+    task = await tasks.get_task(s, task_id)
+    missing = missing_fields(task_snapshot(task)) or list(get_args(MissingField))
+    request, tainted = await enrichment_request_tainted(s, task_id, missing=missing)
+    body = request.model_dump(mode="json")
+    profile_id = profile_id or await _first_profile(s, task.project_id)
+    return TaskPacket(
+        kind=RunKind.ENRICH,
+        run_id=run_id or uuid5(task_id, PREVIEW_RUN),
+        profile_id=profile_id or UUID(int=0),
+        skill=ENRICH_SKILL,
+        output_schema=ENRICH_RESULT,
+        correlation_id=f"enrich:{task_id}",
+        timeout_s=timeout_s,
+        prompt_text=render_prompt(ENRICH_SKILL, ENRICH_RESULT, body),
+        body=body,
+        tainted=tainted,
+    )
+
+
+async def plan_projects(
+    s: AsyncSession, project_ids: Sequence[UUID], *, now: datetime | None = None
+) -> list[PlanProject]:
+    """The planning request's projects (FR-2.3), each with the first BRIEF_EXCERPT_MAX
+    characters of its brief ("" before it has one): P1-17's seam for P1-11's
+    `planning_request`. 404 for a project the caller cannot see."""
+    out: list[PlanProject] = []
+    for project_id in project_ids:
+        project = await projects.get_project(s, project_id, now=now)
+        try:
+            brief = (await knowledge.get_brief(project_id, session=s)).body_md or ""
+        except NotFound:
+            brief = ""
+        out.append(
+            PlanProject(
+                id=project.id,
+                name=project.name[:PROJECT_TEXT_MAX],
+                health=project.health.value,
+                next_milestone=project.next_milestone,
+                brief_excerpt=brief[:BRIEF_EXCERPT_MAX],
+            )
+        )
+    return out
 
 
 async def packet_for_caller(
@@ -853,15 +995,12 @@ async def packet_for_caller(
     """`get_task_packet`: the task's packet as the caller would get it for a run, with no
     token (`callback.task_token: null`). The run is the caller's (a task token's) or a
     stable preview id; the nonce is derived from the content, so repeated reads agree.
-    `with_context=False` (a caller without `context:read`) leaves the context items out."""
+    `with_context=False` (a caller without `context:read`) leaves the context items out.
+    `kind=enrich` answers `enrich_packet` (P1-17)."""
+    if kind == RunKind.ENRICH:
+        return await enrich_packet(s, task_id, run_id=run_id, profile_id=profile_id)
     project = (await tasks.get_task(s, task_id)).project_id
-    if profile_id is None and project is not None:
-        profile_id = await s.scalar(
-            select(_profiles.c.id)
-            .where(_profiles.c.project_id == project, _profiles.c.deleted_at.is_(None))
-            .order_by(_profiles.c.created_at, _profiles.c.id)
-            .limit(1)
-        )
+    profile_id = profile_id or await _first_profile(s, project)
     inputs = await gather_inputs(s, task_id, profile_id=profile_id)
     if not with_context:
         inputs = inputs.model_copy(update={"context_items": []})
