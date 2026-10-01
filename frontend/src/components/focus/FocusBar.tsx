@@ -126,8 +126,17 @@ export function FocusBar() {
   const pending = latest?.response === null ? latest : undefined;
   const minutes = useMinutesSince(session?.started_at);
 
+  // A reply that failed reopens the check-in (the effect below sends its message
+  // again) and says so; the next answer that lands clears the notice.
+  const [failures, setFailures] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
   const show = (answer: FocusCurrentOut) => {
     queryClient.setQueryData(focusGetCurrentQueryKey(), answer);
+    setNotice(null);
+  };
+  const failed = () => {
+    setNotice("Your answer was not saved. Try again.");
+    setFailures((n) => n + 1);
   };
   const respond = useWrite<
     { event_id: string; response: Response; idempotencyKey?: string },
@@ -143,6 +152,7 @@ export function FocusBar() {
         schema: zFocusCurrentOut,
       }),
     onSuccess: show,
+    onError: failed,
   });
   const less = useWrite<
     { event_id: string; idempotencyKey?: string },
@@ -158,6 +168,7 @@ export function FocusBar() {
         schema: zFocusCurrentOut,
       }),
     onSuccess: show,
+    onError: failed,
   });
 
   // The implementations are given inline so they always see this render's message
@@ -207,8 +218,9 @@ export function FocusBar() {
       rule: pending.rule,
       message: pending.message,
     });
-    // Only a new message is a new event; the rest of `pending` is the same message.
-  }, [actor, pendingId]);
+    // Only a new message (or a failed reply to this one) is a new event; the rest of
+    // `pending` is the same message.
+  }, [actor, pendingId, failures]);
 
   if (!data || (session === null && messages.length === 0)) return null;
 
@@ -257,6 +269,11 @@ export function FocusBar() {
         <ul className="text-sm">
           <Message message={latest} />
         </ul>
+      )}
+      {notice !== null && (
+        <p role="alert" className="text-sm text-danger">
+          {notice}
+        </p>
       )}
       {(state === "checkIn" || canStart) && pending !== undefined && (
         <div className="flex flex-wrap gap-2">

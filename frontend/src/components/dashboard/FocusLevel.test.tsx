@@ -2,6 +2,7 @@
 // workspace level in one select (`PUT /v1/focus/level`) and "Less today"
 // (`POST /v1/focus/less`); each answer is the new focus state, shown at once.
 import { screen, waitFor } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { expect, test } from "vitest";
 
 import { focusCurrent, focusReplies, quietFocus } from "../../test/msw/focus";
@@ -63,4 +64,26 @@ test("[P2-15][FR-10.9] at Quiet there is nothing to lower", async () => {
 
   expect(await screen.findByText("Focus: Quiet")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Less today" })).toBeNull();
+});
+
+test("[P2-15][FR-10.1] a level change that fails says so", async () => {
+  server.use(
+    focusCurrent(COACH),
+    http.put("*/v1/focus/level", () =>
+      HttpResponse.json(
+        { type: "about:blank", title: "Unavailable", status: 503, code: "x" },
+        { status: 503 },
+      ),
+    ),
+  );
+  const { user } = renderWithProviders(<FocusLevel />, { viewport: "phone" });
+
+  await user.selectOptions(
+    await screen.findByRole("combobox", { name: "Workspace focus level" }),
+    "quiet",
+  );
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "The focus level was not changed",
+  );
 });

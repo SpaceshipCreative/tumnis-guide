@@ -7,7 +7,12 @@ import { http, HttpResponse } from "msw";
 import { expect, test } from "vitest";
 
 import { makeTask } from "../../test/factories";
-import { focusCurrent, focusMessage, quietFocus } from "../../test/msw/focus";
+import {
+  focusCurrent,
+  focusMessage,
+  focusSession,
+  quietFocus,
+} from "../../test/msw/focus";
 import { server } from "../../test/msw/server";
 import { Recorder } from "../../test/msw/settings";
 import { renderRoute } from "../../test/render";
@@ -68,4 +73,48 @@ test("[P2-15][FR-10.9] each message shows its attribution; a block offers Start"
   });
   expect(recorder.sent[0]?.path).toBe(`/v1/tasks/${task.id}/status`);
   expect(recorder.sent[0]?.body).toEqual({ to: "in_progress", version: 7 });
+});
+
+test("[P2-15][FR-10.4] a reply that fails reopens the check-in and says so", async () => {
+  const session = focusSession("Write proposal", 30);
+  const checkIn = focusMessage({ task_id: session.task_id });
+  let posts = 0;
+  server.use(
+    focusCurrent({
+      ...quietFocus(),
+      level: "coach",
+      workspace_level: "coach",
+      session,
+      messages: [checkIn],
+    }),
+    http.post("*/v1/focus/respond", () => {
+      posts += 1;
+      return HttpResponse.json(
+        { type: "about:blank", title: "Unavailable", status: 503, code: "x" },
+        { status: 503 },
+      );
+    }),
+  );
+  const view = await renderRoute("/", { viewport: "phone" });
+
+  const bar = await screen.findByRole("region", { name: "Focus" });
+  await view.user.click(within(bar).getByRole("button", { name: "Snooze" }));
+
+  expect(await within(bar).findByRole("alert")).toHaveTextContent(
+    "Your answer was not saved",
+  );
+  expect(
+    await within(bar).findByRole("button", { name: "Snooze" }),
+  ).toBeInTheDocument();
+  expect(posts).toBe(1);
+});
+
+test("[P2-15][FR-10.9] at Quiet with nothing today the loaded page has no focus bar", async () => {
+  server.use(focusCurrent(quietFocus()));
+  await renderRoute("/", { viewport: "laptop" });
+
+  // The dashboard's level chip reads the same focus state: once it shows, the bar has
+  // had its answer too.
+  expect(await screen.findByText("Focus: Quiet")).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Focus" })).toBeNull();
 });

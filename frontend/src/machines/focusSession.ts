@@ -140,8 +140,15 @@ export const focusSession = setup({
         TASK_LEFT: "idle",
       },
     },
+    // Beyond the plan's config: the session goes on after a stuck answer, so its next
+    // check-in or a switch opens a check-in here too, as from active and snoozed.
     stuck: {
       on: {
+        FOCUS_EVENT: {
+          guard: "isCheckInOrSwitched",
+          target: "checkIn",
+          actions: "show",
+        },
         TASK_STARTED: { target: "active", actions: "startTimer" },
         TASK_LEFT: "idle",
         DISMISS: "active",

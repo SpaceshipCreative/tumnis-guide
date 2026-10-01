@@ -9,20 +9,31 @@ import { fieldClass, saveClass } from "./rail/RailSection";
 import type { Project } from "./types";
 
 export const DEFAULT_CADENCE_MIN = 25; // FR-10.1
+const MIN_CADENCE = 5;
+const MAX_CADENCE = 240;
 
 export function FocusCadence({ project }: { project: Project }) {
   const [cadence, setCadence] = useState(
     project.focus_cadence_min == null ? "" : String(project.focus_cadence_min),
   );
+  const [invalid, setInvalid] = useState(false);
   const update = useUpdateProject();
   const id = useId();
   const hint = useId();
   return (
     <form
+      noValidate
       className="flex min-w-0 flex-col gap-2 border-t border-border pt-3"
       onSubmit={(event) => {
         event.preventDefault();
         const value = cadence.trim() === "" ? null : Number(cadence);
+        const ok =
+          value === null ||
+          (Number.isInteger(value) &&
+            value >= MIN_CADENCE &&
+            value <= MAX_CADENCE);
+        setInvalid(!ok);
+        if (!ok) return;
         update.mutate({ project, patch: { focus_cadence_min: value } });
       }}
     >
@@ -33,8 +44,9 @@ export function FocusCadence({ project }: { project: Project }) {
         id={id}
         type="number"
         inputMode="numeric"
-        min={5}
-        max={240}
+        min={MIN_CADENCE}
+        max={MAX_CADENCE}
+        aria-invalid={invalid}
         aria-describedby={hint}
         placeholder={`${String(DEFAULT_CADENCE_MIN)} (default)`}
         value={cadence}
@@ -48,6 +60,11 @@ export function FocusCadence({ project }: { project: Project }) {
         tasks is In progress. Two &ldquo;still on it&rdquo; answers in a row
         double it for the rest of the task.
       </p>
+      {invalid && (
+        <p role="alert" className="text-sm text-danger">
+          {`Use whole minutes from ${String(MIN_CADENCE)} to ${String(MAX_CADENCE)}, or leave it empty for the default.`}
+        </p>
+      )}
       <button type="submit" disabled={update.isPending} className={saveClass}>
         Save cadence
       </button>

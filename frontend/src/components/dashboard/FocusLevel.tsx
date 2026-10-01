@@ -95,6 +95,11 @@ export function FocusLevel() {
           </option>
         ))}
       </select>
+      {(setLevel.isError || less.isError) && (
+        <span role="alert" className="text-sm text-danger">
+          The focus level was not changed. Try again.
+        </span>
+      )}
       {data.level !== "quiet" && (
         <button
           type="button"

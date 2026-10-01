@@ -69,3 +69,24 @@ test("[P2-15][FR-10.1] an empty cadence goes back to the default", async () => {
     version: 2,
   });
 });
+
+test("[P2-15][FR-10.1] a cadence out of range is refused before any PATCH", async () => {
+  const project = makeProject({ version: 1 });
+  const recorder = new Recorder();
+  server.use(answering(recorder, project));
+  const { user } = renderWithProviders(<FocusCadence project={project} />, {
+    viewport: "phone",
+  });
+
+  const field = screen.getByRole("spinbutton", {
+    name: "Focus check-in cadence (minutes)",
+  });
+  await user.type(field, "300");
+  await user.click(screen.getByRole("button", { name: "Save cadence" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Use whole minutes from 5 to 240",
+  );
+  expect(field).toHaveAttribute("aria-invalid", "true");
+  expect(recorder.sent).toEqual([]);
+});
