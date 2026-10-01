@@ -1,0 +1,78 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/focus.event.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "fired_at": {
+      "format": "date-time",
+      "title": "Fired At",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "block_start",
+        "not_started",
+        "check_in_due",
+        "switched",
+        "stuck",
+        "block_end",
+        "day_end"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "level": {
+      "enum": [
+        "quiet",
+        "nudge",
+        "coach",
+        "guardrail"
+      ],
+      "title": "Level",
+      "type": "string"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "rule": {
+      "title": "Rule",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Task Id"
+    }
+  },
+  "required": [
+    "schema_version",
+    "event_id",
+    "kind",
+    "task_id",
+    "rule",
+    "level",
+    "message",
+    "fired_at"
+  ],
+  "title": "FocusEventV1",
+  "type": "object"
+}

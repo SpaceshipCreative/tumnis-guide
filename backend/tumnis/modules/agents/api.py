@@ -178,6 +178,7 @@ __all__ = [
     "run_plan",
     "run_token_scopes",
     "set_profile_key",
+    "task_activity_times",
 ]
 
 RUNNER_CHANNEL: Final = "runner_mailbox"  # NOTIFY {"runner": id, "close": bool}
@@ -2243,6 +2244,29 @@ async def run_plan(workspace_id: UUID, packet: TaskPacket) -> RunOutcome:
     if not _skill_runner:
         raise RuntimeError("agents.workflows is not loaded: nothing can run a skill")
     return RunOutcome.model_validate(await _skill_runner[0](workspace_id, packet))
+
+
+# --- Focus activity (P2-15) ---------------------------------------------------------------
+
+
+async def task_activity_times(
+    ctx: WorkspaceContext, task_id: UUID, *, since: datetime, until: datetime
+) -> list[datetime]:
+    """When the task's runs streamed events inside [since, until], oldest first: the agent
+    activity that suppresses a focus check-in (FR-10.7b)."""
+    stmt = (
+        select(_events.c.created_at)
+        .join(_runs, _runs.c.id == _events.c.run_id)
+        .where(
+            _runs.c.task_id == task_id,
+            _events.c.created_at >= since,
+            _events.c.created_at <= until,
+        )
+        .order_by(_events.c.created_at)
+    )
+    async with tenant_session(ctx) as s:
+        found: list[datetime] = list((await s.scalars(stmt)).all())
+    return found
 
 
 # --- Close the day (P1-18) ----------------------------------------------------------------------

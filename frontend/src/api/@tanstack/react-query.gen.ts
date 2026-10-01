@@ -59,6 +59,10 @@ import {
   deadLettersPostRetry,
   decisionsEditThreshold,
   decisionsGetCalibration,
+  focusGetCurrent,
+  focusLess,
+  focusPutLevel,
+  focusRespond,
   githubWebhook,
   healthLive,
   healthReady,
@@ -292,6 +296,18 @@ import type {
   DecisionsGetCalibrationData,
   DecisionsGetCalibrationError,
   DecisionsGetCalibrationResponse,
+  FocusGetCurrentData,
+  FocusGetCurrentError,
+  FocusGetCurrentResponse,
+  FocusLessData,
+  FocusLessError,
+  FocusLessResponse,
+  FocusPutLevelData,
+  FocusPutLevelError,
+  FocusPutLevelResponse,
+  FocusRespondData,
+  FocusRespondError,
+  FocusRespondResponse,
   GithubWebhookData,
   GithubWebhookError,
   GithubWebhookResponse,
@@ -1823,6 +1839,115 @@ export const knowledgeGetFileOptions = (
     },
     queryKey: knowledgeGetFileQueryKey(options),
   });
+
+export const focusGetCurrentQueryKey = (
+  options?: Options<FocusGetCurrentData>,
+) => createQueryKey("focusGetCurrent", options);
+
+/**
+ * Get Current
+ */
+export const focusGetCurrentOptions = (
+  options?: Options<FocusGetCurrentData>,
+) =>
+  queryOptions<
+    FocusGetCurrentResponse,
+    FocusGetCurrentError,
+    FocusGetCurrentResponse,
+    ReturnType<typeof focusGetCurrentQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await focusGetCurrent({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: focusGetCurrentQueryKey(options),
+  });
+
+/**
+ * Less
+ */
+export const focusLessMutation = (
+  options?: Partial<Options<FocusLessData>>,
+): UseMutationOptions<
+  FocusLessResponse,
+  FocusLessError,
+  Options<FocusLessData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    FocusLessResponse,
+    FocusLessError,
+    Options<FocusLessData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await focusLess({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Put Level
+ */
+export const focusPutLevelMutation = (
+  options?: Partial<Options<FocusPutLevelData>>,
+): UseMutationOptions<
+  FocusPutLevelResponse,
+  FocusPutLevelError,
+  Options<FocusPutLevelData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    FocusPutLevelResponse,
+    FocusPutLevelError,
+    Options<FocusPutLevelData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await focusPutLevel({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Respond
+ */
+export const focusRespondMutation = (
+  options?: Partial<Options<FocusRespondData>>,
+): UseMutationOptions<
+  FocusRespondResponse,
+  FocusRespondError,
+  Options<FocusRespondData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    FocusRespondResponse,
+    FocusRespondError,
+    Options<FocusRespondData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await focusRespond({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 /**
  * Webhook
