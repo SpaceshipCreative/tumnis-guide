@@ -230,3 +230,43 @@ async def post_result(
     posted = await surface.rest_twin(request, session, tools.POST_RESULT, raw)
     assert isinstance(posted, api.ResultOut)  # noqa: S101  # the op's output model
     return posted
+
+
+# --- Questions and approvals (P2-05, FR-5.6, FR-5.7) ----------------------------------------
+
+_HUMAN_WAIT = RoutePolicy(
+    auth="session_or_key",
+    scopes=frozenset({"tasks:write"}),
+    idempotent=False,
+    not_idempotent_reason=(
+        "idempotent inside invoke on the Idempotency-Key header, as on MCP; the long poll"
+        " runs after that transaction commits, so the route holds no session"
+    ),
+    project_param="lookup:runs",
+)
+
+
+@router.post("/runs/{run_id}/questions")
+@route_policy(_HUMAN_WAIT)
+async def ask_human(run_id: UUID, body: tools.AskHumanBody, request: Request) -> api.HumanWaitOut:
+    """Ask the human (the `ask_human` tool's twin): the task waits on the human, and the
+    call waits up to the long poll for the answer, else answers `pending` with the
+    question's id for the re-send. A key with no run answers `denied`."""
+    raw = {**body.model_dump(), "run_id": run_id}
+    asked = await surface.rest_twin_detached(request, tools.ASK_HUMAN, raw)
+    assert isinstance(asked, api.HumanWaitOut)  # noqa: S101  # the op's output model
+    return asked
+
+
+@router.post("/runs/{run_id}/approvals")
+@route_policy(_HUMAN_WAIT)
+async def request_approval(
+    run_id: UUID, body: tools.RequestApprovalBody, request: Request
+) -> api.HumanWaitOut:
+    """Ask before an action (the `request_approval` tool's twin): `approved`, `denied`, or
+    `pending` with the approval's id once the long poll runs out. A key with no run
+    answers `denied`."""
+    raw = {**body.model_dump(), "run_id": run_id}
+    asked = await surface.rest_twin_detached(request, tools.REQUEST_APPROVAL, raw)
+    assert isinstance(asked, api.HumanWaitOut)  # noqa: S101  # the op's output model
+    return asked

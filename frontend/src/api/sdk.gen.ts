@@ -10,6 +10,9 @@ import {
 } from "./client";
 import { client } from "./client.gen";
 import type {
+  AgentsAskHumanData,
+  AgentsAskHumanErrors,
+  AgentsAskHumanResponses,
   AgentsCancelRunData,
   AgentsCancelRunErrors,
   AgentsCancelRunResponses,
@@ -43,6 +46,9 @@ import type {
   AgentsRegisterProfileData,
   AgentsRegisterProfileErrors,
   AgentsRegisterProfileResponses,
+  AgentsRequestApprovalData,
+  AgentsRequestApprovalErrors,
+  AgentsRequestApprovalResponses,
   AgentsRequestRunData,
   AgentsRequestRunErrors,
   AgentsRequestRunResponses,
@@ -349,6 +355,7 @@ import type {
   UsageGetUsageResponses,
 } from "./types.gen";
 import {
+  zAgentsAskHumanResponse,
   zAgentsCancelRunResponse,
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
@@ -360,6 +367,7 @@ import {
   zAgentsListRunnersResponse,
   zAgentsPostResultResponse,
   zAgentsRegisterProfileResponse,
+  zAgentsRequestApprovalResponse,
   zAgentsRequestRunResponse,
   zAgentsRotateRunnerTokenResponse,
   zAgentsUpdateProfileResponse,
@@ -2265,6 +2273,35 @@ export const agentsGetRun = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Request Approval
+ *
+ * Ask before an action (the `request_approval` tool's twin): `approved`, `denied`, or
+ * `pending` with the approval's id once the long poll runs out. A key with no run
+ * answers `denied`.
+ */
+export const agentsRequestApproval = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsRequestApprovalData, ThrowOnError>,
+): RequestResult<
+  AgentsRequestApprovalResponses,
+  AgentsRequestApprovalErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsRequestApprovalResponses,
+    AgentsRequestApprovalErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsRequestApprovalResponse.parseAsync(data),
+    url: "/v1/runs/{run_id}/approvals",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Cancel Run
  *
  * Stop (FR-5.5): a queued run ends at once; a running one is stopped by its workflow
@@ -2310,6 +2347,31 @@ export const agentsListRunEvents = <ThrowOnError extends boolean = false>(
       await zAgentsListRunEventsResponse.parseAsync(data),
     url: "/v1/runs/{run_id}/events",
     ...options,
+  });
+
+/**
+ * Ask Human
+ *
+ * Ask the human (the `ask_human` tool's twin): the task waits on the human, and the
+ * call waits up to the long poll for the answer, else answers `pending` with the
+ * question's id for the re-send. A key with no run answers `denied`.
+ */
+export const agentsAskHuman = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsAskHumanData, ThrowOnError>,
+): RequestResult<AgentsAskHumanResponses, AgentsAskHumanErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    AgentsAskHumanResponses,
+    AgentsAskHumanErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsAskHumanResponse.parseAsync(data),
+    url: "/v1/runs/{run_id}/questions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**

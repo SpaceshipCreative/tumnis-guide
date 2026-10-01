@@ -281,6 +281,66 @@ async def change_document_trust(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+# --- Approvals (P2-05) -----------------------------------------------------------------------
+# `approval.granted` / `approval.denied` are the human's decide on an `approval` review item.
+# The item is queued here as a run's `request_approval` would (no run is dispatched: the
+# decide hook updates the approval row when there is one and writes the audit row either
+# way). `agent.gated_action` and `approval.auto` are a run's own rows (actor `task_token`,
+# which a Ctx has no id for, and a dispatched run); T-P2-05-12 and
+# agents/tests/integration/test_default_policy.py check those.
+
+
+async def _open_approval(ctx: Ctx) -> tuple[str, int]:
+    """One open `approval` review item in the case's workspace; (id, version)."""
+    import uuid  # noqa: PLC0415
+
+    import psycopg  # noqa: PLC0415
+
+    from tests._pg import OWNER  # noqa: PLC0415
+    from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+    from tumnis.modules.tasks import api as tasks  # noqa: PLC0415
+
+    run_id = uuid.uuid4()
+    async with tenant_session(WorkspaceContext(ctx.workspace_id, SYSTEM_ACTOR)) as s:
+        item_id = await tasks.add_review_item(
+            "approval",
+            target=tasks.TargetRef(type="run", id=run_id),
+            project_id=None,
+            payload={
+                "approval_id": str(uuid.uuid4()),
+                "run_id": str(run_id),
+                "action_class": "merge_main",
+                "description": "Merge the audit case branch into main",
+                "rule": "gated_by_policy",
+            },
+            session=s,
+        )
+    with psycopg.connect(ctx.db.libpq(OWNER)) as conn:
+        row = conn.execute("SELECT version FROM review_items WHERE id = %s", (item_id,)).fetchone()
+    assert row is not None
+    return str(item_id), int(row[0])
+
+
+async def _decide_approval(ctx: Ctx, action: str) -> None:
+    item_id, version = await _open_approval(ctx)
+    response = await ctx.session_client.post(
+        f"/v1/review/{item_id}/decide",
+        json={"action": action, "version": version, "payload": {"reason": "Audit case"}},
+    )
+    response.raise_for_status()
+
+
+async def grant_approval(ctx: Ctx) -> None:
+    """POST /v1/review/{id}/decide `approve` with a reason: `approval.granted`."""
+    await _decide_approval(ctx, "approve")
+
+
+async def deny_approval(ctx: Ctx) -> None:
+    """POST /v1/review/{id}/decide `deny` with a reason: `approval.denied`."""
+    await _decide_approval(ctx, "deny")
+
+
 AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("audit.exported", export_csv, "user"),
     AuditCase("dead_letter.retried", retry_dead_letter, "user"),
@@ -303,6 +363,8 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("data.purged", purge_project, "user"),
     AuditCase("threshold.changed", change_threshold, "user"),
     AuditCase("document.trust_changed", change_document_trust, "user"),
+    AuditCase("approval.granted", grant_approval, "user"),
+    AuditCase("approval.denied", deny_approval, "user"),
 )
 
 # action -> the work package that builds its operation and adds its case.

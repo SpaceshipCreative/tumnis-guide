@@ -10,6 +10,7 @@ import {
 
 import { client } from "../client.gen";
 import {
+  agentsAskHuman,
   agentsCancelRun,
   agentsCheckProfileHealth,
   agentsCreateRunner,
@@ -21,6 +22,7 @@ import {
   agentsListRunners,
   agentsPostResult,
   agentsRegisterProfile,
+  agentsRequestApproval,
   agentsRequestRun,
   agentsRotateRunnerToken,
   agentsUpdateProfile,
@@ -126,6 +128,9 @@ import {
   usageGetUsage,
 } from "../sdk.gen";
 import type {
+  AgentsAskHumanData,
+  AgentsAskHumanError,
+  AgentsAskHumanResponse,
   AgentsCancelRunData,
   AgentsCancelRunError,
   AgentsCancelRunResponse,
@@ -159,6 +164,9 @@ import type {
   AgentsRegisterProfileData,
   AgentsRegisterProfileError,
   AgentsRegisterProfileResponse,
+  AgentsRequestApprovalData,
+  AgentsRequestApprovalError,
+  AgentsRequestApprovalResponse,
   AgentsRequestRunData,
   AgentsRequestRunError,
   AgentsRequestRunResponse,
@@ -3309,6 +3317,37 @@ export const agentsGetRunOptions = (options: Options<AgentsGetRunData>) =>
   });
 
 /**
+ * Request Approval
+ *
+ * Ask before an action (the `request_approval` tool's twin): `approved`, `denied`, or
+ * `pending` with the approval's id once the long poll runs out. A key with no run
+ * answers `denied`.
+ */
+export const agentsRequestApprovalMutation = (
+  options?: Partial<Options<AgentsRequestApprovalData>>,
+): UseMutationOptions<
+  AgentsRequestApprovalResponse,
+  AgentsRequestApprovalError,
+  Options<AgentsRequestApprovalData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsRequestApprovalResponse,
+    AgentsRequestApprovalError,
+    Options<AgentsRequestApprovalData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsRequestApproval({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Cancel Run
  *
  * Stop (FR-5.5): a queued run ends at once; a running one is stopped by its workflow
@@ -3368,6 +3407,37 @@ export const agentsListRunEventsOptions = (
     },
     queryKey: agentsListRunEventsQueryKey(options),
   });
+
+/**
+ * Ask Human
+ *
+ * Ask the human (the `ask_human` tool's twin): the task waits on the human, and the
+ * call waits up to the long poll for the answer, else answers `pending` with the
+ * question's id for the re-send. A key with no run answers `denied`.
+ */
+export const agentsAskHumanMutation = (
+  options?: Partial<Options<AgentsAskHumanData>>,
+): UseMutationOptions<
+  AgentsAskHumanResponse,
+  AgentsAskHumanError,
+  Options<AgentsAskHumanData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsAskHumanResponse,
+    AgentsAskHumanError,
+    Options<AgentsAskHumanData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsAskHuman({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 /**
  * Post Result

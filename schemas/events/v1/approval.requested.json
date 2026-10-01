@@ -1,0 +1,61 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/approval.requested.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A run asked to take an action that needs a decision (P2-05, FR-5.6): `rule` is the\npolicy's verdict. `opened` is true when the human was asked in the same transaction\n(review item, task Waiting on human); false while Decisions has yet to judge an action\nthe policy does not name (`unknown_needs_decision`). `agents.start_human_wait` starts\nits `approval_flow`.",
+  "properties": {
+    "action_class": {
+      "maxLength": 200,
+      "title": "Action Class",
+      "type": "string"
+    },
+    "approval_id": {
+      "format": "uuid",
+      "title": "Approval Id",
+      "type": "string"
+    },
+    "opened": {
+      "title": "Opened",
+      "type": "boolean"
+    },
+    "rule": {
+      "maxLength": 60,
+      "title": "Rule",
+      "type": "string"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Task Id"
+    }
+  },
+  "required": [
+    "schema_version",
+    "approval_id",
+    "run_id",
+    "task_id",
+    "action_class",
+    "rule",
+    "opened"
+  ],
+  "title": "ApprovalRequestedV1",
+  "type": "object"
+}

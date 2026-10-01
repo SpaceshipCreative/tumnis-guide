@@ -129,6 +129,30 @@ export type AppDeployStatus = {
 };
 
 /**
+ * AskHumanBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export type AskHumanBody = {
+  /**
+   * Choices
+   */
+  choices?: Array<string>;
+  /**
+   * Prompt
+   */
+  prompt: string;
+  /**
+   * Question Id
+   */
+  question_id?: string | null;
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+};
+
+/**
  * AuditEntry
  */
 export type AuditEntry = {
@@ -892,6 +916,44 @@ export type HealthCheckAccepted = {
    * Request Id
    */
   request_id: string;
+};
+
+/**
+ * HumanWaitOut
+ */
+export type HumanWaitOut = {
+  /**
+   * Answer
+   */
+  answer?: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Reason
+   */
+  reason?: string | null;
+  /**
+   * Retry After Seconds
+   */
+  retry_after_seconds?: number | null;
+  /**
+   * Rule
+   */
+  rule?: string | null;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Status
+   */
+  status: "pending" | "answered" | "approved" | "denied";
+  /**
+   * Tainted
+   */
+  tainted?: boolean;
 };
 
 /**
@@ -2467,6 +2529,34 @@ export type ReorderIn = {
    * Version
    */
   version: number;
+};
+
+/**
+ * RequestApprovalBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export type RequestApprovalBody = {
+  /**
+   * Action Class
+   */
+  action_class: string;
+  /**
+   * Approval Id
+   */
+  approval_id?: string | null;
+  /**
+   * Description
+   */
+  description: string;
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+  /**
+   * Target
+   */
+  target?: string | null;
 };
 
 /**
@@ -8776,6 +8866,66 @@ export type AgentsGetRunResponses = {
 export type AgentsGetRunResponse =
   AgentsGetRunResponses[keyof AgentsGetRunResponses];
 
+export type AgentsRequestApprovalData = {
+  body: RequestApprovalBody;
+  path: {
+    /**
+     * Run Id
+     */
+    run_id: string;
+  };
+  query?: never;
+  url: "/v1/runs/{run_id}/approvals";
+};
+
+export type AgentsRequestApprovalErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsRequestApprovalError =
+  AgentsRequestApprovalErrors[keyof AgentsRequestApprovalErrors];
+
+export type AgentsRequestApprovalResponses = {
+  /**
+   * Successful Response
+   */
+  200: HumanWaitOut;
+};
+
+export type AgentsRequestApprovalResponse =
+  AgentsRequestApprovalResponses[keyof AgentsRequestApprovalResponses];
+
 export type AgentsCancelRunData = {
   body?: never;
   path: {
@@ -8904,6 +9054,66 @@ export type AgentsListRunEventsResponses = {
 
 export type AgentsListRunEventsResponse =
   AgentsListRunEventsResponses[keyof AgentsListRunEventsResponses];
+
+export type AgentsAskHumanData = {
+  body: AskHumanBody;
+  path: {
+    /**
+     * Run Id
+     */
+    run_id: string;
+  };
+  query?: never;
+  url: "/v1/runs/{run_id}/questions";
+};
+
+export type AgentsAskHumanErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsAskHumanError =
+  AgentsAskHumanErrors[keyof AgentsAskHumanErrors];
+
+export type AgentsAskHumanResponses = {
+  /**
+   * Successful Response
+   */
+  200: HumanWaitOut;
+};
+
+export type AgentsAskHumanResponse =
+  AgentsAskHumanResponses[keyof AgentsAskHumanResponses];
 
 export type AgentsPostResultData = {
   body: PostResultBody;
