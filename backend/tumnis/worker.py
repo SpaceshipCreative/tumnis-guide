@@ -158,6 +158,8 @@ def configure_generation(settings: Settings) -> None:
     # The Embeddings slot (P3-10): only the worker embeds chunks and search queries; the
     # api process never calls out, so its hybrid searches answer with full text.
     decisions.configure_embeddings(settings.embeddings, net_policy=settings.net_policy())
+    # The Speech slot (P4-03): only the worker makes spoken focus messages' clips.
+    decisions.configure_speech(settings.speech, net_policy=settings.net_policy())
 
 
 def configure_agents(settings: Settings) -> None:

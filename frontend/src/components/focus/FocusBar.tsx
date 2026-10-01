@@ -25,6 +25,7 @@ import type {
 import { zFocusCurrentOut } from "../../api/zod.gen";
 import { apiWrite, ConflictError, useWrite } from "../../lib/fetch";
 import { LEVEL_TEXT } from "../../lib/levelRules";
+import { useVoiceMode } from "../../lib/speech/useVoiceMode";
 import { taskQueryOptions } from "../../lib/optimistic";
 import { invalidateTaskViews } from "../../lib/task-cache";
 import {
@@ -126,6 +127,7 @@ export function FocusBar() {
   const data = current.data;
   const session = data?.session ?? null;
   const messages = data?.messages ?? [];
+  useVoiceMode(data?.messages); // P4-03: speaks new messages when voice is on
   const latest = messages.at(-1);
   const pending = latest?.response === null ? latest : undefined;
   const minutes = useMinutesSince(session?.started_at);

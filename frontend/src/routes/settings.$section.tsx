@@ -35,8 +35,10 @@ import {
 import { SessionsSection } from "../components/settings/SessionsSection";
 import { SettingsLayout } from "../components/settings/SettingsLayout";
 import { StorageSection } from "../components/settings/StorageSection";
+import { VoiceSection } from "../components/settings/voice/VoiceSection";
 import { WorkingHoursSection } from "../components/settings/WorkingHoursSection";
 import { WorkspaceSection } from "../components/settings/WorkspaceSection";
+import { voiceQuery } from "../lib/speech/voiceSettings";
 
 export const settingsSections = SETTINGS_SECTIONS;
 
@@ -53,6 +55,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   storage: StorageSection,
   calibration: CalibrationSection,
   metrics: MetricsSection,
+  voice: VoiceSection,
 };
 
 export const Route = createFileRoute("/settings/$section")({
@@ -115,6 +118,9 @@ export const Route = createFileRoute("/settings/$section")({
               ),
             ),
         );
+        break;
+      case "voice":
+        started(queryClient.query(voiceQuery()));
         break;
       default:
         break; // the audit log reads by page

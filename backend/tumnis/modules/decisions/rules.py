@@ -520,3 +520,36 @@ def confidence_bar(t: Threshold, *, fallback: bool = False) -> float:
     if eff.t_no is not None:
         bands.append(1 - 2 * eff.t_no)
     return round(max(bands), 6) if bands else 1.0
+
+
+# --- Voice (P4-03, FR-10.8, FR-11.7, Data flow rule 6) ----------------------------------
+
+FocusLevel = Literal["quiet", "nudge", "coach", "guardrail"]  # focus.payloads.Level
+SpeechRoute = Literal["browser", "piper", "hosted"]
+
+
+class VoiceSettings(BaseModel):
+    """Settings > Voice (section `voice`): which focus levels are spoken (opt-in; empty is
+    off), the engine (the browser's own speech synthesis needs nothing set up; `server`
+    makes a clip through the Speech slot), the server provider, and whether a hosted
+    provider may be used (off by default; never for a local-only project)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled_levels: set[FocusLevel] = Field(default_factory=set)
+    engine: Literal["browser", "server"] = "browser"
+    server_provider: Literal["piper", "hosted"] = "piper"
+    hosted_allowed: bool = False
+
+
+def speech_route(settings: VoiceSettings, *, local_only: bool) -> SpeechRoute:
+    """Where a message's speech is made. `browser` unless the server engine is chosen; a
+    hosted provider only when allowed and the project is not local-only, else `browser` (the
+    text stays on the device; Piper is local, so a local-only project may use it)."""
+    if settings.engine == "browser":
+        return "browser"
+    if settings.server_provider == "piper":
+        return "piper"
+    if settings.hosted_allowed and not local_only:
+        return "hosted"
+    return "browser"
