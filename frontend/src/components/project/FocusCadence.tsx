@@ -2,7 +2,7 @@
 // check-ins on this project's In progress tasks at Coach and above; empty means the
 // default (25). One PATCH /v1/projects/{id} with the version read, as the other rail
 // settings save (a 409 shows the current value).
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { useUpdateProject } from "./mutations";
 import { fieldClass, saveClass } from "./rail/RailSection";
@@ -20,18 +20,23 @@ export function FocusCadence({ project }: { project: Project }) {
   const update = useUpdateProject();
   const id = useId();
   const hint = useId();
+  const field = useRef<HTMLInputElement>(null);
   return (
     <form
       noValidate
       className="flex min-w-0 flex-col gap-2 border-t border-border pt-3"
       onSubmit={(event) => {
         event.preventDefault();
+        // Unfinished text such as "-" reads as "" with badInput set: refuse it
+        // rather than saving it as the default.
+        const badInput = field.current?.validity.badInput ?? false;
         const value = cadence.trim() === "" ? null : Number(cadence);
         const ok =
-          value === null ||
-          (Number.isInteger(value) &&
-            value >= MIN_CADENCE &&
-            value <= MAX_CADENCE);
+          !badInput &&
+          (value === null ||
+            (Number.isInteger(value) &&
+              value >= MIN_CADENCE &&
+              value <= MAX_CADENCE));
         setInvalid(!ok);
         if (!ok) return;
         update.mutate({ project, patch: { focus_cadence_min: value } });
@@ -42,6 +47,7 @@ export function FocusCadence({ project }: { project: Project }) {
       </label>
       <input
         id={id}
+        ref={field}
         type="number"
         inputMode="numeric"
         min={MIN_CADENCE}

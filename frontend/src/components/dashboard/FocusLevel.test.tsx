@@ -87,3 +87,63 @@ test("[P2-15][FR-10.1] a level change that fails says so", async () => {
     "The focus level was not changed",
   );
 });
+
+const UNAVAILABLE = () =>
+  HttpResponse.json(
+    { type: "about:blank", title: "Unavailable", status: 503, code: "x" },
+    { status: 503 },
+  );
+
+test("[P2-15][FR-10.9] a failed level change stops showing once less today works", async () => {
+  const replies = focusReplies({
+    ...COACH,
+    level: "nudge",
+    override_level: "nudge",
+  });
+  server.use(
+    focusCurrent(COACH),
+    http.put("*/v1/focus/level", UNAVAILABLE),
+    ...replies.handlers,
+  );
+  const { user } = renderWithProviders(<FocusLevel />, { viewport: "phone" });
+
+  await user.selectOptions(
+    await screen.findByRole("combobox", { name: "Workspace focus level" }),
+    "quiet",
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "The focus level was not changed",
+  );
+  await user.click(screen.getByRole("button", { name: "Less today" }));
+
+  expect(
+    await screen.findByText("Focus today: Nudge (usually Coach)"),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+test("[P2-15][FR-10.1] a failed less today stops showing once a level change works", async () => {
+  const replies = focusReplies({
+    ...quietFocus(),
+    level: "nudge",
+    workspace_level: "nudge",
+  });
+  server.use(
+    focusCurrent(COACH),
+    http.post("*/v1/focus/less", UNAVAILABLE),
+    ...replies.handlers,
+  );
+  const { user } = renderWithProviders(<FocusLevel />, { viewport: "phone" });
+
+  await user.click(await screen.findByRole("button", { name: "Less today" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "The focus level was not changed",
+  );
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: "Workspace focus level" }),
+    "nudge",
+  );
+
+  expect(await screen.findByText("Focus: Nudge")).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).toBeNull();
+});

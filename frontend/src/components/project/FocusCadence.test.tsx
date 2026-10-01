@@ -90,3 +90,31 @@ test("[P2-15][FR-10.1] a cadence out of range is refused before any PATCH", asyn
   expect(field).toHaveAttribute("aria-invalid", "true");
   expect(recorder.sent).toEqual([]);
 });
+
+test("[P2-15][FR-10.1] text that is not a number is refused, not saved as the default", async () => {
+  const project = { ...makeProject({ version: 3 }), focus_cadence_min: 30 };
+  const recorder = new Recorder();
+  server.use(answering(recorder, project));
+  const { user } = renderWithProviders(<FocusCadence project={project} />, {
+    viewport: "phone",
+  });
+
+  const field = screen.getByRole("spinbutton", {
+    name: "Focus check-in cadence (minutes)",
+  });
+  await user.clear(field);
+  await user.type(field, "-");
+  // A browser reads unfinished text such as "-" as an empty value with
+  // validity.badInput set (HTML Standard, number state); jsdom never sets badInput.
+  Object.defineProperty(field, "validity", {
+    configurable: true,
+    value: { badInput: true },
+  });
+  await user.click(screen.getByRole("button", { name: "Save cadence" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Use whole minutes from 5 to 240",
+  );
+  expect(field).toHaveAttribute("aria-invalid", "true");
+  expect(recorder.sent).toEqual([]);
+});

@@ -85,6 +85,8 @@ export function FocusLevel() {
         value={data.workspace_level}
         disabled={busy}
         onChange={(e) => {
+          // Each action owns its error; a new one clears the other's (review).
+          less.reset();
           setLevel.mutate({ level: e.target.value as Level });
         }}
         className="min-h-11 rounded-lg border border-border bg-surface px-2 text-base md:min-h-8 md:text-sm"
@@ -106,6 +108,7 @@ export function FocusLevel() {
           className={`${BUTTON_SECONDARY} md:min-h-8 md:py-1`}
           disabled={busy}
           onClick={() => {
+            setLevel.reset();
             less.mutate({});
           }}
         >
