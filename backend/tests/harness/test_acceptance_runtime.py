@@ -23,10 +23,10 @@ from __future__ import annotations
 import asyncio
 import importlib
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -347,3 +347,80 @@ async def test_a_late_scripted_answer_ends_a_run_a_reset_removed(
             break
         await asyncio.sleep(0.2)
     assert await ended()
+
+
+OLD_WORLD_MIN = 9  # more than the events queue runs at once (worker_concurrency 8)
+CANCEL_SEEN_S = 2.0
+
+
+@pytest.mark.xfail(strict=True, reason="spec:SEED")
+@pytest.mark.req("A2.1", "A2.2")
+async def test_a_reset_cancels_the_event_deliveries_of_the_world_it_removed(
+    client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
+) -> None:
+    """T-SEED-29
+    A reset empties every table but not the DBOS events queue. Deliveries queued for the
+    world it removed then fail on missing rows and back off, holding the queue's slots,
+    and the next test's events wait behind them: after a few resets `run.requested`
+    waited there for over a minute, so A2.1 and A2.2 never saw their run start. A reset
+    cancels every event delivery still queued or running from before it, and the new
+    world's own deliveries (its seed's events) start without waiting behind them."""
+    from dbos import SetWorkflowID  # noqa: PLC0415
+
+    from tumnis.core.events import (  # noqa: PLC0415
+        EVENTS_QUEUE,
+        EventEnvelope,
+        deliver_event,
+        delivery_id,
+        relay_once,
+        subscribers_for,
+    )
+
+    await _reset(client)
+    removed = [EventEnvelope.from_outbox_row(row) for row in _rows(db, "SELECT * FROM outbox")]
+    await _reset(client)
+    # The removed world's events, delivered now: their rows are gone, so they fail and
+    # back off, as a delivery still queued when a reset ran does.
+    old: list[str] = []
+    for envelope in removed:
+        fresh = envelope.model_copy(update={"event_id": uuid4()})
+        for sub in subscribers_for(fresh.name):
+            if sub.direct:
+                continue
+            wf_id = delivery_id(fresh.event_id, sub.name)
+            with SetWorkflowID(wf_id):
+                await dbos.enqueue_workflow_async(
+                    EVENTS_QUEUE, deliver_event, sub.name, fresh.model_dump(mode="json")
+                )
+            old.append(wf_id)
+
+    async def waiting(ids: list[str], statuses: set[str]) -> list[str]:
+        found = await dbos.list_workflows_async(workflow_ids=ids, load_input=False)
+        return [w.workflow_id for w in found if w.status in statuses]
+
+    assert len(await waiting(old, {"PENDING", "ENQUEUED"})) >= OLD_WORLD_MIN
+
+    await _reset(client)
+
+    cancelled = await _until_async(
+        lambda: waiting(old, {"PENDING", "ENQUEUED"}), CANCEL_SEEN_S, want=[]
+    )
+    assert cancelled == []
+    await relay_once(1000)
+    new = [
+        delivery_id(row["event_id"], sub.name)
+        for row in _rows(db, "SELECT event_id, name FROM outbox")
+        for sub in subscribers_for(row["name"])
+        if not sub.direct
+    ]
+    assert len(await dbos.list_workflows_async(workflow_ids=new, load_input=False)) > 0
+    assert await _until_async(lambda: waiting(new, {"ENQUEUED"}), SETTLE_S, want=[]) == []
+
+
+async def _until_async(check: Callable[[], Awaitable[Any]], timeout_s: float, *, want: Any) -> Any:
+    deadline = time.monotonic() + timeout_s
+    while True:
+        value = await check()
+        if value == want or time.monotonic() >= deadline:
+            return value
+        await asyncio.sleep(0.1)
