@@ -65,7 +65,6 @@ ENGINES = [
 
 @pytest.mark.req("FR-11.7")
 @pytest.mark.wp("P4-03")
-@pytest.mark.xfail(strict=True, reason="spec:P4-03")
 @pytest.mark.parametrize("make", ENGINES)
 async def test_tts_contract(make: Any) -> None:
     """T-P4-03-05 (fake), T-P4-03-06 (piper)
