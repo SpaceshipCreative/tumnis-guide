@@ -29,19 +29,22 @@ export function yieldToMain(): Promise<void> {
   });
 }
 
-/** Issues of `schema` over `values`, a slice at a time, each path under `at(index)`. */
-async function issuesInSlices(
-  schema: z.ZodType,
-  values: readonly unknown[],
-  at: (index: number) => PropertyKey[],
-): Promise<Issue[]> {
+/** One value to check: `schema` over `value`, its issues' paths under `path`. */
+interface Unit {
+  schema: z.ZodType;
+  value: unknown;
+  path: PropertyKey[];
+}
+
+/** Issues of every unit, a slice of units at a time. */
+async function issuesInSlices(units: readonly Unit[]): Promise<Issue[]> {
   const issues: Issue[] = [];
-  for (let i = 0; i < values.length; i++) {
+  for (const [i, { schema, value, path }] of units.entries()) {
     if (i > 0 && i % SLICE === 0) await yieldToMain();
-    const result = schema.safeParse(values[i]);
+    const result = schema.safeParse(value);
     if (!result.success) {
       for (const issue of result.error.issues) {
-        issues.push({ ...issue, path: [...at(i), ...issue.path] });
+        issues.push({ ...issue, path: [...path, ...issue.path] });
       }
     }
   }
@@ -70,17 +73,27 @@ export async function parsePageInSlices(
   }
   const envelope = page.safeParse({ ...data, items: [] });
   const issues = envelope.success ? [] : [...envelope.error.issues];
-  issues.push(...(await issuesInSlices(item, data.items, (i) => ["items", i])));
+  issues.push(
+    ...(await issuesInSlices(
+      (data.items as unknown[]).map((value, i) => ({
+        schema: item,
+        value,
+        path: ["items", i],
+      })),
+    )),
+  );
   fail(issues);
 }
 
 /**
- * Validates `data` against `board` (`columns[].cards[]` of `card`) like
- * `board.parseAsync(data)`, with the cards of every column a slice at a time.
+ * Validates `data` against `board` (`columns[].cards[]` of `card`, each card's
+ * `checklist[]` of `task`) like `board.parseAsync(data)`, a slice of cards and checklist
+ * items at a time, so a card with a long checklist is split too.
  */
 export async function parseBoardInSlices(
   board: z.ZodType,
   card: z.ZodType,
+  task: z.ZodType,
   data: unknown,
 ): Promise<void> {
   const columns = isRecord(data) ? data.columns : undefined;
@@ -97,18 +110,23 @@ export async function parseBoardInSlices(
     columns: cols.map((c) => ({ ...c, cards: [] })),
   });
   const issues = envelope.success ? [] : [...envelope.error.issues];
-  const cards = cols.flatMap((c, col) =>
-    (c.cards as unknown[]).map((value, index) => ({ value, col, index })),
+  const units = cols.flatMap((c, col) =>
+    (c.cards as unknown[]).flatMap((value, index): Unit[] => {
+      const path = ["columns", col, "cards", index];
+      if (!isRecord(value) || !Array.isArray(value.checklist)) {
+        return [{ schema: card, value, path }];
+      }
+      // The checklist's items one by one, then the rest of the card without them.
+      return [
+        ...(value.checklist as unknown[]).map((item, i) => ({
+          schema: task,
+          value: item,
+          path: [...path, "checklist", i],
+        })),
+        { schema: card, value: { ...value, checklist: [] }, path },
+      ];
+    }),
   );
-  issues.push(
-    ...(await issuesInSlices(
-      card,
-      cards.map((c) => c.value),
-      (i) => {
-        const at = cards[i];
-        return ["columns", at?.col ?? 0, "cards", at?.index ?? 0];
-      },
-    )),
-  );
+  issues.push(...(await issuesInSlices(units)));
   fail(issues);
 }

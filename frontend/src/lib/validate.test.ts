@@ -71,7 +71,7 @@ test("[P0-29][PERF-2] the board is checked card by card with the generated verdi
     ],
   });
   await expect(
-    parseBoardInSlices(zBoardOut, zCardOut, board),
+    parseBoardInSlices(zBoardOut, zCardOut, zTaskOut, board),
   ).resolves.toBeUndefined();
 
   const [backlog, today] = board.columns;
@@ -99,11 +99,15 @@ test("[P0-29][PERF-2] the board is checked card by card with the generated verdi
   const expected = await issuesOf(() => zBoardOut.parseAsync(bad));
   expect(expected).not.toBe("no error");
   expect(
-    await issuesOf(() => parseBoardInSlices(zBoardOut, zCardOut, bad)),
+    await issuesOf(() =>
+      parseBoardInSlices(zBoardOut, zCardOut, zTaskOut, bad),
+    ),
   ).toEqual(expected);
   for (const odd of [null, { columns: "x" }, { columns: [{ cards: 1 }] }]) {
     expect(
-      await issuesOf(() => parseBoardInSlices(zBoardOut, zCardOut, odd)),
+      await issuesOf(() =>
+        parseBoardInSlices(zBoardOut, zCardOut, zTaskOut, odd),
+      ),
     ).toEqual(await issuesOf(() => zBoardOut.parseAsync(odd)));
   }
 });
@@ -117,4 +121,54 @@ test("[P0-29][PERF-2] a long list gives the main thread back between slices", as
 
   await parsePageInSlices(zTaskPage, zTaskOut, page(5 * SLICE + 1));
   expect(yields).toHaveBeenCalledTimes(5);
+});
+
+test("[P0-29][PERF-2] a card's long checklist is checked a slice at a time too", async () => {
+  const board = makeBoard({
+    columns: [{ name: "Backlog", status: "backlog", cards: [{}, {}] }],
+  });
+  const [column] = board.columns;
+  const [first, second] = column?.cards ?? [];
+  const checklist = Array.from({ length: 3 * SLICE }, () =>
+    makeTask({ parent_id: first?.task.id ?? null }),
+  );
+  const long = {
+    ...board,
+    columns: [{ ...column, cards: [{ ...first, checklist }, second] }],
+  };
+
+  const yields = vi.fn(() => Promise.resolve());
+  vi.stubGlobal("scheduler", { yield: yields });
+  await expect(
+    parseBoardInSlices(zBoardOut, zCardOut, zTaskOut, long),
+  ).resolves.toBeUndefined();
+  // 3 slices of checklist items plus 2 cards: the pause comes inside the first card.
+  expect(yields).toHaveBeenCalledTimes(3);
+  vi.unstubAllGlobals();
+
+  const bad = {
+    ...long,
+    columns: [
+      {
+        ...column,
+        cards: [
+          {
+            ...first,
+            task: { ...first?.task, title: 3 },
+            checklist: checklist.map((item, i) =>
+              i === 2 * SLICE + 4 ? { ...item, label: "robot" } : item,
+            ),
+          },
+          { ...second, checklist: "none" },
+        ],
+      },
+    ],
+  };
+  const expected = await issuesOf(() => zBoardOut.parseAsync(bad));
+  expect(expected).not.toBe("no error");
+  expect(
+    await issuesOf(() =>
+      parseBoardInSlices(zBoardOut, zCardOut, zTaskOut, bad),
+    ),
+  ).toEqual(expected);
 });

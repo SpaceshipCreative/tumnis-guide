@@ -43,7 +43,7 @@ export const policyQuery = (projectId: string) =>
 const validateTaskPage = (data: unknown) =>
   parsePageInSlices(zTaskPage, zTaskOut, data);
 const validateBoard = (data: unknown) =>
-  parseBoardInSlices(zBoardOut, zCardOut, data);
+  parseBoardInSlices(zBoardOut, zCardOut, zTaskOut, data);
 
 /**
  * Every task of the project: follows `next_cursor` through every page and answers one
