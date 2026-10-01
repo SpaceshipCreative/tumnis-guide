@@ -24,6 +24,7 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import AnyHttpUrl, BaseModel, Field, StringConstraints
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from tumnis.core import agent_surface
 from tumnis.core.audit_router import require_session
 from tumnis.core.clock import Clock
 from tumnis.core.errors import ProblemError
@@ -76,6 +77,15 @@ def _origin(request: Request) -> Literal["user_text", "agent"]:
     other caller (an API key or a task token) writes untrusted text."""
     person = principal_of(request).kind == "session"
     return "user_text" if person else "agent"
+
+
+async def _tainted(request: Request) -> bool:
+    """Whether what the caller writes is tainted (SAF-1): an API key with no run (R-31) or
+    a tainted run's token (P2-08), as for `add_document`; a person's session never is."""
+    principal = principal_of(request)
+    if principal.kind == "session":
+        return False
+    return agent_surface.caller_tainted(await agent_surface.resolve_caller(principal))
 
 
 Session = Annotated[WorkspaceContext, Depends(require_session)]
@@ -205,6 +215,7 @@ async def update_document(
         pinned=body.pinned,
         net=_net(request),
         origin=_origin(request),
+        tainted=await _tainted(request),
     )
 
 
@@ -235,6 +246,9 @@ class LinkIn(BaseModel):
 
 class TrustIn(BaseModel):
     trusted: bool
+    # The version the person reviewed: a later edit makes the request 409
+    # `stale_version`, so nobody promotes text they have not seen.
+    version: Version | None = None
 
 
 def _scoped_ctx(request: Request, project_id: UUID | None) -> None:
@@ -292,6 +306,7 @@ async def create_text_entry(
         body.body_md,
         origin=_origin(request),
         net=_net(request),
+        tainted=await _tainted(request),
     )
 
 
@@ -339,7 +354,9 @@ async def set_trust(
     """A person marks the document trusted or untrusted (audited); keys and agents
     cannot (403 `session_required`)."""
     clock: Clock = request.app.state.clock
-    return await api.mark_trusted(session, document_id, body.trusted, now=clock.now())
+    return await api.mark_trusted(
+        session, document_id, body.trusted, now=clock.now(), expected_version=body.version
+    )
 
 
 @router.get("/knowledge/documents/{document_id}/versions")

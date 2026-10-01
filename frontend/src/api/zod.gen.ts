@@ -1967,6 +1967,7 @@ export const zTrashIn = z.object({
  */
 export const zTrustIn = z.object({
   trusted: z.boolean(),
+  version: z.int().gte(0).lte(2147483647).nullish(),
 });
 
 /**

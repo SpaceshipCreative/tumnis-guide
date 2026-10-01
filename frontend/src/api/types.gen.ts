@@ -4323,6 +4323,10 @@ export type TrustIn = {
    * Trusted
    */
   trusted: boolean;
+  /**
+   * Version
+   */
+  version?: number | null;
 };
 
 /**

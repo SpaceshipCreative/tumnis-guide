@@ -2063,12 +2063,14 @@ async def _write_text(  # the row, its new body, and where the note goes
     net: NetPolicy | None,
     event: type[DocumentAddedV1] | type[DocumentChangedV1],
     by_agent: bool = False,
+    tainted: bool = False,
 ) -> DocumentDTO:
     """Version, index and file one text write: the row updated (versioned, so its row lock
     orders concurrent writers and a stale one gets 409 before any version is added), a new
     version holding `body` as the current one, its chunks, its note file when the project
     has a folder, and `document.added` or `document.changed`. A write `by_agent` leaves
-    the entry untrusted (FR-15.5) until a person marks it trusted again."""
+    the entry untrusted (FR-15.5) until a person marks it trusted again; a `tainted` write
+    (its caller is: `agent_surface.caller_tainted`) taints it, and nothing lowers that."""
     data = body.encode()
     values: dict[str, Any] = {
         "body_md": body,
@@ -2077,6 +2079,8 @@ async def _write_text(  # the row, its new body, and where the note goes
     }
     if by_agent:
         values["trust"] = "untrusted"
+    if tainted:
+        values["tainted"] = True
     try:
         await update_versioned(s, _documents, row["id"], expected_version, values)
     except StaleVersion as exc:
@@ -2129,13 +2133,17 @@ async def create_text_entry(  # the entry's fields, plus who wrote it
     *,
     origin: Literal["user_text", "agent"] = "user_text",
     net: NetPolicy | None = None,
+    tainted: bool = False,
 ) -> DocumentDTO:
     """A text entry in the project's knowledge base (None: the workspace knowledge base,
     which every project sees; FR-15.1), with trust by origin (FR-15.5): a person's text is
     trusted, an agent's untrusted and labeled `agent` until a person marks it trusted. The
-    first write is version 1; with `net`, a project with a folder gets the note file too."""
+    first write is version 1; with `net`, a project with a folder gets the note file too.
+    A `tainted` caller (a key with no run, a tainted run's token) writes a tainted entry,
+    like `add_document`."""
     await _check_project(s, project_id)
-    trust, tainted = default_trust(origin)
+    trust, by_origin = default_trust(origin)
+    tainted = tainted or by_origin
     row = (
         (
             await s.execute(
@@ -2172,11 +2180,12 @@ async def update_text_entry(
     expected_version: int,
     net: NetPolicy | None = None,
     origin: Literal["user_text", "agent"] = "user_text",
+    tainted: bool = False,
 ) -> DocumentDTO:
     """Replace a text entry's Markdown body: a new version, re-indexed (FR-15.6). Synced
     files and uploads are not edited here: anything but a text entry (`is_note`) is 409
     `not_text`; a stale `expected_version` is 409 `stale_version` with the current entry.
-    An agent's edit leaves the entry untrusted (FR-15.5)."""
+    An agent's edit leaves the entry untrusted (FR-15.5); a `tainted` caller's taints it."""
     row = await _live_row(s, document_id)
     if not is_note(row) and row["source"] != AGENT_SOURCE:
         raise ProblemError(409, "not_text", "Only text entries can be edited here")
@@ -2188,6 +2197,7 @@ async def update_text_entry(
         net=net,
         event=DocumentChangedV1,
         by_agent=origin == "agent",
+        tainted=tainted,
     )
 
 
@@ -2224,29 +2234,37 @@ async def add_link(
 
 
 async def mark_trusted(
-    s: AsyncSession, document_id: UUID, trusted: bool, *, now: datetime
+    s: AsyncSession,
+    document_id: UUID,
+    trusted: bool,
+    *,
+    now: datetime,
+    expected_version: int | None = None,
 ) -> DocumentDTO:
     """A person marks the document trusted or untrusted (FR-15.5), audited as
     `document.trust_changed`. Only a person (a session) may: anything else is 403
-    `human_only`. The taint stays as it was: it records where the text came from."""
+    `human_only`. The taint stays as it was: it records where the text came from. With
+    `expected_version` (the version the person reviewed), a document that has moved on
+    since is 409 `stale_version` with its current state, and nothing changes."""
     ctx = tenancy.current()
     if ctx is None or not str(ctx.actor).startswith("user:"):
         raise ProblemError(403, "human_only", "Only a person can change a document's trust")
     row = await _live_row(s, document_id)
+    if expected_version is not None and row["version"] != expected_version:
+        raise StaleVersion(current=_dto(row).model_dump(mode="json"))
     trust = "trusted" if trusted else "untrusted"
     if row["trust"] != trust:
-        row = (
-            (
-                await s.execute(
-                    update(_documents)
-                    .where(_documents.c.id == document_id)
-                    .values(trust=trust)
-                    .returning(*_documents.c)
-                )
-            )
-            .mappings()
-            .one()
+        stmt = update(_documents).where(_documents.c.id == document_id)
+        if expected_version is not None:
+            # An edit committed after the read above still makes the request stale.
+            stmt = stmt.where(_documents.c.version == expected_version)
+        changed = (
+            (await s.execute(stmt.values(trust=trust).returning(*_documents.c))).mappings().first()
         )
+        if changed is None:
+            current = _dto(await _live_row(s, document_id)).model_dump(mode="json")
+            raise StaleVersion(current=current)
+        row = changed
     await audit.record(
         s,
         "document.trust_changed",
@@ -2310,9 +2328,10 @@ async def edit_document(  # the patchable fields, each optional
     pinned: bool | None = None,
     net: NetPolicy | None = None,
     origin: Literal["user_text", "agent"] = "user_text",
+    tainted: bool = False,
 ) -> DocumentDTO:
     """One versioned edit of a document (the rail's PATCH): its metadata (title, tags,
-    pin) first, then a text entry's body as a new version (`origin` as in
+    pin) first, then a text entry's body as a new version (`origin` and `tainted` as in
     `update_text_entry`). The first change takes `expected_version`; a body change after
     it takes the version that change left."""
     values: dict[str, Any] = {}
@@ -2333,7 +2352,13 @@ async def edit_document(  # the patchable fields, each optional
         version = dto.version
     if body_md is not None:
         dto = await update_text_entry(
-            s, document_id, body_md, expected_version=version, net=net, origin=origin
+            s,
+            document_id,
+            body_md,
+            expected_version=version,
+            net=net,
+            origin=origin,
+            tainted=tainted,
         )
     if dto is None:
         dto = _dto(await _live_row(s, document_id))
