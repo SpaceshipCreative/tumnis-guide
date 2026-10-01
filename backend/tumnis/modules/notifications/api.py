@@ -234,12 +234,18 @@ async def subscribe(
     return PushSubscriptionOut(id=row.id, endpoint=row.endpoint, created_at=row.created_at)
 
 
-async def unsubscribe(subscription_id: UUID, *, now: datetime, session: AsyncSession) -> None:
-    """`DELETE /v1/push/subscriptions/{id}`: forget this browser's subscription (404 for
-    one that is unknown or gone)."""
+async def unsubscribe(
+    subscription_id: UUID, *, user_id: UUID, now: datetime, session: AsyncSession
+) -> None:
+    """`DELETE /v1/push/subscriptions/{id}`: forget one of this user's browser
+    subscriptions (404 for one that is unknown, gone or another member's)."""
     done = await session.execute(
         update(_subscriptions)
-        .where(_subscriptions.c.id == subscription_id, _subscriptions.c.deleted_at.is_(None))
+        .where(
+            _subscriptions.c.id == subscription_id,
+            _subscriptions.c.user_id == user_id,
+            _subscriptions.c.deleted_at.is_(None),
+        )
         .values(deleted_at=now)
         .returning(_subscriptions.c.id)
     )
