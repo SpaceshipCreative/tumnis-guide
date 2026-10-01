@@ -1,4 +1,10 @@
-// Project views (P0-22). calendar joined in P1-12; inbox and activity join in P3-07 and
-// P2-10.
-export const projectViews = ["tasks", "board", "calendar"] as const;
+// Project views (P0-22). calendar joined in P1-12; inbox and activity in P2-17 (P3-07 fills
+// the Inbox).
+export const projectViews = [
+  "tasks",
+  "board",
+  "calendar",
+  "inbox",
+  "activity",
+] as const;
 export type ProjectView = (typeof projectViews)[number];

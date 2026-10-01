@@ -76,7 +76,11 @@ export const LIVE_MAP: Record<
   // The review badge (P0-18) and the review queue (P1-13).
   review_item: {
     details: [],
-    lists: ["tasksGetReviewCount", "tasksListReview"],
+    lists: [
+      "tasksGetReviewCount",
+      "tasksListReview",
+      "tasksListInbox", // a project's open proposals (P2-17)
+    ],
   },
   // The workspace settings have no id in their path: any settings message refreshes them,
   // the sections and the module switches too (P0-26).
@@ -112,10 +116,11 @@ export const LIVE_MAP: Record<
     lists: ["agentsListProfiles"],
   },
   // A run's status and its log (P2-04): a run message refreshes its header and events
-  // page (the run view pages on from its cursor).
+  // page (the run view pages on from its cursor). A run's status also moves it between
+  // the dashboard feed's groups and adds to its project's Activity (P2-17).
   run: {
     details: ["agentsGetRun", "agentsListRunEvents"],
-    lists: [],
+    lists: ["agentsGetAgentFeed", "agentsListActivity"],
   },
   // A pause or resume (P2-09): the kill switch and every project's pause control refresh.
   agent_pause: { details: [], lists: ["agentsGetPauses"] },

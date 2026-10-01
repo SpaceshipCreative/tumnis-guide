@@ -28,7 +28,9 @@ key or task token aiming at another project is 404 `not_found`, the answer RLS g
 another workspace's row, so existence never leaks. The project comes from the policy's
 `project_param`: `path:<name>`, `query:<name>`, `body:<name>` or `lookup:<module>` (the
 module registers `register_project_lookup(module, fn)`, which resolves the route's row id
-to its project in the caller's workspace). Last, a NUL character (U+0000) in a path or query
+to its project in the caller's workspace; a row that belongs to no project but that every
+caller of the workspace may read, such as a workspace knowledge-base document, resolves to
+`WORKSPACE_ROW`). Last, a NUL character (U+0000) in a path or query
 parameter or anywhere in a JSON body is 422 `validation_error`: PostgreSQL text cannot hold
 it, and a handler passing it on would answer 500.
 """
@@ -236,6 +238,9 @@ ALLOWED_KINDS: Final[dict[str, frozenset[str]]] = {
 PROJECT_SOURCES: Final = frozenset({"path", "query", "body", "lookup"})
 
 ProjectLookup = Callable[[WorkspaceContext, UUID], Awaitable[UUID | None]]
+# What a lookup answers for a row of the workspace that belongs to no project and that a
+# project-limited caller may still read (P2-17: a workspace knowledge-base document).
+WORKSPACE_ROW: Final = UUID(int=0)
 _project_lookups: dict[str, ProjectLookup] = {}
 
 
@@ -317,7 +322,7 @@ async def project_of_request(
     project = await lookup(principal.workspace_context(), row_id)
     if project is None:
         raise _not_found()
-    return project
+    return None if project == WORKSPACE_ROW else project
 
 
 async def _authorize(request: Request, policy: RoutePolicy) -> None:
