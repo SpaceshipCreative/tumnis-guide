@@ -109,3 +109,41 @@ def test_recordings_load_by_bare_name_only() -> None:
     ):
         with pytest.raises(ValueError):  # noqa: PT011  # the one error a bad name raises
             load_recording(bad)
+
+
+@pytest.mark.xfail(strict=True, reason="spec:SEED")
+async def test_a_question_whose_run_a_reset_removed_ends_quietly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-SEED-26
+    A scripted question waits for its answer by re-reading the run; once a test reset has
+    removed the run, the playback ends there (no answer) instead of failing on the
+    missing row."""
+    import contextlib  # noqa: PLC0415
+    import uuid  # noqa: PLC0415
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
+    from tumnis.core.versioning import NotFound  # noqa: PLC0415
+    from tumnis.modules.agents import api as agents_api  # noqa: PLC0415
+    from tumnis.modules.agents import fake_play  # noqa: PLC0415
+
+    run_id = uuid.uuid4()
+
+    @contextlib.asynccontextmanager
+    async def session(_ctx: Any) -> Any:
+        yield object()
+
+    async def ask_human(*_: Any, **__: Any) -> Any:
+        return SimpleNamespace(id=uuid.uuid4(), status="pending", answer=None)
+
+    async def get_run(_s: Any, missing: uuid.UUID) -> Any:
+        raise NotFound("runs", missing)
+
+    monkeypatch.setattr(fake_play, "tenant_session", session)
+    monkeypatch.setattr(agents_api, "ask_human", ask_human)
+    monkeypatch.setattr(agents_api, "get_run", get_run)
+    monkeypatch.setattr(fake_play, "QUESTION_POLL_S", 0.0)
+
+    ctx = WorkspaceContext(uuid.uuid4(), fake_play.FAKE_RUNNER_ACTOR)
+    assert await fake_play._ask(ctx, run_id, {"prompt": "Which logo?"}) is None
