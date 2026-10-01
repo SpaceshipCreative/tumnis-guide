@@ -82,7 +82,7 @@ describe("CloseDayPanel", () => {
     expect(within(empty.panel).queryAllByRole("listitem")).toEqual([]);
   });
 
-  test.fails("[P1-18][J7] T-P1-18-09 dismissing sends no write", async () => {
+  test("[P1-18][J7] T-P1-18-09 dismissing sends no write", async () => {
     server.use(daySummary(FULL_DAY));
     const sent: string[] = [];
     const record = ({ request }: { request: Request }) => {
