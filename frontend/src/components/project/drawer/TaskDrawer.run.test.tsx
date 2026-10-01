@@ -150,79 +150,76 @@ test("[P2-04][FR-5.4] a Human task has no Run button", async () => {
   hybrid.unmount();
 });
 
-test.fails(
-  "[P2-04][FR-5.4] a Run answer that lands after another task opens is ignored",
-  async () => {
-    // CodeRabbit on #120: the answer to task A's Run arrives after the user has opened
-    // task B; B's drawer stays on B's details and the URL gets no `run`.
-    const project = makeProject({ name: "Acme site" });
-    const first = makeTask({
-      project_id: project.id,
-      title: "Fix footer link",
-      label: "ai",
-      status: "today",
-    });
-    const second = makeTask({
-      project_id: project.id,
-      title: "Write the release notes",
-      label: "ai",
-      status: "today",
-    });
-    const fake = new ProjectFake({ project, tasks: [first, second] });
-    const recorder = new Recorder();
-    let answer: () => void = () => undefined;
-    const answered = new Promise<void>((resolve) => {
-      answer = resolve;
-    });
-    server.resetHandlers();
-    server.use(
-      ...fake.handlers,
-      http.post("*/v1/tasks/:id/run", async ({ request }) => {
-        await recorder.record(request);
-        await answered;
-        return HttpResponse.json(
-          { run_id: RUN_ID, status: "queued" },
-          { status: 202 },
-        );
-      }),
-      ...runHandlers(recorder, first.id, project.id),
-    );
+test("[P2-04][FR-5.4] a Run answer that lands after another task opens is ignored", async () => {
+  // CodeRabbit on #120: the answer to task A's Run arrives after the user has opened
+  // task B; B's drawer stays on B's details and the URL gets no `run`.
+  const project = makeProject({ name: "Acme site" });
+  const first = makeTask({
+    project_id: project.id,
+    title: "Fix footer link",
+    label: "ai",
+    status: "today",
+  });
+  const second = makeTask({
+    project_id: project.id,
+    title: "Write the release notes",
+    label: "ai",
+    status: "today",
+  });
+  const fake = new ProjectFake({ project, tasks: [first, second] });
+  const recorder = new Recorder();
+  let answer: () => void = () => undefined;
+  const answered = new Promise<void>((resolve) => {
+    answer = resolve;
+  });
+  server.resetHandlers();
+  server.use(
+    ...fake.handlers,
+    http.post("*/v1/tasks/:id/run", async ({ request }) => {
+      await recorder.record(request);
+      await answered;
+      return HttpResponse.json(
+        { run_id: RUN_ID, status: "queued" },
+        { status: 202 },
+      );
+    }),
+    ...runHandlers(recorder, first.id, project.id),
+  );
 
-    const { user, unmount, router, queryClient } = await renderRoute(
-      `/projects/${project.id}?view=tasks&task=${first.id}`,
-      { viewport: "laptop" },
-    );
-    const drawer = await screen.findByRole("dialog", {
-      name: "Fix footer link",
-    });
-    await user.click(within(drawer).getByRole("button", { name: "Run" }));
-    await waitFor(() => {
-      expect(recorder.writes()).toEqual([`POST /v1/tasks/${first.id}/run`]);
-    });
+  const { user, unmount, router, queryClient } = await renderRoute(
+    `/projects/${project.id}?view=tasks&task=${first.id}`,
+    { viewport: "laptop" },
+  );
+  const drawer = await screen.findByRole("dialog", {
+    name: "Fix footer link",
+  });
+  await user.click(within(drawer).getByRole("button", { name: "Run" }));
+  await waitFor(() => {
+    expect(recorder.writes()).toEqual([`POST /v1/tasks/${first.id}/run`]);
+  });
 
-    // Task B opens from the list while A's Run is still waiting for its answer.
-    await user.click(
-      screen.getByRole("button", { name: "Write the release notes" }),
-    );
-    const next = await screen.findByRole("dialog", {
-      name: "Write the release notes",
-    });
-    await waitFor(() => {
-      expect(router.state.location.search).toMatchObject({ task: second.id });
-    });
-
-    answer();
-    await waitFor(() => {
-      expect(queryClient.isMutating()).toBe(0);
-      expect(router.state.isLoading).toBe(false);
-    });
-
+  // Task B opens from the list while A's Run is still waiting for its answer.
+  await user.click(
+    screen.getByRole("button", { name: "Write the release notes" }),
+  );
+  const next = await screen.findByRole("dialog", {
+    name: "Write the release notes",
+  });
+  await waitFor(() => {
     expect(router.state.location.search).toMatchObject({ task: second.id });
-    expect(router.state.location.search).not.toHaveProperty("run");
-    expect(within(next).queryByRole("log", { name: "Run log" })).toBeNull();
-    expect(within(next).getByRole("textbox", { name: "Title" })).toHaveValue(
-      "Write the release notes",
-    );
-    unmount();
-  },
-);
+  });
+
+  answer();
+  await waitFor(() => {
+    expect(queryClient.isMutating()).toBe(0);
+    expect(router.state.isLoading).toBe(false);
+  });
+
+  expect(router.state.location.search).toMatchObject({ task: second.id });
+  expect(router.state.location.search).not.toHaveProperty("run");
+  expect(within(next).queryByRole("log", { name: "Run log" })).toBeNull();
+  expect(within(next).getByRole("textbox", { name: "Title" })).toHaveValue(
+    "Write the release notes",
+  );
+  unmount();
+});
