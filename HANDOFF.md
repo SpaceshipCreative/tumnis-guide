@@ -1,7 +1,78 @@
-# HANDOFF: P3-10 (Embeddings and hybrid search), continuation c0 -> c1
+# HANDOFF: P3-10 (Embeddings and hybrid search), continuation c1 -> c2
 
 Branch `wp/P3-10` (push with `/usr/bin/git push origin HEAD:wp/P3-10`). No PR yet.
 Title when opened: `[P3-10] impl: embeddings and hybrid search`.
+
+## c1 progress (read first; the c0 sections below are kept for the details)
+
+Done in c1 (make check green at each):
+- `a297171` rules: RRF_K, CANDIDATES, EMBED_BATCH, EMBED_QUEUE, REEMBED_WORKFLOW,
+  DEFAULT_EMBEDDING_MODEL/DIMS, COSINE_OPCLASS/OPERATOR, Ranked, FusedHit, rrf_merge,
+  recall_at_k, valid_model_name, model_slug, hnsw_index_name. T-01..03 markers removed.
+- `cb757df` decisions adapters `adapters/embeddings/{port,vllm,hosted,fake}.py`
+  (`FakeEmbeddings`, `FakeHostedEmbeddings`), registry names `decisions.embeddings_vllm` /
+  `decisions.embeddings_hosted`, contract classes in
+  `decisions/tests/contract/test_embeddings_contract.py`, recording
+  `decisions/tests/recordings/vllm_embeddings/bge_m3__batch_order.json`,
+  `openai_compat.ChatEndpoint(path=, bearer=)`. T-11 marker removed. Eval vectors RECORDED
+  (`backend/fixtures/search_eval/vectors/*.jsonl` + `README`; vector-only recall@5 = 1.0)
+  with `backend/scripts/record_eval_vectors.py --onnx-dir`. Shared-file edits:
+  `.importlinter` (two modules added to `api-never-calls-out`; ignore
+  `knowledge.tests.** -> decisions.adapters.embeddings.fake` in modules-api-only).
+- `ca6daab` migration `knowledge_0007_embeddings_hnsw.py` (DO-block extension assert so
+  offline rendering works), models `Vector` (UserDefinedType, bind as text cast to vector),
+  `EmbeddingModel`, `Embedding`, `vector_literal`; `decisions/embeddings_slot.py`
+  (Embedders, use_embedders, configure_embeddings, embedders_for, embed(texts, project_id,
+  model=), query_timeout_s, workspace setting section `embeddings` {local_only}) re-exported
+  from decisions.api; `Settings.embeddings` (EmbeddingsSettings base_url/model/dims/
+  query_timeout_ms). Slot is OFF unless EMBEDDINGS__BASE_URL is set (fake mode too), so the
+  locked P2-02 golden packets are untouched.
+- All `# type: ignore` comments on now-existing names were removed; the remaining ones are
+  on `knowledge.embed_document`, `embedding_models`, `create_embedding_index`,
+  `set_embedding_model`, `start_reembed`, `knowledge.search` import, and the `mode=mode`
+  `arg-type` ones (those stay: `mode` is a `str`).
+
+Next (c1's plan, in order):
+1. `knowledge/embeddings.py`: `embed_document(ctx, document_id, version_id=None) -> int`
+   (inside `tenancy.use_workspace(ctx)`; embed `chunks.context_text`; target = first
+   allowed embedder (decisions.embedders_for) whose embedding_models row is `active`, else
+   first allowed with NO row (insert `active`, index_name from pg_indexes), else 0; batches
+   of EMBED_BATCH; INSERT ... ON CONFLICT DO NOTHING; project_id from the document),
+   `search_model(project_id)` (first allowed active), `embedding_models(s)`,
+   `set_embedding_model(s, model, dims, provider) -> ReembedRequest(model, replaces)` (row
+   `building`, index_name from pg_indexes NOW: T-07/08 create the index before the row),
+   `start_reembed(ctx, request, *, client=None)` (id `reembed:<ws>:<model>`; no client: a
+   hook registered by workflows.py that does DBOS.enqueue_workflow_async in a fresh
+   contextvars.Context, like `enqueue_folder_extraction`), `create_embedding_index(owner_url,
+   model, dims)` (sync psycopg; convert `postgresql+psycopg://` with
+   `sqlalchemy.engine.make_url(..).set(drivername="postgresql")`; CREATE INDEX IF NOT EXISTS
+   with literals; UPDATE embedding_models SET index_name for every workspace). Re-export from
+   knowledge.api.
+2. `knowledge/search.py`: `vector_query(model, dims, vector, *, project_id, project_ids,
+   candidates)` with model/dims as LITERALS (valid_model_name, quotes doubled) and only
+   `CAST(:q AS vector)` bound; ORDER BY `(e.embedding::vector(<dims>)) <=> CAST(:q AS vector)`;
+   `tune_session(s)` (SET LOCAL hnsw.ef_search = 100; SET LOCAL hnsw.iterative_scan =
+   relaxed_order); `hybrid(...)`: FTS top CANDIDATES via search_knowledge(mode="fts"); query
+   vector via decisions.embed(model=search model) under asyncio.timeout(query_timeout_s),
+   any AdapterError/TimeoutError/skip -> return FTS[:limit] unchanged (T-10 needs identical
+   order); else rrf_merge, hydrate vector-only ids with the FTS filters (current version,
+   live, ready, `_scope`), sort candidates by distance in Python, `rank` = fused score.
+   In api.search_knowledge: `mode: Literal["fts", "hybrid"]`, dispatch hybrid lazily; in
+   passages_for pass `mode="hybrid"` (module-global name: T-12 monkeypatches it). Check
+   router.py for a typed `mode` query param (then `make gen`).
+3. pipeline.index: after replace_chunks, `embed_document(ctx, doc, version_id=vid)` in
+   try/except Exception (log, never fail extraction). events.py subscribers
+   `knowledge.embed_added_document` / `knowledge.embed_changed_document`.
+4. workflows.py `knowledge_reembed_all(workspace_id, model, replaces)` (name =
+   REEMBED_WORKFLOW): poll step until index_name set (DBOS.sleep_async), loop steps of 64
+   (`faults.killpoint(f"knowledge.reembed.batch_{n}")` after each), final step: model
+   active, replaces retired + its rows deleted. The no-more-chunks probe must not call
+   embed (T-07 expects calls [64, 6]). worker.py: register EMBED_QUEUE
+   (worker_concurrency=2), add to main_queues (check test_worker_queues/listen first);
+   call `decisions.configure_embeddings(settings.embeddings, net_policy=...)` beside
+   configure_generation (worker only; api-process query embedding is a Scott item).
+5. cli.py `tumnis embeddings index <model> --dims N`.
+6. Remove markers T-04..10, 12, 13, A3.4 x2 only after CI shows them passing.
 
 ## Done
 
