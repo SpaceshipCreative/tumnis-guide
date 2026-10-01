@@ -383,8 +383,11 @@ async def update_policy(
     `policy.changed` audit row with both lists (SEC-3), in the caller's transaction. 404
     for an unknown project; 422 `invalid_action_class` for a malformed name and
     `policy_conflict` when a class is in both lists; 409
-    `stale_version` with the policy as it is now (`current`)."""
+    `stale_version` with the policy as it is now (`current`), checked first, so a stale
+    write always learns the current policy."""
     before = await get_policy(s, project_id)
+    if body.version != before.version:
+        raise StaleVersion(current=before.model_dump(mode="json"))
     odd = sorted({a for a in (*body.gated, *body.allowed) if not _ACTION_CLASS_RE.fullmatch(a)})
     if odd:
         raise ProblemError(

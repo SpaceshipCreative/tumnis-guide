@@ -151,3 +151,21 @@ async def test_put_policy_malformed_class_is_422(
     assert response.json()["code"] == "invalid_action_class"
     reread = await session_client.get(f"/v1/projects/{project_id}/policy")
     assert reread.json()["version"] == policy["version"]
+
+
+@pytest.mark.req("FR-5.6", "REL-2")
+@pytest.mark.wp("P2-05")
+async def test_put_policy_stale_wins_over_a_bad_body(
+    app: FastAPI, session_client: SessionClient, workspace: WorkspaceHandle, db: DbUrls
+) -> None:
+    """A stale version is 409 with `current` even when the body would also be 422, so a
+    stale writer always learns the current policy."""
+    project_id, policy = await _project_and_policy(session_client)
+    body = {
+        "gated": [*policy["gated"], "read"],
+        "allowed": policy["allowed"],
+        "version": policy["version"] + 5,
+    }
+    response = await session_client.put(f"/v1/projects/{project_id}/policy", json=body)
+    assert response.status_code == 409, response.text
+    assert response.json()["current"] == policy
