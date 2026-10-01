@@ -19,15 +19,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        copy: [1, 2]
-        variant: [base, pr-n3, par-n2, par-n2-compile, par-n2-collect, seq-threads]
+        copy: [1, 2, 3]
+        variant: [base, pr-n3, par-n3-collect, par-n2-collect, par-n3-early]
         include:
           - { variant: base, mode: seq, pyn: auto, pool: forks, prewarm: none }
           - { variant: pr-n3, mode: par, pyn: "3", pool: threads, prewarm: none }
-          - { variant: par-n2, mode: par, pyn: "2", pool: threads, prewarm: none }
-          - { variant: par-n2-compile, mode: par, pyn: "2", pool: threads, prewarm: compile }
+          - { variant: par-n3-collect, mode: par, pyn: "3", pool: threads, prewarm: collect }
           - { variant: par-n2-collect, mode: par, pyn: "2", pool: threads, prewarm: collect }
-          - { variant: seq-threads, mode: seq, pyn: auto, pool: threads, prewarm: none }
+          - { variant: par-n3-early, mode: par, pyn: "3", pool: threads, prewarm: early }
     steps:
       - name: CPU
         run: |
@@ -38,6 +37,12 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
+      - name: Prewarm collect early (background)
+        if: matrix.prewarm == 'early'
+        working-directory: backend
+        run: |
+          uv sync
+          nohup sh -c 'uv run pytest -m "not integration and not contract" --collect-only -q -p no:randomly > /dev/null; echo done > "$RUNNER_TEMP/collect.done"' > "$RUNNER_TEMP/collect.log" 2>&1 < /dev/null &
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -70,6 +75,9 @@ jobs:
         if: matrix.prewarm == 'collect'
         working-directory: backend
         run: uv run pytest -m "not integration and not contract" --collect-only -q -p no:randomly > /dev/null
+      - name: Wait for early prewarm
+        if: matrix.prewarm == 'early'
+        run: while [ ! -f "$RUNNER_TEMP/collect.done" ]; do sleep 1; done
       - name: Backend unit tests with coverage
         working-directory: backend
         run: uv run pytest -m "not integration and not contract" -n ${{ matrix.pyn }} --dist worksteal --durations=15 --cov --cov-report=json
