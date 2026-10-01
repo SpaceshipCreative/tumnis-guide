@@ -24,7 +24,7 @@ import asyncio
 import importlib
 import time
 from collections.abc import Awaitable, Callable, Iterator
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -140,7 +140,11 @@ async def test_agents_ready_in_fakes_mode_until_their_runner_connects(
     fake_scripts.enable()
     try:
         assert await states() == ("ready", "ready")
-        _rows(db, "UPDATE runners SET last_heartbeat_at = now() - interval '1 hour' RETURNING id")
+        _rows(
+            db,
+            "UPDATE runners SET last_heartbeat_at = %s RETURNING id",
+            NOW - timedelta(hours=1),
+        )
         assert await states() == ("offline", "offline")  # connected once: judged as usual
     finally:
         fake_scripts.disable()
