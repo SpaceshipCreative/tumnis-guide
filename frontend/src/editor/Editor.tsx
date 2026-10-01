@@ -68,7 +68,7 @@ export function apiSuggest(
         throwOnError: true,
       });
       const seen = new Map<string, SuggestItem>();
-      for (const hit of data) {
+      for (const hit of data.items) {
         if (!seen.has(hit.document_id)) {
           seen.set(hit.document_id, {
             id: hit.document_id,
