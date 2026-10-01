@@ -2430,9 +2430,11 @@ async def list_documents(
     else:
         where = _documents.c.project_id == project_id
     stmt = select(_documents).where(where, _documents.c.deleted_at.is_(None))
-    return await paginate(
+    page = await paginate(
         s, stmt, keys=[], id_col=_documents.c.id, cursor=cursor, limit=limit, model=DocumentDTO
     )
+    # Served like a single read (`_dto`): a file's text only once it is released.
+    return page.model_copy(update={"items": [_dto(doc.model_dump()) for doc in page.items]})
 
 
 async def search_knowledge(  # R-36's parameters, plus the caller's limit
