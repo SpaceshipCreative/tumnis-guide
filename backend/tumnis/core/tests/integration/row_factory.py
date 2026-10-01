@@ -76,6 +76,10 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("embedding_models", "dims"): 3,  # ck_embedding_models_dims (P3-10)
     ("embedding_models", "status"): "retired",  # ck_embedding_models_status
     ("embeddings", "embedding"): "[1,0,0]",  # pgvector's text form (an untyped literal)
+    ("notifications", "level"): "nudge",  # ck_notifications_level (P4-05)
+    ("notifications", "decision"): "now",  # ck_notifications_decision
+    ("delivery_attempts", "channel"): "push",  # ck_delivery_attempts_channel
+    ("delivery_attempts", "status"): "sent",  # ck_delivery_attempts_status
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)

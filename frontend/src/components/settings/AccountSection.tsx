@@ -2,12 +2,13 @@
 // it to a new authenticator app: the current password, then a code from the new app. The
 // new secret lives only in this component's state while the dialog is open (the
 // mutations keep nothing and are reset on close). A lost phone is `tumnis admin
-// reset-totp` on the server.
+// reset-totp` on the server. Push notifications for this device sit here too (P4-05).
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type SyntheticEvent } from "react";
 
 import type { TotpEnrolOut } from "../../api/types.gen";
 import { ApiError, apiWrite, useWrite } from "../../lib/fetch";
+import { PushSettings } from "./PushSettings";
 import { accountQuery } from "./queries";
 import {
   BUTTON,
@@ -90,6 +91,7 @@ export function AccountSection() {
         Lost the phone with your authenticator? The server owner can reset it
         with <code>tumnis admin reset-totp</code>.
       </p>
+      <PushSettings />
       {enrolling && (
         <EnrolDialog
           onClose={() => {
