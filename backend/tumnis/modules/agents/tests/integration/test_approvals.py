@@ -223,7 +223,6 @@ async def test_unknown_action_uses_noul_threshold(  # noqa: PLR0917
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_decisions_audited_with_reason(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
