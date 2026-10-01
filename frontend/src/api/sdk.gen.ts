@@ -25,12 +25,18 @@ import type {
   AgentsGetProfileToolsData,
   AgentsGetProfileToolsErrors,
   AgentsGetProfileToolsResponses,
+  AgentsGetProjectDigestData,
+  AgentsGetProjectDigestErrors,
+  AgentsGetProjectDigestResponses,
   AgentsGetRunData,
   AgentsGetRunErrors,
   AgentsGetRunResponses,
   AgentsGetTaskPacketData,
   AgentsGetTaskPacketErrors,
   AgentsGetTaskPacketResponses,
+  AgentsGetWorkspaceDigestData,
+  AgentsGetWorkspaceDigestErrors,
+  AgentsGetWorkspaceDigestResponses,
   AgentsListProfilesData,
   AgentsListProfilesErrors,
   AgentsListProfilesResponses,
@@ -414,8 +420,10 @@ import {
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
   zAgentsGetProfileToolsResponse,
+  zAgentsGetProjectDigestResponse,
   zAgentsGetRunResponse,
   zAgentsGetTaskPacketResponse,
+  zAgentsGetWorkspaceDigestResponse,
   zAgentsListProfilesResponse,
   zAgentsListRunEventsResponse,
   zAgentsListRunnersResponse,
@@ -1221,6 +1229,55 @@ export const decisionsEditThreshold = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Get Project Digest
+ *
+ * What changed in the project since the caller's last acknowledged digest (the
+ * `get_project_digest` tool's twin); 400 `invalid_cursor` for a cursor issued to another
+ * caller or digest.
+ */
+export const agentsGetProjectDigest = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsGetProjectDigestData, ThrowOnError>,
+): RequestResult<
+  AgentsGetProjectDigestResponses,
+  AgentsGetProjectDigestErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    AgentsGetProjectDigestResponses,
+    AgentsGetProjectDigestErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsGetProjectDigestResponse.parseAsync(data),
+    url: "/v1/digests/project/{project_id}",
+    ...options,
+  });
+
+/**
+ * Get Workspace Digest
+ *
+ * The workspace-wide signals since the caller's last acknowledged digest (the
+ * `get_workspace_digest` tool's twin).
+ */
+export const agentsGetWorkspaceDigest = <ThrowOnError extends boolean = false>(
+  options?: Options<AgentsGetWorkspaceDigestData, ThrowOnError>,
+): RequestResult<
+  AgentsGetWorkspaceDigestResponses,
+  AgentsGetWorkspaceDigestErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    AgentsGetWorkspaceDigestResponses,
+    AgentsGetWorkspaceDigestErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsGetWorkspaceDigestResponse.parseAsync(data),
+    url: "/v1/digests/workspace",
+    ...options,
   });
 
 /**

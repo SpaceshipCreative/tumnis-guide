@@ -11,11 +11,12 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Protocol
 from uuid import UUID, uuid4, uuid5
 
+from prometheus_client import Gauge
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import RowMapping, Table, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from tumnis.core import audit, fake_scripts
 from tumnis.core.errors import ProblemError
@@ -23,6 +24,7 @@ from tumnis.core.ids import uuid7
 from tumnis.core.limits import RUN_WALL_CLOCK_CEILING
 from tumnis.core.live import mark_changed
 from tumnis.core.logging import scrub_text
+from tumnis.core.metrics import REGISTRY
 from tumnis.core.outbox import emit
 from tumnis.core.pagination import Page, SortKey, paginate
 from tumnis.core.routing import register_project_lookup
@@ -36,6 +38,14 @@ from tumnis.modules.agents.adapters.port import (
     AgentUnavailable,
     RunEvent,
     RunHandle,
+)
+from tumnis.modules.agents.digest import (
+    DigestEntryOut,
+    DigestOut,
+    append_entry,
+    horizon_lag_seconds,
+    read_digest,
+    record_event,
 )
 from tumnis.modules.agents.human import (
     HUMAN_QUEUE,
@@ -123,6 +133,8 @@ __all__ = [
     "ApprovalRequired",
     "AskHumanIn",
     "Denied",
+    "DigestEntryOut",
+    "DigestOut",
     "EnrichmentRequest",
     "EnrichmentResult",
     "ForeignReach",
@@ -152,6 +164,7 @@ __all__ = [
     "TaskPacket",
     "TokenReach",
     "ToolServerOut",
+    "append_entry",
     "ask_human",
     "check_action",
     "configure_human_waits",
@@ -160,6 +173,8 @@ __all__ = [
     "master_agent",
     "plan_packet",
     "planning_request",
+    "read_digest",
+    "record_event",
     "register_skill_runner",
     "request_approval",
     "retry_provision",
@@ -170,6 +185,20 @@ __all__ = [
     "set_profile_key",
     "task_activity_times",
 ]
+
+DIGEST_HORIZON_LAG = Gauge(
+    "tumnis_digest_horizon_lag_seconds",
+    "Age of the oldest running app transaction, which holds the digest horizon back",
+    registry=REGISTRY,
+)
+
+
+async def export_metrics(conn: AsyncConnection) -> None:
+    """tumnis_digest_horizon_lag_seconds on every /metrics scrape (P2-03): a long
+    transaction delays digests, never loses an entry. tumnis.wiring registers it."""
+    async with AsyncSession(bind=conn) as s:
+        DIGEST_HORIZON_LAG.set(await horizon_lag_seconds(s))
+
 
 RUNNER_CHANNEL: Final = "runner_mailbox"  # NOTIFY {"runner": id, "close": bool}
 RUN_EVENTS_CHANNEL: Final = "agents_run_events"  # NOTIFY {"run": id}

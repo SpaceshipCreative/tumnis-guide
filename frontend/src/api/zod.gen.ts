@@ -225,6 +225,35 @@ export const zDefaultIn = z.object({
 });
 
 /**
+ * DigestEntryOut
+ */
+export const zDigestEntryOut = z.object({
+  data: z.record(z.string(), z.unknown()),
+  event_id: z.uuid(),
+  id: z.uuid(),
+  kind: z.string(),
+  occurred_at: z.iso.datetime(),
+  project_id: z.uuid().nullable(),
+  scope: z.enum(["project", "workspace"]),
+  task_id: z.uuid().nullable(),
+  text: z.string().nullish(),
+});
+
+/**
+ * DigestOut
+ *
+ * One page of a digest: what changed since the last acknowledged digest.
+ */
+export const zDigestOut = z.object({
+  entries: z.array(zDigestEntryOut),
+  gap: z.boolean().optional().default(false),
+  has_more: z.boolean(),
+  next_cursor: z.string(),
+  schema_version: z.literal(1).optional().default(1),
+  scope: z.enum(["project", "workspace"]),
+});
+
+/**
  * DocumentDTO
  */
 export const zDocumentDto = z.object({
@@ -2550,6 +2579,32 @@ export const zDecisionsEditThresholdPath = z.object({
  * Successful Response
  */
 export const zDecisionsEditThresholdResponse = zThresholdOut;
+
+export const zAgentsGetProjectDigestPath = z.object({
+  project_id: z.uuid(),
+});
+
+export const zAgentsGetProjectDigestQuery = z.object({
+  since: z.string().max(512).nullish(),
+  limit: z.int().gte(1).lte(1000).optional().default(200),
+  schema_version: z.int().nullish(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsGetProjectDigestResponse = zDigestOut;
+
+export const zAgentsGetWorkspaceDigestQuery = z.object({
+  since: z.string().max(512).nullish(),
+  limit: z.int().gte(1).lte(1000).optional().default(200),
+  schema_version: z.int().nullish(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsGetWorkspaceDigestResponse = zDigestOut;
 
 export const zKnowledgeGetFilePath = z.object({
   document_id: z.uuid(),
