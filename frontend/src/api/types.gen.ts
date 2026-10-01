@@ -839,6 +839,54 @@ export type DefaultIn = {
 };
 
 /**
+ * DelegateBody
+ *
+ * `POST /v1/delegations`'s body.
+ */
+export type DelegateBody = {
+  /**
+   * Note
+   *
+   * For the agent: added to the task as a comment it reads in its packet.
+   */
+  note?: string | null;
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+  /**
+   * Task Id
+   */
+  task_id: string;
+};
+
+/**
+ * DelegateOut
+ */
+export type DelegateOut = {
+  /**
+   * Delegation Id
+   */
+  delegation_id: string;
+  /**
+   * Depth
+   */
+  depth: number;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Tainted
+   */
+  tainted: boolean;
+};
+
+/**
  * DigestEntryOut
  */
 export type DigestEntryOut = {
@@ -5161,6 +5209,33 @@ export type UsageRow = {
 };
 
 /**
+ * WaitOut
+ */
+export type WaitOut = {
+  /**
+   * Question
+   */
+  question?: string | null;
+  /**
+   * Result Summary
+   */
+  result_summary?: string | null;
+  run_status: RunStatus;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Status
+   */
+  status: "done" | "waiting_on_human" | "still_running";
+  /**
+   * Task Status
+   */
+  task_status: string;
+};
+
+/**
  * WebResultLink
  *
  * A branch, pull request, draft or other web address: always `http(s)://`.
@@ -7308,6 +7383,130 @@ export type DecisionsEditThresholdResponses = {
 
 export type DecisionsEditThresholdResponse =
   DecisionsEditThresholdResponses[keyof DecisionsEditThresholdResponses];
+
+export type AgentsDelegateTaskData = {
+  body: DelegateBody;
+  path?: never;
+  query?: never;
+  url: "/v1/delegations";
+};
+
+export type AgentsDelegateTaskErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsDelegateTaskError =
+  AgentsDelegateTaskErrors[keyof AgentsDelegateTaskErrors];
+
+export type AgentsDelegateTaskResponses = {
+  /**
+   * Successful Response
+   */
+  201: DelegateOut;
+};
+
+export type AgentsDelegateTaskResponse =
+  AgentsDelegateTaskResponses[keyof AgentsDelegateTaskResponses];
+
+export type AgentsWaitForTaskData = {
+  body?: never;
+  path: {
+    /**
+     * Delegation Id
+     */
+    delegation_id: string;
+  };
+  query?: {
+    /**
+     * Schema Version
+     */
+    schema_version?: number | null;
+    /**
+     * Timeout Seconds
+     */
+    timeout_seconds?: number;
+  };
+  url: "/v1/delegations/{delegation_id}/wait";
+};
+
+export type AgentsWaitForTaskErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsWaitForTaskError =
+  AgentsWaitForTaskErrors[keyof AgentsWaitForTaskErrors];
+
+export type AgentsWaitForTaskResponses = {
+  /**
+   * Successful Response
+   */
+  200: WaitOut;
+};
+
+export type AgentsWaitForTaskResponse =
+  AgentsWaitForTaskResponses[keyof AgentsWaitForTaskResponses];
 
 export type AgentsGetProjectDigestData = {
   body?: never;

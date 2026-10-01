@@ -72,7 +72,7 @@ from tumnis.core.versioning import NotFound
 
 # The subscribers start `provision_profile` through api's starter seam, which workflows
 # fills at import: loading the subscribers loads the workflow too, in every process.
-from tumnis.modules.agents import api, human_flows, signals, workflows
+from tumnis.modules.agents import api, delegation, human_flows, signals, workflows
 from tumnis.modules.agents.review_kinds import APPROVAL, QUESTION, RESULT
 from tumnis.modules.agents.rules import DIGEST_EVENTS, ESTIMATED_LABELS, enrichment_settled
 from tumnis.modules.tasks import api as tasks
@@ -261,6 +261,11 @@ async def _apply_result_decision(envelope: EventEnvelope) -> None:
     ctx = WorkspaceContext(envelope.workspace_id, actor)
     async with tenant_session(ctx) as s:
         item = await tasks.get_review_item(s, UUID(str(payload["item_id"])))
+        if decision == "accept" and item.payload.get("run_id") is not None:
+            # P2-06: an accepted result restarts its delegation's loop count.
+            await delegation.mark_accepted(
+                s, UUID(str(item.payload["run_id"])), envelope.occurred_at
+            )
         try:
             task = await tasks.get_task(s, item.target_id)
         except NotFound:

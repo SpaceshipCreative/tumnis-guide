@@ -1,5 +1,6 @@
 """agents REST (P1-04, FR-5.1, FR-5.9): runners and agent profiles, session only (admin);
-and the digests' twins (P2-03), for a session or a key with `tasks:read`.
+and the digests' twins (P2-03), for a session or a key with `tasks:read`; the delegation
+twins (P2-06), for the master key.
 
 `/v1/runners` and `/v1/agents/profiles` (not under one module prefix: the plan's paths).
 Creating a runner and rotating its token answer the device token once; an idempotent
@@ -20,7 +21,7 @@ from tumnis.core.pagination import Page, PageParams, page_params
 from tumnis.core.principal import principal_of
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
-from tumnis.modules.agents import api
+from tumnis.modules.agents import api, delegation
 from tumnis.modules.agents import mcp as tools
 from tumnis.modules.agents.packet_builder import TaskPacket
 
@@ -386,6 +387,43 @@ async def resume_project(
     still paused."""
     inp = api.ResumeIn(scope="project", project_id=project_id, reason=body.reason)
     return await api.resume(ctx, inp, now=_clock(request).now(), session=session)
+
+
+# --- Delegation (P2-06, FR-5.2): the delegate_task and wait_for_task tools' twins ----------
+
+_DELEGATE = frozenset({"delegate"})
+
+
+@router.post("/delegations", status_code=201)
+@route_policy(RoutePolicy(auth="session_or_key", scopes=_DELEGATE, idempotent=True))
+async def delegate_task(
+    body: delegation.DelegateBody, request: Request, session: SessionDep
+) -> delegation.DelegateOut:
+    """Hand a task to its project's agent (the master key only; 403 `master_only` for any
+    other caller): a run of the task starts, and the delegation id is its run's id. 409
+    `agent_not_provisioned`, `agents_paused`, `delegation_depth_exceeded`,
+    `delegation_loop`."""
+    made = await surface.rest_twin(request, session, tools.DELEGATE_TASK, body.model_dump())
+    assert isinstance(made, delegation.DelegateOut)  # noqa: S101  # the op's output model
+    return made
+
+
+@router.get("/delegations/{delegation_id}/wait")
+# No project_param: the op finds the delegation's project before `master_only` (404 for
+# one the caller cannot see), and a non-master key never gets past the op.
+@route_policy(RoutePolicy(auth="session_or_key", scopes=_DELEGATE))
+async def wait_for_task(
+    delegation_id: UUID,
+    request: Request,
+    query: Annotated[delegation.WaitQuery, Query()],
+) -> delegation.WaitOut:
+    """Wait for a delegated task up to `timeout_seconds` (the master key only): `done`,
+    `waiting_on_human` with the question, or `still_running` at the timeout. The wait
+    runs after the read's transaction, so it holds none."""
+    raw = {**query.model_dump(), "delegation_id": delegation_id}
+    found = await surface.rest_twin_detached(request, tools.WAIT_FOR_TASK, raw)
+    assert isinstance(found, delegation.WaitOut)  # noqa: S101  # the op's output model
+    return found
 
 
 # --- Digests (P2-03): the get_project_digest and get_workspace_digest tools' twins ----------

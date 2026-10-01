@@ -17,6 +17,10 @@
   Their `on_decide` hook records the answer on the `questions` or `approvals` row and, for
   an approval, the `approval.granted` or `approval.denied` audit row with the reason, in
   the decide transaction; `agents.apply_review_decision` then wakes the waiting workflow.
+- `delegation_loop` (P2-06, SAF-5): the master delegated the same task too often in the
+  window without an accepted result, or back into its own chain; the delegation was
+  refused and the master's runs that were active then were stopped. Actions: `accept`
+  (acknowledge) and `snooze`.
 """
 
 from typing import Final, Literal
@@ -220,5 +224,32 @@ tasks.register_review_kind(
         impact_scope="task",
         action_payloads={"approve": ApprovalReason, "deny": ApprovalReason},
         on_decide=_approval_decided,
+    )
+)
+
+
+# --- Delegation (P2-06, SAF-5) ---------------------------------------------------------------
+
+DELEGATION_LOOP_KIND: Final = "delegation_loop"
+
+
+class DelegationLoopPayload(BaseModel):
+    """A refused delegation: the task, how many times it was delegated in the window,
+    whether it was a cycle (the task is in its own delegation chain), and the master's
+    runs that were stopped."""
+
+    task_id: UUID
+    delegations: int = Field(ge=0)
+    cycle: bool = False
+    stopped_runs: list[UUID] = Field(default=[], max_length=100)
+
+
+tasks.register_review_kind(
+    tasks.ReviewKindSpec(
+        kind=DELEGATION_LOOP_KIND,
+        owner_module="agents",
+        payload_schema=DelegationLoopPayload,
+        actions=("accept", "snooze"),
+        impact_scope="task",
     )
 )

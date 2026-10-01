@@ -179,4 +179,7 @@ export const NOT_LIVE = [
   // cursor, so the UI never caches or refetches them.
   "agentsGetProjectDigest",
   "agentsGetWorkspaceDigest",
+  // The master's long poll on a delegation (P2-06): an agent's call that waits up to ten
+  // minutes, never a cached query of the app.
+  "agentsWaitForTask",
 ] as const;
