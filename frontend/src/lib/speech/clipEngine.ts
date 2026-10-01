@@ -31,7 +31,10 @@ export function createClipEngine(
         audio.addEventListener("error", settle);
         signal?.addEventListener("abort", stop);
         audio.src = message.clipUrl;
-        audio.play().catch(settle); // autoplay refused: nothing to wait for
+        // Autoplay refused: nothing to wait for. Some environments return no promise.
+        const played = audio.play() as Promise<void> | undefined;
+        if (played === undefined) settle();
+        else played.catch(settle);
       }),
   };
 }
