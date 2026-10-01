@@ -620,3 +620,10 @@ async def schedule_block(
         row = (await s.execute(stmt.returning(*_ITEMS.c))).one()
         live.mark_changed(s, "task", task_id)
         return _item_out(row, day)
+
+
+# --- The daily plan (P1-11) ------------------------------------------------------------------
+
+
+async def plan_candidates(ctx: WorkspaceContext, day: date) -> list[UUID]:
+    raise NotImplementedError

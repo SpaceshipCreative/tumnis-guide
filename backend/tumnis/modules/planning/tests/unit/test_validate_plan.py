@@ -63,9 +63,9 @@ def plan_task(  # every PlanTask field a test varies
     return rules.PlanTask(
         task_id=task_id(n),
         project_id=PROJECT,
-        label=label,  # type: ignore[arg-type]
+        label=label,
         estimate_minutes=estimate,
-        status=status,  # type: ignore[arg-type]
+        status=status,
         blocked=blocked,
         due_on=due_on,
         priority=priority,

@@ -90,9 +90,9 @@ def build_runs() -> list[Any]:
     return list(DBOS.list_workflows(name="build_plan"))
 
 
-async def until[T](
-    check: Callable[[], Awaitable[T] | T], *, timeout_s: float = SETTLE_S, poll_s: float = 0.1
-) -> T:
+async def until(
+    check: Callable[[], Any], *, timeout_s: float = SETTLE_S, poll_s: float = 0.1
+) -> Any:
     """The first truthy value of `check`, or its last value once `timeout_s` has passed."""
     deadline = time.monotonic() + timeout_s
     while True:
@@ -100,7 +100,7 @@ async def until[T](
         if asyncio.iscoroutine(value) or isinstance(value, Awaitable):
             value = await value
         if value or time.monotonic() >= deadline:
-            return value  # type: ignore[return-value]
+            return value
         await asyncio.sleep(poll_s)
 
 
@@ -164,7 +164,9 @@ async def move_task(
             else ActorRef(f"user:{workspace.user_id}")
         )
         async with tenant_session(WorkspaceContext(workspace.id, actor)) as s:
-            task = await tasks.change_status(s, actor, task_id, to, task.version, now=clock.now())
+            task = await tasks.change_status(
+                s, actor, task_id, tasks.Status(to), task.version, now=clock.now()
+            )
     return task
 
 

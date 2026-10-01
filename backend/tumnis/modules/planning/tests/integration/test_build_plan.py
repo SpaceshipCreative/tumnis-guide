@@ -371,7 +371,7 @@ async def test_nothing_replans_during_the_day(
     """
     from tumnis.core.outbox import emit  # noqa: PLC0415
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
-    from tumnis.modules.calendar.payloads import CalendarSyncedV1, SyncWindow  # noqa: PLC0415
+    from tumnis.modules.calendar.api import CalendarSyncedV1, SyncWindow  # noqa: PLC0415
     from tumnis.modules.planning.tests.integration._plan import user_ctx  # noqa: PLC0415
     from tumnis.modules.tasks import api as tasks  # noqa: PLC0415
 

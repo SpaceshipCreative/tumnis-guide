@@ -860,3 +860,18 @@ async def packet_for_caller(
         nonce=content_nonce(inputs),
         token=None,
     )
+
+
+# --- The planning request (P1-11) ------------------------------------------------------------
+
+
+class PlanningProjectIn(BaseModel):
+    id: UUID
+    name: str
+    health: str
+    next_milestone: Any
+    brief: str
+
+
+def assemble_planning_request(**kwargs: Any) -> Any:
+    raise NotImplementedError

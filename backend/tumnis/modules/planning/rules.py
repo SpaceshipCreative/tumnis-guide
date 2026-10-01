@@ -146,3 +146,81 @@ def validate_manual_block(
         if any(p.start < block.end and block.start < p.end for p in planned):
             found.append("blocks_overlap")
     return [Violation(code=code, task_id=task.task_id) for code in found]
+
+
+# --- The daily plan (P1-11) -------------------------------------------------------------------
+
+MAX_ITEMS: Final = 5  # FR-1.2, FR-4.3
+MAX_REASON: Final = 140  # plan default
+SLOT_ROUNDING_MIN: Final = 5  # plan default: blocks start on 5-minute marks
+MIN_SPLIT_CHUNK: Final = 15  # plan default
+MOVE_LOOKAHEAD_WORKING_DAYS: Final = 5  # plan default
+DEFAULT_PLAN_TIME: Final = time(8, 30)  # plan default, before FR-4.7's 09:00 start
+DEFAULT_PLAN_WEEKDAYS: Final = frozenset(range(5))  # Monday to Friday
+
+
+class PlannedItem(BaseModel, frozen=True):
+    task_id: UUID
+    position: int
+    reason: str
+    block: Interval | None
+
+
+class PlanPick(BaseModel, frozen=True):
+    task_id: UUID
+    reason: str
+
+
+class PlanContext(BaseModel, frozen=True):
+    day: date
+    tz: str
+    now: datetime
+    free_blocks: list[Interval]
+    tasks: dict[UUID, PlanTask]
+    replan: bool
+    ahead: dict[date, list[Interval]] = {}
+
+
+class FitOffer(BaseModel, frozen=True):
+    split: list[int] | None
+    move_to: date | None
+
+
+class Unplaceable(BaseModel, frozen=True):
+    task_id: UUID
+    reason: str
+    offer: FitOffer
+
+
+def validate_plan(items: Sequence[PlannedItem], ctx: PlanContext) -> list[Violation]:
+    raise NotImplementedError
+
+
+def check_picks(picks: Sequence[PlanPick], ctx: PlanContext) -> list[Violation]:
+    raise NotImplementedError
+
+
+def assign_blocks(
+    picks: Sequence[PlanPick], ctx: PlanContext
+) -> tuple[list[PlannedItem], list[Unplaceable]]:
+    raise NotImplementedError
+
+
+def fallback_plan(ctx: PlanContext) -> tuple[list[PlannedItem], list[Unplaceable]]:
+    raise NotImplementedError
+
+
+def fit_offer(
+    task: PlanTask, today: Sequence[Interval], ahead: Mapping[date, Sequence[Interval]]
+) -> FitOffer:
+    raise NotImplementedError
+
+
+def is_plan_due(
+    now: datetime,
+    tz: ZoneInfo,
+    plan_time: time,
+    plan_weekdays: frozenset[int],
+    already_built: bool,  # the plan's signature
+) -> date | None:
+    raise NotImplementedError
