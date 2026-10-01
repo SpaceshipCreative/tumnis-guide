@@ -88,7 +88,6 @@ class WebPushContract(AdapterContract[WebPushAdapter]):
         """Script the push service's next answer for an endpoint."""
         raise NotImplementedError
 
-    @pytest.mark.xfail(strict=True, reason="spec:P4-05")
     async def test_contract(self, subject: WebPushAdapter) -> None:
         """T-P4-05-07
         A push the service takes: 201 `sent`, the encrypted body under the 4 KB bound and
@@ -107,7 +106,6 @@ class WebPushContract(AdapterContract[WebPushAdapter]):
         assert str(claims["sub"]).startswith(("mailto:", "https://"))
         assert 0 < int(claims["exp"]) - int(T0.timestamp()) <= 24 * 3600
 
-    @pytest.mark.xfail(strict=True, reason="spec:P4-05")
     @pytest.mark.parametrize("status", [404, 410])
     async def test_gone_subscription_answers_gone(
         self, subject: WebPushAdapter, script: Callable[[str, int], None], status: int
@@ -118,7 +116,6 @@ class WebPushContract(AdapterContract[WebPushAdapter]):
         result = await subject.send(Browser.new().subscription(), approval_payload(), TTL_S)
         assert (result.outcome, result.status_code) == ("gone", status)
 
-    @pytest.mark.xfail(strict=True, reason="spec:P4-05")
     @pytest.mark.parametrize("status", [429, 500, 503])
     async def test_service_trouble_is_unavailable(
         self, subject: WebPushAdapter, script: Callable[[str, int], None], status: int
@@ -129,7 +126,6 @@ class WebPushContract(AdapterContract[WebPushAdapter]):
         with pytest.raises(AdapterUnavailable):
             await subject.send(Browser.new().subscription(), approval_payload(), TTL_S)
 
-    @pytest.mark.xfail(strict=True, reason="spec:P4-05")
     async def test_other_refusals_are_rejected(
         self, subject: WebPushAdapter, script: Callable[[str, int], None]
     ) -> None:
@@ -139,7 +135,6 @@ class WebPushContract(AdapterContract[WebPushAdapter]):
         with pytest.raises(AdapterRejected):
             await subject.send(Browser.new().subscription(), approval_payload(), TTL_S)
 
-    @pytest.mark.xfail(strict=True, reason="spec:P4-05")
     @pytest.mark.parametrize(
         "endpoint", ["http://fcm.googleapis.com/fcm/send/x", "https://push.example.com/x"]
     )
@@ -235,7 +230,6 @@ class TestWebPushReal(WebPushContract):
     def script(self, service: PushService) -> Callable[[str, int], None]:
         return service.script
 
-    @pytest.mark.xfail(strict=True, reason="spec:P4-05")
     async def test_request_decrypts_and_carries_ttl_and_a_valid_vapid_signature(
         self,
         subject: WebPushAdapter,
