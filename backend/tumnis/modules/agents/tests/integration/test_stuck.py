@@ -109,7 +109,6 @@ async def test_stuck_routes_to_project_agent(  # noqa: PLR0917
     assert len(packet.body["recent_comments"]) <= 5
 
 
-@pytest.mark.xfail(strict=True, reason="spec:P4-02")
 @pytest.mark.req("FR-10.5")
 @pytest.mark.wp("P4-02")
 async def test_split_step_posted_within_a_minute(  # noqa: PLR0917
@@ -177,7 +176,6 @@ async def test_split_step_posted_within_a_minute(  # noqa: PLR0917
     assert any(m["entity"] == "focus" for m in live)
 
 
-@pytest.mark.xfail(strict=True, reason="spec:P4-02")
 @pytest.mark.req("FR-10.5")
 @pytest.mark.wp("P4-02")
 async def test_agent_takes_step_itself(  # noqa: PLR0917
