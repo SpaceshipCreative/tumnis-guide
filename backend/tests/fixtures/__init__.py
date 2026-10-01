@@ -444,8 +444,12 @@ async def load_fixture(db: DbUrls, clock: FixedClock) -> SeedResult:
 
 @pytest.fixture(scope="session")
 def dbos_sys_db(pg_container: PostgresContainer, pg_base: DbUrls, worker_id: str) -> DbUrls:
-    """One DBOS system database per xdist worker, owned by the app role."""
+    """One DBOS system database per xdist worker, owned by the app role, with DBOS's tables
+    made up front: a route that enqueues through the api's DBOSClient (which never
+    migrates) works whether or not an earlier test on the worker launched DBOS, as in a
+    deployment whose worker has started (P1-11: `POST /v1/plan/replan` in the A0.3 sweep)."""
     import psycopg  # noqa: PLC0415
+    from dbos import run_dbos_database_migrations  # noqa: PLC0415
     from psycopg import sql  # noqa: PLC0415
 
     name = f"tumnis_dbos_{worker_id}"
@@ -453,7 +457,9 @@ def dbos_sys_db(pg_container: PostgresContainer, pg_base: DbUrls, worker_id: str
         conn.execute(
             sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(name), sql.Identifier(APP))
         )
-    return DbUrls(pg_base.host, pg_base.port, name)
+    urls = DbUrls(pg_base.host, pg_base.port, name)
+    run_dbos_database_migrations(urls.url(APP))
+    return urls
 
 
 @pytest.fixture
@@ -688,7 +694,9 @@ class WorkerKiller:
                 payload = model.model_validate({"note": f"kill-{i}"})
                 self.event_ids.append(await emit(session, payload, occurred_at=at))
 
-    async def _start(self, killpoint: str | None) -> asyncio.subprocess.Process:
+    async def _start(
+        self, killpoint: str | None, app_version: str = KILLER_APP_VERSION
+    ) -> asyncio.subprocess.Process:
         import os  # noqa: PLC0415
         import sys  # noqa: PLC0415
 
@@ -709,7 +717,7 @@ class WorkerKiller:
         args = [sys.executable, "-m", "tumnis.testing.run_worker"]
         for name in self.imports:
             args += ["--import", name]
-        args += ["--app-version", KILLER_APP_VERSION]
+        args += ["--app-version", app_version]
         if self.queues:
             args += ["--queues", ",".join(self.queues)]
         label = "-".join(self.queues) or "main"  # two killers may share the logs folder
@@ -871,10 +879,14 @@ class WorkerKiller:
         finally:
             await self._stop(proc)
 
-    async def start(self, killpoint: str | None = None) -> asyncio.subprocess.Process:
+    async def start(
+        self, killpoint: str | None = None, *, app_version: str = KILLER_APP_VERSION
+    ) -> asyncio.subprocess.Process:
         """A worker on this killer's databases, armed at `killpoint` when one is given, for
-        tests that drive their own workflows (P1-04); end it with `stop`."""
-        return await self._start(killpoint)
+        tests that drive their own workflows (P1-04); end it with `stop`. `app_version`
+        is the DBOS application version it runs (P2-05: a deploy is a worker on another
+        version, which recovers none of the older version's workflows)."""
+        return await self._start(killpoint, app_version)
 
     async def stop(self, proc: asyncio.subprocess.Process) -> None:
         await self._stop(proc)

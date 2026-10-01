@@ -102,6 +102,36 @@ export type AgentProfileOut = {
 };
 
 /**
+ * AlternateOut
+ */
+export type AlternateOut = {
+  /**
+   * Due On
+   */
+  due_on: string | null;
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes: number | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Label
+   */
+  label: string | null;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Title
+   */
+  title: string;
+};
+
+/**
  * AppDeployStatus
  */
 export type AppDeployStatus = {
@@ -126,6 +156,30 @@ export type AppDeployStatus = {
    * Previews
    */
   previews: Array<PreviewOut>;
+};
+
+/**
+ * AskHumanBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export type AskHumanBody = {
+  /**
+   * Choices
+   */
+  choices?: Array<string>;
+  /**
+   * Prompt
+   */
+  prompt: string;
+  /**
+   * Question Id
+   */
+  question_id?: string | null;
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
 };
 
 /**
@@ -186,6 +240,20 @@ export type AuditEntry = {
    * User Agent
    */
   user_agent: string | null;
+};
+
+/**
+ * BlockOut
+ */
+export type BlockOut = {
+  /**
+   * End
+   */
+  end: string;
+  /**
+   * Start
+   */
+  start: string;
 };
 
 /**
@@ -814,6 +882,22 @@ export type FileTouched = {
 };
 
 /**
+ * FitOffer
+ *
+ * What a task with no big enough gap is offered (J6).
+ */
+export type FitOffer = {
+  /**
+   * Move To
+   */
+  move_to: string | null;
+  /**
+   * Split
+   */
+  split: Array<number> | null;
+};
+
+/**
  * FolderIn
  */
 export type FolderIn = {
@@ -882,6 +966,44 @@ export type HealthCheckAccepted = {
    * Request Id
    */
   request_id: string;
+};
+
+/**
+ * HumanWaitOut
+ */
+export type HumanWaitOut = {
+  /**
+   * Answer
+   */
+  answer?: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Reason
+   */
+  reason?: string | null;
+  /**
+   * Retry After Seconds
+   */
+  retry_after_seconds?: number | null;
+  /**
+   * Rule
+   */
+  rule?: string | null;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Status
+   */
+  status: "pending" | "answered" | "approved" | "denied";
+  /**
+   * Tainted
+   */
+  tainted?: boolean;
 };
 
 /**
@@ -1421,6 +1543,41 @@ export type PageSessionOut = {
 };
 
 /**
+ * PlanIssueOut
+ */
+export type PlanIssueOut = {
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes: number | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Kind
+   */
+  kind: string;
+  offer: FitOffer;
+  /**
+   * Resolved At
+   */
+  resolved_at: string | null;
+  /**
+   * Review Item Id
+   */
+  review_item_id: string | null;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Title
+   */
+  title: string;
+};
+
+/**
  * PlanItemOut
  */
 export type PlanItemOut = {
@@ -1459,6 +1616,131 @@ export type PlanItemOut = {
 };
 
 /**
+ * PlanItemViewOut
+ *
+ * One item as the Today panel shows it: the plan's facts plus the task as it is now
+ * (`blocked` from its live status: a task waiting on the person stays at its position,
+ * flagged, until Re-plan).
+ */
+export type PlanItemViewOut = {
+  /**
+   * Accepted At
+   */
+  accepted_at: string | null;
+  block: BlockOut | null;
+  /**
+   * Blocked
+   */
+  blocked: boolean;
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes: number | null;
+  /**
+   * First Action
+   */
+  first_action: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Label
+   */
+  label: string | null;
+  /**
+   * Position
+   */
+  position: number;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Project Name
+   */
+  project_name: string;
+  /**
+   * Reason
+   */
+  reason: string;
+  /**
+   * Removed At
+   */
+  removed_at: string | null;
+  /**
+   * Status
+   */
+  status: string;
+  /**
+   * Swapped From Task Id
+   */
+  swapped_from_task_id: string | null;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Title
+   */
+  title: string;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * PlanOut
+ */
+export type PlanOut = {
+  /**
+   * Built At
+   */
+  built_at: string;
+  /**
+   * Day
+   */
+  day: string;
+  /**
+   * Fallback Reason
+   */
+  fallback_reason: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Issues
+   */
+  issues: Array<PlanIssueOut>;
+  /**
+   * Items
+   */
+  items: Array<PlanItemViewOut>;
+  /**
+   * Notice
+   */
+  notice: string | null;
+  /**
+   * Source
+   */
+  source: string;
+  /**
+   * Status
+   */
+  status: string;
+  /**
+   * Timezone
+   */
+  timezone: string;
+  /**
+   * Trigger
+   */
+  trigger: string;
+};
+
+/**
  * PlannedBlockOut
  */
 export type PlannedBlockOut = {
@@ -1478,6 +1760,65 @@ export type PlannedBlockOut = {
    * Title
    */
   title: string | null;
+};
+
+/**
+ * PolicyIn
+ *
+ * The policy editor's save (P2-05, FR-5.6): both lists as a whole and the version
+ * read. A class in both lists is 422 `policy_conflict`.
+ */
+export type PolicyIn = {
+  /**
+   * Allowed
+   */
+  allowed: Array<string>;
+  /**
+   * Gated
+   */
+  gated: Array<string>;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * PolicyOut
+ */
+export type PolicyOut = {
+  /**
+   * Allowed
+   */
+  allowed: Array<string>;
+  /**
+   * Gated
+   */
+  gated: Array<string>;
+  /**
+   * Max Concurrent Runs
+   */
+  max_concurrent_runs: number;
+  /**
+   * Max Run Minutes
+   */
+  max_run_minutes: number;
+  /**
+   * Max Tasks Per Run
+   */
+  max_tasks_per_run: number;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Tool Allowlist
+   */
+  tool_allowlist: Array<string>;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -2342,6 +2683,58 @@ export type ReorderIn = {
 };
 
 /**
+ * ReplanAccepted
+ */
+export type ReplanAccepted = {
+  /**
+   * Day
+   */
+  day: string;
+  /**
+   * Workflow Id
+   */
+  workflow_id: string;
+};
+
+/**
+ * ReplanIn
+ */
+export type ReplanIn = {
+  /**
+   * Day
+   */
+  day?: string | null;
+};
+
+/**
+ * RequestApprovalBody
+ *
+ * The REST twin's body (the run is in the path).
+ */
+export type RequestApprovalBody = {
+  /**
+   * Action Class
+   */
+  action_class: string;
+  /**
+   * Approval Id
+   */
+  approval_id?: string | null;
+  /**
+   * Description
+   */
+  description: string;
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+  /**
+   * Target
+   */
+  target?: string | null;
+};
+
+/**
  * ResultLink
  */
 export type ResultLink = {
@@ -3048,6 +3441,16 @@ export type StatusBody = {
    * Version
    */
   version: number;
+};
+
+/**
+ * SwapIn
+ */
+export type SwapIn = {
+  /**
+   * With Task Id
+   */
+  with_task_id: string;
 };
 
 /**
@@ -6542,6 +6945,61 @@ export type KnowledgeSetProjectFolderResponses = {
 export type KnowledgeSetProjectFolderResponse =
   KnowledgeSetProjectFolderResponses[keyof KnowledgeSetProjectFolderResponses];
 
+export type PlanningReplanData = {
+  body: ReplanIn;
+  path?: never;
+  query?: never;
+  url: "/v1/plan/replan";
+};
+
+export type PlanningReplanErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningReplanError =
+  PlanningReplanErrors[keyof PlanningReplanErrors];
+
+export type PlanningReplanResponses = {
+  /**
+   * Successful Response
+   */
+  202: ReplanAccepted;
+};
+
+export type PlanningReplanResponse =
+  PlanningReplanResponses[keyof PlanningReplanResponses];
+
 export type PlanningGetProjectWeekData = {
   body?: never;
   path: {
@@ -6607,6 +7065,188 @@ export type PlanningGetProjectWeekResponses = {
 export type PlanningGetProjectWeekResponse =
   PlanningGetProjectWeekResponses[keyof PlanningGetProjectWeekResponses];
 
+export type PlanningGetPlanData = {
+  body?: never;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+  };
+  query?: never;
+  url: "/v1/plan/{day}";
+};
+
+export type PlanningGetPlanErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningGetPlanError =
+  PlanningGetPlanErrors[keyof PlanningGetPlanErrors];
+
+export type PlanningGetPlanResponses = {
+  /**
+   * Successful Response
+   */
+  200: PlanOut;
+};
+
+export type PlanningGetPlanResponse =
+  PlanningGetPlanResponses[keyof PlanningGetPlanResponses];
+
+export type PlanningAcceptAllData = {
+  body?: never;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+  };
+  query?: never;
+  url: "/v1/plan/{day}/accept-all";
+};
+
+export type PlanningAcceptAllErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningAcceptAllError =
+  PlanningAcceptAllErrors[keyof PlanningAcceptAllErrors];
+
+export type PlanningAcceptAllResponses = {
+  /**
+   * Successful Response
+   */
+  200: PlanOut;
+};
+
+export type PlanningAcceptAllResponse =
+  PlanningAcceptAllResponses[keyof PlanningAcceptAllResponses];
+
+export type PlanningGetAlternatesData = {
+  body?: never;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+  };
+  query?: never;
+  url: "/v1/plan/{day}/alternates";
+};
+
+export type PlanningGetAlternatesErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningGetAlternatesError =
+  PlanningGetAlternatesErrors[keyof PlanningGetAlternatesErrors];
+
+export type PlanningGetAlternatesResponses = {
+  /**
+   * Response Planning Get Alternates
+   *
+   * Successful Response
+   */
+  200: Array<AlternateOut>;
+};
+
+export type PlanningGetAlternatesResponse =
+  PlanningGetAlternatesResponses[keyof PlanningGetAlternatesResponses];
+
 export type PlanningGetDayCalendarData = {
   body?: never;
   path: {
@@ -6666,6 +7306,134 @@ export type PlanningGetDayCalendarResponses = {
 
 export type PlanningGetDayCalendarResponse =
   PlanningGetDayCalendarResponses[keyof PlanningGetDayCalendarResponses];
+
+export type PlanningMoveIssueData = {
+  body?: never;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+    /**
+     * Plan Issue Id
+     */
+    plan_issue_id: string;
+  };
+  query?: never;
+  url: "/v1/plan/{day}/issues/{plan_issue_id}/move";
+};
+
+export type PlanningMoveIssueErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningMoveIssueError =
+  PlanningMoveIssueErrors[keyof PlanningMoveIssueErrors];
+
+export type PlanningMoveIssueResponses = {
+  /**
+   * Successful Response
+   */
+  200: PlanOut;
+};
+
+export type PlanningMoveIssueResponse =
+  PlanningMoveIssueResponses[keyof PlanningMoveIssueResponses];
+
+export type PlanningSplitIssueData = {
+  body?: never;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+    /**
+     * Plan Issue Id
+     */
+    plan_issue_id: string;
+  };
+  query?: never;
+  url: "/v1/plan/{day}/issues/{plan_issue_id}/split";
+};
+
+export type PlanningSplitIssueErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningSplitIssueError =
+  PlanningSplitIssueErrors[keyof PlanningSplitIssueErrors];
+
+export type PlanningSplitIssueResponses = {
+  /**
+   * Successful Response
+   */
+  200: PlanOut;
+};
+
+export type PlanningSplitIssueResponse =
+  PlanningSplitIssueResponses[keyof PlanningSplitIssueResponses];
 
 export type PlanningSchedulePlanItemData = {
   body: ManualBlockIn;
@@ -6730,6 +7498,198 @@ export type PlanningSchedulePlanItemResponses = {
 
 export type PlanningSchedulePlanItemResponse =
   PlanningSchedulePlanItemResponses[keyof PlanningSchedulePlanItemResponses];
+
+export type PlanningAcceptItemData = {
+  body?: never;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/plan/{day}/items/{task_id}/accept";
+};
+
+export type PlanningAcceptItemErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningAcceptItemError =
+  PlanningAcceptItemErrors[keyof PlanningAcceptItemErrors];
+
+export type PlanningAcceptItemResponses = {
+  /**
+   * Successful Response
+   */
+  200: PlanOut;
+};
+
+export type PlanningAcceptItemResponse =
+  PlanningAcceptItemResponses[keyof PlanningAcceptItemResponses];
+
+export type PlanningRemoveItemData = {
+  body?: never;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/plan/{day}/items/{task_id}/remove";
+};
+
+export type PlanningRemoveItemErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningRemoveItemError =
+  PlanningRemoveItemErrors[keyof PlanningRemoveItemErrors];
+
+export type PlanningRemoveItemResponses = {
+  /**
+   * Successful Response
+   */
+  200: PlanOut;
+};
+
+export type PlanningRemoveItemResponse =
+  PlanningRemoveItemResponses[keyof PlanningRemoveItemResponses];
+
+export type PlanningSwapItemData = {
+  body: SwapIn;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/plan/{day}/items/{task_id}/swap";
+};
+
+export type PlanningSwapItemErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningSwapItemError =
+  PlanningSwapItemErrors[keyof PlanningSwapItemErrors];
+
+export type PlanningSwapItemResponses = {
+  /**
+   * Successful Response
+   */
+  200: PlanOut;
+};
+
+export type PlanningSwapItemResponse =
+  PlanningSwapItemResponses[keyof PlanningSwapItemResponses];
 
 export type ProjectsListProjectsData = {
   body?: never;
@@ -7337,6 +8297,126 @@ export type ProjectsGetProjectContextResponses = {
 
 export type ProjectsGetProjectContextResponse =
   ProjectsGetProjectContextResponses[keyof ProjectsGetProjectContextResponses];
+
+export type ProjectsGetPolicyData = {
+  body?: never;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/policy";
+};
+
+export type ProjectsGetPolicyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsGetPolicyError =
+  ProjectsGetPolicyErrors[keyof ProjectsGetPolicyErrors];
+
+export type ProjectsGetPolicyResponses = {
+  /**
+   * Successful Response
+   */
+  200: PolicyOut;
+};
+
+export type ProjectsGetPolicyResponse =
+  ProjectsGetPolicyResponses[keyof ProjectsGetPolicyResponses];
+
+export type ProjectsUpdatePolicyData = {
+  body: PolicyIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/policy";
+};
+
+export type ProjectsUpdatePolicyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ProjectsUpdatePolicyError =
+  ProjectsUpdatePolicyErrors[keyof ProjectsUpdatePolicyErrors];
+
+export type ProjectsUpdatePolicyResponses = {
+  /**
+   * Successful Response
+   */
+  200: PolicyOut;
+};
+
+export type ProjectsUpdatePolicyResponse =
+  ProjectsUpdatePolicyResponses[keyof ProjectsUpdatePolicyResponses];
 
 export type ProjectsReorderProjectData = {
   body: ReorderIn;
@@ -8056,6 +9136,66 @@ export type AgentsGetRunResponses = {
 export type AgentsGetRunResponse =
   AgentsGetRunResponses[keyof AgentsGetRunResponses];
 
+export type AgentsRequestApprovalData = {
+  body: RequestApprovalBody;
+  path: {
+    /**
+     * Run Id
+     */
+    run_id: string;
+  };
+  query?: never;
+  url: "/v1/runs/{run_id}/approvals";
+};
+
+export type AgentsRequestApprovalErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsRequestApprovalError =
+  AgentsRequestApprovalErrors[keyof AgentsRequestApprovalErrors];
+
+export type AgentsRequestApprovalResponses = {
+  /**
+   * Successful Response
+   */
+  200: HumanWaitOut;
+};
+
+export type AgentsRequestApprovalResponse =
+  AgentsRequestApprovalResponses[keyof AgentsRequestApprovalResponses];
+
 export type AgentsCancelRunData = {
   body?: never;
   path: {
@@ -8184,6 +9324,66 @@ export type AgentsListRunEventsResponses = {
 
 export type AgentsListRunEventsResponse =
   AgentsListRunEventsResponses[keyof AgentsListRunEventsResponses];
+
+export type AgentsAskHumanData = {
+  body: AskHumanBody;
+  path: {
+    /**
+     * Run Id
+     */
+    run_id: string;
+  };
+  query?: never;
+  url: "/v1/runs/{run_id}/questions";
+};
+
+export type AgentsAskHumanErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsAskHumanError =
+  AgentsAskHumanErrors[keyof AgentsAskHumanErrors];
+
+export type AgentsAskHumanResponses = {
+  /**
+   * Successful Response
+   */
+  200: HumanWaitOut;
+};
+
+export type AgentsAskHumanResponse =
+  AgentsAskHumanResponses[keyof AgentsAskHumanResponses];
 
 export type AgentsPostResultData = {
   body: PostResultBody;

@@ -12,7 +12,7 @@ logs every decision (typed answers, never the inputs) with a `decision.made` eve
 `put_threshold` sets a point's threshold; `record_outcome` stores what the human did.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
@@ -85,6 +85,8 @@ from tumnis.modules.decisions.payloads import (
     DecisionUnavailablePayload,
     DecisionValueEdit,
 )
+from tumnis.modules.decisions.questions import approval_need as _approval_need
+from tumnis.modules.decisions.questions.approval_need import ApprovalNeed
 from tumnis.modules.decisions.rules import (
     DEFAULT_THRESHOLDS,
     MIN_LABELED,
@@ -110,6 +112,7 @@ from tumnis.modules.tasks import api as tasks
 from tumnis.settings import GenerationSettings
 
 __all__ = [
+    "ApprovalNeed",
     "CalibrationOut",
     "CalibrationPoint",
     "ChoiceAnswer",
@@ -138,6 +141,7 @@ __all__ = [
     "TriageSettings",
     "TypedAnswer",
     "VllmSettings",
+    "ask_approval_need",
     "ask_raw",
     "assess_blocking_impact",
     "calibration",
@@ -496,6 +500,7 @@ async def _threshold(s: AsyncSession, point: DecisionPoint, model: str) -> Thres
 _net_policy: list[NetPolicy] = [NetPolicy(mode="hosted")]  # the strictest until configured
 _built: dict[tuple[str, str], DecisionsProvider] = {}
 _override: list[Providers | None] = [None]
+_override_generation: list[int] = [0]  # bumped by use_providers (cache key)
 
 
 def use_providers(providers: Providers | None) -> None:
@@ -503,6 +508,7 @@ def use_providers(providers: Providers | None) -> None:
     the configured ones (tests: the fakes the queued workflows must see); None restores
     the configured providers."""
     _override[0] = providers
+    _override_generation[0] += 1  # a cached answer of other providers is a miss
 
 
 def configure_net_policy(policy: NetPolicy) -> None:
@@ -616,8 +622,12 @@ async def _ask(  # noqa: PLR0917  # the pieces of one decision, spelled out
     """The cache (the first provider's answers only: never a fallback's), then each
     provider of the chain until one answers."""
     first = chain[0]
+    swapped = "" if _override[0] is None else f":providers-{_override_generation[0]}"
     key = CacheKey.for_workspace(
-        ctx.workspace_id, "decisions", spec.point.value, input_hash(req, first.model).hex()
+        ctx.workspace_id,
+        "decisions",
+        spec.point.value,
+        input_hash(req, first.model).hex() + swapped,
     )
     hit = await DECISIONS_CACHE.get(key)
     if hit is not None:
@@ -1107,3 +1117,36 @@ async def store_evaluations(
                 for e in evaluations
             ],
         )
+
+
+async def ask_approval_need(  # the Noul's fields, spelled out
+    *,
+    action_class: str,
+    description: str,
+    target: str | None,
+    gated: Iterable[str],
+    allowed: Iterable[str],
+    subject: SubjectRef,
+    project_id: UUID | None,
+) -> ApprovalNeed | None:
+    """Worker-only (P2-05): asks the approval-need Noul (`questions/approval_need.py`) and
+    reads its answer with the confidence a "not gated" answer needs; None when nobody
+    answered (Decisions unavailable). Runs in the current workspace context."""
+    ctx = _context()
+    decision = await decide(
+        DecisionPoint.APPROVAL_NEED,
+        _approval_need.inputs(
+            action_class=action_class,
+            description=description,
+            target=target,
+            gated=gated,
+            allowed=allowed,
+        ),
+        subject=subject,
+        project_id=project_id,
+    )
+    if decision.provider == "none":
+        return None
+    threshold = (await thresholds_in_force(ctx))[DecisionPoint.APPROVAL_NEED.value]
+    eff = effective_threshold(threshold, fallback=decision.fallback)
+    return _approval_need.read_answer(decision.answers, fallback=decision.fallback, t_no=eff.t_no)

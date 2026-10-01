@@ -166,12 +166,25 @@ async def _cancel_open_dispatches(db: DbUrls) -> None:
     from tumnis.modules.agents import api  # noqa: PLC0415
 
     open_runs = owner_rows(
-        db, "SELECT id FROM runs WHERE status IN ('queued', 'running', 'waiting_on_human')"
+        db,
+        "SELECT id, workflow_id FROM runs"
+        " WHERE status IN ('queued', 'running', 'waiting_on_human')",
     )
-    for (run_id,) in open_runs:
+    for run_id, workflow_id in open_runs:
+        for target in {str(run_id), workflow_id or str(run_id)}:
+            with contextlib.suppress(Exception):
+                await DBOS.cancel_workflow_async(target)
+                await DBOS.send_async(target, {}, topic=api.run_topic(run_id))
+    # P2-05: the question and approval flows parked on the human (topic `human`).
+    waits = owner_rows(
+        db,
+        "SELECT workflow_id FROM questions WHERE workflow_id IS NOT NULL"
+        " UNION ALL SELECT workflow_id FROM approvals WHERE workflow_id IS NOT NULL",
+    )
+    for (workflow_id,) in waits:
         with contextlib.suppress(Exception):
-            await DBOS.cancel_workflow_async(str(run_id))
-            await DBOS.send_async(str(run_id), {}, topic=api.run_topic(run_id))
+            await DBOS.cancel_workflow_async(workflow_id)
+            await DBOS.send_async(workflow_id, {}, topic=api.HUMAN_TOPIC)
     run_ids = sorted(str(run_id) for (run_id,) in owner_rows(db, "SELECT id FROM runs"))
     if not run_ids:
         return

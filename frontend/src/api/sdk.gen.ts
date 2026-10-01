@@ -10,6 +10,9 @@ import {
 } from "./client";
 import { client } from "./client.gen";
 import type {
+  AgentsAskHumanData,
+  AgentsAskHumanErrors,
+  AgentsAskHumanResponses,
   AgentsCancelRunData,
   AgentsCancelRunErrors,
   AgentsCancelRunResponses,
@@ -43,6 +46,9 @@ import type {
   AgentsRegisterProfileData,
   AgentsRegisterProfileErrors,
   AgentsRegisterProfileResponses,
+  AgentsRequestApprovalData,
+  AgentsRequestApprovalErrors,
+  AgentsRequestApprovalResponses,
   AgentsRequestRunData,
   AgentsRequestRunErrors,
   AgentsRequestRunResponses,
@@ -173,21 +179,51 @@ import type {
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentErrors,
   KnowledgeUploadDocumentResponses,
+  PlanningAcceptAllData,
+  PlanningAcceptAllErrors,
+  PlanningAcceptAllResponses,
+  PlanningAcceptItemData,
+  PlanningAcceptItemErrors,
+  PlanningAcceptItemResponses,
+  PlanningGetAlternatesData,
+  PlanningGetAlternatesErrors,
+  PlanningGetAlternatesResponses,
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarErrors,
   PlanningGetDayCalendarResponses,
+  PlanningGetPlanData,
+  PlanningGetPlanErrors,
+  PlanningGetPlanResponses,
   PlanningGetProjectWeekData,
   PlanningGetProjectWeekErrors,
   PlanningGetProjectWeekResponses,
+  PlanningMoveIssueData,
+  PlanningMoveIssueErrors,
+  PlanningMoveIssueResponses,
+  PlanningRemoveItemData,
+  PlanningRemoveItemErrors,
+  PlanningRemoveItemResponses,
+  PlanningReplanData,
+  PlanningReplanErrors,
+  PlanningReplanResponses,
   PlanningSchedulePlanItemData,
   PlanningSchedulePlanItemErrors,
   PlanningSchedulePlanItemResponses,
+  PlanningSplitIssueData,
+  PlanningSplitIssueErrors,
+  PlanningSplitIssueResponses,
+  PlanningSwapItemData,
+  PlanningSwapItemErrors,
+  PlanningSwapItemResponses,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectErrors,
   ProjectsArchiveProjectResponses,
   ProjectsCreateProjectData,
   ProjectsCreateProjectErrors,
   ProjectsCreateProjectResponses,
+  ProjectsGetPolicyData,
+  ProjectsGetPolicyErrors,
+  ProjectsGetPolicyResponses,
   ProjectsGetProjectContextData,
   ProjectsGetProjectContextErrors,
   ProjectsGetProjectContextResponses,
@@ -203,6 +239,9 @@ import type {
   ProjectsUnarchiveProjectData,
   ProjectsUnarchiveProjectErrors,
   ProjectsUnarchiveProjectResponses,
+  ProjectsUpdatePolicyData,
+  ProjectsUpdatePolicyErrors,
+  ProjectsUpdatePolicyResponses,
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectErrors,
   ProjectsUpdateProjectResponses,
@@ -322,6 +361,7 @@ import type {
   UsageGetUsageResponses,
 } from "./types.gen";
 import {
+  zAgentsAskHumanResponse,
   zAgentsCancelRunResponse,
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
@@ -333,6 +373,7 @@ import {
   zAgentsListRunnersResponse,
   zAgentsPostResultResponse,
   zAgentsRegisterProfileResponse,
+  zAgentsRequestApprovalResponse,
   zAgentsRequestRunResponse,
   zAgentsRotateRunnerTokenResponse,
   zAgentsUpdateProfileResponse,
@@ -374,16 +415,27 @@ import {
   zKnowledgeTestLocationResponse,
   zKnowledgeUpdateDocumentResponse,
   zKnowledgeUploadDocumentResponse,
+  zPlanningAcceptAllResponse,
+  zPlanningAcceptItemResponse,
+  zPlanningGetAlternatesResponse,
   zPlanningGetDayCalendarResponse,
+  zPlanningGetPlanResponse,
   zPlanningGetProjectWeekResponse,
+  zPlanningMoveIssueResponse,
+  zPlanningRemoveItemResponse,
+  zPlanningReplanResponse,
   zPlanningSchedulePlanItemResponse,
+  zPlanningSplitIssueResponse,
+  zPlanningSwapItemResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
+  zProjectsGetPolicyResponse,
   zProjectsGetProjectContextResponse,
   zProjectsGetProjectResponse,
   zProjectsListProjectsResponse,
   zProjectsReorderProjectResponse,
   zProjectsUnarchiveProjectResponse,
+  zProjectsUpdatePolicyResponse,
   zProjectsUpdateProjectResponse,
   zPurgesPurgeResponse,
   zSearchSearchResponse,
@@ -1414,6 +1466,27 @@ export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Replan
+ */
+export const planningReplan = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningReplanData, ThrowOnError>,
+): RequestResult<PlanningReplanResponses, PlanningReplanErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    PlanningReplanResponses,
+    PlanningReplanErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningReplanResponse.parseAsync(data),
+    url: "/v1/plan/replan",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Get Project Week
  */
 export const planningGetProjectWeek = <ThrowOnError extends boolean = false>(
@@ -1431,6 +1504,69 @@ export const planningGetProjectWeek = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zPlanningGetProjectWeekResponse.parseAsync(data),
     url: "/v1/plan/week/{monday}",
+    ...options,
+  });
+
+/**
+ * Get Plan
+ */
+export const planningGetPlan = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetPlanData, ThrowOnError>,
+): RequestResult<
+  PlanningGetPlanResponses,
+  PlanningGetPlanErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetPlanResponses,
+    PlanningGetPlanErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetPlanResponse.parseAsync(data),
+    url: "/v1/plan/{day}",
+    ...options,
+  });
+
+/**
+ * Accept All
+ */
+export const planningAcceptAll = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningAcceptAllData, ThrowOnError>,
+): RequestResult<
+  PlanningAcceptAllResponses,
+  PlanningAcceptAllErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningAcceptAllResponses,
+    PlanningAcceptAllErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningAcceptAllResponse.parseAsync(data),
+    url: "/v1/plan/{day}/accept-all",
+    ...options,
+  });
+
+/**
+ * Get Alternates
+ */
+export const planningGetAlternates = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetAlternatesData, ThrowOnError>,
+): RequestResult<
+  PlanningGetAlternatesResponses,
+  PlanningGetAlternatesErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetAlternatesResponses,
+    PlanningGetAlternatesErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetAlternatesResponse.parseAsync(data),
+    url: "/v1/plan/{day}/alternates",
     ...options,
   });
 
@@ -1456,6 +1592,48 @@ export const planningGetDayCalendar = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Move Issue
+ */
+export const planningMoveIssue = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningMoveIssueData, ThrowOnError>,
+): RequestResult<
+  PlanningMoveIssueResponses,
+  PlanningMoveIssueErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningMoveIssueResponses,
+    PlanningMoveIssueErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningMoveIssueResponse.parseAsync(data),
+    url: "/v1/plan/{day}/issues/{plan_issue_id}/move",
+    ...options,
+  });
+
+/**
+ * Split Issue
+ */
+export const planningSplitIssue = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningSplitIssueData, ThrowOnError>,
+): RequestResult<
+  PlanningSplitIssueResponses,
+  PlanningSplitIssueErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningSplitIssueResponses,
+    PlanningSplitIssueErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningSplitIssueResponse.parseAsync(data),
+    url: "/v1/plan/{day}/issues/{plan_issue_id}/split",
+    ...options,
+  });
+
+/**
  * Schedule Plan Item
  */
 export const planningSchedulePlanItem = <ThrowOnError extends boolean = false>(
@@ -1473,6 +1651,73 @@ export const planningSchedulePlanItem = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zPlanningSchedulePlanItemResponse.parseAsync(data),
     url: "/v1/plan/{day}/items/{task_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Accept Item
+ */
+export const planningAcceptItem = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningAcceptItemData, ThrowOnError>,
+): RequestResult<
+  PlanningAcceptItemResponses,
+  PlanningAcceptItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningAcceptItemResponses,
+    PlanningAcceptItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningAcceptItemResponse.parseAsync(data),
+    url: "/v1/plan/{day}/items/{task_id}/accept",
+    ...options,
+  });
+
+/**
+ * Remove Item
+ */
+export const planningRemoveItem = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningRemoveItemData, ThrowOnError>,
+): RequestResult<
+  PlanningRemoveItemResponses,
+  PlanningRemoveItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningRemoveItemResponses,
+    PlanningRemoveItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningRemoveItemResponse.parseAsync(data),
+    url: "/v1/plan/{day}/items/{task_id}/remove",
+    ...options,
+  });
+
+/**
+ * Swap Item
+ */
+export const planningSwapItem = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningSwapItemData, ThrowOnError>,
+): RequestResult<
+  PlanningSwapItemResponses,
+  PlanningSwapItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningSwapItemResponses,
+    PlanningSwapItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningSwapItemResponse.parseAsync(data),
+    url: "/v1/plan/{day}/items/{task_id}/swap",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -1712,6 +1957,59 @@ export const projectsGetProjectContext = <ThrowOnError extends boolean = false>(
       await zProjectsGetProjectContextResponse.parseAsync(data),
     url: "/v1/projects/{project_id}/context",
     ...options,
+  });
+
+/**
+ * Get Policy
+ *
+ * The project's approval policy (FR-5.6): gated and allowed action classes and the
+ * runaway limits (SAF-5).
+ */
+export const projectsGetPolicy = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsGetPolicyData, ThrowOnError>,
+): RequestResult<
+  ProjectsGetPolicyResponses,
+  ProjectsGetPolicyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ProjectsGetPolicyResponses,
+    ProjectsGetPolicyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsGetPolicyResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/policy",
+    ...options,
+  });
+
+/**
+ * Update Policy
+ *
+ * Replaces the gated and allowed lists at the version read (the policy editor, P2-05);
+ * emits `policy.changed` and writes its audit row. 409 `stale_version` with the current
+ * policy; 422 `policy_conflict` when a class is in both lists.
+ */
+export const projectsUpdatePolicy = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsUpdatePolicyData, ThrowOnError>,
+): RequestResult<
+  ProjectsUpdatePolicyResponses,
+  ProjectsUpdatePolicyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    ProjectsUpdatePolicyResponses,
+    ProjectsUpdatePolicyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsUpdatePolicyResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/policy",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
@@ -2004,6 +2302,35 @@ export const agentsGetRun = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Request Approval
+ *
+ * Ask before an action (the `request_approval` tool's twin): `approved`, `denied`, or
+ * `pending` with the approval's id once the long poll runs out. A key with no run
+ * answers `denied`.
+ */
+export const agentsRequestApproval = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsRequestApprovalData, ThrowOnError>,
+): RequestResult<
+  AgentsRequestApprovalResponses,
+  AgentsRequestApprovalErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsRequestApprovalResponses,
+    AgentsRequestApprovalErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsRequestApprovalResponse.parseAsync(data),
+    url: "/v1/runs/{run_id}/approvals",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Cancel Run
  *
  * Stop (FR-5.5): a queued run ends at once; a running one is stopped by its workflow
@@ -2049,6 +2376,31 @@ export const agentsListRunEvents = <ThrowOnError extends boolean = false>(
       await zAgentsListRunEventsResponse.parseAsync(data),
     url: "/v1/runs/{run_id}/events",
     ...options,
+  });
+
+/**
+ * Ask Human
+ *
+ * Ask the human (the `ask_human` tool's twin): the task waits on the human, and the
+ * call waits up to the long poll for the answer, else answers `pending` with the
+ * question's id for the re-send. A key with no run answers `denied`.
+ */
+export const agentsAskHuman = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsAskHumanData, ThrowOnError>,
+): RequestResult<AgentsAskHumanResponses, AgentsAskHumanErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    AgentsAskHumanResponses,
+    AgentsAskHumanErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsAskHumanResponse.parseAsync(data),
+    url: "/v1/runs/{run_id}/questions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**

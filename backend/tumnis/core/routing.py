@@ -36,6 +36,7 @@ it, and a handler passing it on would answer 500.
 import hmac
 import inspect
 import json
+import weakref
 from collections import deque
 from collections.abc import Awaitable, Callable, Coroutine, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -47,6 +48,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute, RouteContext, iter_route_contexts
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import StreamingResponse
 
 from tumnis.core import idempotency, modules
@@ -128,6 +130,39 @@ def _template(request: Request, route: APIRoute) -> str:
     if context is not None and getattr(context, "original_route", None) is route:
         return str(context.path)
     return route.path
+
+
+_CONCRETE: weakref.WeakKeyDictionary[Any, tuple[int, dict[str, frozenset[str]]]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _concrete_methods(app: Any) -> dict[str, frozenset[str]]:
+    """Path -> methods for every route path without a parameter, cached per app (built
+    again when routes are added)."""
+    count = len(getattr(app, "routes", ()))
+    cached = _CONCRETE.get(app)
+    if cached is None or cached[0] != count:
+        found: dict[str, set[str]] = {}
+        for context in walk_routes(app):
+            if context.path and context.methods and "{" not in context.path:
+                found.setdefault(context.path, set()).update(context.methods)
+        cached = (count, {path: frozenset(methods) for path, methods in found.items()})
+        _CONCRETE[app] = cached
+    return cached[1]
+
+
+def _check_concrete_path(request: Request, template: str) -> None:
+    """A concrete path is matched before a templated one (OpenAPI's Paths Object), so a
+    templated route does not serve a path a concrete route owns: a method that concrete
+    route lacks answers 405 (`GET /v1/plan/replan`, which `POST /v1/plan/replan` owns, is
+    not `GET /v1/plan/{day}` with `day="replan"`; found by the P0-11 fuzzer). The `Allow`
+    header comes from `errors._allowed_methods`, which applies the same rule."""
+    if "{" not in template:
+        return
+    methods = _concrete_methods(request.app).get(request.url.path)
+    if methods is not None and request.method not in methods:
+        raise StarletteHTTPException(405)
 
 
 def _check_rate(request: Request, policy: RoutePolicy) -> None:
@@ -423,6 +458,7 @@ class TumnisRoute(APIRoute):
             request.state.policy = policy
             template = _template(request, route)
             request.state.route_template = template
+            _check_concrete_path(request, template)
             if request.method in WRITE_METHODS:
                 _check_origin(request)
             _check_rate(request, policy)
