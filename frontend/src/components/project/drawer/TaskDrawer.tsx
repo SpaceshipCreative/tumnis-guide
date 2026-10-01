@@ -22,6 +22,7 @@ import { STATUS_WORDS, useChangeStatus, useTrashTask } from "../mutations";
 import { deleteClass, fieldClass, saveClass } from "../rail/RailSection";
 import { statusAction } from "../TaskRow";
 import type { Task } from "../types";
+import { PacketPreview } from "../PacketPreview";
 import { CommentList } from "./CommentList";
 import { PullRequests } from "./PullRequests";
 import { RecurrencePicker } from "./RecurrencePicker";
@@ -157,6 +158,26 @@ function Enriched({ task }: { task: Task }) {
       </button>
       {failed && <span role="status">Could not undo; try again.</span>}
     </p>
+  );
+}
+
+/** What an enrichment run would be given (FR-15.4), read only when asked for. */
+function PacketToggle({ taskId }: { taskId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen((v) => !v);
+        }}
+        className={saveClass}
+      >
+        {open ? "Hide packet" : "Preview packet"}
+      </button>
+      {open && <PacketPreview taskId={taskId} />}
+    </div>
   );
 }
 
@@ -296,6 +317,7 @@ function TaskDetails({
       </div>
       <RecurrencePicker task={task} />
       <PullRequests taskId={task.id} />
+      <PacketToggle key={task.id} taskId={task.id} />
       <CommentList taskId={task.id} />
     </div>
   );

@@ -1,0 +1,3 @@
+- [ ] Send invoice
+- [x] Book kickoff call
+- [ ] Draft sitemap
