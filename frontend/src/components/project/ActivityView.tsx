@@ -60,7 +60,10 @@ export function ActivityView({ projectId }: { projectId: string }) {
           Nothing has happened in this project yet.
         </p>
       ) : (
-        <ol aria-label="Activity" className="flex flex-col divide-y divide-border">
+        <ol
+          aria-label="Activity"
+          className="flex flex-col divide-y divide-border"
+        >
           {items.map((item) => (
             <li
               key={`${item.kind}-${item.id}`}

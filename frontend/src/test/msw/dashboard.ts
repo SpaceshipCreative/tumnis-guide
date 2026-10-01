@@ -62,9 +62,7 @@ export function deployStatus(
 }
 
 /** `GET /v1/agents/feed`: the activity feed's agent runs (P2-17), empty by default. */
-export function agentFeed(
-  feed: Partial<AgentFeedOut> = {},
-): RequestHandler {
+export function agentFeed(feed: Partial<AgentFeedOut> = {}): RequestHandler {
   const body: AgentFeedOut = {
     running: [],
     waiting: [],

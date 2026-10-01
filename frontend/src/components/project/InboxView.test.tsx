@@ -21,41 +21,38 @@ async function load<T>(path: string): Promise<T> {
 
 const makeItem = factoryFor(zReviewItemOut);
 
-test(
-  "[P2-17][FR-2.6] T-P2-17-09 empty state until proposals exist",
-  async () => {
-    const { InboxView } = await load<InboxViewModule>("./InboxView");
-    const project = makeProject({ name: "Acme site" });
-    let items: unknown[] = [];
-    server.use(
-      http.get(`/v1/projects/${project.id}/inbox`, () =>
-        HttpResponse.json({ items, next_cursor: null }),
-      ),
-    );
+test("[P2-17][FR-2.6] T-P2-17-09 empty state until proposals exist", async () => {
+  const { InboxView } = await load<InboxViewModule>("./InboxView");
+  const project = makeProject({ name: "Acme site" });
+  let items: unknown[] = [];
+  server.use(
+    http.get(`/v1/projects/${project.id}/inbox`, () =>
+      HttpResponse.json({ items, next_cursor: null }),
+    ),
+  );
 
-    const first = renderWithProviders(<InboxView projectId={project.id} />);
-    expect(await screen.findByText("No proposals yet")).toBeVisible();
-    expect(
-      screen.getByText(
-        "Tasks the agent suggests from this project's email, chat and notes wait here.",
-      ),
-    ).toBeVisible();
-    first.unmount();
+  const first = renderWithProviders(<InboxView projectId={project.id} />);
+  expect(await screen.findByText("No proposals yet")).toBeVisible();
+  expect(
+    screen.getByText(
+      "Tasks the agent suggests from this project's email, chat and notes wait here.",
+    ),
+  ).toBeVisible();
+  first.unmount();
 
-    items = [
-      makeItem({
-        kind: "proposal",
-        project_id: project.id,
-        target_type: "task",
-        target_title: "Update pricing page copy",
-        payload: { title: "Update pricing page copy", source: "note" },
-        actions: ["accept", "edit", "reject", "snooze"],
-        primary_action: "accept",
-      }),
-    ];
-    renderWithProviders(<InboxView projectId={project.id} />);
-    const list = await screen.findByRole("list", { name: "Inbox" });
-    expect(within(list).getByText("Update pricing page copy")).toBeVisible();
-    expect(screen.queryByText("No proposals yet")).toBeNull();
-  },
-);
+  items = [
+    makeItem({
+      kind: "proposal",
+      project_id: project.id,
+      target_type: "task",
+      target_title: "Update pricing page copy",
+      payload: { title: "Update pricing page copy", source: "note" },
+      actions: ["accept", "edit", "reject", "snooze"],
+      primary_action: "accept",
+    }),
+  ];
+  renderWithProviders(<InboxView projectId={project.id} />);
+  const list = await screen.findByRole("list", { name: "Inbox" });
+  expect(within(list).getByText("Update pricing page copy")).toBeVisible();
+  expect(screen.queryByText("No proposals yet")).toBeNull();
+});

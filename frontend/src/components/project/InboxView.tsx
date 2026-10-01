@@ -7,7 +7,10 @@ import { tasksListInboxOptions } from "../../api/@tanstack/react-query.gen";
 import { Card } from "../common/Card";
 
 export const inboxQuery = (projectId: string) =>
-  tasksListInboxOptions({ path: { project_id: projectId }, query: { limit: 50 } });
+  tasksListInboxOptions({
+    path: { project_id: projectId },
+    query: { limit: 50 },
+  });
 
 export function InboxView({ projectId }: { projectId: string }) {
   const inbox = useQuery(inboxQuery(projectId));
