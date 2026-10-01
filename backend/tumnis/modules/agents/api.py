@@ -94,6 +94,12 @@ from tumnis.modules.agents.payloads import (
     SignalKind,
 )
 from tumnis.modules.agents.protocol import McpServerInfo, SchemaRef
+from tumnis.modules.agents.relay import (
+    NEEDS_APP,
+    ReplyHandler,
+    register_reply_handler,
+    reply_handler,
+)
 from tumnis.modules.agents.review_kinds import (
     RESULT,
     RUN_LIMIT,
@@ -145,6 +151,7 @@ if TYPE_CHECKING:
 __all__ = [
     "HUMAN_QUEUE",
     "HUMAN_TOPIC",
+    "NEEDS_APP",
     "AgentAdapter",
     "AgentAvailability",
     "AgentCapabilities",
@@ -173,6 +180,7 @@ __all__ = [
     "ProfilePatch",
     "ProfileToolsOut",
     "ProjectAgentEntry",
+    "ReplyHandler",
     "RequestApprovalIn",
     "RunEvent",
     "RunHandle",
@@ -200,7 +208,9 @@ __all__ = [
     "read_digest",
     "record_event",
     "register_enrichment_starter",
+    "register_reply_handler",
     "register_skill_runner",
+    "reply_handler",
     "request_approval",
     "retry_provision",
     "run_ended",
