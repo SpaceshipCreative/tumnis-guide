@@ -211,11 +211,14 @@ export function PauseControl({ projectId }: { projectId?: string }) {
     },
   });
 
-  if (!pauses.data) return null;
-  const open =
-    projectId === undefined
-      ? pauses.data.workspace
-      : (pauses.data.projects.find((p) => p.project_id === projectId) ?? null);
+  // The state unknown (loading, or its read failed): the pause control still shows, so a
+  // failed read never hides the safety control (a pause of a paused scope changes nothing).
+  const data = pauses.data;
+  const open = !data
+    ? null
+    : projectId === undefined
+      ? data.workspace
+      : (data.projects.find((p) => p.project_id === projectId) ?? null);
   if (open) {
     return (
       <PausedBanner
