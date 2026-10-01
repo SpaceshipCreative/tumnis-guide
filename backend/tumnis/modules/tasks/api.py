@@ -139,6 +139,7 @@ __all__ = [
     "Deciding",
     "DuplicateReviewKind",
     "EstimateOutlierPayload",
+    "HumanDecidedV1",
     "ImpactFacts",
     "Label",
     "LabelSource",
@@ -563,6 +564,28 @@ async def project_tasks(s: AsyncSession, project_id: UUID) -> list[TaskOut]:
     rows = await s.execute(
         select(_tasks)
         .where(_live(_tasks), _tasks.c.project_id == project_id)
+        .order_by(_tasks.c.created_at, _tasks.c.id)
+    )
+    return [_out(row._mapping) for row in rows]
+
+
+async def open_tasks(s: AsyncSession) -> list[TaskOut]:
+    """Every live task that is not Done, in creation order: one statement, for the daily
+    plan's candidates (P1-11)."""
+    rows = await s.execute(
+        select(_tasks)
+        .where(_live(_tasks), _tasks.c.status != Status.DONE)
+        .order_by(_tasks.c.created_at, _tasks.c.id)
+    )
+    return [_out(row._mapping) for row in rows]
+
+
+async def tasks_by_ids(s: AsyncSession, ids: Collection[UUID]) -> list[TaskOut]:
+    """The live tasks among `ids` (any status), in creation order: one statement (the
+    daily plan's read, P1-11)."""
+    rows = await s.execute(
+        select(_tasks)
+        .where(_live(_tasks), _tasks.c.id.in_(list(ids)))
         .order_by(_tasks.c.created_at, _tasks.c.id)
     )
     return [_out(row._mapping) for row in rows]

@@ -145,19 +145,23 @@ def _declines(route: Any, path_params: dict[str, str]) -> bool:
 def _allowed_methods(request: Request) -> str | None:
     """Every method any route serves at this path. Starlette's 405 names only the first
     route that matched the path, so a path with GET and PUT on separate routes would
-    answer `Allow: GET` (found by the P0-11 fuzzer)."""
+    answer `Allow: GET` (found by the P0-11 fuzzer). A concrete path is matched before a
+    templated one, as OpenAPI's Paths Object says: `/v1/plan/replan` (POST) answers
+    `Allow: POST`, not the methods of `/v1/plan/{day}` too."""
     from starlette.routing import compile_path  # noqa: PLC0415
 
     from tumnis.core.routing import walk_routes  # noqa: PLC0415  # routing imports errors
 
-    methods: set[str] = set()
+    concrete: set[str] = set()
+    templated: set[str] = set()
     for route in walk_routes(request.app):
         if not (route.path and route.methods):
             continue
-        match = compile_path(route.path)[0].match(request.url.path)
+        regex, _, convertors = compile_path(route.path)
+        match = regex.match(request.url.path)
         if match and not _declines(route.original_route, match.groupdict()):
-            methods |= route.methods
-    return ", ".join(sorted(methods)) or None
+            (templated if convertors else concrete).update(route.methods)
+    return ", ".join(sorted(concrete or templated)) or None
 
 
 async def http_exception_handler(request: Request, exc: Exception) -> Response:

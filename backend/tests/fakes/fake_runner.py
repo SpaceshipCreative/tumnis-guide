@@ -33,6 +33,11 @@ task the run's packet names (`body.task.id`), so one recorded enrichment result 
 task; `script(..., gate=threading.Event())` holds the answer until the test sets the gate
 (a user edit while the run is in flight).
 
+P1-11: a scripted plan reply (`picks`) may name tasks `title:<task title>`: each becomes
+the id of the packet's candidate with that title (`body.candidates`). On the factory,
+`offline(profile)` keeps that profile offline on every runner made from then on (and on
+those made already), for tests that never reach the runner themselves.
+
 The runner is sync (a reader thread per socket): call it from sync or async tests alike.
 """
 
@@ -66,6 +71,9 @@ WAIT_S = 10.0
 GATE_WAIT_S = 60.0  # a gated answer gives up waiting after this long
 # A scripted output's `task_id` equal to this becomes the run's own task (P1-08).
 TASK_ID_SENTINEL = "00000000-0000-0000-0000-000000000000"
+# A recorded plan reply names a task `title:<task title>`; no candidate with it: this id.
+TITLE_PREFIX = "title:"
+UNKNOWN_TASK_ID = "0199ffff-0000-7000-8000-00000000beef"
 ResultStatus = Literal["succeeded", "failed", "timed_out"]
 ProvisionStatus = Literal["created", "exists", "linked", "failed"]
 ProvisionError = Literal["template_version_mismatch", "not_found", "hermes_error", "invalid_name"]
@@ -630,11 +638,40 @@ class FakeRunner:
 
 
 def _for_task(output: dict[str, Any] | None, packet: dict[str, Any]) -> dict[str, Any] | None:
-    """The scripted output, its sentinel `task_id` replaced by the packet's task (P1-08)."""
-    if output is None or output.get("task_id") != TASK_ID_SENTINEL:
+    """The scripted output, its sentinel `task_id` replaced by the packet's task (P1-08),
+    and a plan reply's `title:<title>` task ids by the candidate with that title (P1-11)."""
+    if output is None:
+        return output
+    if isinstance(output.get("picks"), list):
+        return _for_plan(output, packet)
+    if output.get("task_id") != TASK_ID_SENTINEL:
         return output
     task = (packet.get("body") or {}).get("task") or {}
     return {**output, "task_id": task.get("id", TASK_ID_SENTINEL)}
+
+
+def _for_plan(output: dict[str, Any], packet: dict[str, Any]) -> dict[str, Any]:
+    """A recorded plan reply names tasks as `title:<task title>` (ids differ every run):
+    each becomes the id of the packet's candidate with that title, or UNKNOWN_TASK_ID when
+    no candidate has it. Plain ids are left as they are."""
+    titles = {
+        str(c.get("title")): str(c.get("task_id"))
+        for c in (packet.get("body") or {}).get("candidates") or []
+    }
+
+    def resolve(value: Any) -> Any:
+        if isinstance(value, str) and value.startswith(TITLE_PREFIX):
+            return titles.get(value.removeprefix(TITLE_PREFIX), UNKNOWN_TASK_ID)
+        return value
+
+    return {
+        **output,
+        "picks": [
+            {**pick, "task_id": resolve(pick.get("task_id"))} if isinstance(pick, dict) else pick
+            for pick in output["picks"]
+        ],
+        "alternates": [resolve(a) for a in output.get("alternates") or []],
+    }
 
 
 # --- Rows the runner needs, made through the agents api ------------------------------------
@@ -731,6 +768,8 @@ class FakeRunnerFactory(Protocol):
         project_id: uuid.UUID | None = None,
     ) -> uuid.UUID: ...
 
+    def offline(self, profile: str) -> None: ...
+
 
 class _Factory:
     def __init__(self, client: TestClient, workspace: WorkspaceHandle, clock: FixedClock) -> None:
@@ -738,6 +777,7 @@ class _Factory:
         self.workspace = workspace
         self.clock = clock
         self.made: list[FakeRunner] = []
+        self.offline_profiles: set[str] = set()
 
     def __call__(
         self,
@@ -758,9 +798,17 @@ class _Factory:
             strict=strict,
         )
         self.made.append(runner)
+        for profile in self.offline_profiles:
+            runner._offline.add(profile)  # the factory's own runner
         if connect:
             runner.connect()
         return runner
+
+    def offline(self, profile: str) -> None:
+        """Keep `profile` offline on every runner of this factory (P1-11, A1.4)."""
+        self.offline_profiles.add(profile)
+        for runner in self.made:
+            runner.offline(profile)
 
     def register_profile(
         self,

@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tumnis.core import tenancy
 from tumnis.core.schemas import VersionedPayload, versioned
 from tumnis.core.tenancy import WorkspaceContext, session_for
+from tumnis.core.types import Interval as CoreInterval
 from tumnis.core.versioning import NotFound
 from tumnis.modules.agents.models import AgentProfile, RunRow
 from tumnis.modules.agents.protocol import SchemaRef
@@ -55,14 +56,21 @@ from tumnis.modules.agents.rules import (
 from tumnis.modules.agents.skill_io import (
     BRIEF_EXCERPT_MAX,
     BRIEF_MAX,
+    MAX_CANDIDATES,
     MAX_HISTORY,
     MAX_PASSAGES,
     EnrichmentRequest,
     EnrichProject,
     EnrichTask,
     EstimateHistoryItem,
+    EventSummary,
+    Health,
+    Interval,
     MissingField,
+    PlanCandidate,
+    PlanningRequest,
     PlanProject,
+    ProjectAgentEntry,
 )
 from tumnis.modules.agents.skill_io import Passage as RequestPassage
 from tumnis.modules.auth import api as auth
@@ -79,11 +87,13 @@ __all__ = [
     "PacketTooLargeError",
     "Passage",
     "PathLocation",
+    "PlanningProjectIn",
     "PolicySection",
     "RepoLocation",
     "TaskPacket",
     "TaskRunRequest",
     "assemble",
+    "assemble_planning_request",
     "build_packet",
     "code_location",
     "code_location_of",
@@ -1001,4 +1011,86 @@ async def packet_for_caller(
         profile_id=profile_id or UUID(int=0),
         nonce=content_nonce(inputs),
         token=None,
+    )
+
+
+# --- The planning request (P1-11) ------------------------------------------------------------
+#
+# The `plan` packet's body (P1-05's schema, FR-4.3): what planning gathers (the day, its
+# working window, free blocks and events, the candidate tasks in order) and what agents adds
+# (each candidate project's health, next milestone and brief excerpt, and the master's
+# registry of project agents). `assemble_planning_request` is the pure half;
+# `agents.api.planning_request` reads the projects, briefs and registry and calls it.
+
+EVENT_TITLE_MAX: Final = 120
+BUSY_TITLE: Final = "Busy"  # an event without a title
+
+
+class PlanningProjectIn(BaseModel):
+    """A candidate's project as the request carries it, its brief in full (cut here)."""
+
+    id: UUID
+    name: str
+    health: Health
+    next_milestone: date | None
+    brief: str
+
+
+def _candidate(task: tasks.TaskOut, project_name: str, now: datetime) -> PlanCandidate:
+    return PlanCandidate(
+        task_id=task.id,
+        project_id=task.project_id,
+        project_name=project_name[:PROJECT_TEXT_MAX] or "(unnamed)",
+        title=task.title[:TITLE_MAX],
+        label=task.label.value if task.label is not None else None,
+        estimate_minutes=task.estimate_minutes,
+        due_on=task.due_on,
+        priority=task.priority,
+        rollover_count=task.rollover_count,
+        first_action=_cut(task.first_action, LONG_TEXT_MAX),
+        age_days=max((now - task.created_at).days, 0),
+    )
+
+
+def assemble_planning_request(  # the request's parts, spelled out
+    *,
+    day: date,
+    timezone: str,
+    now: datetime,
+    window: CoreInterval | None,
+    free_blocks: Sequence[CoreInterval],
+    events: Sequence[tuple[str | None, datetime, datetime]],
+    candidates: Sequence[tasks.TaskOut],
+    projects: Sequence[PlanningProjectIn],
+    agents: Sequence[ProjectAgentEntry],
+) -> PlanningRequest:
+    """The planning request: the first MAX_CANDIDATES candidates in the order given (the
+    planner orders them: pins first, then the due-date order), each candidate project once
+    (in the order given) with its brief cut to BRIEF_EXCERPT_MAX, and the registry."""
+    kept = list(candidates[:MAX_CANDIDATES])
+    used = {task.project_id for task in kept}
+    names = {project.id: project.name for project in projects}
+    return PlanningRequest(
+        day=day,
+        timezone=timezone,
+        now=now,
+        working_window=None if window is None else Interval(start=window.start, end=window.end),
+        free_blocks=[Interval(start=b.start, end=b.end) for b in free_blocks],
+        candidates=[_candidate(task, names.get(task.project_id, ""), now) for task in kept],
+        projects=[
+            PlanProject(
+                id=project.id,
+                name=project.name[:PROJECT_TEXT_MAX],
+                health=project.health,
+                next_milestone=project.next_milestone,
+                brief_excerpt=project.brief[:BRIEF_EXCERPT_MAX],
+            )
+            for project in projects
+            if project.id in used
+        ],
+        agents=list(agents),
+        events=[
+            EventSummary(title=(title or BUSY_TITLE)[:EVENT_TITLE_MAX], start=start, end=end)
+            for title, start, end in events
+        ],
     )
