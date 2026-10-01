@@ -1225,6 +1225,9 @@ class RunOut(BaseModel):
     created_at: datetime
     error: str | None = None
     active_seconds_used: float = 0.0
+    # The profile's VERSION the daemon reported in the run's `status{started}` (R-25,
+    # P2-12); None until one arrives.
+    profile_version: str | None = None
 
 
 class RunEventOut(BaseModel):
