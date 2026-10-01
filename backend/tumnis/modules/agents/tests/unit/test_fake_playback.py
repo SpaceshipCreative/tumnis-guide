@@ -32,14 +32,13 @@ def _plan_packet() -> dict[str, Any]:
     }
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 def test_plan_reply_titles_become_candidate_ids() -> None:
     """T-SEED-14
     A recorded plan reply's `title:` picks and alternates become the ids of the packet's
     candidates with those titles; a title no candidate has becomes the fixed unknown id
     (so `check_picks` refuses the reply, as `plan__unknown_task` expects); a plain id is
     left as it is; the reason and the rest of the reply are untouched."""
-    from tumnis.modules.agents.adapters.fake import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.adapters.fake import (  # noqa: PLC0415
         UNKNOWN_TASK_ID,
         scripted_output,
     )
@@ -68,12 +67,11 @@ def test_plan_reply_titles_become_candidate_ids() -> None:
     assert reply["picks"][0]["task_id"] == "title:Invoice Acme for phase one"  # not mutated
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 def test_enrich_reply_sentinel_becomes_the_packet_task() -> None:
     """T-SEED-15
     A recorded enrichment reply whose `task_id` is the sentinel answers for the packet's
     own task (`body.task.id`); any other `task_id` stays; no output stays None."""
-    from tumnis.modules.agents.adapters.fake import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.adapters.fake import (  # noqa: PLC0415
         TASK_ID_SENTINEL,
         scripted_output,
     )
@@ -82,17 +80,18 @@ def test_enrich_reply_sentinel_becomes_the_packet_task() -> None:
     packet = {"body": {"task": {"id": OWN_TASK, "title": "Send Acme the March invoice"}}}
     reply = {"schema_version": 1, "task_id": SENTINEL, "first_action": "Open the invoice"}
     assert scripted_output(reply, packet) == {**reply, "task_id": OWN_TASK}
-    assert scripted_output({**reply, "task_id": INVOICE}, packet)["task_id"] == INVOICE
+    other = scripted_output({**reply, "task_id": INVOICE}, packet)
+    assert other is not None
+    assert other["task_id"] == INVOICE
     assert scripted_output(None, packet) is None
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 def test_recordings_load_by_bare_name_only() -> None:
     """T-SEED-16
     A script's `result` names a file in the runner recordings folder: a bare name loads
     its JSON; a path, a parent reference or a missing file is refused (ValueError), so a
     posted script never reads outside the folder."""
-    from tumnis.modules.agents.adapters.fake import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.adapters.fake import (  # noqa: PLC0415
         load_recording,
     )
 
