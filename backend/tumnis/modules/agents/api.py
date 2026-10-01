@@ -1939,11 +1939,17 @@ async def resume(
         existing = await _open_pause(s, inp.scope, inp.project_id)
         if existing is None:
             return ResumeOut(pause_id=None, released_runs=0)
-        await s.execute(
+        # Still open on the row itself: of two concurrent resumes, the one that waited on
+        # the other's row lock finds it resumed and changes nothing (one audit row, one
+        # `agents.resumed`).
+        resumed = await s.scalar(
             update(_pauses)
-            .where(_pauses.c.id == existing["id"])
+            .where(_pauses.c.id == existing["id"], _open())
             .values(resumed_at=now, resumed_by=str(ctx.actor), resume_reason=inp.reason)
+            .returning(_pauses.c.id)
         )
+        if resumed is None:
+            return ResumeOut(pause_id=None, released_runs=0)
         mark_changed(s, LIVE_PAUSE, existing["id"])
         released = len(await held_runs_free(s, inp.scope, inp.project_id))
         await audit.record(
