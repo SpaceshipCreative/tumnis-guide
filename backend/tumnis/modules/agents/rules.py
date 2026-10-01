@@ -337,13 +337,15 @@ WaitStatus = Literal["done", "waiting_on_human", "still_running"]
 
 @dataclass(frozen=True, slots=True)
 class DelegationRecord:
-    """A delegation as the rules read it: the task it handed over, when, and whether its
-    run's result was accepted since."""
+    """A delegation as the rules read it: the task it handed over, when, and whether (and
+    when) its run's result was accepted since. An acceptance with no time counts as at
+    the delegation's own time."""
 
     delegation_id: UUID
     task_id: UUID
     delegated_at: datetime
     accepted: bool = False
+    accepted_at: datetime | None = None
 
 
 def delegation_depth(chain: Sequence[DelegationRecord]) -> int:
@@ -371,13 +373,14 @@ def is_delegation_loop(
     or when the chain that produced the task already contains task_id (a cycle)."""
     if any(record.task_id == task_id for record in chain):
         return True
-    recent = sorted(
-        (r for r in history if r.task_id == task_id and now - r.delegated_at < LOOP_WINDOW),
-        key=lambda r: r.delegated_at,
-    )
+    mine = [r for r in history if r.task_id == task_id]
+    # (time, is_acceptance): in the window, delegations count; an acceptance resets the
+    # count at its own time, after a delegation made at that same instant.
+    events = [(r.delegated_at, False) for r in mine if now - r.delegated_at < LOOP_WINDOW]
+    events += [(r.accepted_at or r.delegated_at, True) for r in mine if r.accepted]
     since_accepted = 0
-    for record in recent:
-        since_accepted = 0 if record.accepted else since_accepted + 1
+    for _, acceptance in sorted(events):
+        since_accepted = 0 if acceptance else since_accepted + 1
     return since_accepted >= LOOP_REPEAT_LIMIT - 1
 
 

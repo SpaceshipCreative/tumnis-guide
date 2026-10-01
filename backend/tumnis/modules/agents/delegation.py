@@ -137,6 +137,7 @@ def _record(row: Any) -> DelegationRecord:
         task_id=row.child_task_id,
         delegated_at=row.delegated_at,
         accepted=row.accepted_at is not None,
+        accepted_at=row.accepted_at,
     )
 
 
