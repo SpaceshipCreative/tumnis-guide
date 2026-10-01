@@ -57,7 +57,6 @@ def started(monkeypatch: pytest.MonkeyPatch) -> list[uuid.UUID]:
 
 
 @pytest.mark.req("FR-4.4")
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_a_seeded_task_starts_no_enrichment(started: list[uuid.UUID]) -> None:
     """T-SEED-22"""
     from tumnis.modules.agents.events import enrich_on_create  # noqa: PLC0415
