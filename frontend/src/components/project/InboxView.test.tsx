@@ -21,7 +21,7 @@ async function load<T>(path: string): Promise<T> {
 
 const makeItem = factoryFor(zReviewItemOut);
 
-test.fails(
+test(
   "[P2-17][FR-2.6] T-P2-17-09 empty state until proposals exist",
   async () => {
     const { InboxView } = await load<InboxViewModule>("./InboxView");

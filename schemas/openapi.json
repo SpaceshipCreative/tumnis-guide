@@ -13061,7 +13061,7 @@
     },
     "/v1/files/{document_id}": {
       "get": {
-        "description": "The document's original file, always as a download (`attachment`, octet-stream,\n`nosniff`); 409 `not_available` until the document is `ready`. `version` is a version\nnumber.",
+        "description": "The document's original file as a download (`attachment`, octet-stream, `nosniff`);\na PDF by its sniffed bytes is served `inline` as `application/pdf`, so a citation opens\nthe browser's viewer at `#page=n` (RFC 8118; Scott decision 47). Both keep `nosniff`\nand the security headers. 409 `not_available` until the document is `ready`. `version`\nis a version number.",
         "operationId": "knowledge_get_file",
         "parameters": [
           {
@@ -13095,6 +13095,12 @@
           "200": {
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "application/pdf": {
                 "schema": {
                   "format": "binary",
                   "type": "string"

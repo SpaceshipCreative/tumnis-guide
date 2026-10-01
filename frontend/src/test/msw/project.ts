@@ -483,6 +483,13 @@ export class ProjectFake {
       http.get(`/v1/projects/${pid}/brief`, () =>
         HttpResponse.json(this.brief),
       ),
+      // The Inbox and Activity views (P2-17): empty until a test says otherwise.
+      http.get(`/v1/projects/${pid}/inbox`, () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get(`/v1/projects/${pid}/activity`, () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
       http.patch("/v1/knowledge/documents/:id", async ({ request }) => {
         const sent = await this.recorder.record(request);
         const body = sent.body as { body_md: string; version: number };

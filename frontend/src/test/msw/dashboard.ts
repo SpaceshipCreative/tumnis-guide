@@ -6,6 +6,7 @@
 import { http, HttpResponse, type RequestHandler } from "msw";
 
 import type {
+  AgentFeedOut,
   ProjectDeployStatus,
   ReviewCountOut,
   TaskOut,
@@ -60,9 +61,25 @@ export function deployStatus(
   return http.get("/v1/coolify/status", () => HttpResponse.json(entries));
 }
 
+/** `GET /v1/agents/feed`: the activity feed's agent runs (P2-17), empty by default. */
+export function agentFeed(
+  feed: Partial<AgentFeedOut> = {},
+): RequestHandler {
+  const body: AgentFeedOut = {
+    running: [],
+    waiting: [],
+    finished: [],
+    failed: [],
+    ...feed,
+  };
+  return http.get("/v1/agents/feed", () => HttpResponse.json(body));
+}
+
 /** The dashboard's reads, empty: no projects, nothing today, nothing to review, no apps,
- * no working hours or events today, and no plan for the day (P1-11). */
+ * no working hours or events today, no plan for the day (P1-11) and no agent runs in
+ * the activity feed (P2-17). */
 export const dashboardDefaults: RequestHandler[] = [
+  agentFeed(),
   deployStatus(),
   projectsList([]),
   todayTasks([]),

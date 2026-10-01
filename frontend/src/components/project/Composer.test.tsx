@@ -51,7 +51,7 @@ test("[P0-24][FR-2.5] T-P0-24-14 Enter creates a task in this project", async ()
 // question. Enter sends it to POST /v1/projects/{id}/ask (one Idempotency-Key), which
 // makes an AI task, so the question lands in the task list and nowhere else: no chat
 // panel opens. The toggle goes back to task mode after sending.
-test.fails("[P2-17][FR-2.5] T-P2-17-07 ask toggle posts to ask", async () => {
+test("[P2-17][FR-2.5] T-P2-17-07 ask toggle posts to ask", async () => {
   const question = "Which typefaces does the brand guide name?";
   for (const viewport of ["phone", "laptop"] as const) {
     const project = makeProject({ name: "Acme site" });

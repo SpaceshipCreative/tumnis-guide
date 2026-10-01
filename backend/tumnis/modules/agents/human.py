@@ -408,6 +408,7 @@ async def request_approval(  # the call's facts, spelled out
             target=("approval", approval_id),
             details={"action_class": inp.action_class, "rule": verdict.rule},
             occurred_at=now,
+            project_id=run.project_id,  # shows in the project's Activity (P2-17)
         )
         return _approval_out(row, run_tainted)
     opened = verdict.rule != UNKNOWN_NEEDS_DECISION

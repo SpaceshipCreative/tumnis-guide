@@ -1944,6 +1944,9 @@ async def get_document(s: AsyncSession, document_id: UUID) -> DocumentDTO:
     return _dto(await _live_row(s, document_id))
 
 
+PDF_MIME: Final = "application/pdf"
+
+
 @dataclasses.dataclass(frozen=True)
 class DownloadInfo:
     """What the file route needs to answer: the name to offer, the path on its location and
@@ -1954,6 +1957,10 @@ class DownloadInfo:
     location_id: UUID
     path: str
     size: int
+    # The served version's bytes sniffed as a PDF (P1-16's libmagic type, never the name):
+    # served inline so a citation opens the browser's viewer at `#page=n` (Scott decision
+    # 47, P2-17).
+    pdf: bool = False
 
 
 async def _newer_version_unreleased(
@@ -1999,7 +2006,7 @@ async def download_info(
         )
         if doc is None:
             raise NotFound("documents", document_id)
-        status, source_name = doc["status"], None
+        status, source_name, mime = doc["status"], None, None
         if version_no is not None:
             ver = (
                 (
@@ -2015,7 +2022,7 @@ async def download_info(
             )
             if ver is None:
                 raise NotFound("document_versions", document_id)
-            status, source_name = ver["status"], ver["source_name"]
+            status, source_name, mime = ver["status"], ver["source_name"], ver["mime"]
             current = doc["current_version_id"]
             if current is not None and ver["id"] != current:
                 status = "replaced"  # the folder keeps the current version's bytes only
@@ -2028,10 +2035,16 @@ async def download_info(
             raise ProblemError(409, "not_available", "The file is not available yet")
         if await _newer_version_unreleased(s, document_id, doc["current_version_id"]):
             raise ProblemError(409, "not_available", "The file is not available yet")
-        if source_name is None:
-            source_name = await s.scalar(
-                select(_versions.c.source_name).where(_versions.c.id == doc["current_version_id"])
-            )
+        if version_no is None:
+            current_ver = (
+                await s.execute(
+                    select(_versions.c.source_name, _versions.c.mime).where(
+                        _versions.c.id == doc["current_version_id"]
+                    )
+                )
+            ).first()
+            if current_ver is not None:
+                source_name, mime = current_ver.source_name, current_ver.mime
         full = await storage_path(s, doc["project_id"], doc["path"])
         async with open_backend(s, doc["storage_location_id"], net=net) as backend:
             try:
@@ -2046,6 +2059,7 @@ async def download_info(
         location_id=doc["storage_location_id"],
         path=full,
         size=stat.size,
+        pdf=mime == PDF_MIME,
     )
 
 

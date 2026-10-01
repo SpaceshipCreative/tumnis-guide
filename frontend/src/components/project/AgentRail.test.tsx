@@ -29,7 +29,7 @@ async function load<T>(path: string): Promise<T> {
 const makeProfile = factoryFor(zAgentProfileOut);
 const makeTools = factoryFor(zProfileToolsOut);
 
-test.fails(
+test(
   "[P2-17][FR-2.7] T-P2-17-08 shows profile health workers tools and pause",
   async () => {
     const { AgentRail } = await load<AgentRailModule>("./AgentRail");
@@ -123,7 +123,7 @@ test.fails(
   },
 );
 
-test.fails(
+test(
   "[P2-17][FR-2.7] T-P2-17-08 says when the project has no agent yet",
   async () => {
     const { AgentRail } = await load<AgentRailModule>("./AgentRail");

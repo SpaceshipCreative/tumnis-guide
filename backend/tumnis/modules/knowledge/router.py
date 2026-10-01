@@ -521,7 +521,14 @@ async def get_document(
 @router.get(
     "/files/{document_id}",
     response_class=StreamingResponse,
-    responses={200: {"content": {"application/octet-stream": {"schema": FILE_SCHEMA}}}},
+    responses={
+        200: {
+            "content": {
+                "application/octet-stream": {"schema": FILE_SCHEMA},
+                "application/pdf": {"schema": FILE_SCHEMA},
+            }
+        }
+    },
 )
 @route_policy(
     RoutePolicy(
@@ -533,17 +540,20 @@ async def get_document(
 async def get_file(
     document_id: UUID, request: Request, version: int | None = None
 ) -> StreamingResponse:
-    """The document's original file, always as a download (`attachment`, octet-stream,
-    `nosniff`); 409 `not_available` until the document is `ready`. `version` is a version
-    number."""
+    """The document's original file as a download (`attachment`, octet-stream, `nosniff`);
+    a PDF by its sniffed bytes is served `inline` as `application/pdf`, so a citation opens
+    the browser's viewer at `#page=n` (RFC 8118; Scott decision 47). Both keep `nosniff`
+    and the security headers. 409 `not_available` until the document is `ready`. `version`
+    is a version number."""
     ctx = principal_of(request).workspace_context()
     net = _net(request)
     info = await api.download_info(ctx, document_id, version_no=version, net=net)
+    disposition = "inline" if info.pdf else "attachment"
     return StreamingResponse(
         api.stream_file(ctx, info, net=net),
-        media_type="application/octet-stream",
+        media_type=api.PDF_MIME if info.pdf else "application/octet-stream",
         headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(info.name, safe='')}",
+            "Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(info.name, safe='')}",
             "Content-Length": str(info.size),
             "X-Content-Type-Options": "nosniff",
         },

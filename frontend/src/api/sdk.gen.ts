@@ -1250,9 +1250,11 @@ export const decisionsEditThreshold = <ThrowOnError extends boolean = false>(
 /**
  * Get File
  *
- * The document's original file, always as a download (`attachment`, octet-stream,
- * `nosniff`); 409 `not_available` until the document is `ready`. `version` is a version
- * number.
+ * The document's original file as a download (`attachment`, octet-stream, `nosniff`);
+ * a PDF by its sniffed bytes is served `inline` as `application/pdf`, so a citation opens
+ * the browser's viewer at `#page=n` (RFC 8118; Scott decision 47). Both keep `nosniff`
+ * and the security headers. 409 `not_available` until the document is `ready`. `version`
+ * is a version number.
  */
 export const knowledgeGetFile = <ThrowOnError extends boolean = false>(
   options: Options<KnowledgeGetFileData, ThrowOnError>,
