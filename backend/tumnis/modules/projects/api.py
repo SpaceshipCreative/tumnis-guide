@@ -10,6 +10,7 @@ tasks module registers a `ProjectStatsSource` at import (P0-18). Until then ever
 counts zero tasks and is on track. Reads ask the source once per page for every id on it.
 """
 
+import re
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Annotated, Any, Final, Literal, Protocol
@@ -163,8 +164,11 @@ class PolicyOut(BaseModel):
     version: int
 
 
-# An action class's name: the policy's own vocabulary (FR-5.6), never free text.
-ActionClassName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
+# An action class's name: the policy's own vocabulary (FR-5.6), never free text. The
+# schema bounds only its length; `update_policy` checks the form (422
+# `invalid_action_class`), since a pattern inside a list starves the schema fuzzer (P0-11).
+ActionClassName = Annotated[str, StringConstraints(min_length=1, max_length=64)]
+_ACTION_CLASS_RE: Final = re.compile(r"[a-z][a-z0-9_]{0,63}")
 
 
 class PolicyIn(BaseModel):
@@ -377,9 +381,18 @@ async def update_policy(
     """Replaces the project's gated and allowed lists at `body.version` (P2-05, FR-5.6).
     Emits `policy.changed` with the policy before and after and writes the
     `policy.changed` audit row with both lists (SEC-3), in the caller's transaction. 404
-    for an unknown project; 422 `policy_conflict` when a class is in both lists; 409
+    for an unknown project; 422 `invalid_action_class` for a malformed name and
+    `policy_conflict` when a class is in both lists; 409
     `stale_version` with the policy as it is now (`current`)."""
     before = await get_policy(s, project_id)
+    odd = sorted({a for a in (*body.gated, *body.allowed) if not _ACTION_CLASS_RE.fullmatch(a)})
+    if odd:
+        raise ProblemError(
+            422,
+            "invalid_action_class",
+            "An action class is lowercase letters, digits and underscores, starting with"
+            f" a letter: {', '.join(odd)}",
+        )
     gated = list(dict.fromkeys(body.gated))
     allowed = list(dict.fromkeys(body.allowed))
     both = sorted(set(gated) & set(allowed))

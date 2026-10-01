@@ -2806,7 +2806,8 @@
         "properties": {
           "allowed": {
             "items": {
-              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "maxLength": 64,
+              "minLength": 1,
               "type": "string"
             },
             "maxItems": 100,
@@ -2815,7 +2816,8 @@
           },
           "gated": {
             "items": {
-              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "maxLength": 64,
+              "minLength": 1,
               "type": "string"
             },
             "maxItems": 100,

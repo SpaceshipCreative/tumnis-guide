@@ -548,8 +548,8 @@ export const zPlannedBlockOut = z.object({
  * read. A class in both lists is 422 `policy_conflict`.
  */
 export const zPolicyIn = z.object({
-  allowed: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)).max(100),
-  gated: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)).max(100),
+  allowed: z.array(z.string().min(1).max(64)).max(100),
+  gated: z.array(z.string().min(1).max(64)).max(100),
   version: z.int().gte(0).lte(2147483647),
 });
 

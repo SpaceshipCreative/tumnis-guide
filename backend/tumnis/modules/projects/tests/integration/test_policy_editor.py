@@ -131,3 +131,23 @@ async def test_put_policy_class_in_both_lists_is_422(
     assert "read" in response.json()["detail"]
     reread = await session_client.get(f"/v1/projects/{project_id}/policy")
     assert reread.json()["version"] == policy["version"]
+
+
+@pytest.mark.req("FR-5.6")
+@pytest.mark.wp("P2-05")
+async def test_put_policy_malformed_class_is_422(
+    app: FastAPI, session_client: SessionClient, workspace: WorkspaceHandle, db: DbUrls
+) -> None:
+    """A class name that is not lowercase letters, digits and underscores is 422
+    `invalid_action_class`; the policy keeps its version."""
+    project_id, policy = await _project_and_policy(session_client)
+    body = {
+        "gated": [*policy["gated"], "Send Email!"],
+        "allowed": policy["allowed"],
+        "version": policy["version"],
+    }
+    response = await session_client.put(f"/v1/projects/{project_id}/policy", json=body)
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "invalid_action_class"
+    reread = await session_client.get(f"/v1/projects/{project_id}/policy")
+    assert reread.json()["version"] == policy["version"]
