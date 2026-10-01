@@ -47,37 +47,31 @@ function initialChunks(chunks: Chunk[]): Set<string> {
   return seen;
 }
 
-test.fails(
-  "[P1-17][PERF-2] editor is lazy loaded",
-  async () => {
-    const chunks = await buildChunks();
-    const initial = initialChunks(chunks);
-    expect(initial.size).toBeGreaterThan(0);
+test("[P1-17][PERF-2] editor is lazy loaded", async () => {
+  const chunks = await buildChunks();
+  const initial = initialChunks(chunks);
+  expect(initial.size).toBeGreaterThan(0);
 
-    const editorIn = (c: Chunk) =>
-      c.moduleIds.some((id) => EDITOR_MODULE.test(id));
-    const initialWithEditor = chunks
-      .filter((c) => initial.has(c.fileName) && editorIn(c))
-      .map((c) => c.fileName);
-    expect(initialWithEditor).toEqual([]);
+  const editorIn = (c: Chunk) =>
+    c.moduleIds.some((id) => EDITOR_MODULE.test(id));
+  const initialWithEditor = chunks
+    .filter((c) => initial.has(c.fileName) && editorIn(c))
+    .map((c) => c.fileName);
+  expect(initialWithEditor).toEqual([]);
 
-    // The editor is in the build, in a chunk reached only through a dynamic import.
-    const lazyWithEditor = chunks.filter(
-      (c) => !initial.has(c.fileName) && editorIn(c),
-    );
-    expect(lazyWithEditor.length).toBeGreaterThan(0);
-    const dynamicTargets = new Set(chunks.flatMap((c) => c.dynamicImports));
-    const reachedLazily = (name: string, seen = new Set<string>()): boolean => {
-      if (dynamicTargets.has(name)) return true;
-      if (seen.has(name)) return false;
-      seen.add(name);
-      return chunks
-        .filter((c) => c.imports.includes(name))
-        .some(
-          (c) => !initial.has(c.fileName) && reachedLazily(c.fileName, seen),
-        );
-    };
-    expect(lazyWithEditor.every((c) => reachedLazily(c.fileName))).toBe(true);
-  },
-  300_000,
-);
+  // The editor is in the build, in a chunk reached only through a dynamic import.
+  const lazyWithEditor = chunks.filter(
+    (c) => !initial.has(c.fileName) && editorIn(c),
+  );
+  expect(lazyWithEditor.length).toBeGreaterThan(0);
+  const dynamicTargets = new Set(chunks.flatMap((c) => c.dynamicImports));
+  const reachedLazily = (name: string, seen = new Set<string>()): boolean => {
+    if (dynamicTargets.has(name)) return true;
+    if (seen.has(name)) return false;
+    seen.add(name);
+    return chunks
+      .filter((c) => c.imports.includes(name))
+      .some((c) => !initial.has(c.fileName) && reachedLazily(c.fileName, seen));
+  };
+  expect(lazyWithEditor.every((c) => reachedLazily(c.fileName))).toBe(true);
+}, 300_000);

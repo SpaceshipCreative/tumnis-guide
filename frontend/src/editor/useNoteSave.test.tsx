@@ -25,7 +25,7 @@ function typeAfter(editor: TiptapEditor, after: string, text: string): void {
   editor.view.dispatch(editor.state.tr.insertText(text, at));
 }
 
-test.fails("[P1-17][ADR-0008] opening a note never writes", async () => {
+test("[P1-17][ADR-0008] opening a note never writes", async () => {
   const note = makeDocument({
     title: "Moodboard",
     kind: "text",

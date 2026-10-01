@@ -17,7 +17,7 @@ afterEach(() => {
   editor = null;
 });
 
-test.fails("[P1-17][FR-15.1] make task swaps in a mention", async () => {
+test("[P1-17][FR-15.1] make task swaps in a mention", async () => {
   const fake = new TaskCreateFake();
   server.resetHandlers();
   server.use(...fake.handlers);

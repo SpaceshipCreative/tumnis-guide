@@ -27,7 +27,7 @@ export function buildExtensions(opts: {
   headless?: boolean;
 }): AnyExtension[] {
   const extensions: AnyExtension[] = [
-    StarterKit.configure({ link: false }),
+    StarterKit.configure({ link: false, trailingNode: false }),
     TaskList,
     TaskItem.configure({ nested: true }),
     Link.configure({

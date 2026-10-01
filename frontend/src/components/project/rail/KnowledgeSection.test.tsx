@@ -43,7 +43,7 @@ function setup() {
   return { project, rateCard, knowledge };
 }
 
-test.fails("[P1-17][FR-15.6] count, quota, add, pin, trash", async () => {
+test("[P1-17][FR-15.6] count, quota, add, pin, trash", async () => {
   const { project, rateCard, knowledge } = setup();
   const { user } = await renderRoute(`/projects/${project.id}?view=tasks`, {
     viewport: "laptop",
@@ -124,22 +124,19 @@ test.fails("[P1-17][FR-15.6] count, quota, add, pin, trash", async () => {
   );
 });
 
-test.fails(
-  "[P1-17][FR-15.6] the phone Context sheet has the Knowledge section",
-  async () => {
-    const { project } = setup();
-    const { user } = await renderRoute(`/projects/${project.id}?view=tasks`, {
-      viewport: "phone",
-    });
-    await user.click(await screen.findByRole("button", { name: "Context" }));
-    const sheet = screen.getByRole("dialog", { name: "Context" });
-    const section = await within(sheet).findByRole("button", {
-      name: /^Knowledge/,
-    });
-    await waitFor(() => {
-      expect(section).toHaveTextContent("2 items · 1.5 MB of 10 GB");
-    });
-    await user.click(section);
-    expect(await within(sheet).findByText("Rate card")).toBeVisible();
-  },
-);
+test("[P1-17][FR-15.6] the phone Context sheet has the Knowledge section", async () => {
+  const { project } = setup();
+  const { user } = await renderRoute(`/projects/${project.id}?view=tasks`, {
+    viewport: "phone",
+  });
+  await user.click(await screen.findByRole("button", { name: "Context" }));
+  const sheet = screen.getByRole("dialog", { name: "Context" });
+  const section = await within(sheet).findByRole("button", {
+    name: /^Knowledge/,
+  });
+  await waitFor(() => {
+    expect(section).toHaveTextContent("2 items · 1.5 MB of 10 GB");
+  });
+  await user.click(section);
+  expect(await within(sheet).findByText("Rate card")).toBeVisible();
+});
