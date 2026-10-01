@@ -28,7 +28,9 @@ mailbox row), then plays the script stored for `<profile>/<skill>`
 (`fakes.runner.script(profile, skill, result)`): after the script's delay, the named
 recording, fitted to the packet (`scripted_output`), is the run's `result` event and is
 sent to the waiting workflow, as the api hands over a daemon's result. Without a script
-the fake answers nothing, like a runner that never replies (the workflow times out).
+the fake answers nothing, like a runner that never replies (the workflow times out), until
+a test reset removes the run: then it reports its runner lost, so the workflow ends at once
+instead of holding its queue slot into the next test (`_watch_silent`, T-SEED-23).
 Phase 1 dispatches never reach the phase 2 hook (`dispatched`): they are not `run` packets.
 
 The playback is not durable: a worker that dies mid-script loses the rest (a fake).
@@ -73,6 +75,7 @@ _log = logging.getLogger(__name__)
 STEP_PAUSE_S: float = 0.1
 RESULT_HOLD_S: float = 4.0
 QUESTION_POLL_S: float = 0.5  # how often a question's playback re-reads the answer
+SILENT_POLL_S: float = 0.5  # how often a silent (unscripted) run checks it still exists
 # The fake runner speaks as a device, as a real runner's handler does (`device:<runner>`);
 # it has no runner row, so the nil id.
 FAKE_RUNNER_ACTOR: Final = ActorRef(f"device:{UUID(int=0)}")
@@ -278,12 +281,12 @@ async def dispatch_skill(ctx: WorkspaceContext, packet: TaskPacket) -> None:
         script = Phase1Script.model_validate(stored) if stored is not None else None
     except ValidationError:  # the default ("") script, or a phase 2 one: not for this skill
         script = None
-    if script is None or (script.profile, script.skill) != (profile.name, packet.skill):
-        return
+    if script is not None and (script.profile, script.skill) == (profile.name, packet.skill):
+        work = _answer(ctx, packet, script)
+    else:  # no script for this skill: the fake stays silent (T-SEED-20) until a reset
+        work = _watch_silent(ctx, packet)
     # A fresh context: the playback outlives this step and must not act inside its workflow.
-    playback = asyncio.get_running_loop().create_task(
-        _answer(ctx, packet, script), context=contextvars.Context()
-    )
+    playback = asyncio.get_running_loop().create_task(work, context=contextvars.Context())
     _playing.add(playback)
     playback.add_done_callback(_done)
 
@@ -315,6 +318,39 @@ async def _answer(ctx: WorkspaceContext, packet: TaskPacket, script: Phase1Scrip
     await DBOS.send_async(
         workflow_id, message, api.run_topic(run_id), idempotency_key=str(message_id)
     )
+
+
+async def _watch_silent(ctx: WorkspaceContext, packet: TaskPacket) -> None:
+    """An unscripted run answers nothing, like a runner that never replies, while its
+    `runs` row lasts. Once a test reset has removed it (T-SEED-23), the fake tells the
+    waiting `run_skill` its runner is lost, as the runner sweep does: the workflow then
+    ends within seconds instead of holding its queue slot (a morning build holds the
+    one-at-a-time maintenance queue) for the run timeout into the next test. A run that
+    ends, or outlives its timeout, is no longer watched."""
+    run_id = packet.run_id
+    workflow_id: str | None = None
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + packet.timeout_s
+    while loop.time() < deadline:
+        async with tenant_session(ctx) as s:
+            row = (
+                await s.execute(
+                    select(_runs.c.status, _runs.c.workflow_id).where(_runs.c.id == run_id)
+                )
+            ).first()
+        if row is not None:
+            if row.status not in _OPEN:
+                return
+            workflow_id = row.workflow_id
+            await asyncio.sleep(SILENT_POLL_S)
+            continue
+        if workflow_id is not None:
+            message = {"type": "result", "run_id": str(run_id), "status": api.RUNNER_LOST}
+            lost = uuid5(run_id, "fake-runner-lost")
+            await DBOS.send_async(
+                workflow_id, message, api.run_topic(run_id), idempotency_key=str(lost)
+            )
+        return
 
 
 on_dispatch(dispatched)
