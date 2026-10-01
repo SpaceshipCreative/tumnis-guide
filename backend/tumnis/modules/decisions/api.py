@@ -68,6 +68,18 @@ from tumnis.modules.decisions.catalog import (
     build_request,
     input_hash,
 )
+from tumnis.modules.decisions.embeddings_slot import (
+    EMBEDDINGS_SECTION,
+    EmbedderInfo,
+    Embedders,
+    EmbeddingsWorkspaceSettings,
+    EmbedResult,
+    configure_embeddings,
+    embed,
+    embedders_for,
+    query_timeout_s,
+    use_embedders,
+)
 from tumnis.modules.decisions.eval import (
     Evaluation,
     InvalidSet,
@@ -114,6 +126,7 @@ from tumnis.modules.tasks import api as tasks
 from tumnis.settings import GenerationSettings
 
 __all__ = [
+    "EMBEDDINGS_SECTION",
     "ApprovalNeed",
     "CalibrationOut",
     "CalibrationPoint",
@@ -121,6 +134,10 @@ __all__ = [
     "Decision",
     "DecisionPoint",
     "DecisionsProvider",
+    "EmbedResult",
+    "EmbedderInfo",
+    "Embedders",
+    "EmbeddingsWorkspaceSettings",
     "Evaluation",
     "InvalidSet",
     "JevSettings",
@@ -149,21 +166,26 @@ __all__ = [
     "ask_raw",
     "assess_blocking_impact",
     "calibration",
+    "configure_embeddings",
     "configure_generation",
     "configure_net_policy",
     "decide",
     "dump_set",
     "edit_threshold",
+    "embed",
+    "embedders_for",
     "evaluate",
     "get_provider_config",
     "labeled_decisions",
     "load_set",
     "put_provider_config",
     "put_threshold",
+    "query_timeout_s",
     "record_outcome",
     "set_sha256",
     "store_evaluations",
     "thresholds_in_force",
+    "use_embedders",
     "use_providers",
 ]
 

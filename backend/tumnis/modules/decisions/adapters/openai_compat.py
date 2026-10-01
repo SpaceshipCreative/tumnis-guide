@@ -24,11 +24,11 @@ _SERVER_ERROR: Final = 500
 _CLIENT_ERROR: Final = 400
 
 
-def _chat_url(base_url: str) -> httpx.URL:
+def _chat_url(base_url: str, path: str = CHAT_PATH) -> httpx.URL:
     """`http://host:8000`, `http://host:8000/` and `http://host:8000/v1` all name the same
     API root."""
     root = base_url.rstrip("/").removesuffix("/v1")
-    return httpx.URL(root + CHAT_PATH)
+    return httpx.URL(root + path)
 
 
 def _retry_after(response: httpx.Response) -> float | None:
@@ -39,7 +39,9 @@ def _retry_after(response: httpx.Response) -> float | None:
 
 
 class ChatEndpoint:
-    """One OpenAI-compatible endpoint: `post(body)` sends a chat completion request and
+    """One OpenAI-compatible endpoint: `post(body)` sends a request (a chat completion by
+    default; `path` names another route, such as P3-10's `/v1/embeddings`, and `bearer` a
+    hosted provider's key) and
     returns the decoded answer, or raises AdapterTimeout, AdapterUnavailable (connection,
     408, 429, 5xx) or AdapterRejected (other 4xx, a body that is not JSON, a blocked
     destination: SsrfBlocked)."""
@@ -54,16 +56,21 @@ class ChatEndpoint:
         timeout_s: float,
         resolver: Resolver = system_resolver,
         transport: httpx.AsyncBaseTransport | None = None,  # MockTransport in tests
+        path: str = CHAT_PATH,
+        bearer: str | None = None,
     ) -> None:
-        self.url = _chat_url(base_url)
+        self.url = _chat_url(base_url, path)
         self._adapter, self._op = adapter, op
+        self._headers = {} if bearer is None else {"Authorization": f"Bearer {bearer}"}
         port = self.url.port or SCHEME_PORTS.get(self.url.scheme, 443)
         policy = replace(net_policy, ports=net_policy.ports | {port})
         self._client = guarded_client(policy, timeout=timeout_s, resolver=resolver, inner=transport)
 
     async def post(self, body: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
         try:
-            response = await self._client.post(self.url, json=body, timeout=timeout_s)
+            response = await self._client.post(
+                self.url, json=body, timeout=timeout_s, headers=self._headers
+            )
         except httpx.TimeoutException:
             raise AdapterTimeout(self._adapter, self._op) from None
         except httpx.TransportError as exc:
