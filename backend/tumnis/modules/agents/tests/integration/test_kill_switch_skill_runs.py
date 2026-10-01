@@ -218,7 +218,6 @@ async def test_stop_ends_a_running_skill_run_cancelled(  # noqa: PLR0917
 
 @pytest.mark.req("SAF-4", "FR-5.5")
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 async def test_stop_ends_a_skill_run_when_its_agent_cannot_be_stopped(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
