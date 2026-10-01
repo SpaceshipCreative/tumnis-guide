@@ -93,6 +93,7 @@ from tumnis.modules.tasks.payloads import (
 from tumnis.modules.tasks.review import (
     ESTIMATE_KIND,
     LABEL_KIND,
+    Deciding,
     DuplicateReviewKind,
     EstimateOutlierPayload,
     ImpactFacts,
@@ -135,6 +136,7 @@ __all__ = [
     "ESTIMATE_KIND",
     "LABEL_KIND",
     "ActorKind",
+    "Deciding",
     "DuplicateReviewKind",
     "EstimateOutlierPayload",
     "ImpactFacts",

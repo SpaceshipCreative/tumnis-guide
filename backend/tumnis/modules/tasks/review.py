@@ -26,7 +26,7 @@ modules import it from there.
 """
 
 import re
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -80,6 +80,29 @@ class ReviewKindSpec:
     action_payloads: Mapping[str, type[BaseModel]] = field(
         default_factory=lambda: MappingProxyType({})
     )
+    # The owner's part of a decision (P2-05): called in the decide transaction, after the
+    # item is closed and before `human.decided` is emitted, for every action but snooze.
+    # It may refuse the decision (a ProblemError rolls the whole decision back) and
+    # returns the decision's reason for the event (None when it has none).
+    on_decide: "DecideHook | None" = None
+
+
+@dataclass(frozen=True, slots=True)
+class Deciding:
+    """What an owner's `on_decide` hook gets: the item as stored and the decision."""
+
+    item_id: UUID
+    kind: str
+    target_type: str
+    target_id: UUID
+    item_payload: Mapping[str, Any]
+    action: str
+    payload: Mapping[str, Any] | None
+    actor: ActorRef
+    now: datetime
+
+
+DecideHook = Callable[[AsyncSession, Deciding], Awaitable[str | None]]
 
 
 class DuplicateReviewKind(ValueError):  # noqa: N818  # reads as the condition it reports
@@ -565,6 +588,7 @@ async def _decide(  # noqa: PLR0917  # decide_review_item's fields, spelled out
     snooze_until: datetime | None,
     version: int,
     now: datetime,
+    actor: ActorRef,
 ) -> ReviewItemOut:
     row = await _item_row(s, item_id)
     spec = _spec(row["kind"])
@@ -577,6 +601,22 @@ async def _decide(  # noqa: PLR0917  # decide_review_item's fields, spelled out
         else {"decided_at": now, "decision": action}
     )
     await update_versioned(s, _review, item_id, version, values)
+    reason = None
+    if action != SNOOZE and spec.on_decide is not None:
+        reason = await spec.on_decide(
+            s,
+            Deciding(
+                item_id=item_id,
+                kind=spec.kind,
+                target_type=row["target_type"],
+                target_id=row["target_id"],
+                item_payload=row["payload"] or {},
+                action=action,
+                payload=body,
+                actor=actor,
+                now=now,
+            ),
+        )
     await emit(
         s,
         HumanDecidedV1(
@@ -585,6 +625,7 @@ async def _decide(  # noqa: PLR0917  # decide_review_item's fields, spelled out
             target_type=row["target_type"],
             target_id=row["target_id"],
             decision=action,
+            reason=reason,
             payload=body,
             decision_id=_decision_id(row["payload"] or {}),
         ),
@@ -611,9 +652,9 @@ async def decide_review_item(  # R-04's body, plus who and when
     any other action closes the item with `decision`. Emits `human.decided` (R-07)."""
     at = now if now is not None else SystemClock().now()
     if session is not None:
-        return await _decide(session, item_id, action, payload, snooze_until, version, at)
+        return await _decide(session, item_id, action, payload, snooze_until, version, at, actor)
     async with tenant_session(WorkspaceContext(_context().workspace_id, actor)) as s:
-        return await _decide(s, item_id, action, payload, snooze_until, version, at)
+        return await _decide(s, item_id, action, payload, snooze_until, version, at, actor)
 
 
 async def review_badge_count(s: AsyncSession, now: datetime) -> int:
