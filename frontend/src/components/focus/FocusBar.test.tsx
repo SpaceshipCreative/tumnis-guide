@@ -100,49 +100,46 @@ test("[P2-15][FR-10.9] T-P2-15-17 less of this posts once and nothing shows at Q
   expect(screen.queryByRole("region", { name: "Focus" })).toBeNull();
 });
 
-test.fails(
-  "[P4-01][FR-10.9] T-P4-01-13 less of this lowers to Coach",
-  async () => {
-    for (const viewport of VIEWPORTS) {
-      // Guardrail with a task in progress and no check-in waiting: "Less of this" is one
-      // tap away all the same, and sets today's level to Coach.
-      const session = focusSession("Write Acme invoice", 5);
-      const lowered = {
+test("[P4-01][FR-10.9] T-P4-01-13 less of this lowers to Coach", async () => {
+  for (const viewport of VIEWPORTS) {
+    // Guardrail with a task in progress and no check-in waiting: "Less of this" is one
+    // tap away all the same, and sets today's level to Coach.
+    const session = focusSession("Write Acme invoice", 5);
+    const lowered = {
+      ...quietFocus(),
+      level: "coach" as const,
+      workspace_level: "guardrail" as const,
+      override_level: "coach" as const,
+      session,
+    };
+    const replies = focusReplies(lowered);
+    server.use(
+      focusCurrent({
         ...quietFocus(),
-        level: "coach" as const,
-        workspace_level: "guardrail" as const,
-        override_level: "coach" as const,
+        level: "guardrail",
+        workspace_level: "guardrail",
         session,
-      };
-      const replies = focusReplies(lowered);
-      server.use(
-        focusCurrent({
-          ...quietFocus(),
-          level: "guardrail",
-          workspace_level: "guardrail",
-          session,
-        }),
-        ...replies.handlers,
-      );
-      const view = await renderRoute("/review", { viewport });
-      const bar = await screen.findByRole("region", { name: "Focus" });
+      }),
+      ...replies.handlers,
+    );
+    const view = await renderRoute("/review", { viewport });
+    const bar = await screen.findByRole("region", { name: "Focus" });
+    expect(within(bar).getByTestId("focus-level")).toHaveTextContent(
+      "Guardrail",
+    );
+
+    await view.user.click(
+      within(bar).getByRole("button", { name: "Less of this" }),
+    );
+
+    await waitFor(() => {
+      expect(replies.calls).toEqual([{ path: "/focus/less", body: {} }]);
+    });
+    await waitFor(() => {
       expect(within(bar).getByTestId("focus-level")).toHaveTextContent(
-        "Guardrail",
+        "Coach today",
       );
-
-      await view.user.click(
-        within(bar).getByRole("button", { name: "Less of this" }),
-      );
-
-      await waitFor(() => {
-        expect(replies.calls).toEqual([{ path: "/focus/less", body: {} }]);
-      });
-      await waitFor(() => {
-        expect(within(bar).getByTestId("focus-level")).toHaveTextContent(
-          "Coach today",
-        );
-      });
-      view.unmount();
-    }
-  },
-);
+    });
+    view.unmount();
+  }
+});

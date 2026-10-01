@@ -4,6 +4,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import * as z from "zod";
 
+import { focusGetCurrentOptions } from "../api/@tanstack/react-query.gen";
 import { DashboardPage } from "../components/dashboard/DashboardPage";
 import { localDay } from "../components/dashboard/format";
 import {
@@ -47,6 +48,8 @@ export const Route = createFileRoute("/")({
       }),
       loaderRead(queryClient, deployStatusQuery()),
       loaderRead(queryClient, pausesQuery()),
+      // The focus level in force (P4-01): Guardrail renders the one-task view.
+      loaderRead(queryClient, focusGetCurrentOptions()),
     ]);
   },
   // Commit the match at once while the loader runs (an empty page, not a spinner): the

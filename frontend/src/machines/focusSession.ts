@@ -34,7 +34,7 @@ export interface FocusContext {
   // P4-01: the level in force is Guardrail (detours are captured), and the task a
   // captured detour offers to return to.
   guardrail?: boolean;
-  returnToTaskId?: string;
+  returnToTaskId?: string | undefined;
 }
 
 export type FocusSessionEvent =
@@ -106,10 +106,11 @@ export const focusSession = setup({
         ? { taskId: event.detourTaskId, returnToTaskId: event.returnToTaskId }
         : {},
     ),
-    goBack: assign(({ context }) => ({
-      taskId: context.returnToTaskId ?? context.taskId,
-      returnToTaskId: undefined,
-    })),
+    goBack: assign(({ context }) =>
+      context.returnToTaskId === undefined
+        ? {}
+        : { taskId: context.returnToTaskId, returnToTaskId: undefined },
+    ),
     stayOn: assign({ returnToTaskId: undefined }),
     // Replaced through machine.provide() in the app and the tests.
     postResponse: () => undefined,
@@ -191,6 +192,11 @@ export const focusSession = setup({
         LESS_OF_THIS: { actions: "postLess" },
         TASK_LEFT: "idle",
         DISMISS: "active",
+        SWITCH_DETOUR: {
+          guard: "isGuardrail",
+          target: "detour",
+          actions: "postDetour",
+        },
       },
     },
     snoozed: {
