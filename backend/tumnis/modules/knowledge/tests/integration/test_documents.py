@@ -37,7 +37,6 @@ async def _text_entry(
 
 @pytest.mark.req("FR-15.5", "SAF-1")
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 async def test_trust_defaults_applied_on_create(
     extract_env: ExtractEnv,
     dbos: type[DBOS],
@@ -92,7 +91,6 @@ async def test_trust_defaults_applied_on_create(
 
 @pytest.mark.req("FR-15.6")
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 async def test_edits_keep_versions(
     extract_env: ExtractEnv, session_client: SessionClient, db: DbUrls
 ) -> None:
@@ -137,7 +135,6 @@ async def test_edits_keep_versions(
 
 @pytest.mark.req("FR-15.6")
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 async def test_tags_and_pins_persist_and_trash_restores(
     extract_env: ExtractEnv, session_client: SessionClient
 ) -> None:

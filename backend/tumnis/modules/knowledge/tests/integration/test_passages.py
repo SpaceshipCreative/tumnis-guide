@@ -25,7 +25,6 @@ BRIEF = "Acme's marketing site rebuild. Quotes use the rate card's hourly rates.
 
 @pytest.mark.req("FR-15.4", "FR-2.3")
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 async def test_passages_for_task(
     extract_env: ExtractEnv,
     dbos: type[DBOS],

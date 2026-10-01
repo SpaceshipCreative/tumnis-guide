@@ -24,7 +24,6 @@ GIB = 1024**3
 
 @pytest.mark.req("FR-15.6")
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 async def test_quota_computed(
     extract_env: ExtractEnv, dbos: type[DBOS], session_client: SessionClient
 ) -> None:
