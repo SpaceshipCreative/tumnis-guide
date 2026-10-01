@@ -10,17 +10,20 @@ import {
 
 import { client } from "../client.gen";
 import {
+  agentsAsk,
   agentsAskHuman,
   agentsCancelRun,
   agentsCheckProfileHealth,
   agentsCreateRunner,
   agentsDelegateTask,
+  agentsGetAgentFeed,
   agentsGetPauses,
   agentsGetProfileTools,
   agentsGetProjectDigest,
   agentsGetRun,
   agentsGetTaskPacket,
   agentsGetWorkspaceDigest,
+  agentsListActivity,
   agentsListProfiles,
   agentsListRunEvents,
   agentsListRunners,
@@ -140,6 +143,7 @@ import {
   tasksLinkContextItem,
   tasksLinkPullRequest,
   tasksListComments,
+  tasksListInbox,
   tasksListPullRequests,
   tasksListRecurrence,
   tasksListReview,
@@ -155,9 +159,12 @@ import {
   usageGetUsage,
 } from "../sdk.gen";
 import type {
+  AgentsAskData,
+  AgentsAskError,
   AgentsAskHumanData,
   AgentsAskHumanError,
   AgentsAskHumanResponse,
+  AgentsAskResponse,
   AgentsCancelRunData,
   AgentsCancelRunError,
   AgentsCancelRunResponse,
@@ -170,6 +177,9 @@ import type {
   AgentsDelegateTaskData,
   AgentsDelegateTaskError,
   AgentsDelegateTaskResponse,
+  AgentsGetAgentFeedData,
+  AgentsGetAgentFeedError,
+  AgentsGetAgentFeedResponse,
   AgentsGetPausesData,
   AgentsGetPausesError,
   AgentsGetPausesResponse,
@@ -188,6 +198,9 @@ import type {
   AgentsGetWorkspaceDigestData,
   AgentsGetWorkspaceDigestError,
   AgentsGetWorkspaceDigestResponse,
+  AgentsListActivityData,
+  AgentsListActivityError,
+  AgentsListActivityResponse,
   AgentsListProfilesData,
   AgentsListProfilesError,
   AgentsListProfilesResponse,
@@ -537,6 +550,9 @@ import type {
   TasksListCommentsData,
   TasksListCommentsError,
   TasksListCommentsResponse,
+  TasksListInboxData,
+  TasksListInboxError,
+  TasksListInboxResponse,
   TasksListPullRequestsData,
   TasksListPullRequestsError,
   TasksListPullRequestsResponse,
@@ -666,6 +682,37 @@ export const healthReadyOptions = (options?: Options<HealthReadyData>) =>
       return data;
     },
     queryKey: healthReadyQueryKey(options),
+  });
+
+export const agentsGetAgentFeedQueryKey = (
+  options?: Options<AgentsGetAgentFeedData>,
+) => createQueryKey("agentsGetAgentFeed", options);
+
+/**
+ * Get Agent Feed
+ *
+ * The dashboard's agent activity (FR-1.5): task runs running, waiting on the human,
+ * finished and failed, the newest ten of each.
+ */
+export const agentsGetAgentFeedOptions = (
+  options?: Options<AgentsGetAgentFeedData>,
+) =>
+  queryOptions<
+    AgentsGetAgentFeedResponse,
+    AgentsGetAgentFeedError,
+    AgentsGetAgentFeedResponse,
+    ReturnType<typeof agentsGetAgentFeedQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsGetAgentFeed({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsGetAgentFeedQueryKey(options),
   });
 
 export const agentsGetPausesQueryKey = (
@@ -1958,9 +2005,11 @@ export const knowledgeGetFileQueryKey = (
 /**
  * Get File
  *
- * The document's original file, always as a download (`attachment`, octet-stream,
- * `nosniff`); 409 `not_available` until the document is `ready`. `version` is a version
- * number.
+ * The document's original file as a download (`attachment`, octet-stream, `nosniff`);
+ * a PDF by its sniffed bytes is served `inline` as `application/pdf`, so a citation opens
+ * the browser's viewer at `#page=n` (RFC 8118; Scott decision 47). Both keep `nosniff`
+ * and the security headers. 409 `not_available` until the document is `ready`. `version`
+ * is a version number.
  */
 export const knowledgeGetFileOptions = (
   options: Options<KnowledgeGetFileData>,
@@ -2440,8 +2489,9 @@ export const knowledgeAddLinkMutation = (
  * Create Text Entry
  *
  * A text entry (Markdown) in a project or the workspace knowledge base: version 1,
- * searchable at once, trusted when a person writes it (FR-15.5, `_origin`); in a project
- * with a folder, also `notes/`.
+ * searchable at once; the `add_document` tool's twin (R-36). A person's is a trusted
+ * note (in a project with a folder, also `notes/`); any other caller's is untrusted and
+ * agent-written (FR-15.5), and goes to `agent-outputs/`.
  */
 export const knowledgeCreateTextEntryMutation = (
   options?: Partial<Options<KnowledgeCreateTextEntryData>>,
@@ -2503,7 +2553,9 @@ export const knowledgeGetDocumentQueryKey = (
 /**
  * Get Document
  *
- * A document's state (status, reason, kind, path): what the upload flow polls.
+ * A document's state (status, reason, kind, path) and text: what the upload flow
+ * polls; the `get_document` tool's twin. A project-limited caller reads its projects'
+ * documents and the workspace knowledge base's (R-28).
  */
 export const knowledgeGetDocumentOptions = (
   options: Options<KnowledgeGetDocumentData>,
@@ -2820,8 +2872,10 @@ export const knowledgeSearchQueryKey = (
 /**
  * Search
  *
- * Full-text search of a project's items and the workspace knowledge base (none: the
- * whole workspace), citing document, heading path and page (FR-15.3).
+ * Full-text search of a project's items and the workspace knowledge base (none: every
+ * project the caller sees), citing document, heading path and page (FR-15.3), best
+ * first, a page at a time; the `search_knowledge` tool's twin. The parameters are
+ * `tools.SearchKnowledgeIn`'s, spelled out so the page's `cursor` and `limit` show.
  */
 export const knowledgeSearchOptions = (options: Options<KnowledgeSearchData>) =>
   queryOptions<
@@ -2841,6 +2895,64 @@ export const knowledgeSearchOptions = (options: Options<KnowledgeSearchData>) =>
     },
     queryKey: knowledgeSearchQueryKey(options),
   });
+
+export const knowledgeSearchInfiniteQueryKey = (
+  options: Options<KnowledgeSearchData>,
+): QueryKey<Options<KnowledgeSearchData>> =>
+  createQueryKey("knowledgeSearch", options, true);
+
+/**
+ * Search
+ *
+ * Full-text search of a project's items and the workspace knowledge base (none: every
+ * project the caller sees), citing document, heading path and page (FR-15.3), best
+ * first, a page at a time; the `search_knowledge` tool's twin. The parameters are
+ * `tools.SearchKnowledgeIn`'s, spelled out so the page's `cursor` and `limit` show.
+ */
+export const knowledgeSearchInfiniteOptions = (
+  options: Options<KnowledgeSearchData>,
+) => {
+  const opts = infiniteQueryOptions<
+    KnowledgeSearchResponse,
+    KnowledgeSearchError,
+    InfiniteData<KnowledgeSearchResponse>,
+    QueryKey<Options<KnowledgeSearchData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<KnowledgeSearchData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<KnowledgeSearchData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await knowledgeSearch({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: knowledgeSearchInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
 
 /**
  * Record App Open
@@ -3390,6 +3502,95 @@ export const projectsUpdateProjectMutation = (
   return mutationOptions;
 };
 
+export const agentsListActivityQueryKey = (
+  options: Options<AgentsListActivityData>,
+) => createQueryKey("agentsListActivity", options);
+
+/**
+ * List Activity
+ *
+ * The project's Activity view (FR-2.6): its task runs, their results and its audit
+ * trail, newest first, a page at a time. 400 `invalid_cursor`; 404 for an unknown
+ * project.
+ */
+export const agentsListActivityOptions = (
+  options: Options<AgentsListActivityData>,
+) =>
+  queryOptions<
+    AgentsListActivityResponse,
+    AgentsListActivityError,
+    AgentsListActivityResponse,
+    ReturnType<typeof agentsListActivityQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsListActivity({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsListActivityQueryKey(options),
+  });
+
+export const agentsListActivityInfiniteQueryKey = (
+  options: Options<AgentsListActivityData>,
+): QueryKey<Options<AgentsListActivityData>> =>
+  createQueryKey("agentsListActivity", options, true);
+
+/**
+ * List Activity
+ *
+ * The project's Activity view (FR-2.6): its task runs, their results and its audit
+ * trail, newest first, a page at a time. 400 `invalid_cursor`; 404 for an unknown
+ * project.
+ */
+export const agentsListActivityInfiniteOptions = (
+  options: Options<AgentsListActivityData>,
+) => {
+  const opts = infiniteQueryOptions<
+    AgentsListActivityResponse,
+    AgentsListActivityError,
+    InfiniteData<AgentsListActivityResponse>,
+    QueryKey<Options<AgentsListActivityData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<AgentsListActivityData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<AgentsListActivityData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await agentsListActivity({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: agentsListActivityInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
 /**
  * Archive Project
  */
@@ -3407,6 +3608,38 @@ export const projectsArchiveProjectMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await projectsArchiveProject({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Ask
+ *
+ * Ask the project's agent (the composer's Ask the agent toggle): the question becomes
+ * an AI task (source `ask`) and its run starts at once; the run's result is the answer.
+ * 404 for an unknown project; 409 `no_ready_profile` (nothing is kept) when the project
+ * has no ready agent.
+ */
+export const agentsAskMutation = (
+  options?: Partial<Options<AgentsAskData>>,
+): UseMutationOptions<
+  AgentsAskResponse,
+  AgentsAskError,
+  Options<AgentsAskData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsAskResponse,
+    AgentsAskError,
+    Options<AgentsAskData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsAsk({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -3560,6 +3793,90 @@ export const projectsGetProjectContextOptions = (
     },
     queryKey: projectsGetProjectContextQueryKey(options),
   });
+
+export const tasksListInboxQueryKey = (options: Options<TasksListInboxData>) =>
+  createQueryKey("tasksListInbox", options);
+
+/**
+ * List Inbox
+ *
+ * The project's Inbox (FR-2.6): the tasks its agent proposes, waiting for a decision
+ * (`proposal` review items; P3-07 fills it). 404 for an unknown project.
+ */
+export const tasksListInboxOptions = (options: Options<TasksListInboxData>) =>
+  queryOptions<
+    TasksListInboxResponse,
+    TasksListInboxError,
+    TasksListInboxResponse,
+    ReturnType<typeof tasksListInboxQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListInbox({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListInboxQueryKey(options),
+  });
+
+export const tasksListInboxInfiniteQueryKey = (
+  options: Options<TasksListInboxData>,
+): QueryKey<Options<TasksListInboxData>> =>
+  createQueryKey("tasksListInbox", options, true);
+
+/**
+ * List Inbox
+ *
+ * The project's Inbox (FR-2.6): the tasks its agent proposes, waiting for a decision
+ * (`proposal` review items; P3-07 fills it). 404 for an unknown project.
+ */
+export const tasksListInboxInfiniteOptions = (
+  options: Options<TasksListInboxData>,
+) => {
+  const opts = infiniteQueryOptions<
+    TasksListInboxResponse,
+    TasksListInboxError,
+    InfiniteData<TasksListInboxResponse>,
+    QueryKey<Options<TasksListInboxData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<TasksListInboxData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<TasksListInboxData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await tasksListInbox({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: tasksListInboxInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
 
 /**
  * Pause Project

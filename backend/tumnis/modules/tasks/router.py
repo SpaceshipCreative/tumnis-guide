@@ -427,6 +427,21 @@ async def list_review(
     )
 
 
+@router.get("/projects/{project_id}/inbox")
+@route_policy(SESSION_LIST)
+async def list_inbox(
+    project_id: UUID,
+    request: Request,
+    session: SessionDep,
+    page: Annotated[PageParams, Depends(page_params)],
+) -> Page[api.ReviewItemOut]:
+    """The project's Inbox (FR-2.6): the tasks its agent proposes, waiting for a decision
+    (`proposal` review items; P3-07 fills it). 404 for an unknown project."""
+    return await api.inbox(
+        session, project_id, now=_clock(request).now(), cursor=page.cursor, limit=page.limit
+    )
+
+
 @router.post("/review/{id}/decide")
 @route_policy(DECIDE)
 async def decide_review(

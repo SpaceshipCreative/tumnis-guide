@@ -27,6 +27,76 @@ export type AccountOut = {
 };
 
 /**
+ * ActivityItem
+ *
+ * One row of a project's Activity: a run (its status now), a result (its summary) or
+ * an audit row (its action and who did it), at the time it happened.
+ */
+export type ActivityItem = {
+  /**
+   * Action
+   */
+  action: string | null;
+  /**
+   * Actor Type
+   */
+  actor_type: string | null;
+  /**
+   * At
+   */
+  at: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Kind
+   */
+  kind: "run" | "result" | "audit";
+  /**
+   * Run Id
+   */
+  run_id: string | null;
+  status: RunStatus | null;
+  /**
+   * Summary
+   */
+  summary: string | null;
+  /**
+   * Task Id
+   */
+  task_id: string | null;
+  /**
+   * Task Title
+   */
+  task_title: string | null;
+};
+
+/**
+ * AgentFeedOut
+ *
+ * The dashboard's agent activity (FR-1.5): the newest task runs in each group.
+ */
+export type AgentFeedOut = {
+  /**
+   * Failed
+   */
+  failed: Array<FeedRun>;
+  /**
+   * Finished
+   */
+  finished: Array<FeedRun>;
+  /**
+   * Running
+   */
+  running: Array<FeedRun>;
+  /**
+   * Waiting
+   */
+  waiting: Array<FeedRun>;
+};
+
+/**
  * AgentProfileChoice
  *
  * The project's agent (P1-06): a new Hermes profile from the project template
@@ -180,6 +250,29 @@ export type AskHumanBody = {
    * Schema Version
    */
   schema_version?: number | null;
+};
+
+/**
+ * AskIn
+ */
+export type AskIn = {
+  /**
+   * Question
+   */
+  question: string;
+};
+
+/**
+ * AskOut
+ *
+ * The task the question became, and the run answering it.
+ */
+export type AskOut = {
+  /**
+   * Run Id
+   */
+  run_id: string;
+  task: TaskOut;
 };
 
 /**
@@ -954,6 +1047,27 @@ export type DocumentDto = {
 };
 
 /**
+ * DocumentResultLink
+ *
+ * A document: a web address or a citation of a knowledge-base document and page,
+ * `tumnis://doc/<id>#page=<n>` (P2-17, FR-15.4).
+ */
+export type DocumentResultLink = {
+  /**
+   * Kind
+   */
+  kind: "document";
+  /**
+   * Label
+   */
+  label?: string | null;
+  /**
+   * Url
+   */
+  url: string;
+};
+
+/**
  * DocumentVersionOut
  */
 export type DocumentVersionOut = {
@@ -1042,6 +1156,34 @@ export type Evaluation = {
    * Threshold
    */
   threshold: number;
+};
+
+/**
+ * FeedRun
+ */
+export type FeedRun = {
+  /**
+   * At
+   */
+  at: string;
+  kind: RunKind;
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Run Id
+   */
+  run_id: string;
+  status: RunStatus;
+  /**
+   * Task Id
+   */
+  task_id: string | null;
+  /**
+   * Task Title
+   */
+  task_title: string | null;
 };
 
 /**
@@ -1857,6 +1999,20 @@ export type OpenPause = {
 };
 
 /**
+ * Page[ActivityItem]
+ */
+export type PageActivityItem = {
+  /**
+   * Items
+   */
+  items: Array<ActivityItem>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
  * Page[AgentProfileOut]
  */
 export type PageAgentProfileOut = {
@@ -1934,6 +2090,20 @@ export type PageKeyOut = {
    * Items
    */
   items: Array<KeyOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
+ * Page[KnowledgeHit]
+ */
+export type PageKnowledgeHit = {
+  /**
+   * Items
+   */
+  items: Array<KnowledgeHit>;
   /**
    * Next Cursor
    */
@@ -3361,21 +3531,15 @@ export type RespondIn = {
 
 /**
  * ResultLink
+ *
+ * A link a result names. Only a `document` link may be a `tumnis://` citation: the
+ * rule is the schema's (one variant per kind; `kind` tells them apart), so OpenAPI, the
+ * tools' JSON Schema and anything generated from them (zod, test factories) hold it too.
+ * A plain `anyOf`, not a discriminator: its mapping would name `#/$defs/...` in the tool
+ * and `#/components/...` in OpenAPI. Built like a model, `ResultLink(kind=..., url=...)`;
+ * `kind`, `url` and `label` read through.
  */
-export type ResultLink = {
-  /**
-   * Kind
-   */
-  kind: "branch" | "pull_request" | "document" | "draft" | "url";
-  /**
-   * Label
-   */
-  label?: string | null;
-  /**
-   * Url
-   */
-  url: string;
-};
+export type ResultLink = WebResultLink | DocumentResultLink;
 
 /**
  * ResultOut
@@ -4757,6 +4921,8 @@ export type TextDocumentPatch = {
 
 /**
  * TextEntryIn
+ *
+ * `add_document`'s twin body (P1-17's text entry, R-36).
  */
 export type TextEntryIn = {
   /**
@@ -4767,6 +4933,14 @@ export type TextEntryIn = {
    * Project Id
    */
   project_id?: string | null;
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+  /**
+   * Tags
+   */
+  tags?: Array<string>;
   /**
    * Title
    */
@@ -5058,6 +5232,26 @@ export type WaitOut = {
 };
 
 /**
+ * WebResultLink
+ *
+ * A branch, pull request, draft or other web address: always `http(s)://`.
+ */
+export type WebResultLink = {
+  /**
+   * Kind
+   */
+  kind: "branch" | "pull_request" | "draft" | "url";
+  /**
+   * Label
+   */
+  label?: string | null;
+  /**
+   * Url
+   */
+  url: string;
+};
+
+/**
  * WebhookOut
  */
 export type WebhookOut = {
@@ -5298,6 +5492,61 @@ export type HealthReadyResponses = {
    */
   200: unknown;
 };
+
+export type AgentsGetAgentFeedData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/agents/feed";
+};
+
+export type AgentsGetAgentFeedErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsGetAgentFeedError =
+  AgentsGetAgentFeedErrors[keyof AgentsGetAgentFeedErrors];
+
+export type AgentsGetAgentFeedResponses = {
+  /**
+   * Successful Response
+   */
+  200: AgentFeedOut;
+};
+
+export type AgentsGetAgentFeedResponse =
+  AgentsGetAgentFeedResponses[keyof AgentsGetAgentFeedResponses];
 
 export type AgentsGetPausesData = {
   body?: never;
@@ -8280,7 +8529,12 @@ export type KnowledgeGetDocumentData = {
      */
     document_id: string;
   };
-  query?: never;
+  query?: {
+    /**
+     * Schema Version
+     */
+    schema_version?: number | null;
+  };
   url: "/v1/knowledge/documents/{document_id}";
 };
 
@@ -8942,6 +9196,14 @@ export type KnowledgeSearchData = {
      * Limit
      */
     limit?: number;
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Schema Version
+     */
+    schema_version?: number | null;
   };
   url: "/v1/knowledge/search";
 };
@@ -8986,11 +9248,9 @@ export type KnowledgeSearchError =
 
 export type KnowledgeSearchResponses = {
   /**
-   * Response Knowledge Search
-   *
    * Successful Response
    */
-  200: Array<KnowledgeHit>;
+  200: PageKnowledgeHit;
 };
 
 export type KnowledgeSearchResponse =
@@ -10104,6 +10364,75 @@ export type ProjectsUpdateProjectResponses = {
 export type ProjectsUpdateProjectResponse =
   ProjectsUpdateProjectResponses[keyof ProjectsUpdateProjectResponses];
 
+export type AgentsListActivityData = {
+  body?: never;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: {
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/projects/{project_id}/activity";
+};
+
+export type AgentsListActivityErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsListActivityError =
+  AgentsListActivityErrors[keyof AgentsListActivityErrors];
+
+export type AgentsListActivityResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageActivityItem;
+};
+
+export type AgentsListActivityResponse =
+  AgentsListActivityResponses[keyof AgentsListActivityResponses];
+
 export type ProjectsArchiveProjectData = {
   body: TumnisModulesProjectsRouterVersionIn;
   path: {
@@ -10163,6 +10492,64 @@ export type ProjectsArchiveProjectResponses = {
 
 export type ProjectsArchiveProjectResponse =
   ProjectsArchiveProjectResponses[keyof ProjectsArchiveProjectResponses];
+
+export type AgentsAskData = {
+  body: AskIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/ask";
+};
+
+export type AgentsAskErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsAskError = AgentsAskErrors[keyof AgentsAskErrors];
+
+export type AgentsAskResponses = {
+  /**
+   * Successful Response
+   */
+  201: AskOut;
+};
+
+export type AgentsAskResponse = AgentsAskResponses[keyof AgentsAskResponses];
 
 export type TasksGetBoardData = {
   body?: never;
@@ -10467,6 +10854,75 @@ export type ProjectsGetProjectContextResponses = {
 
 export type ProjectsGetProjectContextResponse =
   ProjectsGetProjectContextResponses[keyof ProjectsGetProjectContextResponses];
+
+export type TasksListInboxData = {
+  body?: never;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: {
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/projects/{project_id}/inbox";
+};
+
+export type TasksListInboxErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksListInboxError =
+  TasksListInboxErrors[keyof TasksListInboxErrors];
+
+export type TasksListInboxResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageReviewItemOut;
+};
+
+export type TasksListInboxResponse =
+  TasksListInboxResponses[keyof TasksListInboxResponses];
 
 export type AgentsPauseProjectData = {
   body: ProjectPauseIn;

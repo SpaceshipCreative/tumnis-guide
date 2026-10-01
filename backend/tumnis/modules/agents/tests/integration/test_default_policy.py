@@ -101,4 +101,5 @@ async def test_allowed_class_writes_one_auto_approval_row(  # noqa: PLR0917
     assert rows[0]["details"] == {
         "action_class": "push_feature_branch",
         "rule": "allowed_by_policy",
+        "project_id": str(world.project_id),
     }

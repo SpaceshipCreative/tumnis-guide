@@ -27,16 +27,29 @@ from typing import Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from sqlalchemy import Table, update
+from sqlalchemy import Table, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core import audit
 from tumnis.core.errors import ProblemError
-from tumnis.modules.agents.models import ApprovalRow, QuestionRow
+from tumnis.modules.agents.models import AgentProfile, ApprovalRow, QuestionRow, RunRow
 from tumnis.modules.tasks import api as tasks
 
 _questions: Table = QuestionRow.__table__  # type: ignore[assignment]
 _approvals: Table = ApprovalRow.__table__  # type: ignore[assignment]
+_runs: Table = RunRow.__table__  # type: ignore[assignment]
+_profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
+
+
+async def project_of_run(s: AsyncSession, run_id: UUID) -> UUID | None:
+    """The project of the run's profile (None for a master run): what the run's audit
+    rows carry, so they show in the project's Activity (P2-17)."""
+    found: UUID | None = await s.scalar(
+        select(_profiles.c.project_id)
+        .select_from(_runs.join(_profiles, _profiles.c.id == _runs.c.profile_id))
+        .where(_runs.c.id == run_id)
+    )
+    return found
 
 
 class ForeignReach(BaseModel):
@@ -186,6 +199,7 @@ async def _approval_decided(s: AsyncSession, d: tasks.Deciding) -> str | None:
             "run_id": str(approval.run_id),
         },
         occurred_at=d.now,
+        project_id=await project_of_run(s, approval.run_id),
     )
     return reason
 
