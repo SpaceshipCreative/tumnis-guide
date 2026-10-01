@@ -32,7 +32,7 @@ TABLE = [
 
 
 def _verdict(action: str, tainted: bool, noul: Any, moved: bool) -> Any:
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
         DEFAULT_POLICY,
         NoulAnswer,
         PolicySnapshot,
@@ -56,7 +56,6 @@ def _verdict(action: str, tainted: bool, noul: Any, moved: bool) -> Any:
 
 @pytest.mark.req("FR-5.6")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 @pytest.mark.parametrize(
     ("action", "tainted", "noul", "moved", "outcome", "rule"),
     TABLE,
@@ -85,7 +84,6 @@ NOULS = st.one_of(
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 @given(
     action=ACTIONS,
     gated=st.frozensets(ACTIONS, max_size=5),
@@ -103,7 +101,7 @@ def test_tainted_run_every_action_needs_approval(
     """T-P2-05-09
     For any action, any policy and any answer from Decisions, a tainted run gets
     `approval_required` with rule `tainted_run`."""
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
         NoulAnswer,
         PolicySnapshot,
         approval_need,

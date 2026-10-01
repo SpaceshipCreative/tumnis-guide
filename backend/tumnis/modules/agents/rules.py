@@ -984,3 +984,112 @@ def plausibility_flag(answer: _ScoreView | None, route: str) -> PlausibilityFlag
 def enrichment_settled(status: str | None) -> bool:
     """Whether an enrichment has run and ended (not NULL, not pending or running)."""
     return status is not None and status not in ENRICHMENT_BUSY
+
+
+# --- Approvals (P2-05, FR-5.6, SAF-1) --------------------------------------------------------
+
+ActionClass = Literal[
+    "send_email",
+    "merge_main",
+    "push_main",
+    "force_push",
+    "deploy_production",
+    "proxmox_destructive",
+    "spend_money",
+    "delete_files",
+    "push_feature_branch",
+    "open_pull_request",
+    "trigger_preview_deploy",
+    "proxmox_create_start",
+    "create_draft",
+    "read",
+]
+DEFAULT_GATED: Final[frozenset[str]] = frozenset(
+    {
+        "send_email",
+        "merge_main",
+        "push_main",
+        "force_push",
+        "deploy_production",
+        "proxmox_destructive",
+        "spend_money",
+        "delete_files",
+    }
+)  # FR-5.6
+DEFAULT_ALLOWED: Final[frozenset[str]] = frozenset(
+    {
+        "push_feature_branch",
+        "open_pull_request",
+        "trigger_preview_deploy",
+        "proxmox_create_start",
+        "create_draft",
+        "read",
+    }
+)  # FR-5.6
+READ_ACTION: Final = "read"  # allowed on a clean run with no row at all
+NOUL_MIDPOINT: Final = 0.5
+
+VerdictRule = Literal[
+    "tainted_run",
+    "gated_by_policy",
+    "allowed_by_policy",
+    "unknown_needs_decision",
+    "unknown_decided_safe",
+    "unknown_below_threshold",
+    "unknown_decided_gated",
+    "decisions_unavailable",
+]
+
+
+@dataclass(frozen=True)
+class PolicySnapshot:
+    """A project's approval policy (FR-5.6): the classes it gates and the ones it allows."""
+
+    gated: frozenset[str]
+    allowed: frozenset[str]
+
+
+DEFAULT_POLICY: Final = PolicySnapshot(gated=DEFAULT_GATED, allowed=DEFAULT_ALLOWED)
+
+
+@dataclass(frozen=True)
+class NoulAnswer:
+    p: float  # probability that the Noul's question is true (here: approval is needed)
+    confidence: float
+    fallback: bool  # answered by the vLLM fallback (stricter threshold applied by decisions)
+
+
+@dataclass(frozen=True)
+class PolicyVerdict:
+    outcome: Literal["allowed", "approval_required"]
+    rule: VerdictRule
+
+
+def approval_need(
+    action: str,
+    policy: PolicySnapshot,
+    *,
+    run_tainted: bool,
+    noul: NoulAnswer | None,
+    threshold: float | None,
+) -> PolicyVerdict:
+    """The server's approval rule (FR-5.6): a tainted run needs approval for everything
+    (SAF-1); then the project's gated and allowed classes; an action the policy does not
+    name needs approval unless Decisions answered confidently that it is safe. `threshold`
+    None means Decisions was not asked yet; `noul` None after asking means nobody
+    answered. Below the threshold never silently allows (FR-11.4)."""
+    if run_tainted:
+        return PolicyVerdict("approval_required", "tainted_run")
+    if action in policy.gated:
+        return PolicyVerdict("approval_required", "gated_by_policy")
+    if action in policy.allowed:
+        return PolicyVerdict("allowed", "allowed_by_policy")
+    if threshold is None:
+        return PolicyVerdict("approval_required", "unknown_needs_decision")
+    if noul is None:
+        return PolicyVerdict("approval_required", "decisions_unavailable")
+    if noul.confidence < threshold:
+        return PolicyVerdict("approval_required", "unknown_below_threshold")
+    if noul.p >= NOUL_MIDPOINT:
+        return PolicyVerdict("approval_required", "unknown_decided_gated")
+    return PolicyVerdict("allowed", "unknown_decided_safe")
