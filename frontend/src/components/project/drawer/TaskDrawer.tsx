@@ -3,11 +3,10 @@
 // laptop, a full sheet on the phone; Escape or Close shuts it. P2-04: an AI or Hybrid
 // task has Run; `?run=<id>` shows that run (RunView) in the drawer, Back returns.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 
 import type { RunRequested } from "../../../api/types.gen";
 import { ApiError, apiWrite, useWrite } from "../../../lib/fetch";
-import { RunView } from "../../runs/RunView";
 
 import {
   taskQueryKey,
@@ -160,6 +159,12 @@ function Enriched({ task }: { task: Task }) {
     </p>
   );
 }
+
+// The run view loads only when a run is open (`?run=`), so the project page does not
+// carry its code (P0-29's blocking-time budget).
+const RunView = lazy(() =>
+  import("../../runs/RunView").then((m) => ({ default: m.RunView })),
+);
 
 // Run (P2-04, FR-5.4): an AI or Hybrid task the agent may still work on asks for a run
 // (`POST /v1/tasks/{id}/run`, 202) and the drawer switches to it; the server refuses
@@ -361,7 +366,11 @@ export function TaskDrawer({
             >
               Back to the task
             </button>
-            <RunView runId={runId} />
+            <Suspense
+              fallback={<p className="text-sm text-muted">Loading the run…</p>}
+            >
+              <RunView runId={runId} />
+            </Suspense>
           </div>
         ) : data ? (
           <TaskDetails task={data} onClose={onClose} onRun={onRun} />
