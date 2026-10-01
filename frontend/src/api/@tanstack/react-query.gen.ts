@@ -55,14 +55,23 @@ import {
   githubWebhook,
   healthLive,
   healthReady,
+  knowledgeAddLink,
   knowledgeCreateLocation,
+  knowledgeCreateTextEntry,
   knowledgeGetBrief,
   knowledgeGetDocument,
   knowledgeGetFile,
+  knowledgeGetQuota,
+  knowledgeListDocuments,
   knowledgeListLocations,
+  knowledgeListVersions,
+  knowledgeRestoreDocument,
+  knowledgeSearch,
   knowledgeSetDefaultLocation,
   knowledgeSetProjectFolder,
+  knowledgeSetTrust,
   knowledgeTestLocation,
+  knowledgeTrashDocument,
   knowledgeUpdateDocument,
   knowledgeUploadDocument,
   type Options,
@@ -247,9 +256,15 @@ import type {
   HealthLiveData,
   HealthLiveResponse,
   HealthReadyData,
+  KnowledgeAddLinkData,
+  KnowledgeAddLinkError,
+  KnowledgeAddLinkResponse,
   KnowledgeCreateLocationData,
   KnowledgeCreateLocationError,
   KnowledgeCreateLocationResponse,
+  KnowledgeCreateTextEntryData,
+  KnowledgeCreateTextEntryError,
+  KnowledgeCreateTextEntryResponse,
   KnowledgeGetBriefData,
   KnowledgeGetBriefError,
   KnowledgeGetBriefResponse,
@@ -259,18 +274,39 @@ import type {
   KnowledgeGetFileData,
   KnowledgeGetFileError,
   KnowledgeGetFileResponse,
+  KnowledgeGetQuotaData,
+  KnowledgeGetQuotaError,
+  KnowledgeGetQuotaResponse,
+  KnowledgeListDocumentsData,
+  KnowledgeListDocumentsError,
+  KnowledgeListDocumentsResponse,
   KnowledgeListLocationsData,
   KnowledgeListLocationsError,
   KnowledgeListLocationsResponse,
+  KnowledgeListVersionsData,
+  KnowledgeListVersionsError,
+  KnowledgeListVersionsResponse,
+  KnowledgeRestoreDocumentData,
+  KnowledgeRestoreDocumentError,
+  KnowledgeRestoreDocumentResponse,
+  KnowledgeSearchData,
+  KnowledgeSearchError,
+  KnowledgeSearchResponse,
   KnowledgeSetDefaultLocationData,
   KnowledgeSetDefaultLocationError,
   KnowledgeSetDefaultLocationResponse,
   KnowledgeSetProjectFolderData,
   KnowledgeSetProjectFolderError,
   KnowledgeSetProjectFolderResponse,
+  KnowledgeSetTrustData,
+  KnowledgeSetTrustError,
+  KnowledgeSetTrustResponse,
   KnowledgeTestLocationData,
   KnowledgeTestLocationError,
   KnowledgeTestLocationResponse,
+  KnowledgeTrashDocumentData,
+  KnowledgeTrashDocumentError,
+  KnowledgeTrashDocumentResponse,
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentError,
   KnowledgeUpdateDocumentResponse,
@@ -1781,6 +1817,91 @@ export const authRotateKeyMutation = (
   return mutationOptions;
 };
 
+export const knowledgeListDocumentsQueryKey = (
+  options?: Options<KnowledgeListDocumentsData>,
+) => createQueryKey("knowledgeListDocuments", options);
+
+/**
+ * List Documents
+ *
+ * A project's knowledge items (none: the workspace knowledge base's), oldest first.
+ */
+export const knowledgeListDocumentsOptions = (
+  options?: Options<KnowledgeListDocumentsData>,
+) =>
+  queryOptions<
+    KnowledgeListDocumentsResponse,
+    KnowledgeListDocumentsError,
+    KnowledgeListDocumentsResponse,
+    ReturnType<typeof knowledgeListDocumentsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeListDocuments({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeListDocumentsQueryKey(options),
+  });
+
+export const knowledgeListDocumentsInfiniteQueryKey = (
+  options?: Options<KnowledgeListDocumentsData>,
+): QueryKey<Options<KnowledgeListDocumentsData>> =>
+  createQueryKey("knowledgeListDocuments", options, true);
+
+/**
+ * List Documents
+ *
+ * A project's knowledge items (none: the workspace knowledge base's), oldest first.
+ */
+export const knowledgeListDocumentsInfiniteOptions = (
+  options?: Options<KnowledgeListDocumentsData>,
+) => {
+  const opts = infiniteQueryOptions<
+    KnowledgeListDocumentsResponse,
+    KnowledgeListDocumentsError,
+    InfiniteData<KnowledgeListDocumentsResponse>,
+    QueryKey<Options<KnowledgeListDocumentsData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<KnowledgeListDocumentsData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<KnowledgeListDocumentsData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await knowledgeListDocuments({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: knowledgeListDocumentsInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
 /**
  * Upload Document
  *
@@ -1802,6 +1923,94 @@ export const knowledgeUploadDocumentMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await knowledgeUploadDocument({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Add Link
+ *
+ * A link as a knowledge item; its content is never fetched.
+ */
+export const knowledgeAddLinkMutation = (
+  options?: Partial<Options<KnowledgeAddLinkData>>,
+): UseMutationOptions<
+  KnowledgeAddLinkResponse,
+  KnowledgeAddLinkError,
+  Options<KnowledgeAddLinkData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeAddLinkResponse,
+    KnowledgeAddLinkError,
+    Options<KnowledgeAddLinkData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeAddLink({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Create Text Entry
+ *
+ * A text entry (Markdown) in a project or the workspace knowledge base: version 1,
+ * searchable at once, trusted (FR-15.5); in a project with a folder, also `notes/`.
+ */
+export const knowledgeCreateTextEntryMutation = (
+  options?: Partial<Options<KnowledgeCreateTextEntryData>>,
+): UseMutationOptions<
+  KnowledgeCreateTextEntryResponse,
+  KnowledgeCreateTextEntryError,
+  Options<KnowledgeCreateTextEntryData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeCreateTextEntryResponse,
+    KnowledgeCreateTextEntryError,
+    Options<KnowledgeCreateTextEntryData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeCreateTextEntry({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Trash Document
+ *
+ * To the trash: hidden from lists, reads and search until restored.
+ */
+export const knowledgeTrashDocumentMutation = (
+  options?: Partial<Options<KnowledgeTrashDocumentData>>,
+): UseMutationOptions<
+  KnowledgeTrashDocumentResponse,
+  KnowledgeTrashDocumentError,
+  Options<KnowledgeTrashDocumentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeTrashDocumentResponse,
+    KnowledgeTrashDocumentError,
+    Options<KnowledgeTrashDocumentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeTrashDocument({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -1845,7 +2054,9 @@ export const knowledgeGetDocumentOptions = (
 /**
  * Update Document
  *
- * Replace a text entry's Markdown body; 409 `stale_version` with the current entry.
+ * Edit a document: a text entry's Markdown body (a new version, its note file
+ * rewritten), any document's title, tags or pin. 409 `stale_version` with the current
+ * document; 409 `not_text` for a body on anything but a text entry.
  */
 export const knowledgeUpdateDocumentMutation = (
   options?: Partial<Options<KnowledgeUpdateDocumentData>>,
@@ -1870,6 +2081,95 @@ export const knowledgeUpdateDocumentMutation = (
   };
   return mutationOptions;
 };
+
+/**
+ * Restore Document
+ *
+ * Back from the trash; 404 for a document that is not in it.
+ */
+export const knowledgeRestoreDocumentMutation = (
+  options?: Partial<Options<KnowledgeRestoreDocumentData>>,
+): UseMutationOptions<
+  KnowledgeRestoreDocumentResponse,
+  KnowledgeRestoreDocumentError,
+  Options<KnowledgeRestoreDocumentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeRestoreDocumentResponse,
+    KnowledgeRestoreDocumentError,
+    Options<KnowledgeRestoreDocumentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeRestoreDocument({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Set Trust
+ *
+ * A person marks the document trusted or untrusted (audited); keys and agents
+ * cannot (403 `session_required`).
+ */
+export const knowledgeSetTrustMutation = (
+  options?: Partial<Options<KnowledgeSetTrustData>>,
+): UseMutationOptions<
+  KnowledgeSetTrustResponse,
+  KnowledgeSetTrustError,
+  Options<KnowledgeSetTrustData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeSetTrustResponse,
+    KnowledgeSetTrustError,
+    Options<KnowledgeSetTrustData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeSetTrust({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const knowledgeListVersionsQueryKey = (
+  options: Options<KnowledgeListVersionsData>,
+) => createQueryKey("knowledgeListVersions", options);
+
+/**
+ * List Versions
+ *
+ * Every kept version of a live document, oldest first, each with its body.
+ */
+export const knowledgeListVersionsOptions = (
+  options: Options<KnowledgeListVersionsData>,
+) =>
+  queryOptions<
+    KnowledgeListVersionsResponse,
+    KnowledgeListVersionsError,
+    KnowledgeListVersionsResponse,
+    ReturnType<typeof knowledgeListVersionsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeListVersions({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeListVersionsQueryKey(options),
+  });
 
 export const knowledgeListLocationsQueryKey = (
   options?: Options<KnowledgeListLocationsData>,
@@ -2006,6 +2306,65 @@ export const knowledgeSetProjectFolderMutation = (
   };
   return mutationOptions;
 };
+
+export const knowledgeGetQuotaQueryKey = (
+  options?: Options<KnowledgeGetQuotaData>,
+) => createQueryKey("knowledgeGetQuota", options);
+
+/**
+ * Get Quota
+ *
+ * The workspace's knowledge bytes against its quota, and the scope's item count.
+ */
+export const knowledgeGetQuotaOptions = (
+  options?: Options<KnowledgeGetQuotaData>,
+) =>
+  queryOptions<
+    KnowledgeGetQuotaResponse,
+    KnowledgeGetQuotaError,
+    KnowledgeGetQuotaResponse,
+    ReturnType<typeof knowledgeGetQuotaQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetQuota({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetQuotaQueryKey(options),
+  });
+
+export const knowledgeSearchQueryKey = (
+  options: Options<KnowledgeSearchData>,
+) => createQueryKey("knowledgeSearch", options);
+
+/**
+ * Search
+ *
+ * Full-text search of a project's items and the workspace knowledge base (none: the
+ * whole workspace), citing document, heading path and page (FR-15.3).
+ */
+export const knowledgeSearchOptions = (options: Options<KnowledgeSearchData>) =>
+  queryOptions<
+    KnowledgeSearchResponse,
+    KnowledgeSearchError,
+    KnowledgeSearchResponse,
+    ReturnType<typeof knowledgeSearchQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeSearch({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeSearchQueryKey(options),
+  });
 
 export const planningGetProjectWeekQueryKey = (
   options: Options<PlanningGetProjectWeekData>,

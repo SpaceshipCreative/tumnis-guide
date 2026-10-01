@@ -18,15 +18,17 @@ from typing import Annotated, Any, Final
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import Depends, Request
+from fastapi import Depends, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, StringConstraints
+from pydantic import AnyHttpUrl, BaseModel, Field, StringConstraints
 
 from tumnis.core.audit_router import require_session
+from tumnis.core.clock import Clock
 from tumnis.core.errors import ProblemError
 from tumnis.core.idempotency import SessionDep
 from tumnis.core.ids import uuid7
 from tumnis.core.net import NetPolicy
+from tumnis.core.pagination import Page, PageParams, page_params
 from tumnis.core.principal import principal_of
 from tumnis.core.routing import RoutePolicy, authorize, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
@@ -111,8 +113,17 @@ async def set_project_folder(
 # /v1/knowledge/documents/{id}. Keep this block separate.
 
 
+Markdown = Annotated[str, StringConstraints(max_length=100_000)]
+Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+
+
 class TextDocumentPatch(BaseModel):
-    body_md: Annotated[str, StringConstraints(max_length=100_000)]
+    """A document edit (P0-24's body, P1-17's title, tags and pin); at least one field."""
+
+    body_md: Markdown | None = None
+    title: Title | None = None
+    tags: list[str] | None = Field(default=None, max_length=api.MAX_TAGS)
+    pinned: bool | None = None
     version: Version
 
 
@@ -139,12 +150,204 @@ async def get_brief(project_id: UUID, session: SessionDep) -> api.DocumentDTO:
     )
 )
 async def update_document(
-    document_id: UUID, body: TextDocumentPatch, session: SessionDep
+    document_id: UUID, body: TextDocumentPatch, request: Request, session: SessionDep
 ) -> api.DocumentDTO:
-    """Replace a text entry's Markdown body; 409 `stale_version` with the current entry."""
-    return await api.update_text_document(
-        session, document_id, body_md=body.body_md, version=body.version
+    """Edit a document: a text entry's Markdown body (a new version, its note file
+    rewritten), any document's title, tags or pin. 409 `stale_version` with the current
+    document; 409 `not_text` for a body on anything but a text entry."""
+    return await api.edit_document(
+        session,
+        document_id,
+        expected_version=body.version,
+        body_md=body.body_md,
+        title=body.title,
+        tags=body.tags,
+        pinned=body.pinned,
+        net=_net(request),
     )
+
+
+# --- P1-17: knowledge items, search, passages and quota -----------------------------------
+# Text entries and links (`POST /knowledge/documents/text`, the later `add_document` twin,
+# R-36; `.../link`), the project's list, trash and restore, versions, trust (a person
+# only, audited), full-text search (`q`) and the quota.
+
+_WRITE = RoutePolicy(
+    auth="session_or_key",
+    scopes=frozenset({"knowledge:write"}),
+    idempotent=True,
+    project_param="lookup:knowledge",
+)
+
+
+class TextEntryIn(BaseModel):
+    project_id: UUID | None = None  # None: the workspace knowledge base
+    title: Title
+    body_md: Markdown = ""
+
+
+class LinkIn(BaseModel):
+    project_id: UUID | None = None
+    url: AnyHttpUrl
+    title: Title | None = None
+
+
+class TrustIn(BaseModel):
+    trusted: bool
+
+
+def _scoped_ctx(request: Request, project_id: UUID | None) -> None:
+    """A project-limited key may not write to the workspace knowledge base (R-28: 404)."""
+    if project_id is None and principal_of(request).project_ids is not None:
+        raise ProblemError(404, "not_found", "Not found")
+
+
+@router.get("/knowledge/documents")
+@route_policy(
+    RoutePolicy(
+        auth="session_or_key",
+        scopes=frozenset({"context:read"}),
+        paginated=True,
+        project_param="query:project_id",
+    )
+)
+async def list_documents(
+    request: Request,
+    session: SessionDep,
+    page: Annotated[PageParams, Depends(page_params)],
+    project_id: UUID | None = None,
+) -> Page[api.DocumentDTO]:
+    """A project's knowledge items (none: the workspace knowledge base's), oldest first."""
+    _scoped_ctx(request, project_id)
+    return await api.list_documents(
+        session,
+        project_id,
+        cursor=page.cursor,
+        limit=page.limit,
+        project_ids=principal_of(request).project_ids,
+    )
+
+
+@router.post("/knowledge/documents/text", status_code=201)
+@route_policy(
+    RoutePolicy(
+        auth="session_or_key",
+        scopes=frozenset({"knowledge:write"}),
+        idempotent=True,
+        project_param="body:project_id",
+    )
+)
+async def create_text_entry(
+    body: TextEntryIn, request: Request, session: SessionDep
+) -> api.DocumentDTO:
+    """A text entry (Markdown) in a project or the workspace knowledge base: version 1,
+    searchable at once, trusted (FR-15.5); in a project with a folder, also `notes/`."""
+    _scoped_ctx(request, body.project_id)
+    return await api.create_text_entry(
+        session, body.project_id, body.title, body.body_md, net=_net(request)
+    )
+
+
+@router.post("/knowledge/documents/link", status_code=201)
+@route_policy(
+    RoutePolicy(
+        auth="session_or_key",
+        scopes=frozenset({"knowledge:write"}),
+        idempotent=True,
+        project_param="body:project_id",
+    )
+)
+async def add_link(body: LinkIn, request: Request, session: SessionDep) -> api.DocumentDTO:
+    """A link as a knowledge item; its content is never fetched."""
+    _scoped_ctx(request, body.project_id)
+    return await api.add_link(session, body.project_id, str(body.url), body.title)
+
+
+@router.delete("/knowledge/documents/{document_id}", status_code=204)
+@route_policy(_WRITE)
+async def trash_document(document_id: UUID, session: SessionDep) -> None:
+    """To the trash: hidden from lists, reads and search until restored."""
+    await api.trash(session, document_id)
+
+
+@router.post("/knowledge/documents/{document_id}/restore")
+@route_policy(
+    RoutePolicy(
+        auth="session_or_key",
+        scopes=frozenset({"knowledge:write"}),
+        idempotent=True,
+        project_param="lookup:knowledge",
+    )
+)
+async def restore_document(document_id: UUID, session: SessionDep) -> api.DocumentDTO:
+    """Back from the trash; 404 for a document that is not in it."""
+    return await api.restore(session, document_id)
+
+
+@router.post("/knowledge/documents/{document_id}/trust")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def set_trust(
+    document_id: UUID, body: TrustIn, request: Request, _ctx: Session, session: SessionDep
+) -> api.DocumentDTO:
+    """A person marks the document trusted or untrusted (audited); keys and agents
+    cannot (403 `session_required`)."""
+    clock: Clock = request.app.state.clock
+    return await api.mark_trusted(session, document_id, body.trusted, now=clock.now())
+
+
+@router.get("/knowledge/documents/{document_id}/versions")
+@route_policy(
+    RoutePolicy(
+        auth="session_or_key",
+        scopes=frozenset({"context:read"}),
+        project_param="lookup:knowledge",
+        unpaginated_reason="one document's versions, each an edit a person or a sync made",
+    )
+)
+async def list_versions(document_id: UUID, session: SessionDep) -> list[api.DocumentVersionOut]:
+    """Every kept version of a live document, oldest first, each with its body."""
+    await api.get_document(session, document_id)
+    return await api.list_document_versions(session, document_id)
+
+
+@router.get("/knowledge/search")
+@route_policy(
+    RoutePolicy(
+        auth="session_or_key",
+        scopes=frozenset({"context:read"}),
+        project_param="query:project_id",
+        unpaginated_reason="the top ranked hits, at most 50 (`limit`)",
+    )
+)
+async def search(
+    request: Request,
+    session: SessionDep,
+    q: Annotated[str, Query(min_length=1, max_length=500)],
+    project_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=api.SEARCH_LIMIT_MAX)] = 10,
+) -> list[api.KnowledgeHit]:
+    """Full-text search of a project's items and the workspace knowledge base (none: the
+    whole workspace), citing document, heading path and page (FR-15.3)."""
+    return await api.search_knowledge(
+        session,
+        q,
+        project_id=project_id,
+        limit=limit,
+        project_ids=principal_of(request).project_ids,
+    )
+
+
+@router.get("/knowledge/quota")
+@route_policy(
+    RoutePolicy(
+        auth="session_or_key",
+        scopes=frozenset({"context:read"}),
+        project_param="query:project_id",
+    )
+)
+async def get_quota(session: SessionDep, project_id: UUID | None = None) -> api.Quota:
+    """The workspace's knowledge bytes against its quota, and the scope's item count."""
+    return await api.quota(session, project_id)
 
 
 # --- P1-16: uploads and files --------------------------------------------------------------
@@ -239,7 +442,7 @@ async def upload_document(request: Request) -> api.UploadAccepted:
         project_param="lookup:knowledge",
     )
 )
-async def get_document(document_id: UUID, session: SessionDep) -> api.DocumentStatusOut:
+async def get_document(document_id: UUID, session: SessionDep) -> api.DocumentDTO:
     """A document's state (status, reason, kind, path): what the upload flow polls."""
     return await api.get_document(session, document_id)
 

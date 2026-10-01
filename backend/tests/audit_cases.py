@@ -265,6 +265,22 @@ async def change_threshold(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+# --- Knowledge trust (P1-17) -------------------------------------------------------------------
+
+
+async def change_document_trust(ctx: Ctx) -> None:
+    """A text entry in the workspace knowledge base, then `POST
+    /v1/knowledge/documents/{id}/trust {trusted: false}`: `document.trust_changed`."""
+    made = await ctx.session_client.post(
+        "/v1/knowledge/documents/text", json={"title": "Audit case", "body_md": "Text."}
+    )
+    made.raise_for_status()
+    response = await ctx.session_client.post(
+        f"/v1/knowledge/documents/{made.json()['id']}/trust", json={"trusted": False}
+    )
+    response.raise_for_status()
+
+
 AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("audit.exported", export_csv, "user"),
     AuditCase("dead_letter.retried", retry_dead_letter, "user"),
@@ -286,6 +302,7 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("runner.token_rotated", rotate_runner_token, "user"),
     AuditCase("data.purged", purge_project, "user"),
     AuditCase("threshold.changed", change_threshold, "user"),
+    AuditCase("document.trust_changed", change_document_trust, "user"),
 )
 
 # action -> the work package that builds its operation and adds its case.

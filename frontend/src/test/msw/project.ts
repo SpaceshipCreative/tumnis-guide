@@ -62,6 +62,13 @@ export interface BriefStub {
   pinned: boolean;
   version: number;
   label: "agent" | null;
+  tags: string[];
+  source: string | null;
+  status: "pending_scan" | "extracting" | "ready" | "quarantined" | "failed";
+  status_reason: string | null;
+  path: string | null;
+  provider_url: string | null;
+  current_version_id: string | null;
 }
 
 type ProjectOut = z.output<typeof zProjectOut>;
@@ -143,6 +150,13 @@ export class ProjectFake {
       pinned: true,
       version: 1,
       label: null,
+      tags: [],
+      source: "text",
+      status: "ready",
+      status_reason: null,
+      path: null,
+      provider_url: null,
+      current_version_id: null,
     };
     this.timezone = init.timezone ?? "America/New_York";
     this.deployApps = init.deployApps ?? [];

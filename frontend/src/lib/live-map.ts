@@ -58,6 +58,10 @@ export const LIVE_MAP: Record<
       "searchTypeaheadProjects",
       "coolifyListDeployStatus",
       "planningGetProjectWeek", // link edits change which events match (P1-12)
+      // P1-17: every knowledge write marks its project changed (the Knowledge rail).
+      "knowledgeListDocuments",
+      "knowledgeGetQuota",
+      "knowledgeSearch",
     ],
   },
   // The review badge (P0-18) and the review queue (P1-13).
@@ -125,6 +129,8 @@ export const NOT_LIVE = [
   // yet), and a file is a download, never a cached query.
   "knowledgeGetDocument",
   "knowledgeGetFile",
+  // A document's versions are read on demand when its history is opened (P1-17).
+  "knowledgeListVersions",
   // Calibration is evidence read on demand (P3-08); the Calibration screen refetches after
   // its own threshold edit.
   "decisionsGetCalibration",

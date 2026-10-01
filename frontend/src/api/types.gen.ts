@@ -649,6 +649,10 @@ export type DocumentDto = {
    */
   body_md: string | null;
   /**
+   * Current Version Id
+   */
+  current_version_id: string | null;
+  /**
    * Id
    */
   id: string;
@@ -661,6 +665,10 @@ export type DocumentDto = {
    */
   label: "agent" | null;
   /**
+   * Path
+   */
+  path: string | null;
+  /**
    * Pinned
    */
   pinned: boolean;
@@ -669,9 +677,29 @@ export type DocumentDto = {
    */
   project_id: string | null;
   /**
+   * Provider Url
+   */
+  provider_url: string | null;
+  /**
    * Role
    */
   role: string | null;
+  /**
+   * Source
+   */
+  source: string | null;
+  /**
+   * Status
+   */
+  status: "pending_scan" | "extracting" | "ready" | "quarantined" | "failed";
+  /**
+   * Status Reason
+   */
+  status_reason: string | null;
+  /**
+   * Tags
+   */
+  tags: Array<string>;
   /**
    * Tainted
    */
@@ -691,55 +719,33 @@ export type DocumentDto = {
 };
 
 /**
- * DocumentStatusOut
- *
- * A document's state as the upload flow polls it (P1-17 owns the full read).
+ * DocumentVersionOut
  */
-export type DocumentStatusOut = {
+export type DocumentVersionOut = {
   /**
-   * Current Version Id
+   * Body Md
    */
-  current_version_id: string | null;
+  body_md: string | null;
+  /**
+   * Content Hash
+   */
+  content_hash: string;
+  /**
+   * Document Id
+   */
+  document_id: string;
   /**
    * Id
    */
   id: string;
   /**
-   * Kind
+   * Size
    */
-  kind: string;
+  size: number;
   /**
-   * Path
+   * Version No
    */
-  path: string | null;
-  /**
-   * Project Id
-   */
-  project_id: string | null;
-  /**
-   * Status
-   */
-  status: "pending_scan" | "extracting" | "ready" | "quarantined" | "failed";
-  /**
-   * Status Reason
-   */
-  status_reason: string | null;
-  /**
-   * Tainted
-   */
-  tainted: boolean;
-  /**
-   * Title
-   */
-  title: string;
-  /**
-   * Trust
-   */
-  trust: "trusted" | "untrusted";
-  /**
-   * Version
-   */
-  version: number;
+  version_no: number;
 };
 
 /**
@@ -999,6 +1005,62 @@ export type KeyOut = {
 };
 
 /**
+ * KnowledgeHit
+ *
+ * One chunk found by `search_knowledge`, citing its document, heading path and page.
+ */
+export type KnowledgeHit = {
+  /**
+   * Chunk Id
+   */
+  chunk_id: string;
+  /**
+   * Document Id
+   */
+  document_id: string;
+  /**
+   * Document Title
+   */
+  document_title: string;
+  /**
+   * Heading Path
+   */
+  heading_path: Array<string>;
+  /**
+   * Page
+   */
+  page: number | null;
+  /**
+   * Page To
+   */
+  page_to: number | null;
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Rank
+   */
+  rank: number;
+  /**
+   * Snippet
+   */
+  snippet: string;
+  /**
+   * Tainted
+   */
+  tainted: boolean;
+  /**
+   * Text
+   */
+  text: string;
+  /**
+   * Trust
+   */
+  trust: "trusted" | "untrusted";
+};
+
+/**
  * Label
  */
 export type Label = "human" | "ai" | "hybrid";
@@ -1023,6 +1085,24 @@ export type LastDeployOut = {
    * Status
    */
   status: string;
+};
+
+/**
+ * LinkIn
+ */
+export type LinkIn = {
+  /**
+   * Project Id
+   */
+  project_id?: string | null;
+  /**
+   * Title
+   */
+  title?: string | null;
+  /**
+   * Url
+   */
+  url: string;
 };
 
 /**
@@ -1320,6 +1400,20 @@ export type PageDeadLetterOut = {
    * Items
    */
   items: Array<DeadLetterOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
+ * Page[DocumentDTO]
+ */
+export type PageDocumentDto = {
+  /**
+   * Items
+   */
+  items: Array<DocumentDto>;
   /**
    * Next Cursor
    */
@@ -2244,6 +2338,36 @@ export type PurgeOut = {
    * Status
    */
   status?: "accepted";
+};
+
+/**
+ * Quota
+ *
+ * Bytes the workspace's knowledge uses (current file versions plus text entries,
+ * trash included until it is purged) against its quota; `count` and `project_bytes` are
+ * the asked scope's (a project, or the workspace knowledge base).
+ */
+export type Quota = {
+  /**
+   * Count
+   */
+  count: number;
+  /**
+   * Project Bytes
+   */
+  project_bytes: number;
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Quota Bytes
+   */
+  quota_bytes: number;
+  /**
+   * Used Bytes
+   */
+  used_bytes: number;
 };
 
 /**
@@ -3612,16 +3736,48 @@ export type TaskWithLayoutOut = {
 
 /**
  * TextDocumentPatch
+ *
+ * A document edit (P0-24's body, P1-17's title, tags and pin); at least one field.
  */
 export type TextDocumentPatch = {
   /**
    * Body Md
    */
-  body_md: string;
+  body_md?: string | null;
+  /**
+   * Pinned
+   */
+  pinned?: boolean | null;
+  /**
+   * Tags
+   */
+  tags?: Array<string> | null;
+  /**
+   * Title
+   */
+  title?: string | null;
   /**
    * Version
    */
   version: number;
+};
+
+/**
+ * TextEntryIn
+ */
+export type TextEntryIn = {
+  /**
+   * Body Md
+   */
+  body_md?: string;
+  /**
+   * Project Id
+   */
+  project_id?: string | null;
+  /**
+   * Title
+   */
+  title: string;
 };
 
 /**
@@ -3813,6 +3969,16 @@ export type TrashIn = {
    * Version
    */
   version: number;
+};
+
+/**
+ * TrustIn
+ */
+export type TrustIn = {
+  /**
+   * Trusted
+   */
+  trusted: boolean;
 };
 
 /**
@@ -6075,6 +6241,74 @@ export type AuthRotateKeyResponses = {
 export type AuthRotateKeyResponse =
   AuthRotateKeyResponses[keyof AuthRotateKeyResponses];
 
+export type KnowledgeListDocumentsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/knowledge/documents";
+};
+
+export type KnowledgeListDocumentsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeListDocumentsError =
+  KnowledgeListDocumentsErrors[keyof KnowledgeListDocumentsErrors];
+
+export type KnowledgeListDocumentsResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageDocumentDto;
+};
+
+export type KnowledgeListDocumentsResponse =
+  KnowledgeListDocumentsResponses[keyof KnowledgeListDocumentsResponses];
+
 export type KnowledgeUploadDocumentData = {
   body: {
     file: Blob | File;
@@ -6134,6 +6368,176 @@ export type KnowledgeUploadDocumentResponses = {
 export type KnowledgeUploadDocumentResponse =
   KnowledgeUploadDocumentResponses[keyof KnowledgeUploadDocumentResponses];
 
+export type KnowledgeAddLinkData = {
+  body: LinkIn;
+  path?: never;
+  query?: never;
+  url: "/v1/knowledge/documents/link";
+};
+
+export type KnowledgeAddLinkErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeAddLinkError =
+  KnowledgeAddLinkErrors[keyof KnowledgeAddLinkErrors];
+
+export type KnowledgeAddLinkResponses = {
+  /**
+   * Successful Response
+   */
+  201: DocumentDto;
+};
+
+export type KnowledgeAddLinkResponse =
+  KnowledgeAddLinkResponses[keyof KnowledgeAddLinkResponses];
+
+export type KnowledgeCreateTextEntryData = {
+  body: TextEntryIn;
+  path?: never;
+  query?: never;
+  url: "/v1/knowledge/documents/text";
+};
+
+export type KnowledgeCreateTextEntryErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeCreateTextEntryError =
+  KnowledgeCreateTextEntryErrors[keyof KnowledgeCreateTextEntryErrors];
+
+export type KnowledgeCreateTextEntryResponses = {
+  /**
+   * Successful Response
+   */
+  201: DocumentDto;
+};
+
+export type KnowledgeCreateTextEntryResponse =
+  KnowledgeCreateTextEntryResponses[keyof KnowledgeCreateTextEntryResponses];
+
+export type KnowledgeTrashDocumentData = {
+  body?: never;
+  path: {
+    /**
+     * Document Id
+     */
+    document_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/documents/{document_id}";
+};
+
+export type KnowledgeTrashDocumentErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeTrashDocumentError =
+  KnowledgeTrashDocumentErrors[keyof KnowledgeTrashDocumentErrors];
+
+export type KnowledgeTrashDocumentResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type KnowledgeTrashDocumentResponse =
+  KnowledgeTrashDocumentResponses[keyof KnowledgeTrashDocumentResponses];
+
 export type KnowledgeGetDocumentData = {
   body?: never;
   path: {
@@ -6188,7 +6592,7 @@ export type KnowledgeGetDocumentResponses = {
   /**
    * Successful Response
    */
-  200: DocumentStatusOut;
+  200: DocumentDto;
 };
 
 export type KnowledgeGetDocumentResponse =
@@ -6253,6 +6657,188 @@ export type KnowledgeUpdateDocumentResponses = {
 
 export type KnowledgeUpdateDocumentResponse =
   KnowledgeUpdateDocumentResponses[keyof KnowledgeUpdateDocumentResponses];
+
+export type KnowledgeRestoreDocumentData = {
+  body?: never;
+  path: {
+    /**
+     * Document Id
+     */
+    document_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/documents/{document_id}/restore";
+};
+
+export type KnowledgeRestoreDocumentErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeRestoreDocumentError =
+  KnowledgeRestoreDocumentErrors[keyof KnowledgeRestoreDocumentErrors];
+
+export type KnowledgeRestoreDocumentResponses = {
+  /**
+   * Successful Response
+   */
+  200: DocumentDto;
+};
+
+export type KnowledgeRestoreDocumentResponse =
+  KnowledgeRestoreDocumentResponses[keyof KnowledgeRestoreDocumentResponses];
+
+export type KnowledgeSetTrustData = {
+  body: TrustIn;
+  path: {
+    /**
+     * Document Id
+     */
+    document_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/documents/{document_id}/trust";
+};
+
+export type KnowledgeSetTrustErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeSetTrustError =
+  KnowledgeSetTrustErrors[keyof KnowledgeSetTrustErrors];
+
+export type KnowledgeSetTrustResponses = {
+  /**
+   * Successful Response
+   */
+  200: DocumentDto;
+};
+
+export type KnowledgeSetTrustResponse =
+  KnowledgeSetTrustResponses[keyof KnowledgeSetTrustResponses];
+
+export type KnowledgeListVersionsData = {
+  body?: never;
+  path: {
+    /**
+     * Document Id
+     */
+    document_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/documents/{document_id}/versions";
+};
+
+export type KnowledgeListVersionsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeListVersionsError =
+  KnowledgeListVersionsErrors[keyof KnowledgeListVersionsErrors];
+
+export type KnowledgeListVersionsResponses = {
+  /**
+   * Response Knowledge List Versions
+   *
+   * Successful Response
+   */
+  200: Array<DocumentVersionOut>;
+};
+
+export type KnowledgeListVersionsResponse =
+  KnowledgeListVersionsResponses[keyof KnowledgeListVersionsResponses];
 
 export type KnowledgeListLocationsData = {
   body?: never;
@@ -6545,6 +7131,136 @@ export type KnowledgeSetProjectFolderResponses = {
 
 export type KnowledgeSetProjectFolderResponse =
   KnowledgeSetProjectFolderResponses[keyof KnowledgeSetProjectFolderResponses];
+
+export type KnowledgeGetQuotaData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+  };
+  url: "/v1/knowledge/quota";
+};
+
+export type KnowledgeGetQuotaErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeGetQuotaError =
+  KnowledgeGetQuotaErrors[keyof KnowledgeGetQuotaErrors];
+
+export type KnowledgeGetQuotaResponses = {
+  /**
+   * Successful Response
+   */
+  200: Quota;
+};
+
+export type KnowledgeGetQuotaResponse =
+  KnowledgeGetQuotaResponses[keyof KnowledgeGetQuotaResponses];
+
+export type KnowledgeSearchData = {
+  body?: never;
+  path?: never;
+  query: {
+    /**
+     * Q
+     */
+    q: string;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/knowledge/search";
+};
+
+export type KnowledgeSearchErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeSearchError =
+  KnowledgeSearchErrors[keyof KnowledgeSearchErrors];
+
+export type KnowledgeSearchResponses = {
+  /**
+   * Response Knowledge Search
+   *
+   * Successful Response
+   */
+  200: Array<KnowledgeHit>;
+};
+
+export type KnowledgeSearchResponse =
+  KnowledgeSearchResponses[keyof KnowledgeSearchResponses];
 
 export type PlanningGetProjectWeekData = {
   body?: never;
