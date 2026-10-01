@@ -61,6 +61,8 @@ from tumnis.modules.agents.models import (
     RunRow,
 )
 from tumnis.modules.agents.packet_builder import (
+    ENRICH_RESULT,
+    ENRICH_SKILL,
     MCP_PATH,
     REST_BASE,
     Callback,
@@ -68,9 +70,10 @@ from tumnis.modules.agents.packet_builder import (
     build_packet,
     enrichment_request,
     render_prompt,
+    task_snapshot,
 )
 from tumnis.modules.agents.payloads import RunSignalV1, RunStartedV1
-from tumnis.modules.agents.protocol import Provision, ProvisionResult, SchemaRef
+from tumnis.modules.agents.protocol import Provision, ProvisionResult
 from tumnis.modules.agents.review_kinds import DRIFT, DriftPayload, ForeignReach
 from tumnis.modules.agents.rules import (
     ESTIMATE,
@@ -1407,8 +1410,6 @@ api.register_provision_starter(start_provision)
 ENRICH_RUNS: Final = UUID("6f1e0b8a-3c2d-5e4f-9a8b-7c6d5e4f3a21")  # uuid5 namespace of run ids
 LABEL_POLL_S: Final = 0.5  # how often the enrichment looks for the label (plan default)
 APPLY_ATTEMPTS: Final = 3  # a user write between read and apply: read, merge, try again
-ENRICH_SKILL: Final = "enrich"
-ENRICH_RESULT: Final = SchemaRef(family="enrichment", name="result", version=1)
 
 
 def enrich_workflow_id(task_id: UUID, key: str) -> str:
@@ -1417,26 +1418,9 @@ def enrich_workflow_id(task_id: UUID, key: str) -> str:
     return f"enrich:{task_id}:{key}"
 
 
-def _snapshot(task: tasks.TaskOut) -> TaskSnapshot:
-    return TaskSnapshot(
-        id=task.id,
-        project_id=task.project_id,
-        title=task.title,
-        label=None if task.label is None else task.label.value,
-        label_source=task.label_source,
-        status=task.status.value,
-        first_action=task.first_action,
-        first_action_source=task.first_action_source,
-        acceptance_criteria=task.acceptance_criteria,
-        estimate_minutes=task.estimate_minutes,
-        version=task.version,
-        enrichment_status=task.enrichment_status,
-    )
-
-
 async def _read_snapshot(s: AsyncSession, task_id: UUID) -> TaskSnapshot | None:
     try:
-        return _snapshot(await tasks.get_task(s, task_id))
+        return task_snapshot(await tasks.get_task(s, task_id))
     except NotFound:
         return None
 

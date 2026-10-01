@@ -20315,7 +20315,8 @@
               "enum": [
                 "task",
                 "proposal",
-                "stuck"
+                "stuck",
+                "enrich"
               ],
               "title": "Kind",
               "type": "string"

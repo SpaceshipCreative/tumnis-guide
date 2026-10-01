@@ -10251,7 +10251,7 @@ export type AgentsGetTaskPacketData = {
     /**
      * Kind
      */
-    kind?: "task" | "proposal" | "stuck";
+    kind?: "task" | "proposal" | "stuck" | "enrich";
   };
   url: "/v1/tasks/{task_id}/packet";
 };

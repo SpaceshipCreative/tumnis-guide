@@ -2907,7 +2907,10 @@ export const zAgentsGetTaskPacketPath = z.object({
 
 export const zAgentsGetTaskPacketQuery = z.object({
   schema_version: z.int().nullish(),
-  kind: z.enum(["task", "proposal", "stuck"]).optional().default("task"),
+  kind: z
+    .enum(["task", "proposal", "stuck", "enrich"])
+    .optional()
+    .default("task"),
 });
 
 /**
