@@ -112,6 +112,7 @@ async def test_kill_switch_cancels_running_holds_queued_and_resume_releases(  # 
             return await run_status(session_client, queued) == "running"
 
         assert await until(released)
+        await world.delivered(queued)
         assert len(world.packets(queued)) == 1
 
     [on] = audit(db, "killswitch.on")
