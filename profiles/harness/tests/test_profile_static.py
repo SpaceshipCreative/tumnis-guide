@@ -164,24 +164,47 @@ TUMNIS_CODE = (
     (REPO / "daemon" / "tumnis_daemon", ("*.py",)),
     (REPO / "frontend" / "src", ("*.ts", "*.tsx")),
 )
+# Test files and fixtures are test data, not code paths: a fixture may mock an agent's own
+# tool inventory (P2-17's AgentRail.test.tsx lists the worker tools an agent reports).
+TEST_DIRS = {"tests", "test"}
+TEST_FILE = re.compile(r"(\.test\.tsx?|_test\.py)$|^test_.*\.py$")
+
+
+def _is_test_path(path: Path, root: Path) -> bool:
+    rel = path.relative_to(root)
+    return bool(TEST_DIRS.intersection(rel.parts[:-1])) or bool(TEST_FILE.search(rel.name))
+
+
+def _worker_names_in(code: tuple[tuple[Path, tuple[str, ...]], ...], base: Path) -> list[str]:
+    return [
+        str(path.relative_to(base))
+        for root, globs in code
+        for glob in globs
+        for path in root.rglob(glob)
+        if not _is_test_path(path, root)
+        and WORKER_NAMES.search(path.read_text(encoding="utf-8", errors="replace"))
+    ]
 
 
 @pytest.mark.req("FR-5.3")
 @pytest.mark.wp("P2-12")
-def test_no_worker_routing_in_tumnis() -> None:
+def test_no_worker_routing_in_tumnis(tmp_path: Path) -> None:
     """T-P2-12-09
     Worker routing lives in the profile (FR-5.3): no source file of the backend, the
     daemon or the frontend names Claude Code or Codex, so Tumnis never routes to a worker.
+    Test files and fixtures are not code paths and are not scanned.
     The check itself finds a planted name.
     """
-    found = [
-        str(path.relative_to(REPO))
-        for root, globs in TUMNIS_CODE
-        for glob in globs
-        for path in root.rglob(glob)
-        if WORKER_NAMES.search(path.read_text(encoding="utf-8", errors="replace"))
-    ]
+    found = _worker_names_in(TUMNIS_CODE, REPO)
     assert found == []
+    planted = tmp_path / "src" / "lib"
+    planted.mkdir(parents=True)
+    (planted / "route.ts").write_text("const worker = 'claude-code';\n", encoding="utf-8")
+    (planted / "route.test.ts").write_text("const worker = 'codex';\n", encoding="utf-8")
+    (tmp_path / "src" / "tests").mkdir()
+    (tmp_path / "src" / "tests" / "fixture.ts").write_text("'codex'\n", encoding="utf-8")
+    planted_code = ((tmp_path / "src", ("*.ts",)),)
+    assert _worker_names_in(planted_code, tmp_path) == ["src/lib/route.ts"]
     assert WORKER_NAMES.search("route = 'claude-code'")
     assert WORKER_NAMES.search("if worker == 'Codex':")
     assert not WORKER_NAMES.search("encode codecs")
