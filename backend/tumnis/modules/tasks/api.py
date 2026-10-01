@@ -27,7 +27,7 @@ Also here: the ReviewItem interface (R-03, `review.py`), the `ProjectStatsSource
 health reads (registered at import) and the task seed writer.
 """
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Any, Final, Literal
 from uuid import UUID
@@ -878,7 +878,21 @@ async def _announce_created(s: AsyncSession, created: RowMapping, now: datetime 
     return _out(created)
 
 
-async def create_task(
+# The run task counter (P2-09, SAF-5): agents counts a task created with a run's task
+# token against the run's limit, in the caller's transaction, and raises 409
+# `run_limit_exceeded` past it. agents registers it at import (tasks cannot import agents:
+# agents imports tasks).
+RunTaskCounter = Callable[..., Awaitable[None]]
+_run_task_counter: list[RunTaskCounter] = []
+
+
+def register_run_task_counter(counter: RunTaskCounter) -> None:
+    """Set the counter `create_task` calls for a task made by a run's task token; called
+    as `counter(session, run_id, now=...)`."""
+    _run_task_counter[:] = [counter]
+
+
+async def create_task(  # the task, plus where it came from
     s: AsyncSession,
     actor: ActorRef,
     data: TaskCreate,
@@ -888,6 +902,7 @@ async def create_task(
     label_source: LabelSource | None = None,
     tainted: bool = False,
     context_item_ids: Sequence[UUID] = (),
+    run_id: UUID | None = None,
 ) -> TaskOut:
     """A task in Backlog or Today, last in its column; emits `task.created`. 404 for a
     project, parent or context item the caller cannot see; 422 `estimate_required` (an
@@ -898,8 +913,14 @@ async def create_task(
 
     Taint (P2-08, SAF-1) is derived once and stored: the OR of the linked context items,
     the parent task and the caller (`tainted`: a tainted run's token, or a key with no run,
-    R-31)."""
+    R-31).
+
+    `run_id` (a run's task token, P2-09) counts the task against the run's tasks-per-run
+    limit (SAF-5); past it the call is 409 `run_limit_exceeded` and nothing is created."""
     await _require_project(s, data.project_id)
+    if run_id is not None:
+        for counter in _run_task_counter:
+            await counter(s, run_id, now=_now(now))
     sources = [rules.TaintSource("user", None, tainted=False)]
     if tainted:
         sources.append(rules.TaintSource("run", None, tainted=True))

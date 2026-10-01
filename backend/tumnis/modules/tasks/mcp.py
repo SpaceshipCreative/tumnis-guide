@@ -110,6 +110,7 @@ async def _create(call: surface.SurfaceCall, data: CreateTaskIn) -> api.TaskWith
         api.TaskCreate(**_fields(data)),
         now=call.now,
         tainted=call.tainted,
+        run_id=call.caller.run_id,  # a run's task token counts against its limit (P2-09)
     )
     return await api.with_layout(call.session, created)
 

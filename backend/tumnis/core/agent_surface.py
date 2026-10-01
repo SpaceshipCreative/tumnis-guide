@@ -77,7 +77,6 @@ PENDING_TOOLS: Final[Mapping[str, str]] = {
     "request_approval": "P2-05",
     "delegate_task": "P2-06",
     "wait_for_task": "P2-06",
-    "pause_agents": "P2-09",
     "record_human_reply": "P2-16",
     "search_knowledge": "P2-17",
     "get_document": "P2-17",

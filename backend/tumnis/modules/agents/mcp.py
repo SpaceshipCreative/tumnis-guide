@@ -4,11 +4,15 @@
 | --- | --- | --- |
 | `get_task_packet` | tasks:read | `GET /v1/tasks/{task_id}/packet` |
 | `post_result` | tasks:write | `POST /v1/runs/{run_id}/result` |
+| `pause_agents` | delegate, master only | `POST /v1/agents/pause` |
 
 `get_task_packet` answers the task's packet as a run of the caller would get it, without a
 token (`callback.task_token: null`): the token exists only in the packet a dispatch sends.
 `post_result` (P2-04) stores the run's result with the run's own task token (403
 `run_mismatch` for another run's); only an agent posts one, so its twin refuses a session.
+`pause_agents` (P2-09, SAF-4, a plan addition) is the kill switch for the master: it pauses
+every agent, or one project's, and can never resume them (a person resumes in the app).
+Its twin also takes a session (the app's kill switch), which the router serves directly.
 
 agents also tells the agent surface which profile a caller acts for (`CallerFacts`): an
 API key linked to a profile (`set_profile_key`) acts for that profile, and the master
@@ -139,6 +143,55 @@ POST_RESULT = surface.register_op(
         project_resolver=_project_of_run,
         handler=_post_result,
         session_twin_allowed=False,  # a result comes from the run's agent, never a session
+    )
+)
+
+
+# --- The kill switch (P2-09, SAF-4) ---------------------------------------------------------
+
+
+class PauseBody(surface.SurfaceInput):
+    """The REST twin's body: what to pause and why."""
+
+    scope: api.PauseScope
+    project_id: UUID | None = None
+    reason: api.ReasonText
+
+
+class PauseAgentsIn(surface.WriteInput, PauseBody):
+    pass
+
+
+async def _pause(call: surface.SurfaceCall, data: PauseAgentsIn) -> api.PauseOut:
+    if data.scope == "workspace" and call.project_ids is not None:
+        # A project-limited caller cannot stop the other projects' agents.
+        raise ProblemError(404, "not_found", "Not found")
+    inp = api.PauseIn(scope=data.scope, project_id=data.project_id, reason=data.reason)
+    return await api.pause(
+        call.caller.principal.workspace_context(), inp, now=call.now, session=call.session
+    )
+
+
+PAUSE_AGENTS = surface.register_op(
+    surface.SurfaceOp(
+        name="pause_agents",
+        description=(
+            "Stop agents at once: scope workspace pauses every agent, scope project (with"
+            " project_id) one project's. Running runs are cancelled, queued runs are held and"
+            " no new run starts until a person resumes in the app; this tool cannot resume."
+            " Give the reason."
+        ),
+        scope="delegate",
+        input_model=PauseAgentsIn,
+        output_model=api.PauseOut,
+        rest_method="POST",
+        rest_path="/v1/agents/pause",
+        write=True,
+        updates_existing=False,
+        project_arg="project_id",
+        project_resolver=None,
+        handler=_pause,
+        master_only=True,
     )
 )
 

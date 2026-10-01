@@ -265,6 +265,55 @@ async def change_threshold(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+# --- The kill switch (P2-09) ----------------------------------------------------------------
+
+
+async def pause_all(ctx: Ctx) -> None:
+    """POST /v1/agents/pause with a reason: `killswitch.on`."""
+    response = await ctx.session_client.post(
+        "/v1/agents/pause", json={"scope": "workspace", "reason": "Audit case"}
+    )
+    response.raise_for_status()
+
+
+async def resume_all(ctx: Ctx) -> None:
+    """A pause, then POST /v1/agents/resume: `killswitch.off`."""
+    await pause_all(ctx)
+    response = await ctx.session_client.post(
+        "/v1/agents/resume", json={"scope": "workspace", "reason": "Audit case over"}
+    )
+    response.raise_for_status()
+
+
+async def _new_project(ctx: Ctx) -> str:
+    made = await ctx.session_client.post("/v1/projects", json={"name": "Pause case"})
+    made.raise_for_status()
+    project_id: str = made.json()["id"]
+    return project_id
+
+
+async def pause_project(ctx: Ctx) -> None:
+    """POST /v1/projects/{id}/pause with a reason: `project.paused`."""
+    project_id = await _new_project(ctx)
+    response = await ctx.session_client.post(
+        f"/v1/projects/{project_id}/pause", json={"reason": "Audit case"}
+    )
+    response.raise_for_status()
+
+
+async def resume_project(ctx: Ctx) -> None:
+    """A project pause, then POST /v1/projects/{id}/resume: `project.resumed`."""
+    project_id = await _new_project(ctx)
+    paused = await ctx.session_client.post(
+        f"/v1/projects/{project_id}/pause", json={"reason": "Audit case"}
+    )
+    paused.raise_for_status()
+    response = await ctx.session_client.post(
+        f"/v1/projects/{project_id}/resume", json={"reason": "Audit case over"}
+    )
+    response.raise_for_status()
+
+
 AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("audit.exported", export_csv, "user"),
     AuditCase("dead_letter.retried", retry_dead_letter, "user"),
@@ -286,6 +335,10 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("runner.token_rotated", rotate_runner_token, "user"),
     AuditCase("data.purged", purge_project, "user"),
     AuditCase("threshold.changed", change_threshold, "user"),
+    AuditCase("killswitch.on", pause_all, "user"),
+    AuditCase("killswitch.off", resume_all, "user"),
+    AuditCase("project.paused", pause_project, "user"),
+    AuditCase("project.resumed", resume_project, "user"),
 )
 
 # action -> the work package that builds its operation and adds its case.
