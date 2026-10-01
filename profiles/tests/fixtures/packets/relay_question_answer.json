@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "kind": "relay",
+  "run_id": "d3e2ee74-648c-5cb4-a552-8e97e908adc2",
+  "profile_id": "a118b87c-5c5b-5ad5-902c-e853237ee3de",
+  "skill": "relay",
+  "output_schema": {
+    "family": "harness",
+    "name": "relay_reply",
+    "version": 1
+  },
+  "correlation_id": "run:d3e2ee74-648c-5cb4-a552-8e97e908adc2",
+  "timeout_s": 60,
+  "prompt_text": "A message from the person arrived in the chat channel.\n\nUse the skill relay. Reply with one JSON object matching harness/relay_reply/1.\n\n<packet>\n{\n  \"kind\": \"relay\",\n  \"message\": {\n    \"id\": \"1676536492863234969\",\n    \"author\": \"person\",\n    \"content\": \"Spring\",\n    \"reply_to\": {\n      \"id\": \"1895951957589777229\",\n      \"author\": \"tumnis-master\",\n      \"content\": \"Question from the Acme site agent: which name should the launch campaign use? Answers: Spring, Summer\\nref question:2af75f7f-0281-524d-8496-d9ccaf4dc8ad\"\n    }\n  }\n}\n</packet>\n",
+  "body": {
+    "kind": "relay",
+    "message": {
+      "id": "1676536492863234969",
+      "author": "person",
+      "content": "Spring",
+      "reply_to": {
+        "id": "1895951957589777229",
+        "author": "tumnis-master",
+        "content": "Question from the Acme site agent: which name should the launch campaign use? Answers: Spring, Summer\nref question:2af75f7f-0281-524d-8496-d9ccaf4dc8ad"
+      }
+    }
+  },
+  "tainted": false
+}

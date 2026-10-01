@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "kind": "relay",
+  "run_id": "d5412845-7a0f-569a-a0ce-e67ea692f4a0",
+  "profile_id": "a118b87c-5c5b-5ad5-902c-e853237ee3de",
+  "skill": "relay",
+  "output_schema": {
+    "family": "harness",
+    "name": "relay_reply",
+    "version": 1
+  },
+  "correlation_id": "run:d5412845-7a0f-569a-a0ce-e67ea692f4a0",
+  "timeout_s": 60,
+  "prompt_text": "A message from the person arrived in the chat channel.\n\nUse the skill relay. Reply with one JSON object matching harness/relay_reply/1.\n\n<packet>\n{\n  \"kind\": \"relay\",\n  \"message\": {\n    \"id\": \"1689483595848173714\",\n    \"author\": \"person\",\n    \"content\": \"approve\",\n    \"reply_to\": {\n      \"id\": \"1898253491006770779\",\n      \"author\": \"tumnis-master\",\n      \"content\": \"Approval needed on Acme site: merge PR #12 into main. Decide it in Tumnis: https://tumnis.example/review?item=0b87169b-caa2-55c9-841b-32d58cd0c314\\nref approval:0b87169b-caa2-55c9-841b-32d58cd0c314\"\n    }\n  }\n}\n</packet>\n",
+  "body": {
+    "kind": "relay",
+    "message": {
+      "id": "1689483595848173714",
+      "author": "person",
+      "content": "approve",
+      "reply_to": {
+        "id": "1898253491006770779",
+        "author": "tumnis-master",
+        "content": "Approval needed on Acme site: merge PR #12 into main. Decide it in Tumnis: https://tumnis.example/review?item=0b87169b-caa2-55c9-841b-32d58cd0c314\nref approval:0b87169b-caa2-55c9-841b-32d58cd0c314"
+      }
+    }
+  },
+  "tainted": false
+}
