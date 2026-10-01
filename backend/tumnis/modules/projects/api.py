@@ -543,6 +543,17 @@ async def project_exists(s: AsyncSession, project_id: UUID) -> bool:
     return found is not None
 
 
+async def active_project_ids(s: AsyncSession) -> set[UUID]:
+    """The live, unarchived projects whose status is `active`: one statement (the daily
+    plan's eligible tasks belong to one, P1-11)."""
+    rows = await s.execute(
+        select(_projects.c.id).where(
+            _live(), _projects.c.archived_at.is_(None), _projects.c.status == "active"
+        )
+    )
+    return {row.id for row in rows}
+
+
 async def _project_itself(ctx: WorkspaceContext, project_id: UUID) -> UUID | None:
     """The `projects` project lookup: the project when it is live in the workspace (the
     agent surface locates a write's project with it, P2-01)."""

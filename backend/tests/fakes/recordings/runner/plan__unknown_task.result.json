@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "picks": [
+    {
+      "task_id": "title:Invoice Acme for phase one",
+      "reason": "Acme pays on receipt"
+    },
+    {
+      "task_id": "0199ffff-0000-7000-8000-00000000dead",
+      "reason": "A task nobody offered"
+    }
+  ],
+  "alternates": [],
+  "notes": null
+}

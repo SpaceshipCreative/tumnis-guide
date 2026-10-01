@@ -79,6 +79,12 @@ CASES = [
     ),
     (
         "events",
+        "plan.published",
+        1,
+        "backend/tests/contract/fixtures/events/plan.published/v1.json",
+    ),
+    (
+        "events",
         "policy.changed",
         1,
         "backend/tests/contract/fixtures/events/policy.changed/v1.json",

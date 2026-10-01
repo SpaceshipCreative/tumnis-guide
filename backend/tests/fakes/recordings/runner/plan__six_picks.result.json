@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "picks": [
+    {
+      "task_id": "title:Invoice Acme for phase one",
+      "reason": "One"
+    },
+    {
+      "task_id": "title:Send logo drafts to Acme",
+      "reason": "Two"
+    },
+    {
+      "task_id": "title:Record lesson one",
+      "reason": "Three"
+    },
+    {
+      "task_id": "title:Generate March analytics report",
+      "reason": "Four"
+    },
+    {
+      "task_id": "title:Write Acme proposal",
+      "reason": "Five"
+    },
+    {
+      "task_id": "title:Book a guest for lesson three",
+      "reason": "Six"
+    }
+  ],
+  "alternates": [],
+  "notes": null
+}
