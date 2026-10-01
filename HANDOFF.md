@@ -1,45 +1,61 @@
-# HANDOFF · P2-05 Questions and approvals (continuation 0 → 1)
+# HANDOFF · P2-05 Questions and approvals (continuation 1 → 2)
 
-Branch `wp/P2-05` (pushed to origin). No PR opened yet. No CodeRabbit threads. No CI run yet beyond the push.
+PR #121 (https://github.com/SpaceshipCreative/tumnis-guide/pull/121), branch `wp/P2-05`, base main. `@coderabbitai review` requested once at open (don't request another full review). The PR body (summary, deviations, docs, Scott item) is in `$TMPDIR/P2-05-c1/pr-body.md`. Edit it with `gh pr edit 121 --body-file` when markers or results change.
 
-## Done
+## Commits
 
-- `1545174` test(agents): P2-05 spec tests (red). All backend spec tests T-P2-05-01..14, strict xfail `spec:P2-05`:
-  - unit `backend/tumnis/modules/agents/tests/unit/test_policy_rules.py` (T-08 table, T-09 hypothesis property). Imports carry `# type: ignore[attr-defined]` until `rules.py` has the names; drop the ignores when the names land (mypy `warn_unused_ignores` will say so).
-  - integration `test_questions.py` (T-01, T-02, T-14), `test_approvals.py` (T-03, -04, -05, -10, -11, -12, -13), `test_approval_deploy.py` (T-06, T-07).
-  - helper `agents/tests/integration/_human.py` (no assertions): `human_waits(poll_seconds, slice_seconds)` calls `agents.api.configure_human_waits(poll_seconds=, wait_slice_seconds=)` (two `type: ignore` to drop); REST twin callers `ask` (`POST /v1/runs/{run_id}/questions`), `approval` (`POST /v1/runs/{run_id}/approvals`); `open_items`, `decide`, `taint`, `audit_rows`, `use_decisions`, `gated_noul`, `decisions_down` (fake loaded via importlib: agents may import only `decisions.api`).
-  - shared fixture edit: `backend/tests/fixtures/__init__.py` `WorkerKiller.start(killpoint, *, app_version=KILLER_APP_VERSION)` and `_start(killpoint, app_version)`.
-- `make check` green (run with `SEMGREP_SETTINGS_FILE/LOG_FILE/VERSION_CACHE_PATH` under `/tmp/claude-1002/P2-05-c0/`; frontend skipped, node_modules absent). Integration tests only collected locally (Docker rule); they are red by construction (routes and names missing).
-- Coordinator agreed: P2-05 owns `supervise_run` + version-aware `deliver_signal`. If P2-04 PR2 (signals.py split) merges first, put them in `signals.py`; keep one copy and both sides' tests. `agents_0006` OK; whoever merges second re-chains after main's agents head (P2-09 may also add one).
+- `1545174` test(agents): P2-05 spec tests (red), from c0.
+- `738cad0` feat(agents): the approval_need rule plus defaults. T-08/T-09 markers removed (unit, green).
+- `d5edcda` feat(agents): everything else in PR1's backend scope. `make check` green, unit 1588 passed. Pushed. CI not read yet.
 
-## Design settled (advisor-reviewed; follow it)
+## What's built (see the PR body for detail)
 
-- **Locked sweep constraints.** T-P2-01-05/-10/-11 require a key with no run to get 200 on every write op, so a keyless `ask_human`/`request_approval` answers 200 `HumanWaitOut(status="denied", rule="run_token_required")` (T-13 asserts that; #111 precedent for post_result). T-P2-08-07 needs `tainted: bool` on `HumanWaitOut` (true for a tainted run / keyless). Sweeps and T-P2-08-07 (direct `invoke`) must not long-poll 600 s: autouse fixture in `backend/tests/meta/conftest.py` setting `configure_human_waits(poll_seconds=0)` and resetting; also an autouse reset in `backend/tests/acceptance/conftest.py` (A2.x set 2 s process-wide). `configure_human_waits()` with no args restores defaults (poll 600 s, slice `WAIT_SLICE_S`). Add SAMPLES for both ops in `backend/tests/_mcp.py` using `running_run(world, project)`; make the task P→W move tolerant (only when the task is `in_progress`). Remove both from `PENDING_TOOLS` in `core/agent_surface.py`.
-- **Long poll after commit.** Add a post-commit hook to `SurfaceOp` (e.g. `after_commit(caller, output, parsed) -> output`) that `invoke` calls after `run_idempotent` / the read session (not when the REST caller passes its session). REST twins declared `idempotent=False` with `not_idempotent_reason`, calling `surface.invoke(..., door="rest", session=None)` with the `Idempotency-Key` header as `idempotency_key` (keeps `idempotency_key_required`), `session_twin_allowed=False`. REST body models = op input minus `run_id` (path) and `idempotency_key` (T-P2-01-02 parity). Poll the row (truth) every ≤0.5 s up to `poll_seconds` (deviation from plan's DBOS get_event slices). `retry_after_seconds=2` while rule is `unknown_needs_decision`.
-- **Open in the request transaction** (known verdicts): row pending + review item (`question`/`approval`, payload includes `question_id`/`approval_id`, prompt, choices / action_class, description, target, rule) + task P→W as the token actor + `run.signal{waiting}` + audit `agent.gated_action` (details: action_class, rule; target `approval`) + emit `question.asked`/`approval.requested`. An agents subscriber on those events starts `question_flow`/`approval_flow` on the new `human` queue (register in `worker.py`) in a fresh `contextvars.Context` (like `start_dispatch`) with ids `question:<id>:<DBOS.application_version>` / `approval:<id>:<version>`, stores `workflow_id` on the row. Flows: (approval, unknown class) `evaluate_approval` step asks Decisions (`decisions.api` re-export of new `decisions/questions/approval_need.py`; map `Decision` → `NoulAnswer(p=noul, confidence=|p-0.5|*2, fallback)`, threshold `confidence_bar(in-force, fallback)`), then auto-approve (row approved, audit `approval.auto`) or open; then `faults.killpoint("agents.<flow>.waiting")`, loop `recv_async("human", timeout_seconds=wait_slice)`, `set_event_async("decision", ...)`, close step: task W→P as system only if no other open wait on the run, `run.signal{resumed}`. `read` on an untainted run returns approved with no row; other allowed classes write an approved row + `approval.auto` audit.
-- **Decide path.** Add an owner hook to `ReviewKindSpec` (tasks/review.py), called in `_decide` after `update_versioned`, before `emit`, with the actor passed into `_decide`; it updates the agents row (answer / approved / denied + reason, decided_by/at), writes `approval.granted`/`approval.denied` (reason required: approve/deny payload model accepts blank, hook raises 422 `reason_required`; map `audit.ReasonRequiredError`), and returns `reason` for `HumanDecidedV1.reason`. Kinds: `question` actions (`answer`, `snooze`) payload `{answer}`; `approval` actions (`approve`, `deny`, `snooze`) payload `{reason}`. Extend the existing `agents.apply_review_decision` subscriber (never add/rename) to deliver `{"decision": ...}` on topic `human` to the row's workflow; if that workflow's `WorkflowStatus.app_version` != `DBOS.application_version`, cancel it and start `<kind>:<id>:<current>` with `resume=True`, update the row.
-- **Deploy (T-06).** In `deliver_signal`: if the run's workflow (runs.workflow_id or run id) is PENDING on an older app version, cancel it, start `supervise_run(workspace_id, run_id)` (id e.g. `supervise:<run>:<version>`, loads handle/budget/started_at/waiting from the row), update `runs.workflow_id`, then send. Extend `_runs.py::_cancel_open_dispatches` to cancel+wake open question/approval flows and supervise ids (else the `dbos` fixture teardown waits 10 s).
-- Other pieces: migration `agents_0006` (`approvals`, `questions` via `create_tenant_table`, after `agents_0005`; NOT NULL columns need server defaults or `row_factory.py` entries); models; `payloads.py` event models `question.asked`, `approval.requested` + fixtures `backend/tests/contract/fixtures/events/<name>/v1.json` + `make gen`; `settings.py` `AgentsSettings.human_wait_poll_seconds=600` wired in `create_app`; `tests/audit_cases.py` cases for `approval.granted`, `approval.denied`, `agent.gated_action`, `approval.auto` (or PENDING with reason if a Ctx can't drive them); `rules.py` `ActionClass`, `DEFAULT_GATED`, `DEFAULT_ALLOWED`, `PolicySnapshot`, `DEFAULT_POLICY`, `NoulAnswer`, `PolicyVerdict`, `approval_need` (100% coverage); `api.py` `check_action`, `Allowed/ApprovalRequired/Denied`, `AskHumanIn`, `RequestApprovalIn`, `HumanWaitOut`, `configure_human_waits`, `ask_human`, `request_approval`, `long_poll_decision`; `mcp.py` two ops; `router.py` two twins.
-- PR split: PR1 `wp/P2-05` = backend (all above + A2.2/A2.3 markers off once they pass in CI). PR2 `wp/P2-05-impl-2` = Vitest T-15/T-16 red first, `QuestionItem`, `ApprovalItem` (reason presets), review slots, `PolicyEditor` + `PUT /v1/projects/{id}/policy` (versioned, 409 current, class in both lists 422, `policy.changed` + audit) + `make gen`. e2e `A2.2-question.spec.ts` stays `test.fail()` (needs P2-04 PR2's `fakes.runner.script`).
+- `agents/human.py`: the api side. Models, `configure_human_waits`, `ask_human`, `request_approval`, `check_action`, `open_approval_in`, `long_poll_decision` (re-reads the row every 0.5 s after the commit), `policy_snapshot`. Re-exported from `agents/api.py`.
+- `agents/human_flows.py`: the worker side. `question_flow`, `approval_flow`, steps `load_decision`, `evaluate_approval`, `close_human_wait`, plus `start_human_wait` and `deliver_human_decision` (version-aware).
+- `agents/workflows.py`: `supervise_run`, `load_supervision`, `stale_workflow`, `_replace_supervisor`. `deliver_signal` replaces an older-version run workflow. `_supervise(..., waiting=)`. `HUMAN_QUEUE`.
+- `agents/events.py`: subscribers `agents.start_question_flow` and `agents.start_approval_flow`. `apply_review_decision` extended for question and approval.
+- `agents/review_kinds.py`: kinds `question` and `approval`, with `on_decide` hooks (row update, audit, 422 `reason_required` / `invalid_answer`).
+- `tasks/review.py`: `ReviewKindSpec.on_decide`, `Deciding`. `_decide` takes `actor`. `human.decided.reason` comes from the hook.
+- `core/agent_surface.py`: `SurfaceOp.after_commit`, `rest_twin_detached`, `PENDING_TOOLS` trimmed.
+- `decisions`: `questions/approval_need.py`, `api.ask_approval_need`, and a cache-key generation bumped by `use_providers` (T-10 would otherwise read case 1's cached answer).
+- Migration `agents_0006`, events + fixtures + `make gen`, worker `human` queue, test scaffolding (SAMPLES, meta/acceptance autouse fixtures, `_runs.py` teardown).
 
-## Remaining TDD steps (plan order)
+## Next steps
 
-1. T-08/09 rules → 2. T-13 guard → 3. T-01 → 4. T-02, T-14 → 5. T-03..05 → 6. T-10 → 7. T-11, T-12 → 8. T-06, T-07 → A2.2/A2.3 (`tests/acceptance`, need `configure_human_waits`) → open PR1, `@coderabbitai review` once, review loop, MERGE-READY to main → PR2.
+1. `gh pr checks 121`. Integration/acceptance tests still carry strict xfail `spec:P2-05`. An XPASS(strict) failure in CI means the test passed: remove that marker (Scott-approved step). A real failure: read `gh run view <id> --log-failed` and fix. Local `make test-int` at most once per continuation (Docker load rule).
+   - Integration tests: `agents/tests/integration/test_questions.py` (T-01, -02, -14), `test_approvals.py` (T-03, -04, -05, -10, -11, -12, -13), `test_approval_deploy.py` (T-06, -07).
+   - Acceptance A2.2 and A2.3: `tests/acceptance/test_a2_2_question_resumes_run.py`, `test_a2_3_approvals_and_taint.py`. Remove their markers only if they genuinely pass.
+   - Watch the P2-01 meta sweeps (`tests/meta/test_mcp_*`, `test_taint_sweep.py`) with the two new ops. T-P2-01-09 only covers update ops; T-08 needs `idempotency_key_required` on both doors (the detached twin passes None → 400).
+2. Likely trouble spots: event ordering of `run.signal{waiting}` vs `{resumed}`; `park_task` when the task isn't `in_progress`; T-06 relies on `stale_workflow` and `_replace_supervisor` (the v2 worker cancels v1's `dispatch_run` and starts `supervise:<run>:v2`); T-14 recovery on the same version.
+3. CodeRabbit loop per pr-review-loop.md. When CI is green and there are 0 open threads, SendMessage to main: "#121 MERGE-READY at <sha>".
+4. PR2 on `wp/P2-05-impl-2` (from wp/P2-05): Vitest T-15/T-16 red first, then `QuestionItem.tsx`, `ApprovalItem.tsx` (reason presets, blank blocked), review slots, `PolicyEditor.tsx` + `PUT /v1/projects/{id}/policy` (versioned, 409 current, a class in both lists is 422, `policy.changed` + audit), `make gen`. e2e `A2.2-question.spec.ts` stays `test.fail()`.
+5. Delete HANDOFF.md in a chore commit when done.
 
-## Deviations to report (so far / planned)
+## Deviations (also in the PR body)
 
-Keyless call answers 200 denied `run_token_required` (locked P2-01 sweeps); `HumanWaitOut.tainted`; long poll reads the row, not DBOS events; REST twins `idempotent=False` (op-level idempotency inside invoke); known-verdict waits opened in the request transaction (workflow opens only after Decisions evaluation); DBOS 3.1.0 no dedup on partitioned queues (deterministic workflow ids); test helper loads the decisions fake via importlib.
+1. Keyless call answers 200 `denied` / `run_token_required`.
+2. `HumanWaitOut.tainted`.
+3. The long poll reads the row, not DBOS events.
+4. REST twins `idempotent=False` (idempotent inside invoke; long poll after commit).
+5. Known verdicts open in the request transaction.
+6. Deterministic workflow ids (DBOS 3.1.0: no dedup on partitioned queues).
+7. Plan class names in `DEFAULT_GATED` vs the projects stored default vocabulary.
+8. `settings.human_wait_poll_seconds` not wired (`configure_human_waits` is the knob).
+9. No `audit_cases.py` cases for the approval actions.
+10. The decisions fake is loaded via importlib in `_human.py`.
+11. A shared decisions cache-key change.
 
 ## Verify
 
 ```
-SEMGREP_SETTINGS_FILE=/tmp/claude-1002/P2-05-c0/semgrep.yml SEMGREP_LOG_FILE=/tmp/claude-1002/P2-05-c0/semgrep.log SEMGREP_VERSION_CACHE_PATH=/tmp/claude-1002/P2-05-c0/semgrep.ver make check
-cd backend && uv run pytest -q -m "not integration and not contract" tumnis/modules/agents/tests/unit/test_policy_rules.py
+SEMGREP_SETTINGS_FILE=/tmp/claude-1002/P2-05-c1/semgrep.yml SEMGREP_LOG_FILE=/tmp/claude-1002/P2-05-c1/semgrep.log SEMGREP_VERSION_CACHE_PATH=/tmp/claude-1002/P2-05-c1/semgrep.ver PYTEST_XDIST_AUTO_NUM_WORKERS=3 make check
 make test-int   # bare, once per continuation; CI is the authority
 ```
 
-Context7 used: `/dbos-inc/dbos-docs` (application versions: recovery only of the current version; `fork_workflow`; `application_version` config). Installed DBOS 3.1.0: `DBOS.application_version`, `WorkflowStatus.app_version`, `cancel_workflow_async`, `rewind_workflow` only for terminal workflows.
+Bash heredocs near paths are refused by the worktree guard: write helper scripts with the Write tool into `$TMPDIR/P2-05-c2/` and run them with `uv run python <file>`. Frontend `node_modules` is installed in this worktree.
+
+Context7: `/dbos-inc/dbos-docs` (application versions, `cancel_workflow_async`, `get_workflow_status_async`), cited in the PR body.
 
 ## Scott items
 
-- T-P2-05-13 vs the locked P2-01 sweeps: keyless gated calls answer 200 `denied`/`run_token_required` instead of 403 (same pattern #111 used for post_result).
+- T-P2-05-13 vs the locked P2-01 sweeps: keyless gated calls answer 200 `denied` / `run_token_required` instead of 403.
