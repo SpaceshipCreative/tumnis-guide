@@ -14,7 +14,7 @@ NOW = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
 
 
 def _record(task_id: uuid.UUID, minutes_ago: float, *, accepted: bool = False) -> Any:
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
         DelegationRecord,
     )
 
@@ -28,13 +28,12 @@ def _record(task_id: uuid.UUID, minutes_ago: float, *, accepted: bool = False) -
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 def test_depth_over_two_refused() -> None:
     """T-P2-06-06
     The new delegation's depth is the task's chain plus one: a root task delegates at depth
     1, a task one delegation down at 2 (allowed, the maximum), and a task whose chain holds
     two delegations would be depth 3, which is refused."""
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
         MAX_DELEGATION_DEPTH,
         delegation_depth,
         depth_exceeded,
@@ -52,14 +51,13 @@ def test_depth_over_two_refused() -> None:
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 def test_loop_detection() -> None:
     """T-P2-06-08
     The third delegation of a task inside the window (two before it, no accepted result in
     between) is a loop; one before it is not; a delegation exactly LOOP_WINDOW old has left
     the window; an accepted result resets the count; other tasks' delegations do not count;
     and a task already in its own chain is a cycle."""
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
         LOOP_REPEAT_LIMIT,
         LOOP_WINDOW,
         is_delegation_loop,
@@ -99,13 +97,12 @@ def test_loop_detection() -> None:
 
 @pytest.mark.req("Design decision 6")
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 def test_wait_status_mapping() -> None:
     """T-P2-06-10
     `waiting_on_human` maps to `waiting_on_human`; every terminal status (succeeded,
     failed, cancelled, timed_out, runner_lost) to `done`; queued, held and running to
     `still_running`."""
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
         RunStatus,
         wait_status,
     )
