@@ -325,6 +325,29 @@ async def deny_approval(ctx: Ctx) -> None:
     await _decide_approval(ctx, "deny")
 
 
+# --- Approval policy (P2-05) -----------------------------------------------------------------
+
+
+async def change_policy(ctx: Ctx) -> None:
+    """A project made through the routes, then `PUT /v1/projects/{id}/policy` moving one
+    class to gated (the policy editor): `policy.changed`."""
+    made = await ctx.session_client.post("/v1/projects", json={"name": "Policy case"})
+    made.raise_for_status()
+    project_id = made.json()["id"]
+    read = await ctx.session_client.get(f"/v1/projects/{project_id}/policy")
+    read.raise_for_status()
+    policy = read.json()
+    response = await ctx.session_client.put(
+        f"/v1/projects/{project_id}/policy",
+        json={
+            "gated": [*policy["gated"], "trigger_preview_deploy"],
+            "allowed": [a for a in policy["allowed"] if a != "trigger_preview_deploy"],
+            "version": policy["version"],
+        },
+    )
+    response.raise_for_status()
+
+
 AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("audit.exported", export_csv, "user"),
     AuditCase("dead_letter.retried", retry_dead_letter, "user"),
@@ -348,6 +371,7 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("threshold.changed", change_threshold, "user"),
     AuditCase("approval.granted", grant_approval, "user"),
     AuditCase("approval.denied", deny_approval, "user"),
+    AuditCase("policy.changed", change_policy, "user"),
 )
 
 # action -> the work package that builds its operation and adds its case.

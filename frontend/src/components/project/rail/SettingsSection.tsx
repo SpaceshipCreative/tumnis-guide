@@ -2,7 +2,8 @@
 // empty means the workspace default. P1-02 (Data flow rule 6): the local decisions only
 // switch. Turning it on keeps every decision about the project's items on the local vLLM
 // model; nothing is sent to Jev. A toggle sends one PATCH /v1/projects/{id} with the
-// version it read; a 409 shows the current value with a notice (REL-2).
+// version it read; a 409 shows the current value with a notice (REL-2). P2-05 (FR-5.6):
+// the approval policy editor.
 // In the rail, RailSections opens one section at a time (`open`, `onToggle`); rendered on
 // its own, the section starts open and toggles itself.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +20,7 @@ import {
 } from "../../../lib/fetch";
 import { workspaceQuery } from "../../settings/queries";
 import { useUpdateProject } from "../mutations";
+import { PolicyEditor } from "../PolicyEditor";
 import { projectQuery } from "../queries";
 import type { Project } from "../types";
 import { fieldClass, RailSection, saveClass } from "./RailSection";
@@ -226,6 +228,7 @@ export function SettingsSection({
         workspaceDefault={workspaceDefault}
       />
       <LocalDecisionsSwitch project={project} />
+      <PolicyEditor project={project} />
     </RailSection>
   );
 }
