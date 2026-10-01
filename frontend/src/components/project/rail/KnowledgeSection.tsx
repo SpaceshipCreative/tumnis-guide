@@ -347,6 +347,7 @@ export function KnowledgeSection({
                 setTrashed(doc);
                 run(
                   apiWrite({
+                    // "create": apiWrite's kind without a version; trashing takes none.
                     kind: "create",
                     method: "DELETE",
                     path: `/knowledge/documents/${doc.id}`,

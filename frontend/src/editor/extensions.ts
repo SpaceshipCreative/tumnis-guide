@@ -4,8 +4,11 @@
 // `isAllowedUri` accepts only http(s), mailto and tumnis task/doc links: pasted HTML and
 // autolinks with any other href never become links, and a link loaded from Markdown with
 // one (a `javascript:` URL, say) renders with an empty href while its Markdown is kept
-// as written. Pasted HTML only keeps what the schema models. `headless` (the round trip)
-// leaves the menus out.
+// as written. Pasted HTML only keeps what the schema models. StarterKit's TrailingNode
+// is off too: Markdown is the stored form, so the empty paragraph it appends after a
+// final list or code block has nothing to save and only adds blank lines to the
+// editor's Markdown (Gapcursor still reaches past such a block). `headless` (the round
+// trip) leaves the menus out.
 import type { AnyExtension } from "@tiptap/core";
 import Link from "@tiptap/extension-link";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
