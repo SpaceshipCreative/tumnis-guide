@@ -2,17 +2,29 @@
 # The master agent: one per workspace. `version` must equal VERSION, and any change under
 # this directory needs a VERSION bump (scripts/ci/profile_version_check.py).
 # The repo never holds the profile's .env, memories or sessions; .env.example lists the
-# variables config.yaml's MCP servers read.
+# variables config.yaml's MCP servers and its Discord gateway read.
 name: tumnis-master
-version: 1.1.0
-description: Tumnis master agent (plan, orchestrate-master and workspace-digest skills)
+version: 1.2.0
+description: Tumnis master agent (plan, orchestrate-master, workspace-digest, focus and relay skills)
 env_requires:
   - name: TUMNIS_URL
     description: Tumnis's base URL, without /mcp (config.yaml's tumnis server)
     required: true
   - name: TUMNIS_TOKEN
-    description: The master's own Tumnis key for cron jobs; a run gets its task token from the daemon
+    description: The master's own Tumnis key for cron jobs and the Discord gateway; a run gets its task token from the daemon
     required: true
   - name: TYPESAFE_API_KEY
     description: TypeSafe API key for the Jev MCP server (mcp.json); set it in the profile's .env
+    required: true
+  - name: DISCORD_BOT_TOKEN
+    description: The Discord bot token for the master's gateway (P2-16)
+    required: true
+  - name: DISCORD_ALLOWED_USERS
+    description: The person's Discord user id, the only user the bot answers
+    required: true
+  - name: DISCORD_ALLOWED_CHANNELS
+    description: The one Discord channel id the bot listens in (the same id as DISCORD_HOME_CHANNEL)
+    required: true
+  - name: DISCORD_HOME_CHANNEL
+    description: The one Discord channel id the bot posts focus messages to
     required: true

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "kind": "notify",
+  "run_id": "0dd6a407-11c5-5a87-9d30-0ab6d5f00fcc",
+  "profile_id": "a118b87c-5c5b-5ad5-902c-e853237ee3de",
+  "skill": "focus",
+  "output_schema": {
+    "family": "harness",
+    "name": "focus_message",
+    "version": 1
+  },
+  "correlation_id": "run:0dd6a407-11c5-5a87-9d30-0ab6d5f00fcc",
+  "timeout_s": 60,
+  "prompt_text": "Tumnis has a focus message for the person.\n\nUse the skill focus. Reply with one JSON object matching harness/focus_message/1.\n\n<packet>\n{\n  \"kind\": \"notify\",\n  \"event\": {\n    \"id\": \"4deee029-ca4b-5d2c-91fe-eed9e92bf30a\",\n    \"kind\": \"block_start\",\n    \"level\": \"nudge\",\n    \"rule\": \"Nudge · block_start\",\n    \"fired_at\": \"2026-03-09T09:00:00Z\"\n  },\n  \"task\": {\n    \"id\": \"c461b81a-0a23-5fd9-b86d-462b5825255d\",\n    \"title\": \"Write the spring proposal\",\n    \"first_action\": \"Open the proposal template and fill in the client's name\"\n  },\n  \"project\": {\n    \"id\": \"784f329e-4863-5fdc-8bf1-0d58e13420c8\",\n    \"name\": \"Acme site\"\n  },\n  \"return_to\": null,\n  \"answers\": []\n}\n</packet>\n",
+  "body": {
+    "kind": "notify",
+    "event": {
+      "id": "4deee029-ca4b-5d2c-91fe-eed9e92bf30a",
+      "kind": "block_start",
+      "level": "nudge",
+      "rule": "Nudge · block_start",
+      "fired_at": "2026-03-09T09:00:00Z"
+    },
+    "task": {
+      "id": "c461b81a-0a23-5fd9-b86d-462b5825255d",
+      "title": "Write the spring proposal",
+      "first_action": "Open the proposal template and fill in the client's name"
+    },
+    "project": {
+      "id": "784f329e-4863-5fdc-8bf1-0d58e13420c8",
+      "name": "Acme site"
+    },
+    "return_to": null,
+    "answers": []
+  },
+  "tainted": false
+}

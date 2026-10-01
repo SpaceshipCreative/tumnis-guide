@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "kind": "relay",
+  "run_id": "2429d36e-0ec9-5664-b1d1-451235e234b1",
+  "profile_id": "a118b87c-5c5b-5ad5-902c-e853237ee3de",
+  "skill": "relay",
+  "output_schema": {
+    "family": "harness",
+    "name": "relay_reply",
+    "version": 1
+  },
+  "correlation_id": "run:2429d36e-0ec9-5664-b1d1-451235e234b1",
+  "timeout_s": 60,
+  "prompt_text": "A message from the person arrived in the chat channel.\n\nUse the skill relay. Reply with one JSON object matching harness/relay_reply/1.\n\n<packet>\n{\n  \"kind\": \"relay\",\n  \"message\": {\n    \"id\": \"1648086794890075711\",\n    \"author\": \"person\",\n    \"content\": \"stop all agents\",\n    \"reply_to\": null\n  }\n}\n</packet>\n",
+  "body": {
+    "kind": "relay",
+    "message": {
+      "id": "1648086794890075711",
+      "author": "person",
+      "content": "stop all agents",
+      "reply_to": null
+    }
+  },
+  "tainted": false
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "kind": "relay",
+  "run_id": "8476035c-eb56-5a5b-bc58-784a3834c6c4",
+  "profile_id": "a118b87c-5c5b-5ad5-902c-e853237ee3de",
+  "skill": "relay",
+  "output_schema": {
+    "family": "harness",
+    "name": "relay_reply",
+    "version": 1
+  },
+  "correlation_id": "run:8476035c-eb56-5a5b-bc58-784a3834c6c4",
+  "timeout_s": 60,
+  "prompt_text": "A message from the person arrived in the chat channel.\n\nUse the skill relay. Reply with one JSON object matching harness/relay_reply/1.\n\n<packet>\n{\n  \"kind\": \"relay\",\n  \"message\": {\n    \"id\": \"1078959655759573793\",\n    \"author\": \"person\",\n    \"content\": \"FYI, this came in today. Nothing to do yet.\",\n    \"reply_to\": null\n  }\n}\n</packet>\n",
+  "body": {
+    "kind": "relay",
+    "message": {
+      "id": "1078959655759573793",
+      "author": "person",
+      "content": "FYI, this came in today. Nothing to do yet.",
+      "reply_to": null
+    }
+  },
+  "tainted": false
+}

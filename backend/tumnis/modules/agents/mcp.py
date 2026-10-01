@@ -7,6 +7,7 @@
 | `ask_human` | tasks:write | `POST /v1/runs/{run_id}/questions` |
 | `request_approval` | tasks:write | `POST /v1/runs/{run_id}/approvals` |
 | `pause_agents` | delegate, master only | `POST /v1/agents/pause` |
+| `record_human_reply` | delegate, master only | `POST /v1/relay/replies` |
 | `get_project_digest` | tasks:read | `GET /v1/digests/project/{project_id}` |
 | `get_workspace_digest` | tasks:read | `GET /v1/digests/workspace` |
 
@@ -26,16 +27,18 @@ API key linked to a profile (`set_profile_key`) acts for that profile, and the m
 profile's key is the master; a task token acts for its run's profile.
 """
 
-from typing import Any, Literal
+from typing import Any, Final, Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from sqlalchemy import Table, select
 
 from tumnis.core import agent_surface as surface
+from tumnis.core import audit
 from tumnis.core.errors import ProblemError
 from tumnis.core.principal import Principal
-from tumnis.core.tenancy import WorkspaceContext, tenant_session
+from tumnis.core.tenancy import WorkspaceContext, act_as, tenant_session
+from tumnis.core.types import ActorRef
 from tumnis.modules.agents import api
 from tumnis.modules.agents.models import AgentProfile, RunRow
 from tumnis.modules.agents.packet_builder import (
@@ -44,6 +47,7 @@ from tumnis.modules.agents.packet_builder import (
     enrich_packet,
     packet_for_caller,
 )
+from tumnis.modules.agents.review_kinds import QUESTION, TEXT_MAX
 from tumnis.modules.auth import api as auth
 from tumnis.modules.tasks import api as tasks
 
@@ -328,6 +332,121 @@ PAUSE_AGENTS = surface.register_op(
         project_resolver=None,
         handler=_pause,
         master_only=True,
+    )
+)
+
+
+# --- Replies relayed from the master's chat channel (P2-16, FR-8.2) --------------------------
+
+RelayItemKind = Literal["question", "focus", "approval", "result"]
+RELAY_CHANNEL: Final = "discord"  # the master's one chat channel (PRD open question 3)
+
+
+class RelayReplyBody(surface.SurfaceInput):
+    """The REST twin's body: the item answered, the person's answer and the chat message
+    it was typed in."""
+
+    item_kind: RelayItemKind = Field(
+        description="question or focus; approval and result are answered 403 needs_app"
+    )
+    item_id: UUID = Field(description="The question's review item id, or the focus message id")
+    answer: str = Field(min_length=1, max_length=TEXT_MAX, pattern=r"\S")
+    channel_message_id: str = Field(
+        min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.:-]+$", description="For the audit"
+    )
+
+
+class RecordHumanReplyIn(surface.WriteInput, RelayReplyBody):
+    pass
+
+
+class RelayReplyOut(BaseModel):
+    schema_version: Literal[1] = 1
+    item_kind: Literal["question", "focus"]
+    item_id: UUID
+    answer: str
+    tainted: bool = False  # the reply came through a key with no run (R-31, P2-08)
+
+
+def _needs_app() -> ProblemError:
+    return ProblemError(
+        403, "needs_app", "Approvals and results are decided in the app: open the item there"
+    )
+
+
+async def _record_reply(call: surface.SurfaceCall, data: RecordHumanReplyIn) -> RelayReplyOut:
+    """The person's answer, recorded as the person (`act_as` the workspace's owner) through
+    the same calls the app makes: R-04's decide for a question, the owning module's handler
+    for anything else (focus: `focus.api.relay_reply`). Then one `human.relayed` audit row,
+    the caller's, naming the channel's message."""
+    if data.item_kind in api.NEEDS_APP:
+        raise _needs_app()
+    s, answer = call.session, data.answer.strip()
+    person = ActorRef(f"user:{await auth.workspace_owner(s)}")
+    if data.item_kind == "question":
+        item = await tasks.get_review_item(s, data.item_id)
+        if item.kind != QUESTION:
+            raise _needs_app()
+        target = ("review_item", item.id)
+        async with act_as(s, person):
+            await tasks.decide_review_item(
+                item.id,
+                action="answer",
+                payload={"answer": answer},
+                snooze_until=None,
+                version=item.version,
+                actor=person,
+                now=call.now,
+                session=s,
+            )
+    else:
+        handler = api.reply_handler(data.item_kind)
+        if handler is None:
+            raise ProblemError(422, "invalid_item_kind", f"No reply is taken for {data.item_kind}")
+        target = (f"{data.item_kind}_event", data.item_id)
+        async with act_as(s, person) as ctx:
+            await handler(ctx, data.item_id, answer, now=call.now, session=s)
+    await audit.record(
+        s,
+        "human.relayed",
+        target=target,
+        details={
+            "channel": RELAY_CHANNEL,
+            "channel_message_id": data.channel_message_id,
+            "item_kind": data.item_kind,
+            "on_behalf_of": str(person),
+        },
+        occurred_at=call.now,
+    )
+    return RelayReplyOut(
+        item_kind=data.item_kind, item_id=data.item_id, answer=answer, tainted=call.tainted
+    )
+
+
+RECORD_HUMAN_REPLY = surface.register_op(
+    surface.SurfaceOp(
+        name="record_human_reply",
+        description=(
+            "Record the person's answer typed in the chat channel, exactly as if they had"
+            " answered in the app. item_kind question: item_id is the question's review item"
+            " and the answer one of its choices when it has any. item_kind focus: item_id is"
+            " the focus message and the answer still_on_it, switched, stuck or snooze (return"
+            " or stay to a return question). Give the chat message's id. Approvals and"
+            " results are decided in the app only (403 needs_app): link the person to the"
+            " item instead."
+        ),
+        scope="delegate",
+        input_model=RecordHumanReplyIn,
+        output_model=RelayReplyOut,
+        rest_method="POST",
+        rest_path="/v1/relay/replies",
+        write=True,
+        updates_existing=False,
+        project_arg=None,
+        project_resolver=None,
+        handler=_record_reply,
+        master_only=True,
+        session_twin_allowed=False,  # the person answers in the app; this is the master's door
     )
 )
 

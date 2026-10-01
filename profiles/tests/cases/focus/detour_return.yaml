@@ -1,0 +1,30 @@
+# T-P4-01-12 (deferred by P4-01 to P2-16): a detour captured at Guardrail (a `switched`
+# event with the task to return to) becomes a message that names the detour and the task
+# to return to and offers return (and stay). The plan names this case
+# profiles/tests/cases/focus_detour_return.yaml; the case loader requires a folder named
+# for the skill, so it lives at focus/detour_return.yaml.
+id: focus-detour-return
+profile: master
+skill: focus
+input: ../../fixtures/packets/focus_detour.json
+output_schema: {family: harness, name: focus_message, version: 1}
+meta: {test_id: T-P4-01-12, req: [FR-10.3], wp: P4-01, xfail: "spec:P2-16"}
+expect:
+  calls:
+    - server: discord
+      tool: send_message
+      min: 1
+      max: 1
+      where:
+        - {path: "$.target", equals: discord}
+        - {path: "$.message", matches: "(?s).*Reply to the venue about the booking.*"}
+        - {path: "$.message", matches: "(?s).*Write the spring proposal.*"}
+        - {path: "$.message", matches: "(?s).*\\breturn\\b.*"}
+        - {path: "$.message", matches: "(?s).*Guardrail · switched.*"}
+  forbid:
+    - {tool: record_human_reply}
+    - {tool: pause_agents}
+  json:
+    - {path: "$.message", matches: "(?s).*Reply to the venue about the booking.*"}
+    - {path: "$.message", matches: "(?s).*Write the spring proposal.*"}
+    - {path: "$.message", matches: "(?s).*\\breturn\\b.*"}
