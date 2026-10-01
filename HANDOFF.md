@@ -46,7 +46,7 @@ Next: reply in each thread with the fix SHA (2e34964), resolve each with the Gra
 - integration: only T-10 XPASS(strict) (fixed in 1d8664d); everything else passed, serial part too.
 - contract: T-P0-11-10 KeyError from the convertor (fixed in a66b816; the test passes locally:
   `cd backend && uv run pytest -q tests/contract/test_generation.py -k operation_ids`).
-- security: fails on every PR (Trivy, libpcre2-8-0 CVE in the base image). Coordinator: a separate
+- security: failed on every PR (Trivy, libpcre2-8-0 CVE). FIXED on main by #123 (eb363ad): merge origin/main (step 4). Before that the coordinator said: a separate
   agent fixes it on `fix/trivy-pcre2`; **don't touch the Dockerfile or .trivyignore**; merge main
   when the coordinator says so and re-run CI.
 - performance: Lighthouse `total-blocking-time` 217 > 200 on the board page. main's own run
@@ -74,8 +74,9 @@ Next: reply in each thread with the fix SHA (2e34964), resolve each with the Gra
      and `enrich_apply_step` changed: shared agents file), version-order fix, body_md masking, fences.
    - Add the performance note (pre-existing on main, run 36799478425).
    - Docs: add RFC 9110 section 15.5.6 (405 must send Allow) and keep the Starlette routing citation.
-4. When the coordinator says the Trivy fix merged: `/usr/bin/git fetch origin`, `/usr/bin/git merge origin/main`,
-   `make gen` if generated files conflict, `make check`, push, re-run CI.
+4. **The Trivy fix has merged** (#123, main at eb363ad; coordinator, 2026-10-01). Do this FIRST:
+   `/usr/bin/git fetch origin`, `/usr/bin/git merge origin/main`, `make gen` if generated files
+   conflict, `make check`, push `HEAD:wp/P1-17`, so CI's `security` job passes.
 5. CI green (except Trivy until merged) and 0 open threads: SendMessage to "main":
    "#122 MERGE-READY at <sha>".
 6. Then PR 2 (editor) on `wp/P1-17-impl-2` from wp/P1-17: Context7 first (Tiptap 3 `@tiptap/markdown`,
