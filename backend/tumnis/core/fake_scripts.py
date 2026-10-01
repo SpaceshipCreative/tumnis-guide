@@ -12,13 +12,17 @@ A scriptable fake registers a parser under its hook name (`decisions.jev`, `gene
 `ValidationError` included) and returns the match key the fake looks the script up by (a
 decision point, say; `""` for one script per hook) and the JSON to store. `lookup` prefers
 the exact key and falls back to `""`.
+
+The fake runner (P2-04) also keeps the last `run` packet it received here, with a count
+(`record_run_packet`, read by `GET /v1/test/fakes/runner/last-packet`); its task token is
+redacted when its run ends (`redact_run_token`).
 """
 
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from sqlalchemy import Column, Table, Text, literal, or_, select
-from sqlalchemy.dialects.postgresql import JSONB, insert
+from sqlalchemy import Column, Integer, Table, Text, cast, func, literal, or_, select, update
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, insert
 
 from tumnis.core import db
 from tumnis.core.base import Base
@@ -88,3 +92,61 @@ async def lookup(name: str, key: str = "") -> dict[str, Any] | None:
     async with db.app_sessionmaker()() as session, session.begin():
         script: dict[str, Any] | None = await session.scalar(stmt)
     return script
+
+
+# --- The fake runner's last packet (P2-04, `GET /v1/test/fakes/runner/last-packet`) ---------
+
+RUNNER = "runner"  # the fake runner's scripts (`POST /v1/test/fakes/runner/script`)
+# The last `run` packet the fake runner received and how many it received since the reset,
+# stored as {"packet": {...}, "run_messages": n}. The packet keeps its live task token
+# while its run is open, so a test can call back with it: a test-only exception to Scott's
+# decision 31, which `redact_run_token` closes when the run ends.
+LAST_PACKET = "runner.last_packet"
+_PACKET_KEY = ""
+
+
+async def record_run_packet(packet: Mapping[str, Any]) -> None:
+    """Keep `packet` as the fake runner's last one and count it (one atomic upsert, so two
+    dispatches at once count twice)."""
+    first = {"packet": dict(packet), "run_messages": 1}
+    stmt = insert(_t).values(adapter=LAST_PACKET, match_key=_PACKET_KEY, script=first)
+    counted = func.jsonb_build_object(
+        "packet",
+        stmt.excluded.script["packet"],
+        "run_messages",
+        cast(_t.c.script["run_messages"].astext, Integer) + 1,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[_t.c.adapter, _t.c.match_key], set_={"script": counted}
+    )
+    async with db.app_sessionmaker()() as session, session.begin():
+        await session.execute(stmt)
+
+
+async def last_run_packet() -> dict[str, Any] | None:
+    """`{"packet": ..., "run_messages": n}`, or None before any packet (or while disabled)."""
+    return await lookup(LAST_PACKET, _PACKET_KEY)
+
+
+async def redact_run_token(run_id: object, marker: str) -> None:
+    """The run ended: the stored last packet, when it is that run's, has its task token
+    replaced by `marker`. Nothing while the store is disabled (every real deployment)."""
+    if not _enabled:
+        return
+    token_path = literal(["packet", "callback", "task_token"], ARRAY(Text))
+    stmt = (
+        update(_t)
+        .where(
+            _t.c.adapter == LAST_PACKET,
+            _t.c.match_key == _PACKET_KEY,
+            _t.c.script["packet"]["run_id"].astext == str(run_id),
+            _t.c.script["packet"]["callback"]["task_token"].astext.is_not(None),
+        )
+        .values(
+            script=func.jsonb_set(
+                _t.c.script, token_path, func.to_jsonb(cast(literal(marker), Text))
+            )
+        )
+    )
+    async with db.app_sessionmaker()() as session, session.begin():
+        await session.execute(stmt)

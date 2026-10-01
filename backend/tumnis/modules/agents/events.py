@@ -53,7 +53,7 @@ from tumnis.core.versioning import NotFound
 
 # The subscribers start `provision_profile` through api's starter seam, which workflows
 # fills at import: loading the subscribers loads the workflow too, in every process.
-from tumnis.modules.agents import api, workflows
+from tumnis.modules.agents import api, signals, workflows
 from tumnis.modules.agents.review_kinds import RESULT
 from tumnis.modules.agents.rules import ESTIMATED_LABELS, enrichment_settled
 from tumnis.modules.tasks import api as tasks
@@ -142,7 +142,7 @@ async def start_dispatch(envelope: EventEnvelope) -> None:
 @subscribe("run.signal", name=SIGNAL_SUBSCRIBER)
 async def deliver_run_signal(envelope: EventEnvelope) -> None:
     payload = envelope.payload
-    await workflows.deliver_signal(
+    await signals.deliver_signal(
         envelope.workspace_id,
         UUID(str(payload["run_id"])),
         str(payload["kind"]),

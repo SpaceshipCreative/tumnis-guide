@@ -19,6 +19,10 @@
   on topic `provision:<project id>`.
 - `profile_health_sweep(scheduled_at, context)`: scheduled every 15 minutes; enqueues
   `check_profile_health` for every live, unpaused profile.
+- `dispatch_run(workspace_id, run_id)` (P2-04): a run from the `runs` queue to its end;
+  the `run.signal` messages it waits on are delivered by `agents.signals`.
+- `reconcile_runs(scheduled_at, context)` (P2-04): hourly on the maintenance queue; fails
+  the active runs whose `dispatch_run` workflow ended (cancelled or errored).
 """
 
 import asyncio
@@ -32,14 +36,13 @@ from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID, uuid5
 
 from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
-from dbos._error import DBOSNonExistentWorkflowError  # dbos 3.1.0: not re-exported
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import Table, Text, cast, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import audit, db, faults
+from tumnis.core import audit, db, faults, workflows_ops
 from tumnis.core.clock import SystemClock
 from tumnis.core.limits import WAIT_SLICE_S
 from tumnis.core.live import mark_changed
@@ -48,10 +51,13 @@ from tumnis.core.schemas import registry
 from tumnis.core.tenancy import WorkspaceContext, tenant_session, use_workspace
 from tumnis.core.types import SYSTEM_ACTOR, ActorRef
 from tumnis.core.versioning import NotFound, StaleVersion
-from tumnis.modules.agents import api
+from tumnis.modules.agents import api, signals
 
 # P2-18: importing archive also registers its steps with the project archive workflows.
 from tumnis.modules.agents import archive as _archive
+
+# P2-04: importing fake_play hooks the scripted fake runner into FakeAgent (fakes only).
+from tumnis.modules.agents import fake_play as _fake_play  # noqa: F401
 from tumnis.modules.agents.adapters.hermes import DaemonTransport, McpEndpointTransport
 from tumnis.modules.agents.models import (
     AgentProfile,
@@ -128,6 +134,8 @@ RUNNER_SWEEP_QUEUE: Final = "agents-sweep"
 RUNS_QUEUE: Final = api.RUNS_QUEUE
 PROFILE_HEALTH_SCHEDULE: Final = "*/15 * * * *"  # every 15 minutes (plan default)
 PROFILE_HEALTH_SCHEDULE_NAME: Final = "profile-health"
+RECONCILE_RUNS_SCHEDULE: Final = "0 * * * *"  # hourly (plan)
+RECONCILE_RUNS_SCHEDULE_NAME: Final = "reconcile-runs"
 
 _profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
 _runners: Table = Runner.__table__  # type: ignore[assignment]
@@ -525,7 +533,8 @@ async def send_to_agent(workspace_id: str, run_id: str) -> RunHandleData:
         return handle.model_copy(update={"refused": f"no_packet: {exc}"[:200]})
     try:
         adapter = await api.adapter_for(row.profile_id, ctx=ctx)
-        await adapter.dispatch(packet)
+        with use_workspace(ctx):  # the fake runner of compose.test plays in this workspace
+            await adapter.dispatch(packet)
     except api.AgentUnavailable as exc:
         return handle.model_copy(update={"refused": f"agent_unavailable: {exc.reason}"[:200]})
     faults.killpoint("agents.send_to_agent.after_dispatch")  # dispatched, step not recorded
@@ -615,21 +624,6 @@ async def _end(workspace_id: str, run_id: str, status: RunStatus, reason: str | 
     return ended
 
 
-def _signal(message: dict[str, Any]) -> tuple[str, str | None]:
-    """A message on the run's topic as (kind, reason): `run.signal` deliveries, and the
-    older shapes (`{"status": "runner_lost"}` from a run_skill-era sweep, `{"status":
-    "cancelled"}` from the protocol-1 cancel fallback)."""
-    kind = message.get("kind")
-    if isinstance(kind, str):
-        return kind, message.get("reason")
-    status = message.get("status")
-    if status == "runner_lost":
-        return "runner_lost", api.RUNNER_LOST
-    if status == "cancelled":
-        return "cancel", message.get("error") or "cancelled"
-    return "ignored", None
-
-
 async def _supervise(  # noqa: PLR0917  # the plan's one loop over every signal
     workspace_id: str,
     run_id: str,
@@ -665,7 +659,7 @@ async def _supervise(  # noqa: PLR0917  # the plan's one loop over every signal
                 await stop_agent(workspace_id, stored, api.TIME_LIMIT)
                 return await _end(workspace_id, run_id, RunStatus.TIMED_OUT, api.TIME_LIMIT)
             continue
-        kind, reason = _signal(message)
+        kind, reason = signals.signal_of(message)
         if kind == "result":
             return await _end(workspace_id, run_id, RunStatus.SUCCEEDED, None)
         if kind == "waiting":
@@ -728,27 +722,6 @@ async def start_dispatch(
             )
 
     await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
-
-
-async def deliver_signal(
-    workspace_id: UUID, run_id: UUID, kind: str, reason: str | None, key: str
-) -> None:
-    """Send a `run.signal` to the run's workflow, once per event (`key`). A workflow that
-    does not exist yet is retried (the delivery raises), unless the run already ended."""
-    message = {"kind": kind, "reason": reason}
-    async with tenant_session(_ctx(str(workspace_id))) as s:
-        row = (
-            await s.execute(select(_runs.c.status, _runs.c.workflow_id).where(_runs.c.id == run_id))
-        ).first()
-    if row is None:
-        return
-    target = row.workflow_id or dispatch_workflow_id(run_id)
-    try:
-        await DBOS.send_async(target, message, topic=api.run_topic(run_id), idempotency_key=key)
-    except DBOSNonExistentWorkflowError:
-        if row.status in api.TERMINAL:
-            return
-        raise
 
 
 # --- runner_sweep ---------------------------------------------------------------------------
@@ -1812,6 +1785,71 @@ async def profile_health_sweep(scheduled_at: datetime, context: Any) -> int:
     return started
 
 
+# --- reconcile_runs (P2-04, NFR Reliability) ----------------------------------------------
+#
+# Housekeeping, hourly on the maintenance queue: a run whose `dispatch_run` workflow has
+# ended (cancelled from outside, or failed for good) while its row is still active would
+# never end otherwise, since nothing listens for its result or its stop any more.
+
+
+@DBOS.step()
+async def active_dispatch_runs_step(workspace_id: str) -> list[str]:
+    """The workspace's active runs that a `dispatch_run` workflow serves or will serve (its
+    id is the run's id); `run_skill` runs keep their own path."""
+    async with tenant_session(_ctx(workspace_id)) as s:
+        found: list[UUID] = list(
+            await s.scalars(
+                select(_runs.c.id).where(
+                    _runs.c.status.in_(api.ACTIVE_RUN),
+                    _runs.c.deleted_at.is_(None),
+                    (_runs.c.workflow_id.is_(None))
+                    | (_runs.c.workflow_id == cast(_runs.c.id, Text)),
+                )
+            )
+        )
+        return [str(run_id) for run_id in found]
+
+
+@DBOS.step()
+async def fail_orphan_step(workspace_id: str, run_id: str, reason: str) -> bool:
+    """End the run through the one end path (`api.finish_run_in`: tokens revoked, log
+    closed, `run.finished`): `failed`, or `cancelled` for a held run (the state table has
+    no held -> failed edge). False when the run had already ended."""
+    ctx = _ctx(workspace_id)
+    async with tenant_session(ctx) as s:
+        current = await s.scalar(select(_runs.c.status).where(_runs.c.id == UUID(run_id)))
+        if current is None:
+            return False
+        status = RunStatus.CANCELLED if current == RunStatus.HELD.value else RunStatus.FAILED
+        done = await api.finish_run_in(
+            s, ctx, UUID(run_id), status, reason, now=SystemClock().now()
+        )
+    return done.changed
+
+
+@DBOS.workflow(name="reconcile_runs")
+async def reconcile_runs(scheduled_at: datetime, context: Any) -> list[str]:
+    """Scheduled hourly (DBOS passes the scheduled time and the schedule's context): fails
+    every active run whose `dispatch_run` workflow is CANCELLED, ERROR or past its recovery
+    attempts; returns their ids."""
+    ended: list[str] = []
+    for workspace_id in await list_workspaces_step():
+        active = await active_dispatch_runs_step(workspace_id)
+        if not active:
+            continue
+        dead = await DBOS.list_workflows_async(
+            workflow_ids=active,
+            status=list(api.ENDED_WORKFLOW_REASONS),
+            load_input=False,
+            load_output=False,
+        )
+        for workflow in dead:
+            reason = api.ENDED_WORKFLOW_REASONS[str(workflow.status)]
+            if await fail_orphan_step(workspace_id, workflow.workflow_id, reason):
+                ended.append(workflow.workflow_id)
+    return ended
+
+
 def schedules() -> list[Any]:
     """This module's DBOS schedules, applied by the worker after launch (the runner sweep
     has its own registration in `worker.py`)."""
@@ -1821,5 +1859,11 @@ def schedules() -> list[Any]:
             "workflow_fn": profile_health_sweep,
             "schedule": PROFILE_HEALTH_SCHEDULE,
             "queue_name": RUNNER_SWEEP_QUEUE,
-        }
+        },
+        {
+            "schedule_name": RECONCILE_RUNS_SCHEDULE_NAME,
+            "workflow_fn": reconcile_runs,
+            "schedule": RECONCILE_RUNS_SCHEDULE,
+            "queue_name": workflows_ops.MAINTENANCE_QUEUE,
+        },
     ]

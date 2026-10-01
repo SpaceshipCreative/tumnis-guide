@@ -1,7 +1,7 @@
 // A project (P0-22 route, P0-24 page): `view` (tasks, board or calendar; absent means the
-// last one used here, else tasks), `task` (the open drawer) and `week` (the Calendar
-// view's ISO Monday, P1-12; absent or not a Monday means the current week) live in the
-// URL. The loader prefetches the header's reads so the first render has them.
+// last one used here, else tasks), `task` (the open drawer), `run` (the run the drawer
+// shows, P2-04) and `week` (the Calendar view's ISO Monday, P1-12; absent or not a Monday
+// means the current week) live in the URL. The loader prefetches the header's reads so the first render has them.
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import * as z from "zod";
 
@@ -18,6 +18,8 @@ export const projectSearch = z.object({
   // undefined means "last used, else tasks" (P0-24)
   view: z.enum(projectViews).optional().catch(undefined),
   task: z.uuid().optional().catch(undefined),
+  // The run the task drawer shows (P2-04); it follows `task` in the URL.
+  run: z.uuid().optional().catch(undefined),
   filter: z.enum(["open", "all"]).optional().catch(undefined),
   // An ISO Monday; anything else falls back to the current week (P0-22 rule).
   week: z.iso.date().refine(isMonday).optional().catch(undefined),
@@ -47,13 +49,14 @@ export const Route = createFileRoute("/projects/$projectId")({
 
 function ProjectRoute() {
   const { projectId } = Route.useParams();
-  const { view, task, week } = Route.useSearch();
+  const { view, task, run, week } = Route.useSearch();
   const navigate = Route.useNavigate();
   return (
     <ProjectPage
       projectId={projectId}
       view={view}
       taskId={task}
+      runId={run}
       week={week}
       onWeek={(monday) => {
         void navigate({ search: (s) => ({ ...s, week: monday }) });
@@ -62,7 +65,13 @@ function ProjectRoute() {
         void navigate({ search: (s) => ({ ...s, view: next }) });
       }}
       onTask={(taskId) => {
-        void navigate({ search: (s) => ({ ...s, task: taskId }) });
+        // Another task (or none) leaves the run behind.
+        void navigate({
+          search: (s) => ({ ...s, task: taskId, run: undefined }),
+        });
+      }}
+      onRun={(runId) => {
+        void navigate({ search: (s) => ({ ...s, run: runId }) });
       }}
     />
   );
