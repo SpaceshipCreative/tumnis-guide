@@ -115,7 +115,6 @@ async def test_same_events_as_discord(push: PushWorld) -> None:
 
 @pytest.mark.req("FR-8.3")
 @pytest.mark.wp("P4-05")
-@pytest.mark.xfail(strict=True, reason="spec:P4-05")
 async def test_gone_subscription_deleted(push: PushWorld) -> None:
     """T-P4-05-06
     The push service answers 410 for one subscription: it is deleted, with one `gone`
