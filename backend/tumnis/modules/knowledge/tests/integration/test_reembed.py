@@ -78,7 +78,7 @@ async def test_model_change_reembeds_in_background(
         FakeEmbeddings,
     )
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
-    from tumnis.modules.knowledge.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.knowledge.rules import (  # noqa: PLC0415
         EMBED_BATCH,
     )
 
@@ -147,7 +147,7 @@ async def test_reembed_resumes_after_kill(  # noqa: PLR0917
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
     from tumnis.modules.decisions.adapters.embeddings.fake import FakeEmbeddings  # noqa: PLC0415
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
-    from tumnis.modules.knowledge.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.knowledge.rules import (  # noqa: PLC0415
         EMBED_QUEUE,
         REEMBED_WORKFLOW,
     )

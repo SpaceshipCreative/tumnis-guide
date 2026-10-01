@@ -19,14 +19,13 @@ def _ids(*names: str) -> dict[str, UUID]:
 
 @pytest.mark.req("FR-15.3")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 def test_rrf_merge_table() -> None:
     """T-P3-10-01
     Full text [a, b, c] and vector [c, a, d] with k = 60 fuse to a, c, b, d: a scores
     1/61 + 1/62, c 1/63 + 1/61, b 1/62 and d 1/63; items in one list only keep their one
     term, and each hit says which lists found it.
     """
-    from tumnis.modules.knowledge.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.knowledge.rules import (  # noqa: PLC0415
         RRF_K,
         Ranked,
         rrf_merge,
@@ -61,7 +60,6 @@ _ranked_lists = st.lists(st.integers(min_value=0, max_value=30), unique=True, ma
 
 @pytest.mark.req("FR-15.3")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 @given(fulltext=_ranked_lists, vector=_ranked_lists)
 def test_rrf_properties(fulltext: list[int], vector: list[int]) -> None:
     """T-P3-10-02
@@ -69,7 +67,7 @@ def test_rrf_properties(fulltext: list[int], vector: list[int]) -> None:
     inputs; an item ranked first in both lists ranks first; the same input gives the same
     output.
     """
-    from tumnis.modules.knowledge.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.knowledge.rules import (  # noqa: PLC0415
         Ranked,
         rrf_merge,
     )
@@ -90,14 +88,13 @@ def test_rrf_properties(fulltext: list[int], vector: list[int]) -> None:
 
 @pytest.mark.req("FR-15.3")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 def test_recall_at_k() -> None:
     """T-P3-10-03
     Recall@k is the mean over queries of |expected ∩ top k| / min(k, |expected|): on a toy
     mapping, 1 of 2 found, 0 of 2 found and 1 of 1 found average to 0.5 at k = 5; at k = 1
     the first query's second expected item no longer counts against it.
     """
-    from tumnis.modules.knowledge.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.knowledge.rules import (  # noqa: PLC0415
         recall_at_k,
     )
 

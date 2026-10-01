@@ -91,7 +91,7 @@ async def test_recall_not_worse_than_fulltext_on_eval_set(
     mixed, with vectors recorded from the real model), recall@5 of hybrid search is no
     worse than recall@5 of full-text search; both numbers go into the test report.
     """
-    from tumnis.modules.knowledge.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.knowledge.rules import (  # noqa: PLC0415
         recall_at_k,
     )
     from tumnis.modules.knowledge.tests._eval import (  # noqa: PLC0415
@@ -140,7 +140,7 @@ async def test_hnsw_index_used(
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
     from tumnis.modules.knowledge import search  # type: ignore[attr-defined]  # noqa: PLC0415
-    from tumnis.modules.knowledge.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.knowledge.rules import (  # noqa: PLC0415
         CANDIDATES,
         DEFAULT_EMBEDDING_DIMS,
         DEFAULT_EMBEDDING_MODEL,
