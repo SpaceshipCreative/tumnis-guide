@@ -204,6 +204,29 @@ def normalize_estimate(label: Label | None, estimate: int | None, actor: ActorKi
     return estimate
 
 
+# --- The stuck run's step (P4-02, FR-10.5) -----------------------------------------------------
+
+STUCK_MAX_MINUTES: Final = 10  # FR-10.5: a first step the person takes fits in 10 minutes
+
+
+@dataclass(frozen=True, slots=True)
+class StuckRefusal:
+    code: str
+    status: int
+    detail: str
+
+
+def stuck_step_refusal(
+    stuck_task_id: UUID,
+    parent_id: UUID | None,
+    label: Label | None,
+    estimate_minutes: int | None,
+    steps_before: int,
+) -> StuckRefusal | None:
+    """Why a task made with a stuck run's token is refused (P4-02); None when allowed."""
+    raise NotImplementedError("P4-02")
+
+
 # --- Layout (FR-3.4, FR-3.8) -------------------------------------------------------------------
 
 

@@ -1206,6 +1206,11 @@ def dispatch_workflow_id(run_id: UUID) -> str:
     return str(run_id)
 
 
+def configure_stuck(deadline_seconds: float | None = None) -> None:
+    """How long `handle_stuck` waits for the agent's answer (P4-02, R-30)."""
+    raise NotImplementedError("P4-02")
+
+
 def configure_runs(
     active_cap_seconds: float | None = None, wall_clock_ceiling_seconds: float | None = None
 ) -> None:
