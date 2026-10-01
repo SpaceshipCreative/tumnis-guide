@@ -308,3 +308,43 @@ async def test_a_silent_fake_run_ends_when_a_reset_removes_it(
     assert tick.json() == {"woken": 1}
     plans = _rows(db, "SELECT source, status FROM daily_plans WHERE day = %s", MONDAY)
     assert plans == [{"source": "master", "status": "published"}]
+
+
+@pytest.mark.req("A1.2", "A2.6")
+@pytest.mark.xfail(strict=True, reason="spec:SEED")
+async def test_a_late_scripted_answer_ends_a_run_a_reset_removed(
+    client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
+) -> None:
+    """T-SEED-24
+    A scripted answer that comes after a reset has removed its run (the tick gave up
+    waiting, the test moved on) still ends the waiting run: the fake tells it its runner
+    is lost, so the morning build ends within seconds of the answer instead of holding
+    the maintenance queue for the rest of the run timeout."""
+    from tumnis.modules.planning import api as planning  # noqa: PLC0415
+    from tumnis.modules.planning import testing as planning_testing  # noqa: PLC0415
+
+    await _reset(client)
+    await _script(client, "tumnis-master", "plan", "plan__monday_four_picks", delay_ms=3000)
+    clock = await client.post("/v1/test/clock", json={"time": MONDAY_PLAN_TIME})
+    assert clock.status_code == 200, clock.text
+    stale = planning.plan_workflow_id(_ctx(db).workspace_id, MONDAY, "morning")
+    bound = planning_testing.TICK_WAIT_S
+    planning_testing.TICK_WAIT_S = 1.0
+    try:
+        tick = await client.post("/v1/test/tick/planner-tick")
+    finally:
+        planning_testing.TICK_WAIT_S = bound
+    assert tick.json() == {"woken": 1}
+    assert await _until(lambda: _rows(db, "SELECT id FROM runs WHERE status = 'running'"))
+
+    await _reset(client)
+
+    async def ended() -> bool:
+        [status] = await dbos.list_workflows_async(workflow_ids=[stale], load_input=False)
+        return status.status not in {"PENDING", "ENQUEUED"}
+
+    for _ in range(int(SILENT_END_S / 0.2)):
+        if await ended():
+            break
+        await asyncio.sleep(0.2)
+    assert await ended()
