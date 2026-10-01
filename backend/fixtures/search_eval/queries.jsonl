@@ -1,0 +1,42 @@
+{"query_id": "k01", "text": "Argon2id password hashing", "project": "acme", "expected_chunk_ids": ["4ebbd91e-f109-5a55-aa3a-c81df1a4be7a"], "kind": "keyword"}
+{"query_id": "k02", "text": "senior designer per hour", "project": "acme", "expected_chunk_ids": ["5c26b113-e9cd-5eb5-991c-bed4164a750e"], "kind": "keyword"}
+{"query_id": "k03", "text": "301 redirect", "project": "acme", "expected_chunk_ids": ["d50eb5e5-5f7d-58dc-a020-d157a1e26db6"], "kind": "keyword"}
+{"query_id": "k04", "text": "cookie banner", "project": "acme", "expected_chunk_ids": ["136d7b7b-066c-5f5a-b348-24802d7a5a3f"], "kind": "keyword"}
+{"query_id": "k05", "text": "previous image tag", "project": "acme", "expected_chunk_ids": ["3155ab08-2d8e-575f-85cf-ec00545d3058"], "kind": "keyword"}
+{"query_id": "k06", "text": "WCAG contrast", "project": "acme", "expected_chunk_ids": ["161834ea-ff83-5bf5-bf48-03515d19685d"], "kind": "keyword"}
+{"query_id": "k07", "text": "AVIF hero images", "project": "acme", "expected_chunk_ids": ["a186a191-aa51-525a-a9d6-5b33c91f3d6c"], "kind": "keyword"}
+{"query_id": "k08", "text": "change request", "project": "acme", "expected_chunk_ids": ["7cbc0cc6-68b0-5cbb-86b9-81e52f66dd2e"], "kind": "keyword"}
+{"query_id": "k09", "text": "sitemap Search Console", "project": "acme", "expected_chunk_ids": ["d7b3a9c4-bdeb-511d-8273-bc5fdfe8526e"], "kind": "keyword"}
+{"query_id": "k10", "text": "sentence case headlines", "project": "acme", "expected_chunk_ids": ["171e4b1a-60ab-50f3-ac5f-e95efdfbc42c"], "kind": "keyword"}
+{"query_id": "k11", "text": "TLS certificates renew", "project": "acme", "expected_chunk_ids": ["e0a7b4b8-0435-5a3b-a3c3-0f15134c9096"], "kind": "keyword"}
+{"query_id": "k12", "text": "authenticator app", "project": "acme", "expected_chunk_ids": ["48add7f4-3a07-543a-bd25-0dfef07c21bc"], "kind": "keyword"}
+{"query_id": "k13", "text": "restore drill", "project": "acme", "expected_chunk_ids": ["442f525b-63b3-5899-960a-2f27a5381317"], "kind": "keyword"}
+{"query_id": "k14", "text": "aria-label", "project": "acme", "expected_chunk_ids": ["6d9ad4ca-3e63-5f39-a5a6-e1083ebbe39a"], "kind": "keyword"}
+{"query_id": "p01", "text": "how are login secrets stored", "project": "acme", "expected_chunk_ids": ["4ebbd91e-f109-5a55-aa3a-c81df1a4be7a"], "kind": "paraphrase"}
+{"query_id": "p02", "text": "what does it cost to hire one of our designers", "project": "acme", "expected_chunk_ids": ["5c26b113-e9cd-5eb5-991c-bed4164a750e"], "kind": "paraphrase"}
+{"query_id": "p03", "text": "undo a bad release", "project": "acme", "expected_chunk_ids": ["3155ab08-2d8e-575f-85cf-ec00545d3058"], "kind": "paraphrase"}
+{"query_id": "p04", "text": "when must the customer pay our bills", "project": "acme", "expected_chunk_ids": ["0702dac8-499c-5149-bfa0-bfa49681eef8"], "kind": "paraphrase"}
+{"query_id": "p05", "text": "visitors must agree before we track them", "project": "acme", "expected_chunk_ids": ["136d7b7b-066c-5f5a-b348-24802d7a5a3f"], "kind": "paraphrase"}
+{"query_id": "p06", "text": "who signs off on wording", "project": "acme", "expected_chunk_ids": ["5abb7488-3510-56de-97b9-917b81043c1d"], "kind": "paraphrase"}
+{"query_id": "p07", "text": "menu unusable without a mouse", "project": "acme", "expected_chunk_ids": ["7262de90-1a4b-5e3b-ac4a-51ef70f10f69"], "kind": "paraphrase"}
+{"query_id": "p08", "text": "how quickly the page should load on mobile", "project": "acme", "expected_chunk_ids": ["788534c7-892b-528a-ad28-334cdc4c226e"], "kind": "paraphrase"}
+{"query_id": "p09", "text": "moving old web addresses to new pages", "project": "acme", "expected_chunk_ids": ["d50eb5e5-5f7d-58dc-a020-d157a1e26db6"], "kind": "paraphrase"}
+{"query_id": "p10", "text": "who owns the artwork after the project", "project": "acme", "expected_chunk_ids": ["7f4ba16e-377c-5e68-a037-9a1c2107f2af"], "kind": "paraphrase"}
+{"query_id": "p11", "text": "can I take vacation days into next year", "project": "acme", "expected_chunk_ids": ["170d2c49-56a8-519e-9aa3-b51c552d81e7"], "kind": "paraphrase"}
+{"query_id": "p12", "text": "is wine paid back on business trips", "project": "acme", "expected_chunk_ids": ["e91a6845-7c4d-5a17-ba85-8c94af0818f3"], "kind": "paraphrase"}
+{"query_id": "p13", "text": "where do we keep client logins", "project": "acme", "expected_chunk_ids": ["a35e2665-1dba-590b-9896-d86941b18cb6"], "kind": "paraphrase"}
+{"query_id": "p14", "text": "when do we stop shipping before big announcements", "project": "acme", "expected_chunk_ids": ["f8f8a1a1-0e7b-578d-8ef5-727e0fd4a9c8"], "kind": "paraphrase"}
+{"query_id": "m01", "text": "rollback after errors go up", "project": "acme", "expected_chunk_ids": ["3155ab08-2d8e-575f-85cf-ec00545d3058"], "kind": "mixed"}
+{"query_id": "m02", "text": "discount for a monthly retainer", "project": "acme", "expected_chunk_ids": ["78a62bc8-334b-52e7-845b-bc42383e6b7e"], "kind": "mixed"}
+{"query_id": "m03", "text": "logo spacing rules", "project": "acme", "expected_chunk_ids": ["078ca276-c54b-5af7-b568-67e65a12909b"], "kind": "mixed"}
+{"query_id": "m04", "text": "pricing page rewrite danger", "project": "acme", "expected_chunk_ids": ["c87cb414-0b1c-5eb6-a79c-cd14cda93436"], "kind": "mixed"}
+{"query_id": "m05", "text": "newsletter send day", "project": "acme", "expected_chunk_ids": ["7e15d844-1fa5-5629-9a99-0f5d19e14e93"], "kind": "mixed"}
+{"query_id": "m06", "text": "support reply time when the site is down", "project": "acme", "expected_chunk_ids": ["20ff68a1-5b52-516a-b216-2b4f1b41d086"], "kind": "mixed"}
+{"query_id": "m07", "text": "fonts to load first", "project": "acme", "expected_chunk_ids": ["cfbbf70c-4a84-5915-b846-766c9a592223"], "kind": "mixed"}
+{"query_id": "m08", "text": "photography style for staff pictures", "project": "acme", "expected_chunk_ids": ["5f128dd0-472c-5d45-ab02-4d6aea4686fc"], "kind": "mixed"}
+{"query_id": "m09", "text": "demo requests goal for the year", "project": "acme", "expected_chunk_ids": ["f5eee558-15de-5e94-a176-2018174c2d5a"], "kind": "mixed"}
+{"query_id": "m10", "text": "acceptance period for client review", "project": "acme", "expected_chunk_ids": ["a81aadcd-2dd0-592b-890e-0fac50456b45"], "kind": "mixed"}
+{"query_id": "m11", "text": "expense receipts deadline", "project": "acme", "expected_chunk_ids": ["b9f03212-06b0-5173-a739-08fcab91653f"], "kind": "mixed"}
+{"query_id": "m12", "text": "quarterly access check of the hosting dashboard", "project": "acme", "expected_chunk_ids": ["9604083b-78d7-5a50-a3ed-1e1b44509129"], "kind": "mixed"}
+{"query_id": "m13", "text": "unsubscribe link speed", "project": "acme", "expected_chunk_ids": ["4cfb6818-4a40-53ec-8b72-99915767e997"], "kind": "mixed"}
+{"query_id": "m14", "text": "launch week in the timeline", "project": "acme", "expected_chunk_ids": ["39b3afe5-76b1-5ab1-a6f5-a9d916011eee"], "kind": "mixed"}

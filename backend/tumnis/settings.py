@@ -72,6 +72,21 @@ class GenerationSettings(BaseModel):
     spoken_timeout_ms: int = Field(default=2000, gt=0)  # plan default (P2-16's caller)
 
 
+class EmbeddingsSettings(BaseModel):
+    """The Embeddings slot (P3-10, FR-11.10): the local OpenAI-compatible endpoint (vLLM)
+    that embeds knowledge chunks and search queries, its model and the model's dimension.
+    Unset `base_url` leaves the slot off: chunks are not embedded and hybrid search answers
+    with full-text results. Env: `EMBEDDINGS__BASE_URL` and so on. A hosted embedder is
+    optional and not configured here (Scott item: its key storage)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    base_url: str | None = None  # e.g. http://vllm.lan:8000 (the /v1 API root is appended)
+    model: str = "BAAI/bge-m3"  # plan default
+    dims: int = Field(default=1024, ge=1, le=2000)  # pgvector's HNSW limit is 2,000
+    query_timeout_ms: int = Field(default=2000, gt=0)  # a search waits this long, then FTS
+
+
 class KnowledgeSettings(BaseModel):
     """Upload safety and extraction (P1-16, SEC-10, ADR-0007). Env: `KNOWLEDGE__SPOOL_DIR`
     and so on.
@@ -135,6 +150,7 @@ class Settings(BaseSettings):
     # though they are private (P0-16, SEC-5); self-hosted mode allows the LAN anyway.
     outbound_allowlist: str = ""
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
+    embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings)
     knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
     agents: AgentsSettings = Field(default_factory=AgentsSettings)
 
