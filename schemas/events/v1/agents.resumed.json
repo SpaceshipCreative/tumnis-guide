@@ -1,0 +1,52 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/agents.resumed.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "pause_id": {
+      "format": "uuid",
+      "title": "Pause Id",
+      "type": "string"
+    },
+    "project_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Project Id"
+    },
+    "resumed_at": {
+      "format": "date-time",
+      "title": "Resumed At",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "scope": {
+      "enum": [
+        "workspace",
+        "project"
+      ],
+      "title": "Scope",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "pause_id",
+    "scope",
+    "resumed_at"
+  ],
+  "title": "AgentsResumedV1",
+  "type": "object"
+}

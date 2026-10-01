@@ -15,7 +15,8 @@ export type LiveEntity =
   | "run"
   | "plan"
   | "focus"
-  | "knowledge";
+  | "knowledge"
+  | "agent_pause";
 
 export const LIVE_MAP: Record<
   LiveEntity,
@@ -116,6 +117,8 @@ export const LIVE_MAP: Record<
     details: ["agentsGetRun", "agentsListRunEvents"],
     lists: [],
   },
+  // A pause or resume (P2-09): the kill switch and every project's pause control refresh.
+  agent_pause: { details: [], lists: ["agentsGetPauses"] },
   // A workspace knowledge base item (no project) written, trashed or restored (P1-17):
   // its message carries the document id, and every knowledge list, search and quota
   // includes the workspace items, so they all refresh.

@@ -46,7 +46,6 @@ CANCEL_WITHIN_S = 5  # plan default
 
 
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 async def test_kill_switch_cancels_running_holds_queued_and_resume_releases(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,
@@ -112,6 +111,7 @@ async def test_kill_switch_cancels_running_holds_queued_and_resume_releases(  # 
             return await run_status(session_client, queued) == "running"
 
         assert await until(released)
+        await world.delivered(queued)
         assert len(world.packets(queued)) == 1
 
     [on] = audit(db, "killswitch.on")

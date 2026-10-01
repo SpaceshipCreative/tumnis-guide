@@ -9,8 +9,14 @@ live apart so `api.py` and `workflows.py` can emit them while `events.py` calls 
   `agents.deliver_run_signal` sends it with the event id as the idempotency key.
 - `run.started`: the run left the queue (queued or held -> running).
 - `run.finished`: the run ended, once per run, with its terminal status and stop reason.
+- `agents.paused` (P2-09): the kill switch, for the workspace or one project; the
+  `agents.cancel_paused_runs` subscriber sends `run.signal{cancel}` to each running or
+  waiting run in scope.
+- `agents.resumed` (P2-09): a person resumed it in the app; the `agents.release_held_runs`
+  subscriber sends `release` to the held runs nothing holds any more.
 """
 
+from datetime import datetime
 from typing import ClassVar, Final, Literal
 from uuid import UUID
 
@@ -106,3 +112,27 @@ class ApprovalRequestedV1(EventPayload):
     action_class: str = Field(max_length=200)
     rule: str = Field(max_length=60)
     opened: bool
+
+
+PauseScope = Literal["workspace", "project"]
+
+
+@event_type("agents.paused", 1)
+class AgentsPausedV1(EventPayload):
+    event_name: ClassVar[str] = "agents.paused"
+    schema_version: Literal[1] = 1
+    pause_id: UUID
+    scope: PauseScope
+    project_id: UUID | None = None
+    reason: str = Field(min_length=1, max_length=REASON_MAX)
+    paused_at: datetime
+
+
+@event_type("agents.resumed", 1)
+class AgentsResumedV1(EventPayload):
+    event_name: ClassVar[str] = "agents.resumed"
+    schema_version: Literal[1] = 1
+    pause_id: UUID
+    scope: PauseScope
+    project_id: UUID | None = None
+    resumed_at: datetime

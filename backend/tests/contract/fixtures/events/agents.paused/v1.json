@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "pause_id": "01a0ec82-72d7-7f23-8be6-203712702b01",
+  "scope": "project",
+  "project_id": "01a0ec82-72d7-7f23-8be6-203712702b02",
+  "reason": "The agent keeps opening pull requests",
+  "paused_at": "2026-03-09T12:00:00Z"
+}
