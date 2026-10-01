@@ -15,7 +15,7 @@ that a nudge is warranted now and the answer's confidence): rules may import not
 another module.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Final, Literal
@@ -209,3 +209,41 @@ def attribution(level: Level, kind: EventKind, detail: str | None = None) -> str
     """'Coach · check_in_due (50 min cadence)'; shown on every message (FR-10.9)."""
     text = f"{level.capitalize()} · {kind}"
     return text if detail is None else f"{text} ({detail})"
+
+
+# --- Guardrail (P4-01, FR-10.6) ------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PlanItemLite:
+    """One live item of today's plan: its task, its place and whether the person accepted
+    it (removed items are left out by the caller)."""
+
+    task_id: UUID
+    position: int
+    accepted: bool
+
+
+@dataclass(frozen=True)
+class TaskLite:
+    status: str
+
+
+def captures_detour(level: Level) -> bool:
+    raise NotImplementedError
+
+
+def current_guardrail_task(
+    plan: Sequence[PlanItemLite], tasks: Mapping[UUID, TaskLite]
+) -> UUID | None:
+    raise NotImplementedError
+
+
+def next_guardrail_task(
+    plan: Sequence[PlanItemLite], tasks: Mapping[UUID, TaskLite], current: UUID | None
+) -> UUID | None:
+    raise NotImplementedError
+
+
+def is_detour(to_task_id: UUID | None, today_task_ids: frozenset[UUID]) -> bool:
+    raise NotImplementedError
