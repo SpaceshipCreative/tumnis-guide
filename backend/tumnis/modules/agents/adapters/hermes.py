@@ -20,6 +20,7 @@ of two transports.
 import json
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any, Final, Protocol
 from uuid import UUID, uuid5
 
@@ -97,6 +98,47 @@ def _packet_task(packet: TaskPacket) -> UUID | None:
         return UUID(str(raw)) if raw is not None else None
     except ValueError:
         return None
+
+
+async def record_dispatch(
+    s: AsyncSession, packet: TaskPacket, *, now: datetime, dispatched: Mapping[str, Any]
+) -> None:
+    """The run's `runs` row (`running`, in the calling workflow, which its result is sent
+    to) and its `dispatched` event (payload `dispatched`), in the caller's transaction.
+
+    The run is tainted when its packet is (P2-08, SAF-1: `runs.tainted` from the packet,
+    the OR of its blocks). A row made before (a replayed step, or a run made when it was
+    requested) keeps everything else and only gains the packet's taint, never loses its
+    own, before the runner can see the packet or use its token."""
+    made = insert(_runs).values(
+        id=packet.run_id,
+        profile_id=packet.profile_id,
+        task_id=_packet_task(packet),
+        kind=packet.kind.value,
+        status="running",
+        workflow_id=_workflow_id(),
+        started_at=now,
+        correlation_id=packet.correlation_id,
+        tainted=packet.tainted,
+    )
+    await s.execute(
+        made.on_conflict_do_update(
+            index_elements=["id"],
+            set_={"tainted": _runs.c.tainted | made.excluded.tainted},
+            where=made.excluded.tainted & ~_runs.c.tainted,
+        )
+    )
+    await s.execute(
+        insert(_events)
+        .values(
+            run_id=packet.run_id,
+            message_id=uuid5(packet.run_id, "dispatched"),
+            kind="dispatched",
+            payload=dict(dispatched),
+        )
+        .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
+    )
+    await _notify(s, RUN_EVENTS_CHANNEL, {"run": str(packet.run_id)})
 
 
 class AgentTransport(Protocol):
@@ -178,34 +220,22 @@ class DaemonTransport:
         return str(profile.name), profile.runner_id
 
     async def dispatch(self, packet: TaskPacket) -> RunHandle:
-        """In one transaction: the `runs` row, the `run` mailbox row (message id
-        uuid5(run_id, "run"), so a replayed step queues nothing new), the `dispatched` run
-        event and the NOTIFY that wakes the runner's socket.
-
-        The run is tainted when its packet is (P2-08, SAF-1: `runs.tainted` from the
-        packet, the OR of its blocks). A row made before (a replayed step, or a run made
-        when it was requested) keeps everything else and only gains the packet's taint,
-        never loses its own, before the runner can see the packet or use its token."""
+        """In one transaction: the `runs` row and the `dispatched` run event
+        (`record_dispatch`, which also says how a run gains its packet's taint), the `run`
+        mailbox row (message id uuid5(run_id, "run"), so a replayed step queues nothing
+        new) and the NOTIFY that wakes the runner's socket."""
         now = self.clock.now()
         async with tenant_session(self.ctx) as s:
             profile, runner_id = await self._runner_for(s, packet.profile_id)
-            made = insert(_runs).values(
-                id=packet.run_id,
-                profile_id=packet.profile_id,
-                task_id=_packet_task(packet),
-                kind=packet.kind.value,
-                status="running",
-                workflow_id=_workflow_id(),
-                started_at=now,
-                correlation_id=packet.correlation_id,
-                tainted=packet.tainted,
-            )
-            await s.execute(
-                made.on_conflict_do_update(
-                    index_elements=["id"],
-                    set_={"tainted": _runs.c.tainted | made.excluded.tainted},
-                    where=made.excluded.tainted & ~_runs.c.tainted,
-                )
+            await record_dispatch(
+                s,
+                packet,
+                now=now,
+                dispatched={
+                    "profile": profile,
+                    "skill": packet.skill,
+                    "runner_id": str(runner_id),
+                },
             )
             run = RunV2(
                 message_id=uuid5(packet.run_id, "run"),
@@ -230,22 +260,7 @@ class DaemonTransport:
                 )
                 .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
             )
-            await s.execute(
-                insert(_events)
-                .values(
-                    run_id=packet.run_id,
-                    message_id=uuid5(packet.run_id, "dispatched"),
-                    kind="dispatched",
-                    payload={
-                        "profile": profile,
-                        "skill": packet.skill,
-                        "runner_id": str(runner_id),
-                    },
-                )
-                .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
-            )
             await _notify(s, RUNNER_CHANNEL, {"runner": str(runner_id), "close": False})
-            await _notify(s, RUN_EVENTS_CHANNEL, {"run": str(packet.run_id)})
         return RunHandle(
             run_id=packet.run_id,
             profile_id=packet.profile_id,
