@@ -11253,12 +11253,12 @@ export type NotificationsUnsubscribeData = {
   body?: never;
   path: {
     /**
-     * Subscription Id
+     * Push Subscription Id
      */
-    subscription_id: string;
+    push_subscription_id: string;
   };
   query?: never;
-  url: "/v1/push/subscriptions/{subscription_id}";
+  url: "/v1/push/subscriptions/{push_subscription_id}";
 };
 
 export type NotificationsUnsubscribeErrors = {

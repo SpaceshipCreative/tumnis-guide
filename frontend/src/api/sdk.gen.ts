@@ -2911,7 +2911,7 @@ export const notificationsUnsubscribe = <ThrowOnError extends boolean = false>(
   >({
     responseValidator: async (data) =>
       await zNotificationsUnsubscribeResponse.parseAsync(data),
-    url: "/v1/push/subscriptions/{subscription_id}",
+    url: "/v1/push/subscriptions/{push_subscription_id}",
     ...options,
   });
 

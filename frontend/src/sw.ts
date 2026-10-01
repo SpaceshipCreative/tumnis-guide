@@ -99,9 +99,10 @@ export async function openOrFocus(
   });
   const open = windows.find(isWindowClient);
   if (open !== undefined) {
+    // Focus first, while the click still allows it; then move the window to the link.
+    await open.focus().catch(() => undefined);
     try {
       await open.navigate(target);
-      await open.focus();
       return;
     } catch {
       // a window this worker does not control cannot be navigated: open a new one

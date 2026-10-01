@@ -6,7 +6,8 @@ Browser push (`root_router`, under /v1 itself, as the plan names the paths):
 - `POST /push/subscriptions` `{endpoint, keys: {p256dh, auth}}`: store this browser's
   subscription (201; 422 `endpoint_not_allowed` for anything but an https endpoint of a
   known push service).
-- `DELETE /push/subscriptions/{id}`: forget it (204).
+- `DELETE /push/subscriptions/{push_subscription_id}`: forget it (204; the plan's `{id}`,
+  named after its table so the tenant-isolation sweep finds A's row).
 
 Session-only; the writes are idempotent and run in the request's transaction. They only
 store: the worker sends.
@@ -57,8 +58,10 @@ async def subscribe(
     )
 
 
-@root_router.delete("/push/subscriptions/{subscription_id}", status_code=204)
+@root_router.delete("/push/subscriptions/{push_subscription_id}", status_code=204)
 @route_policy(RoutePolicy(auth="session", idempotent=True))
-async def unsubscribe(subscription_id: UUID, request: Request, session: SessionDep) -> Response:
-    await api.unsubscribe(subscription_id, now=_clock(request).now(), session=session)
+async def unsubscribe(
+    push_subscription_id: UUID, request: Request, session: SessionDep
+) -> Response:
+    await api.unsubscribe(push_subscription_id, now=_clock(request).now(), session=session)
     return Response(status_code=204)

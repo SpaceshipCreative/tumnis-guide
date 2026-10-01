@@ -3463,7 +3463,7 @@ export const zNotificationsSubscribeBody = zPushSubscriptionIn;
 export const zNotificationsSubscribeResponse = zPushSubscriptionOut;
 
 export const zNotificationsUnsubscribePath = z.object({
-  subscription_id: z.uuid(),
+  push_subscription_id: z.uuid(),
 });
 
 /**

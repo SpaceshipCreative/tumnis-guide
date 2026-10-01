@@ -22019,17 +22019,17 @@
         ]
       }
     },
-    "/v1/push/subscriptions/{subscription_id}": {
+    "/v1/push/subscriptions/{push_subscription_id}": {
       "delete": {
         "operationId": "notifications_unsubscribe",
         "parameters": [
           {
             "in": "path",
-            "name": "subscription_id",
+            "name": "push_subscription_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Subscription Id",
+              "title": "Push Subscription Id",
               "type": "string"
             }
           }
