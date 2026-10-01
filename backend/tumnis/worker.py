@@ -24,6 +24,9 @@ GITHUB_QUEUE = "github"  # pull request status reads (P2-13); its own queue: lim
 GITHUB_REFRESHES_PER_MINUTE = 15  # each refresh makes four requests, 304s included
 FOCUS_QUEUE = "focus"  # focus_plan and focus_session (P2-15); each parks on its next instant
 NOTIFICATIONS_QUEUE = "notifications"  # browser pushes (P4-05); each retries on its own
+# As for `events`: DBOS's default poll (1 s) would put up to a second between a push's
+# enqueue and its send.
+NOTIFICATIONS_QUEUE_POLL_S = 0.2
 EXTRACT_QUEUE = "extract"  # upload scanning and extraction (P1-16); only `worker-extract` listens
 EMBED_QUEUE = "embed"  # re-embedding on a model change (P3-10; knowledge.rules.EMBED_QUEUE)
 EMBED_WORKER_CONCURRENCY = 2  # plan default
@@ -96,7 +99,7 @@ def register_queues() -> None:
     # Re-embedding (P3-10): two batches at a time, so a build never starves the embedder.
     DBOS.register_queue(EMBED_QUEUE, worker_concurrency=EMBED_WORKER_CONCURRENCY)
     # Browser pushes (P4-05): one workflow per notification, waiting between its retries.
-    DBOS.register_queue(NOTIFICATIONS_QUEUE)
+    DBOS.register_queue(NOTIFICATIONS_QUEUE, polling_interval_sec=NOTIFICATIONS_QUEUE_POLL_S)
 
 
 def register_schedules(settings: Settings) -> None:
