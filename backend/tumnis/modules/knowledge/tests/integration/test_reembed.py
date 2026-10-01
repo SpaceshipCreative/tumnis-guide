@@ -60,7 +60,6 @@ def _rows(db: DbUrls, model: str) -> int:
 
 @pytest.mark.req("FR-11.10")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_model_change_reembeds_in_background(
     knowledge_ws: WorkspaceHandle,
     dbos: type[DBOS],
@@ -129,7 +128,6 @@ async def _hybrid(ctx: WorkspaceContext, q: str) -> list[Any]:
 
 @pytest.mark.req("REL-3", "FR-11.10")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_reembed_resumes_after_kill(  # noqa: PLR0917
     knowledge_ws: WorkspaceHandle,
     worker_killer: WorkerKillerFactory,

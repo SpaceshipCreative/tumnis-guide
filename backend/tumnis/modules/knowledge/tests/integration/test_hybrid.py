@@ -37,7 +37,6 @@ async def _search(ctx: Any, q: str, project_id: UUID | None, mode: str, limit: i
 
 @pytest.mark.req("FR-15.3")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_every_hit_keeps_document_heading_and_page(
     knowledge_ws: WorkspaceHandle, clock: FixedClock, use_embedders: Callable[..., None]
 ) -> None:
@@ -79,7 +78,6 @@ async def test_every_hit_keeps_document_heading_and_page(
 
 @pytest.mark.req("FR-15.3")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_recall_not_worse_than_fulltext_on_eval_set(
     knowledge_ws: WorkspaceHandle,
     clock: FixedClock,
@@ -126,7 +124,6 @@ async def test_recall_not_worse_than_fulltext_on_eval_set(
 
 @pytest.mark.req("PERF-1")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_hnsw_index_used(
     load_fixture: SeedResult, knowledge_ws: WorkspaceHandle, db: DbUrls
 ) -> None:
@@ -192,7 +189,6 @@ async def test_hnsw_index_used(
 
 @pytest.mark.req("FR-15.4", "FR-15.3")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_passages_for_task_uses_hybrid_and_brief_first(
     knowledge_ws: WorkspaceHandle,
     clock: FixedClock,
@@ -257,7 +253,6 @@ async def test_passages_for_task_uses_hybrid_and_brief_first(
 
 @pytest.mark.req("FR-15.3", "FR-15.1")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_results_workspace_and_project_isolated(
     knowledge_ws: WorkspaceHandle,
     db: DbUrls,

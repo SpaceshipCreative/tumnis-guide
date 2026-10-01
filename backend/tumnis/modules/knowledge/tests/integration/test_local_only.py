@@ -54,7 +54,6 @@ async def _search(ctx: WorkspaceContext, q: str, project_id: UUID, mode: str) ->
 
 @pytest.mark.req("FR-11.10")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_local_only_project_never_sends_text_to_hosted_embedder(
     knowledge_ws: WorkspaceHandle,
     db: DbUrls,
@@ -91,7 +90,6 @@ async def test_local_only_project_never_sends_text_to_hosted_embedder(
 
 @pytest.mark.req("FR-15.3", "FR-11.10")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_no_local_embedder_falls_back_to_fulltext(
     knowledge_ws: WorkspaceHandle,
     db: DbUrls,

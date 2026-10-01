@@ -75,7 +75,6 @@ async def _search(ws: WorkspaceHandle, q: str, project_id: UUID, mode: str) -> l
 
 @pytest.mark.req("FR-15.3")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_hybrid_recall_at_5_not_worse_than_fulltext(
     eval_world: WorkspaceHandle,
     clock: FixedClock,
@@ -113,7 +112,6 @@ async def test_hybrid_recall_at_5_not_worse_than_fulltext(
 
 @pytest.mark.req("FR-15.3")
 @pytest.mark.wp("P3-10")
-@pytest.mark.xfail(strict=True, reason="spec:P3-10")
 async def test_every_hit_cites_document_and_page(
     eval_world: WorkspaceHandle, clock: FixedClock
 ) -> None:
