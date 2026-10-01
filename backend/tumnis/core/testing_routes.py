@@ -5,7 +5,8 @@ clock; `GET /v1/test/requests` lists the last write requests (P0-10); `POST
 /v1/test/clock` sets the server clock (A10; issue #6: A0.1 signs in with the TOTP code at
 the browser's installed clock, so the server must check it at the same instant); `POST
 /v1/test/fakes/{adapter}/script` scripts a fake in every process (R-37, through
-tumnis.core.fake_scripts)."""
+tumnis.core.fake_scripts); `GET /v1/test/fakes/runner/last-packet` answers the last `run`
+packet the fake runner received and how many (P2-04)."""
 
 import asyncio
 from collections.abc import Callable
@@ -258,3 +259,23 @@ async def script_fake(adapter: str, body: Annotated[dict[str, Any], Body()]) -> 
         raise ProblemError(422, "invalid_fake_script", str(exc)) from None
     await fake_scripts.put(adapter, key, script)
     return Response(status_code=204)
+
+
+class LastPacket(BaseModel):
+    """The last `run` packet the fake runner received (None before any) and how many it
+    received since the last reset."""
+
+    packet: dict[str, Any] | None
+    run_messages: int
+
+
+@router.get("/fakes/runner/last-packet")
+@route_policy(RoutePolicy(auth="none"))
+async def runner_last_packet() -> LastPacket:
+    """What A2.1 reads back (P2-04, R-37): the packet as the fake runner received it, its
+    task token live while its run is open (a test-only exception to decision 31; redacted
+    when the run ends)."""
+    stored = await fake_scripts.last_run_packet()
+    if stored is None:
+        return LastPacket(packet=None, run_messages=0)
+    return LastPacket.model_validate(stored)

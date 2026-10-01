@@ -4,7 +4,7 @@
 // the run (`POST /v1/runs/{id}/cancel`, 202; the worker stops the agent). A card (DS-01,
 // ADR-0012) whose log scrolls inside it, so the Stop button stays in reach on the phone.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import {
   agentsGetRunOptions,
@@ -20,9 +20,12 @@ import type { BadgeTone } from "../common/ui";
 const RUN_POLL_MS = 5_000;
 const ACTIVE = new Set(["queued", "running", "waiting_on_human", "held"]);
 const LINE_KINDS = new Set(["log", "tool_call", "file"]);
-/** The elapsed time counts in steps of this many seconds: a calm header while lines
- * stream in, and an honest figure at the minute scale a run is judged on. */
+/** After a run's first minute the elapsed time counts in steps of this many seconds: a
+ * calm header while lines stream in, and an honest figure at the minute scale a run is
+ * judged on. Through the first minute it counts each second, so a run that has just
+ * started visibly moves. */
 const ELAPSED_STEP_S = 5;
+const ELAPSED_SECONDS_FOR_S = 60;
 
 const STATUS: Record<string, { text: string; tone: BadgeTone }> = {
   queued: { text: "Queued", tone: "neutral" },
@@ -69,9 +72,14 @@ function Elapsed({ run, active }: { run: RunOut; active: boolean }) {
   const end =
     active || run.finished_at === null ? now : Date.parse(run.finished_at);
   const raw = (end - Date.parse(run.started_at)) / 1000;
-  const seconds = Math.floor(raw / ELAPSED_STEP_S) * ELAPSED_STEP_S;
+  const step = raw < ELAPSED_SECONDS_FOR_S ? 1 : ELAPSED_STEP_S;
+  const seconds = Math.floor(raw / step) * step;
   return (
-    <span aria-label="Elapsed" className="font-mono text-sm tabular-nums">
+    <span
+      aria-label="Elapsed"
+      data-testid="run-elapsed"
+      className="font-mono text-sm tabular-nums"
+    >
       {formatElapsed(seconds)}
     </span>
   );
@@ -115,6 +123,11 @@ export function RunView({ runId }: { runId: string }) {
   const active = run.data === undefined || ACTIVE.has(run.data.status);
   const events = useRunEvents(runId, { active });
   const lines = (events.data ?? []).filter((e) => LINE_KINDS.has(e.kind));
+  // The files the agent touched, each once, in the order it first named them.
+  const files = [
+    ...new Set(lines.filter((e) => e.kind === "file").map(lineText)),
+  ].filter((path) => path !== "");
+  const filesId = useId();
 
   const stop = useWrite<{ idempotencyKey?: string }, unknown>({
     mutationFn: ({ idempotencyKey }) =>
@@ -185,6 +198,23 @@ export function RunView({ runId }: { runId: string }) {
       </ol>
       {events.isSuccess && lines.length === 0 && (
         <p className={`${HINT} px-4 pb-3`}>No output yet.</p>
+      )}
+      {files.length > 0 && (
+        <section
+          aria-labelledby={filesId}
+          className="border-t border-border px-4 py-2"
+        >
+          <h3 id={filesId} className="text-sm font-medium text-muted">
+            Files touched
+          </h3>
+          <ul aria-labelledby={filesId} className="flex flex-col gap-0.5 pt-1">
+            {files.map((path) => (
+              <li key={path} className="min-w-0 truncate font-mono text-xs">
+                {path}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </section>
   );
