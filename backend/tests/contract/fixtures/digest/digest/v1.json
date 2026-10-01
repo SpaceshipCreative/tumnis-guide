@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "scope": "project",
+  "entries": [
+    {
+      "id": "01a0ec82-72d7-7f23-8be6-203712701fa1",
+      "event_id": "01a0ec82-72d7-7f23-8be6-203712701fb1",
+      "kind": "label_override",
+      "scope": "project",
+      "project_id": "01a0ec82-72d7-7f23-8be6-203712701f10",
+      "task_id": "01a0ec82-72d7-7f23-8be6-203712701f31",
+      "occurred_at": "2026-03-09T12:00:00Z",
+      "data": {
+        "task_id": "01a0ec82-72d7-7f23-8be6-203712701f31",
+        "from": "human",
+        "to": "ai",
+        "reason": null
+      },
+      "text": null
+    },
+    {
+      "id": "01a0ec82-72d7-7f23-8be6-203712701fa2",
+      "event_id": "01a0ec82-72d7-7f23-8be6-203712701fb2",
+      "kind": "context_linked",
+      "scope": "project",
+      "project_id": "01a0ec82-72d7-7f23-8be6-203712701f10",
+      "task_id": "01a0ec82-72d7-7f23-8be6-203712701f31",
+      "occurred_at": "2026-03-09T12:05:00Z",
+      "data": {
+        "task_id": "01a0ec82-72d7-7f23-8be6-203712701f31",
+        "context_item_id": "01a0ec82-72d7-7f23-8be6-203712701f71",
+        "target_type": "message"
+      },
+      "text": "<untrusted-data id=\"u-7f3a9c2e5b10d4aa\" source=\"message\" item=\"01a0ec82-72d7-7f23-8be6-203712701f71\" from=\"client@example.com\" title=\"Logo feedback\">\nPlease make it rounder.\n</untrusted-data id=\"u-7f3a9c2e5b10d4aa\">"
+    }
+  ],
+  "next_cursor": "MTIzNDU6Mjo...",
+  "has_more": false,
+  "gap": false
+}
