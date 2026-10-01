@@ -42,13 +42,16 @@ _LOCK_OUTBOX = text("LOCK TABLE outbox IN ACCESS EXCLUSIVE MODE")
 # SQLSTATE deadlock_detected, and how many times a reset runs its TRUNCATE before giving up.
 DEADLOCK_DETECTED = "40P01"
 DEADLOCK_ATTEMPTS = 3
-# A reset that waits this long for one lock is stuck behind a transaction left open (a
-# request parked on an `await` with its locks held): it gives up with SQLSTATE
-# lock_not_available and reports who holds what (`blocked_report`, SEED) instead of
-# holding every later reset until the e2e job's budget runs out.
-RESET_LOCK_TIMEOUT_S: Final = 20
+# A reset whose TRUNCATE waits this long for one lock may be in a cycle Postgres cannot
+# see: a request holds a later table in its transaction and waits, in Python, on its own
+# second connection, which queues behind the TRUNCATE's lock on an earlier table (J1's swap
+# reads the day calendar that way). The TRUNCATE gives way (SQLSTATE lock_not_available),
+# which lets the request finish, logs who held what (`blocked_report`), and tries again,
+# up to LOCK_WAIT_ATTEMPTS times; then the reset answers 503 with the report (SEED).
+RESET_LOCK_TIMEOUT_S: float = 5.0  # read per attempt (a test shortens it)
+LOCK_WAIT_ATTEMPTS: Final = 4
 LOCK_NOT_AVAILABLE: Final = "55P03"
-_SET_LOCK_TIMEOUT = text(f"SET LOCAL lock_timeout = '{RESET_LOCK_TIMEOUT_S}s'")
+_SET_LOCK_TIMEOUT = text("SELECT set_config('lock_timeout', :timeout, true)")
 # The open transactions in this database. As the app role it sees the api's and the
 # worker's statements; another role's rows show without them (Postgres hides those).
 _OPEN_TRANSACTIONS = text(
@@ -75,20 +78,31 @@ async def truncate_tables(owner_url: str) -> list[str]:
     The TRUNCATE locks the tables in name order, so a reader that holds a later table and
     then reads an earlier one closes a lock cycle; Postgres aborts the TRUNCATE (P0-29: a
     load-set reset in CI). The reader finishes once the TRUNCATE gives way, so the reset
-    tries again, up to `DEADLOCK_ATTEMPTS` times."""
+    tries again, up to `DEADLOCK_ATTEMPTS` times. A cycle Postgres cannot see ends at the
+    lock timeout instead (see RESET_LOCK_TIMEOUT_S): the reset logs the open transactions
+    and tries again, up to LOCK_WAIT_ATTEMPTS times, then raises ResetBlockedError."""
     engine = create_async_engine(owner_url, poolclass=NullPool)
-    attempt = 1
+    attempt = lock_waits = 1
     try:
         while True:
             try:
                 return await _truncate_once(engine)
             except DBAPIError as error:
-                if getattr(error.orig, "sqlstate", None) == LOCK_NOT_AVAILABLE:
+                code = getattr(error.orig, "sqlstate", None)
+                if code == LOCK_NOT_AVAILABLE:
                     report = blocked_report(await _open_transactions(engine), _parked_chains())
-                    _log.error("reset blocked on a lock for %ss:\n%s", RESET_LOCK_TIMEOUT_S, report)
-                    raise ResetBlockedError(report) from error
-                deadlock = getattr(error.orig, "sqlstate", None) == DEADLOCK_DETECTED
-                if not deadlock or attempt == DEADLOCK_ATTEMPTS:
+                    _log.warning(
+                        "reset blocked on a lock for %ss (attempt %d of %d):\n%s",
+                        RESET_LOCK_TIMEOUT_S,
+                        lock_waits,
+                        LOCK_WAIT_ATTEMPTS,
+                        report,
+                    )
+                    if lock_waits == LOCK_WAIT_ATTEMPTS:
+                        raise ResetBlockedError(report) from error
+                    lock_waits += 1
+                    continue
+                if code != DEADLOCK_DETECTED or attempt == DEADLOCK_ATTEMPTS:
                     raise
                 attempt += 1
     finally:
@@ -97,7 +111,7 @@ async def truncate_tables(owner_url: str) -> list[str]:
 
 async def _truncate_once(engine: AsyncEngine) -> list[str]:
     async with engine.begin() as conn:
-        await conn.execute(_SET_LOCK_TIMEOUT)
+        await conn.execute(_SET_LOCK_TIMEOUT, {"timeout": f"{int(RESET_LOCK_TIMEOUT_S * 1000)}ms"})
         names = [
             name
             for (name,) in await conn.execute(
@@ -135,8 +149,8 @@ async def _truncate_once(engine: AsyncEngine) -> list[str]:
 
 
 class ResetBlockedError(Exception):
-    """The reset's TRUNCATE waited RESET_LOCK_TIMEOUT_S for a lock; `report` says who
-    holds it (`blocked_report`)."""
+    """The reset's TRUNCATE hit its lock timeout LOCK_WAIT_ATTEMPTS times in a row;
+    `report` says who held what the last time (`blocked_report`)."""
 
     def __init__(self, report: str) -> None:
         super().__init__(report)
