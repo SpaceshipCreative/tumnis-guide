@@ -311,7 +311,6 @@ async def test_a_silent_fake_run_ends_when_a_reset_removes_it(
 
 
 @pytest.mark.req("A1.2", "A2.6")
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_a_late_scripted_answer_ends_a_run_a_reset_removed(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
 ) -> None:

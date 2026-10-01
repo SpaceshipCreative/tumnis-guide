@@ -21,6 +21,10 @@ export default defineConfig({
   // A stalled stack fails the run before CI's e2e job budget (10 minutes, about 1.5 of
   // them setup) cancels it, so the failure steps still upload the stack logs (SEED).
   globalTimeout: process.env.CI ? 7 * 60_000 : 0,
+  // Two unexpected failures end a CI run at once (a test.fail() journey failing as
+  // expected does not count): a stalled stack fails fast, with its logs, instead of
+  // each later test waiting out its own timeout. Setup can take 3.5 of the 10 minutes.
+  maxFailures: process.env.CI ? 2 : 0,
   reporter: [["list"], ["junit", { outputFile: "test-results/junit.xml" }]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8080",
