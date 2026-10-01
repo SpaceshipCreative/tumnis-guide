@@ -145,3 +145,14 @@ def test_free_left_cuts_the_taken_blocks(
 ) -> None:
     result = rules.free_left([span(*f) for f in free], [span(*t) for t in taken])
     assert result == [span(*b) for b in left]
+
+
+def test_fallback_plan_stops_at_max_items() -> None:
+    """More small tasks fit than a plan may hold: the due-date plan places the first
+    MAX_ITEMS in fallback order and stops (a fixed case, so coverage never rests on the
+    property test's draws)."""
+    small = [task(n, estimate=15) for n in range(1, rules.MAX_ITEMS + 3)]
+    items, unplaceable = rules.fallback_plan(context(*small))
+    oldest_first = sorted(small, key=lambda t: t.created_at)[: rules.MAX_ITEMS]
+    assert [i.task_id for i in items] == [t.task_id for t in oldest_first]
+    assert unplaceable == []
