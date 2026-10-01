@@ -1,0 +1,7 @@
+# A photo of a receipt: one page, read by OCR.
+min_chunks: 1
+max_chunks: 2
+chunks:
+  - contains: ["Flat white", "Croissant", "10.50"]
+    page_from: 1
+    page_to: 1

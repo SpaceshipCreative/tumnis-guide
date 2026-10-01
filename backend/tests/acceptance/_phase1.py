@@ -208,24 +208,120 @@ def fail_decision_providers(fakes: Any) -> None:
     use_label_fakes(fakes["decisions.jev"], fakes["decisions.vllm"])
 
 
+# What `knowledge_app` changed in this process (the in-process pipeline's settings and
+# parts); the acceptance conftest puts it back after each test.
+KNOWLEDGE_APP_UNDO: list[Callable[[], object]] = []
+
+
 def knowledge_app(app_factory: Any, minio: S3Endpoint, clamd: ClamdEndpoint) -> Any:
     """The app with the knowledge pipeline on real services: MinIO as the seed workspace's
     default storage location (P1-14), clamd for scanning and the real Docling converter
-    (P1-16), every other adapter a fake. The plan names the pieces but not the settings that
-    select them, so P1-14 and P1-16 wire this seam."""
-    raise NotImplementedError(
-        f"P1-14/P1-16: build the app with storage on {minio.url} and clamd on "
-        f"{clamd.host}:{clamd.port} (factory {app_factory!r})"
+    (P1-16), every other adapter a fake.
+
+    The api spools uploads to a temporary folder that the in-process pipeline (run by the
+    `dbos` fixture) reads, with its own scratch folder. The seed has no storage location,
+    so on the first request the returned app saves a MinIO bucket as the workspace default
+    and gives every seed project its folder there."""
+    import shutil  # noqa: PLC0415
+    import tempfile  # noqa: PLC0415
+
+    from tumnis.core.clock import SystemClock  # noqa: PLC0415
+    from tumnis.modules.knowledge import pipeline  # noqa: PLC0415
+    from tumnis.modules.knowledge.adapters.clamav import ClamAV  # noqa: PLC0415
+    from tumnis.modules.knowledge.adapters.docling import DoclingExtractor  # noqa: PLC0415
+    from tumnis.settings import KnowledgeSettings  # noqa: PLC0415
+
+    work = Path(tempfile.mkdtemp(prefix="a1-knowledge-"))
+    # Each undo goes on the list as soon as its change is made, so a failure part-way
+    # through still leaves nothing behind (the list runs in pop order).
+    KNOWLEDGE_APP_UNDO.append(lambda: shutil.rmtree(work, ignore_errors=True))
+    (work / "spool").mkdir()
+    (work / "scratch").mkdir()
+    settings = KnowledgeSettings(
+        spool_dir=str(work / "spool"),
+        scratch_dir=str(work / "scratch"),
+        clamd_host=clamd.host,
+        clamd_port=clamd.port,
     )
+    app = app_factory(knowledge=settings)
+    previous_settings = pipeline.configure(settings)
+    KNOWLEDGE_APP_UNDO.append(lambda: pipeline.configure(previous_settings))
+    previous_parts = pipeline.use(
+        scanner=ClamAV(clamd.host, clamd.port, clock=SystemClock()),
+        extractor=DoclingExtractor(chunk_tokenizer=settings.chunk_tokenizer),
+    )
+    KNOWLEDGE_APP_UNDO.append(lambda: pipeline.use(**previous_parts))
+    return _WithMinioLocation(app, minio)
+
+
+class _WithMinioLocation:
+    """An ASGI app that, before its first request, saves a MinIO bucket as the (single)
+    seed workspace's default location and assigns each project its folder on it."""
+
+    def __init__(self, app: Any, minio: S3Endpoint) -> None:
+        self.app = app
+        self.minio = minio
+        self.ready = False
+        self.lock = asyncio.Lock()
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] == "http" and not self.ready:
+            async with self.lock:
+                if not self.ready:
+                    await self._default_location()
+                    self.ready = True
+        await self.app(scope, receive, send)
+
+    async def _default_location(self) -> None:
+        from sqlalchemy import text  # noqa: PLC0415
+
+        from tumnis.core import db as core_db  # noqa: PLC0415
+        from tumnis.core.net import NetPolicy  # noqa: PLC0415
+        from tumnis.core.tenancy import WorkspaceContext, tenant_session  # noqa: PLC0415
+        from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+        from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+        from tumnis.modules.knowledge.tests.contract.test_storage_s3 import (  # noqa: PLC0415
+            make_bucket,
+        )
+        from tumnis.modules.knowledge.tests.integration.test_locations import (  # noqa: PLC0415
+            _lan_endpoint,
+        )
+
+        async with core_db.owner_sessionmaker()() as owner:
+            (workspace_id,) = (await owner.execute(text("SELECT id FROM workspaces"))).one()
+            projects: list[uuid.UUID] = list(
+                (
+                    await owner.execute(text("SELECT id FROM projects WHERE deleted_at IS NULL"))
+                ).scalars()
+            )
+        net = NetPolicy(mode="self-hosted")
+        location = knowledge.LocationIn(
+            name="minio",
+            kind="s3",
+            root=await make_bucket(self.minio),
+            is_default=True,
+            s3=knowledge.S3ConfigIn(
+                endpoint=_lan_endpoint(self.minio),
+                region=self.minio.region,
+                access_key=self.minio.access_key,
+                secret_key=self.minio.secret_key,
+            ),
+        )
+        async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
+            await knowledge.create_location(s, location, net=net)
+            for project in projects:
+                await knowledge.ensure_project_folder(s, project, net=net)
 
 
 async def upload(http: SessionClient, project: str, fixture: str) -> Json:
-    """`POST /v1/knowledge/documents` (multipart) with a file from backend/fixtures/extraction."""
-    path = EXTRACTION / fixture
+    """`POST /v1/knowledge/documents` (multipart) with a file from backend/fixtures/extraction
+    (`eicar.txt` is made at run time: scanners on dev machines quarantine a committed copy)."""
+    from tumnis.modules.knowledge.tests._samples import fixture_bytes  # noqa: PLC0415
+
     response = await http.post(
         "/v1/knowledge/documents",
         data={"project_id": project},
-        files={"file": (path.name, path.read_bytes())},
+        files={"file": (fixture, fixture_bytes(fixture))},
     )
     response.raise_for_status()
     body: Json = response.json()

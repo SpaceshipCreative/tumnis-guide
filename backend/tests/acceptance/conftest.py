@@ -170,3 +170,14 @@ def _reset_human_waits() -> Iterator[None]:
     from tumnis.modules.agents import api as agents  # noqa: PLC0415
 
     agents.configure_human_waits()
+
+
+@pytest.fixture(autouse=True)
+def _undo_knowledge_app() -> Iterator[None]:
+    """Put back the in-process extraction pipeline that `_phase1.knowledge_app` pointed at
+    clamd and Docling, so the next test on this worker starts from the defaults."""
+    from tests.acceptance._phase1 import KNOWLEDGE_APP_UNDO  # noqa: PLC0415
+
+    yield
+    while KNOWLEDGE_APP_UNDO:
+        KNOWLEDGE_APP_UNDO.pop()()

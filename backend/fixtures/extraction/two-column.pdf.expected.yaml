@@ -1,0 +1,12 @@
+# Two columns on one page: each column is read whole, under its own heading.
+min_chunks: 2
+max_chunks: 3
+chunks:
+  - contains: ["community garden", "compost bins"]
+    heading_path_endswith: ["Garden notes"]
+    page_from: 1
+    page_to: 1
+  - contains: ["bicycle club", "leaves the harbour at nine"]
+    heading_path_endswith: ["Bicycle club"]
+    page_from: 1
+    page_to: 1

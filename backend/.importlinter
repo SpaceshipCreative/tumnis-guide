@@ -186,7 +186,7 @@ type = forbidden
 # builds JevDecisions, VllmDecisions (P1-02) and VllmGeneration (P1-03) lazily through the
 # adapter registry. The name predates VllmDecisions (tests/meta/test_import_contracts.py
 # matches it); the forbidden list below covers all three adapters. P2-13 adds the
-# read-only GitHub client, built the same way.
+# read-only GitHub client, built the same way; P1-16 the vision model (VllmVision).
 as_packages = False
 source_modules =
     tumnis.*
@@ -198,6 +198,7 @@ forbidden_modules =
     tumnis.modules.decisions.adapters.vllm
     tumnis.modules.decisions.adapters.vllm_generation
     tumnis.modules.github.adapters.github_status
+    tumnis.modules.knowledge.adapters.vision
     typesafe_sdk
 
 # P1-03 (FR-11.8): the Generation slot writes the placeholder first action and the spoken
