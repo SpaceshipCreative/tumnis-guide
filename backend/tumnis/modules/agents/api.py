@@ -1841,12 +1841,13 @@ async def pause(
     subscriber cancels the running and waiting runs in scope through their workflows. A
     scope already paused answers its open pause and changes nothing. `tainted`: a write
     by a key with no run, such as the master's (R-31), kept on the row and answered.
-    404 for a project the caller cannot see; 422 for a scope and project_id that do
-    not match."""
-    _scope_check(inp.scope, inp.project_id)
+    404 for a project the caller cannot see (before anything else); 422 for a scope and
+    project_id that do not match."""
     async with session_for(ctx, session) as s:
+        # The project first: an id the caller cannot see is 404 whatever the scope (A0.3).
         if inp.project_id is not None and not await projects.project_exists(s, inp.project_id):
             raise NotFound("projects", inp.project_id)
+        _scope_check(inp.scope, inp.project_id)
         existing = await _open_pause(s, inp.scope, inp.project_id)
         if existing is not None:
             return PauseOut(
@@ -1929,10 +1930,11 @@ async def resume(
     the open pause of the scope resumed, the audit row (`killswitch.off`, or
     `project.resumed`) and `agents.resumed`, whose subscriber releases the held runs no
     other pause holds. Nothing paused: nothing changes (`pause_id` None)."""
-    _scope_check(inp.scope, inp.project_id)
     async with session_for(ctx, session) as s:
+        # The project first: an id the caller cannot see is 404 whatever the scope (A0.3).
         if inp.project_id is not None and not await projects.project_exists(s, inp.project_id):
             raise NotFound("projects", inp.project_id)
+        _scope_check(inp.scope, inp.project_id)
         existing = await _open_pause(s, inp.scope, inp.project_id)
         if existing is None:
             return ResumeOut(pause_id=None, released_runs=0)
