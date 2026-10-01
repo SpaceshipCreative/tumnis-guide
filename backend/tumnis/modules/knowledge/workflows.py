@@ -54,7 +54,10 @@ from uuid import UUID
 from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
 
 from tumnis.core import faults
-from tumnis.modules.knowledge import api, pipeline, sync
+from tumnis.core.tenancy import WorkspaceContext
+from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.modules.knowledge import api, embeddings, pipeline, sync
+from tumnis.modules.knowledge.rules import EMBED_BATCH, EMBED_QUEUE, REEMBED_WORKFLOW
 
 log = logging.getLogger(__name__)
 
@@ -340,6 +343,79 @@ async def enqueue_folder_extraction(workspace_id: UUID, version_id: UUID, _path:
 
 
 sync.register_extraction(enqueue_folder_extraction)
+
+
+# Re-embedding on a model change (P3-10, FR-11.10, REL-3)
+
+REEMBED_INDEX_POLL_S: Final = 60.0  # how often a build waits for the model's HNSW index
+REEMBED_INDEX_POLLS: Final = 1440  # a day of waiting; then the model stays `building`
+REEMBED_ROUNDS: Final = 3  # passes over chunks added while the last batches ran
+
+
+def _workspace(workspace_id: str) -> WorkspaceContext:
+    return WorkspaceContext(UUID(workspace_id), SYSTEM_ACTOR)
+
+
+@DBOS.step(name="knowledge_reembed_index_ready", **STEP_RETRY)
+async def reembed_index_step(workspace_id: str, model: str) -> bool:
+    return await embeddings.reembed_index_ready(_workspace(workspace_id), model)
+
+
+@DBOS.step(name="knowledge_reembed_batch", **EXTRACT_STEP_RETRY)
+async def reembed_batch_step(workspace_id: str, model: str) -> int:
+    return await embeddings.reembed_batch(_workspace(workspace_id), model)
+
+
+@DBOS.step(name="knowledge_reembed_finish", **STEP_RETRY)
+async def reembed_finish_step(workspace_id: str, model: str, replaces: str | None) -> int:
+    return await embeddings.reembed_finish(_workspace(workspace_id), model, replaces)
+
+
+@DBOS.workflow(name=REEMBED_WORKFLOW)
+async def reembed_all(workspace_id: str, model: str, replaces: str | None) -> dict[str, Any]:
+    """`knowledge_reembed_all` on the `embed` queue (workflow id `reembed:<ws>:<model>`):
+    once the model's partial HNSW index exists, embed every chunk lacking its vector, a
+    step per EMBED_BATCH chunks (kill point `knowledge.reembed.batch_<n>` after step n,
+    so a killed worker's replacement resumes after the last finished batch and no chunk
+    is sent twice), then switch: the model `active`, `replaces` `retired` and its rows
+    deleted. Search keeps using the active model until that switch."""
+    for _ in range(REEMBED_INDEX_POLLS):
+        if await reembed_index_step(workspace_id, model):
+            break
+        await DBOS.sleep_async(REEMBED_INDEX_POLL_S)
+    else:
+        return {"status": "no_index", "embedded": 0}
+    batches = embedded = 0
+    for _ in range(REEMBED_ROUNDS):
+        while True:
+            count = await reembed_batch_step(workspace_id, model)
+            batches += 1
+            embedded += count
+            faults.killpoint(f"knowledge.reembed.batch_{batches}")
+            if count < EMBED_BATCH:
+                break
+        if await reembed_finish_step(workspace_id, model, replaces) == 0:
+            return {"status": "active", "embedded": embedded}
+    return {"status": "incomplete", "embedded": embedded}
+
+
+async def enqueue_reembed(
+    workflow_id: str, workspace_id: str, model: str, replaces: str | None
+) -> None:
+    """`reembed_all` on the `embed` queue in this process (`embeddings.start_reembed`),
+    under its id, so a repeat returns the workflow already there. Started in a fresh
+    context, as `enqueue_folder_extraction` is, so a caller inside a step can use it."""
+
+    async def enqueue() -> None:
+        with SetWorkflowID(workflow_id):
+            await DBOS.enqueue_workflow_async(
+                EMBED_QUEUE, reembed_all, workspace_id, model, replaces
+            )
+
+    await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
+
+
+embeddings.register_reembed_starter(enqueue_reembed)
 
 
 # P2-18: the folder steps of the project archive workflows register with projects.

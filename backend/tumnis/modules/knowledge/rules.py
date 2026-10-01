@@ -430,3 +430,107 @@ def _pieces(text: str) -> list[str]:
     if current.strip():
         pieces.append(current)
     return pieces
+
+
+# --- Hybrid search (P3-10, FR-15.3, FR-11.10) ----------------------------------------------
+
+RRF_K: Final = 60  # plan default: the constant of the original RRF paper (Cormack et al. 2009)
+CANDIDATES: Final = 50  # per list, plan default
+EMBED_BATCH: Final = 64  # chunks per re-embed step, plan default
+EMBED_QUEUE: Final = "embed"  # the worker's queue for re-embedding (worker concurrency 2)
+REEMBED_WORKFLOW: Final = "knowledge_reembed_all"
+DEFAULT_EMBEDDING_MODEL: Final = "BAAI/bge-m3"  # plan default (local vLLM)
+DEFAULT_EMBEDDING_DIMS: Final = 1024
+HNSW_MAX_DIMS: Final = 2000  # pgvector: HNSW indexes `vector` up to 2,000 dimensions
+# Cosine distance: the index's operator class and the query's operator, kept together so
+# they cannot drift (the planner uses the index only when both match).
+COSINE_OPCLASS: Final = "vector_cosine_ops"
+COSINE_OPERATOR: Final = "<=>"
+HNSW_PREFIX: Final = "embeddings_hnsw_"
+_PG_IDENTIFIER_MAX: Final = 63
+_MODEL_NAME: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$")
+_SLUG_JUNK: Final = re.compile(r"[^a-z0-9]+")
+Source = Literal["fulltext", "vector"]
+
+
+@dataclass(frozen=True)
+class Ranked:
+    chunk_id: UUID
+    rank: int  # 1-based within its list
+
+
+@dataclass(frozen=True)
+class FusedHit:
+    """One fused result: the chunk, its RRF score, which lists found it and its best rank in
+    either. Search hydrates the citation fields (document, heading path, page) afterwards."""
+
+    chunk_id: UUID
+    score: float
+    sources: frozenset[Source]
+    best_rank: int
+
+
+def rrf_merge(
+    fulltext: Sequence[Ranked], vector: Sequence[Ranked], k: int = RRF_K, limit: int = 10
+) -> list[FusedHit]:
+    """score(c) = sum over lists containing c of 1 / (k + rank). Ties break by better
+    best-rank, then chunk_id. Raw scores are ignored: only ranks are comparable."""
+    scores: dict[UUID, float] = {}
+    sources: dict[UUID, set[Source]] = {}
+    best: dict[UUID, int] = {}
+    lists: tuple[tuple[Source, Sequence[Ranked]], ...] = (
+        ("fulltext", fulltext),
+        ("vector", vector),
+    )
+    for source, ranked in lists:
+        for item in ranked:
+            found = sources.setdefault(item.chunk_id, set())
+            if source in found:
+                continue  # a list names a chunk once; a repeat adds nothing
+            found.add(source)
+            scores[item.chunk_id] = scores.get(item.chunk_id, 0.0) + 1 / (k + item.rank)
+            best[item.chunk_id] = min(best.get(item.chunk_id, item.rank), item.rank)
+    order = sorted(scores, key=lambda c: (-scores[c], best[c], c))
+    return [FusedHit(c, scores[c], frozenset(sources[c]), best[c]) for c in order[:limit]]
+
+
+def recall_at_k(
+    results: Mapping[str, Sequence[UUID]], expected: Mapping[str, set[UUID]], k: int = 5
+) -> float:
+    """Mean over queries of |expected ∩ top_k| / min(k, |expected|); a query with nothing
+    expected is skipped, and no query at all is 0.0."""
+    recalls = [
+        len(want & set(list(results.get(query, []))[:k])) / min(k, len(want))
+        for query, want in expected.items()
+        if want
+    ]
+    return sum(recalls) / len(recalls) if recalls else 0.0
+
+
+def valid_model_name(model: str) -> bool:
+    """A model name Tumnis accepts: it is written into SQL as a literal (the partial index's
+    predicate), so only letters, digits and `._:/@+-`, at most 200 characters."""
+    return bool(_MODEL_NAME.match(model))
+
+
+def model_slug(model: str) -> str:
+    """`BAAI/bge-m3` -> `baai_bge_m3`."""
+    return _SLUG_JUNK.sub("_", model.lower()).strip("_")
+
+
+def _fnv1a(text: str) -> str:
+    """32-bit FNV-1a as 8 hex digits (pure arithmetic: rules import no hashlib)."""
+    h = 0x811C9DC5
+    for byte in text.encode():
+        h = ((h ^ byte) * 0x01000193) & 0xFFFFFFFF
+    return f"{h:08x}"
+
+
+def hnsw_index_name(model: str) -> str:
+    """The model's partial HNSW index: `embeddings_hnsw_<slug>`, within PostgreSQL's 63-byte
+    identifier limit (a longer one is cut and ends in a hash of the model name)."""
+    name = HNSW_PREFIX + model_slug(model)
+    if len(name) <= _PG_IDENTIFIER_MAX:
+        return name
+    suffix = "_" + _fnv1a(model)
+    return name[: _PG_IDENTIFIER_MAX - len(suffix)] + suffix
