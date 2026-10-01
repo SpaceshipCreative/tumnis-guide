@@ -163,7 +163,8 @@ async def _cancel_open_dispatches(db: DbUrls) -> None:
     fixture's teardown does not wait out its 10 s for a workflow parked in `recv`. Only
     DBOS state changes (no run, event or outbox row). DBOS 3.1.0 checks cancellation at a
     workflow's next step, and `recv` does not wake for it: an empty message on the run's
-    topic wakes it, and its next step (`now_s`) aborts."""
+    topic wakes it, and its next step (`now_s`) aborts. A run that already ended while its
+    workflow was cancelled and parked (`reconcile_runs` ends such runs) is woken too."""
     from dbos import DBOS  # noqa: PLC0415
 
     from tumnis.modules.agents import api  # noqa: PLC0415
@@ -188,6 +189,16 @@ async def _cancel_open_dispatches(db: DbUrls) -> None:
         with contextlib.suppress(Exception):
             await DBOS.cancel_workflow_async(workflow_id)
             await DBOS.send_async(workflow_id, {}, topic=api.HUMAN_TOPIC)
+    run_ids = sorted(str(run_id) for (run_id,) in owner_rows(db, "SELECT id FROM runs"))
+    if not run_ids:
+        return
+    with contextlib.suppress(Exception):
+        for workflow in await DBOS.list_workflows_async(
+            workflow_ids=run_ids, status="CANCELLED", load_input=False, load_output=False
+        ):
+            with contextlib.suppress(Exception):
+                topic = api.run_topic(uuid.UUID(workflow.workflow_id))
+                await DBOS.send_async(workflow.workflow_id, {}, topic=topic)
 
 
 def user_ctx(workspace: WorkspaceHandle) -> WorkspaceContext:

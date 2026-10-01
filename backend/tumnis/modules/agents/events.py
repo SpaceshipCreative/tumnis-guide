@@ -66,7 +66,7 @@ from tumnis.core.versioning import NotFound
 
 # The subscribers start `provision_profile` through api's starter seam, which workflows
 # fills at import: loading the subscribers loads the workflow too, in every process.
-from tumnis.modules.agents import api, human_flows, workflows
+from tumnis.modules.agents import api, human_flows, signals, workflows
 from tumnis.modules.agents.review_kinds import APPROVAL, QUESTION, RESULT
 from tumnis.modules.agents.rules import ESTIMATED_LABELS, enrichment_settled
 from tumnis.modules.tasks import api as tasks
@@ -167,7 +167,7 @@ async def start_dispatch(envelope: EventEnvelope) -> None:
 @subscribe("run.signal", name=SIGNAL_SUBSCRIBER)
 async def deliver_run_signal(envelope: EventEnvelope) -> None:
     payload = envelope.payload
-    await workflows.deliver_signal(
+    await signals.deliver_signal(
         envelope.workspace_id,
         UUID(str(payload["run_id"])),
         str(payload["kind"]),
@@ -204,9 +204,7 @@ async def release_held_runs(envelope: EventEnvelope) -> None:
     async with tenant_session(ctx) as s:
         free = await api.held_runs_free(s, str(payload["scope"]), project_id)
     for run_id in free:
-        await workflows.release_held(
-            envelope.workspace_id, run_id, key=f"{envelope.event_id}:{run_id}"
-        )
+        await signals.release_held(run_id, key=f"{envelope.event_id}:{run_id}")
 
 
 @subscribe("human.decided", name=REVIEW_SUBSCRIBER)

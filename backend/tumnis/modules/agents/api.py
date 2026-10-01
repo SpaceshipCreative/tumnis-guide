@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import audit
+from tumnis.core import audit, fake_scripts
 from tumnis.core.errors import ProblemError
 from tumnis.core.ids import uuid7
 from tumnis.core.limits import RUN_WALL_CLOCK_CEILING
@@ -1059,6 +1059,7 @@ async def run_ended(ctx: WorkspaceContext, run_id: UUID, *, now: datetime) -> in
     async with tenant_session(ctx) as s:
         revoked = await auth.revoke_task_tokens_for_run(ctx, run_id, now=now, session=s)
         await _redact_run_message(s, run_id)
+    await fake_scripts.redact_run_token(run_id, REDACTED)  # fakes only (R-37)
     return revoked
 
 
@@ -1112,6 +1113,9 @@ LIVE_RUN: Final = "run"
 LIVE_PAUSE: Final = "agent_pause"  # the kill switch's state in the app (P2-09)
 RUN_EVENTS_LIMIT_DEFAULT: Final = 100
 RUN_EVENTS_LIMIT_MAX: Final = 500
+# A protocol-2 `stream` line's kind -> the run event's kind (the runner's handler and the
+# fake runner store them alike).
+STREAM_EVENT_KIND: Final = {"log": "log", "tool_call": "tool_call", "file_touched": "file"}
 LOG_LINE_MAX_BYTES: Final = 8 * 1024  # a longer line is cut with a marker (plan default)
 CUT_MARKER: Final = " [cut]"
 ACTIVE_RUN: Final = frozenset(s.value for s in ACTIVE_RUN_STATUSES)
@@ -1137,6 +1141,15 @@ CLOSING_LINES: Final[dict[str, str]] = {
     "cancelled": "Stopped",
     "failed": "Stopped: the run failed",
     "timed_out": "Stopped at the time limit",
+    "workflow_cancelled": "Stopped: the run's workflow ended",
+    "workflow_error": "Stopped: the run's workflow ended",
+}
+# `reconcile_runs` (P2-04): the DBOS statuses of an ended `dispatch_run` workflow, and the
+# stop reason a run still active then ends with.
+ENDED_WORKFLOW_REASONS: Final[dict[str, str]] = {
+    "CANCELLED": "workflow_cancelled",
+    "ERROR": "workflow_error",
+    "MAX_RECOVERY_ATTEMPTS_EXCEEDED": "workflow_error",
 }
 _runs: Table = RunRow.__table__  # type: ignore[assignment]
 _limits: dict[str, float | None] = {
@@ -1406,6 +1419,25 @@ def log_text(line: str) -> str:
     return raw[:keep].decode("utf-8", errors="ignore") + CUT_MARKER
 
 
+async def record_run_event(
+    s: AsyncSession, run_id: UUID, message_id: UUID, kind: str, payload: dict[str, Any]
+) -> None:
+    """One event of a run (a stream line, a status, an artifact), stored once per message
+    id in the caller's transaction, with a notice for the run view. The run's row is locked
+    before the event takes its `seq`, as every run-event writer does: a run's events then
+    commit in seq order, so a reader paging with `after_seq` never skips one although the
+    sequence is global. The runner's handler and the fake runner both write through it."""
+    await s.execute(select(_runs.c.id).where(_runs.c.id == run_id).with_for_update())
+    await s.execute(
+        pg_insert(_events)
+        .values(run_id=run_id, message_id=message_id, kind=kind, payload=payload)
+        .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
+    )
+    await s.execute(
+        _NOTIFY, {"channel": RUN_EVENTS_CHANNEL, "payload": json.dumps({"run": str(run_id)})}
+    )
+
+
 async def add_system_line(s: AsyncSession, run_id: UUID, line: str, *, name: str) -> None:
     """A system `log` line in the run's log, once per `name` (message id uuid5(run, name))."""
     await s.execute(
@@ -1478,6 +1510,8 @@ async def finish_run_in(
     await auth.revoke_task_tokens_for_run(ctx, run_id, now=now, session=s)
     await _redact_run_message(s, run_id)
     await _redact_stored_packet(s, run_id)
+    # The fake runner's last packet (compose.test only; a no-op otherwise, R-37).
+    await fake_scripts.redact_run_token(run_id, REDACTED)
     if status is not RunStatus.SUCCEEDED:
         line = CLOSING_LINES.get(reason or "", CLOSING_LINES.get(status.value, "Stopped"))
         await add_system_line(s, run_id, line, name="closed")

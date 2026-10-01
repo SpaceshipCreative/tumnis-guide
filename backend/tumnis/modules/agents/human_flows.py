@@ -40,7 +40,7 @@ from tumnis.modules.agents.models import AgentProfile, ApprovalRow, QuestionRow,
 from tumnis.modules.agents.payloads import RunSignalV1
 from tumnis.modules.agents.review_kinds import APPROVAL, QUESTION
 from tumnis.modules.agents.rules import NoulAnswer, approval_need
-from tumnis.modules.agents.workflows import stale_workflow
+from tumnis.modules.agents.signals import stale_workflow
 from tumnis.modules.decisions import api as decisions
 from tumnis.modules.tasks import api as tasks
 
