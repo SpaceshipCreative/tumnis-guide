@@ -18,7 +18,6 @@ WORKING_WEEK = frozenset(range(5))
 
 @pytest.mark.req("Success metrics")
 @pytest.mark.wp("P1-18")
-@pytest.mark.xfail(strict=True, reason="spec:P1-18")
 @pytest.mark.parametrize("fixture", all_streams(), ids=lambda p: Path(p).stem)
 def test_stream(fixture: Path) -> None:
     """T-P1-18-03
@@ -45,7 +44,6 @@ def _gate(days: list[tuple[date, bool, bool]]) -> dict[date, rules.PlanDayFacts]
 
 @pytest.mark.req("Success metrics")
 @pytest.mark.wp("P1-18")
-@pytest.mark.xfail(strict=True, reason="spec:P1-18")
 def test_consecutive_plan_days_exit_gate() -> None:
     """T-P1-18-04
     10 working days with plans and decisions give 10; a day with a plan but no decision
@@ -83,7 +81,6 @@ def test_consecutive_plan_days_exit_gate() -> None:
 
 @pytest.mark.req("Success metrics")
 @pytest.mark.wp("P1-18")
-@pytest.mark.xfail(strict=True, reason="spec:P1-18")
 def test_metrics_with_no_data_are_none() -> None:
     """T-P1-18-05
     Empty inputs return None, never 0 or a division error.
