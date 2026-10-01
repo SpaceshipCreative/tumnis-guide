@@ -391,7 +391,10 @@ async def run_skill(workspace_id: str, packet: dict[str, Any]) -> dict[str, Any]
         handle = RunHandleData(
             run_id=task.run_id, profile_id=task.profile_id, correlation_id=task.correlation_id
         )
-        await stop_agent(workspace_id, handle.model_dump(mode="json"), stop)
+        try:
+            await stop_agent(workspace_id, handle.model_dump(mode="json"), stop)
+        except Exception:  # the run still ends, and its task token with it (R-27)
+            _log.exception("stopping run %s failed; ending it cancelled", task.run_id)
         message = {"status": "cancelled", "error": stop}
     return await finish_step(workspace_id, packet, message)
 
