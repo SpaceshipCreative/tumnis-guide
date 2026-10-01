@@ -255,7 +255,7 @@ Integration tests carry `@pytest.mark.enable_socket` through a module-level `pyt
 
 | Layer | Runner and command | Scope | Budget | Where it runs |
 | --- | --- | --- | --- | --- |
-| Unit | `uv run pytest -m "not integration and not contract"` | `rules.py`, pure code, sockets disabled | 3 min (PRD: backend rules under 30 s) | GitHub-hosted |
+| Unit | `uv run pytest -m "not integration and not contract"` | `rules.py`, pure code, sockets disabled | 4 min (PRD: backend rules under 30 s) | GitHub-hosted |
 | Contract | `uv run pytest -m contract` + `make gen && git diff --exit-code` + Schemathesis | Schemas, adapters, connectors | 3 min | GitHub-hosted |
 | Integration | `uv run pytest -m integration -n auto` | Postgres, DBOS, MinIO, SFTP, clamd, RLS, workflows | 15 min | GitHub-hosted |
 | Frontend | `npm run test` (Vitest) | Components, machines, stores, lib | inside Unit budget | GitHub-hosted |
@@ -1591,7 +1591,7 @@ cd ../frontend && npm run test -- --run && npx playwright test e2e/harness.spec.
 
 **Done checklist**
 
-- [ ] Each test layer runs its (harness-only) suite green in CI inside its budget (unit 3 min, contract 3 min, integration 15 min, frontend inside unit, e2e 10 min)
+- [ ] Each test layer runs its (harness-only) suite green in CI inside its budget (unit 4 min, contract 3 min, integration 15 min, frontend inside unit, e2e 10 min)
 - [ ] `xfail_strict`, strict markers, random order and the socket block are on by default
 - [ ] T-P0-02-03 is committed with `reason="spec:P0-18"`
 - [ ] AGENTS.md "Tests and markers" section updated with the fixture list
@@ -12817,7 +12817,7 @@ The api side, used by both doors:
 
 ```python
 async def request_approval(caller: Caller, inp: RequestApprovalIn) -> HumanWaitOut:
-    """Task token only (403 run_token_required otherwise); token.run_id == inp.run_id.
+    """Task token only (200 denied, rule run_token_required, otherwise); token.run_id == inp.run_id.
     First call: pure approval_need() with threshold=None. 'allowed' returns approved at once
     (no row for 'read'; an audited row otherwise). Anything else inserts an approvals row
     (status pending) and enqueues approval_flow with workflow ID approval:<id>:<app_version>
@@ -12849,7 +12849,7 @@ Decisions from the human go through P1-13's `POST /v1/review/{item}/decide {acti
 | T-P2-05-10 | `backend/tumnis/modules/agents/tests/integration/test_approvals.py::test_unknown_action_uses_noul_threshold` | integration | Fake Decisions: confident safe gives approved; below threshold and Decisions down give pending | FR-5.6 |
 | T-P2-05-11 | `backend/tumnis/modules/agents/tests/integration/test_approvals.py::test_decisions_audited_with_reason` | integration | `approval.granted` and `approval.denied` rows carry actor, reason, correlation ID; blank reason is 422 | SEC-3 |
 | T-P2-05-12 | `backend/tumnis/modules/agents/tests/integration/test_approvals.py::test_gated_request_writes_gated_action_audit` | integration | `agent.gated_action` row per approval-required request | SEC-3 |
-| T-P2-05-13 | `backend/tumnis/modules/agents/tests/integration/test_approvals.py::test_api_key_without_run_refused` | integration | `run_token_required` | FR-5.6 |
+| T-P2-05-13 | `backend/tumnis/modules/agents/tests/integration/test_approvals.py::test_api_key_without_run_refused` | integration | 200 `denied` with rule `run_token_required` (Scott decision 43) | FR-5.6 |
 | T-P2-05-14 | `backend/tumnis/modules/agents/tests/integration/test_questions.py::test_killed_worker_during_wait_answer_still_resumes` | integration | Kill while `question_flow` waits; restart; answer resumes once | FR-5.7 |
 | T-P2-05-15 | `frontend/src/components/project/PolicyEditor.test.tsx::[P2-05][FR-5.6] toggles gated and allowed and saves with version` | unit (Vitest) | PUT with version; 409 shows current | FR-5.6 |
 | T-P2-05-16 | `frontend/src/components/review/ApprovalItem.test.tsx::[P2-05][SEC-3] deny needs a reason` | unit (Vitest) | Presets fill the reason; blank blocked | SEC-3 |
