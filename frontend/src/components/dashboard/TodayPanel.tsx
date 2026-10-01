@@ -24,6 +24,8 @@ export function TodayPanel({
   unavailable?: boolean;
   /** No answer yet (a retry after a failure): claim nothing. */
   pending?: boolean;
+  /** The workspace's local day (`YYYY-MM-DD`): its published plan shows instead (P1-11). */
+  planDay?: string;
   className?: string;
 }) {
   const shown = items.slice(0, TODAY_LIMIT);
