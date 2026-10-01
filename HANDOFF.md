@@ -1,7 +1,113 @@
-# HANDOFF: P3-10 (Embeddings and hybrid search), continuation c1 -> c2
+# HANDOFF: P3-10 (Embeddings and hybrid search), continuation c2 -> c3
 
-Branch `wp/P3-10` (push with `/usr/bin/git push origin HEAD:wp/P3-10`). No PR yet.
-Title when opened: `[P3-10] impl: embeddings and hybrid search`.
+Branch `wp/P3-10` (push with `/usr/bin/git push origin HEAD:wp/P3-10`).
+**PR #141** https://github.com/SpaceshipCreative/tumnis-guide/pull/141 (opened in c2).
+
+## c2 progress (read first; c1/c0 sections below are kept for details)
+
+Commits (c2):
+- `27405c5` merge origin/wp/P3-10 into main-based worktree (`.importlinter` conflict:
+  kept both P2-17's projects.tests -> agents ignore and P3-10's knowledge.tests -> decisions'
+  fake ignore).
+- `cff9b3e` feat(knowledge): `knowledge/embeddings.py` (embed_document, search_model,
+  set_embedding_model, start_reembed + register_reembed_starter, create_embedding_index,
+  reembed_index_ready/batch/finish), `knowledge/search.py` (vector_query, tune_session,
+  fuse -> list[FusedHit] | None), api.py: `_search_stmt(chunk_ids=)`, `search_knowledge`
+  mode `Literal["fts","hybrid"]` (hybrid fuses inside api.py through `_fulltext_hits`, never
+  via the public `search_knowledge`, so T-12's spy sees one call), passages_for passes
+  `mode="hybrid"`, embeddings names re-exported as module attributes
+  (`embed_document = _embeddings.embed_document` etc.: mypy strict needs explicit
+  re-exports, ruff refuses `as` aliases). search.py must NOT import api (import-linter
+  acyclic_siblings within knowledge). pipeline.index embeds after replace_chunks
+  (try/except, logged). events.py subscribers `knowledge.embed_added_document` /
+  `knowledge.embed_changed_document`. workflows.py `reembed_all` (name
+  `knowledge_reembed_all`) + `enqueue_reembed`. worker.py: `EMBED_QUEUE="embed"`
+  (worker_concurrency 2) in register_queues and main_queues; `configure_embeddings` in
+  `configure_generation` (worker only). cli.py `tumnis embeddings index <model> --dims N`.
+  fake.py: `hold` is POLLED (a queued workflow runs on DBOS's own loop; an asyncio.Event
+  set from the test loop would not wake it). Unused red-phase `# type: ignore`s removed.
+- `76f2650` fix: `tune_session` uses `set_config('hnsw.ef_search', :value, true)` (semgrep
+  tumnis-sql-fstring / avoid-sqlalchemy-text failed CI `security` on the f-string SET
+  LOCAL); new unit tests `knowledge/tests/unit/test_vector_query.py` (not spec tests).
+- `425788a` markers OFF for T-P3-10-04..10, 12, 13 and both A3.4 tests: CI run
+  36871715280 (sha cff9b3e) showed every one XPASS(strict). row_factory.py
+  COLUMN_VALUES gains embedding_models dims 3 / status retired and embeddings.embedding
+  "[1,0,0]" (fill_every_table broke ck_embedding_models_dims: 273 errors in A0.3,
+  audit immutability, stairway).
+- No spec-test markers for P3-10 remain (`grep -rn spec:P3-10 backend` is empty).
+
+CI state at handoff: the run on cff9b3e had unit, contract, lint, e2e, performance, daemon,
+skills, traceability, spec-guard, red-proof, version-skew, GitGuardian green; CodeRabbit
+check pass (auto-reviewed on open; threads NOT yet read); `security` failed (semgrep,
+fixed in 76f2650); `integration` failed only on the row_factory errors and the XPASSes
+(both fixed in 425788a). 76f2650 and 425788a are pushed with this handoff, so a new run is
+in flight: check it first.
+
+## Next steps (c3)
+
+1. `gh pr checks 141`; if `integration` fails, `gh run view <id> --log-failed` (needs
+   `allowed_domains` `*.blob.core.windows.net`). The only expected risk is anything else
+   that inserts generic rows into every table.
+2. Merge origin/main (main moved: #137, #102 P1-16 PR2, #134 P2-12, #136): run
+   `/usr/bin/git merge origin/main`, check `uv run alembic heads` (knowledge must have a
+   single head; if main gained a knowledge_0007 from P3-14, re-chain ours to after it and
+   rename revision id), regenerate with `make gen` if openapi/client files conflict,
+   `make check` (use a script that exports the three SEMGREP_* vars under
+   /tmp/claude-1002/P3-10-c3/), push.
+3. Read CodeRabbit's review on #141 (inline comments, review bodies incl. nitpicks,
+   GraphQL reviewThreads); fix or reply + resolve each. CodeRabbit already reviewed once
+   on open; after fixes comment `@coderabbitai review` once.
+4. Update the PR body (body file pattern: /tmp/claude-1002/P3-10-c2/pr-body.md is a WIP
+   draft; write the final one in your own folder): per-layer results, shared-file edits,
+   deviations, Scott items, docs cited (below). `gh pr edit 141 --body-file <file>`.
+5. When CI is green and no threads are open: SendMessage to "main":
+   "#141 MERGE-READY at <sha>". Then delete HANDOFF.md in a chore commit.
+
+## Deviations to list in the PR body (c2 additions)
+
+- MCP `search_knowledge` tool NOT switched to hybrid: it pages with an offset cursor over
+  `_search_stmt` (P2-17's `search_page`, depth 500); fused results are a bounded top-100
+  list, so wiring it would change the tool's cursor contract. Follow-up (coordinator note
+  said "if small"; it is not).
+- REST `GET /v1/knowledge/search` unchanged (no `mode` parameter; backward compatible).
+- Hybrid fusion lives in `api.search_knowledge` + `search.fuse` (plan: search.py) because
+  knowledge's subpackages must stay acyclic (search.py cannot import api).
+- Embedding text entries happens in the worker through `document.added/changed`
+  subscribers (the api process never calls out); files embed in extraction step 8.
+- Re-embed excludes chunks whose project may not send text to the new model (hosted model
+  + local-only project); after the switch such chunks have no vector (full text only).
+  `reembed_all` does up to 3 rounds to pick up chunks added during the build.
+- Catch-up after an embedder outage: `start_reembed` with a request for the active model
+  fills gaps (no automatic schedule).
+- row_factory.py (core test helper) edited for the new tables.
+- Not spec tests: `test_vector_query.py` added.
+
+## Shared-file edits (whole PR)
+
+`.importlinter` (two embeddings adapters in api-never-calls-out; test-only ignore
+knowledge.tests -> decisions.adapters.embeddings.fake), `backend/tumnis/settings.py`
+(EmbeddingsSettings), `backend/tumnis/worker.py`, `backend/tumnis/cli.py`,
+`backend/tumnis/core/tests/integration/row_factory.py`. No pyproject/uv.lock/Makefile/
+AGENTS.md/frontend edits. Migration: `knowledge_0007` (down knowledge_0006).
+
+## Docs consulted (cite in PR body)
+
+pgvector README (HNSW, mixed dimensions via expression + partial index, `vector(n)` cast
+must match, iterative scans 0.8 `relaxed_order`, `hnsw.ef_search`); vLLM OpenAI-compatible
+`/v1/embeddings` (data[].index/embedding); DBOS Transact Python 3.1 via Context7
+(`DBOS.sleep_async`, `enqueue_workflow_async`, `SetWorkflowID`, queues registered after
+launch); PostgreSQL `set_config(name, value, is_local)` == SET LOCAL; SQLAlchemy 2.x
+`UserDefinedType` (bind_expression cast).
+
+## Scott items (c2 additions)
+
+- Query embedding from the api process (coordinator note): currently option (b), the slot
+  is configured only in the worker (`worker.configure_generation` calls
+  `configure_embeddings`); api-side hybrid searches (packet route, MCP) answer with full
+  text. Options: (a) bounded exception, 2 s timeout (`EMBEDDINGS__QUERY_TIMEOUT_MS`), FTS
+  fallback, call `configure_embeddings` in create_app too; (b) keep worker-only.
+- /tmp on this VM hit 99% (ENOSPC) during c2; c2 deleted P3-10-c0's bge-m3 ONNX model and
+  venv (vectors are already committed). Re-download (huggingface.co) if re-recording.
 
 ## c1 progress (read first; the c0 sections below are kept for the details)
 
