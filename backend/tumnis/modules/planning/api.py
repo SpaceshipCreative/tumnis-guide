@@ -830,7 +830,11 @@ async def gather_plan(
         now=now,
         free_blocks=free,
         tasks=pool.planned,
-        replan=replan,
+        # No block may start before the build's clock, whatever the trigger: a morning
+        # plan built late (the first tick after an outage, or a plan time after the hours
+        # start) is floored at `now` like a Re-plan. Before the hours start it changes
+        # nothing.
+        replan=True,
         ahead=await _ahead(ctx, day),
     )
     request = await agents.planning_request(
