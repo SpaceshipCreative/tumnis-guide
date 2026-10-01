@@ -3378,6 +3378,102 @@
         "title": "PlannedBlockOut",
         "type": "object"
       },
+      "PolicyIn": {
+        "description": "The policy editor's save (P2-05, FR-5.6): both lists as a whole and the version\nread. A class in both lists is 422 `policy_conflict`.",
+        "properties": {
+          "allowed": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Allowed",
+            "type": "array"
+          },
+          "gated": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Gated",
+            "type": "array"
+          },
+          "version": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "gated",
+          "allowed",
+          "version"
+        ],
+        "title": "PolicyIn",
+        "type": "object"
+      },
+      "PolicyOut": {
+        "properties": {
+          "allowed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed",
+            "type": "array"
+          },
+          "gated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gated",
+            "type": "array"
+          },
+          "max_concurrent_runs": {
+            "title": "Max Concurrent Runs",
+            "type": "integer"
+          },
+          "max_run_minutes": {
+            "title": "Max Run Minutes",
+            "type": "integer"
+          },
+          "max_tasks_per_run": {
+            "title": "Max Tasks Per Run",
+            "type": "integer"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "tool_allowlist": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tool Allowlist",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "gated",
+          "allowed",
+          "tool_allowlist",
+          "max_concurrent_runs",
+          "max_run_minutes",
+          "max_tasks_per_run",
+          "version"
+        ],
+        "title": "PolicyOut",
+        "type": "object"
+      },
       "PolicySection": {
         "additionalProperties": false,
         "description": "What the agent may do without asking, and its run limits (FR-5.6, SAF-5). The action\nclasses are the project policy's own vocabulary (projects.rules.GATED_DEFAULT).",
@@ -16696,6 +16792,242 @@
           }
         },
         "summary": "Get Project Context",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/policy": {
+      "get": {
+        "description": "The project's approval policy (FR-5.6): gated and allowed action classes and the\nrunaway limits (SAF-5).",
+        "operationId": "projects_get_policy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Policy",
+        "tags": [
+          "projects"
+        ]
+      },
+      "put": {
+        "description": "Replaces the gated and allowed lists at the version read (the policy editor, P2-05);\nemits `policy.changed` and writes its audit row. 409 `stale_version` with the current\npolicy; 422 `policy_conflict` when a class is in both lists.",
+        "operationId": "projects_update_policy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Update Policy",
         "tags": [
           "projects"
         ]

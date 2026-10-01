@@ -97,6 +97,27 @@ async def get_project_context(
     return found
 
 
+@router.get("/{project_id}/policy")
+@route_policy(READ_ONE)
+async def get_policy(project_id: UUID, session: SessionDep) -> api.PolicyOut:
+    """The project's approval policy (FR-5.6): gated and allowed action classes and the
+    runaway limits (SAF-5)."""
+    return await api.get_policy(session, project_id)
+
+
+@router.put("/{project_id}/policy")
+@route_policy(WRITE)
+async def update_policy(
+    project_id: UUID, body: api.PolicyIn, request: Request, session: SessionDep
+) -> api.PolicyOut:
+    """Replaces the gated and allowed lists at the version read (the policy editor, P2-05);
+    emits `policy.changed` and writes its audit row. 409 `stale_version` with the current
+    policy; 422 `policy_conflict` when a class is in both lists."""
+    return await api.update_policy(
+        session, principal_of(request).actor, project_id, body, now=_clock(request).now()
+    )
+
+
 @router.patch("/{project_id}")
 @route_policy(WRITE)
 async def update_project(
