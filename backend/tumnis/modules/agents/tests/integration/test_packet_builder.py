@@ -29,7 +29,6 @@ LONG_BRIEF = " ".join(f"word{i}" for i in range(300))  # well over 600 character
 
 @pytest.mark.req("FR-15.4", "FR-2.3")
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 async def test_enrichment_and_planning_requests_carry_brief_and_passages(
     db: DbUrls,
     workspace: WorkspaceHandle,
