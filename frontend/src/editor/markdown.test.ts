@@ -14,7 +14,7 @@ const dir = fileURLToPath(
 );
 const fixture = (name: string) => readFileSync(join(dir, name), "utf8");
 
-test.fails("[P1-17][ADR-0008] unsupported constructs open as source", () => {
+test("[P1-17][ADR-0008] unsupported constructs open as source", () => {
   const table = fixture("table-unsupported.md");
   expect(canEditSafely(table)).toBe(false);
   expect(editorMode(table)).toBe("source");

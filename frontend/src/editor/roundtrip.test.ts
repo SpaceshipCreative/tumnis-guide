@@ -26,13 +26,13 @@ describe.each(cases)("[P1-17][ADR-0008] round trip %s", (name) => {
   const src = readFileSync(join(dir, name), "utf8");
   const canon = join(dir, name.replace(/\.md$/, ".canonical.md"));
   const expected = existsSync(canon) ? readFileSync(canon, "utf8") : src;
-  test.fails("loads and saves to canonical markdown", () => {
+  test("loads and saves to canonical markdown", () => {
     expect(roundTrip(src)).toBe(expected);
   });
-  test.fails("is idempotent", () => {
+  test("is idempotent", () => {
     expect(roundTrip(roundTrip(src))).toBe(roundTrip(src));
   });
-  test.fails("keeps frontmatter byte for byte", () => {
+  test("keeps frontmatter byte for byte", () => {
     expect(splitFrontmatter(roundTrip(src)).frontmatter).toBe(
       splitFrontmatter(src).frontmatter,
     );

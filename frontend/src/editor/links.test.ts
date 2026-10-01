@@ -23,7 +23,7 @@ afterEach(() => {
   editor = null;
 });
 
-test.fails("[P1-17][ADR-0008] mentions serialize as tumnis links", async () => {
+test("[P1-17][ADR-0008] mentions serialize as tumnis links", async () => {
   const menu: { open: SuggestOpen | null } = { open: null };
   // Read through a function: the menu opens inside the editor, out of TS's sight.
   const current = (): SuggestOpen | null => menu.open;
