@@ -26,3 +26,9 @@ description = "The S3 conditional-write parameter names (IfNoneMatch=, IfMatch=)
 targetRules = ["generic-api-key"]
 regexTarget = "secret"
 regexes = ['''^If(None)?Match=$''']
+
+[[allowlists]]
+description = "Actor refs (api_key:<uuid>) name an API key's id, not the key; real keys use the tmn_ format and the tumnis-token rule (Scott decision 38)"
+targetRules = ["generic-api-key"]
+regexTarget = "match"
+regexes = ['''api_key:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"?$''']
