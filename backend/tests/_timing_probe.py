@@ -7,9 +7,12 @@ runs past 8 s to $TIMING_PROBE_DIR/<worker>-stacks.txt. Removed before the PR is
 
 from __future__ import annotations
 
+import collections
 import faulthandler
 import json
 import os
+import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -110,5 +113,65 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     )
 
 
+_samples: collections.Counter[str] = collections.Counter()
+_cpu: list[tuple[float, float]] = []
+_stop = threading.Event()
+_KEEP = ("/backend/tumnis/", "/backend/tests/")
+
+
+def _area(nodeid: str) -> str:
+    return nodeid.split("::", 1)[0]
+
+
+def _sampler(main_ident: int) -> None:
+    """Every 10 ms: the main thread's stack (backend frames plus the innermost frame),
+    counted per test module; the collapsed stacks go to <worker>-profile.txt."""
+    while not _stop.wait(0.01):
+        frame = sys._current_frames().get(main_ident)
+        names: list[str] = []
+        leaf = True
+        while frame is not None:
+            code = frame.f_code
+            if leaf or any(k in code.co_filename for k in _KEEP):
+                short = code.co_filename.rsplit("/backend/", 1)[-1].rsplit("site-packages/", 1)[-1]
+                names.append(f"{short}:{code.co_name}")
+            leaf = False
+            frame = frame.f_back
+        names.reverse()
+        _samples[_area(_current["nodeid"]) + ";" + ";".join(names[-14:])] += 1
+
+
+def _cpu_sampler() -> None:
+    """Every 2 s: the runner's CPU busy fraction from /proc/stat (gw0 only)."""
+    last = None
+    while not _stop.wait(2):
+        try:
+            fields = [float(x) for x in Path("/proc/stat").read_text().split("\n")[0].split()[1:]]
+        except OSError:
+            return
+        idle, total = fields[3] + fields[4], sum(fields)
+        if last is not None:
+            d_total = total - last[1]
+            _cpu.append((time.time(), 1 - (idle - last[0]) / d_total if d_total else 0.0))
+        last = (idle, total)
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    if not _DIR or _WORKER == "main":
+        return
+    threading.Thread(target=_sampler, args=(threading.get_ident(),), daemon=True).start()
+    if _WORKER == "gw0":
+        threading.Thread(target=_cpu_sampler, daemon=True).start()
+
+
 def pytest_unconfigure(config: pytest.Config) -> None:
+    _stop.set()
     _write({"kind": "end", "t": time.time()})
+    if _DIR and _WORKER != "main":
+        with Path(_DIR, f"{_WORKER}-profile.txt").open("w", encoding="utf-8") as out:
+            for stack, count in _samples.most_common():
+                out.write(f"{stack} {count}\n")
+        _write({"kind": "cpu", "samples": _cpu})
+    for handle in (_out, _stacks):
+        if handle is not None:
+            handle.close()
