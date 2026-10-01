@@ -134,6 +134,14 @@ def _from_http(status: int, detail: Any) -> Problem:
     return problem(status, default, text)
 
 
+def _declines(route: Any, path_params: dict[str, str]) -> bool:
+    """A route may decline a path its pattern matches (`declines(path_params) -> bool`),
+    e.g. `/documents/{document_id}` declines `/documents/text`, which another route
+    serves; it then adds no methods to that path's `Allow`."""
+    declines = getattr(route, "declines", None)
+    return callable(declines) and bool(declines(path_params))
+
+
 def _allowed_methods(request: Request) -> str | None:
     """Every method any route serves at this path. Starlette's 405 names only the first
     route that matched the path, so a path with GET and PUT on separate routes would
@@ -150,7 +158,8 @@ def _allowed_methods(request: Request) -> str | None:
         if not (route.path and route.methods):
             continue
         regex, _, convertors = compile_path(route.path)
-        if regex.match(request.url.path):
+        match = regex.match(request.url.path)
+        if match and not _declines(route.original_route, match.groupdict()):
             (templated if convertors else concrete).update(route.methods)
     return ", ".join(sorted(concrete or templated)) or None
 

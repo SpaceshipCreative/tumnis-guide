@@ -23,6 +23,7 @@ from tumnis.core.versioning import NotFound
 from tumnis.modules.knowledge.adapters.port import ChunkRow
 from tumnis.modules.knowledge.models import Chunk, Document, DocumentVersion, ExtractionArtifact
 from tumnis.modules.knowledge.payloads import DocumentAddedV1, DocumentChangedV1
+from tumnis.modules.knowledge.rules import default_trust
 
 Status = Literal["pending_scan", "extracting", "ready", "quarantined", "failed"]
 NO_HASH: Final = bytes(32)  # a folder file's hash until step 1 has read it
@@ -108,7 +109,9 @@ async def new_document(
     path: str | None,
     source: Literal["upload", "folder"],
 ) -> UUID:
-    """An untrusted, tainted document, `pending_scan`; its kind is settled by the sniff."""
+    """An untrusted, tainted document (`rules.default_trust` of an upload or an outside
+    folder file), `pending_scan`; its kind is settled by the sniff."""
+    trust, tainted = default_trust("upload" if source == "upload" else "folder_external")
     created: UUID = (
         await s.execute(
             insert(_documents)
@@ -116,8 +119,8 @@ async def new_document(
                 project_id=project_id,
                 title=title,
                 kind="file",
-                trust="untrusted",
-                tainted=True,
+                trust=trust,
+                tainted=tainted,
                 storage_location_id=location_id,
                 path=path,
                 content_hash=digest,

@@ -28,14 +28,19 @@ from tumnis.core.principal import Principal
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.modules.agents import api
 from tumnis.modules.agents.models import AgentProfile, RunRow
-from tumnis.modules.agents.packet_builder import PacketTooLargeError, TaskPacket, packet_for_caller
+from tumnis.modules.agents.packet_builder import (
+    PacketTooLargeError,
+    TaskPacket,
+    enrich_packet,
+    packet_for_caller,
+)
 from tumnis.modules.auth import api as auth
 from tumnis.modules.tasks import api as tasks
 
 _profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
 _runs: Table = RunRow.__table__  # type: ignore[assignment]
 
-PacketKind = Literal["task", "proposal", "stuck"]
+PacketKind = Literal["task", "proposal", "stuck", "enrich"]
 
 
 class TaskPacketQuery(surface.SurfaceInput):
@@ -50,7 +55,16 @@ class GetTaskPacketIn(TaskPacketQuery):
 
 async def _packet(call: surface.SurfaceCall, data: GetTaskPacketIn) -> TaskPacket:
     """Context items are outside content under `context:read` (FR-14.10): a caller with
-    only `tasks:read` gets the packet without them."""
+    only `tasks:read` gets the packet without them. `kind=enrich` answers the enrich
+    packet `enrich_task` would dispatch now (P1-17), with the configured run timeout."""
+    if data.kind == "enrich":
+        return await enrich_packet(
+            call.session,
+            data.task_id,
+            run_id=call.caller.run_id,
+            profile_id=call.caller.profile_id,
+            timeout_s=api.enrichment_config().run_timeout_s,
+        )
     try:
         return await packet_for_caller(
             call.session,
@@ -78,8 +92,9 @@ GET_TASK_PACKET = surface.register_op(
         description=(
             "The task's packet as a run would get it: the task, its project's brief and"
             " passages, context items (with context:read), the policy and the callback (no"
-            " token), with outside"
-            " text inside untrusted-data blocks. `kind` is task (default), proposal or stuck."
+            " token), with outside text inside untrusted-data blocks. `kind` is task"
+            " (default), proposal or stuck; enrich answers the enrichment request's packet"
+            " with the brief and passages (nothing is dispatched)."
         ),
         scope="tasks:read",
         input_model=GetTaskPacketIn,
