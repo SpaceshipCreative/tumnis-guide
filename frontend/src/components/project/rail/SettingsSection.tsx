@@ -3,7 +3,7 @@
 // switch. Turning it on keeps every decision about the project's items on the local vLLM
 // model; nothing is sent to Jev. A toggle sends one PATCH /v1/projects/{id} with the
 // version it read; a 409 shows the current value with a notice (REL-2). P2-05 (FR-5.6):
-// the approval policy editor.
+// the approval policy editor. P2-15 (FR-10.1): the focus check-in cadence.
 // In the rail, RailSections opens one section at a time (`open`, `onToggle`); rendered on
 // its own, the section starts open and toggles itself.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +19,7 @@ import {
   useWrite,
 } from "../../../lib/fetch";
 import { workspaceQuery } from "../../settings/queries";
+import { FocusCadence } from "../FocusCadence";
 import { useUpdateProject } from "../mutations";
 import { PolicyEditor } from "../PolicyEditor";
 import { projectQuery } from "../queries";
@@ -226,6 +227,10 @@ export function SettingsSection({
         key={project.version}
         project={project}
         workspaceDefault={workspaceDefault}
+      />
+      <FocusCadence
+        key={`focus-${String(project.version)}`}
+        project={project}
       />
       <LocalDecisionsSwitch project={project} />
       <PolicyEditor project={project} />
