@@ -12,9 +12,8 @@ import {
 
 test(
   "T-SEED-11 the acceptance set holds the journeys' projects and tasks",
-  { tag: ["@SEED", "@J3", "@J7"] },
+  { tag: ["@SEED"] },
   async ({ signedInPage: page, seededApp }) => {
-    test.fail();
     await seededApp.reset("acceptance");
 
     for (const name of ["Acme site", "Beta app", "Gamma ops"]) {
@@ -37,7 +36,6 @@ test(
   "T-SEED-12 acceptance specs reset to the acceptance set by their tags",
   { tag: ["@SEED"] },
   () => {
-    test.fail();
     expect(seedSetFor(["@A1.1", "@J2"])).toBe("acceptance");
     expect(seedSetFor(["@A2.6", "@J8"])).toBe("acceptance");
     expect(seedSetFor(["@A1.5", "@FR-15.2"])).toBe("acceptance");

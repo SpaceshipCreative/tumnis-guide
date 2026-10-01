@@ -39,7 +39,6 @@ def _rows(db: DbUrls, query: str) -> list[dict[str, Any]]:
         return list(conn.execute(query.encode()).fetchall())
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_acceptance_set_writes_runner_agents_keys_and_link(
     db: DbUrls, clock: FixedClock, master_key_file: MasterKeyFile, pepper_file: PepperFile
 ) -> None:
@@ -104,7 +103,6 @@ async def test_acceptance_set_writes_runner_agents_keys_and_link(
     assert _rows(db, "SELECT count(*) AS n FROM tasks WHERE status = 'today'") == [{"n": 0}]
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_reset_loads_the_acceptance_set_at_an_anchor(
     client: httpx.AsyncClient, db: DbUrls
 ) -> None:
