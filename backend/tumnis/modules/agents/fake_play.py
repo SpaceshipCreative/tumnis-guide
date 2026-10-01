@@ -30,6 +30,8 @@ import logging
 from typing import Any, Final
 from uuid import UUID, uuid5
 
+from pydantic import ValidationError
+
 from tumnis.core import fake_scripts
 from tumnis.core.clock import SystemClock
 from tumnis.core.errors import ProblemError
@@ -205,8 +207,13 @@ def _with_answer(result: dict[str, Any], answer: str | None) -> dict[str, Any]:
 
 async def _result(ctx: WorkspaceContext, run_id: UUID, result: dict[str, Any]) -> None:
     """The run's result through `api.accept_result`, as the runner's handler posts a
-    dispatch_run run's result; a run already ended keeps its log and nothing else."""
-    inp = api.PostResultIn.model_validate({**result, "run_id": str(run_id)})
+    dispatch_run run's result; a run already ended keeps its log and nothing else. A
+    result invalid once `{answer}` is replaced (a summary past its limit) is logged."""
+    try:
+        inp = api.PostResultIn.model_validate({**result, "run_id": str(run_id)})
+    except ValidationError:
+        _log.warning("the fake runner's result was invalid", extra={"code": "invalid_result"})
+        return
     try:
         async with tenant_session(ctx) as s:
             await api.accept_result(s, ctx.actor, run_id, inp, now=SystemClock().now())

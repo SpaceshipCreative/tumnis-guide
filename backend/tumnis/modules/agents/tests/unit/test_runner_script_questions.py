@@ -56,3 +56,28 @@ def test_question_step_refuses_what_the_fake_cannot_ask(step: dict[str, Any]) ->
     naming a question and another action: refused."""
     with pytest.raises(ValueError):  # noqa: PT011  # pydantic's ValidationError included
         _parse({"task_title": "Fix footer link", "runs": [[step]]})
+
+
+@pytest.mark.req("FR-5.5")
+@pytest.mark.wp("P2-04")
+async def test_answer_that_overflows_the_summary_is_logged_not_raised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A summary at its limit grows past it once `{answer}` is replaced: the playback logs
+    the invalid result and posts nothing, instead of failing the background task."""
+    from uuid import UUID  # noqa: PLC0415
+
+    from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
+    from tumnis.modules.agents import api, fake_play  # noqa: PLC0415
+
+    posted: list[Any] = []
+
+    async def accept_result(*args: Any, **kwargs: Any) -> None:
+        posted.append(args)
+
+    monkeypatch.setattr(api, "accept_result", accept_result)
+    summary = "x" * (20_000 - len("{answer}")) + "{answer}"
+    result = fake_play._with_answer({"outcome": "done", "summary": summary}, "Turquoise")
+    ctx = WorkspaceContext(UUID(int=1), fake_play.FAKE_RUNNER_ACTOR)
+    await fake_play._result(ctx, UUID(int=2), result)
+    assert posted == []
