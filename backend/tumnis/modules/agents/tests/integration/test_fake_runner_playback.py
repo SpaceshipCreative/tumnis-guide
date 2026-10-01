@@ -135,7 +135,6 @@ def _run_status(db: DbUrls, run_id: UUID) -> str | None:
 
 @pytest.mark.req("FR-5.5", "FR-5.8")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_scripted_fake_plays_each_run_through_accept_result(
     dbos: type[DBOS],
     scripted: None,
@@ -211,7 +210,6 @@ async def test_scripted_fake_plays_each_run_through_accept_result(
 
 @pytest.mark.req("FR-5.5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_last_packet_holds_the_live_token_while_the_run_is_open(
     dbos: type[DBOS],
     scripted: None,

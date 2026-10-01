@@ -47,7 +47,6 @@ async def _running(world: RunWorld, db: DbUrls, title: str) -> UUID:
 
 @pytest.mark.req("NFR Reliability")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_reconcile_fails_a_run_whose_workflow_was_cancelled(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,

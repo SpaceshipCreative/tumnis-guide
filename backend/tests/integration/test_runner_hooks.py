@@ -35,7 +35,6 @@ def stored_scripts() -> Iterator[None]:
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_runner_script_takes_both_shapes(
     client: httpx.AsyncClient, stored_scripts: None
 ) -> None:
@@ -61,7 +60,6 @@ async def test_runner_script_takes_both_shapes(
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:P2-04")
 async def test_last_packet_counts_run_messages_and_reset_clears_it(
     client: httpx.AsyncClient, stored_scripts: None
 ) -> None:
