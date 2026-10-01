@@ -244,9 +244,7 @@ async def test_unscripted_fake_dispatch_is_recorded_and_left_running(
     written `running` with its `dispatched` event, as a daemon's would be) and answers
     nothing, like a runner that never replies: the tick gives up waiting at its bound and
     nothing is published yet."""
-    from tumnis.modules.planning import (  # type: ignore[attr-defined]  # noqa: PLC0415
-        testing as planning_testing,
-    )
+    from tumnis.modules.planning import testing as planning_testing  # noqa: PLC0415
 
     del dbos
     await _reset(client)

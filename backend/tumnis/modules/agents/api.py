@@ -773,7 +773,9 @@ async def adapter_for(profile_id: UUID, *, ctx: WorkspaceContext | None = None) 
 async def agent_for_project(
     project_id: UUID, *, now: datetime, ctx: WorkspaceContext | None = None
 ) -> AgentAvailability:
-    """ready | offline | not_provisioned for the project's agent profile."""
+    """ready | offline | not_provisioned for the project's agent profile; ready too while
+    the fake runner serves it (`fake_runner_serves`: compose.test, its runner never
+    connected), unless it is paused."""
     from tumnis.core import tenancy  # noqa: PLC0415
 
     ctx = ctx or tenancy.current()
@@ -2170,7 +2172,8 @@ async def master_agent(*, ctx: WorkspaceContext) -> MasterAgentOut:
     """ready | offline | not_provisioned for the workspace's master profile (the oldest
     live one): not provisioned without one (or while it is provisioning), offline while
     paused, its runner is not online or the runner does not list it; an MCP endpoint
-    profile is ready (an unreachable endpoint fails its run instead)."""
+    profile is ready (an unreachable endpoint fails its run instead), and so is one the
+    fake runner serves (`fake_runner_serves`: compose.test, its runner never connected)."""
     async with tenant_session(ctx) as s:
         found = (
             (

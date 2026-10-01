@@ -133,9 +133,10 @@ def phase_1_key(profile: str, skill: str) -> str:
     return f"{profile}/{skill}"
 
 
-def load_recording(name: str) -> dict[str, Any]:
+def recorded_reply(name: str) -> dict[str, Any] | None:
     """The JSON of the runner recording called `name`: a bare file name inside
-    RUNNER_RECORDINGS. A path, a parent reference or a missing file raises ValueError, so
+    RUNNER_RECORDINGS; None for a recording of JSON `null` (a reply with no JSON, such as
+    `plan__no_json`). A path, a parent reference or a missing file raises ValueError, so
     a posted script never reads outside the folder."""
     if not name or name in {".", ".."} or Path(name).name != name or "\\" in name:
         raise ValueError(f"not a recording name: {name!r}")
@@ -143,7 +144,17 @@ def load_recording(name: str) -> dict[str, Any]:
     if not path.is_file():
         raise ValueError(f"no runner recording named {name!r}")
     loaded = json.loads(path.read_text(encoding="utf-8"))
+    if loaded is None:
+        return None
     if not isinstance(loaded, dict):
+        raise ValueError(f"runner recording {name!r} is not a JSON object")
+    return loaded
+
+
+def load_recording(name: str) -> dict[str, Any]:
+    """`recorded_reply` for a recording that holds a JSON object (ValueError otherwise)."""
+    loaded = recorded_reply(name)
+    if loaded is None:
         raise ValueError(f"runner recording {name!r} is not a JSON object")
     return loaded
 

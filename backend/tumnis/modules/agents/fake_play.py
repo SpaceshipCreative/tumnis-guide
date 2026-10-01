@@ -18,14 +18,29 @@ first, so the run view shows a running run (its lines, its ticking clock, its St
 button) before the result ends it. The hold is sized for A2.1, which checks those within
 Playwright's 5 s expect window and then waits at most 5 s for In review.
 
+Phase 1 (SEED, R-37): a `run_skill` dispatch (plan, enrich) to a profile the fake serves
+(`api.fake_served`) comes to `dispatch_skill` instead of the daemon transport. It writes the
+run's `runs` row and `dispatched` event as a daemon dispatch does (`record_dispatch`, no
+mailbox row), then plays the script stored for `<profile>/<skill>`
+(`fakes.runner.script(profile, skill, result)`): after the script's delay, the named
+recording, fitted to the packet (`scripted_output`), is the run's `result` event and is
+sent to the waiting workflow, as the api hands over a daemon's result. Without a script
+the fake answers nothing, like a runner that never replies (the workflow times out).
+Phase 1 dispatches never reach the phase 2 hook (`dispatched`): they are not `run` packets.
+
 The playback is not durable: a worker that dies mid-script loses the rest (a fake).
 """
 
 import asyncio
+import contextvars
 import hashlib
 import logging
 from typing import Any, Final
 from uuid import UUID, uuid5
+
+from dbos import DBOS
+from pydantic import ValidationError
+from sqlalchemy import Table, select
 
 from tumnis.core import fake_scripts
 from tumnis.core.clock import SystemClock
@@ -34,7 +49,18 @@ from tumnis.core.tenancy import WorkspaceContext, current, tenant_session
 from tumnis.core.types import ActorRef
 from tumnis.core.versioning import NotFound
 from tumnis.modules.agents import api
-from tumnis.modules.agents.adapters.fake import TaskScript, on_dispatch, task_script_key
+from tumnis.modules.agents.adapters.fake import (
+    Phase1Script,
+    TaskScript,
+    on_dispatch,
+    phase_1_key,
+    recorded_reply,
+    scripted_output,
+    task_script_key,
+)
+from tumnis.modules.agents.adapters.hermes import record_dispatch
+from tumnis.modules.agents.adapters.port import AgentUnavailable
+from tumnis.modules.agents.models import AgentProfile, RunRow
 from tumnis.modules.agents.packet_builder import TaskPacket
 from tumnis.modules.agents.rules import artifact_refusal
 from tumnis.modules.tasks import api as tasks
@@ -48,6 +74,8 @@ RESULT_HOLD_S: float = 4.0
 FAKE_RUNNER_ACTOR: Final = ActorRef(f"device:{UUID(int=0)}")
 
 _playing: set["asyncio.Task[None]"] = set()  # strong references until each playback ends
+_profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
+_runs: Table = RunRow.__table__  # type: ignore[assignment]
 
 
 async def dispatched(packet: TaskPacket) -> None:
@@ -167,6 +195,76 @@ async def _result(ctx: WorkspaceContext, run_id: UUID, result: dict[str, Any]) -
             await api.accept_result(s, ctx.actor, run_id, inp, now=SystemClock().now())
     except ProblemError as exc:
         _log.warning("the fake runner's result was not accepted", extra={"code": exc.code})
+
+
+# --- Phase 1: a `run_skill` dispatch (plan, enrich) played from its recording -------------
+
+
+async def dispatch_skill(ctx: WorkspaceContext, packet: TaskPacket) -> None:
+    """Take a `run_skill` dispatch for the fake (see the module): the run is written
+    `running` with its `dispatched` event, then the profile's script for the skill, if
+    any, plays in the background. AgentUnavailable for an unknown or paused profile, as
+    the daemon transport refuses it."""
+    async with tenant_session(ctx) as s:
+        profile = (
+            await s.execute(
+                select(_profiles.c.name, _profiles.c.status).where(
+                    _profiles.c.id == packet.profile_id, _profiles.c.deleted_at.is_(None)
+                )
+            )
+        ).first()
+        if profile is None:
+            raise AgentUnavailable(packet.profile_id, "unknown profile")
+        if profile.status == "paused":
+            raise AgentUnavailable(packet.profile_id, "paused or without a runner")
+        await record_dispatch(
+            s,
+            packet,
+            now=SystemClock().now(),
+            dispatched={"profile": profile.name, "skill": packet.skill, "runner_id": None},
+        )
+    stored = await fake_scripts.lookup(fake_scripts.RUNNER, phase_1_key(profile.name, packet.skill))
+    try:
+        script = Phase1Script.model_validate(stored) if stored is not None else None
+    except ValidationError:  # the default ("") script, or a phase 2 one: not for this skill
+        script = None
+    if script is None or (script.profile, script.skill) != (profile.name, packet.skill):
+        return
+    # A fresh context: the playback outlives this step and must not act inside its workflow.
+    playback = asyncio.get_running_loop().create_task(
+        _answer(ctx, packet, script), context=contextvars.Context()
+    )
+    _playing.add(playback)
+    playback.add_done_callback(_done)
+
+
+async def _answer(ctx: WorkspaceContext, packet: TaskPacket, script: Phase1Script) -> None:
+    """The recording as the run's result, after the script's delay: a `result` run event
+    (once per run) and the message the waiting `run_skill` receives (idempotent too)."""
+    await asyncio.sleep(script.delay_ms / 1000)
+    try:
+        output = scripted_output(recorded_reply(script.result), packet.model_dump(mode="json"))
+    except ValueError:
+        _log.warning("the fake runner has no usable recording for %s", packet.skill)
+        return
+    run_id = packet.run_id
+    message_id = uuid5(run_id, "fake-result")
+    message = {
+        "type": "result",
+        "run_id": str(run_id),
+        "status": "succeeded",
+        "exit_code": 0,
+        "output_json": output,
+        "error": None,
+    }
+    async with tenant_session(ctx) as s:
+        workflow_id = await s.scalar(select(_runs.c.workflow_id).where(_runs.c.id == run_id))
+        await api.record_run_event(s, run_id, message_id, "result", message)
+    if workflow_id is None:
+        return
+    await DBOS.send_async(
+        workflow_id, message, api.run_topic(run_id), idempotency_key=str(message_id)
+    )
 
 
 on_dispatch(dispatched)
