@@ -320,14 +320,26 @@ class Focus:
 
     # --- settling ----------------------------------------------------------------------
 
-    def _pending_messages(self) -> int:
+    def _busy_focus(self) -> int:
+        """Focus workflows not yet parked in their wait: enqueued, holding an unread
+        message, or between steps. DBOS 3.1 records a `DBOS.sleep` row when a `recv`
+        starts waiting and a `DBOS.recv` row when it returns, so a workflow is parked
+        exactly when it has one sleep more than recvs and no unread message. A message to
+        a finished workflow (it saw its session end first) is never read and not
+        counted."""
         with psycopg.connect(self.sys_db.libpq(APP)) as conn:
-            # Only messages a waiting workflow will still read: one sent to a workflow
-            # that has finished (it saw its session end first) is never consumed.
             row = conn.execute(
-                b"SELECT count(*) FROM dbos.notifications n"
-                b" JOIN dbos.workflow_status w ON w.workflow_uuid = n.destination_uuid"
-                b" WHERE n.topic = 'focus' AND w.status IN ('ENQUEUED', 'PENDING')"
+                b"SELECT count(*) FROM dbos.workflow_status w"
+                b" WHERE w.name IN ('focus_plan', 'focus_session')"
+                b" AND w.status IN ('ENQUEUED', 'PENDING') AND ("
+                b"  EXISTS (SELECT 1 FROM dbos.notifications n"
+                b"   WHERE n.destination_uuid = w.workflow_uuid AND n.topic = 'focus'"
+                b"   AND NOT n.consumed)"
+                b"  OR (SELECT count(*) FROM dbos.operation_outputs o"
+                b"   WHERE o.workflow_uuid = w.workflow_uuid AND o.function_name = 'DBOS.sleep')"
+                b"  <> (SELECT count(*) FROM dbos.operation_outputs o"
+                b"   WHERE o.workflow_uuid = w.workflow_uuid AND o.function_name = 'DBOS.recv')"
+                b"  + 1)"
             ).fetchone()
         return int(row[0]) if row else 0
 
@@ -358,7 +370,7 @@ class Focus:
                 status=["ENQUEUED", "PENDING"], name="deliver_event", load_input=False
             )
             seen = self._fingerprint()
-            quiet = not sent and not busy and self._pending_messages() == 0 and seen == last
+            quiet = not sent and not busy and self._busy_focus() == 0 and seen == last
             calm = calm + 1 if quiet else 0
             last = seen
             if loop.time() > deadline:

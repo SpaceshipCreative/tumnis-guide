@@ -24,7 +24,6 @@ ATTRIBUTION = re.compile(r"^(Quiet|Nudge|Coach|Guardrail) · [a-z_]+")
 
 @pytest.mark.req("FR-10.9")
 @pytest.mark.wp("P2-15")
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 async def test_every_event_has_level_and_rule(dbos: Any, focus: Focus) -> None:
     """T-P2-15-14
     A Coach day with a planned block, a started task, a check-in, an answer and the task
@@ -66,7 +65,6 @@ async def test_every_event_has_level_and_rule(dbos: Any, focus: Focus) -> None:
 
 @pytest.mark.req("FR-10.9")
 @pytest.mark.wp("P2-15")
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 async def test_less_of_this_lowers_today_level(dbos: Any, focus: Focus) -> None:
     """T-P2-15-15
     At Coach, "less of this" on a check-in lowers today's level to Nudge (the response is

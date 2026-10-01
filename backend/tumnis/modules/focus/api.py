@@ -817,7 +817,8 @@ async def planned_events(ctx: WorkspaceContext, plan_id: UUID, day: date) -> lis
         if i.block is not None and i.removed_at is None
     ]
     day_end = await _day_end(ctx, day, tz)
-    found = rules.plan_events(items, day_end or datetime.max.replace(tzinfo=tz))
+    # A day without hours plans no day_end: a stand-in instant, dropped below.
+    found = rules.plan_events(items, day_end or local_to_utc(day + timedelta(days=1), time(0), tz))
     return [
         PlannedOut(kind=e.kind, at=e.at, task_id=e.task_id)
         for e in found

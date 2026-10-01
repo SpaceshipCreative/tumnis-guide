@@ -28,7 +28,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-11.4")
 @pytest.mark.wp("P2-15")
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 async def test_noul_suppresses_and_decisions_down_fires(dbos: Any, focus: Focus) -> None:
     """T-P2-15-13
     The fake Decisions answers that a nudge is not warranted (p = 0.05): the check-in at

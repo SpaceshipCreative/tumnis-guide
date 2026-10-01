@@ -25,7 +25,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 @pytest.mark.req("FR-10.2")
 @pytest.mark.wp("P2-15")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 async def test_session_survives_restart(worker_killer: WorkerKillerFactory, focus: Focus) -> None:
     """T-P2-15-11
     The worker is killed while the session of the started task waits for its first
@@ -70,7 +69,6 @@ async def test_session_survives_restart(worker_killer: WorkerKillerFactory, focu
 @pytest.mark.req("FR-10.2")
 @pytest.mark.wp("P2-15")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 async def test_session_ends_when_task_leaves_in_progress(dbos: Any, focus: Focus) -> None:
     """T-P2-15-12
     On the real clock, with the session's wait cut to 2 seconds (R-30: the timeout path,

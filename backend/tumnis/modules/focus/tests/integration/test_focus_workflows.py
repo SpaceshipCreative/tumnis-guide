@@ -27,7 +27,6 @@ FULL_DAY = ("08:45", "09:59", "10:00", "10:14", "10:15", "10:30", "10:49", "10:5
 
 @pytest.mark.req("FR-10.2")
 @pytest.mark.wp("P2-15")
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 async def test_nudge_fires_block_start_not_started_day_end(dbos: Any, focus: Focus) -> None:
     """T-P2-15-08
     At Nudge, a day with `Write proposal` blocked 10:00 to 10:50 that is never started
@@ -56,7 +55,6 @@ async def test_nudge_fires_block_start_not_started_day_end(dbos: Any, focus: Foc
 
 @pytest.mark.req("FR-10.2")
 @pytest.mark.wp("P2-15")
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 async def test_coach_adds_check_in_switched_stuck(dbos: Any, focus: Focus) -> None:
     """T-P2-15-09
     At Coach the planned events fire as at Nudge, and the session adds its kinds: the task
@@ -92,7 +90,6 @@ async def test_coach_adds_check_in_switched_stuck(dbos: Any, focus: Focus) -> No
 
 @pytest.mark.req("FR-10.2")
 @pytest.mark.wp("P2-15")
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 async def test_quiet_fires_nothing(dbos: Any, focus: Focus) -> None:
     """T-P2-15-10
     At Quiet (the default) a full planned day, with the task started and later another
