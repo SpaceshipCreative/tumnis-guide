@@ -20,6 +20,10 @@ agents api, the fake runner and the outbox.
 - `finish(runner, run_id, output)`, `stream(runner, run_id, seq, text)`: what a daemon
   sends for a run (protocol-2 frames), with their message ids.
 - `wait_until(check)`, `owner_rows(db, sql, params)`, `workflow_status(run_id)`.
+- P2-09: `master_key(world)` (the master profile on the world's runner, with its key),
+  `call_tool(runner, token, name, args)` (one MCP `tools/call` through the runner's
+  TestClient), `audit_rows(db, action)`, `open_pauses(db)` and `step_names(sys_db, run)`
+  (the steps a worker recorded for a run's `dispatch_run`).
 """
 
 from __future__ import annotations
@@ -165,7 +169,8 @@ async def _cancel_open_dispatches(db: DbUrls) -> None:
     from tumnis.modules.agents import api  # noqa: PLC0415
 
     open_runs = owner_rows(
-        db, "SELECT id FROM runs WHERE status IN ('queued', 'running', 'waiting_on_human')"
+        db,
+        "SELECT id FROM runs WHERE status IN ('queued', 'running', 'waiting_on_human', 'held')",
     )
     for (run_id,) in open_runs:
         with contextlib.suppress(Exception):
@@ -366,3 +371,74 @@ def cancels(runner: FakeRunner, run_id: uuid.UUID) -> list[Any]:
         for m in runner.received
         if getattr(m, "type", None) == "cancel" and getattr(m, "run_id", None) == run_id
     ]
+
+
+# --- P2-09: the kill switch -----------------------------------------------------------------
+
+MASTER_SCOPES: Final = ["tasks:read", "tasks:write", "delegate"]
+
+
+async def master_key(world: RunWorld) -> str:
+    """The master profile (`tumnis-master`) on the world's runner, linked to a fresh key
+    with MASTER_SCOPES; the key's secret."""
+    from tests.fakes.fake_runner import register_profile  # noqa: PLC0415
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth  # noqa: PLC0415
+
+    profile_id = await asyncio.to_thread(
+        register_profile,
+        world.workspace,
+        world.clock,
+        "tumnis-master",
+        role="master",
+        runner_id=world.runner.runner_id,
+    )
+    key = await auth.create_key(
+        world.workspace.ctx,
+        auth.KeyIn(name="master key", scopes=MASTER_SCOPES),
+        now=world.clock.now(),
+    )
+    await agents.set_profile_key(world.workspace.ctx, profile_id, key.id, now=world.clock.now())
+    return key.key
+
+
+async def call_tool(runner: FakeRunner, token: str, name: str, args: dict[str, Any]) -> Any:
+    """One MCP `tools/call` with the bearer `token`, as an agent sends it (an
+    `Outcome`: status, problem code or None, data)."""
+    from tests.acceptance._phase2 import tool  # noqa: PLC0415
+
+    return await tool(runner, token, name, args)
+
+
+def audit_rows(db: DbUrls, action: str) -> list[tuple[Any, ...]]:
+    """(actor_type, actor_id, reason, host(source_ip), correlation_id, target_type,
+    target_id) of the audit rows of `action`, oldest first."""
+    return owner_rows(
+        db,
+        "SELECT actor_type, actor_id, reason, host(source_ip), correlation_id, target_type,"
+        " target_id FROM audit_log WHERE action = %s ORDER BY seq",
+        (action,),
+    )
+
+
+def open_pauses(db: DbUrls) -> list[tuple[Any, ...]]:
+    """(scope, project_id, reason) of the pauses not resumed."""
+    return owner_rows(
+        db,
+        "SELECT scope, project_id, reason FROM agent_pauses WHERE resumed_at IS NULL"
+        " ORDER BY paused_at, id",
+    )
+
+
+def step_names(sys_db: DbUrls, run_id: uuid.UUID) -> list[str]:
+    """The step names a worker recorded for the run's `dispatch_run` (its workflow id is
+    the run id), in order, without their module path."""
+    from tests._pg import APP  # noqa: PLC0415
+
+    with psycopg.connect(sys_db.libpq(APP)) as conn:
+        rows = conn.execute(
+            b"SELECT function_name FROM dbos.operation_outputs WHERE workflow_uuid = %s"
+            b" ORDER BY function_id",
+            (str(run_id),),
+        ).fetchall()
+    return [str(name).rsplit(".", 1)[-1] for (name,) in rows]
