@@ -87,15 +87,22 @@ export async function enablePush(): Promise<PushStatus> {
     applicationServerKey: base64UrlBytes(publicKey),
   });
   const json = subscription.toJSON();
-  await apiWrite({
-    kind: "create",
-    method: "POST",
-    path: "/push/subscriptions",
-    idempotencyKey: crypto.randomUUID(),
-    body: {
-      endpoint: json.endpoint ?? subscription.endpoint,
-      keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
-    },
-  });
+  try {
+    await apiWrite({
+      kind: "create",
+      method: "POST",
+      path: "/push/subscriptions",
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        endpoint: json.endpoint ?? subscription.endpoint,
+        keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
+      },
+    });
+  } catch (error) {
+    // The server kept nothing: drop the browser's subscription too, or Settings would
+    // show push as on (from `getSubscription`) with no way to try again.
+    await subscription.unsubscribe().catch(() => false);
+    throw error;
+  }
   return "on";
 }
