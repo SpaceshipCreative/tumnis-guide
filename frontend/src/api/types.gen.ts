@@ -611,6 +611,43 @@ export type DayEventOut = {
 };
 
 /**
+ * DaySummaryOut
+ *
+ * `GET /v1/day/{day}/summary`: the close-the-day panel's four sections for one local
+ * day of the workspace.
+ */
+export type DaySummaryOut = {
+  /**
+   * Agents Finished
+   */
+  agents_finished: Array<TaskRef>;
+  /**
+   * Day
+   */
+  day: string;
+  /**
+   * Prepared By Agents
+   */
+  prepared_by_agents: number;
+  /**
+   * Queued Overnight
+   */
+  queued_overnight: Array<TaskRef>;
+  /**
+   * Rolls Over
+   */
+  rolls_over: Array<RolloverRef>;
+  /**
+   * Shipped
+   */
+  shipped: Array<TaskRef>;
+  /**
+   * Timezone
+   */
+  timezone: string;
+};
+
+/**
  * DeadLetterOut
  */
 export type DeadLetterOut = {
@@ -1290,6 +1327,38 @@ export type McpServerInfo = {
 };
 
 /**
+ * MetricOut
+ *
+ * One PRD success metric: its value over the range (null while there is no data), its
+ * target as the PRD states it, and the phase that brings its data when it has none yet.
+ */
+export type MetricOut = {
+  /**
+   * Available After
+   */
+  available_after: "phase 2" | "phase 4" | null;
+  /**
+   * Key
+   */
+  key:
+    | "daily_open_rate"
+    | "tasks_completed_per_working_day"
+    | "rollover_rate"
+    | "estimate_error"
+    | "agent_share"
+    | "agent_acceptance_rate"
+    | "unattended_runs_per_week";
+  /**
+   * Target
+   */
+  target: string;
+  /**
+   * Value
+   */
+  value: number | null;
+};
+
+/**
  * Metrics
  */
 export type Metrics = {
@@ -1313,6 +1382,35 @@ export type Metrics = {
    * Review Rate
    */
   review_rate: number;
+};
+
+/**
+ * MetricsSummaryOut
+ *
+ * `GET /v1/metrics/summary?from=&to=`: the success metrics over the local days `start`
+ * to `end`, and the phase 1 exit gate (working days planned in a row, as of today).
+ */
+export type MetricsSummaryOut = {
+  /**
+   * End
+   */
+  end: string;
+  /**
+   * Exit Gate Days
+   */
+  exit_gate_days: number;
+  /**
+   * Metrics
+   */
+  metrics: Array<MetricOut>;
+  /**
+   * Plan Days In A Row
+   */
+  plan_days_in_a_row: number;
+  /**
+   * Start
+   */
+  start: string;
 };
 
 /**
@@ -2931,6 +3029,39 @@ export type ReviewKindsOut = {
 };
 
 /**
+ * RolloverRef
+ *
+ * A Today task that is not done: the nights it has rolled over so far, and its count
+ * after tonight's day close.
+ */
+export type RolloverRef = {
+  /**
+   * Label
+   */
+  label: "human" | "ai" | "hybrid" | null;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Rollover Count
+   */
+  rollover_count: number;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Title
+   */
+  title: string;
+  /**
+   * Tonight
+   */
+  tonight: number;
+};
+
+/**
  * RotateIn
  */
 export type RotateIn = {
@@ -3852,6 +3983,30 @@ export type TaskRecurrenceOut = {
    * Weekday
    */
   weekday: number | null;
+};
+
+/**
+ * TaskRef
+ *
+ * A task as the close-the-day panel names it.
+ */
+export type TaskRef = {
+  /**
+   * Label
+   */
+  label: "human" | "ai" | "hybrid" | null;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Title
+   */
+  title: string;
 };
 
 /**
@@ -5815,6 +5970,66 @@ export type CoolifyListDeployStatusResponses = {
 export type CoolifyListDeployStatusResponse =
   CoolifyListDeployStatusResponses[keyof CoolifyListDeployStatusResponses];
 
+export type PlanningGetDaySummaryData = {
+  body?: never;
+  path: {
+    /**
+     * Day
+     */
+    day: string;
+  };
+  query?: never;
+  url: "/v1/day/{day}/summary";
+};
+
+export type PlanningGetDaySummaryErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningGetDaySummaryError =
+  PlanningGetDaySummaryErrors[keyof PlanningGetDaySummaryErrors];
+
+export type PlanningGetDaySummaryResponses = {
+  /**
+   * Successful Response
+   */
+  200: DaySummaryOut;
+};
+
+export type PlanningGetDaySummaryResponse =
+  PlanningGetDaySummaryResponses[keyof PlanningGetDaySummaryResponses];
+
 export type DeadLettersGetDeadLettersData = {
   body?: never;
   path?: never;
@@ -6944,6 +7159,125 @@ export type KnowledgeSetProjectFolderResponses = {
 
 export type KnowledgeSetProjectFolderResponse =
   KnowledgeSetProjectFolderResponses[keyof KnowledgeSetProjectFolderResponses];
+
+export type PlanningRecordAppOpenData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/metrics/open";
+};
+
+export type PlanningRecordAppOpenErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningRecordAppOpenError =
+  PlanningRecordAppOpenErrors[keyof PlanningRecordAppOpenErrors];
+
+export type PlanningRecordAppOpenResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type PlanningRecordAppOpenResponse =
+  PlanningRecordAppOpenResponses[keyof PlanningRecordAppOpenResponses];
+
+export type PlanningGetMetricsSummaryData = {
+  body?: never;
+  path?: never;
+  query: {
+    /**
+     * From
+     */
+    from: string;
+    /**
+     * To
+     */
+    to: string;
+  };
+  url: "/v1/metrics/summary";
+};
+
+export type PlanningGetMetricsSummaryErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningGetMetricsSummaryError =
+  PlanningGetMetricsSummaryErrors[keyof PlanningGetMetricsSummaryErrors];
+
+export type PlanningGetMetricsSummaryResponses = {
+  /**
+   * Successful Response
+   */
+  200: MetricsSummaryOut;
+};
+
+export type PlanningGetMetricsSummaryResponse =
+  PlanningGetMetricsSummaryResponses[keyof PlanningGetMetricsSummaryResponses];
 
 export type PlanningReplanData = {
   body: ReplanIn;

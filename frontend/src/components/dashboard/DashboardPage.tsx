@@ -3,14 +3,18 @@
 // calendar strip (P1-10), the Today panel and the activity feed beside the project cards on a laptop (5/12 and 7/12, no page
 // scroll at 1280 x 800), one column on a phone with quick add in thumb reach. Each part is
 // a card (DS-01, ADR-0012). The route loader has filled the cache, so the first render
-// has data.
+// has data. From 16:00 local a Close the day button opens the day-close panel (P1-18, J7)
+// through the `?panel=close` search param.
 import { useQuery } from "@tanstack/react-query";
-import { useLayoutEffect, useRef } from "react";
+import { getRouteApi } from "@tanstack/react-router";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { BUTTON_SECONDARY } from "../common/ui";
 import { ActivityFeed } from "./ActivityFeed";
 import { CalendarStrip } from "./CalendarStrip";
+import { CloseDayPanel } from "./CloseDayPanel";
 import { FitOfferList } from "./FitOfferRow";
-import { formatToday, localDay } from "./format";
+import { formatToday, localDay, localHour } from "./format";
 import { ProjectCardGrid } from "./ProjectCardGrid";
 import {
   deployStatusQuery,
@@ -23,6 +27,36 @@ import {
 import { ReviewBadge } from "./ReviewBadge";
 import { TodayPanel } from "./TodayPanel";
 import type { DashboardProject } from "./types";
+
+const dashboardRoute = getRouteApi("/");
+
+/** The Close the day button shows from this hour, local time (plan default). */
+export const CLOSE_DAY_FROM_HOUR = 16;
+
+/** Close the day, shown from 16:00 in `timeZone`; it checks the clock each minute. */
+function CloseDayButton({
+  timeZone,
+  onOpen,
+}: {
+  timeZone: string;
+  onOpen: () => void;
+}) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tick = window.setInterval(() => {
+      setNow(new Date());
+    }, 60_000);
+    return () => {
+      window.clearInterval(tick);
+    };
+  }, []);
+  if (localHour(now, timeZone) < CLOSE_DAY_FROM_HOUR) return null;
+  return (
+    <button type="button" className={BUTTON_SECONDARY} onClick={onOpen}>
+      Close the day
+    </button>
+  );
+}
 
 /** Performance mark once the cards and Today render with data (A0.6, P0-29 reads it). */
 export const DASHBOARD_READY_MARK = "tumnis:dashboard-ready";
@@ -44,6 +78,8 @@ function activeInBoardOrder(
 }
 
 export function DashboardPage() {
+  const { panel } = dashboardRoute.useSearch();
+  const navigate = dashboardRoute.useNavigate();
   const projects = useQuery(projectsQuery());
   const today = useQuery(todayQuery());
   const reviewCount = useQuery(reviewCountQuery());
@@ -68,6 +104,11 @@ export function DashboardPage() {
     (deployStatus.data ?? []).map((entry) => [entry.project_id, entry.apps]),
   );
 
+  const closeDay = planDay ?? localDay(new Date(), timeZone);
+  const setPanel = (next: "close" | undefined) => {
+    void navigate({ search: (prev) => ({ ...prev, panel: next }) });
+  };
+
   const ready = projects.isSuccess && today.isSuccess;
   const marked = useRef(false);
   useLayoutEffect(() => {
@@ -85,7 +126,15 @@ export function DashboardPage() {
             {formatToday(new Date(), timeZone)}
           </p>
         </div>
-        <ReviewBadge count={reviewCount.data?.count ?? 0} />
+        <div className="flex flex-wrap items-center gap-2">
+          <CloseDayButton
+            timeZone={timeZone}
+            onOpen={() => {
+              setPanel("close");
+            }}
+          />
+          <ReviewBadge count={reviewCount.data?.count ?? 0} />
+        </div>
       </header>
       <div className="flex flex-col gap-6 md:grid md:min-h-0 md:flex-1 md:grid-cols-12">
         <div className="flex min-h-0 flex-col gap-4 md:col-span-5">
@@ -117,6 +166,14 @@ export function DashboardPage() {
           className="md:col-span-7"
         />
       </div>
+      {panel === "close" && (
+        <CloseDayPanel
+          day={closeDay}
+          onClose={() => {
+            setPanel(undefined);
+          }}
+        />
+      )}
     </div>
   );
 }

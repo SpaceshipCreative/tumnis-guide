@@ -9,6 +9,7 @@ deduplication window).
 
 from datetime import date
 from typing import Final
+from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy import select, text
@@ -17,7 +18,20 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from tumnis.core.events import EventEnvelope
 from tumnis.core.metrics import USAGE_TOTAL
 from tumnis.modules.usage.models import UsageCounter
+
+# The local success metrics (P1-18): planning gathers their inputs and calls them here.
+from tumnis.modules.usage.rules import PlanDayFacts as PlanDayFacts  # noqa: PLC0414
+from tumnis.modules.usage.rules import PlannedOutcome as PlannedOutcome  # noqa: PLC0414
+from tumnis.modules.usage.rules import (
+    consecutive_plan_days as consecutive_plan_days,  # noqa: PLC0414
+)
+from tumnis.modules.usage.rules import daily_open_rate as daily_open_rate  # noqa: PLC0414
+from tumnis.modules.usage.rules import estimate_error as estimate_error  # noqa: PLC0414
 from tumnis.modules.usage.rules import increments, usage_day
+from tumnis.modules.usage.rules import rollover_rate as rollover_rate  # noqa: PLC0414
+from tumnis.modules.usage.rules import (
+    tasks_completed_per_working_day as tasks_completed_per_working_day,  # noqa: PLC0414
+)
 
 
 class UsageRow(BaseModel):
@@ -73,6 +87,40 @@ async def report(s: AsyncSession, day_from: date, day_to: date) -> list[UsageRow
         .order_by(UsageCounter.day, UsageCounter.counter)
     )
     return [UsageRow(day=day, counter=counter, value=value) for day, counter, value in rows]
+
+
+# --- App opens (P1-18) ---------------------------------------------------------------------------
+
+APP_OPEN: Final = "app_open"
+_OPEN: Final = text(
+    """
+    INSERT INTO usage_counters (workspace_id, day, counter, value)
+    VALUES (:ws, :day, :counter, 1)
+    ON CONFLICT (workspace_id, day, counter)
+    DO UPDATE SET value = usage_counters.value + 1, version = usage_counters.version + 1
+    """
+)
+
+
+async def record_open(s: AsyncSession, workspace_id: UUID, day: date) -> None:
+    """Counts one app open on `day`, in the caller's transaction. Unlike the event counters
+    (UTC days), `day` is the workspace's local day, which the caller works out (usage reads
+    no other module): the daily open rate counts local days (P1-18)."""
+    await s.execute(_OPEN, {"ws": workspace_id, "day": day, "counter": APP_OPEN})
+
+
+async def open_days(s: AsyncSession, day_from: date, day_to: date) -> set[date]:
+    """The local days from `day_from` to `day_to` (both inclusive) the app was opened on, for
+    the workspace in context."""
+    rows = await s.execute(
+        select(UsageCounter.day).where(
+            UsageCounter.counter == APP_OPEN,
+            UsageCounter.day.between(day_from, day_to),
+            UsageCounter.value > 0,
+            UsageCounter.deleted_at.is_(None),
+        )
+    )
+    return {day for (day,) in rows}
 
 
 _TOTALS: Final = text("SELECT counter, total FROM app.usage_totals()")

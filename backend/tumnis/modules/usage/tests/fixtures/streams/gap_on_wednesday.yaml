@@ -1,0 +1,82 @@
+# Fixture event stream (P1-18, T-P1-18-03): events as the metric functions read them,
+# and the metrics they must give. Format (usage/tests/streams.py loads it):
+#   timezone, range {from, to} (local days, both inclusive), optional weekdays (0 = Monday;
+#   default Monday to Friday) and events, each with `at` (UTC) and `type`:
+#   app_open; plan.published {day, task_ids}; human.decided {item_kind, decision} (counts
+#   on the local day of `at`); task.status_changed {task, to, from?, actor?, label?,
+#   estimate?, actual?}: `to: done` is a completion, `from: today, to: backlog, actor:
+#   system` is a night's rollover.
+#
+# A plan every weekday but no decision on Wednesday 18 March, so the run ending
+# Friday 20 March is Thursday and Friday; opens on weekdays only (10 of 12 days);
+# 9 weekday + 1 AI + 1 Saturday + 1 late-Friday completions over 10 working days.
+timezone: America/New_York
+range: {from: 2026-03-09, to: 2026-03-20}
+expect:
+  daily_open_rate: 0.8333333333333334
+  tasks_completed_per_working_day: 1.2
+  rollover_rate: 0.2
+  estimate_error: 0.5
+  consecutive_plan_days: 2
+events:
+  - {at: "2026-03-09T13:00:00Z", type: app_open}
+  - {at: "2026-03-09T18:00:00Z", type: app_open}
+  - {at: "2026-03-10T13:00:00Z", type: app_open}
+  - {at: "2026-03-10T18:00:00Z", type: app_open}
+  - {at: "2026-03-11T13:00:00Z", type: app_open}
+  - {at: "2026-03-11T18:00:00Z", type: app_open}
+  - {at: "2026-03-12T13:00:00Z", type: app_open}
+  - {at: "2026-03-12T18:00:00Z", type: app_open}
+  - {at: "2026-03-13T13:00:00Z", type: app_open}
+  - {at: "2026-03-13T18:00:00Z", type: app_open}
+  - {at: "2026-03-16T13:00:00Z", type: app_open}
+  - {at: "2026-03-16T18:00:00Z", type: app_open}
+  - {at: "2026-03-17T13:00:00Z", type: app_open}
+  - {at: "2026-03-17T18:00:00Z", type: app_open}
+  - {at: "2026-03-18T13:00:00Z", type: app_open}
+  - {at: "2026-03-18T18:00:00Z", type: app_open}
+  - {at: "2026-03-19T13:00:00Z", type: app_open}
+  - {at: "2026-03-19T18:00:00Z", type: app_open}
+  - {at: "2026-03-20T13:00:00Z", type: app_open}
+  - {at: "2026-03-20T18:00:00Z", type: app_open}
+  - {at: "2026-03-09T12:35:00Z", type: plan.published, day: 2026-03-09, task_ids: [t1]}
+  - {at: "2026-03-09T12:50:00Z", type: human.decided, item_kind: plan_item, decision: remove}
+  - {at: "2026-03-09T21:10:00Z", type: task.status_changed, task: h1, to: done, label: human, estimate: 30, actual: 30}
+  - {at: "2026-03-10T12:35:00Z", type: plan.published, day: 2026-03-10, task_ids: [t2]}
+  - {at: "2026-03-10T12:50:00Z", type: human.decided, item_kind: plan_item, decision: swap}
+  - {at: "2026-03-10T21:10:00Z", type: task.status_changed, task: h2, to: done, label: human, estimate: 30, actual: 60}
+  - {at: "2026-03-11T12:35:00Z", type: plan.published, day: 2026-03-11, task_ids: [t3]}
+  - {at: "2026-03-11T12:50:00Z", type: human.decided, item_kind: plan_item, decision: remove}
+  - {at: "2026-03-11T21:10:00Z", type: task.status_changed, task: h3, to: done, label: hybrid}
+  - {at: "2026-03-12T12:35:00Z", type: plan.published, day: 2026-03-12, task_ids: [t4]}
+  - {at: "2026-03-12T12:50:00Z", type: human.decided, item_kind: plan_item, decision: swap}
+  - {at: "2026-03-12T21:10:00Z", type: task.status_changed, task: h4, to: done, label: human, estimate: 60, actual: 30}
+  - {at: "2026-03-13T12:35:00Z", type: plan.published, day: 2026-03-13, task_ids: [t5]}
+  - {at: "2026-03-13T12:50:00Z", type: human.decided, item_kind: plan_item, decision: remove}
+  - {at: "2026-03-13T21:10:00Z", type: task.status_changed, task: h5, to: done, label: human, estimate: 10, actual: 15}
+  - {at: "2026-03-16T12:35:00Z", type: plan.published, day: 2026-03-16, task_ids: [t6]}
+  - {at: "2026-03-16T12:50:00Z", type: human.decided, item_kind: plan_item, decision: swap}
+  - {at: "2026-03-16T21:10:00Z", type: task.status_changed, task: h6, to: done, label: hybrid}
+  - {at: "2026-03-17T12:35:00Z", type: plan.published, day: 2026-03-17, task_ids: [t7]}
+  - {at: "2026-03-17T12:50:00Z", type: human.decided, item_kind: plan_item, decision: remove}
+  - {at: "2026-03-17T21:10:00Z", type: task.status_changed, task: h7, to: done, label: hybrid}
+  - {at: "2026-03-18T12:35:00Z", type: plan.published, day: 2026-03-18, task_ids: [t8]}
+  - {at: "2026-03-19T12:35:00Z", type: plan.published, day: 2026-03-19, task_ids: [t9]}
+  - {at: "2026-03-19T12:50:00Z", type: human.decided, item_kind: plan_item, decision: remove}
+  - {at: "2026-03-19T21:10:00Z", type: task.status_changed, task: h9, to: done, label: hybrid}
+  - {at: "2026-03-20T12:35:00Z", type: plan.published, day: 2026-03-20, task_ids: [t10]}
+  - {at: "2026-03-20T12:50:00Z", type: human.decided, item_kind: plan_item, decision: swap}
+  - {at: "2026-03-20T21:10:00Z", type: task.status_changed, task: h10, to: done, label: hybrid}
+  - {at: "2026-03-11T15:00:00Z", type: task.status_changed, task: x1, to: done, label: ai, estimate: 10, actual: 50}
+  - {at: "2026-03-14T16:00:00Z", type: task.status_changed, task: x2, to: done, label: human}
+  - {at: "2026-03-21T03:30:00Z", type: task.status_changed, task: x3, to: done, label: human}
+  - {at: "2026-03-21T04:30:00Z", type: task.status_changed, task: x4, to: done, label: human}
+  - {at: "2026-03-10T04:05:00Z", type: task.status_changed, task: t2, from: today, to: backlog, actor: system}
+  - {at: "2026-03-11T04:05:00Z", type: task.status_changed, task: t2, from: today, to: backlog, actor: system}
+  - {at: "2026-03-12T04:05:00Z", type: task.status_changed, task: t2, from: today, to: backlog, actor: system}
+  - {at: "2026-03-10T04:05:00Z", type: task.status_changed, task: t5, from: today, to: backlog, actor: system}
+  - {at: "2026-03-11T04:05:00Z", type: task.status_changed, task: t5, from: today, to: backlog, actor: system}
+  - {at: "2026-03-12T04:05:00Z", type: task.status_changed, task: t5, from: today, to: backlog, actor: system}
+  - {at: "2026-03-13T04:05:00Z", type: task.status_changed, task: t5, from: today, to: backlog, actor: system}
+  - {at: "2026-03-10T04:05:00Z", type: task.status_changed, task: t7, from: today, to: backlog, actor: system}
+  - {at: "2026-03-11T04:05:00Z", type: task.status_changed, task: t7, from: today, to: backlog, actor: system}

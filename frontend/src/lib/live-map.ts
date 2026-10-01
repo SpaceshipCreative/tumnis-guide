@@ -39,6 +39,7 @@ export const LIVE_MAP: Record<
       "planningGetProjectWeek", // due dates and the tasks to schedule (P1-12)
       "planningGetPlan", // an item's live status and blocked flag (P1-11)
       "planningGetAlternates",
+      "planningGetDaySummary", // what shipped and what rolls over (P1-18)
     ],
   },
   // A project's board, columns and agent context (P2-01) carry its id in their path:
@@ -142,4 +143,6 @@ export const NOT_LIVE = [
   // Calibration is evidence read on demand (P3-08); the Calibration screen refetches after
   // its own threshold edit.
   "decisionsGetCalibration",
+  // The local metrics are a summary over days, read when Settings > Metrics opens (P1-18).
+  "planningGetMetricsSummary",
 ] as const;
