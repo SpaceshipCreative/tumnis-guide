@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Final
 
 import pytest
 
-from tumnis.core.versioning import StaleVersion
 from tumnis.modules.agents.tests.integration._human import ask, human_waits, run_status, started
 from tumnis.modules.agents.tests.integration._runs import owner_rows, relay, run_world, wait_until
 
@@ -114,7 +113,6 @@ async def test_prepare_run_survives_a_task_version_bump(  # noqa: PLR0917
 
 @pytest.mark.req("FR-5.7")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, raises=StaleVersion, reason="spec:FIX-prepare-run")
 async def test_close_human_wait_survives_a_task_version_bump(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
