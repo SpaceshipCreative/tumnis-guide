@@ -5,7 +5,7 @@
 // offline queue show as pending rows (P0-25), even when the project cannot load offline.
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "@xstate/store-react";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId, useMemo, useState } from "react";
 
 import { useIsLaptop } from "../../lib/media";
 import { mondayOf } from "../../lib/time";
@@ -105,7 +105,18 @@ export function ProjectPage({
   );
   const timezone = workspace.data?.timezone ?? "UTC";
   const [now] = useState(() => new Date());
-  const pending = usePendingTasks(projectId).map(pendingRow);
+  const pendingTasks = usePendingTasks(projectId);
+  const pending = useMemo(() => pendingTasks.map(pendingRow), [pendingTasks]);
+  // Every task with the pending ones, and the header's Today among them: worked out once
+  // per change, not on each render of the page (a few hundred tasks; PERF-2).
+  const items = useMemo(
+    () => [...(tasks.data?.items ?? []), ...pending],
+    [tasks.data, pending],
+  );
+  const today = useMemo(
+    () => items.filter((t) => groupOf(t, now, timezone) === "today"),
+    [items, now, timezone],
+  );
 
   if (project.isPending) {
     return (
@@ -125,8 +136,6 @@ export function ProjectPage({
       </>
     );
   }
-  const items = [...(tasks.data?.items ?? []), ...pending];
-  const today = items.filter((t) => groupOf(t, now, timezone) === "today");
   const changeView = (next: ProjectView) => {
     uiStore.trigger.setLastView({ projectId, view: next });
     onView(next);
