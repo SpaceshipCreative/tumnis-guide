@@ -46,6 +46,7 @@ from tumnis.core.idempotency import SessionDep
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.modules.planning import api
+from tumnis.modules.planning import testing as _testing  # noqa: F401  # registers `planner-tick`
 
 router = v1_router("planning", prefix="/plan", tags=["planning"])
 settings_router = v1_router("planning", prefix="/settings", tags=["settings"])
