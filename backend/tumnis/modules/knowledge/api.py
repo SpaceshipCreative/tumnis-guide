@@ -36,6 +36,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from tumnis.core import agent_surface, audit, deadletter, settings_store, tenancy
 from tumnis.core.adapters.errors import AdapterError, AdapterRejected, AdapterUnavailable
@@ -1340,6 +1341,16 @@ async def ensure_project_folder(
     return folder
 
 
+def announce(s: AsyncSession | Session, project_id: UUID | None, document_id: UUID) -> None:
+    """A knowledge write's live message (R-05): a project's item refreshes that project's
+    Knowledge rail (`project`); a workspace knowledge base item, which has no project,
+    sends `knowledge` with its id, so workspace lists, search and quota refresh too."""
+    if project_id is not None:
+        mark_changed(s, "project", project_id)
+    else:
+        mark_changed(s, "knowledge", document_id)
+
+
 async def make_layout(backend: StorageBackend, root_path: str) -> None:
     """A Tumnis-made folder's subfolders (a no-op on S3)."""
     for sub in FOLDER_LAYOUT:
@@ -1358,8 +1369,7 @@ async def trash_document(s: AsyncSession, document_id: UUID) -> None:
     found = await s.scalar(select(_documents.c.id).where(_documents.c.id == document_id))
     if found is None:
         raise NotFound("documents", document_id)
-    if project_id is not None:
-        mark_changed(s, "project", project_id)
+    announce(s, project_id, document_id)
 
 
 def text_of(data: bytes) -> str | None:
@@ -2102,8 +2112,7 @@ async def _write_text(  # the row, its new body, and where the note goes
         ),
         occurred_at=SystemClock().now(),
     )
-    if saved["project_id"] is not None:
-        mark_changed(s, "project", saved["project_id"])
+    announce(s, saved["project_id"], row["id"])
     return _dto(saved)
 
 
@@ -2210,8 +2219,7 @@ async def add_link(
         .mappings()
         .one()
     )
-    if project_id is not None:
-        mark_changed(s, "project", project_id)
+    announce(s, project_id, row["id"])
     return _dto(row)
 
 
@@ -2246,8 +2254,7 @@ async def mark_trusted(
         details={"trust": trust},
         occurred_at=now,
     )
-    if row["project_id"] is not None:
-        mark_changed(s, "project", row["project_id"])
+    announce(s, row["project_id"], row["id"])
     return _dto(row)
 
 
@@ -2276,8 +2283,7 @@ async def _set_fields(
         row = await update_versioned(s, _documents, document_id, expected_version, values)
     except StaleVersion as exc:
         raise StaleVersion(current=_dto(exc.current).model_dump(mode="json")) from None
-    if row["project_id"] is not None:
-        mark_changed(s, "project", row["project_id"])
+    announce(s, row["project_id"], row["id"])
     return _dto(row)
 
 
@@ -2357,8 +2363,7 @@ async def restore(s: AsyncSession, document_id: UUID) -> DocumentDTO:
     )
     if row is None:
         raise NotFound("documents", document_id)
-    if row["project_id"] is not None:
-        mark_changed(s, "project", row["project_id"])
+    announce(s, row["project_id"], row["id"])
     return _dto(row)
 
 

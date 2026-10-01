@@ -13,7 +13,8 @@ export type LiveEntity =
   | "runner"
   | "agent_profile"
   | "run"
-  | "plan";
+  | "plan"
+  | "knowledge";
 
 export const LIVE_MAP: Record<
   LiveEntity,
@@ -61,7 +62,8 @@ export const LIVE_MAP: Record<
       "searchTypeaheadProjects",
       "coolifyListDeployStatus",
       "planningGetProjectWeek", // link edits change which events match (P1-12)
-      // P1-17: every knowledge write marks its project changed (the Knowledge rail).
+      // P1-17: a project item's knowledge write marks its project changed (the Knowledge
+      // rail); a workspace item's sends `knowledge` instead (below).
       "knowledgeListDocuments",
       "knowledgeGetQuota",
       "knowledgeSearch",
@@ -110,6 +112,13 @@ export const LIVE_MAP: Record<
   run: {
     details: ["agentsGetRun", "agentsListRunEvents"],
     lists: [],
+  },
+  // A workspace knowledge base item (no project) written, trashed or restored (P1-17):
+  // its message carries the document id, and every knowledge list, search and quota
+  // includes the workspace items, so they all refresh.
+  knowledge: {
+    details: [],
+    lists: ["knowledgeListDocuments", "knowledgeGetQuota", "knowledgeSearch"],
   },
   // A plan published, superseded or acted on (P1-11): its path names the day, not the
   // plan, so every plan message refreshes the day's plan, its alternates and the week.
