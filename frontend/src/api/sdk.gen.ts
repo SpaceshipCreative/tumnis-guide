@@ -28,6 +28,9 @@ import type {
   AgentsGetAgentFeedData,
   AgentsGetAgentFeedErrors,
   AgentsGetAgentFeedResponses,
+  AgentsGetPausesData,
+  AgentsGetPausesErrors,
+  AgentsGetPausesResponses,
   AgentsGetProfileToolsData,
   AgentsGetProfileToolsErrors,
   AgentsGetProfileToolsResponses,
@@ -55,6 +58,12 @@ import type {
   AgentsListRunnersData,
   AgentsListRunnersErrors,
   AgentsListRunnersResponses,
+  AgentsPauseAgentsData,
+  AgentsPauseAgentsErrors,
+  AgentsPauseAgentsResponses,
+  AgentsPauseProjectData,
+  AgentsPauseProjectErrors,
+  AgentsPauseProjectResponses,
   AgentsPostResultData,
   AgentsPostResultErrors,
   AgentsPostResultResponses,
@@ -67,6 +76,12 @@ import type {
   AgentsRequestRunData,
   AgentsRequestRunErrors,
   AgentsRequestRunResponses,
+  AgentsResumeAgentsData,
+  AgentsResumeAgentsErrors,
+  AgentsResumeAgentsResponses,
+  AgentsResumeProjectData,
+  AgentsResumeProjectErrors,
+  AgentsResumeProjectResponses,
   AgentsRotateRunnerTokenData,
   AgentsRotateRunnerTokenErrors,
   AgentsRotateRunnerTokenResponses,
@@ -433,6 +448,7 @@ import {
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
   zAgentsGetAgentFeedResponse,
+  zAgentsGetPausesResponse,
   zAgentsGetProfileToolsResponse,
   zAgentsGetProjectDigestResponse,
   zAgentsGetRunResponse,
@@ -442,10 +458,14 @@ import {
   zAgentsListProfilesResponse,
   zAgentsListRunEventsResponse,
   zAgentsListRunnersResponse,
+  zAgentsPauseAgentsResponse,
+  zAgentsPauseProjectResponse,
   zAgentsPostResultResponse,
   zAgentsRegisterProfileResponse,
   zAgentsRequestApprovalResponse,
   zAgentsRequestRunResponse,
+  zAgentsResumeAgentsResponse,
+  zAgentsResumeProjectResponse,
   zAgentsRotateRunnerTokenResponse,
   zAgentsUpdateProfileResponse,
   zAuditListAuditResponse,
@@ -633,6 +653,61 @@ export const agentsGetAgentFeed = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Pauses
+ *
+ * What is paused now: the whole workspace and each paused project (the kill switch's
+ * state in the app).
+ */
+export const agentsGetPauses = <ThrowOnError extends boolean = false>(
+  options?: Options<AgentsGetPausesData, ThrowOnError>,
+): RequestResult<
+  AgentsGetPausesResponses,
+  AgentsGetPausesErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    AgentsGetPausesResponses,
+    AgentsGetPausesErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsGetPausesResponse.parseAsync(data),
+    url: "/v1/agents/pause",
+    ...options,
+  });
+
+/**
+ * Pause Agents
+ *
+ * The kill switch: pause every agent (`scope` workspace) or one project's, with a
+ * reason. Running runs are cancelled through their agent, queued runs held, new runs
+ * refused (409 `agents_paused`) until a person resumes in the app. The person's control
+ * in the app, and the `pause_agents` tool's twin for the master key (403 `master_only`
+ * for any other key).
+ */
+export const agentsPauseAgents = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsPauseAgentsData, ThrowOnError>,
+): RequestResult<
+  AgentsPauseAgentsResponses,
+  AgentsPauseAgentsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsPauseAgentsResponses,
+    AgentsPauseAgentsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsPauseAgentsResponse.parseAsync(data),
+    url: "/v1/agents/pause",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * List Profiles
  *
  * Agent profiles by name, with their last health check; `project_id` narrows them to
@@ -758,6 +833,34 @@ export const agentsGetProfileTools = <ThrowOnError extends boolean = false>(
       await zAgentsGetProfileToolsResponse.parseAsync(data),
     url: "/v1/agents/profiles/{id}/tools",
     ...options,
+  });
+
+/**
+ * Resume Agents
+ *
+ * Let the agents run again (a person, in the app; no key or tool can): held runs
+ * start. Nothing paused: nothing changes.
+ */
+export const agentsResumeAgents = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsResumeAgentsData, ThrowOnError>,
+): RequestResult<
+  AgentsResumeAgentsResponses,
+  AgentsResumeAgentsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsResumeAgentsResponses,
+    AgentsResumeAgentsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsResumeAgentsResponse.parseAsync(data),
+    url: "/v1/agents/resume",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
@@ -2572,6 +2675,35 @@ export const tasksListInbox = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Pause Project
+ *
+ * Pause one project's agents, with a reason: its running runs are cancelled, its
+ * queued runs held and its new runs refused until it is resumed. 404 for an unknown
+ * project.
+ */
+export const agentsPauseProject = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsPauseProjectData, ThrowOnError>,
+): RequestResult<
+  AgentsPauseProjectResponses,
+  AgentsPauseProjectErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsPauseProjectResponses,
+    AgentsPauseProjectErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsPauseProjectResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/pause",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Get Policy
  *
  * The project's approval policy (FR-5.6): gated and allowed action classes and the
@@ -2644,6 +2776,34 @@ export const projectsReorderProject = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zProjectsReorderProjectResponse.parseAsync(data),
     url: "/v1/projects/{project_id}/reorder",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Resume Project
+ *
+ * Let one project's agents run again: its held runs start, unless all agents are
+ * still paused.
+ */
+export const agentsResumeProject = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsResumeProjectData, ThrowOnError>,
+): RequestResult<
+  AgentsResumeProjectResponses,
+  AgentsResumeProjectErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsResumeProjectResponses,
+    AgentsResumeProjectErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsResumeProjectResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/resume",
     ...options,
     headers: {
       "Content-Type": "application/json",

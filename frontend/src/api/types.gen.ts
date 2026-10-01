@@ -1921,6 +1921,36 @@ export type OAuthStartOut = {
 };
 
 /**
+ * OpenPause
+ */
+export type OpenPause = {
+  /**
+   * Pause Id
+   */
+  pause_id: string;
+  /**
+   * Paused At
+   */
+  paused_at: string;
+  /**
+   * Paused By
+   */
+  paused_by: string;
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Reason
+   */
+  reason: string;
+  /**
+   * Scope
+   */
+  scope: "workspace" | "project";
+};
+
+/**
  * Page[ActivityItem]
  */
 export type PageActivityItem = {
@@ -2114,6 +2144,73 @@ export type PageSessionOut = {
    * Next Cursor
    */
   next_cursor: string | null;
+};
+
+/**
+ * PauseBody
+ *
+ * The REST twin's body: what to pause and why.
+ */
+export type PauseBody = {
+  /**
+   * Project Id
+   */
+  project_id?: string | null;
+  /**
+   * Reason
+   */
+  reason: string;
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+  /**
+   * Scope
+   */
+  scope: "workspace" | "project";
+};
+
+/**
+ * PauseOut
+ */
+export type PauseOut = {
+  /**
+   * Cancelled Runs
+   */
+  cancelled_runs: number;
+  /**
+   * Held Runs
+   */
+  held_runs: number;
+  /**
+   * Pause Id
+   */
+  pause_id: string;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Tainted
+   */
+  tainted?: boolean;
+};
+
+/**
+ * PausesOut
+ *
+ * What is paused now: the workspace (or None), and each paused project.
+ */
+export type PausesOut = {
+  /**
+   * Projects
+   */
+  projects: Array<OpenPause>;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  workspace: OpenPause | null;
 };
 
 /**
@@ -3068,6 +3165,26 @@ export type ProjectPatch = {
 };
 
 /**
+ * ProjectPauseIn
+ */
+export type ProjectPauseIn = {
+  /**
+   * Reason
+   */
+  reason: string;
+};
+
+/**
+ * ProjectResumeIn
+ */
+export type ProjectResumeIn = {
+  /**
+   * Reason
+   */
+  reason?: string | null;
+};
+
+/**
  * PullRequestIn
  */
 export type PullRequestIn = {
@@ -3420,6 +3537,42 @@ export type ResultOut = {
    * Tests Summary
    */
   tests_summary?: string | null;
+};
+
+/**
+ * ResumeIn
+ */
+export type ResumeIn = {
+  /**
+   * Project Id
+   */
+  project_id?: string | null;
+  /**
+   * Reason
+   */
+  reason?: string | null;
+  /**
+   * Scope
+   */
+  scope: "workspace" | "project";
+};
+
+/**
+ * ResumeOut
+ */
+export type ResumeOut = {
+  /**
+   * Pause Id
+   */
+  pause_id: string | null;
+  /**
+   * Released Runs
+   */
+  released_runs: number;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
 };
 
 /**
@@ -5320,6 +5473,116 @@ export type AgentsGetAgentFeedResponses = {
 export type AgentsGetAgentFeedResponse =
   AgentsGetAgentFeedResponses[keyof AgentsGetAgentFeedResponses];
 
+export type AgentsGetPausesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/agents/pause";
+};
+
+export type AgentsGetPausesErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsGetPausesError =
+  AgentsGetPausesErrors[keyof AgentsGetPausesErrors];
+
+export type AgentsGetPausesResponses = {
+  /**
+   * Successful Response
+   */
+  200: PausesOut;
+};
+
+export type AgentsGetPausesResponse =
+  AgentsGetPausesResponses[keyof AgentsGetPausesResponses];
+
+export type AgentsPauseAgentsData = {
+  body: PauseBody;
+  path?: never;
+  query?: never;
+  url: "/v1/agents/pause";
+};
+
+export type AgentsPauseAgentsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsPauseAgentsError =
+  AgentsPauseAgentsErrors[keyof AgentsPauseAgentsErrors];
+
+export type AgentsPauseAgentsResponses = {
+  /**
+   * Successful Response
+   */
+  200: PauseOut;
+};
+
+export type AgentsPauseAgentsResponse =
+  AgentsPauseAgentsResponses[keyof AgentsPauseAgentsResponses];
+
 export type AgentsListProfilesData = {
   body?: never;
   path?: never;
@@ -5622,6 +5885,61 @@ export type AgentsGetProfileToolsResponses = {
 
 export type AgentsGetProfileToolsResponse =
   AgentsGetProfileToolsResponses[keyof AgentsGetProfileToolsResponses];
+
+export type AgentsResumeAgentsData = {
+  body: ResumeIn;
+  path?: never;
+  query?: never;
+  url: "/v1/agents/resume";
+};
+
+export type AgentsResumeAgentsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsResumeAgentsError =
+  AgentsResumeAgentsErrors[keyof AgentsResumeAgentsErrors];
+
+export type AgentsResumeAgentsResponses = {
+  /**
+   * Successful Response
+   */
+  200: ResumeOut;
+};
+
+export type AgentsResumeAgentsResponse =
+  AgentsResumeAgentsResponses[keyof AgentsResumeAgentsResponses];
 
 export type AuditListAuditData = {
   body?: never;
@@ -10407,6 +10725,66 @@ export type TasksListInboxResponses = {
 export type TasksListInboxResponse =
   TasksListInboxResponses[keyof TasksListInboxResponses];
 
+export type AgentsPauseProjectData = {
+  body: ProjectPauseIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/pause";
+};
+
+export type AgentsPauseProjectErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsPauseProjectError =
+  AgentsPauseProjectErrors[keyof AgentsPauseProjectErrors];
+
+export type AgentsPauseProjectResponses = {
+  /**
+   * Successful Response
+   */
+  200: PauseOut;
+};
+
+export type AgentsPauseProjectResponse =
+  AgentsPauseProjectResponses[keyof AgentsPauseProjectResponses];
+
 export type ProjectsGetPolicyData = {
   body?: never;
   path: {
@@ -10586,6 +10964,66 @@ export type ProjectsReorderProjectResponses = {
 
 export type ProjectsReorderProjectResponse =
   ProjectsReorderProjectResponses[keyof ProjectsReorderProjectResponses];
+
+export type AgentsResumeProjectData = {
+  body: ProjectResumeIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/projects/{project_id}/resume";
+};
+
+export type AgentsResumeProjectErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsResumeProjectError =
+  AgentsResumeProjectErrors[keyof AgentsResumeProjectErrors];
+
+export type AgentsResumeProjectResponses = {
+  /**
+   * Successful Response
+   */
+  200: ResumeOut;
+};
+
+export type AgentsResumeProjectResponse =
+  AgentsResumeProjectResponses[keyof AgentsResumeProjectResponses];
 
 export type ProjectsUnarchiveProjectData = {
   body: TumnisModulesProjectsRouterVersionIn;

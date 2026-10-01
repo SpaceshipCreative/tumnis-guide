@@ -699,6 +699,18 @@ export const zOAuthStartOut = z.object({
 });
 
 /**
+ * OpenPause
+ */
+export const zOpenPause = z.object({
+  pause_id: z.uuid(),
+  paused_at: z.iso.datetime(),
+  paused_by: z.string(),
+  project_id: z.uuid().nullable(),
+  reason: z.string(),
+  scope: z.enum(["workspace", "project"]),
+});
+
+/**
  * Page[AuditEntry]
  */
 export const zPageAuditEntry = z.object({
@@ -744,6 +756,40 @@ export const zPageKeyOut = z.object({
 export const zPageKnowledgeHit = z.object({
   items: z.array(zKnowledgeHit),
   next_cursor: z.string().nullable(),
+});
+
+/**
+ * PauseBody
+ *
+ * The REST twin's body: what to pause and why.
+ */
+export const zPauseBody = z.object({
+  project_id: z.uuid().nullish(),
+  reason: z.string().min(1).max(500).regex(/\S/),
+  schema_version: z.int().nullish(),
+  scope: z.enum(["workspace", "project"]),
+});
+
+/**
+ * PauseOut
+ */
+export const zPauseOut = z.object({
+  cancelled_runs: z.int(),
+  held_runs: z.int(),
+  pause_id: z.uuid(),
+  schema_version: z.literal(1).optional().default(1),
+  tainted: z.boolean().optional().default(false),
+});
+
+/**
+ * PausesOut
+ *
+ * What is paused now: the workspace (or None), and each paused project.
+ */
+export const zPausesOut = z.object({
+  projects: z.array(zOpenPause),
+  schema_version: z.literal(1).optional().default(1),
+  workspace: zOpenPause.nullable(),
 });
 
 /**
@@ -1084,6 +1130,20 @@ export const zProjectPatch = z.object({
 });
 
 /**
+ * ProjectPauseIn
+ */
+export const zProjectPauseIn = z.object({
+  reason: z.string().min(1).max(500).regex(/\S/),
+});
+
+/**
+ * ProjectResumeIn
+ */
+export const zProjectResumeIn = z.object({
+  reason: z.string().max(500).nullish(),
+});
+
+/**
  * PullRequestIn
  */
 export const zPullRequestIn = z.object({
@@ -1241,6 +1301,24 @@ export const zRespondIn = z.object({
     "less_of_this",
   ]),
   to_task_id: z.uuid().nullish(),
+});
+
+/**
+ * ResumeIn
+ */
+export const zResumeIn = z.object({
+  project_id: z.uuid().nullish(),
+  reason: z.string().max(500).nullish(),
+  scope: z.enum(["workspace", "project"]),
+});
+
+/**
+ * ResumeOut
+ */
+export const zResumeOut = z.object({
+  pause_id: z.uuid().nullable(),
+  released_runs: z.int(),
+  schema_version: z.literal(1).optional().default(1),
 });
 
 /**
@@ -2452,6 +2530,18 @@ export const zHealthLiveResponse = z.record(z.string(), z.string());
  */
 export const zAgentsGetAgentFeedResponse = zAgentFeedOut;
 
+/**
+ * Successful Response
+ */
+export const zAgentsGetPausesResponse = zPausesOut;
+
+export const zAgentsPauseAgentsBody = zPauseBody;
+
+/**
+ * Successful Response
+ */
+export const zAgentsPauseAgentsResponse = zPauseOut;
+
 export const zAgentsListProfilesQuery = z.object({
   project_id: z.uuid().nullish(),
   cursor: z.string().max(2048).nullish(),
@@ -2498,6 +2588,13 @@ export const zAgentsGetProfileToolsPath = z.object({
  * Successful Response
  */
 export const zAgentsGetProfileToolsResponse = zProfileToolsOut;
+
+export const zAgentsResumeAgentsBody = zResumeIn;
+
+/**
+ * Successful Response
+ */
+export const zAgentsResumeAgentsResponse = zResumeOut;
 
 export const zAuditListAuditQuery = z.object({
   action: z.string().max(200).nullish(),
@@ -3252,6 +3349,17 @@ export const zTasksListInboxQuery = z.object({
  */
 export const zTasksListInboxResponse = zPageReviewItemOut;
 
+export const zAgentsPauseProjectBody = zProjectPauseIn;
+
+export const zAgentsPauseProjectPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsPauseProjectResponse = zPauseOut;
+
 export const zProjectsGetPolicyPath = z.object({
   project_id: z.uuid(),
 });
@@ -3282,6 +3390,17 @@ export const zProjectsReorderProjectPath = z.object({
  * Successful Response
  */
 export const zProjectsReorderProjectResponse = zProjectOut;
+
+export const zAgentsResumeProjectBody = zProjectResumeIn;
+
+export const zAgentsResumeProjectPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsResumeProjectResponse = zResumeOut;
 
 export const zProjectsUnarchiveProjectBody =
   zTumnisModulesProjectsRouterVersionIn;

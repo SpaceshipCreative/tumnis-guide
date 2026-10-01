@@ -7,6 +7,7 @@ import { http, HttpResponse, type RequestHandler } from "msw";
 
 import type {
   AgentFeedOut,
+  PausesOut,
   ProjectDeployStatus,
   ReviewCountOut,
   TaskOut,
@@ -73,11 +74,23 @@ export function agentFeed(feed: Partial<AgentFeedOut> = {}): RequestHandler {
   return http.get("/v1/agents/feed", () => HttpResponse.json(body));
 }
 
+/** `GET /v1/agents/pause`: the kill switch's state (P2-09); nothing paused by default. */
+export function agentPauses(body: Partial<PausesOut> = {}): RequestHandler {
+  const pauses: PausesOut = {
+    schema_version: 1,
+    workspace: null,
+    projects: [],
+    ...body,
+  };
+  return http.get("*/v1/agents/pause", () => HttpResponse.json(pauses));
+}
+
 /** The dashboard's reads, empty: no projects, nothing today, nothing to review, no apps,
- * no working hours or events today, no plan for the day (P1-11) and no agent runs in
- * the activity feed (P2-17). */
+ * no working hours or events today, no plan for the day (P1-11), no agent runs in the
+ * activity feed (P2-17) and no agents paused (P2-09). */
 export const dashboardDefaults: RequestHandler[] = [
   agentFeed(),
+  agentPauses(),
   deployStatus(),
   projectsList([]),
   todayTasks([]),

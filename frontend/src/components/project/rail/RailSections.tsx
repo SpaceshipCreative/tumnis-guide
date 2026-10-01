@@ -1,7 +1,9 @@
 // The Context sections (P0-24, FR-2.7), shared by the laptop rail and the phone sheet;
-// one opens at a time. Agent (P2-17) shows the project's profile, health and tools.
+// one opens at a time. Agent (P2-17) shows the project's profile, health and tools, and
+// holds the project's agent pause (P2-09, SAF-4).
 import { useState } from "react";
 
+import { PauseControl } from "../../dashboard/KillSwitch";
 import { AgentRail } from "../AgentRail";
 import type { Project } from "../types";
 import { BriefSection } from "./BriefSection";
@@ -44,6 +46,7 @@ export function RailSections({
         projectId={project.id}
         open={open === "agent"}
         onToggle={toggle("agent")}
+        pause={<PauseControl projectId={project.id} />}
       />
       <SettingsSection
         project={project}

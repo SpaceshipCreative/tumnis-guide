@@ -16,6 +16,7 @@ import {
   agentsCheckProfileHealth,
   agentsCreateRunner,
   agentsGetAgentFeed,
+  agentsGetPauses,
   agentsGetProfileTools,
   agentsGetProjectDigest,
   agentsGetRun,
@@ -25,10 +26,14 @@ import {
   agentsListProfiles,
   agentsListRunEvents,
   agentsListRunners,
+  agentsPauseAgents,
+  agentsPauseProject,
   agentsPostResult,
   agentsRegisterProfile,
   agentsRequestApproval,
   agentsRequestRun,
+  agentsResumeAgents,
+  agentsResumeProject,
   agentsRotateRunnerToken,
   agentsUpdateProfile,
   auditExportAuditCsv,
@@ -170,6 +175,9 @@ import type {
   AgentsGetAgentFeedData,
   AgentsGetAgentFeedError,
   AgentsGetAgentFeedResponse,
+  AgentsGetPausesData,
+  AgentsGetPausesError,
+  AgentsGetPausesResponse,
   AgentsGetProfileToolsData,
   AgentsGetProfileToolsError,
   AgentsGetProfileToolsResponse,
@@ -197,6 +205,12 @@ import type {
   AgentsListRunnersData,
   AgentsListRunnersError,
   AgentsListRunnersResponse,
+  AgentsPauseAgentsData,
+  AgentsPauseAgentsError,
+  AgentsPauseAgentsResponse,
+  AgentsPauseProjectData,
+  AgentsPauseProjectError,
+  AgentsPauseProjectResponse,
   AgentsPostResultData,
   AgentsPostResultError,
   AgentsPostResultResponse,
@@ -209,6 +223,12 @@ import type {
   AgentsRequestRunData,
   AgentsRequestRunError,
   AgentsRequestRunResponse,
+  AgentsResumeAgentsData,
+  AgentsResumeAgentsError,
+  AgentsResumeAgentsResponse,
+  AgentsResumeProjectData,
+  AgentsResumeProjectError,
+  AgentsResumeProjectResponse,
   AgentsRotateRunnerTokenData,
   AgentsRotateRunnerTokenError,
   AgentsRotateRunnerTokenResponse,
@@ -687,6 +707,70 @@ export const agentsGetAgentFeedOptions = (
     queryKey: agentsGetAgentFeedQueryKey(options),
   });
 
+export const agentsGetPausesQueryKey = (
+  options?: Options<AgentsGetPausesData>,
+) => createQueryKey("agentsGetPauses", options);
+
+/**
+ * Get Pauses
+ *
+ * What is paused now: the whole workspace and each paused project (the kill switch's
+ * state in the app).
+ */
+export const agentsGetPausesOptions = (
+  options?: Options<AgentsGetPausesData>,
+) =>
+  queryOptions<
+    AgentsGetPausesResponse,
+    AgentsGetPausesError,
+    AgentsGetPausesResponse,
+    ReturnType<typeof agentsGetPausesQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsGetPauses({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsGetPausesQueryKey(options),
+  });
+
+/**
+ * Pause Agents
+ *
+ * The kill switch: pause every agent (`scope` workspace) or one project's, with a
+ * reason. Running runs are cancelled through their agent, queued runs held, new runs
+ * refused (409 `agents_paused`) until a person resumes in the app. The person's control
+ * in the app, and the `pause_agents` tool's twin for the master key (403 `master_only`
+ * for any other key).
+ */
+export const agentsPauseAgentsMutation = (
+  options?: Partial<Options<AgentsPauseAgentsData>>,
+): UseMutationOptions<
+  AgentsPauseAgentsResponse,
+  AgentsPauseAgentsError,
+  Options<AgentsPauseAgentsData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsPauseAgentsResponse,
+    AgentsPauseAgentsError,
+    Options<AgentsPauseAgentsData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsPauseAgents({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const agentsListProfilesQueryKey = (
   options?: Options<AgentsListProfilesData>,
 ) => createQueryKey("agentsListProfiles", options);
@@ -928,6 +1012,36 @@ export const agentsGetProfileToolsOptions = (
     },
     queryKey: agentsGetProfileToolsQueryKey(options),
   });
+
+/**
+ * Resume Agents
+ *
+ * Let the agents run again (a person, in the app; no key or tool can): held runs
+ * start. Nothing paused: nothing changes.
+ */
+export const agentsResumeAgentsMutation = (
+  options?: Partial<Options<AgentsResumeAgentsData>>,
+): UseMutationOptions<
+  AgentsResumeAgentsResponse,
+  AgentsResumeAgentsError,
+  Options<AgentsResumeAgentsData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsResumeAgentsResponse,
+    AgentsResumeAgentsError,
+    Options<AgentsResumeAgentsData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsResumeAgents({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const auditListAuditQueryKey = (options?: Options<AuditListAuditData>) =>
   createQueryKey("auditListAudit", options);
@@ -3692,6 +3806,37 @@ export const tasksListInboxInfiniteOptions = (
   return opts as Omit<typeof opts, "initialData">;
 };
 
+/**
+ * Pause Project
+ *
+ * Pause one project's agents, with a reason: its running runs are cancelled, its
+ * queued runs held and its new runs refused until it is resumed. 404 for an unknown
+ * project.
+ */
+export const agentsPauseProjectMutation = (
+  options?: Partial<Options<AgentsPauseProjectData>>,
+): UseMutationOptions<
+  AgentsPauseProjectResponse,
+  AgentsPauseProjectError,
+  Options<AgentsPauseProjectData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsPauseProjectResponse,
+    AgentsPauseProjectError,
+    Options<AgentsPauseProjectData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsPauseProject({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const projectsGetPolicyQueryKey = (
   options: Options<ProjectsGetPolicyData>,
 ) => createQueryKey("projectsGetPolicy", options);
@@ -3773,6 +3918,36 @@ export const projectsReorderProjectMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await projectsReorderProject({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Resume Project
+ *
+ * Let one project's agents run again: its held runs start, unless all agents are
+ * still paused.
+ */
+export const agentsResumeProjectMutation = (
+  options?: Partial<Options<AgentsResumeProjectData>>,
+): UseMutationOptions<
+  AgentsResumeProjectResponse,
+  AgentsResumeProjectError,
+  Options<AgentsResumeProjectData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsResumeProjectResponse,
+    AgentsResumeProjectError,
+    Options<AgentsResumeProjectData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsResumeProject({
         ...options,
         ...fnOptions,
         throwOnError: true,

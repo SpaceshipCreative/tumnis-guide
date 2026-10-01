@@ -15,7 +15,9 @@ registry, the routes and the auth api.
   through the projects and tasks apis; `SAMPLES[op_name](world, project)` gives an op's
   arguments aimed at that project (a fresh task for ops that update one).
 - `Callers`: API keys (cached by scopes and projects), a task token bound to a run in
-  project A, and the master key (marked through the caller-facts seam).
+  project A, and the master key (marked through the caller-facts seam). The key with
+  every scope and no project limit IS the master key (the same cache entry): the sweeps'
+  writer must reach every write op, master-only ones too (`pause_agents`, P2-09).
 """
 
 from __future__ import annotations
@@ -412,6 +414,18 @@ async def running_run(world: World, project: str) -> uuid.UUID:
     return run_id
 
 
+async def _pause_agents(world: World, project: str) -> dict[str, Any]:
+    """P2-09: the project's agents paused (a project pause names the project, so the
+    project-limited sweeps reach it; a second pause of a paused project answers the
+    open one)."""
+    return {
+        "scope": "project",
+        "project_id": str(world.projects[project]),
+        "reason": f"Paused through the surface {next(_ids)}",
+        "idempotency_key": idem(),
+    }
+
+
 async def _post_result(world: World, project: str) -> dict[str, Any]:
     return {
         "run_id": str(await running_run(world, project)),
@@ -488,6 +502,7 @@ SAMPLES: Final[dict[str, Sample]] = {
     "search": _search,
     "get_task_packet": _get_task_packet,
     "post_result": _post_result,
+    "pause_agents": _pause_agents,
     "ask_human": _ask_human,
     "request_approval": _request_approval,
     "search_knowledge": _search_knowledge,
@@ -524,21 +539,26 @@ class Callers:
         self, scopes: frozenset[str], projects: frozenset[uuid.UUID] | None = None
     ) -> tuple[str, uuid.UUID]:
         """(secret, key id) of a key with exactly these scopes (and project limit)."""
-        from tumnis.modules.auth import api as auth  # noqa: PLC0415
-
         cache_key = (frozenset(scopes), projects)
+        if cache_key == (ALL_SCOPES, None) and self.master_key_id is None:
+            await self.master_key()
         if cache_key not in self._keys:
-            created = await auth.create_key(
-                self._ctx(),
-                auth.KeyIn(
-                    name=f"sweep {next(_ids)}",
-                    scopes=sorted(scopes),
-                    project_ids=None if projects is None else sorted(projects, key=str),
-                ),
-                now=self.world.clock.now(),
-            )
+            created = await self._create(scopes, projects)
             self._keys[cache_key] = (created.key, created.id)
         return self._keys[cache_key]
+
+    async def _create(self, scopes: frozenset[str], projects: frozenset[uuid.UUID] | None) -> Any:
+        from tumnis.modules.auth import api as auth  # noqa: PLC0415
+
+        return await auth.create_key(
+            self._ctx(),
+            auth.KeyIn(
+                name=f"sweep {next(_ids)}",
+                scopes=sorted(scopes),
+                project_ids=None if projects is None else sorted(projects, key=str),
+            ),
+            now=self.world.clock.now(),
+        )
 
     async def task_token(self, project: str = "A", run_id: uuid.UUID | None = None) -> str:
         """A task token for a run in the project, with `TOKEN_SCOPES`."""
@@ -559,7 +579,13 @@ class Callers:
         links it to the master profile; until then the test registers the fact)."""
         from tumnis.core import agent_surface  # noqa: PLC0415
 
-        secret, key_id = await self.key(ALL_SCOPES, None)
+        cache_key = (ALL_SCOPES, None)
+        if cache_key not in self._keys:
+            created = await self._create(ALL_SCOPES, None)
+            self._keys[cache_key] = (created.key, created.id)
+        secret, key_id = self._keys[cache_key]
+        if self.master_key_id == key_id:
+            return secret
         self.master_key_id = key_id
 
         async def facts(principal: Any) -> Any:
