@@ -23,12 +23,14 @@ async function openPanel(onClose: () => void = () => undefined) {
     <CloseDayPanel day={DAY} onClose={onClose} />,
   );
   const panel = await screen.findByRole("dialog", { name: "Close the day" });
+  // The sections render once the summary has loaded.
+  await within(panel).findAllByRole("region");
   const part = (name: string) => within(panel).getByRole("region", { name });
   return { ...rendered, panel, part };
 }
 
 describe("CloseDayPanel", () => {
-  test.fails("[P1-18][J7] T-P1-18-08 sections and empty states", async () => {
+  test("[P1-18][J7] T-P1-18-08 sections and empty states", async () => {
     server.use(daySummary(FULL_DAY));
     const { panel, part, unmount } = await openPanel();
 
