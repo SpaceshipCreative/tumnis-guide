@@ -988,30 +988,43 @@ def enrichment_settled(status: str | None) -> bool:
 
 # --- Approvals (P2-05, FR-5.6, SAF-1) --------------------------------------------------------
 
+# The action classes are the project policy's own vocabulary (projects.rules GATED_DEFAULT /
+# ALLOWED_DEFAULT, P0-17, T-P0-17-16), which the packet, the worker-tool mocks and the hostile
+# harness also use. The plan's P2-05 interface names two coarser classes
+# (`proxmox_destructive`, `proxmox_create_start`); a project's stored policy never holds
+# them, so the finer names are the one vocabulary. rules.py may not import projects, so the
+# lists are copied here and a unit test holds them equal.
 ActionClass = Literal[
     "send_email",
-    "merge_main",
     "push_main",
+    "merge_main",
     "force_push",
     "deploy_production",
-    "proxmox_destructive",
+    "proxmox_delete_guest",
+    "proxmox_rollback_snapshot",
+    "proxmox_storage_change",
+    "proxmox_network_change",
     "spend_money",
     "delete_files",
     "push_feature_branch",
     "open_pull_request",
     "trigger_preview_deploy",
-    "proxmox_create_start",
+    "proxmox_create_guest",
+    "proxmox_start_guest",
     "create_draft",
     "read",
 ]
 DEFAULT_GATED: Final[frozenset[str]] = frozenset(
     {
         "send_email",
-        "merge_main",
         "push_main",
+        "merge_main",
         "force_push",
         "deploy_production",
-        "proxmox_destructive",
+        "proxmox_delete_guest",
+        "proxmox_rollback_snapshot",
+        "proxmox_storage_change",
+        "proxmox_network_change",
         "spend_money",
         "delete_files",
     }
@@ -1021,7 +1034,8 @@ DEFAULT_ALLOWED: Final[frozenset[str]] = frozenset(
         "push_feature_branch",
         "open_pull_request",
         "trigger_preview_deploy",
-        "proxmox_create_start",
+        "proxmox_create_guest",
+        "proxmox_start_guest",
         "create_draft",
         "read",
     }
