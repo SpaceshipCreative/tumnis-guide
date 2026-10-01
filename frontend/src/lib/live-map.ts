@@ -14,6 +14,7 @@ export type LiveEntity =
   | "agent_profile"
   | "run"
   | "plan"
+  | "focus"
   | "knowledge";
 
 export const LIVE_MAP: Record<
@@ -136,6 +137,12 @@ export const LIVE_MAP: Record<
       "planningGetAlternates",
       "planningGetProjectWeek",
     ],
+  },
+  // A focus event fired or answered, a session started or ended, or the level changed
+  // (P2-15): the focus bar's one read refreshes.
+  focus: {
+    details: [],
+    lists: ["focusGetCurrent"],
   },
 };
 
