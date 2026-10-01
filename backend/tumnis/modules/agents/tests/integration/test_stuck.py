@@ -16,7 +16,6 @@ from uuid import UUID
 import pytest
 
 from tumnis.modules.agents.tests.integration._runs import (
-    call_tool,
     finish,
     master_key,
     owner_rows,
@@ -28,6 +27,7 @@ from tumnis.modules.agents.tests.integration._runs import (
 from tumnis.modules.agents.tests.integration._stuck import (
     FIRST_ACTION,
     RequestRunSpy,
+    call_tool,
     human_task,
     live_messages,
     next_step,

@@ -17,6 +17,9 @@ so the person's side goes through the app's routes with the signed-in `session_c
 - `quiet_stuck_workflows()`: on exit, the `handle_stuck` workflows still parked in `recv`
   are cancelled and woken, so the `dbos` fixture's teardown does not wait them out.
 - `RequestRunSpy`: records every `agents.api.request_run` call and passes it on.
+- `call_tool(runner, token, name, args)`: `_runs.call_tool`, except that a tool error
+  reports the problem's own HTTP status (MCP answers a refused call with 200 and the
+  problem in the result; decision 63).
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from typing import TYPE_CHECKING, Any, Final
 import psycopg
 
 from tests._pg import APP, OWNER
+from tumnis.modules.agents.tests.integration import _runs
 from tumnis.modules.agents.tests.integration._runs import owner_rows
 
 if TYPE_CHECKING:
@@ -40,10 +44,26 @@ if TYPE_CHECKING:
     import pytest
 
     from tests._pg import DbUrls
+    from tests.fakes.fake_runner import FakeRunner
     from tumnis.modules.agents.tests.integration._runs import RunWorld
 
 STUCK_TOPIC: Final = "stuck_outcome"
 FIRST_ACTION: Final = "Open the invoice template"
+
+
+async def call_tool(runner: FakeRunner, token: str, name: str, args: dict[str, Any]) -> Any:
+    """One MCP `tools/call` as `_runs.call_tool` sends it. A tool error carries the
+    problem's HTTP status (`data["status"]`, e.g. 422) instead of the transport's 200;
+    every other answer is `_runs.call_tool`'s as it is."""
+    from dataclasses import replace  # noqa: PLC0415
+
+    outcome = await _runs.call_tool(runner, token, name, args)
+    problem = outcome.data
+    if outcome.status == 200 and outcome.code is not None and isinstance(problem, dict):
+        status = problem.get("status")
+        if isinstance(status, int):
+            return replace(outcome, status=status)
+    return outcome
 
 
 async def human_task(world: RunWorld, title: str = "Send the March invoice") -> Any:
