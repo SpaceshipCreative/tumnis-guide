@@ -2515,10 +2515,12 @@ def _used_bytes() -> ColumnElement[int]:
 
 async def quota(s: AsyncSession, project_id: UUID | None) -> Quota:
     """The workspace's used bytes (trash counts until it is purged) against its quota
-    (`knowledge.quota_bytes`, 10 GiB by default), and the scope's item count and bytes."""
+    (`knowledge.quota_bytes`, 10 GiB by default), and the scope's item count and bytes.
+    404 for a project the caller cannot see."""
     ctx = tenancy.current()
     if ctx is None:
         raise RuntimeError("quota runs in a workspace context")
+    await _check_project(s, project_id)
     setting = await settings_store.get_setting(ctx, KNOWLEDGE_QUOTA_KEY, QuotaSetting)
     limit = setting.value.quota_bytes if setting is not None else DEFAULT_QUOTA_BYTES
     used = _used_bytes()
