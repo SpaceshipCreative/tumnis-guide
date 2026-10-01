@@ -65,3 +65,21 @@ def test_long_sections_are_cut_at_paragraphs() -> None:
     assert all(len(text) <= CHUNK_MAX_CHARS for _, text in pieces)
     assert len(pieces) == 4
     assert pieces[0][1].startswith("No heading.")
+
+
+@pytest.mark.req("FR-15.3")
+@pytest.mark.wp("P1-17")
+@pytest.mark.parametrize(
+    "fence",
+    [
+        "```\n~~~\n# hidden\n```",  # a tilde line does not close a backtick fence
+        "````\n```\n# hidden\n````",  # a shorter fence does not close a longer one
+        "```\n```python\n# hidden\n```",  # a closing fence has no info string
+        "   ```\n# hidden\n   ```",  # up to three spaces of indent still fence
+    ],
+)
+def test_headings_inside_code_fences_stay_text(fence: str) -> None:
+    """A code fence closes only with the same character, at least as long, and nothing
+    after it (CommonMark), so `#` lines inside it never open a section."""
+    md = f"# Notes\n\n{fence}\n\n## After\n\nDone."
+    assert [path for path, _ in markdown_sections(md)] == [["Notes"], ["Notes", "After"]]

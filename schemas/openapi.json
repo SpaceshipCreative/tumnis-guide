@@ -12600,7 +12600,7 @@
     },
     "/v1/knowledge/documents/text": {
       "post": {
-        "description": "A text entry (Markdown) in a project or the workspace knowledge base: version 1,\nsearchable at once, trusted (FR-15.5); in a project with a folder, also `notes/`.",
+        "description": "A text entry (Markdown) in a project or the workspace knowledge base: version 1,\nsearchable at once, trusted when a person writes it (FR-15.5, `_origin`); in a project\nwith a folder, also `notes/`.",
         "operationId": "knowledge_create_text_entry",
         "requestBody": {
           "content": {

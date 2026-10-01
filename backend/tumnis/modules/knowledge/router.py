@@ -15,7 +15,7 @@ take the deployment's SSRF policy from the settings.
 
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Annotated, Any, Final
+from typing import Annotated, Any, Final, Literal
 from urllib.parse import quote
 from uuid import UUID
 
@@ -62,6 +62,14 @@ class _KnowledgeRoute(TumnisRoute):
 
 router = v1_router("knowledge", tags=["knowledge"])
 router.route_class = _KnowledgeRoute
+
+
+def _origin(request: Request) -> Literal["user_text", "agent"]:
+    """Who wrote a text entry (FR-15.5): a person (a session) writes trusted text; any
+    other caller (an API key or a task token) writes untrusted text."""
+    person = principal_of(request).kind == "session"
+    return "user_text" if person else "agent"
+
 
 Session = Annotated[WorkspaceContext, Depends(require_session)]
 
@@ -189,6 +197,7 @@ async def update_document(
         tags=body.tags,
         pinned=body.pinned,
         net=_net(request),
+        origin=_origin(request),
     )
 
 
@@ -266,10 +275,16 @@ async def create_text_entry(
     body: TextEntryIn, request: Request, session: SessionDep
 ) -> api.DocumentDTO:
     """A text entry (Markdown) in a project or the workspace knowledge base: version 1,
-    searchable at once, trusted (FR-15.5); in a project with a folder, also `notes/`."""
+    searchable at once, trusted when a person writes it (FR-15.5, `_origin`); in a project
+    with a folder, also `notes/`."""
     _scoped_ctx(request, body.project_id)
     return await api.create_text_entry(
-        session, body.project_id, body.title, body.body_md, net=_net(request)
+        session,
+        body.project_id,
+        body.title,
+        body.body_md,
+        origin=_origin(request),
+        net=_net(request),
     )
 
 

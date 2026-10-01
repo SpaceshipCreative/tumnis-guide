@@ -68,7 +68,7 @@ from tumnis.modules.agents.packet_builder import (
     Callback,
     TaskPacket,
     build_packet,
-    enrichment_request,
+    enrichment_request_tainted,
     render_prompt,
     task_snapshot,
 )
@@ -1531,13 +1531,17 @@ async def enrich_request_step(
         if not wanted:
             await tasks.set_enrichment_status(s, snap.id, "done")
             return None
-        request = await enrichment_request(s, snap.id, missing=wanted)
+        request, tainted = await enrichment_request_tainted(s, snap.id, missing=wanted)
         profile_id = await _project_profile(s, UUID(project_id))
         if profile_id is None:  # removed while the enrichment waited
             await tasks.set_enrichment_status(s, snap.id, "not_provisioned")
             return None
         await tasks.set_enrichment_status(s, snap.id, "running")
-    return {"request": request.model_dump(mode="json"), "profile_id": str(profile_id)}
+    return {
+        "request": request.model_dump(mode="json"),
+        "profile_id": str(profile_id),
+        "tainted": tainted,
+    }
 
 
 def _checked_result(request: EnrichmentRequest, outcome: dict[str, Any]) -> EnrichmentResult | None:
@@ -1621,10 +1625,13 @@ async def enrich_apply_step(
     request: dict[str, Any],
     result: dict[str, Any],
     outlier: dict[str, Any] | None,
+    *,
+    tainted: bool = False,
 ) -> str:
     """The result merged into the task as it is now (a user's edit made meanwhile wins,
     UX 9) and applied in one versioned write, `done`; an outlier flag for the estimate it
-    applied queues one `estimate_outlier` item in the same transaction."""
+    applied queues one `estimate_outlier` item in the same transaction. A result from a
+    tainted request (outside text in its passages) taints the task (SAF-1)."""
     req = EnrichmentRequest.model_validate(request)
     res = EnrichmentResult.model_validate(result)
     flagged = None if outlier is None else tasks.EstimateOutlierPayload.model_validate(outlier)
@@ -1640,6 +1647,8 @@ async def enrich_apply_step(
                 await tasks.apply_enrichment(
                     s, snap.id, tasks.EnrichmentWrite(**patch.model_dump()), snap.version
                 )
+                if tainted:
+                    await tasks.raise_taint(s, snap.id)
                 if flagged is not None and patch.estimate_minutes == flagged.estimate_minutes:
                     await tasks.add_estimate_outlier(s, snap.id, flagged)
             return "done"
@@ -1700,6 +1709,7 @@ async def enrich_task(workspace_id: str, task_id: str, only: list[str] | None = 
             timeout_s=loaded["run_timeout_s"],
             prompt_text=render_prompt(ENRICH_SKILL, ENRICH_RESULT, built["request"]),
             body=built["request"],
+            tainted=built.get("tainted", False),
         )
         with SetWorkflowID(run_workflow_id(run_id)):
             outcome = await run_skill(workspace_id, packet.model_dump(mode="json"))
@@ -1709,7 +1719,14 @@ async def enrich_task(workspace_id: str, task_id: str, only: list[str] | None = 
             return "failed"
         as_json = result.model_dump(mode="json")
         outlier = await enrich_plausibility_step(workspace_id, task_id, built["request"], as_json)
-        ended = await enrich_apply_step(workspace_id, task_id, built["request"], as_json, outlier)
+        ended = await enrich_apply_step(
+            workspace_id,
+            task_id,
+            built["request"],
+            as_json,
+            outlier,
+            tainted=built.get("tainted", False),
+        )
     except Exception:
         await enrich_fail_step(workspace_id, task_id)
         raise

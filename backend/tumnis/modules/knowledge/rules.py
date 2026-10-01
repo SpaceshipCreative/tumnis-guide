@@ -361,7 +361,7 @@ def passage_query(title: str, criteria: Sequence[str], goal: str | None) -> str:
 
 CHUNK_MAX_CHARS: Final = 2_000  # plan default: about Docling's 512 tokens
 _HEADING: Final = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t#]*$")
-_FENCE: Final = re.compile(r"^(```|~~~)")
+_FENCE: Final = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")  # CommonMark: at most 3 spaces in
 _FRONTMATTER: Final = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
 
 
@@ -375,11 +375,10 @@ def markdown_sections(markdown: str) -> list[tuple[list[str], str]]:
     body = _FRONTMATTER.sub("", markdown.replace("\r\n", "\n"), count=1)
     path: list[str] = []
     sections: list[tuple[list[str], list[str]]] = [([], [])]
-    fenced = False
+    fence: str | None = None  # the open code fence's marker
     for line in body.split("\n"):
-        if _FENCE.match(line.strip()):
-            fenced = not fenced
-        heading = None if fenced else _HEADING.match(line)
+        fence = _fence_after(line, fence)
+        heading = None if fence is not None else _HEADING.match(line)
         if heading is None:
             sections[-1][1].append(line)
             continue
@@ -391,6 +390,21 @@ def markdown_sections(markdown: str) -> list[tuple[list[str], str]]:
         for piece in _pieces("\n".join(lines).strip()):
             out.append((heading_path, piece))
     return out
+
+
+def _fence_after(line: str, fence: str | None) -> str | None:
+    """The open code fence after `line` (CommonMark): a fence opens with 3 or more
+    backticks or tildes (a backtick fence's info string has no backtick) and closes only
+    with the same character, at least as long, and nothing but spaces after it."""
+    found = _FENCE.match(line)
+    if found is None:
+        return fence
+    marker, rest = found.group(1), found.group(2)
+    if fence is None:
+        return None if marker[0] == "`" and "`" in rest else marker
+    if marker[0] == fence[0] and len(marker) >= len(fence) and not rest.strip():
+        return None
+    return fence
 
 
 def _pieces(text: str) -> list[str]:

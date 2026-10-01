@@ -89,6 +89,7 @@ __all__ = [
     "code_location_of",
     "enrich_packet",
     "enrichment_request",
+    "enrichment_request_tainted",
     "packet_blocks",
     "packet_for_caller",
     "plan_projects",
@@ -816,6 +817,16 @@ async def enrichment_request(
     MAX_PASSAGES) and its 10 most recently finished Human or Hybrid tasks with estimate
     and actual time. 404 for a task the caller cannot see; ValueError for no missing field
     (a request always asks for one)."""
+    request, _tainted = await enrichment_request_tainted(s, task_id, missing=missing)
+    return request
+
+
+async def enrichment_request_tainted(
+    s: AsyncSession, task_id: UUID, *, missing: Sequence[str]
+) -> tuple[EnrichmentRequest, bool]:
+    """`enrichment_request` and whether it carries outside text (SAF-1, P2-08): a tainted
+    task, or a tainted brief or passage in it (an upload, a synced outside file). The
+    enrichment run is then tainted, and so is the task it writes."""
     if not missing:
         raise ValueError("an enrichment request names at least one missing field")
     task = await tasks.get_task(s, task_id)
@@ -829,8 +840,10 @@ async def enrichment_request(
     chosen = await knowledge.passages_for(s, task_id)
     brief = chosen[0].text if chosen and chosen[0].chunk_id is None else ""
     passages = [p for p in chosen if p.chunk_id is not None][:MAX_PASSAGES]
+    used = [p for p in chosen if p.chunk_id is None and brief] + passages
+    tainted = task.tainted or any(p.tainted for p in used)
     history = await tasks.estimate_history(s, task.project_id, limit=MAX_HISTORY)
-    return EnrichmentRequest(
+    request = EnrichmentRequest(
         task=EnrichTask(
             id=task.id,
             title=task.title[:TITLE_MAX],
@@ -871,6 +884,7 @@ async def enrichment_request(
             for h in history
         ],
     )
+    return request, tainted
 
 
 def task_snapshot(task: tasks.TaskOut) -> TaskSnapshot:
@@ -917,7 +931,8 @@ async def enrich_packet(
     preview id and the profile to the project's first; nothing is dispatched here."""
     task = await tasks.get_task(s, task_id)
     missing = missing_fields(task_snapshot(task)) or list(get_args(MissingField))
-    body = (await enrichment_request(s, task_id, missing=missing)).model_dump(mode="json")
+    request, tainted = await enrichment_request_tainted(s, task_id, missing=missing)
+    body = request.model_dump(mode="json")
     profile_id = profile_id or await _first_profile(s, task.project_id)
     return TaskPacket(
         kind=RunKind.ENRICH,
@@ -929,6 +944,7 @@ async def enrich_packet(
         timeout_s=timeout_s,
         prompt_text=render_prompt(ENRICH_SKILL, ENRICH_RESULT, body),
         body=body,
+        tainted=tainted,
     )
 
 

@@ -1966,7 +1966,8 @@ export const knowledgeAddLinkMutation = (
  * Create Text Entry
  *
  * A text entry (Markdown) in a project or the workspace knowledge base: version 1,
- * searchable at once, trusted (FR-15.5); in a project with a folder, also `notes/`.
+ * searchable at once, trusted when a person writes it (FR-15.5, `_origin`); in a project
+ * with a folder, also `notes/`.
  */
 export const knowledgeCreateTextEntryMutation = (
   options?: Partial<Options<KnowledgeCreateTextEntryData>>,

@@ -1992,7 +1992,12 @@ class KnowledgeHit(BaseModel):
 
 
 def _dto(row: Row) -> DocumentDTO:
-    return DocumentDTO.model_validate(dict(row))
+    """The row as served: a file's text stays hidden until it is released (`ready`);
+    an app text entry's body is always its own (#99)."""
+    data = dict(row)
+    if data.get("status") != "ready" and not is_note(data):
+        data["body_md"] = None
+    return DocumentDTO.model_validate(data)
 
 
 async def _live_row(s: AsyncSession, document_id: UUID) -> RowMapping:
@@ -2047,23 +2052,39 @@ async def _write_text(  # the row, its new body, and where the note goes
     expected_version: int,
     net: NetPolicy | None,
     event: type[DocumentAddedV1] | type[DocumentChangedV1],
+    by_agent: bool = False,
 ) -> DocumentDTO:
-    """Version, index and file one text write: a new version holding `body`, the row
-    updated to it (versioned), its chunks, its note file when the project has a folder,
-    and `document.added` or `document.changed`."""
+    """Version, index and file one text write: the row updated (versioned, so its row lock
+    orders concurrent writers and a stale one gets 409 before any version is added), a new
+    version holding `body` as the current one, its chunks, its note file when the project
+    has a folder, and `document.added` or `document.changed`. A write `by_agent` leaves
+    the entry untrusted (FR-15.5) until a person marks it trusted again."""
     data = body.encode()
-    version_id = await add_version(s, row["id"], data, body, status="ready")
-    values = {
+    values: dict[str, Any] = {
         "body_md": body,
         "content_hash": hashlib.sha256(data).digest(),
-        "current_version_id": version_id,
         "status": "ready",
     }
+    if by_agent:
+        values["trust"] = "untrusted"
     try:
-        saved = await update_versioned(s, _documents, row["id"], expected_version, values)
+        await update_versioned(s, _documents, row["id"], expected_version, values)
     except StaleVersion as exc:
         current = _dto(exc.current).model_dump(mode="json")
         raise StaleVersion(current=current) from None
+    version_id = await add_version(s, row["id"], data, body, status="ready")
+    saved = (
+        (
+            await s.execute(
+                update(_documents)
+                .where(_documents.c.id == row["id"])
+                .values(current_version_id=version_id)
+                .returning(*_documents.c)
+            )
+        )
+        .mappings()
+        .one()
+    )
     await _index_text(s, row["id"], version_id, body)
     if net is not None and await _has_folder(s, saved["project_id"]):
         await save_note(s, row["id"], net=net, version_id=version_id)
@@ -2141,15 +2162,23 @@ async def update_text_entry(
     *,
     expected_version: int,
     net: NetPolicy | None = None,
+    origin: Literal["user_text", "agent"] = "user_text",
 ) -> DocumentDTO:
     """Replace a text entry's Markdown body: a new version, re-indexed (FR-15.6). Synced
     files and uploads are not edited here: anything but a text entry (`is_note`) is 409
-    `not_text`; a stale `expected_version` is 409 `stale_version` with the current entry."""
+    `not_text`; a stale `expected_version` is 409 `stale_version` with the current entry.
+    An agent's edit leaves the entry untrusted (FR-15.5)."""
     row = await _live_row(s, document_id)
     if not is_note(row) and row["source"] != AGENT_SOURCE:
         raise ProblemError(409, "not_text", "Only text entries can be edited here")
     return await _write_text(
-        s, row, markdown, expected_version=expected_version, net=net, event=DocumentChangedV1
+        s,
+        row,
+        markdown,
+        expected_version=expected_version,
+        net=net,
+        event=DocumentChangedV1,
+        by_agent=origin == "agent",
     )
 
 
@@ -2274,10 +2303,12 @@ async def edit_document(  # the patchable fields, each optional
     tags: list[str] | None = None,
     pinned: bool | None = None,
     net: NetPolicy | None = None,
+    origin: Literal["user_text", "agent"] = "user_text",
 ) -> DocumentDTO:
     """One versioned edit of a document (the rail's PATCH): its metadata (title, tags,
-    pin) first, then a text entry's body as a new version. The first change takes
-    `expected_version`; a body change after it takes the version that change left."""
+    pin) first, then a text entry's body as a new version (`origin` as in
+    `update_text_entry`). The first change takes `expected_version`; a body change after
+    it takes the version that change left."""
     values: dict[str, Any] = {}
     if title is not None:
         values["title"] = title
@@ -2295,7 +2326,9 @@ async def edit_document(  # the patchable fields, each optional
         dto = await _set_fields(s, document_id, values, version)
         version = dto.version
     if body_md is not None:
-        dto = await update_text_entry(s, document_id, body_md, expected_version=version, net=net)
+        dto = await update_text_entry(
+            s, document_id, body_md, expected_version=version, net=net, origin=origin
+        )
     if dto is None:
         dto = _dto(await _live_row(s, document_id))
         if dto.version != expected_version:
