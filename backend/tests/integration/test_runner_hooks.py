@@ -46,7 +46,11 @@ async def test_runner_script_takes_both_shapes(
     task = {"task_title": "Fix footer link", "runs": [[{"result": RESULT}]]}
     assert (await client.post(SCRIPT, json=task)).status_code == 204
     refused = await client.post(
-        SCRIPT, json={"task_title": "Fix footer link", "runs": [[{"ask_human": {"prompt": "?"}}]]}
+        SCRIPT,
+        json={
+            "task_title": "Fix footer link",
+            "runs": [[{"request_approval": {"action_class": "merge_main"}}]],
+        },
     )
     assert refused.status_code == 422, refused.text
     assert refused.json()["code"] == "invalid_fake_script"

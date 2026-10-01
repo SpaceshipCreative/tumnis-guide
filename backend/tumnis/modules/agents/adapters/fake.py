@@ -16,7 +16,7 @@ steps.
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Final, Literal, Self
+from typing import Annotated, Any, Final, Literal, Self
 from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -63,6 +63,16 @@ class ArtifactStep(_Strict):
     content: str
 
 
+class AskHumanStep(_Strict):
+    """A question to the human, asked through `ask_human` as the run's agent; the run's
+    playback waits for the answer (Scott decision 55)."""
+
+    prompt: str = Field(min_length=1, max_length=MAX_STEP_TEXT)
+    choices: list[Annotated[str, Field(min_length=1, max_length=500)]] | None = Field(
+        default=None, max_length=20
+    )
+
+
 class ResultStep(BaseModel):
     """The result the run posts; the whole body is checked as `post_result`'s input when
     it is played (the same validation as any agent's result)."""
@@ -74,18 +84,22 @@ class ResultStep(BaseModel):
 
 
 class Step(_Strict):
-    """One thing a run does: exactly one of a stream line, an artifact or its result.
-    Questions and approvals (`ask_human`, P2-05) are not played yet: refused."""
+    """One thing a run does: exactly one of a stream line, an artifact, a question to the
+    human or its result. A result's summary may name the last answer as `{answer}`.
+    Approvals (`request_approval`) are not played: refused."""
 
     stream: StreamStep | None = None
     upload_artifact: ArtifactStep | None = None
+    ask_human: AskHumanStep | None = None
     result: ResultStep | None = None
 
     @model_validator(mode="after")
     def _one_action(self) -> Self:
-        given = [self.stream, self.upload_artifact, self.result]
+        given = [self.stream, self.upload_artifact, self.ask_human, self.result]
         if sum(step is not None for step in given) != 1:
-            raise ValueError("a step names exactly one of stream, upload_artifact or result")
+            raise ValueError(
+                "a step names exactly one of stream, upload_artifact, ask_human or result"
+            )
         return self
 
 
