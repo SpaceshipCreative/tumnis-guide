@@ -29,7 +29,6 @@ def _parse(body: dict[str, Any]) -> tuple[str, dict[str, Any]]:
 
 @pytest.mark.req("FR-5.7")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:SPEC-54-55")
 def test_task_script_keeps_a_question_step() -> None:
     """A question step is stored as given, with its choices when it has some."""
     key, stored = _parse(QUESTION_RUNS)
