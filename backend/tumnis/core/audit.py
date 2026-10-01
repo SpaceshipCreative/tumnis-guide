@@ -255,13 +255,13 @@ class ProjectAuditRow:
 _PROJECT_FIRST = text(
     "SELECT id, occurred_at, action, actor_type, target_type, target_id, reason, details"
     " FROM audit_log WHERE workspace_id = app.current_workspace_id()"
-    " AND details->>'project_id' = :project"
+    " AND details ? 'project_id' AND details->>'project_id' = :project"
     " ORDER BY occurred_at DESC, id DESC LIMIT :limit"
 )
 _PROJECT_AFTER = text(
     "SELECT id, occurred_at, action, actor_type, target_type, target_id, reason, details"
     " FROM audit_log WHERE workspace_id = app.current_workspace_id()"
-    " AND details->>'project_id' = :project"
+    " AND details ? 'project_id' AND details->>'project_id' = :project"
     " AND (occurred_at, id) < (CAST(:at AS timestamptz), CAST(:id AS uuid))"
     " ORDER BY occurred_at DESC, id DESC LIMIT :limit"
 )
