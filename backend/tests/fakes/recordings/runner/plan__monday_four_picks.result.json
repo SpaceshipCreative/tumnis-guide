@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "picks": [
+    {
+      "task_id": "title:Invoice Acme for phase one",
+      "reason": "Acme pays on receipt; send it before their 11:00 cutoff"
+    },
+    {
+      "task_id": "title:Send logo drafts to Acme",
+      "reason": "Acme expects the drafts today"
+    },
+    {
+      "task_id": "title:Record lesson one",
+      "reason": "Rolled over twice; the launch depends on it"
+    },
+    {
+      "task_id": "title:Generate March analytics report",
+      "reason": "Runs while you work; due for Friday's review"
+    }
+  ],
+  "alternates": [
+    "title:Book a guest for lesson three"
+  ],
+  "notes": null
+}

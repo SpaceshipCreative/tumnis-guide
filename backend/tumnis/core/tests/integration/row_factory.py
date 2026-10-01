@@ -60,6 +60,7 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("daily_plans", "source"): "manual",  # ck_daily_plans_source
     ("daily_plans", "trigger"): "manual",  # ck_daily_plans_trigger
     ("daily_plans", "status"): "superseded",  # ck_daily_plans_status
+    ("plan_issues", "kind"): "no_gap",  # ck_plan_issues_kind
     ("archived_blobs", "codec"): "zstd",  # ck_archived_blobs_codec
     ("project_archives", "state"): "archived",  # ck_project_archives_state
 }
