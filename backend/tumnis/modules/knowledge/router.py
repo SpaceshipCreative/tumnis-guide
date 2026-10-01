@@ -22,11 +22,10 @@ from uuid import UUID
 from fastapi import Depends, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import AnyHttpUrl, BaseModel, Field, StringConstraints
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from tumnis.core.audit_router import require_session
 from tumnis.core.clock import Clock
-from tumnis.core.errors import ProblemError
+from tumnis.core.errors import FixedAllow, ProblemError
 from tumnis.core.idempotency import SessionDep
 from tumnis.core.ids import uuid7
 from tumnis.core.net import NetPolicy
@@ -54,7 +53,7 @@ class _KnowledgeRoute(TumnisRoute):
 
         async def literal_first(request: Request) -> Response:
             if request.path_params.get("document_id") in LITERAL_DOCUMENT_PATHS:
-                raise StarletteHTTPException(405, headers={"Allow": "POST"})
+                raise FixedAllow("POST")
             return await handler(request)
 
         return literal_first

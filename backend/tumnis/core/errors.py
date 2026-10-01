@@ -134,6 +134,14 @@ def _from_http(status: int, detail: Any) -> Problem:
     return problem(status, default, text)
 
 
+class FixedAllow(StarletteHTTPException):
+    """A 405 raised by a route that knows its own `Allow` (RFC 9110, 15.5.6); the
+    handler keeps it instead of naming every method served at the path."""
+
+    def __init__(self, allow: str) -> None:
+        super().__init__(HTTPStatus.METHOD_NOT_ALLOWED, headers={"Allow": allow})
+
+
 def _allowed_methods(request: Request) -> str | None:
     """Every method any route serves at this path. Starlette's 405 names only the first
     route that matched the path, so a path with GET and PUT on separate routes would
@@ -154,7 +162,7 @@ async def http_exception_handler(request: Request, exc: Exception) -> Response:
     headers = dict(exc.headers or {})
     if (
         exc.status_code == HTTPStatus.METHOD_NOT_ALLOWED
-        and "Allow" not in headers  # a route that answers 405 itself knows its Allow
+        and not isinstance(exc, FixedAllow)
         and (allow := _allowed_methods(request))
     ):
         headers["Allow"] = allow
