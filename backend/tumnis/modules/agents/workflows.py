@@ -126,6 +126,7 @@ RUNNER_SWEEP_NAME: Final = "runner-sweep"
 # three-missed-heartbeat detection (FR-5.9).
 RUNNER_SWEEP_QUEUE: Final = "agents-sweep"
 RUNS_QUEUE: Final = api.RUNS_QUEUE
+HUMAN_QUEUE: Final = api.HUMAN_QUEUE  # P2-05: question_flow and approval_flow
 PROFILE_HEALTH_SCHEDULE: Final = "*/15 * * * *"  # every 15 minutes (plan default)
 PROFILE_HEALTH_SCHEDULE_NAME: Final = "profile-health"
 
@@ -649,13 +650,15 @@ async def _supervise(  # noqa: PLR0917  # the plan's one loop over every signal
     ceiling: float,
     started_at_s: float,
     used: float = 0.0,
+    *,
+    waiting: bool = False,
 ) -> str:
     """Waits for the run's end: a result, a cancel or limit, a lost runner, a failed agent,
     the active-time cap (SAF-5; time waiting on a human does not count) or the wall-clock
     ceiling (R-29; waiting included). Both caps are enforced here, never by a DBOS
     workflow timeout, so the agent is stopped and the log and review item are left."""
     stored = handle.model_dump(mode="json")
-    waiting, mark = False, await now_s()
+    mark = await now_s()
     ceiling_at = started_at_s + ceiling
     faults.killpoint("agents.dispatch_run.waiting_recv")  # parked before the first recv
     while True:
@@ -745,21 +748,149 @@ async def deliver_signal(
     workspace_id: UUID, run_id: UUID, kind: str, reason: str | None, key: str
 ) -> None:
     """Send a `run.signal` to the run's workflow, once per event (`key`). A workflow that
-    does not exist yet is retried (the delivery raises), unless the run already ended."""
+    does not exist yet is retried (the delivery raises), unless the run already ended.
+    The run row stays locked from reading its workflow id until a stale one is replaced,
+    so a concurrent delivery waits and then reads the new id instead of sending to the
+    cancelled workflow."""
     message = {"kind": kind, "reason": reason}
     async with tenant_session(_ctx(str(workspace_id))) as s:
         row = (
-            await s.execute(select(_runs.c.status, _runs.c.workflow_id).where(_runs.c.id == run_id))
+            await s.execute(
+                select(_runs.c.status, _runs.c.workflow_id)
+                .where(_runs.c.id == run_id)
+                .with_for_update()
+            )
         ).first()
-    if row is None:
-        return
-    target = row.workflow_id or dispatch_workflow_id(run_id)
+        if row is None:
+            return
+        target = row.workflow_id or dispatch_workflow_id(run_id)
+        if row.status not in api.TERMINAL and await stale_workflow(target):
+            target = await _replace_supervisor(s, workspace_id, run_id, target)
     try:
         await DBOS.send_async(target, message, topic=api.run_topic(run_id), idempotency_key=key)
     except DBOSNonExistentWorkflowError:
         if row.status in api.TERMINAL:
             return
         raise
+
+
+# --- supervise_run and version-aware delivery (P2-05, R-30) ---------------------------------
+#
+# DBOS recovers only the workflows of the application version it runs (Context7
+# /dbos-inc/dbos-docs, "application versions"), so a run's `dispatch_run` started before a
+# deploy would never hear its signals again. `deliver_signal` finds such a workflow by its
+# `app_version`, cancels it and starts `supervise_run` on the current version, which picks
+# the run up from its row (handle, budgets, time used, waiting or not).
+
+LIVE_WORKFLOW: Final = frozenset({"PENDING", "ENQUEUED"})
+MASTER_RUN_MINUTES: Final = 60  # a run with no project: the plan default cap (SAF-5)
+
+
+class Supervision(BaseModel):
+    """What `supervise_run` needs to carry on with a run, read from its row."""
+
+    status: str
+    ended: bool = False
+    handle: RunHandleData | None = None
+    max_active_seconds: float = 0.0
+    ceiling_seconds: float = 0.0
+    started_at_s: float = 0.0
+    used_seconds: float = 0.0
+    waiting: bool = False
+
+
+def supervise_workflow_id(run_id: UUID, version: str) -> str:
+    return f"supervise:{run_id}:{version}"
+
+
+@DBOS.step()
+async def load_supervision(workspace_id: str, run_id: str) -> Supervision:
+    run = UUID(run_id)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        row = (
+            (
+                await s.execute(
+                    select(*_runs.c, _profiles.c.project_id)
+                    .select_from(_runs.join(_profiles, _profiles.c.id == _runs.c.profile_id))
+                    .where(_runs.c.id == run)
+                )
+            )
+            .mappings()
+            .one()
+        )
+        status = RunStatus(row["status"])
+        if status in TERMINAL_STATUSES:
+            return Supervision(status=status.value, ended=True)
+        minutes = (
+            MASTER_RUN_MINUTES
+            if row["project_id"] is None
+            else (await projects.get_policy(s, row["project_id"])).max_run_minutes
+        )
+    active_cap, ceiling = api.run_caps(minutes)
+    started = row["started_at"] or SystemClock().now()
+    return Supervision(
+        status=status.value,
+        handle=RunHandleData(
+            run_id=run, profile_id=row["profile_id"], correlation_id=row["correlation_id"]
+        ),
+        max_active_seconds=active_cap,
+        ceiling_seconds=ceiling,
+        started_at_s=started.timestamp(),
+        used_seconds=row["active_seconds_used"],
+        waiting=status is RunStatus.WAITING_ON_HUMAN,
+    )
+
+
+@DBOS.workflow(name="supervise_run")
+async def supervise_run(workspace_id: str, run_id: str) -> str:
+    """Carries on supervising a dispatched run on this application version (P2-05): the
+    run's signals, its active-time cap and its wall-clock ceiling, as `dispatch_run` did."""
+    state = await load_supervision(workspace_id, run_id)
+    if state.ended or state.handle is None:
+        return state.status
+    return await _supervise(
+        workspace_id,
+        run_id,
+        state.handle,
+        state.max_active_seconds,
+        state.ceiling_seconds,
+        state.started_at_s,
+        state.used_seconds,
+        waiting=state.waiting,
+    )
+
+
+async def _start_detached(workflow_id: str, func: Any, *args: Any) -> None:
+    """Starts a workflow from a fresh context: a subscriber runs inside a DBOS step, and
+    DBOS refuses to start a workflow from one."""
+
+    async def start() -> None:
+        with SetWorkflowID(workflow_id):
+            await DBOS.start_workflow_async(func, *args)
+
+    await asyncio.get_running_loop().create_task(start(), context=contextvars.Context())
+
+
+async def stale_workflow(workflow_id: str | None) -> bool | None:
+    """Whether the workflow is live on an older application version (True), live on this
+    one (False); None when there is no live workflow by that id."""
+    if workflow_id is None:
+        return None
+    status = await DBOS.get_workflow_status_async(workflow_id)
+    if status is None or status.status not in LIVE_WORKFLOW:
+        return None
+    return status.app_version != DBOS.application_version
+
+
+async def _replace_supervisor(s: AsyncSession, workspace_id: UUID, run_id: UUID, old: str) -> str:
+    """Cancels the run's workflow of an older version and starts `supervise_run` on this
+    one; the run row (locked by the caller, in `s`) names the new workflow."""
+    new = supervise_workflow_id(run_id, str(DBOS.application_version))
+    await DBOS.cancel_workflow_async(old)
+    await _start_detached(new, supervise_run, str(workspace_id), str(run_id))
+    await s.execute(update(_runs).where(_runs.c.id == run_id).values(workflow_id=new))
+    _log.info("run %s: workflow %s of an older version replaced by %s", run_id, old, new)
+    return new
 
 
 # --- runner_sweep ---------------------------------------------------------------------------

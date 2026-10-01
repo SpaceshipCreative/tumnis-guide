@@ -37,3 +37,12 @@ async def seed(
 def _reset_label_fakes() -> Iterator[None]:
     yield
     reset_label_fakes()
+
+
+@pytest.fixture(autouse=True)
+def _reset_human_waits() -> Iterator[None]:
+    """A2.2 and A2.3 shorten the long poll for the process (P2-05); put it back."""
+    yield
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+
+    agents.configure_human_waits()

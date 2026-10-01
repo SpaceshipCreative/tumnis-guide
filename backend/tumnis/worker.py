@@ -44,6 +44,7 @@ def main_queues() -> list[str]:
         workflows_ops.MAINTENANCE_QUEUE,
         SYNC_QUEUE,
         agents.RUNS_QUEUE,
+        agents.HUMAN_QUEUE,
         agents.RUNNER_SWEEP_QUEUE,
         GITHUB_QUEUE,
         _projects().ARCHIVE_QUEUE,
@@ -71,6 +72,8 @@ def register_queues() -> None:
         polling_interval_sec=agents.RUNS_QUEUE_POLL_S,
     )
     DBOS.register_queue(agents.RUNNER_SWEEP_QUEUE, worker_concurrency=1)
+    # Questions and approvals (P2-05): no limit, each flow parks on the human.
+    DBOS.register_queue(agents.HUMAN_QUEUE)
     DBOS.register_queue(
         GITHUB_QUEUE,
         worker_concurrency=2,
