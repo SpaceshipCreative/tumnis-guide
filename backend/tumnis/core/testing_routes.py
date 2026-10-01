@@ -10,9 +10,12 @@ packet the fake runner received and how many (P2-04); `POST /v1/test/tick/{sched
 fires a registered test tick (R-37, tumnis.core.ticks; P2-15's `focus-wake`)."""
 
 import asyncio
-from collections.abc import Callable
+import contextlib
+import logging
+import re
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timedelta
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Final, Self
 from uuid import UUID
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
@@ -22,7 +25,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from tumnis.core import deadletter, fake_scripts, ticks
+from tumnis.core import db, deadletter, fake_scripts, ticks
 from tumnis.core.clock import OverridableClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.ratelimit import RateLimiter
@@ -39,6 +42,25 @@ _LOCK_OUTBOX = text("LOCK TABLE outbox IN ACCESS EXCLUSIVE MODE")
 # SQLSTATE deadlock_detected, and how many times a reset runs its TRUNCATE before giving up.
 DEADLOCK_DETECTED = "40P01"
 DEADLOCK_ATTEMPTS = 3
+# A reset that waits this long for one lock is stuck behind a transaction left open (a
+# request parked on an `await` with its locks held): it gives up with SQLSTATE
+# lock_not_available and reports who holds what (`blocked_report`, SEED) instead of
+# holding every later reset until the e2e job's budget runs out.
+RESET_LOCK_TIMEOUT_S: Final = 20
+LOCK_NOT_AVAILABLE: Final = "55P03"
+_SET_LOCK_TIMEOUT = text(f"SET LOCAL lock_timeout = '{RESET_LOCK_TIMEOUT_S}s'")
+# The open transactions in this database. As the app role it sees the api's and the
+# worker's statements; another role's rows show without them (Postgres hides those).
+_OPEN_TRANSACTIONS = text(
+    "SELECT pid, usename, application_name, state, wait_event_type, wait_event,"
+    " now() - xact_start AS xact_age, pg_blocking_pids(pid) AS blocked_by,"
+    " left(query, 300) AS query FROM pg_stat_activity"
+    " WHERE datname = current_database() AND pid <> pg_backend_pid()"
+    " AND (xact_start IS NOT NULL OR state IS NULL) ORDER BY xact_start"
+)
+REPORT_TASKS_MAX: Final = 20
+REPORT_DETAIL_MAX: Final = 6000
+_log = logging.getLogger(__name__)
 # The statement-level guards of the append-only tables (pg_trigger.tgtype bit 32).
 _TRUNCATE_GUARDS = text(
     "SELECT c.relname, t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid"
@@ -61,6 +83,10 @@ async def truncate_tables(owner_url: str) -> list[str]:
             try:
                 return await _truncate_once(engine)
             except DBAPIError as error:
+                if getattr(error.orig, "sqlstate", None) == LOCK_NOT_AVAILABLE:
+                    report = blocked_report(await _open_transactions(engine), _parked_chains())
+                    _log.error("reset blocked on a lock for %ss:\n%s", RESET_LOCK_TIMEOUT_S, report)
+                    raise ResetBlockedError(report) from error
                 deadlock = getattr(error.orig, "sqlstate", None) == DEADLOCK_DETECTED
                 if not deadlock or attempt == DEADLOCK_ATTEMPTS:
                     raise
@@ -71,6 +97,7 @@ async def truncate_tables(owner_url: str) -> list[str]:
 
 async def _truncate_once(engine: AsyncEngine) -> list[str]:
     async with engine.begin() as conn:
+        await conn.execute(_SET_LOCK_TIMEOUT)
         names = [
             name
             for (name,) in await conn.execute(
@@ -105,6 +132,91 @@ async def _truncate_once(engine: AsyncEngine) -> list[str]:
                     text(f"ALTER TABLE {quote(table)} ENABLE TRIGGER {quote(trigger)}")
                 )
     return names
+
+
+class ResetBlockedError(Exception):
+    """The reset's TRUNCATE waited RESET_LOCK_TIMEOUT_S for a lock; `report` says who
+    holds it (`blocked_report`)."""
+
+    def __init__(self, report: str) -> None:
+        super().__init__(report)
+        self.report = report
+
+
+async def _open_transactions(owner: AsyncEngine) -> list[dict[str, Any]]:
+    """`_OPEN_TRANSACTIONS` as the app role when this process has one (it sees the api's and
+    the worker's statements), else as the owner; empty when neither answers."""
+    engines: list[AsyncEngine] = []
+    with contextlib.suppress(RuntimeError):  # unconfigured: a harness calls truncate alone
+        engines.append(db.app_engine())
+    engines.append(owner)
+    for engine in engines:
+        try:
+            async with engine.connect() as conn:
+                rows = await conn.execute(_OPEN_TRANSACTIONS)
+                return [dict(row._mapping) for row in rows]
+        except DBAPIError:
+            continue
+    return []
+
+
+def await_chain(task: "asyncio.Task[Any]") -> list[str]:
+    """Where `task` is parked: each coroutine from its outermost down its `cr_await` chain,
+    as `file:line function`, ending with the awaited future (a task's own stack shows only
+    its outermost coroutine)."""
+    chain: list[str] = []
+    awaited: Any = task.get_coro()
+    while awaited is not None:
+        frame = (
+            getattr(awaited, "cr_frame", None)
+            or getattr(awaited, "gi_frame", None)
+            or getattr(awaited, "ag_frame", None)
+        )
+        if frame is None:
+            chain.append(repr(awaited)[:200])
+            break
+        chain.append(f"{frame.f_code.co_filename}:{frame.f_lineno} {frame.f_code.co_name}")
+        awaited = (
+            getattr(awaited, "cr_await", None)
+            or getattr(awaited, "gi_yieldfrom", None)
+            or getattr(awaited, "ag_await", None)
+        )
+    return chain
+
+
+def _parked_chains() -> list[list[str]]:
+    """The await chains of this process's other tasks that run tumnis code."""
+    current = asyncio.current_task()
+    chains = [
+        chain
+        for task in asyncio.all_tasks()
+        if task is not current
+        for chain in [await_chain(task)]
+        if any("/tumnis/" in line for line in chain)
+    ]
+    return chains[:REPORT_TASKS_MAX]
+
+
+def _one_line(value: Any) -> str:
+    return re.sub(r"\s+", " ", "" if value is None else str(value)).strip()
+
+
+def blocked_report(activity: Sequence[Mapping[str, Any]], chains: Sequence[Sequence[str]]) -> str:
+    """A stuck reset's report: each open transaction (pid, role, application, state, wait,
+    age, the pids blocking it, its last statement) and each parked task's await chain."""
+    lines = [f"open transactions ({len(activity)}):"]
+    for row in activity:
+        age = row.get("xact_age")
+        seconds = f"{age.total_seconds():.0f}s" if isinstance(age, timedelta) else "?"
+        lines.append(
+            f"  pid {row.get('pid')} {row.get('usename')} app={row.get('application_name')!r}"
+            f" {row.get('state')} wait={row.get('wait_event_type')}/{row.get('wait_event')}"
+            f" for {seconds} blocked by {list(row.get('blocked_by') or [])}"
+            f" last: {_one_line(row.get('query'))}"
+        )
+    lines.append(f"parked api tasks ({len(chains)}):")
+    lines.extend("  " + " -> ".join(chain) for chain in chains)
+    return "\n".join(lines)
 
 
 @router.post("/reset", status_code=204)
@@ -150,6 +262,8 @@ async def reset(
                 )
     except ResetSupersededError:
         raise HTTPException(status_code=409, detail="superseded by a later reset") from None
+    except ResetBlockedError as blocked:
+        raise HTTPException(status_code=503, detail=blocked.report[:REPORT_DETAIL_MAX]) from None
     return Response(status_code=204)
 
 

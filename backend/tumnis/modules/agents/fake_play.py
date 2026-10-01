@@ -203,7 +203,7 @@ async def _ask(ctx: WorkspaceContext, run_id: UUID, question: dict[str, Any]) ->
     """The question through `api.ask_human`, as the run's agent asks with its task token;
     then re-sent with its id every QUESTION_POLL_S (as an agent re-sends after a `pending`
     long poll) until it is answered and the run runs again. None when the ask is refused
-    or the run ends first (a stopped run's question stays pending)."""
+    or the run ends first (a stopped run's question stays pending) or is gone (a reset)."""
     inp = api.AskHumanIn.model_validate({**question, "run_id": str(run_id)})
     try:
         async with tenant_session(ctx) as s:
@@ -217,7 +217,10 @@ async def _ask(ctx: WorkspaceContext, run_id: UUID, question: dict[str, Any]) ->
     while True:
         await asyncio.sleep(QUESTION_POLL_S)
         async with tenant_session(ctx) as s:
-            status = (await api.get_run(s, run_id)).status
+            try:
+                status = (await api.get_run(s, run_id)).status
+            except NotFound:  # a test reset removed the run (T-SEED-26)
+                return None
             if status not in _OPEN:
                 return None
             out = await api.ask_human(

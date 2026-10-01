@@ -17,7 +17,6 @@ import pytest
 pytestmark = [pytest.mark.req("REL-7"), pytest.mark.wp("SEED")]
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 def test_blocked_report_names_the_open_transactions_and_parked_tasks() -> None:
     """T-SEED-25
     The report lists each open transaction (pid, role, application, state, what it waits
@@ -61,7 +60,6 @@ def test_blocked_report_names_the_open_transactions_and_parked_tasks() -> None:
     assert "tumnis/modules/planning/api.py:1300 swap_item" in report
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_await_chain_follows_a_parked_coroutine_to_its_innermost_await() -> None:
     """T-SEED-25
     A task's own stack shows only its outermost coroutine; the chain follows each

@@ -111,7 +111,6 @@ def test_recordings_load_by_bare_name_only() -> None:
             load_recording(bad)
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_a_question_whose_run_a_reset_removed_ends_quietly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
