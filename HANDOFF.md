@@ -1,87 +1,90 @@
-# HANDOFF: SEED impl-2 (acceptance seed runtime), continuation 3
+# HANDOFF: SEED impl-2 (acceptance seed runtime), continuation 5
 
 **PR #138** (https://github.com/SpaceshipCreative/tumnis-guide/pull/138), branch `wp/SEED-impl-2`.
-- Push only with `/usr/bin/git push origin HEAD:wp/SEED-impl-2`.
-- Scratch folders: c2 `/tmp/claude-1002/SEED-impl-2-c2/`, c3 `/tmp/claude-1002/SEED-impl-2-c3/`. Make your own (`SEED-impl-2-c4/`) for new files.
-- Helpers:
-  - `bash /tmp/claude-1002/SEED-impl-2-c3/check.sh`: `make check` with the semgrep env vars, for the c3 worktree path. Copy it and fix the `cd` path for your worktree.
-  - `/tmp/claude-1002/SEED-impl-2-c2/wait-run.sh <run-id>`: waits for a CI run.
-- PR body draft: `/tmp/claude-1002/SEED-impl-2-c2/pr-body.md`. It is NOT applied to the PR yet, and it is missing c3's work (see step 4).
-- Binding rules:
-  - Scott decision 51: never edit or remove a journey's `test.fail()`/xfail marker to diagnose, not even locally. Do not use `--runxfail`.
-  - Coordinator notes: `~/tumnis-coordinator/agent-reports/SEED-impl-2-coordinator-notes.md`.
-  - Coordinator (c3): don't touch ci.yml. Main's integration job sits at its 15-min limit, and a fix (`fix/ci-integration-speed`) is coming. If #138's `integration` is cancelled, re-run it at most once. When the coordinator says the fix merged, merge origin/main and re-run CI.
-  - Coordinator (c3): the reset's lock-timeout 503 and the diagnostics run only under the test routes. `core/testing_routes.py` is mounted only with fake adapters. That holds now; keep it that way.
-- Local note: a sandboxed Playwright can't reach the stack (loopback is isolated), and `npx playwright` from the repo root resolves the wrong version. Use bare `make up`, then `make e2e`, then `make down`. Error contexts land in `frontend/test-results/`.
+- Push only with `/usr/bin/git push origin HEAD:wp/SEED-impl-2`. Use `/usr/bin/git`, never plain git; no git switch / reset --hard / symbolic-ref.
+- Scratch: c5 used `/tmp/claude-1002/SEED-impl-2-c5/`. Make your own `SEED-impl-2-c6/`.
+- Helpers (copy, fix the worktree path in the `cd`):
+  - `bash /tmp/claude-1002/SEED-impl-2-c5/check.sh`: `make check` with semgrep env vars.
+  - `/tmp/claude-1002/SEED-impl-2-c5/probe.py`: A2.2's API path, timed, run INSIDE the api container. `docker compose -f deploy/compose.test.yaml cp <probe> api:/tmp/probe.py`, then `docker compose -f deploy/compose.test.yaml exec -T api python /tmp/probe.py <resets> <wait_s>`. It prints the run's status changes and the last packet's prompt text.
+  - `/tmp/claude-1002/SEED-impl-2-c5/watch.sh`: DBOS queue counts each second. Copy it to the `postgres` service and run `docker compose -f deploy/compose.test.yaml exec -T -u postgres postgres bash /tmp/watch.sh 60`.
+  - All docker / make up / make e2e / make down commands must be BARE (nothing added). Use literal `/tmp/claude-1002/...` paths, not `$TMPDIR`, in commands near git (the worktree guard refuses variables).
+  - `gh run download` needs `allowed_domains: ["productionresultssa16.blob.core.windows.net"]` and `timeout 120`.
+- PR body draft: `/tmp/claude-1002/SEED-impl-2-c5/pr-body.md`. It already includes c3's work and T-SEED-29. It is NOT applied yet. Add the CI results and the triage below, then run `gh pr edit 138 --repo SpaceshipCreative/tumnis-guide --body-file <file>`.
+- Binding: Scott decision 51 (never touch journey markers to diagnose). Coordinator: agents never remove xfail markers (the classifier blocks it). Scott removes them; report "#138 READY EXCEPT MARKERS at <sha>" with file and line for each.
+- The local stack is probably still up (`tumnis-test-*`). Run `make down` first if you don't need it.
 
-## Commits (c3)
+## Commits (c5)
 
 | SHA | What |
 | --- | --- |
-| 92de985 | Merged origin/wp/SEED-impl-2 into the c3 worktree (main already included). |
-| e68ef3d (red), 9db0887 | T-SEED-25: a stuck reset reports its lock holders (`blocked_report`, `await_chain`, unit). T-SEED-26: a fake `ask_human` playback ends quietly once a reset removed its run (`fake_play._ask` catches NotFound, unit). Both markers removed after they passed. |
-| d03ed2e (red) | T-SEED-27 (integration, `backend/tumnis/core/tests/integration/test_reset_lock_timeout.py`), red with xfail strict. |
-| 5b7431e | `core/testing_routes.py`: the TRUNCATE runs with `lock_timeout` 5 s (`set_config` with a bind value). On SQLSTATE 55P03 it logs a warning with `blocked_report` (pg_stat_activity as the app role, plus the api's parked await chains) and tries again, up to `LOCK_WAIT_ATTEMPTS` = 4. After that, `ResetBlockedError` makes the route answer 503 with the report. |
-| 049c4f3 (red), 2c21f16 | T-SEED-28 (Vitest, `frontend/src/components/common/AppHeader.test.tsx`): the header's review badge span has `data-testid="review-count"`, which `e2e/phase2.ts` `reviewBadgeCount` (A2.2) reads. `AppHeader.tsx` is a shared-file edit. The marker was removed after it passed. |
+| 168109d | T-SEED-29 (integration, `backend/tests/harness/test_acceptance_runtime.py`, strict xfail, red). A reset cancels the removed world's queued event deliveries, and the new world's deliveries then start without waiting. |
+| 451f8c9 | `core/testing_routes.py` `cancel_removed_deliveries()`: after the TRUNCATE and before the seed, it cancels every `deliver_event` workflow still ENQUEUED or PENDING through the api's DBOS client. It is gated on `fake_scripts.enabled() and deadletter.dbos_configured()` (the latter is new in `core/deadletter.py`). |
 
-Check the exact SHAs with `/usr/bin/git log --oneline -10`.
+## ROOT CAUSE 2 (solved): A2.1, A2.2 and T-P4-05-10 never saw their run start
 
-## ROOT CAUSE of the e2e stall (solved)
+- A reset empties the tables but not the DBOS `events` queue. Old-world deliveries fail on FK errors and back off (full jitter, 5 attempts). Each holds one of the 8 slots while it sleeps (`sleep_async` is a plain asyncio.sleep, and `worker_concurrency` is counted in memory).
+- Each acceptance seed queues about 230 deliveries. `run.requested` then waits behind them.
+- Probe, before the fix: after 5 back-to-back resets the run stayed `backlog` for 60 s (8 PENDING and about 230 ENQUEUED, draining at about one every 2 s).
+- Probe, after the fix: the run reached `waiting_on_human` 1.9 s after the run started, after 5 and after 8 resets. Resets also no longer answer 409 `profile_exists`: an old `provision_project` delivery used to race the seed.
+- CI run 36909544176 on 451f8c9: J3 and A2.2 now get far past the run start (details below). Tell the coordinator that #140's T-P4-05-10 should get past this point too.
 
-- J1 step 4 clicks Swap, and the picker closes before the POST lands. J1 then fails its `getPlan` assertion, which is P1-11's race (see the triage in the PR body). The test ends while the swap POST is still running.
-- J1's teardown reset (`page` fixture, `POST /v1/test/reset`) starts TRUNCATE while the swap is in flight.
-- `planning.api.swap_item` holds the request transaction: the advisory lock, FOR UPDATE on plan_items, and AccessShare on later tables. It then calls `day_calendar`/`_ahead`, which open a second connection and read earlier tables (calendar_events, working_hours).
-- That second connection queues behind the TRUNCATE's AccessExclusive on an earlier table, and the TRUNCATE waits on the swap's first connection. The two wait on each other in Python, so Postgres sees no cycle, and every later reset waited forever.
-- Evidence:
-  - Run 36890868588: the swap POST never got an access-log line, and autovacuum logged "lock not available".
-  - Run 36894871728, with the 20 s lock timeout: the stall broke itself, A0.1 passed after a 10 s wait, and e2e was green.
-  - Run 36897810125, on 2c21f16 (5 s plus retry): e2e green, J1 at 9.4 s, A0.1 at 6.7 s, no stall.
-- This is not a production bug: production never TRUNCATEs. The pattern (a nested session inside a request transaction) could only deadlock against AccessExclusive operations such as migrations. Mention that to the coordinator as an FYI for P1-11. No planning change was made.
+## CI state
 
-## CI state (run 36897810125 on 2c21f16)
+- Run 36909544176 (451f8c9):
+  - `integration` cancelled at its 15-min budget. T-SEED-27's XPASS(strict) still fails it until Scott removes that marker.
+  - `performance` cancelled.
+  - `e2e` failed on ONE unexpected failure: T-P0-24-05 (board keyboard drag, phone; card not in Today). It passed in both local runs, so it looks unrelated or flaky.
+  - Every other job is green.
+- c5 then ran `gh run rerun 36909544176 --failed` (the one allowed re-run) at about 19:10Z. Read its result first: `gh pr checks 138 --repo SpaceshipCreative/tumnis-guide`. A new push cancels it (concurrency `cancel-in-progress`).
+- `preview` pending, as expected.
 
-- Every job is green except `integration`. It failed only on T-SEED-27's XPASS(strict): 1 failed, 1637 passed.
-- `preview` is pending, which is expected.
-- A2.2 still fails as expected in CI. The testid was the first failure point; the next one is unknown.
-- In the local `make e2e` at 17:29Z, A2.2 laptop, A1.5 laptop and T-P0-29-03 failed in setup: reset returned 500 after 3 deadlocks in a row (DEADLOCK_ATTEMPTS = 3).
-  - This came after the local-only P0-29 load-set perf tests, which CI excludes with `--grep-invert "@A0\.6|@P0-29"`, under heavy worker writes.
-  - It looks like a pre-existing local-only issue. No "reset blocked" lines appeared, so the lock-timeout path did not fire. Mention it, but don't change DEADLOCK_ATTEMPTS without reason.
-- CodeRabbit: no open threads as of c2. Re-check after the push.
+## Journey triage from CI run 36909544176 (artifact e2e-logs, markers untouched)
+
+- **A2.2:** now passes run start, the review badge, the answer and the task returning to `in_progress` (API). It fails at the last UI step: `taskCards(page, FIX_FOOTER).first()` toContainText "In progress". The Tasks view row (`frontend/src/components/project/TaskRow.tsx`) shows only the title and label chip, with no status, so "Fix footer linkAI".
+  - This is a product UI gap (FR-5.7, P2-05 / P0-24), not harness.
+  - Options for Scott: (a) TaskRow shows a status chip for AI tasks in progress or waiting, or (b) a spec change makes A2.2 read the row's status group.
+- **J3 (A2.1):** now passes dispatch and runMessages 1. It fails at line 63, `untrustedBlocks(prompt_text)` = 2, not 1.
+  - The seeded "Fix footer link" is tainted: its email link is tainted (locked SEED tests `test_acceptance_seed_writers.py` line 88 and `test_acceptance_seed.py` line 132 assert this), and P2-08 propagates the taint to the task.
+  - `packet_builder.assemble` then wraps the task's own text as untrusted (`trusted = by_user and not tainted`, line 523), alongside the URL context block.
+  - This is a conflict between locked tests (J3 vs SEED seed and P2-08), so it goes to Scott and the coordinator. Options: (a) a spec change makes J3 expect 2, or count only non-task blocks; (b) the packet builder keeps a user-written task's own text trusted when its taint comes only from linked items (product, P2-02/P2-08); (c) the seed's email is untainted (breaks the locked SEED tests).
+- J1 (P1-11 swap race), J2 A1.1 (chip), J6 (calendar harness, SEED-impl-3), J7/J8 (unscripted master), A1.5: unchanged from the earlier triage in the body draft.
 
 ## Remaining steps
 
-1. Remove the `@pytest.mark.xfail(strict=True, reason="spec:SEED")` line from T-SEED-27 in `backend/tumnis/core/tests/integration/test_reset_lock_timeout.py`. CI run 36897810125 showed it XPASS(strict). Run check.sh, commit `test(core): T-SEED-27 passes, marker removed (XPASS in CI run 36897810125)`, and push.
-2. Read CI on that push. If `integration` is cancelled at its budget, re-run it once (`gh run rerun <id> --failed`).
-3. A2.2: still expected-fail after the testid. To see its next failure point, run the stack locally (`make up`, `make e2e`, read `frontend/test-results/acceptance-A2.2-*/error-context.md`, `make down`). Fix it only if the cause is harness or SEED. Otherwise put it in the triage. Never touch its marker; remove it only after CI shows an unexpected pass.
-4. Update the PR body draft:
-   - Add c3's work: the root cause above; T-SEED-25..28; the testing_routes lock timeout and retry (a shared core test-only file, with the 503 report); the `AppHeader.tsx` testid (shared frontend file); the `fake_play._ask` fix.
-   - Fix the "core/testing_routes.py is unchanged" sentence, which is now wrong.
-   - Docs: Postgres 18 `lock_timeout` (runtime-config-client), `pg_blocking_pids` (functions-info) and pg_stat_activity visibility (monitoring-stats: other roles' query columns are hidden unless pg_read_all_stats, which is why the report queries as the app role), all via Context7 `/websites/postgresql_18`. Python `asyncio.Task.get_coro` and `cr_await` for `await_chain`.
-   - Apply it: `gh pr edit 138 --repo SpaceshipCreative/tumnis-guide --body-file <file>`.
-5. Delete HANDOFF.md in a `chore:` commit and push.
-6. When CI is green and no threads are open, merge origin/main if it moved, then send `#138 MERGE-READY at <sha>` to main.
+1. Read the rerun's CI. If `e2e` fails only on T-P0-24-05 again, look at its error-context in the artifact (`timeout 120 gh run download <run> -n e2e-logs -D <dir>`, with the blob domain allowed). Decide whether the reset cancel affects it (a board move emits `task.updated`; the cancel only runs inside resets). If it is related, fix it test-first. If not, list it as a flake for the coordinator.
+2. Look for an XPASS(strict) for T-SEED-29 in `integration` (it may be cancelled at budget again; don't re-run more than once). Do not remove its marker. List it for Scott.
+3. Update the PR body draft with: the CI results, the triage above (A2.2 TaskRow status, J3 untrusted-block conflict), and the Scott items below. Apply it with `gh pr edit`.
+4. Delete HANDOFF.md in a `chore:` commit (message file: `/tmp/claude-1002/SEED-impl-2-c5/msg-chore.txt`), run check.sh, and push.
+5. Check CodeRabbit threads (`gh api repos/SpaceshipCreative/tumnis-guide/pulls/138/comments`; no fresh full review). Fix any actionable ones.
+6. Final report: "#138 READY EXCEPT MARKERS at <sha>", listing:
+   - T-SEED-27 marker: `backend/tumnis/core/tests/integration/test_reset_lock_timeout.py` line 50.
+   - T-SEED-29 marker: `backend/tests/harness/test_acceptance_runtime.py`, on `test_a_reset_cancels_the_event_deliveries_of_the_world_it_removed` (the xfail line is 356).
+   - Tell the coordinator the A2.1/A2.2/T-P4-05-10 run path is fixed by 451f8c9, so #140 can retest T-10 once #138 merges.
 
 ## Decisions and deviations (cumulative)
 
 - Phase 1 dispatches skip `FakeAgent.dispatch` and its phase 2 hook. The fake's `dispatched` event has `runner_id: None`. `recorded_reply` returns None for JSON null. `adapter_for` is unchanged.
 - Seeded tasks start no enrichment (T-SEED-22, `agents/events.py`, a shared-file edit).
 - J6 is split to `wp/SEED-impl-3`.
-- TICK_WAIT_S is 8 s (coordinator option a). It was not the stall's cause: the tick answered in about 1 s.
-- Coordinator option (c), "reset cancels build_plan/run_skill", was replaced by the fake's `runner_lost` on a removed run (T-SEED-23/24).
-- `frontend/playwright.config.ts`: `globalTimeout` 7 min and `maxFailures` 2, CI only (harness, shared file). Keep both; they made the stall diagnosable.
-- c3: `core/testing_routes.py` is now changed (lock timeout, retry, report; test-only routes). `frontend/src/components/common/AppHeader.tsx` gets a `data-testid` (shared file).
+- TICK_WAIT_S is 8 s.
+- Coordinator option (c) was replaced by the fake's `runner_lost` (T-SEED-23/24).
+- `frontend/playwright.config.ts`: `globalTimeout` 7 min and `maxFailures` 2, CI only.
+- c3: `core/testing_routes.py` lock timeout, retry and report (T-SEED-25/27). `AppHeader.tsx` gets a `data-testid` (T-SEED-28). `fake_play._ask` NotFound (T-SEED-26).
+- c5: `core/testing_routes.py` `cancel_removed_deliveries` and `core/deadletter.py` `dbos_configured` (T-SEED-29). Only `deliver_event` is cancelled, not every workflow; 1f51f60's sweep of every workflow had stalled the stack.
+- c5 tried cancelling before the TRUNCATE as well, to stop the local-only deadlock 500s after the load set (A0.6/P0-29, which CI excludes), and reverted it on the advisor's advice: it is out of scope, and those 500s are pre-existing and local-only.
 
 ## Scott items
 
-- **Unscripted fake dispatch semantics** (option b, T-SEED-20): the fake records the run and answers nothing. Should it refuse unscripted skills at once instead? That would rewrite T-SEED-20.
-  - A silent run now ends only when a reset removes it. Within a test, J7 and J8 still wait out the 90 s run timeout on the one-at-a-time maintenance queue unless they script `tumnis-master/plan`.
-- FYI for P1-11: `swap_item` (and the other plan writes that call `day_calendar`) open a second connection inside the request transaction. That is harmless in production, but it can deadlock unseen against any AccessExclusive operation (here the test reset).
+- Unscripted fake dispatch semantics (option b, T-SEED-20): should the fake refuse unscripted skills at once? That would rewrite T-SEED-20.
+- FYI for P1-11: `swap_item` opens a second connection inside the request transaction, which can deadlock unseen against AccessExclusive operations.
+- J3 vs SEED/P2-08 untrusted-block conflict (above, options a/b/c).
+- A2.2's last step needs a status on the Tasks-view row (above, options a/b).
+- Markers to remove: T-SEED-27 and T-SEED-29 (above).
+- Local only: after the load set (A0.6), a reset's TRUNCATE deadlocks with old-world deliveries that insert into the outbox, and the reset returns 500 after 3 tries. CI excludes A0.6/P0-29.
 
 ## Verify
 
 ```bash
-cd backend && uv run pytest -q -n 3 -m "not integration and not contract" tumnis/core/tests/unit/test_reset_blocked_report.py tumnis/modules/agents/tests/unit/
-cd frontend && npx vitest run src/components/common/AppHeader.test.tsx
-bash /tmp/claude-1002/SEED-impl-2-c3/check.sh
-gh pr checks 138 --repo SpaceshipCreative/tumnis-guide
+bash /tmp/claude-1002/SEED-impl-2-c5/check.sh   # fix the cd path first
+timeout 120 gh pr checks 138 --repo SpaceshipCreative/tumnis-guide
 ```
