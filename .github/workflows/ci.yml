@@ -93,6 +93,18 @@ jobs:
       - name: Install frontend
         working-directory: frontend
         run: npm ci --no-audit --no-fund
+      # Vitest runs in the background, alongside the backend steps below, instead of after
+      # them: each half alone leaves CPUs idle (pytest's start-up and slow tail, Vitest's
+      # start-up), so together they finish sooner on the runner's 4 vCPUs. Every output
+      # stream is redirected so this step ends at once; `Frontend unit tests` waits for the
+      # exit code (written to a temporary file and renamed, so it is never read half
+      # written), prints the log and fails if Vitest failed. No pytest test writes under
+      # frontend/ (spec-guard and traceability only read *.test.ts files and TypeScript).
+      - name: Start frontend unit tests
+        id: vitest
+        working-directory: frontend
+        run: |
+          nohup sh -c 'date -u +"Vitest started %T"; npm run test -- --run; code=$?; date -u +"Vitest finished %T"; echo "$code" > "$RUNNER_TEMP/vitest.exit.tmp" && mv "$RUNNER_TEMP/vitest.exit.tmp" "$RUNNER_TEMP/vitest.exit"' > "$RUNNER_TEMP/vitest.log" 2>&1 < /dev/null &
       # mypy's incremental cache for the toolchain test (T-P0-01): about 36 s cold, about 1 s
       # warm. mypy checks each cached module's hash, so a stale entry is only rechecked. A
       # key that changes every run, plus restore-keys, restores the newest cache and saves
@@ -106,16 +118,23 @@ jobs:
             mypy-${{ runner.os }}-
       # worksteal lets idle workers take queued tests from busy ones, which shortens the
       # slow tail (the contract job already uses it); --durations shows the slowest tests.
+      # Three workers, not one per vCPU (`auto`): Vitest shares the 4 vCPUs, and each xdist
+      # worker collects the whole suite (about 15 s of CPU), so a fourth costs more than
+      # it gives.
       - name: Backend unit tests with coverage
         working-directory: backend
         run: |
           uv sync
-          uv run pytest -m "not integration and not contract" -n auto --dist worksteal --durations=15 --cov --cov-report=json
+          uv run pytest -m "not integration and not contract" -n 3 --dist worksteal --durations=15 --cov --cov-report=json
       - name: Coverage gates
         run: uv run --project backend python scripts/ci/coverage_gates.py backend/coverage.json
+      # Also runs when a backend step failed, so their failure doesn't hide Vitest's result.
       - name: Frontend unit tests
-        working-directory: frontend
-        run: npm run test -- --run
+        if: ${{ !cancelled() && steps.vitest.outcome == 'success' }}
+        run: |
+          while [ ! -f "$RUNNER_TEMP/vitest.exit" ]; do sleep 1; done
+          cat "$RUNNER_TEMP/vitest.log"
+          exit "$(cat "$RUNNER_TEMP/vitest.exit")"
 
   contract:
     runs-on: ubuntu-latest
