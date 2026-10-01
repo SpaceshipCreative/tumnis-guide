@@ -180,14 +180,17 @@ export function ResultItem({
       <div className={CARD_BODY}>
         <p className="text-sm break-words whitespace-pre-line">{summary}</p>
         {touched.length > 0 && (
-          <ul aria-label="Files touched" className="flex flex-col gap-1">
-            {touched.map((file) => (
-              <li key={file.path} className="flex min-w-0 items-center gap-2">
-                <code className="min-w-0 truncate text-sm">{file.path}</code>
-                <span className={badge("neutral")}>{file.change}</span>
-              </li>
-            ))}
-          </ul>
+          // A region, as in the run view, holding the list (both named for what they hold).
+          <section aria-label="Files touched">
+            <ul aria-label="Files touched" className="flex flex-col gap-1">
+              {touched.map((file) => (
+                <li key={file.path} className="flex min-w-0 items-center gap-2">
+                  <code className="min-w-0 truncate text-sm">{file.path}</code>
+                  <span className={badge("neutral")}>{file.change}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
         {shown.length > 0 && (
           <ul aria-label="Links" className="flex flex-wrap gap-x-4 gap-y-1">

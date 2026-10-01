@@ -1,8 +1,12 @@
 // The task drawer (P0-24, FR-3.5, UX 9): `?task=<id>` opens it; the title, the status
 // action, the repeat rule, comments, and Move to trash (undoable). A side panel on a
-// laptop, a full sheet on the phone; Escape or Close shuts it.
+// laptop, a full sheet on the phone; Escape or Close shuts it. P2-04: an AI or Hybrid
+// task has Run; `?run=<id>` shows that run (RunView) in the drawer, Back returns.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+
+import type { RunRequested } from "../../../api/types.gen";
+import { ApiError, apiWrite, useWrite } from "../../../lib/fetch";
 
 import {
   taskQueryKey,
@@ -156,7 +160,83 @@ function Enriched({ task }: { task: Task }) {
   );
 }
 
-function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
+// The run view loads only when a run is open (`?run=`), so the project page does not
+// carry its code (P0-29's blocking-time budget).
+const RunView = lazy(() =>
+  import("../../runs/RunView").then((m) => ({ default: m.RunView })),
+);
+
+// Run (P2-04, FR-5.4): an AI or Hybrid task the agent may still work on asks for a run
+// (`POST /v1/tasks/{id}/run`, 202) and the drawer switches to it; the server refuses
+// what it cannot run (another run active, no ready agent) and says why.
+const RUNNABLE_LABELS = new Set(["ai", "hybrid"]);
+const RUNNABLE_STATUSES = new Set(["backlog", "today", "in_progress"]);
+
+function RunButton({
+  task,
+  onRun,
+}: {
+  task: Task;
+  onRun: (runId: string) => void;
+}) {
+  const [refused, setRefused] = useState<string | null>(null);
+  const run = useWrite<{ idempotencyKey?: string }, RunRequested>({
+    mutationFn: ({ idempotencyKey }) =>
+      apiWrite<RunRequested>({
+        kind: "create",
+        method: "POST",
+        path: `/tasks/${encodeURIComponent(task.id)}/run`,
+        body: { kind: "task" },
+        idempotencyKey,
+      }),
+    onSuccess: (answer) => {
+      setRefused(null);
+      onRun(answer.run_id);
+    },
+    onError: (error) => {
+      setRefused(
+        error instanceof ApiError
+          ? (error.problem.detail ?? error.message)
+          : "The run could not be started.",
+      );
+    },
+  });
+  if (
+    !RUNNABLE_LABELS.has(task.label ?? "") ||
+    !RUNNABLE_STATUSES.has(task.status)
+  ) {
+    return null;
+  }
+  return (
+    <>
+      <button
+        type="button"
+        disabled={run.isPending}
+        onClick={() => {
+          run.mutate({});
+        }}
+        className={saveClass}
+      >
+        Run
+      </button>
+      {refused !== null && (
+        <p role="alert" className="w-full text-sm text-danger">
+          {refused}
+        </p>
+      )}
+    </>
+  );
+}
+
+function TaskDetails({
+  task,
+  onClose,
+  onRun,
+}: {
+  task: Task;
+  onClose: () => void;
+  onRun: (runId: string) => void;
+}) {
   const change = useChangeStatus();
   const trash = useTrashTask();
   const action = statusAction(task);
@@ -184,6 +264,7 @@ function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
       <Criteria text={task.acceptance_criteria} />
       <Enriched task={task} />
       <div className="flex flex-wrap gap-2">
+        <RunButton task={task} onRun={onRun} />
         {action && (
           <button
             type="button"
@@ -217,12 +298,17 @@ function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
 
 export function TaskDrawer({
   taskId,
+  runId,
   laptop,
   onClose,
+  onRun = () => undefined,
 }: {
   taskId: string;
+  /** The run to show instead of the task's details (`?run=`, P2-04). */
+  runId?: string | undefined;
   laptop: boolean;
   onClose: () => void;
+  onRun?: (runId: string | undefined) => void;
 }) {
   const task = useQuery(taskQueryOptions(taskId));
   const panel = useRef<HTMLDivElement>(null);
@@ -269,8 +355,25 @@ export function TaskDrawer({
             Close
           </button>
         </div>
-        {data ? (
-          <TaskDetails task={data} onClose={onClose} />
+        {runId !== undefined ? (
+          <div className="flex min-h-0 flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                onRun(undefined);
+              }}
+              className="min-h-11 self-start text-sm font-medium text-accent md:min-h-8"
+            >
+              Back to the task
+            </button>
+            <Suspense
+              fallback={<p className="text-sm text-muted">Loading the run…</p>}
+            >
+              <RunView runId={runId} />
+            </Suspense>
+          </div>
+        ) : data ? (
+          <TaskDetails task={data} onClose={onClose} onRun={onRun} />
         ) : task.isError ? (
           <p className="text-sm text-muted">
             This task is not here any more; it may have moved to the trash.

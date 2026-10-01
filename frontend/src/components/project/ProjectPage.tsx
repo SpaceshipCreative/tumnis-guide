@@ -31,11 +31,14 @@ export interface ProjectPageProps {
   projectId: string;
   view: ProjectView | undefined;
   taskId: string | undefined;
+  /** The run the task drawer shows (P2-04); undefined: the task's details. */
+  runId?: string | undefined;
   /** The Calendar view's ISO Monday; undefined: the current week. */
   week?: string | undefined;
   onWeek?: (monday: string) => void;
   onView: (view: ProjectView) => void;
   onTask: (taskId: string | undefined) => void;
+  onRun?: (runId: string | undefined) => void;
 }
 
 /** Pending rows on their own, while the project itself cannot be shown (offline). */
@@ -87,10 +90,12 @@ export function ProjectPage({
   projectId,
   view: searchView,
   taskId,
+  runId,
   week,
   onWeek = () => undefined,
   onView,
   onTask,
+  onRun = () => undefined,
 }: ProjectPageProps) {
   const laptop = useIsLaptop();
   const panelId = useId();
@@ -204,6 +209,8 @@ export function ProjectPage({
       {taskId && (
         <TaskDrawer
           taskId={taskId}
+          runId={runId}
+          onRun={onRun}
           laptop={laptop}
           onClose={() => {
             onTask(undefined);

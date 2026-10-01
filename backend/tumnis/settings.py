@@ -96,11 +96,18 @@ class KnowledgeSettings(BaseModel):
 class AgentsSettings(BaseModel):
     """The agents module (P1-06): how long a project's profile provisioning waits for the
     runner's answer before it counts as failed (R-30: tests shorten it). Env:
-    `AGENTS__PROVISION_TIMEOUT_S`."""
+    `AGENTS__PROVISION_TIMEOUT_S`.
+
+    P2-04 (SAF-5, R-29, R-30): a run's active-time cap and wall-clock ceiling, shortened
+    on the real clock for tests and the compose.test stack only (fakes mode; `Settings`
+    refuses them otherwise). Unset, the project's max_run_minutes and 24 hours apply. Env:
+    `AGENTS__RUN_ACTIVE_CAP_SECONDS`, `AGENTS__RUN_WALL_CLOCK_CEILING_SECONDS`."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     provision_timeout_s: int = Field(default=300, gt=0)  # plan default
+    run_active_cap_seconds: float | None = Field(default=None, gt=0)
+    run_wall_clock_ceiling_seconds: float | None = Field(default=None, gt=0)
 
 
 class Settings(BaseSettings):
@@ -148,6 +155,11 @@ class Settings(BaseSettings):
         if self.cache_backend == "redis":
             raise SettingsError(
                 "cache_backend_unavailable", "the redis cache backend arrives with hosted mode"
+            )
+        shortened = (self.agents.run_active_cap_seconds, self.agents.run_wall_clock_ceiling_seconds)
+        if self.tumnis_adapters != "fake" and any(cap is not None for cap in shortened):
+            raise SettingsError(
+                "run_caps_need_fakes", "a run's time caps are shortened only with fake adapters"
             )
         return self
 
