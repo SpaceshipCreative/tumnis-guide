@@ -31,7 +31,6 @@ def _focus_workflows() -> set[str]:
 
 @pytest.mark.req("FR-10.2")
 @pytest.mark.wp("P4-01")
-@pytest.mark.xfail(strict=True, reason="spec:P4-01")
 async def test_block_end_reveals_next_at_guardrail(dbos: Any, focus: Focus) -> None:
     """T-P4-01-08
     At Guardrail with A In progress, A's block end (09:30) fires `block_end` and the card

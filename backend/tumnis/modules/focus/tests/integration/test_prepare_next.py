@@ -66,7 +66,6 @@ def _agent_project(fake_runner: FakeRunnerFactory, focus: Focus) -> tuple[UUID, 
 
 @pytest.mark.req("FR-10.6")
 @pytest.mark.wp("P4-01")
-@pytest.mark.xfail(strict=True, reason="spec:P4-01")
 async def test_next_task_enriched_ahead(
     dbos: Any, focus: Focus, fake_runner: FakeRunnerFactory
 ) -> None:

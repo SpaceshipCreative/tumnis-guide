@@ -29,7 +29,6 @@ BANK = "Call the bank about the card"
 
 @pytest.mark.req("FR-10.6")
 @pytest.mark.wp("P4-01")
-@pytest.mark.xfail(strict=True, reason="spec:P4-01")
 async def test_detour_creates_task_in_picked_project_and_asks_return(
     dbos: Any, focus: Focus
 ) -> None:
@@ -77,7 +76,6 @@ async def test_detour_creates_task_in_picked_project_and_asks_return(
 
 @pytest.mark.req("FR-10.6")
 @pytest.mark.wp("P4-01")
-@pytest.mark.xfail(strict=True, reason="spec:P4-01")
 @pytest.mark.parametrize("decision", ["return", "stay"])
 async def test_return_restores_previous_task(dbos: Any, focus: Focus, decision: str) -> None:
     """T-P4-01-05
@@ -115,7 +113,6 @@ async def test_return_restores_previous_task(dbos: Any, focus: Focus, decision: 
 
 @pytest.mark.req("FR-10.2")
 @pytest.mark.wp("P4-01")
-@pytest.mark.xfail(strict=True, reason="spec:P4-01")
 async def test_switch_to_today_task_is_not_a_detour(dbos: Any, focus: Focus) -> None:
     """T-P4-01-06
     At Guardrail, "Switched" to a task in Today creates nothing and asks nothing: the
