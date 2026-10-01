@@ -29,12 +29,17 @@ async def surface_app(app: FastAPI) -> AsyncIterator[FastAPI]:
     (T-P2-01-11 makes five calls per op): past nine ops that drains the default burst
     (50, P0-10) and the next op answers 429. Rate limits are not what the sweeps check
     (P0-10's own tests do), so this app's per-principal bucket holds enough for any
-    number of ops."""
+    number of ops. The same goes for the anonymous bucket (burst 10, per address): the
+    matrix's unauthenticated column calls every op without a key, so past ten ops the
+    eleventh answered 429 instead of 401."""
     from tests._mcp import mcp_running  # noqa: PLC0415
     from tumnis.core.ratelimit import BUCKETS, Bucket, RateLimiter  # noqa: PLC0415
 
     sweep = Bucket(rate_per_s=BUCKETS["default"].rate_per_s, burst=10_000)
-    app.state.rate_limiter = RateLimiter(app.state.clock, {**BUCKETS, "default": sweep})
+    anonymous = Bucket(rate_per_s=BUCKETS["anonymous"].rate_per_s, burst=10_000)
+    app.state.rate_limiter = RateLimiter(
+        app.state.clock, {**BUCKETS, "default": sweep, "anonymous": anonymous}
+    )
     async with mcp_running(app):
         yield app
 

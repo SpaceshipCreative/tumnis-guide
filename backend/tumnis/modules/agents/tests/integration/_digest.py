@@ -316,7 +316,10 @@ async def settle(timeout_s: float = 60.0) -> None:
 
 
 async def drain(db: DbUrls) -> None:
-    """Relays every pending outbox row and waits for the agents deliveries."""
+    """Relays every pending outbox row and waits for the digest deliveries. Other agents
+    subscribers are not waited on: a direct one (P1-08's enrichment) has no workflow, and
+    the stand-in decisions name review items that do not exist, which P2-04/P2-05's
+    `apply_review_decision` does not apply."""
     from dbos import DBOS  # noqa: PLC0415
 
     import tumnis.wiring  # noqa: F401, PLC0415
@@ -327,7 +330,7 @@ async def drain(db: DbUrls) -> None:
         pass
     for row in pending:
         for sub in subscribers_for(row["name"]):
-            if sub.module == "agents":
+            if sub.module == "agents" and sub.name.startswith("agents.digest_"):
                 handle: WorkflowHandleAsync[Any] = await DBOS.retrieve_workflow_async(
                     delivery_id(row["event_id"], sub.name)
                 )
