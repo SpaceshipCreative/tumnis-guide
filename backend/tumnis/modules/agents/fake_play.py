@@ -32,10 +32,12 @@ from tumnis.core.clock import SystemClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.tenancy import WorkspaceContext, current, tenant_session
 from tumnis.core.types import ActorRef
+from tumnis.core.versioning import NotFound
 from tumnis.modules.agents import api
 from tumnis.modules.agents.adapters.fake import TaskScript, on_dispatch, task_script_key
 from tumnis.modules.agents.packet_builder import TaskPacket
 from tumnis.modules.agents.rules import artifact_refusal
+from tumnis.modules.tasks import api as tasks
 
 _log = logging.getLogger(__name__)
 
@@ -52,9 +54,8 @@ async def dispatched(packet: TaskPacket) -> None:
     """Record the packet and start playing its task's script, if any (see the module)."""
     await fake_scripts.record_run_packet(packet.model_dump(mode="json"))
     ctx = current()
-    task = packet.body.get("task")
-    title = task.get("title") if isinstance(task, dict) else None
-    if ctx is None or not isinstance(title, str):
+    title = await _task_title(ctx, packet) if ctx is not None else None
+    if ctx is None or title is None:
         return
     steps = await _next_run_steps(title)
     if not steps:
@@ -70,6 +71,20 @@ def _done(playback: "asyncio.Task[None]") -> None:
     _playing.discard(playback)
     if not playback.cancelled() and playback.exception() is not None:
         _log.error("the fake runner's playback failed", exc_info=playback.exception())
+
+
+async def _task_title(ctx: WorkspaceContext, packet: TaskPacket) -> str | None:
+    """The title of the packet's task, which keys its script. The packet carries the task's
+    id but not its bare title (the rendered text block may add acceptance criteria)."""
+    task = packet.body.get("task")
+    task_id = task.get("id") if isinstance(task, dict) else None
+    if not isinstance(task_id, str):
+        return None
+    try:
+        async with tenant_session(ctx) as s:
+            return (await tasks.get_task(s, UUID(task_id))).title
+    except NotFound:
+        return None
 
 
 async def _next_run_steps(title: str) -> list[dict[str, Any]]:

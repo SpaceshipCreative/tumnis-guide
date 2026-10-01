@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from dbos import DBOS
 
     from tests._pg import DbUrls
-    from tests.fixtures import Fakes, WorkspaceHandle
+    from tests.fixtures import Fakes, PepperFile, WorkspaceHandle
     from tumnis.core.clock import FixedClock
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
@@ -70,8 +70,11 @@ SCRIPT: dict[str, Any] = {
 
 
 @pytest.fixture
-def scripted(fakes: Fakes, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Stored scripts on (as the worker enables them with fakes), played without pauses."""
+def scripted(
+    fakes: Fakes, pepper_file: PepperFile, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
+    """Stored scripts on (as the worker enables them with fakes), played without pauses;
+    the pepper lets the profile's API key be made (the task token comes from it)."""
     from tumnis.core import fake_scripts  # noqa: PLC0415
     from tumnis.modules.agents import fake_play  # noqa: PLC0415
 
