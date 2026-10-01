@@ -25172,18 +25172,18 @@
         ]
       }
     },
-    "/v1/speech/clips/{clip_id}": {
+    "/v1/speech/clips/{speech_clip_id}": {
       "get": {
         "description": "A spoken focus message's clip (P4-03): `audio/wav` with `nosniff`, while it lives\n(`CLIP_TTL_MIN`); 404 once expired or in another workspace.",
         "operationId": "speech_get_clip",
         "parameters": [
           {
             "in": "path",
-            "name": "clip_id",
+            "name": "speech_clip_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Clip Id",
+              "title": "Speech Clip Id",
               "type": "string"
             }
           }

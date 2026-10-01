@@ -49,15 +49,15 @@ async def get_calibration(
 
 
 @root_router.get(
-    "/clips/{clip_id}",
+    "/clips/{speech_clip_id}",
     response_class=Response,
     responses={200: {"content": {"audio/wav": {"schema": CLIP_SCHEMA}}}},
 )
 @route_policy(RoutePolicy(auth="session"))
-async def get_clip(clip_id: UUID, request: Request, ctx: Session) -> Response:
+async def get_clip(speech_clip_id: UUID, request: Request, ctx: Session) -> Response:
     """A spoken focus message's clip (P4-03): `audio/wav` with `nosniff`, while it lives
     (`CLIP_TTL_MIN`); 404 once expired or in another workspace."""
-    clip = await api.get_clip(ctx, clip_id, _clock(request).now())
+    clip = await api.get_clip(ctx, speech_clip_id, _clock(request).now())
     return Response(
         content=clip.audio,
         media_type=clip.mime,

@@ -3517,7 +3517,7 @@ export const speechGetClip = <ThrowOnError extends boolean = false>(
   >({
     responseValidator: async (data) =>
       await zSpeechGetClipResponse.parseAsync(data),
-    url: "/v1/speech/clips/{clip_id}",
+    url: "/v1/speech/clips/{speech_clip_id}",
     ...options,
   });
 

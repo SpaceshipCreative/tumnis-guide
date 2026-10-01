@@ -12802,12 +12802,12 @@ export type SpeechGetClipData = {
   body?: never;
   path: {
     /**
-     * Clip Id
+     * Speech Clip Id
      */
-    clip_id: string;
+    speech_clip_id: string;
   };
   query?: never;
-  url: "/v1/speech/clips/{clip_id}";
+  url: "/v1/speech/clips/{speech_clip_id}";
 };
 
 export type SpeechGetClipErrors = {

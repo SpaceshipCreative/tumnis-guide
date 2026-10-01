@@ -3704,7 +3704,7 @@ export const zAuthSetupTotpBody = zSetupTotpIn;
 export const zAuthSetupTotpResponse = zSignedInOut;
 
 export const zSpeechGetClipPath = z.object({
-  clip_id: z.uuid(),
+  speech_clip_id: z.uuid(),
 });
 
 /**
