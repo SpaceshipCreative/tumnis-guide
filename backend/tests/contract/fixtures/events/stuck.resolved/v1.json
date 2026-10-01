@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "focus_event_id": "01a0ec82-72d7-7f23-8be6-203712701f31",
+  "task_id": "01a0ec82-72d7-7f23-8be6-203712701f21",
+  "run_id": "01a0ec82-72d7-7f23-8be6-203712701f41",
+  "outcome": "split",
+  "step_task_id": "01a0ec82-72d7-7f23-8be6-203712701f51"
+}
