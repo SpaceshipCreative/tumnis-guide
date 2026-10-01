@@ -189,7 +189,9 @@ const RunView = lazy(() =>
 
 // Run (P2-04, FR-5.4): an AI or Hybrid task the agent may still work on asks for a run
 // (`POST /v1/tasks/{id}/run`, 202) and the drawer switches to it; the server refuses
-// what it cannot run (another run active, no ready agent) and says why.
+// what it cannot run (another run active, no ready agent) and says why. The answer
+// names the task it was asked for, so the drawer can drop one that lands after the
+// user has moved to another task (or closed the drawer).
 const RUNNABLE_LABELS = new Set(["ai", "hybrid"]);
 const RUNNABLE_STATUSES = new Set(["backlog", "today", "in_progress"]);
 
@@ -198,21 +200,24 @@ function RunButton({
   onRun,
 }: {
   task: Task;
-  onRun: (runId: string) => void;
+  onRun: (runId: string, taskId: string) => void;
 }) {
   const [refused, setRefused] = useState<string | null>(null);
-  const run = useWrite<{ idempotencyKey?: string }, RunRequested>({
-    mutationFn: ({ idempotencyKey }) =>
+  const run = useWrite<
+    { taskId: string; idempotencyKey?: string },
+    RunRequested
+  >({
+    mutationFn: ({ taskId, idempotencyKey }) =>
       apiWrite<RunRequested>({
         kind: "create",
         method: "POST",
-        path: `/tasks/${encodeURIComponent(task.id)}/run`,
+        path: `/tasks/${encodeURIComponent(taskId)}/run`,
         body: { kind: "task" },
         idempotencyKey,
       }),
-    onSuccess: (answer) => {
+    onSuccess: (answer, { taskId }) => {
       setRefused(null);
-      onRun(answer.run_id);
+      onRun(answer.run_id, taskId);
     },
     onError: (error) => {
       setRefused(
@@ -234,7 +239,7 @@ function RunButton({
         type="button"
         disabled={run.isPending}
         onClick={() => {
-          run.mutate({});
+          run.mutate({ taskId: task.id });
         }}
         className={saveClass}
       >
@@ -256,7 +261,7 @@ function TaskDetails({
 }: {
   task: Task;
   onClose: () => void;
-  onRun: (runId: string) => void;
+  onRun: (runId: string, taskId: string) => void;
 }) {
   const change = useChangeStatus();
   const trash = useTrashTask();
@@ -285,7 +290,7 @@ function TaskDetails({
       <Criteria text={task.acceptance_criteria} />
       <Enriched task={task} />
       <div className="flex flex-wrap gap-2">
-        <RunButton task={task} onRun={onRun} />
+        <RunButton key={task.id} task={task} onRun={onRun} />
         {action && (
           <button
             type="button"
@@ -342,6 +347,26 @@ export function TaskDrawer({
       if (opener?.isConnected) opener.focus();
     };
   }, [taskId]);
+  // Switching between the details and a run (Run, Back to the task, or the browser's
+  // history) removes the control that had focus; focus then falls to <body>, outside the
+  // drawer, and Escape no longer reaches it. Put it back on the drawer, which takes
+  // Escape, and leave it alone when it is anywhere else on purpose.
+  useEffect(() => {
+    const at = document.activeElement;
+    if (at === null || at === document.body) panel.current?.focus();
+  }, [runId]);
+  // The task the drawer has open now (none once it closes): a Run answer for any other
+  // task is late and is dropped.
+  const openTask = useRef<string | undefined>(taskId);
+  useEffect(() => {
+    openTask.current = taskId;
+    return () => {
+      openTask.current = undefined;
+    };
+  }, [taskId]);
+  const runFor = (run: string, forTask: string) => {
+    if (forTask === openTask.current) onRun(run);
+  };
   const data = task.data as Task | undefined;
   return (
     <div
@@ -395,7 +420,7 @@ export function TaskDrawer({
             </Suspense>
           </div>
         ) : data ? (
-          <TaskDetails task={data} onClose={onClose} onRun={onRun} />
+          <TaskDetails task={data} onClose={onClose} onRun={runFor} />
         ) : task.isError ? (
           <p className="text-sm text-muted">
             This task is not here any more; it may have moved to the trash.

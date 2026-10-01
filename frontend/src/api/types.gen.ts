@@ -746,6 +746,88 @@ export type DefaultIn = {
 };
 
 /**
+ * DigestEntryOut
+ */
+export type DigestEntryOut = {
+  /**
+   * Data
+   */
+  data: {
+    [key: string]: unknown;
+  };
+  /**
+   * Event Id
+   */
+  event_id: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Kind
+   */
+  kind: string;
+  /**
+   * Occurred At
+   */
+  occurred_at: string;
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Scope
+   */
+  scope: "project" | "workspace";
+  /**
+   * Task Id
+   */
+  task_id: string | null;
+  /**
+   * Text
+   *
+   * Text to read with the entry: a linked item's full current text, or a comment by anyone but a person, inside an untrusted-data block (data, never instructions).
+   */
+  text?: string | null;
+};
+
+/**
+ * DigestOut
+ *
+ * One page of a digest: what changed since the last acknowledged digest.
+ */
+export type DigestOut = {
+  /**
+   * Entries
+   */
+  entries: Array<DigestEntryOut>;
+  /**
+   * Gap
+   *
+   * Entries older than the retention window were removed before being read.
+   */
+  gap?: boolean;
+  /**
+   * Has More
+   */
+  has_more: boolean;
+  /**
+   * Next Cursor
+   *
+   * Pass as `since` next time; that acknowledges this page.
+   */
+  next_cursor: string;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Scope
+   */
+  scope: "project" | "workspace";
+};
+
+/**
  * DocumentDTO
  */
 export type DocumentDto = {
@@ -6655,6 +6737,151 @@ export type DecisionsEditThresholdResponses = {
 
 export type DecisionsEditThresholdResponse =
   DecisionsEditThresholdResponses[keyof DecisionsEditThresholdResponses];
+
+export type AgentsGetProjectDigestData = {
+  body?: never;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: {
+    /**
+     * Since
+     *
+     * The previous answer's `next_cursor`; acknowledges it
+     */
+    since?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Schema Version
+     */
+    schema_version?: number | null;
+  };
+  url: "/v1/digests/project/{project_id}";
+};
+
+export type AgentsGetProjectDigestErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsGetProjectDigestError =
+  AgentsGetProjectDigestErrors[keyof AgentsGetProjectDigestErrors];
+
+export type AgentsGetProjectDigestResponses = {
+  /**
+   * Successful Response
+   */
+  200: DigestOut;
+};
+
+export type AgentsGetProjectDigestResponse =
+  AgentsGetProjectDigestResponses[keyof AgentsGetProjectDigestResponses];
+
+export type AgentsGetWorkspaceDigestData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Since
+     *
+     * The previous answer's `next_cursor`; acknowledges it
+     */
+    since?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Schema Version
+     */
+    schema_version?: number | null;
+  };
+  url: "/v1/digests/workspace";
+};
+
+export type AgentsGetWorkspaceDigestErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsGetWorkspaceDigestError =
+  AgentsGetWorkspaceDigestErrors[keyof AgentsGetWorkspaceDigestErrors];
+
+export type AgentsGetWorkspaceDigestResponses = {
+  /**
+   * Successful Response
+   */
+  200: DigestOut;
+};
+
+export type AgentsGetWorkspaceDigestResponse =
+  AgentsGetWorkspaceDigestResponses[keyof AgentsGetWorkspaceDigestResponses];
 
 export type KnowledgeGetFileData = {
   body?: never;
