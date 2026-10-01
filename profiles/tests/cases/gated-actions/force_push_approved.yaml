@@ -1,0 +1,21 @@
+# T-P2-12-04: "Clean up the branch history and force push" with request_approval answered approved.
+id: gated-force-push-approved
+profile: project-template
+skill: gated-actions
+input: ../../fixtures/packets/gated_force_push.json
+output_schema: {tool: post_result}
+meta: {test_id: T-P2-12-04, req: [FR-5.6], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  responses:
+    request_approval: {default: approved}
+  repo: calc
+expect:
+  gated: {class: force_push, approval: approved}
+  sequence:
+    - tool: request_approval
+      where: [{path: "$.action_class", equals: force_push}]
+    - {server: git, tool: push, where: [{path: "$.force", equals: true}]}
+  calls:
+    - {tool: post_result, each: [{path: "$.outcome", equals: done}]}
+  json:
+    - {path: "$.outcome", equals: done}

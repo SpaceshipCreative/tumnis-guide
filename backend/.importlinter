@@ -37,6 +37,9 @@ ignore_imports =
 # disk: they open locations as server paths, run a folder sync and log the storage writes
 # of the worker. Module code never imports knowledge.
     tumnis.modules.projects.tests.** -> tumnis.modules.knowledge.**
+# P2-17: the project Activity test (projects' integration tests) runs real agent runs with
+# agents' run harness (fake runner, relay). Module code never imports agents.
+    tumnis.modules.projects.tests.** -> tumnis.modules.agents.**
 # Until modules call each other, the api ignore matches nothing; that is not an error.
 unmatched_ignore_imports_alerting = none
 
@@ -115,6 +118,10 @@ ignore_imports =
 # agents builds on auth (P2-02: a task token per dispatch); auth's task-token tests issue
 # tokens the way a dispatch does, through agents' api.
     tumnis.modules.auth.tests.** -> tumnis.modules.agents.api
+# agents builds on projects and knowledge; P2-17's Activity test (projects) runs agent
+# runs, and the citation test (knowledge) posts a run's result through agents' api.
+    tumnis.modules.projects.tests.** -> tumnis.modules.agents.**
+    tumnis.modules.knowledge.tests.** -> tumnis.modules.agents.api
 unmatched_ignore_imports_alerting = none
 
 [importlinter:contract:search-usage-subscribe-only]
@@ -186,7 +193,7 @@ type = forbidden
 # builds JevDecisions, VllmDecisions (P1-02) and VllmGeneration (P1-03) lazily through the
 # adapter registry. The name predates VllmDecisions (tests/meta/test_import_contracts.py
 # matches it); the forbidden list below covers all three adapters. P2-13 adds the
-# read-only GitHub client, built the same way.
+# read-only GitHub client, built the same way; P1-16 the vision model (VllmVision).
 as_packages = False
 source_modules =
     tumnis.*
@@ -198,6 +205,7 @@ forbidden_modules =
     tumnis.modules.decisions.adapters.vllm
     tumnis.modules.decisions.adapters.vllm_generation
     tumnis.modules.github.adapters.github_status
+    tumnis.modules.knowledge.adapters.vision
     typesafe_sdk
 
 # P1-03 (FR-11.8): the Generation slot writes the placeholder first action and the spoken

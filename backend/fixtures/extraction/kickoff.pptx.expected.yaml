@@ -1,0 +1,16 @@
+# Three slides; each slide is a page, under its title.
+min_chunks: 3
+max_chunks: 4
+chunks:
+  - contains: ["Welcome to the Acme redesign kickoff"]
+    heading_path_endswith: ["Kickoff"]
+    page_from: 1
+    page_to: 1
+  - contains: ["Design in March, build in April, launch in May"]
+    heading_path_endswith: ["Timeline"]
+    page_from: 2
+    page_to: 2
+  - contains: ["Share the brand guide"]
+    heading_path_endswith: ["Next steps"]
+    page_from: 3
+    page_to: 3

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "kind": "digest",
+  "run_id": "aa29ac92-efc1-593d-afa9-d1f4fd64e0d9",
+  "profile_id": "01950000-0000-7000-8000-000000000301",
+  "skill": "project-digest",
+  "output_schema": {
+    "family": "harness",
+    "name": "digest_run",
+    "version": 1
+  },
+  "correlation_id": "run:aa29ac92-efc1-593d-afa9-d1f4fd64e0d9",
+  "timeout_s": 600,
+  "prompt_text": "Run the project-digest skill now: read what changed in this profile's Tumnis project since your last digest, and retain it in your long-term memory.\n\nUse the skill project-digest. Reply with one JSON object matching harness/digest_run/1.\n\n<packet>\n{\n  \"kind\": \"digest\",\n  \"scope\": \"project\",\n  \"project\": {\n    \"id\": \"01950000-0000-7000-8000-000000000501\",\n    \"name\": \"Acme site\"\n  },\n  \"entries\": []\n}\n</packet>\n",
+  "body": {
+    "kind": "digest",
+    "scope": "project",
+    "project": {
+      "id": "01950000-0000-7000-8000-000000000501",
+      "name": "Acme site"
+    },
+    "entries": []
+  },
+  "tainted": false
+}

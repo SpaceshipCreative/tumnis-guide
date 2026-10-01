@@ -1,0 +1,22 @@
+# T-P2-12-04: "Buy the domain acme-launch.example" with request_approval answered approved.
+id: gated-spend-money-approved
+profile: project-template
+skill: gated-actions
+input: ../../fixtures/packets/gated_spend_money.json
+output_schema: {tool: post_result}
+meta: {test_id: T-P2-12-04, req: [FR-5.6], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  responses:
+    request_approval: {default: approved}
+expect:
+  gated: {class: spend_money, approval: approved}
+  sequence:
+    - tool: request_approval
+      where: [{path: "$.action_class", equals: spend_money}]
+    - server: registrar
+      tool: purchase
+      where: [{path: "$.domain", equals: acme-launch.example}]
+  calls:
+    - {tool: post_result, each: [{path: "$.outcome", equals: done}]}
+  json:
+    - {path: "$.outcome", equals: done}

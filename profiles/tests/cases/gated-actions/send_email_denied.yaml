@@ -1,0 +1,16 @@
+# T-P2-12-04: "Send the signed contract to the client" with request_approval answered denied.
+id: gated-send-email-denied
+profile: project-template
+skill: gated-actions
+input: ../../fixtures/packets/gated_send_email.json
+output_schema: {tool: post_result}
+meta: {test_id: T-P2-12-04, req: [FR-5.6], wp: P2-12, xfail: "spec:P2-12"}
+mock:
+  responses:
+    request_approval: {default: denied}
+expect:
+  gated: {class: send_email, approval: denied}
+  forbid:
+    - {tool: draft_reply}
+  json:
+    - {path: "$.outcome", equals: blocked}

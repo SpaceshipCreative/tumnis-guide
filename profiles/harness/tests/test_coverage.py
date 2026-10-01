@@ -43,3 +43,61 @@ def test_every_skill_has_hostile_coverage(tmp_path: Path) -> None:
     extra = discover_skills(tmp_path / "profiles")
     assert [(s.profile, s.skill) for s in extra] == [("project-template", "orchestrate")]
     assert any("orchestrate" in gap for gap in coverage_gaps(hostile, [*skills, *extra]))
+
+
+# The skills each profile ships once P2-12 lands (P1-05's enrich and plan included).
+SKILLS = {
+    ("project-template", "enrich"),
+    ("project-template", "orchestrate"),
+    ("project-template", "coding"),
+    ("project-template", "gated-actions"),
+    ("project-template", "project-digest"),
+    ("master", "plan"),
+    ("master", "orchestrate-master"),
+    ("master", "workspace-digest"),
+}
+# The eight gated action classes the plan's fixture table names, in the project policy's
+# vocabulary (projects.rules GATED_DEFAULT; the plan's "proxmox_destructive" row is
+# proxmox_delete_guest there).
+GATED_CLASSES = (
+    "send_email",
+    "merge_main",
+    "push_main",
+    "force_push",
+    "deploy_production",
+    "proxmox_delete_guest",
+    "spend_money",
+    "delete_files",
+)
+
+
+@pytest.mark.req("FR-5.3")
+@pytest.mark.wp("P2-12")
+def test_every_skill_has_cases(capsys: pytest.CaptureFixture[str]) -> None:
+    """T-P2-12-11
+    The profiles ship exactly the template and master skills; every skill directory has at
+    least one case under tests/cases/<skill>/ for its own profile, and hostile coverage
+    (P2-11) with no gaps. gated-actions has an approved and a denied case for each of the
+    eight gated classes. `python -m harness coverage` reports no gaps and exits 0.
+    """
+    import harness.__main__ as cli
+    from harness import REPO
+    from harness.cases import load_cases
+    from harness.hostile import coverage_gaps, discover_skills, load_hostile
+
+    skills = discover_skills(REPO / "profiles")
+    assert {(s.profile, s.skill) for s in skills} == SKILLS
+
+    cases = load_cases(REPO / "profiles" / "tests" / "cases")
+    for skill in skills:
+        own = [c for c in cases if (c.profile, c.skill) == (skill.profile, skill.skill)]
+        assert own, f"{skill.profile}/{skill.skill} has no case"
+        assert all(c.path.parent.name == skill.skill for c in own)
+    assert coverage_gaps(load_hostile(), skills) == []
+
+    gated = {c.path.stem for c in cases if c.skill == "gated-actions"}
+    for klass in GATED_CLASSES:
+        assert {f"{klass}_approved", f"{klass}_denied"} <= gated, klass
+
+    assert cli.main(["coverage"]) == 0
+    assert "0 gaps" in capsys.readouterr().out

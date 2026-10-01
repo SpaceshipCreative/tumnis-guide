@@ -566,6 +566,7 @@ def assemble(
     )
     data = {
         "kind": kind.value,
+        "run_id": str(run),  # the run's calls back (post_result, request_approval) name it
         "tainted": tainted,
         "task": body.task.model_dump(mode="json", exclude={"text", "comments"}),
         "project": body.project.model_dump(mode="json", exclude={"brief", "passages"}),

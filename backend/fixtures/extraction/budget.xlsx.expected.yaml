@@ -1,0 +1,8 @@
+# Two sheets; Docling numbers each sheet as a page.
+min_chunks: 1
+max_chunks: 3
+chunks:
+  - contains: ["Design", "4800", "Hosting", "600"]
+    page_from: 1
+  - contains: ["Wireframes", "12", "Visual design", "18"]
+    page_to: 2

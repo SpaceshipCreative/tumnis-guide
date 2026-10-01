@@ -164,6 +164,11 @@ export function RunView({ runId }: { runId: string }) {
             <span className={badge(status.tone)}>{status.text}</span>
           )}
           {run.data !== undefined && <Elapsed run={run.data} active={active} />}
+          {run.data?.profile_version != null && (
+            <span data-testid="run-profile-version" className={HINT}>
+              Profile {run.data.profile_version}
+            </span>
+          )}
         </div>
         {active && (
           <button

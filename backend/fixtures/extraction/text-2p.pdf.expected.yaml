@@ -1,0 +1,12 @@
+# Two pages with a text layer: one section per page, parsed (no OCR); pages exact.
+min_chunks: 2
+max_chunks: 4
+chunks:
+  - contains: ["The Acme site redesign starts in March"]
+    heading_path_endswith: ["Introduction"]
+    page_from: 1
+    page_to: 1
+  - contains: ["The scope covers the home page"]
+    heading_path_endswith: ["Scope"]
+    page_from: 2
+    page_to: 2

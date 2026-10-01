@@ -273,6 +273,7 @@ async def run_row(project_id: uuid.UUID) -> uuid.UUID:
 LOOKUP_TARGETS: dict[str, Callable[[uuid.UUID], Awaitable[uuid.UUID]]] = {
     "authz_canary": canary_row,
     "knowledge": document_row,
+    "knowledge_read": document_row,  # P2-17: reads also reach the workspace knowledge base
     "runs": run_row,
     "tasks": task_row,
 }

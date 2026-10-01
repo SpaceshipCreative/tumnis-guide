@@ -12,8 +12,9 @@ import hashlib
 import json
 import os
 import re
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Final, Literal
@@ -23,6 +24,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import (
     ColumnElement,
     RowMapping,
+    Select,
     Table,
     and_,
     case,
@@ -48,8 +50,8 @@ from tumnis.core.ids import uuid7
 from tumnis.core.live import mark_changed
 from tumnis.core.net import NetPolicy, Resolver, SsrfBlocked, resolve_and_check, system_resolver
 from tumnis.core.outbox import emit
-from tumnis.core.pagination import Page, paginate
-from tumnis.core.routing import register_project_lookup
+from tumnis.core.pagination import Cursor, Page, invalid_cursor, paginate
+from tumnis.core.routing import WORKSPACE_ROW, register_project_lookup
 from tumnis.core.schemas import versioned
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
@@ -269,25 +271,31 @@ async def put_text_document(
 
 
 AGENT_SOURCE: Final = "agent"  # `source` of a text entry an agent added (`add_document`)
+NOTES: Final = "notes"  # the project folder's subfolder for notes written in the app
+AGENT_OUTPUTS: Final = "agent-outputs"  # ... and for what agents add (FR-15.4)
 
 
-async def add_document(  # the tool's input, plus who and when
+async def add_document(  # the tool's input, plus who, when and where the file goes
     s: AsyncSession,
     caller: agent_surface.Caller,
     *,
-    project_id: UUID,
+    project_id: UUID | None,
     title: str,
     body_markdown: str,
     tags: Sequence[str] = (),
     now: datetime | None = None,
+    net: NetPolicy | None = None,
 ) -> DocumentDTO:
-    """A document an agent adds to a project (P2-08, SAF-1, FR-15.5): always untrusted and
-    written by the caller (agent-written, `source` "agent"), tainted when the caller is
-    (`agent_surface.caller_tainted`: a tainted run's token, or a key with no run). The
-    taint is stored once and never lowered; marking the document trusted later affects
-    future packets, not what was already made from it. P2-17 adds the `add_document` tool,
-    the file under `agent-outputs/` and its extraction on top of this row."""
+    """A document an agent adds (P2-08, P2-17, SAF-1, FR-15.4, FR-15.5): always untrusted
+    and written by the caller (agent-written, `source` "agent", labeled `agent`), tainted
+    when the caller is (`agent_surface.caller_tainted`: a tainted run's token, or a key
+    with no run). The taint is stored once and never lowered; marking the document trusted
+    later affects future packets, not what was already made from it. Like a text entry it
+    is version 1 and searchable at once; with `net`, a project with a folder also gets the
+    file `agent-outputs/<sanitized title>.md`. None for `project_id`: the workspace
+    knowledge base."""
     del now  # the row's timestamps come from the database clock, as for text entries
+    await _check_project(s, project_id)
     row = (
         (
             await s.execute(
@@ -301,9 +309,10 @@ async def add_document(  # the tool's input, plus who and when
                     trust="untrusted",
                     tainted=agent_surface.caller_tainted(caller),
                     pinned=False,
-                    tags=list(tags),
+                    tags=_clean_tags(tags),
                     content_hash=hashlib.sha256(body_markdown.encode()).digest(),
                     source=AGENT_SOURCE,
+                    status="ready",
                     created_by=caller.principal.actor,
                 )
                 .returning(*_documents.c)
@@ -312,7 +321,52 @@ async def add_document(  # the tool's input, plus who and when
         .mappings()
         .one()
     )
-    return DocumentDTO.model_validate(dict(row))
+    return await _write_text(
+        s,
+        row,
+        body_markdown,
+        expected_version=row["version"],
+        net=net,
+        event=DocumentAddedV1,
+        by_agent=True,
+        subfolder=AGENT_OUTPUTS,
+    )
+
+
+# --- The SSRF policy of a storage write the agent surface makes (P2-17) --------------------
+#
+# A REST twin knows the deployment's policy from the app's settings and sets it around the
+# call; an MCP call, which has no request, falls back to the deployment's settings.
+
+_NET: ContextVar[NetPolicy | None] = ContextVar("knowledge_net", default=None)
+
+
+def deployment_net() -> NetPolicy:
+    """The deployment's SSRF policy, read from the environment; without deployment
+    settings (in-process tests) the default mode."""
+    from pydantic import ValidationError  # noqa: PLC0415
+
+    from tumnis.settings import Settings  # noqa: PLC0415
+
+    try:
+        return Settings().net_policy()
+    except ValidationError:
+        return NetPolicy(mode="self-hosted")
+
+
+@contextmanager
+def using_net(net: NetPolicy) -> Iterator[None]:
+    """`net` for the agent-surface calls made inside (a REST twin's request)."""
+    token = _NET.set(net)
+    try:
+        yield
+    finally:
+        _NET.reset(token)
+
+
+def current_net() -> NetPolicy:
+    """The policy `using_net` set, else the deployment's."""
+    return _NET.get() or deployment_net()
 
 
 async def get_brief(project_id: UUID, *, session: AsyncSession | None = None) -> DocumentDTO:
@@ -1020,15 +1074,17 @@ async def save_note(  # noqa: PLR0912  # queue, write and record, one branch eac
     net: NetPolicy,
     resolver: Resolver = system_resolver,
     version_id: UUID | None = None,
+    subfolder: str = NOTES,
 ) -> NoteWrite:
     """Snapshot a text document into `document_versions` (unless the caller made the
     version already and names it, P1-17) and write it to its file: the
     path its `folder_files` record names, else `<folder>/notes/<sanitized title>.md`
-    (numbered when taken). The file is the body under `tumnis_id` frontmatter (P1-15,
-    Scott's decision 15), so the note keeps its identity when renamed outside; without
-    `if_match` a recorded file is replaced only while it still holds what was last synced.
-    While the location is offline the write queues in `pending_writes` (the text is safe
-    in Postgres) and lands on the next healthy check."""
+    (`subfolder`: `agent-outputs` for what an agent adds; numbered when taken). The file is
+    the body under `tumnis_id` frontmatter (P1-15, Scott's decision 15), so the note keeps
+    its identity when renamed outside; without `if_match` a recorded file is replaced only
+    while it still holds what was last synced. While the location is offline the write
+    queues in `pending_writes` (the text is safe in Postgres) and lands on the next healthy
+    check."""
     doc = (
         (
             await s.execute(
@@ -1084,6 +1140,7 @@ async def save_note(  # noqa: PLR0912  # queue, write and record, one branch eac
                 doc["title"],
                 document_id=document_id,
                 backend=backend if online else None,
+                subfolder=subfolder,
             )
         landed: FileStat | None = None
         if online:
@@ -1132,6 +1189,44 @@ async def project_of(ctx: WorkspaceContext, document_id: UUID) -> UUID | None:
 
 
 register_project_lookup("knowledge", project_of)
+
+
+async def readable_scope(ctx: WorkspaceContext, document_id: UUID) -> UUID | None:
+    """Where a live document is read from (the `lookup:knowledge_read` route and the
+    `get_document` tool, R-28): its project, `WORKSPACE_ROW` for the workspace knowledge
+    base (which every project's caller may read, FR-15.1), None when there is no such live
+    document. Writes keep `project_of`, so the knowledge base stays closed to them."""
+    async with tenant_session(ctx) as s:
+        found = (
+            await s.execute(
+                select(_documents.c.project_id).where(
+                    _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+                )
+            )
+        ).first()
+    if found is None:
+        return None
+    project_id: UUID | None = found.project_id
+    return WORKSPACE_ROW if project_id is None else project_id
+
+
+register_project_lookup("knowledge_read", readable_scope)
+
+
+async def citation_title(s: AsyncSession, document_id: UUID, project_id: UUID) -> str | None:
+    """The title of a live document a run of `project_id` may cite (P2-17, FR-15.4): one of
+    that project's or of the workspace knowledge base; None for any other."""
+    found = (
+        await s.execute(
+            select(_documents.c.title, _documents.c.project_id).where(
+                _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+            )
+        )
+    ).first()
+    if found is None or found.project_id not in (None, project_id):
+        return None
+    title: str = found.title
+    return title
 
 
 async def update_text_document(
@@ -1299,9 +1394,11 @@ async def note_path(  # the note's place, its folder and where to look
     document_id: UUID,
     backend: StorageBackend | None,
     taken: set[str] | None = None,
+    subfolder: str = NOTES,
 ) -> str:
     """Where a note without a file record goes: the path of a write already queued for it,
-    else `<folder>/notes/<sanitized title>.md`, numbered past every taken name."""
+    else `<folder>/notes/<sanitized title>.md` (or another subfolder of the project folder,
+    `subfolder`), numbered past every taken name."""
     queued: str | None = await s.scalar(
         select(_pending.c.path)
         .join(_versions, _versions.c.id == _pending.c.document_version_id)
@@ -1316,7 +1413,7 @@ async def note_path(  # the note's place, its folder and where to look
     if queued is not None:
         return queued
     busy = taken if taken is not None else await taken_paths(s, location_id)
-    return await free_path(f"{root_path}/notes/{sanitize_filename(title)}.md", busy, backend)
+    return await free_path(f"{root_path}/{subfolder}/{sanitize_filename(title)}.md", busy, backend)
 
 
 async def ensure_project_folder(
@@ -1847,6 +1944,9 @@ async def get_document(s: AsyncSession, document_id: UUID) -> DocumentDTO:
     return _dto(await _live_row(s, document_id))
 
 
+PDF_MIME: Final = "application/pdf"
+
+
 @dataclasses.dataclass(frozen=True)
 class DownloadInfo:
     """What the file route needs to answer: the name to offer, the path on its location and
@@ -1857,6 +1957,10 @@ class DownloadInfo:
     location_id: UUID
     path: str
     size: int
+    # The served version's bytes sniffed as a PDF (P1-16's libmagic type, never the name):
+    # served inline so a citation opens the browser's viewer at `#page=n` (Scott decision
+    # 47, P2-17).
+    pdf: bool = False
 
 
 async def _newer_version_unreleased(
@@ -1902,7 +2006,7 @@ async def download_info(
         )
         if doc is None:
             raise NotFound("documents", document_id)
-        status, source_name = doc["status"], None
+        status, source_name, mime = doc["status"], None, None
         if version_no is not None:
             ver = (
                 (
@@ -1918,7 +2022,7 @@ async def download_info(
             )
             if ver is None:
                 raise NotFound("document_versions", document_id)
-            status, source_name = ver["status"], ver["source_name"]
+            status, source_name, mime = ver["status"], ver["source_name"], ver["mime"]
             current = doc["current_version_id"]
             if current is not None and ver["id"] != current:
                 status = "replaced"  # the folder keeps the current version's bytes only
@@ -1931,10 +2035,16 @@ async def download_info(
             raise ProblemError(409, "not_available", "The file is not available yet")
         if await _newer_version_unreleased(s, document_id, doc["current_version_id"]):
             raise ProblemError(409, "not_available", "The file is not available yet")
-        if source_name is None:
-            source_name = await s.scalar(
-                select(_versions.c.source_name).where(_versions.c.id == doc["current_version_id"])
-            )
+        if version_no is None:
+            current_ver = (
+                await s.execute(
+                    select(_versions.c.source_name, _versions.c.mime).where(
+                        _versions.c.id == doc["current_version_id"]
+                    )
+                )
+            ).first()
+            if current_ver is not None:
+                source_name, mime = current_ver.source_name, current_ver.mime
         full = await storage_path(s, doc["project_id"], doc["path"])
         async with open_backend(s, doc["storage_location_id"], net=net) as backend:
             try:
@@ -1949,6 +2059,7 @@ async def download_info(
         location_id=doc["storage_location_id"],
         path=full,
         size=stat.size,
+        pdf=mime == PDF_MIME,
     )
 
 
@@ -2083,8 +2194,10 @@ async def _write_text(  # the row, its new body, and where the note goes
     event: type[DocumentAddedV1] | type[DocumentChangedV1],
     by_agent: bool = False,
     tainted: bool = False,
+    subfolder: str = NOTES,
 ) -> DocumentDTO:
-    """Version, index and file one text write: the row updated (versioned, so its row lock
+    """Version, index and file one text write (a new file goes to the project folder's
+    `subfolder`): the row updated (versioned, so its row lock
     orders concurrent writers and a stale one gets 409 before any version is added), a new
     version holding `body` as the current one, its chunks, its note file when the project
     has a folder, and `document.added` or `document.changed`. A write `by_agent` leaves
@@ -2120,7 +2233,7 @@ async def _write_text(  # the row, its new body, and where the note goes
     )
     await _index_text(s, row["id"], version_id, body)
     if net is not None and await _has_folder(s, saved["project_id"]):
-        await save_note(s, row["id"], net=net, version_id=version_id)
+        await save_note(s, row["id"], net=net, version_id=version_id, subfolder=subfolder)
     version_no = await s.scalar(select(_versions.c.version_no).where(_versions.c.id == version_id))
     await emit(
         s,
@@ -2153,6 +2266,7 @@ async def create_text_entry(  # the entry's fields, plus who wrote it
     origin: Literal["user_text", "agent"] = "user_text",
     net: NetPolicy | None = None,
     tainted: bool = False,
+    tags: Sequence[str] = (),
 ) -> DocumentDTO:
     """A text entry in the project's knowledge base (None: the workspace knowledge base,
     which every project sees; FR-15.1), with trust by origin (FR-15.5): a person's text is
@@ -2176,6 +2290,7 @@ async def create_text_entry(  # the entry's fields, plus who wrote it
                     trust=trust,
                     tainted=tainted,
                     pinned=False,
+                    tags=_clean_tags(tags),
                     content_hash=hashlib.sha256(markdown.encode()).digest(),
                     source=AGENT_SOURCE if origin == "agent" else TEXT_SOURCE,
                     status="ready",
@@ -2481,23 +2596,15 @@ async def list_documents(
     return page.model_copy(update={"items": [_dto(doc.model_dump()) for doc in page.items]})
 
 
-async def search_knowledge(  # R-36's parameters, plus the caller's limit
-    s: AsyncSession,
+def _search_stmt(
     q: str,
-    *,
     project_id: UUID | None,
-    limit: int = 10,
-    mode: Literal["fts"] = "fts",
-    project_ids: frozenset[UUID] | None = None,
-) -> list[KnowledgeHit]:
-    """Full-text search (R-36; P3-10 adds `mode="hybrid"`) over the current versions'
-    chunks of live, ready documents: a project's items and the workspace knowledge base
-    (FR-15.1), ranked by cover density, then pinned and recently changed documents first.
-    Row-level security scopes it to the workspace first."""
-    if mode != "fts":
-        raise ProblemError(422, "invalid_mode", "Only full-text search is available")
-    if not q.strip():
-        return []
+    project_ids: frozenset[UUID] | None,
+    *,
+    agent_written: bool = True,
+) -> Select[Any]:
+    """The ranked hits of `q` in the reader's scope (`_scope`), best first, unlimited;
+    without the documents agents added (`source` "agent") when `agent_written` is False."""
     query = func.websearch_to_tsquery(TS_CONFIG, q)
     rank = func.ts_rank_cd(_chunks.c.tsv, query).label("rank")
     stmt = (
@@ -2533,14 +2640,70 @@ async def search_knowledge(  # R-36's parameters, plus the caller's limit
             _documents.c.pinned.desc(),
             _documents.c.updated_at.desc(),
             _chunks.c.ordinal,
+            _chunks.c.id,
         )
-        .limit(max(1, min(limit, SEARCH_LIMIT_MAX)))
     )
+    if not agent_written:
+        stmt = stmt.where(_documents.c.source.is_distinct_from(AGENT_SOURCE))
     scope = _scope(project_id, project_ids)
-    if scope is not None:
-        stmt = stmt.where(scope)
+    return stmt if scope is None else stmt.where(scope)
+
+
+async def search_knowledge(  # R-36's parameters, plus the caller's limit
+    s: AsyncSession,
+    q: str,
+    *,
+    project_id: UUID | None,
+    limit: int = 10,
+    mode: Literal["fts"] = "fts",
+    project_ids: frozenset[UUID] | None = None,
+    agent_written: bool = True,
+) -> list[KnowledgeHit]:
+    """Full-text search (R-36; P3-10 adds `mode="hybrid"`) over the current versions'
+    chunks of live, ready documents: a project's items and the workspace knowledge base
+    (FR-15.1), ranked by cover density, then pinned and recently changed documents first.
+    Row-level security scopes it to the workspace first."""
+    if mode != "fts":
+        raise ProblemError(422, "invalid_mode", "Only full-text search is available")
+    if not q.strip():
+        return []
+    stmt = _search_stmt(q, project_id, project_ids, agent_written=agent_written).limit(
+        max(1, min(limit, SEARCH_LIMIT_MAX))
+    )
     rows = (await s.execute(stmt)).mappings().all()
     return [KnowledgeHit.model_validate(dict(row)) for row in rows]
+
+
+SEARCH_DEPTH_MAX: Final = 500  # how far down the ranking a search pages (plan: top hits)
+
+
+async def search_page(
+    s: AsyncSession,
+    q: str,
+    *,
+    project_id: UUID | None,
+    limit: int = 10,
+    cursor: str | None = None,
+    project_ids: frozenset[UUID] | None = None,
+) -> Page[KnowledgeHit]:
+    """`search_knowledge` a page at a time (the `search_knowledge` tool and its twin,
+    P2-17). A rank is no key to continue after, so the cursor holds the position in the
+    ranking; the walk ends at `SEARCH_DEPTH_MAX` hits. 400 `invalid_cursor` for a cursor
+    that is not one."""
+    offset = 0
+    if cursor is not None:
+        offset = Cursor.decode(cursor, [int]).keys[0]
+        if not 0 < offset < SEARCH_DEPTH_MAX:
+            raise invalid_cursor()
+    size = max(1, min(limit, SEARCH_LIMIT_MAX, SEARCH_DEPTH_MAX - offset))
+    if not q.strip():
+        return Page[KnowledgeHit](items=[], next_cursor=None)
+    stmt = _search_stmt(q, project_id, project_ids).offset(offset).limit(size + 1)
+    rows = (await s.execute(stmt)).mappings().all()
+    hits = [KnowledgeHit.model_validate(dict(row)) for row in rows[:size]]
+    more = len(rows) > size and offset + size < SEARCH_DEPTH_MAX
+    next_cursor = Cursor((offset + size,), hits[-1].chunk_id).encode() if more else None
+    return Page[KnowledgeHit](items=hits, next_cursor=next_cursor)
 
 
 async def passages_for(
@@ -2569,7 +2732,11 @@ async def passages_for(
         )
     criteria = (task.acceptance_criteria or "").splitlines()
     q = passage_query(task.title, criteria, context.goal)
-    hits = await search_knowledge(s, q, project_id=task.project_id, limit=PASSAGE_SEARCH_LIMIT)
+    # What agents added stays out of packets (an agent finds it with `search_knowledge`),
+    # so one run's output never feeds the next run's packet on its own (P2-17, T-P2-08-06).
+    hits = await search_knowledge(
+        s, q, project_id=task.project_id, limit=PASSAGE_SEARCH_LIMIT, agent_written=False
+    )
     ranked = [
         Passage(
             chunk_id=h.chunk_id,
