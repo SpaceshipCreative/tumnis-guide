@@ -12817,7 +12817,7 @@ The api side, used by both doors:
 
 ```python
 async def request_approval(caller: Caller, inp: RequestApprovalIn) -> HumanWaitOut:
-    """Task token only (403 run_token_required otherwise); token.run_id == inp.run_id.
+    """Task token only (200 denied, rule run_token_required, otherwise); token.run_id == inp.run_id.
     First call: pure approval_need() with threshold=None. 'allowed' returns approved at once
     (no row for 'read'; an audited row otherwise). Anything else inserts an approvals row
     (status pending) and enqueues approval_flow with workflow ID approval:<id>:<app_version>
@@ -12849,7 +12849,7 @@ Decisions from the human go through P1-13's `POST /v1/review/{item}/decide {acti
 | T-P2-05-10 | `backend/tumnis/modules/agents/tests/integration/test_approvals.py::test_unknown_action_uses_noul_threshold` | integration | Fake Decisions: confident safe gives approved; below threshold and Decisions down give pending | FR-5.6 |
 | T-P2-05-11 | `backend/tumnis/modules/agents/tests/integration/test_approvals.py::test_decisions_audited_with_reason` | integration | `approval.granted` and `approval.denied` rows carry actor, reason, correlation ID; blank reason is 422 | SEC-3 |
 | T-P2-05-12 | `backend/tumnis/modules/agents/tests/integration/test_approvals.py::test_gated_request_writes_gated_action_audit` | integration | `agent.gated_action` row per approval-required request | SEC-3 |
-| T-P2-05-13 | `backend/tumnis/modules/agents/tests/integration/test_approvals.py::test_api_key_without_run_refused` | integration | `run_token_required` | FR-5.6 |
+| T-P2-05-13 | `backend/tumnis/modules/agents/tests/integration/test_approvals.py::test_api_key_without_run_refused` | integration | 200 `denied` with rule `run_token_required` (Scott decision 43) | FR-5.6 |
 | T-P2-05-14 | `backend/tumnis/modules/agents/tests/integration/test_questions.py::test_killed_worker_during_wait_answer_still_resumes` | integration | Kill while `question_flow` waits; restart; answer resumes once | FR-5.7 |
 | T-P2-05-15 | `frontend/src/components/project/PolicyEditor.test.tsx::[P2-05][FR-5.6] toggles gated and allowed and saves with version` | unit (Vitest) | PUT with version; 409 shows current | FR-5.6 |
 | T-P2-05-16 | `frontend/src/components/review/ApprovalItem.test.tsx::[P2-05][SEC-3] deny needs a reason` | unit (Vitest) | Presets fill the reason; blank blocked | SEC-3 |
