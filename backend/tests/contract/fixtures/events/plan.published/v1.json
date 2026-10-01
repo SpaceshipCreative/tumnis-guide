@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "plan_id": "4e3c2a3f-7d0e-5b8a-9c1d-2f3e4a5b6c7d",
+  "day": "2026-03-09",
+  "task_ids": [
+    "01a0ec82-72d7-7f23-8be6-203712701f21",
+    "01a0ec82-72d7-7f23-8be6-203712701f22"
+  ],
+  "reasons": ["Due Mon 9 Mar", "Rolled over once"],
+  "source": "fallback",
+  "trigger": "morning"
+}

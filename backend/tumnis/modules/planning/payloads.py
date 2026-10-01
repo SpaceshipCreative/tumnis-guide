@@ -4,7 +4,7 @@
 - `plan.published`: a day's plan was published (morning, Re-plan or the due-date
   fallback): its tasks in order with their reasons, and where it came from (`source`:
   master or fallback). Notifications and focus events read it; it is emitted once per
-  plan, in the plan's own transaction.
+  plan, in the plan's own transaction, unless the plan is empty (no items, no issues).
 """
 
 from datetime import date
