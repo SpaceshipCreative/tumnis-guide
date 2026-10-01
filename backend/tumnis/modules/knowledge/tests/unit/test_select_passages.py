@@ -100,7 +100,6 @@ CASES = {
 
 @pytest.mark.req("FR-15.4")
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 @pytest.mark.parametrize("case", list(CASES))
 def test_brief_first_cap_and_stop(case: str) -> None:
     """T-P1-17-11
@@ -137,7 +136,6 @@ def test_brief_first_cap_and_stop(case: str) -> None:
 
 @pytest.mark.req("FR-15.4")
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 @settings(max_examples=200, deadline=None)
 @given(
     brief_len=st.one_of(st.none(), st.integers(0, 20_000)),

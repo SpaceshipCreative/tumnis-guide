@@ -17,7 +17,6 @@ TABLE: dict[str, tuple[str, bool]] = {
 
 @pytest.mark.req("FR-15.5")
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 @pytest.mark.parametrize("origin", list(TABLE))
 def test_default_trust(origin: str) -> None:
     """T-P1-17-06
