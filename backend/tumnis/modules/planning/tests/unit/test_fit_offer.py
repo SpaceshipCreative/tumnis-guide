@@ -62,7 +62,6 @@ ROWS: list[Any] = [
 
 @pytest.mark.req("J6")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 @pytest.mark.parametrize(("estimate", "today", "ahead", "split", "move_to"), ROWS)
 def test_fit_offer_table(
     estimate: int,

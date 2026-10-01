@@ -216,7 +216,6 @@ def table_items(items: list[Item]) -> list[Any]:
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 @pytest.mark.parametrize(("items", "overrides", "expected"), ROWS)
 def test_validate_plan_table(
     items: list[Item], overrides: dict[str, Any], expected: set[str]
@@ -308,7 +307,6 @@ def picks_of(ids: list[UUID]) -> list[Any]:
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 @PROPERTY
 @given(world=worlds(), data=st.data())
 def test_assigned_plans_always_validate(world: dict[str, Any], data: st.DataObject) -> None:
@@ -335,7 +333,6 @@ def fallback_key(task: Any) -> tuple[Any, ...]:
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 @PROPERTY
 @given(world=worlds())
 def test_fallback_always_validates_and_is_due_date_ordered(world: dict[str, Any]) -> None:
@@ -357,7 +354,6 @@ def test_fallback_always_validates_and_is_due_date_ordered(world: dict[str, Any]
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 @PROPERTY
 @given(world=worlds(), data=st.data())
 def test_ai_tasks_never_consume_free_time(world: dict[str, Any], data: st.DataObject) -> None:

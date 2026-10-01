@@ -69,7 +69,6 @@ def _local_to_utc(day: date, local: time, tz: ZoneInfo) -> datetime:
 
 @pytest.mark.req("FR-4.3", "REL-6")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 @pytest.mark.parametrize(("zone", "day", "direction", "transition", "plan_time"), _cases())
 def test_dst_fires_once_per_local_day(
     zone: str, day: date, direction: str, transition: datetime, plan_time: time
@@ -101,7 +100,6 @@ def test_dst_fires_once_per_local_day(
 
 @pytest.mark.req("FR-4.7")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 def test_weekend_no_morning_plan() -> None:
     """T-P1-11-07
     Default plan weekdays (Monday to Friday) and plan time 08:30 in New York, ticks from
