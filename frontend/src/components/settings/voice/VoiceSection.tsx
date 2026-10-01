@@ -97,14 +97,18 @@ function VoiceForm({ loaded }: { loaded: SettingSectionOut }) {
     onError: async (error) => {
       setFailed(true);
       if (error instanceof ConflictError) {
-        const current = await queryClient.query({
-          ...voiceQuery(),
-          staleTime: 0,
-        });
-        show(current);
-        setMessage(
-          "Voice changed elsewhere; you are now seeing the current settings.",
-        );
+        try {
+          const current = await queryClient.query({
+            ...voiceQuery(),
+            staleTime: 0,
+          });
+          show(current);
+          setMessage(
+            "Voice changed elsewhere; you are now seeing the current settings.",
+          );
+        } catch {
+          setMessage("The voice settings could not be saved.");
+        }
         return;
       }
       setMessage(

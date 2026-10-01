@@ -22,8 +22,10 @@ import { readVoice, voiceQuery } from "./voiceSettings";
  * the engine not known yet). */
 export const CLIP_WAIT_MS = 3_000;
 
-function toVoice(message: FocusMessageOut): VoiceMessage {
-  return message.clip_id === null
+/** The message to say; its clip only when the server engine is (or may be) the one chosen:
+ * a clip made earlier outlives a switch to this device's voice. */
+function toVoice(message: FocusMessageOut, useClip: boolean): VoiceMessage {
+  return !useClip || message.clip_id === null
     ? { id: message.id, text: message.message }
     : {
         id: message.id,
@@ -65,7 +67,10 @@ export function useVoiceMode(
       const timer = waiting.current.get(m.id);
       if (timer !== undefined) window.clearTimeout(timer);
       waiting.current.delete(m.id);
-      actor.send({ type: "SAY", message: toVoice(m) });
+      actor.send({
+        type: "SAY",
+        message: toVoice(m, engine !== "browser"),
+      });
     };
     for (const message of messages) {
       if (waiting.current.has(message.id)) {

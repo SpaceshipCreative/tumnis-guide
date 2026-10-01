@@ -97,7 +97,13 @@ test("[P4-03][FR-11.7] the browser engine says a message at once, without a clip
   await waitFor(() => {
     expect(engine.said.map((m) => m.text)).toEqual(["One"]);
   });
-  const second = focusMessage({ level: "coach", speak: true, message: "Two" });
+  // A clip made before the switch to this device's voice is not played.
+  const second = focusMessage({
+    level: "coach",
+    speak: true,
+    clip_id: CLIP_ID,
+    message: "Two",
+  });
   view.rerender({ messages: [first, second] });
   await waitFor(() => {
     expect(engine.said).toEqual([
