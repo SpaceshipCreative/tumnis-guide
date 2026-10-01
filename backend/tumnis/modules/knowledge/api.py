@@ -2365,13 +2365,16 @@ async def restore(s: AsyncSession, document_id: UUID) -> DocumentDTO:
 async def purge_trash(s: AsyncSession, cutoff: datetime, *, limit: int) -> int:
     """Hard-deletes up to `limit` documents trashed before `cutoff`, with their versions,
     chunks, extraction artifacts and queued note writes; a folder file record stays (its
-    file is the folder sync's) without its document. Returns how many went."""
+    file is the folder sync's) without its document. Returns how many went. The picked
+    documents are locked first, skipping any a restore holds, so a restore either waits
+    for the purge (and finds nothing) or keeps its document."""
     ids: list[UUID] = list(
         await s.scalars(
             select(_documents.c.id)
             .where(_documents.c.deleted_at < cutoff)
             .order_by(_documents.c.deleted_at, _documents.c.id)
             .limit(limit)
+            .with_for_update(skip_locked=True)
         )
     )
     if not ids:
