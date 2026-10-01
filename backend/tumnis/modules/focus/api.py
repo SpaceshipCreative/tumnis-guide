@@ -17,11 +17,11 @@ import contextlib
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from typing import Any, Final, Literal, Self
+from typing import Any, Final, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Table, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -192,15 +192,21 @@ class RespondIn(BaseModel):
     event_id: UUID
     response: Response
     to_task_id: UUID | None = None  # with `switched`: the task the person moved to
-    detour: DetourIn | None = None  # with `switched` at Guardrail: capture it (P4-01)
+    # With `switched` at Guardrail: capture it (P4-01). The pairing rules are checked in
+    # `respond` (422 `invalid_detour`), after the event is found, so any body the schema
+    # allows builds and an unknown event is still 404.
+    detour: DetourIn | None = None
 
-    @model_validator(mode="after")
-    def _detour_is_a_switch(self) -> Self:
-        if self.detour is not None and self.response != "switched":
-            raise ValueError("a detour comes only with the response 'switched'")
-        if self.detour is not None and self.to_task_id is not None:
-            raise ValueError("a detour and to_task_id exclude each other")
-        return self
+
+def _check_detour(body: RespondIn) -> None:
+    if body.detour is None:
+        return
+    if body.response != "switched":
+        raise ProblemError(
+            422, "invalid_detour", "A detour comes only with the response 'switched'."
+        )
+    if body.to_task_id is not None:
+        raise ProblemError(422, "invalid_detour", "A detour and to_task_id exclude each other.")
 
 
 class ReturnIn(BaseModel):
@@ -655,10 +661,11 @@ async def respond(
     task's open session (`apply_response`: back-off, snooze), `stuck` fires a `stuck` event
     where the level fires one, and `focus.responded` is emitted; `less_of_this` is
     `less_of_this`. 404 for an unknown event."""
-    if body.response == "less_of_this":
-        return await less_of_this(ctx, LessIn(event_id=body.event_id), now=now, session=session)
     s = session
     event = await _event(s, body.event_id)
+    _check_detour(body)
+    if body.response == "less_of_this":
+        return await less_of_this(ctx, LessIn(event_id=body.event_id), now=now, session=session)
     if body.detour is not None:
         level = await _level(s, ctx, now)
         if not rules.captures_detour(level.effective):
@@ -767,6 +774,8 @@ async def return_detour(
         found = found.where(_events.c.id == body.event_id)
     event = (await s.execute(found.with_for_update())).first()
     if event is None:
+        if body.event_id is not None:
+            await _event(s, body.event_id)  # 404 for an unknown event
         raise ProblemError(409, "no_open_detour", "No detour is waiting for an answer.")
     if body.decision == "return":
         await _go_back(s, ctx, event, body.version, now)

@@ -56,20 +56,27 @@ async def test_yesterdays_open_detour_is_not_answered(dbos: Any, focus: Focus) -
 @pytest.mark.req("FR-10.6")
 @pytest.mark.wp("P4-01")
 async def test_answer_applies_only_to_the_named_detour(dbos: Any, focus: Focus) -> None:
-    """An answer naming another event than the open question is 409 `no_open_detour`; the
-    open question's own `event_id` answers it."""
+    """An answer naming another focus event than the open question is 409
+    `no_open_detour`, one naming no focus event is 404; the open question's own `event_id`
+    answers it."""
     admin = await focus.project("Admin")
     await guardrail_day(focus)
     assert (await detour(focus, BANK, admin)).status_code == 200
     [made] = tasks_titled(focus, BANK)
     shown = (await focus.current())["detour"]
+    [block_start, *_] = focus.events("block_start")
 
     wrong = await focus.http.post(
         "/v1/focus/return",
-        json={"decision": "stay", "version": 1, "event_id": str(made["id"])},
+        json={"decision": "stay", "version": 1, "event_id": str(block_start["id"])},
     )
     assert wrong.status_code == 409, wrong.text
     assert wrong.json()["code"] == "no_open_detour"
+    unknown = await focus.http.post(
+        "/v1/focus/return",
+        json={"decision": "stay", "version": 1, "event_id": str(made["id"])},
+    )
+    assert unknown.status_code == 404, unknown.text
     assert focus.events("switched")[0]["return_decision"] is None
 
     right = await focus.http.post(
@@ -79,3 +86,27 @@ async def test_answer_applies_only_to_the_named_detour(dbos: Any, focus: Focus) 
     await focus.settle()
     assert right.status_code == 200, right.text
     assert focus.events("switched")[0]["return_decision"] == "stay"
+
+
+@pytest.mark.req("FR-10.6")
+@pytest.mark.wp("P4-01")
+async def test_detour_pairing_is_422_after_the_event_is_found(dbos: Any, focus: Focus) -> None:
+    """A detour with a response other than `switched`, or with `to_task_id`, is 422
+    `invalid_detour` and creates nothing; with an unknown event it is 404 first."""
+    admin = await focus.project("Admin")
+    day = await guardrail_day(focus)
+    [event] = focus.events("block_start")[:1]
+    detour_body = {"title": BANK, "project_id": str(admin)}
+
+    for extra in ({"response": "still_on_it"}, {"response": "switched", "to_task_id": str(day.b)}):
+        answer = await focus.http.post(
+            "/v1/focus/respond", json={"event_id": str(event["id"]), "detour": detour_body, **extra}
+        )
+        assert answer.status_code == 422, answer.text
+        assert answer.json()["code"] == "invalid_detour"
+    unknown = await focus.http.post(
+        "/v1/focus/respond",
+        json={"event_id": str(day.a), "response": "still_on_it", "detour": detour_body},
+    )
+    assert unknown.status_code == 404, unknown.text
+    assert tasks_titled(focus, BANK) == []
