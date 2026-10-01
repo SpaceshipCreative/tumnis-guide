@@ -49,7 +49,6 @@ QUESTION = "Which footer color?"
 
 @pytest.mark.req("FR-5.7")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_ask_human_moves_task_to_waiting_and_adds_review_item(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
@@ -85,7 +84,6 @@ async def test_ask_human_moves_task_to_waiting_and_adds_review_item(  # noqa: PL
 
 @pytest.mark.req("FR-5.7")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_answer_resumes_run(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],

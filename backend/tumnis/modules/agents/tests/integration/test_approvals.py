@@ -49,7 +49,6 @@ MERGE = "Merge fix-footer into main"
 
 @pytest.mark.req("FR-5.6")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_request_approval_long_polls_then_pending(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
@@ -80,7 +79,6 @@ async def test_request_approval_long_polls_then_pending(  # noqa: PLR0917
 
 @pytest.mark.req("FR-5.6")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_resend_returns_decision(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
@@ -119,7 +117,6 @@ async def test_resend_returns_decision(  # noqa: PLR0917
 
 @pytest.mark.req("FR-5.6")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_decision_during_long_poll_returns_immediately(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
@@ -277,7 +274,6 @@ async def test_decisions_audited_with_reason(  # noqa: PLR0917
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P2-05")
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_gated_request_writes_gated_action_audit(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],

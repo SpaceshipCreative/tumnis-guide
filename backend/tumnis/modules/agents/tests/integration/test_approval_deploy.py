@@ -141,7 +141,6 @@ async def test_approval_survives_deploy_to_new_version(  # noqa: PLR0917
 @pytest.mark.req("FR-5.6")
 @pytest.mark.wp("P2-05")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P2-05")
 async def test_approval_has_no_deadline(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
