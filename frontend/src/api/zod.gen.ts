@@ -527,6 +527,27 @@ export const zMcpServerInfo = z.object({
 });
 
 /**
+ * MetricOut
+ *
+ * One PRD success metric: its value over the range (null while there is no data), its
+ * target as the PRD states it, and the phase that brings its data when it has none yet.
+ */
+export const zMetricOut = z.object({
+  available_after: z.enum(["phase 2", "phase 4"]).nullable(),
+  key: z.enum([
+    "daily_open_rate",
+    "tasks_completed_per_working_day",
+    "rollover_rate",
+    "estimate_error",
+    "agent_share",
+    "agent_acceptance_rate",
+    "unattended_runs_per_week",
+  ]),
+  target: z.string(),
+  value: z.number().nullable(),
+});
+
+/**
  * Metrics
  */
 export const zMetrics = z.object({
@@ -535,6 +556,20 @@ export const zMetrics = z.object({
   n: z.int(),
   overall_accuracy: z.number(),
   review_rate: z.number(),
+});
+
+/**
+ * MetricsSummaryOut
+ *
+ * `GET /v1/metrics/summary?from=&to=`: the success metrics over the local days `start`
+ * to `end`, and the phase 1 exit gate (working days planned in a row, as of today).
+ */
+export const zMetricsSummaryOut = z.object({
+  end: z.iso.date(),
+  exit_gate_days: z.int(),
+  metrics: z.array(zMetricOut),
+  plan_days_in_a_row: z.int(),
+  start: z.iso.date(),
 });
 
 /**
@@ -1198,6 +1233,21 @@ export const zReviewKindsOut = z.object({
 });
 
 /**
+ * RolloverRef
+ *
+ * A Today task that is not done: the nights it has rolled over so far, and its count
+ * after tonight's day close.
+ */
+export const zRolloverRef = z.object({
+  label: z.enum(["human", "ai", "hybrid"]).nullable(),
+  project_id: z.uuid(),
+  rollover_count: z.int(),
+  task_id: z.uuid(),
+  title: z.string(),
+  tonight: z.int(),
+});
+
+/**
  * RotateIn
  */
 export const zRotateIn = z.object({
@@ -1733,6 +1783,34 @@ export const zTaskRecurrenceOut = z.object({
   title: z.string(),
   version: z.int(),
   weekday: z.int().nullable(),
+});
+
+/**
+ * TaskRef
+ *
+ * A task as the close-the-day panel names it.
+ */
+export const zTaskRef = z.object({
+  label: z.enum(["human", "ai", "hybrid"]).nullable(),
+  project_id: z.uuid(),
+  task_id: z.uuid(),
+  title: z.string(),
+});
+
+/**
+ * DaySummaryOut
+ *
+ * `GET /v1/day/{day}/summary`: the close-the-day panel's four sections for one local
+ * day of the workspace.
+ */
+export const zDaySummaryOut = z.object({
+  agents_finished: z.array(zTaskRef),
+  day: z.iso.date(),
+  prepared_by_agents: z.int(),
+  queued_overnight: z.array(zTaskRef),
+  rolls_over: z.array(zRolloverRef),
+  shipped: z.array(zTaskRef),
+  timezone: z.string(),
 });
 
 /**
@@ -2336,6 +2414,15 @@ export const zCoolifyListDeployStatusQuery = z.object({
  */
 export const zCoolifyListDeployStatusResponse = z.array(zProjectDeployStatus);
 
+export const zPlanningGetDaySummaryPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetDaySummaryResponse = zDaySummaryOut;
+
 export const zDeadLettersGetDeadLettersQuery = z.object({
   status: z
     .string()
@@ -2549,6 +2636,21 @@ export const zKnowledgeSetProjectFolderPath = z.object({
  * Successful Response
  */
 export const zKnowledgeSetProjectFolderResponse = zProjectFolderOut;
+
+/**
+ * Successful Response
+ */
+export const zPlanningRecordAppOpenResponse = z.void();
+
+export const zPlanningGetMetricsSummaryQuery = z.object({
+  from: z.iso.date(),
+  to: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetMetricsSummaryResponse = zMetricsSummaryOut;
 
 export const zPlanningReplanBody = zReplanIn;
 

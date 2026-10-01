@@ -21,6 +21,8 @@ export const dashboardSearch = z.object({
     .enum(["quiet", "nudge", "coach", "guardrail"])
     .optional()
     .catch(undefined),
+  // Close the day (P1-18, J7): the panel over the dashboard, not a route of its own.
+  panel: z.enum(["close"]).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/")({

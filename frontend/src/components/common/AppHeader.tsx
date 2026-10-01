@@ -1,7 +1,7 @@
 // The shell's header (DS-01, UX 6, UX 7, UX 11): on the phone the menu button for the
 // navigation drawer; then search (the Mod+K palette, P0-25), the review queue with its
 // count (the one badge, quiet at zero), help with the keyboard shortcuts, and the account
-// menu (settings, the colour theme, sign out). Every control is 44 px on the phone.
+// menu (settings, the colour theme, close the day, sign out). Every control is 44 px on the phone.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
@@ -228,6 +228,18 @@ function AccountMenu() {
               uiStore.trigger.setTheme({ theme: choice });
             },
           })),
+        },
+        {
+          // P1-18, J7: the day-close panel, at any hour (the dashboard shows its own
+          // button from 16:00).
+          items: [
+            {
+              label: "Close the day",
+              onSelect: () => {
+                void navigate({ to: "/", search: { panel: "close" } });
+              },
+            },
+          ],
         },
         {
           items: [

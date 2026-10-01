@@ -10,11 +10,16 @@ import { CalibrationSection } from "../components/settings/calibration/Calibrati
 import { DeadLettersSection } from "../components/settings/DeadLettersSection";
 import { KeysSection } from "../components/settings/KeysSection";
 import {
+  metricsRange,
+  MetricsSection,
+} from "../components/settings/MetricsSection";
+import {
   accountQuery,
   calendarAccountsQuery,
   calibrationQuery,
   deadLettersQuery,
   keysQuery,
+  metricsSummaryQuery,
   profilesQuery,
   runnersQuery,
   sessionsQuery,
@@ -47,6 +52,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   calendar: () => <CalendarSection />,
   storage: StorageSection,
   calibration: CalibrationSection,
+  metrics: MetricsSection,
 };
 
 export const Route = createFileRoute("/settings/$section")({
@@ -95,6 +101,20 @@ export const Route = createFileRoute("/settings/$section")({
         break;
       case "calibration":
         started(queryClient.query(calibrationQuery()));
+        break;
+      case "metrics":
+        // The two weeks are the workspace's own days, so its zone is read first.
+        started(
+          queryClient
+            .query(workspaceQuery())
+            .then((workspace) =>
+              queryClient.query(
+                metricsSummaryQuery(
+                  metricsRange(new Date(), workspace.timezone),
+                ),
+              ),
+            ),
+        );
         break;
       default:
         break; // the audit log reads by page

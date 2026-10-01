@@ -203,6 +203,12 @@ import type {
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarErrors,
   PlanningGetDayCalendarResponses,
+  PlanningGetDaySummaryData,
+  PlanningGetDaySummaryErrors,
+  PlanningGetDaySummaryResponses,
+  PlanningGetMetricsSummaryData,
+  PlanningGetMetricsSummaryErrors,
+  PlanningGetMetricsSummaryResponses,
   PlanningGetPlanData,
   PlanningGetPlanErrors,
   PlanningGetPlanResponses,
@@ -212,6 +218,9 @@ import type {
   PlanningMoveIssueData,
   PlanningMoveIssueErrors,
   PlanningMoveIssueResponses,
+  PlanningRecordAppOpenData,
+  PlanningRecordAppOpenErrors,
+  PlanningRecordAppOpenResponses,
   PlanningRemoveItemData,
   PlanningRemoveItemErrors,
   PlanningRemoveItemResponses,
@@ -435,9 +444,12 @@ import {
   zPlanningAcceptItemResponse,
   zPlanningGetAlternatesResponse,
   zPlanningGetDayCalendarResponse,
+  zPlanningGetDaySummaryResponse,
+  zPlanningGetMetricsSummaryResponse,
   zPlanningGetPlanResponse,
   zPlanningGetProjectWeekResponse,
   zPlanningMoveIssueResponse,
+  zPlanningRecordAppOpenResponse,
   zPlanningRemoveItemResponse,
   zPlanningReplanResponse,
   zPlanningSchedulePlanItemResponse,
@@ -1033,6 +1045,27 @@ export const coolifyListDeployStatus = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Day Summary
+ */
+export const planningGetDaySummary = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetDaySummaryData, ThrowOnError>,
+): RequestResult<
+  PlanningGetDaySummaryResponses,
+  PlanningGetDaySummaryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetDaySummaryResponses,
+    PlanningGetDaySummaryErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetDaySummaryResponse.parseAsync(data),
+    url: "/v1/day/{day}/summary",
+    ...options,
+  });
+
+/**
  * Get Dead Letters
  */
 export const deadLettersGetDeadLetters = <ThrowOnError extends boolean = false>(
@@ -1563,6 +1596,48 @@ export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Record App Open
+ */
+export const planningRecordAppOpen = <ThrowOnError extends boolean = false>(
+  options?: Options<PlanningRecordAppOpenData, ThrowOnError>,
+): RequestResult<
+  PlanningRecordAppOpenResponses,
+  PlanningRecordAppOpenErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).post<
+    PlanningRecordAppOpenResponses,
+    PlanningRecordAppOpenErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningRecordAppOpenResponse.parseAsync(data),
+    url: "/v1/metrics/open",
+    ...options,
+  });
+
+/**
+ * Get Metrics Summary
+ */
+export const planningGetMetricsSummary = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetMetricsSummaryData, ThrowOnError>,
+): RequestResult<
+  PlanningGetMetricsSummaryResponses,
+  PlanningGetMetricsSummaryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetMetricsSummaryResponses,
+    PlanningGetMetricsSummaryErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetMetricsSummaryResponse.parseAsync(data),
+    url: "/v1/metrics/summary",
+    ...options,
   });
 
 /**
