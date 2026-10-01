@@ -16,6 +16,8 @@ export function quietFocus(): FocusCurrentOut {
     override_level: null,
     session: null,
     messages: [],
+    guardrail: null,
+    detour: null,
   };
 }
 

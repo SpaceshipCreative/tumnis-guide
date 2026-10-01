@@ -1,4 +1,4 @@
-"""focus SQLAlchemy tables owned by this module (mirrors of revision focus_0001)."""
+"""focus SQLAlchemy tables owned by this module (mirrors of revisions focus_0001 and focus_0002)."""
 
 from datetime import date, datetime
 from uuid import UUID
@@ -38,6 +38,11 @@ class FocusEvent(TenantBase, Base):
     rule: Mapped[str]
     message: Mapped[str]
     dedupe_key: Mapped[str]
+    # focus_0002 (P4-01): a `switched` event that captured a detour, and its answer.
+    detour_task_id: Mapped[UUID | None]
+    return_to_task_id: Mapped[UUID | None]
+    return_decision: Mapped[str | None]  # 'return' or 'stay'
+    decided_at: Mapped[datetime | None]
 
 
 class FocusResponse(TenantBase, Base):

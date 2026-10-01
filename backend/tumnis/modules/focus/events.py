@@ -9,6 +9,9 @@ message, since workflow ids and message keys come from the event):
 - `task.status_changed` -> `focus.track_session`: a task leaving In progress ends its
   session (`end`); a task entering it starts one at Nudge or above (another task's open
   session ends, and `switched` fires at Coach and above).
+- `task.status_changed` -> `focus.prepare_next` (P4-01, FR-10.6): a task entering In
+  progress at Guardrail gets the next task of today's plan enriched ahead of time when it
+  has no first action (`enrich:<task id>:prepare_next:<event id>`).
 - `run.started` and `artifact.updated` -> `focus.agent_activity` / `focus.git_activity`:
   agent or git activity on a task (FR-10.7b) suppresses its next check-in.
 - `focus.responded` -> `focus.wake_on_response` and `focus.level_changed` ->
@@ -35,6 +38,7 @@ __all__ = [
     "FocusRespondedV1",
     "agent_activity",
     "git_activity",
+    "prepare_next",
     "start_plan",
     "track_session",
     "wake_on_level",
@@ -82,6 +86,19 @@ async def track_session(envelope: EventEnvelope) -> None:
     for workflow_id in started.ended_workflows:
         await workflows.send(workflow_id, end, key)
     await workflows.start_session(envelope.workspace_id, started)
+
+
+@subscribe("task.status_changed", name="focus.prepare_next")
+async def prepare_next(envelope: EventEnvelope) -> None:
+    payload = envelope.payload
+    if payload.get("to") != IN_PROGRESS:
+        return
+    await api.prepare_next(
+        _ctx(envelope),
+        UUID(str(payload["task_id"])),
+        envelope.occurred_at,
+        f"prepare_next:{envelope.event_id}",
+    )
 
 
 @subscribe("run.started", name="focus.agent_activity")
