@@ -492,6 +492,27 @@ export const zMcpServerInfo = z.object({
 });
 
 /**
+ * MetricOut
+ *
+ * One PRD success metric: its value over the range (null while there is no data), its
+ * target as the PRD states it, and the phase that brings its data when it has none yet.
+ */
+export const zMetricOut = z.object({
+  available_after: z.enum(["phase 2", "phase 4"]).nullable(),
+  key: z.enum([
+    "daily_open_rate",
+    "tasks_completed_per_working_day",
+    "rollover_rate",
+    "estimate_error",
+    "agent_share",
+    "agent_acceptance_rate",
+    "unattended_runs_per_week",
+  ]),
+  target: z.string(),
+  value: z.number().nullable(),
+});
+
+/**
  * Metrics
  */
 export const zMetrics = z.object({
@@ -500,6 +521,20 @@ export const zMetrics = z.object({
   n: z.int(),
   overall_accuracy: z.number(),
   review_rate: z.number(),
+});
+
+/**
+ * MetricsSummaryOut
+ *
+ * `GET /v1/metrics/summary?from=&to=`: the success metrics over the local days `start`
+ * to `end`, and the phase 1 exit gate (working days planned in a row, as of today).
+ */
+export const zMetricsSummaryOut = z.object({
+  end: z.iso.date(),
+  exit_gate_days: z.int(),
+  metrics: z.array(zMetricOut),
+  plan_days_in_a_row: z.int(),
+  start: z.iso.date(),
 });
 
 /**
@@ -665,6 +700,32 @@ export const zPlannedBlockOut = z.object({
   start: z.iso.datetime(),
   task_id: z.uuid().nullable(),
   title: z.string().nullable(),
+});
+
+/**
+ * PolicyIn
+ *
+ * The policy editor's save (P2-05, FR-5.6): both lists as a whole and the version
+ * read. A class in both lists is 422 `policy_conflict`.
+ */
+export const zPolicyIn = z.object({
+  allowed: z.array(z.string().min(1).max(64)).max(100),
+  gated: z.array(z.string().min(1).max(64)).max(100),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * PolicyOut
+ */
+export const zPolicyOut = z.object({
+  allowed: z.array(z.string()),
+  gated: z.array(z.string()),
+  max_concurrent_runs: z.int(),
+  max_run_minutes: z.int(),
+  max_tasks_per_run: z.int(),
+  project_id: z.uuid(),
+  tool_allowlist: z.array(z.string()),
+  version: z.int(),
 });
 
 /**
@@ -1140,6 +1201,21 @@ export const zReviewKindOut = z.object({
  */
 export const zReviewKindsOut = z.object({
   items: z.array(zReviewKindOut),
+});
+
+/**
+ * RolloverRef
+ *
+ * A Today task that is not done: the nights it has rolled over so far, and its count
+ * after tonight's day close.
+ */
+export const zRolloverRef = z.object({
+  label: z.enum(["human", "ai", "hybrid"]).nullable(),
+  project_id: z.uuid(),
+  rollover_count: z.int(),
+  task_id: z.uuid(),
+  title: z.string(),
+  tonight: z.int(),
 });
 
 /**
@@ -1678,6 +1754,34 @@ export const zTaskRecurrenceOut = z.object({
   title: z.string(),
   version: z.int(),
   weekday: z.int().nullable(),
+});
+
+/**
+ * TaskRef
+ *
+ * A task as the close-the-day panel names it.
+ */
+export const zTaskRef = z.object({
+  label: z.enum(["human", "ai", "hybrid"]).nullable(),
+  project_id: z.uuid(),
+  task_id: z.uuid(),
+  title: z.string(),
+});
+
+/**
+ * DaySummaryOut
+ *
+ * `GET /v1/day/{day}/summary`: the close-the-day panel's four sections for one local
+ * day of the workspace.
+ */
+export const zDaySummaryOut = z.object({
+  agents_finished: z.array(zTaskRef),
+  day: z.iso.date(),
+  prepared_by_agents: z.int(),
+  queued_overnight: z.array(zTaskRef),
+  rolls_over: z.array(zRolloverRef),
+  shipped: z.array(zTaskRef),
+  timezone: z.string(),
 });
 
 /**
@@ -2303,6 +2407,15 @@ export const zCoolifyListDeployStatusQuery = z.object({
  */
 export const zCoolifyListDeployStatusResponse = z.array(zProjectDeployStatus);
 
+export const zPlanningGetDaySummaryPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetDaySummaryResponse = zDaySummaryOut;
+
 export const zDeadLettersGetDeadLettersQuery = z.object({
   status: z
     .string()
@@ -2578,6 +2691,21 @@ export const zKnowledgeSearchQuery = z.object({
  */
 export const zKnowledgeSearchResponse = z.array(zKnowledgeHit);
 
+/**
+ * Successful Response
+ */
+export const zPlanningRecordAppOpenResponse = z.void();
+
+export const zPlanningGetMetricsSummaryQuery = z.object({
+  from: z.iso.date(),
+  to: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetMetricsSummaryResponse = zMetricsSummaryOut;
+
 export const zPlanningReplanBody = zReplanIn;
 
 /**
@@ -2800,6 +2928,26 @@ export const zProjectsGetProjectContextQuery = z.object({
  * Successful Response
  */
 export const zProjectsGetProjectContextResponse = zProjectContextOut;
+
+export const zProjectsGetPolicyPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsGetPolicyResponse = zPolicyOut;
+
+export const zProjectsUpdatePolicyBody = zPolicyIn;
+
+export const zProjectsUpdatePolicyPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zProjectsUpdatePolicyResponse = zPolicyOut;
 
 export const zProjectsReorderProjectBody = zReorderIn;
 

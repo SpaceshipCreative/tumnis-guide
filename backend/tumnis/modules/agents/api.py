@@ -1820,3 +1820,40 @@ async def run_plan(workspace_id: UUID, packet: TaskPacket) -> RunOutcome:
     if not _skill_runner:
         raise RuntimeError("agents.workflows is not loaded: nothing can run a skill")
     return RunOutcome.model_validate(await _skill_runner[0](workspace_id, packet))
+
+
+# --- Close the day (P1-18) ----------------------------------------------------------------------
+
+
+class FinishedRunOut(BaseModel):
+    """A run that ended, as the close-the-day panel counts it (planning, P1-18)."""
+
+    run_id: UUID
+    task_id: UUID | None
+    kind: str
+    status: RunStatus
+    finished_at: datetime
+
+
+async def finished_runs(s: AsyncSession, start: datetime, end: datetime) -> list[FinishedRunOut]:
+    """The workspace's runs (in context) that finished within [start, end), in finish
+    order: one statement."""
+    rows = await s.execute(
+        select(_runs.c.id, _runs.c.task_id, _runs.c.kind, _runs.c.status, _runs.c.finished_at)
+        .where(
+            _runs.c.deleted_at.is_(None),
+            _runs.c.finished_at >= start,
+            _runs.c.finished_at < end,
+        )
+        .order_by(_runs.c.finished_at, _runs.c.id)
+    )
+    return [
+        FinishedRunOut(
+            run_id=row.id,
+            task_id=row.task_id,
+            kind=row.kind,
+            status=RunStatus(row.status),
+            finished_at=row.finished_at,
+        )
+        for row in rows
+    ]

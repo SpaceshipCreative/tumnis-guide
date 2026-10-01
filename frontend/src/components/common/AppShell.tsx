@@ -2,7 +2,7 @@
 // sidebar on a laptop, the header (search, review, help, account), the bottom bar and the
 // navigation drawer on a phone, the page in `main`, the conflict notice, notices and the
 // Undo toast (P0-24), all inside the quick-add host (P0-25: the offline queue, quick add,
-// search, shortcuts). While the drawer is open everything else is inert. Sign-in and
+// search, shortcuts), and the app-open ping (P1-18). While the drawer is open everything else is inert. Sign-in and
 // setup get the bare frame (no navigation before a session exists).
 import { Outlet, useRouterState } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
@@ -18,11 +18,13 @@ import { NavRail } from "./NavRail";
 import { NoticeToast } from "./NoticeToast";
 import { MAIN_ID, SkipLink } from "./SkipLink";
 import { UndoToast } from "./UndoToast";
+import { useAppOpenPing } from "./useAppOpenPing";
 
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navOpen = useSelector(uiStore, (s) => s.context.navOpen);
   const bare = PUBLIC_PATHS.has(pathname);
+  useAppOpenPing(!bare);
   return (
     <div className="min-h-dvh bg-bg text-text">
       {/* Everything but the drawer: inert while the drawer is open, so nothing behind it

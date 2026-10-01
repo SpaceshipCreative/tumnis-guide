@@ -218,6 +218,12 @@ import type {
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarErrors,
   PlanningGetDayCalendarResponses,
+  PlanningGetDaySummaryData,
+  PlanningGetDaySummaryErrors,
+  PlanningGetDaySummaryResponses,
+  PlanningGetMetricsSummaryData,
+  PlanningGetMetricsSummaryErrors,
+  PlanningGetMetricsSummaryResponses,
   PlanningGetPlanData,
   PlanningGetPlanErrors,
   PlanningGetPlanResponses,
@@ -227,6 +233,9 @@ import type {
   PlanningMoveIssueData,
   PlanningMoveIssueErrors,
   PlanningMoveIssueResponses,
+  PlanningRecordAppOpenData,
+  PlanningRecordAppOpenErrors,
+  PlanningRecordAppOpenResponses,
   PlanningRemoveItemData,
   PlanningRemoveItemErrors,
   PlanningRemoveItemResponses,
@@ -248,6 +257,9 @@ import type {
   ProjectsCreateProjectData,
   ProjectsCreateProjectErrors,
   ProjectsCreateProjectResponses,
+  ProjectsGetPolicyData,
+  ProjectsGetPolicyErrors,
+  ProjectsGetPolicyResponses,
   ProjectsGetProjectContextData,
   ProjectsGetProjectContextErrors,
   ProjectsGetProjectContextResponses,
@@ -263,6 +275,9 @@ import type {
   ProjectsUnarchiveProjectData,
   ProjectsUnarchiveProjectErrors,
   ProjectsUnarchiveProjectResponses,
+  ProjectsUpdatePolicyData,
+  ProjectsUpdatePolicyErrors,
+  ProjectsUpdatePolicyResponses,
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectErrors,
   ProjectsUpdateProjectResponses,
@@ -449,9 +464,12 @@ import {
   zPlanningAcceptItemResponse,
   zPlanningGetAlternatesResponse,
   zPlanningGetDayCalendarResponse,
+  zPlanningGetDaySummaryResponse,
+  zPlanningGetMetricsSummaryResponse,
   zPlanningGetPlanResponse,
   zPlanningGetProjectWeekResponse,
   zPlanningMoveIssueResponse,
+  zPlanningRecordAppOpenResponse,
   zPlanningRemoveItemResponse,
   zPlanningReplanResponse,
   zPlanningSchedulePlanItemResponse,
@@ -459,11 +477,13 @@ import {
   zPlanningSwapItemResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
+  zProjectsGetPolicyResponse,
   zProjectsGetProjectContextResponse,
   zProjectsGetProjectResponse,
   zProjectsListProjectsResponse,
   zProjectsReorderProjectResponse,
   zProjectsUnarchiveProjectResponse,
+  zProjectsUpdatePolicyResponse,
   zProjectsUpdateProjectResponse,
   zPurgesPurgeResponse,
   zSearchSearchResponse,
@@ -1041,6 +1061,27 @@ export const coolifyListDeployStatus = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zCoolifyListDeployStatusResponse.parseAsync(data),
     url: "/v1/coolify/status",
+    ...options,
+  });
+
+/**
+ * Get Day Summary
+ */
+export const planningGetDaySummary = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetDaySummaryData, ThrowOnError>,
+): RequestResult<
+  PlanningGetDaySummaryResponses,
+  PlanningGetDaySummaryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetDaySummaryResponses,
+    PlanningGetDaySummaryErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetDaySummaryResponse.parseAsync(data),
+    url: "/v1/day/{day}/summary",
     ...options,
   });
 
@@ -1720,6 +1761,48 @@ export const knowledgeSearch = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Record App Open
+ */
+export const planningRecordAppOpen = <ThrowOnError extends boolean = false>(
+  options?: Options<PlanningRecordAppOpenData, ThrowOnError>,
+): RequestResult<
+  PlanningRecordAppOpenResponses,
+  PlanningRecordAppOpenErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).post<
+    PlanningRecordAppOpenResponses,
+    PlanningRecordAppOpenErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningRecordAppOpenResponse.parseAsync(data),
+    url: "/v1/metrics/open",
+    ...options,
+  });
+
+/**
+ * Get Metrics Summary
+ */
+export const planningGetMetricsSummary = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetMetricsSummaryData, ThrowOnError>,
+): RequestResult<
+  PlanningGetMetricsSummaryResponses,
+  PlanningGetMetricsSummaryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetMetricsSummaryResponses,
+    PlanningGetMetricsSummaryErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetMetricsSummaryResponse.parseAsync(data),
+    url: "/v1/metrics/summary",
+    ...options,
+  });
+
+/**
  * Replan
  */
 export const planningReplan = <ThrowOnError extends boolean = false>(
@@ -2211,6 +2294,59 @@ export const projectsGetProjectContext = <ThrowOnError extends boolean = false>(
       await zProjectsGetProjectContextResponse.parseAsync(data),
     url: "/v1/projects/{project_id}/context",
     ...options,
+  });
+
+/**
+ * Get Policy
+ *
+ * The project's approval policy (FR-5.6): gated and allowed action classes and the
+ * runaway limits (SAF-5).
+ */
+export const projectsGetPolicy = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsGetPolicyData, ThrowOnError>,
+): RequestResult<
+  ProjectsGetPolicyResponses,
+  ProjectsGetPolicyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ProjectsGetPolicyResponses,
+    ProjectsGetPolicyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsGetPolicyResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/policy",
+    ...options,
+  });
+
+/**
+ * Update Policy
+ *
+ * Replaces the gated and allowed lists at the version read (the policy editor, P2-05);
+ * emits `policy.changed` and writes its audit row. 409 `stale_version` with the current
+ * policy; 422 `policy_conflict` when a class is in both lists.
+ */
+export const projectsUpdatePolicy = <ThrowOnError extends boolean = false>(
+  options: Options<ProjectsUpdatePolicyData, ThrowOnError>,
+): RequestResult<
+  ProjectsUpdatePolicyResponses,
+  ProjectsUpdatePolicyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    ProjectsUpdatePolicyResponses,
+    ProjectsUpdatePolicyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zProjectsUpdatePolicyResponse.parseAsync(data),
+    url: "/v1/projects/{project_id}/policy",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**

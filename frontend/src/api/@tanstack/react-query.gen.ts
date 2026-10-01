@@ -81,9 +81,12 @@ import {
   planningAcceptItem,
   planningGetAlternates,
   planningGetDayCalendar,
+  planningGetDaySummary,
+  planningGetMetricsSummary,
   planningGetPlan,
   planningGetProjectWeek,
   planningMoveIssue,
+  planningRecordAppOpen,
   planningRemoveItem,
   planningReplan,
   planningSchedulePlanItem,
@@ -91,11 +94,13 @@ import {
   planningSwapItem,
   projectsArchiveProject,
   projectsCreateProject,
+  projectsGetPolicy,
   projectsGetProject,
   projectsGetProjectContext,
   projectsListProjects,
   projectsReorderProject,
   projectsUnarchiveProject,
+  projectsUpdatePolicy,
   projectsUpdateProject,
   purgesPurge,
   searchSearch,
@@ -342,6 +347,12 @@ import type {
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarError,
   PlanningGetDayCalendarResponse,
+  PlanningGetDaySummaryData,
+  PlanningGetDaySummaryError,
+  PlanningGetDaySummaryResponse,
+  PlanningGetMetricsSummaryData,
+  PlanningGetMetricsSummaryError,
+  PlanningGetMetricsSummaryResponse,
   PlanningGetPlanData,
   PlanningGetPlanError,
   PlanningGetPlanResponse,
@@ -351,6 +362,9 @@ import type {
   PlanningMoveIssueData,
   PlanningMoveIssueError,
   PlanningMoveIssueResponse,
+  PlanningRecordAppOpenData,
+  PlanningRecordAppOpenError,
+  PlanningRecordAppOpenResponse,
   PlanningRemoveItemData,
   PlanningRemoveItemError,
   PlanningRemoveItemResponse,
@@ -372,6 +386,9 @@ import type {
   ProjectsCreateProjectData,
   ProjectsCreateProjectError,
   ProjectsCreateProjectResponse,
+  ProjectsGetPolicyData,
+  ProjectsGetPolicyError,
+  ProjectsGetPolicyResponse,
   ProjectsGetProjectContextData,
   ProjectsGetProjectContextError,
   ProjectsGetProjectContextResponse,
@@ -387,6 +404,9 @@ import type {
   ProjectsUnarchiveProjectData,
   ProjectsUnarchiveProjectError,
   ProjectsUnarchiveProjectResponse,
+  ProjectsUpdatePolicyData,
+  ProjectsUpdatePolicyError,
+  ProjectsUpdatePolicyResponse,
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectError,
   ProjectsUpdateProjectResponse,
@@ -1435,6 +1455,34 @@ export const coolifyListDeployStatusOptions = (
     queryKey: coolifyListDeployStatusQueryKey(options),
   });
 
+export const planningGetDaySummaryQueryKey = (
+  options: Options<PlanningGetDaySummaryData>,
+) => createQueryKey("planningGetDaySummary", options);
+
+/**
+ * Get Day Summary
+ */
+export const planningGetDaySummaryOptions = (
+  options: Options<PlanningGetDaySummaryData>,
+) =>
+  queryOptions<
+    PlanningGetDaySummaryResponse,
+    PlanningGetDaySummaryError,
+    PlanningGetDaySummaryResponse,
+    ReturnType<typeof planningGetDaySummaryQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await planningGetDaySummary({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: planningGetDaySummaryQueryKey(options),
+  });
+
 export const deadLettersGetDeadLettersQueryKey = (
   options?: Options<DeadLettersGetDeadLettersData>,
 ) => createQueryKey("deadLettersGetDeadLetters", options);
@@ -2413,6 +2461,61 @@ export const knowledgeSearchOptions = (options: Options<KnowledgeSearchData>) =>
   });
 
 /**
+ * Record App Open
+ */
+export const planningRecordAppOpenMutation = (
+  options?: Partial<Options<PlanningRecordAppOpenData>>,
+): UseMutationOptions<
+  PlanningRecordAppOpenResponse,
+  PlanningRecordAppOpenError,
+  Options<PlanningRecordAppOpenData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningRecordAppOpenResponse,
+    PlanningRecordAppOpenError,
+    Options<PlanningRecordAppOpenData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningRecordAppOpen({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const planningGetMetricsSummaryQueryKey = (
+  options: Options<PlanningGetMetricsSummaryData>,
+) => createQueryKey("planningGetMetricsSummary", options);
+
+/**
+ * Get Metrics Summary
+ */
+export const planningGetMetricsSummaryOptions = (
+  options: Options<PlanningGetMetricsSummaryData>,
+) =>
+  queryOptions<
+    PlanningGetMetricsSummaryResponse,
+    PlanningGetMetricsSummaryError,
+    PlanningGetMetricsSummaryResponse,
+    ReturnType<typeof planningGetMetricsSummaryQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await planningGetMetricsSummary({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: planningGetMetricsSummaryQueryKey(options),
+  });
+
+/**
  * Replan
  */
 export const planningReplanMutation = (
@@ -3075,6 +3178,68 @@ export const projectsGetProjectContextOptions = (
     },
     queryKey: projectsGetProjectContextQueryKey(options),
   });
+
+export const projectsGetPolicyQueryKey = (
+  options: Options<ProjectsGetPolicyData>,
+) => createQueryKey("projectsGetPolicy", options);
+
+/**
+ * Get Policy
+ *
+ * The project's approval policy (FR-5.6): gated and allowed action classes and the
+ * runaway limits (SAF-5).
+ */
+export const projectsGetPolicyOptions = (
+  options: Options<ProjectsGetPolicyData>,
+) =>
+  queryOptions<
+    ProjectsGetPolicyResponse,
+    ProjectsGetPolicyError,
+    ProjectsGetPolicyResponse,
+    ReturnType<typeof projectsGetPolicyQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await projectsGetPolicy({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: projectsGetPolicyQueryKey(options),
+  });
+
+/**
+ * Update Policy
+ *
+ * Replaces the gated and allowed lists at the version read (the policy editor, P2-05);
+ * emits `policy.changed` and writes its audit row. 409 `stale_version` with the current
+ * policy; 422 `policy_conflict` when a class is in both lists.
+ */
+export const projectsUpdatePolicyMutation = (
+  options?: Partial<Options<ProjectsUpdatePolicyData>>,
+): UseMutationOptions<
+  ProjectsUpdatePolicyResponse,
+  ProjectsUpdatePolicyError,
+  Options<ProjectsUpdatePolicyData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ProjectsUpdatePolicyResponse,
+    ProjectsUpdatePolicyError,
+    Options<ProjectsUpdatePolicyData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await projectsUpdatePolicy({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 /**
  * Reorder Project
