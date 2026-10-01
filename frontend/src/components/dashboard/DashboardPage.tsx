@@ -7,7 +7,7 @@
 // through the `?panel=close` search param.
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { BUTTON_SECONDARY } from "../common/ui";
 import { ActivityFeed } from "./ActivityFeed";
@@ -32,6 +32,31 @@ const dashboardRoute = getRouteApi("/");
 
 /** The Close the day button shows from this hour, local time (plan default). */
 export const CLOSE_DAY_FROM_HOUR = 16;
+
+/** Close the day, shown from 16:00 in `timeZone`; it checks the clock each minute. */
+function CloseDayButton({
+  timeZone,
+  onOpen,
+}: {
+  timeZone: string;
+  onOpen: () => void;
+}) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tick = window.setInterval(() => {
+      setNow(new Date());
+    }, 60_000);
+    return () => {
+      window.clearInterval(tick);
+    };
+  }, []);
+  if (localHour(now, timeZone) < CLOSE_DAY_FROM_HOUR) return null;
+  return (
+    <button type="button" className={BUTTON_SECONDARY} onClick={onOpen}>
+      Close the day
+    </button>
+  );
+}
 
 /** Performance mark once the cards and Today render with data (A0.6, P0-29 reads it). */
 export const DASHBOARD_READY_MARK = "tumnis:dashboard-ready";
@@ -79,10 +104,7 @@ export function DashboardPage() {
     (deployStatus.data ?? []).map((entry) => [entry.project_id, entry.apps]),
   );
 
-  const now = new Date();
-  const closeDay = planDay ?? localDay(now, timeZone);
-  const showCloseDay = localHour(now, timeZone) >= CLOSE_DAY_FROM_HOUR;
-  const closeDayButton = useRef<HTMLButtonElement>(null);
+  const closeDay = planDay ?? localDay(new Date(), timeZone);
   const setPanel = (next: "close" | undefined) => {
     void navigate({ search: (prev) => ({ ...prev, panel: next }) });
   };
@@ -105,18 +127,12 @@ export function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {showCloseDay && (
-            <button
-              ref={closeDayButton}
-              type="button"
-              className={BUTTON_SECONDARY}
-              onClick={() => {
-                setPanel("close");
-              }}
-            >
-              Close the day
-            </button>
-          )}
+          <CloseDayButton
+            timeZone={timeZone}
+            onOpen={() => {
+              setPanel("close");
+            }}
+          />
           <ReviewBadge count={reviewCount.data?.count ?? 0} />
         </div>
       </header>
@@ -155,7 +171,6 @@ export function DashboardPage() {
           day={closeDay}
           onClose={() => {
             setPanel(undefined);
-            closeDayButton.current?.focus();
           }}
         />
       )}

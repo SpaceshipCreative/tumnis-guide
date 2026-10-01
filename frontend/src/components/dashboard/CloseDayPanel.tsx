@@ -2,7 +2,8 @@
 // Agents finished, Queued overnight, Rolls over), each a card that says so when it is
 // empty. Rollover counts are plain numbers in the body colour (UX 8: no warning colour,
 // no shame). Nothing here asks for input: Done or Escape closes the panel and writes
-// nothing, so skipping the day close costs nothing. On a phone the panel is a full-height
+// nothing, so skipping the day close costs nothing. Closing it gives focus back to what
+// opened it. On a phone the panel is a full-height
 // sheet; on a laptop a centred dialog.
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, type ReactNode } from "react";
@@ -87,7 +88,19 @@ export function CloseDayPanel({
   const done = useRef<HTMLButtonElement>(null);
   const summary = useQuery(daySummaryQuery(day));
   useEffect(() => {
+    // Whatever had focus opened the panel; it gets focus back when the panel goes, unless
+    // something else has taken it by then.
+    const opener =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     done.current?.focus();
+    return () => {
+      const lost =
+        document.activeElement === null ||
+        document.activeElement === document.body;
+      if (lost && opener?.isConnected) opener.focus();
+    };
   }, []);
 
   const data = summary.data;

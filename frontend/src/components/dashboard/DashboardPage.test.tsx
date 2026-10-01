@@ -1,6 +1,6 @@
 // The dashboard route (P0-23, UX 1, FR-1.1, FR-1.2): the loader fills the cache before the
 // first render, so the page opens with its data and never shows a spinner.
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { expect, test, vi } from "vitest";
 
@@ -197,8 +197,27 @@ test("[P1-18][J7] Close the day shows from 16:00 local and opens the panel", asy
         expect(screen.queryByRole("dialog")).toBeNull();
       });
       expect(router.state.location.search).not.toHaveProperty("panel");
+      // Focus goes back to the button that opened the panel.
+      expect(
+        screen.getByRole("button", { name: "Close the day" }),
+      ).toHaveFocus();
       unmount();
     }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("[P1-18][J7] Close the day appears at 16:00 on an idle dashboard", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  try {
+    vi.setSystemTime(new Date("2026-03-09T19:59:30Z")); // 15:59:30 in New York (EDT)
+    await renderRoute("/", { viewport: "laptop" });
+    expect(screen.queryByRole("button", { name: "Close the day" })).toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+    expect(
+      screen.getByRole("button", { name: "Close the day" }),
+    ).toBeInTheDocument();
   } finally {
     vi.useRealTimers();
   }
