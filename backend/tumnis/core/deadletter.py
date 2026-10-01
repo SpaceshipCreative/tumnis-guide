@@ -266,12 +266,6 @@ def dbos_client() -> "DBOSClient":
     return _dbos_client()
 
 
-def dbos_configured() -> bool:
-    """Whether `dbos_client` has a client to answer with (an app without a DBOS system
-    database, as many route tests run, has none)."""
-    return _client is not None or _client_url is not None
-
-
 def close() -> None:
     """Destroy a client this module built (application shutdown)."""
     global _client, _client_owned  # process-wide client

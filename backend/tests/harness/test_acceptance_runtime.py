@@ -56,6 +56,7 @@ MONDAY_PICKS = [
     "Generate March analytics report",
 ]
 SETTLE_S = 30.0
+SILENT_END_S = 10.0  # well under the 90 s run timeout a silent fake would otherwise hold
 
 
 def _rows(db: DbUrls, query: str, *params: Any) -> list[dict[str, Any]]:
@@ -263,14 +264,15 @@ async def test_unscripted_fake_dispatch_is_recorded_and_left_running(
 
 @pytest.mark.req("A1.2", "A2.6")
 @pytest.mark.xfail(strict=True, reason="spec:SEED")
-async def test_reset_cancels_the_last_tests_workflows(
+async def test_a_silent_fake_run_ends_when_a_reset_removes_it(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
 ) -> None:
     """T-SEED-23
-    A reset starts a fresh world, workflows included. A morning build left waiting on an
-    unscripted master holds the one-at-a-time maintenance queue for the run timeout; the
-    next test's reset cancels it (and anything else still pending or enqueued), so the
-    next test's planner tick builds its plan at once instead of queueing behind it."""
+    A morning build left waiting on an unscripted (silent) fake master would hold the
+    one-at-a-time maintenance queue for the whole run timeout, into the next test. Once a
+    reset has removed its run, the fake tells the waiting run its runner is lost, so the
+    build ends within seconds and the next test's planner tick builds its plan at once
+    instead of queueing behind it."""
     from tumnis.modules.planning import api as planning  # noqa: PLC0415
     from tumnis.modules.planning import testing as planning_testing  # noqa: PLC0415
 
@@ -288,8 +290,16 @@ async def test_reset_cancels_the_last_tests_workflows(
     assert await _until(lambda: _rows(db, "SELECT id FROM runs WHERE status = 'running'"))
 
     await _reset(client)
-    [status] = await dbos.list_workflows_async(workflow_ids=[stale], load_input=False)
-    assert status.status == "CANCELLED"
+
+    async def ended() -> bool:
+        [status] = await dbos.list_workflows_async(workflow_ids=[stale], load_input=False)
+        return status.status not in {"PENDING", "ENQUEUED"}
+
+    for _ in range(int(SILENT_END_S / 0.2)):
+        if await ended():
+            break
+        await asyncio.sleep(0.2)
+    assert await ended()
 
     await _script(client, "tumnis-master", "plan", "plan__monday_four_picks")
     clock = await client.post("/v1/test/clock", json={"time": MONDAY_PLAN_TIME})
