@@ -89,6 +89,20 @@ export const handlers: RequestHandler[] = [
       version: 1,
     } satisfies PolicyOut),
   ),
+  // The Context rail's Knowledge section (P1-17): no items, an empty quota. A test with
+  // knowledge declares a KnowledgeFake.
+  http.get("*/v1/knowledge/documents", () =>
+    HttpResponse.json({ items: [], next_cursor: null }),
+  ),
+  http.get("*/v1/knowledge/quota", ({ request }) =>
+    HttpResponse.json({
+      project_id: new URL(request.url).searchParams.get("project_id"),
+      count: 0,
+      used_bytes: 0,
+      project_bytes: 0,
+      quota_bytes: 10 * 1024 ** 3,
+    }),
+  ),
   // The shell's app-open ping (P1-18), sent on every signed-in start.
   appOpen,
   ...dashboardDefaults,
