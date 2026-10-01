@@ -387,9 +387,12 @@ async def delegation_snapshot(s: AsyncSession, delegation_id: UUID, timeout_s: i
     if run is None:
         raise NotFound("delegations", delegation_id)
     run_status = RunStatus(run.status)
+    status = wait_status(run_status)
     question = None
     if run_status is RunStatus.WAITING_ON_HUMAN:
         question = await _open_question(s, delegation_id)
+        if question is None:  # answered; the run resumes once its workflow hears it
+            status = "still_running"
     summary = None
     if run_status is RunStatus.SUCCEEDED:
         result = await tasks.result_of_run(s, delegation_id)
@@ -399,7 +402,7 @@ async def delegation_snapshot(s: AsyncSession, delegation_id: UUID, timeout_s: i
         with contextlib.suppress(NotFound):
             task_status = (await tasks.get_task(s, run.task_id)).status.value
     out = WaitOut(
-        status=wait_status(run_status),
+        status=status,
         run_status=run_status,
         question=question,
         result_summary=summary,
