@@ -1,6 +1,6 @@
 import { http, HttpResponse, type RequestHandler } from "msw";
 
-import type { PageReviewItemOut } from "../../api/types.gen";
+import type { PageReviewItemOut, PolicyOut } from "../../api/types.gen";
 import { dashboardDefaults } from "./dashboard";
 import { workingHours } from "./planning";
 
@@ -73,6 +73,19 @@ export const handlers: RequestHandler[] = [
       },
       { status: 404 },
     ),
+  ),
+  // The Settings rail section's policy editor (P2-05): the FR-5.6 default policy.
+  http.get("*/v1/projects/:projectId/policy", ({ params }) =>
+    HttpResponse.json({
+      project_id: String(params.projectId),
+      gated: ["send_email", "merge_main", "deploy_production"],
+      allowed: ["push_feature_branch", "open_pull_request", "read"],
+      tool_allowlist: [],
+      max_concurrent_runs: 2,
+      max_run_minutes: 60,
+      max_tasks_per_run: 20,
+      version: 1,
+    } satisfies PolicyOut),
   ),
   ...dashboardDefaults,
 ];

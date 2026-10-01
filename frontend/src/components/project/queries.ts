@@ -7,6 +7,7 @@ import { queryOptions } from "@tanstack/react-query";
 
 import {
   knowledgeGetBriefOptions,
+  projectsGetPolicyOptions,
   projectsGetProjectOptions,
   tasksGetBoardOptions,
   tasksListCommentsOptions,
@@ -32,6 +33,10 @@ export const TASK_PAGE_LIMIT = 200; // the API's largest page
 
 export const projectQuery = (projectId: string) =>
   projectsGetProjectOptions({ path: { project_id: projectId } });
+
+/** The project's approval policy (FR-5.6), which the policy editor edits (P2-05). */
+export const policyQuery = (projectId: string) =>
+  projectsGetPolicyOptions({ path: { project_id: projectId } });
 
 // The generated validators check a whole response in one task; these check the same
 // schemas a slice of tasks or cards at a time (lib/validate.ts, PERF-2).
