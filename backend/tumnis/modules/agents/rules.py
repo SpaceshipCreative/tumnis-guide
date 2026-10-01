@@ -26,7 +26,7 @@ from collections.abc import Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Annotated, Final, Literal, Protocol
+from typing import Annotated, Any, Final, Literal, Protocol, get_args
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -608,6 +608,305 @@ def reach_targets(
         )
     )
     return ReachTargets(own_repos, foreign_repos, own_apps, foreign_apps, owners)
+
+
+# --- Digests (P2-03, FR-13.1, FR-13.4) -------------------------------------------------------
+#
+# A digest entry sits at a position (tx, seq): the ID of the transaction that wrote it and a
+# sequence within the table. A reader returns only entries whose transaction is below the
+# oldest one still running, so a position it hands out never has an uncommitted entry
+# behind it (see `agents.digest`).
+
+
+class DigestCursorInvalid(ValueError):  # noqa: N818  # carries the problem code
+    """A cursor that was never issued to this consumer (400 `invalid_cursor`)."""
+
+    code = "invalid_cursor"
+
+
+@dataclass(frozen=True, order=True)
+class Pos:
+    tx: int
+    seq: int
+
+
+ZERO_POS: Final = Pos(0, 0)
+
+
+def resolve_start(acked: Pos, since: Pos | None, issued_max: Pos) -> tuple[Pos, Pos]:
+    """Returns (new_acked, read_from).
+
+    - since None: read from acked (the last digest may be sent again if its answer was
+      lost);
+    - since past everything issued: DigestCursorInvalid (forged, or another consumer's);
+    - since at or past acked: acknowledge it and read from it;
+    - since before acked (stale): read from acked; acknowledged entries never come again.
+    """
+    if since is None:
+        return acked, acked
+    if since > issued_max:
+        raise DigestCursorInvalid("That cursor was not issued to this consumer")
+    if since >= acked:
+        return since, since
+    return acked, acked
+
+
+DigestKind = Literal[
+    "label_override",
+    "result_rejected",
+    "result_accepted",
+    "approval_decided",
+    "question_answered",
+    "estimate_vs_actual",
+    "task_changed",
+    "task_commented",
+    "document_changed",
+    "proposal_accepted",
+    "context_linked",
+    "focus_response",
+    "focus_setting_changed",
+]
+DigestScope = Literal["project", "workspace"]
+DIGEST_KINDS: Final[tuple[str, ...]] = get_args(DigestKind)
+# Project entries of these kinds are also listed in the workspace digest (FR-13.4).
+ALSO_IN_WORKSPACE: Final = frozenset({"label_override"})
+# The events the digest subscribes to (`focus.*` are P2-15's).
+DIGEST_EVENTS: Final = (
+    "human.decided",
+    "task.created",
+    "task.status_changed",
+    "task.commented",
+    "document.added",
+    "document.changed",
+    "context_item.linked",
+    "focus.level_changed",
+    "focus.responded",
+)
+# P1-07 names a person's label over the AI's `label_override`; a low-confidence label
+# item decided in review (P1-13) is `label`, an override unless the proposal was kept.
+_LABEL_ITEM_KINDS: Final = frozenset({"label", "label_override"})
+_DEFERRED: Final = frozenset({"snooze"})  # comes back later: not a decision yet
+
+
+@dataclass(frozen=True)
+class TaskFacts:
+    """What the subscriber reads of the task an event names (through tasks' api)."""
+
+    task_id: UUID
+    project_id: UUID
+    estimate_minutes: int | None = None
+    actual_minutes: int | None = None
+
+
+@dataclass(frozen=True)
+class DigestEvent:
+    name: str
+    payload: Mapping[str, Any]
+    actor: str
+    task: TaskFacts | None = None
+
+
+@dataclass(frozen=True)
+class EntrySpec:
+    kind: str
+    scope: DigestScope
+    project_id: UUID | None
+    task_id: UUID | None
+    data: dict[str, Any]
+
+
+def _uuid(value: object) -> UUID | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, UUID):
+        return value
+    try:
+        return UUID(str(value))
+    except ValueError:
+        return None
+
+
+def _str(value: object) -> str | None:
+    return None if value is None else str(value)
+
+
+def _extra(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    found = payload.get("payload")
+    return found if isinstance(found, Mapping) else {}
+
+
+def digest_task_id(name: str, payload: Mapping[str, Any]) -> UUID | None:
+    """The task whose facts `classify_event` needs for this event, if any."""
+    if name == "human.decided":
+        if payload.get("target_type") == "task":
+            return _uuid(payload.get("target_id"))
+        return _uuid(_extra(payload).get("task_id"))
+    if name in {"task.status_changed", "focus.responded"}:
+        return _uuid(payload.get("task_id"))
+    return None
+
+
+# P2-05's decisions carry only the decision body ({answer}, {reason}); the question's
+# prompt and the approval's action class are on the review item: its payload's field ->
+# the field the digest entry reads.
+_ITEM_FACTS: Final[Mapping[str, Mapping[str, str]]] = {
+    "question": {"prompt": "question"},
+    "approval": {"action_class": "action_class"},
+}
+
+
+def review_item_needed(name: str, payload: Mapping[str, Any]) -> UUID | None:
+    """The review item whose payload `with_review_item` needs for this event, if any."""
+    if name != "human.decided" or payload.get("item_kind") not in _ITEM_FACTS:
+        return None
+    return _uuid(payload.get("item_id"))
+
+
+def with_review_item(payload: Mapping[str, Any], item_payload: Mapping[str, Any]) -> dict[str, Any]:
+    """The decision with the review item's facts added to its `payload`, never over what
+    the event already says; other kinds come back unchanged."""
+    facts = _ITEM_FACTS.get(str(payload.get("item_kind")))
+    if facts is None:
+        return dict(payload)
+    extra = dict(_extra(payload))
+    for source, field in facts.items():
+        if extra.get(field) is None and item_payload.get(source) is not None:
+            extra[field] = item_payload[source]
+    return {**payload, "payload": extra}
+
+
+def _decided(p: Mapping[str, Any]) -> tuple[str, dict[str, Any]] | None:  # noqa: PLR0911
+    """(kind, data) for a human decision, or None when the digest does not carry it."""
+    item_kind, decision = p.get("item_kind"), str(p.get("decision"))
+    extra, reason = _extra(p), p.get("reason")
+    if decision in _DEFERRED:
+        return None
+    if item_kind in _LABEL_ITEM_KINDS:
+        if item_kind == "label" and decision == "accept":
+            return None
+        previous = p.get("previous")
+        before = previous.get("label") if isinstance(previous, Mapping) else None
+        return "label_override", {
+            "from": before,
+            "to": extra.get("value", decision),
+            "reason": reason,
+        }
+    if item_kind == "result" and decision == "accept":
+        return "result_accepted", {"run_id": _str(extra.get("run_id"))}
+    if item_kind == "result" and decision == "reject":
+        return "result_rejected", {
+            "run_id": _str(extra.get("run_id")),
+            "feedback": reason if reason is not None else extra.get("feedback"),
+        }
+    if item_kind == "approval" and decision in {"approve", "deny"}:
+        return "approval_decided", {
+            "action_class": extra.get("action_class"),
+            "decision": decision,
+            "reason": reason,
+        }
+    if item_kind == "question" and decision == "answer":
+        return "question_answered", {
+            "question": extra.get("question"),
+            "answer": extra.get("answer", reason),
+        }
+    if item_kind == "proposal" and decision == "accept":
+        return "proposal_accepted", {
+            "proposal_id": _str(p.get("item_id")),
+            "created_task_id": _str(extra.get("task_id")),
+        }
+    return None
+
+
+def _project_entry(
+    kind: str, project: UUID | None, task: UUID | None, data: dict[str, Any]
+) -> list[EntrySpec]:
+    """One project entry, or none when its project is unknown (the task is gone)."""
+    if project is None:
+        return []
+    body = {"task_id": _str(task), **data} if task is not None else data
+    return [EntrySpec(kind, "project", project, task, body)]
+
+
+def _status_changed(p: Mapping[str, Any], facts: TaskFacts | None) -> list[EntrySpec]:
+    project = facts.project_id if facts is not None else None
+    task_id, to = _uuid(p.get("task_id")), p.get("to")
+    change = {"change": "status", "from": p.get("from"), "to": to}
+    specs = _project_entry("task_changed", project, task_id, change)
+    if to == "done" and facts is not None and facts.actual_minutes is not None:
+        actual = {
+            "estimate_minutes": facts.estimate_minutes,
+            "actual_minutes": facts.actual_minutes,
+        }
+        specs += _project_entry("estimate_vs_actual", project, task_id, actual)
+    return specs
+
+
+def _commented(p: Mapping[str, Any]) -> list[EntrySpec]:
+    author_kind = str(p.get("author") or "").partition(":")[0] or "system"
+    data = {
+        "comment_id": _str(p.get("comment_id")),
+        "author_kind": author_kind,
+        "trusted": author_kind == "user",  # a person's words; anything else is untrusted
+        "text": str(p.get("text") or ""),
+    }
+    return _project_entry(
+        "task_commented", _uuid(p.get("project_id")), _uuid(p.get("task_id")), data
+    )
+
+
+def _document(name: str, p: Mapping[str, Any]) -> list[EntrySpec]:
+    data = {
+        "document_id": _str(p.get("document_id")),
+        "change": name.partition(".")[2],
+        "version": p.get("version_no"),
+        "trust": p.get("trust"),
+        "title": p.get("title"),
+    }
+    project = _uuid(p.get("project_id"))
+    if project is None:  # the workspace knowledge base
+        return [EntrySpec("document_changed", "workspace", None, None, data)]
+    return _project_entry("document_changed", project, None, data)
+
+
+def classify_event(event: DigestEvent) -> list[EntrySpec]:  # noqa: PLR0911
+    """The digest entries an event makes (the plan's table), nothing else. Pure: the
+    subscriber reads the task's facts first (`digest_task_id`) and passes them in."""
+    p, facts = event.payload, event.task
+    task_project = facts.project_id if facts is not None else None
+    match event.name:
+        case "human.decided":
+            found = _decided(p)
+            if found is None:
+                return []
+            project = _uuid(_extra(p).get("project_id")) or task_project
+            return _project_entry(found[0], project, digest_task_id(event.name, p), found[1])
+        case "task.created":
+            doc = p.get("doc")
+            title = doc.get("title") if isinstance(doc, Mapping) else None
+            data = {"change": "created", "title": title, "label": p.get("label")}
+            project = _uuid(p.get("project_id"))
+            return _project_entry("task_changed", project, _uuid(p.get("task_id")), data)
+        case "task.status_changed":
+            return _status_changed(p, facts)
+        case "task.commented":
+            return _commented(p)
+        case "document.added" | "document.changed":
+            return _document(event.name, p)
+        case "context_item.linked":
+            data = {
+                "context_item_id": _str(p.get("context_item_id")),
+                "target_type": p.get("target_type"),
+            }
+            project, task_id = _uuid(p.get("project_id")), _uuid(p.get("task_id"))
+            return _project_entry("context_linked", project, task_id, data)
+        case "focus.responded":
+            response = {"response": p.get("response")}
+            return _project_entry("focus_response", task_project, _uuid(p.get("task_id")), response)
+        case "focus.level_changed":
+            data = {"from": p.get("from"), "to": p.get("to"), "scope": p.get("scope")}
+            return [EntrySpec("focus_setting_changed", "workspace", None, None, data)]
+        case _:
+            return []
 
 
 # --- Untrusted blocks and task tokens (P2-02, SAF-1, R-24, R-27) --------------------------

@@ -1,4 +1,4 @@
-"""agents event payload models and subscribers (P1-06, P1-13, P2-04).
+"""agents event payload models and subscribers (P1-06, P1-13, P2-04, P2-05, P1-08, P2-03).
 
 - `agents.provision_project` listens to `project.created`: it starts the project's
   `provision_profile` workflow (a new profile from the template, or a link to an existing
@@ -49,6 +49,12 @@ its own workflow keyed on the event): every task write passes through them, and 
 delivery each would add a workflow per `task.created` and per `task.updated` to the
 events queue (a bulk import or the seed's thousands of tasks).
 
+Digests (P2-03, FR-13.1): one subscriber per event the digests carry
+(`rules.DIGEST_EVENTS`), named `agents.digest_<event with dots as underscores>`. Each
+turns the event into its digest entries (`api.record_event`); a redelivered event adds
+nothing (one entry per event and kind). They subscribe by name: `document.*` is P1-16's
+payload and `focus.*` P2-15's, and the entries read the payload as data.
+
 Subscriber names are part of every delivery's workflow id, so they never change.
 """
 
@@ -59,7 +65,7 @@ from uuid import UUID
 
 from tumnis.core.clock import SystemClock
 from tumnis.core.errors import ProblemError
-from tumnis.core.events import EventEnvelope, subscribe
+from tumnis.core.events import EventEnvelope, Handler, subscribe
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR, ActorRef
 from tumnis.core.versioning import NotFound
@@ -68,12 +74,13 @@ from tumnis.core.versioning import NotFound
 # fills at import: loading the subscribers loads the workflow too, in every process.
 from tumnis.modules.agents import api, human_flows, signals, workflows
 from tumnis.modules.agents.review_kinds import APPROVAL, QUESTION, RESULT
-from tumnis.modules.agents.rules import ESTIMATED_LABELS, enrichment_settled
+from tumnis.modules.agents.rules import DIGEST_EVENTS, ESTIMATED_LABELS, enrichment_settled
 from tumnis.modules.tasks import api as tasks
 
 __all__ = [
     "APPROVAL_SUBSCRIBER",
     "CANCEL_PAUSED_SUBSCRIBER",
+    "DIGEST_SUBSCRIBERS",
     "DISPATCH_SUBSCRIBER",
     "ENRICH_CREATE_SUBSCRIBER",
     "ENRICH_UPDATE_SUBSCRIBER",
@@ -85,10 +92,12 @@ __all__ = [
     "apply_review_decision",
     "cancel_paused_runs",
     "deliver_run_signal",
+    "digest_subscriber_name",
     "enrich_on_create",
     "enrich_on_update",
     "project_has_agent",
     "provision_project",
+    "record_digest_entries",
     "release_held_runs",
     "start_approval_flow",
     "start_dispatch",
@@ -333,3 +342,32 @@ async def enrich_on_update(envelope: EventEnvelope) -> None:
         key=str(envelope.event_id),
         only=["estimate_minutes"] if task.enrichment_status == "done" else None,
     )
+
+
+def digest_subscriber_name(event: str) -> str:
+    return f"agents.digest_{event.replace('.', '_')}"
+
+
+async def record_digest_entries(envelope: EventEnvelope) -> None:
+    """Idempotent: an entry already there for this event and kind is left alone."""
+    ctx = WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)
+    async with tenant_session(ctx) as s:
+        await api.record_event(
+            s,
+            name=envelope.name,
+            payload=envelope.payload,
+            actor=envelope.actor,
+            event_id=envelope.event_id,
+            occurred_at=envelope.occurred_at,
+        )
+
+
+def _register(event: str) -> Handler:
+    async def handler(envelope: EventEnvelope) -> None:
+        await record_digest_entries(envelope)
+
+    handler.__name__ = digest_subscriber_name(event).partition(".")[2]
+    return subscribe(event, name=digest_subscriber_name(event))(handler)
+
+
+DIGEST_SUBSCRIBERS = {event: _register(event) for event in DIGEST_EVENTS}

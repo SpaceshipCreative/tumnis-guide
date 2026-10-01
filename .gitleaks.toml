@@ -32,3 +32,9 @@ description = "The golden task packets' made-up task token (P2-02): tmt_abcdefgh
 targetRules = ["tumnis-token"]
 regexTarget = "secret"
 regexes = ['''^tmt_abcdefghijkl_A{43}$''']
+
+[[allowlists]]
+description = "Actor refs (api_key:<uuid>) name an API key's id, not the key; real keys use the tmn_ format and the tumnis-token rule (Scott decision 38)"
+targetRules = ["generic-api-key"]
+regexTarget = "match"
+regexes = ['''api_key:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"?$''']

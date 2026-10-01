@@ -16,8 +16,8 @@ from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 
 from tumnis.core.migration_helpers import create_tenant_table, drop_tenant_table
 
-revision = "agents_0007"
-down_revision = "agents_0006"
+revision = "agents_0008"
+down_revision = "agents_0007"
 branch_labels = None
 depends_on = None
 phase = "expand"

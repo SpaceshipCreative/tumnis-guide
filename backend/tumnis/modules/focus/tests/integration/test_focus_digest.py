@@ -22,7 +22,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-10.4")
 @pytest.mark.wp("P2-15")
-@pytest.mark.xfail(strict=True, reason="spec:P2-15")
 async def test_responses_join_project_digest(dbos: Any, focus: Focus) -> None:
     """T-P2-15-18
     A still-on-it answer to a check-in becomes one `focus_response` entry in the task's

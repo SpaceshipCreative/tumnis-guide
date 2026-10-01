@@ -1,4 +1,4 @@
-"""agents MCP tools; thin calls into api.py (P2-02, FR-5.4, R-24).
+"""agents MCP tools; thin calls into api.py (P2-02, FR-5.4, R-24; P2-03, FR-13.1, FR-13.4).
 
 | Tool | Scope | REST twin |
 | --- | --- | --- |
@@ -7,6 +7,8 @@
 | `ask_human` | tasks:write | `POST /v1/runs/{run_id}/questions` |
 | `request_approval` | tasks:write | `POST /v1/runs/{run_id}/approvals` |
 | `pause_agents` | delegate, master only | `POST /v1/agents/pause` |
+| `get_project_digest` | tasks:read | `GET /v1/digests/project/{project_id}` |
+| `get_workspace_digest` | tasks:read | `GET /v1/digests/workspace` |
 
 `get_task_packet` answers the task's packet as a run of the caller would get it, without a
 token (`callback.task_token: null`): the token exists only in the packet a dispatch sends.
@@ -16,6 +18,9 @@ token (`callback.task_token: null`): the token exists only in the packet a dispa
 every agent, or one project's, and can never resume them (a person resumes in the app).
 Its twin also takes a session (the app's kill switch), which the router serves directly.
 
+The digests' consumer, whose cursor moves, is the caller's profile, or the API key when
+the key belongs to no profile. Reading acknowledges the page named by `since` (P2-03).
+
 agents also tells the agent surface which profile a caller acts for (`CallerFacts`): an
 API key linked to a profile (`set_profile_key`) acts for that profile, and the master
 profile's key is the master; a task token acts for its run's profile.
@@ -24,6 +29,7 @@ profile's key is the master; a task token acts for its run's profile.
 from typing import Any, Literal
 from uuid import UUID
 
+from pydantic import Field
 from sqlalchemy import Table, select
 
 from tumnis.core import agent_surface as surface
@@ -322,6 +328,104 @@ PAUSE_AGENTS = surface.register_op(
         project_resolver=None,
         handler=_pause,
         master_only=True,
+    )
+)
+
+
+# --- Digests (P2-03, FR-13.1, FR-13.4) ------------------------------------------------------
+
+DEFAULT_LIMIT = 200  # plan default
+
+
+class WorkspaceDigestIn(surface.SurfaceInput):
+    since: str | None = Field(
+        default=None,
+        max_length=512,
+        description="The `next_cursor` of the previous answer; it acknowledges that page.",
+    )
+    limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=1000)
+
+
+class ProjectDigestIn(WorkspaceDigestIn):
+    project_id: UUID
+
+
+def _consumer(call: surface.SurfaceCall) -> UUID:
+    consumer = call.caller.profile_id or call.caller.key_id
+    if consumer is None:  # pragma: no cover  # authorize_call refused anonymous callers
+        raise ProblemError(401, "unauthenticated", "Send an API key or a task token")
+    return consumer
+
+
+async def _project_digest(call: surface.SurfaceCall, data: ProjectDigestIn) -> api.DigestOut:
+    return await api.read_digest(
+        call.session,
+        call.caller.principal.workspace_context(),
+        consumer_id=_consumer(call),
+        scope="project",
+        project_id=data.project_id,
+        since=data.since,
+        limit=data.limit,
+        project_ids=call.project_ids,
+    )
+
+
+async def _workspace_digest(call: surface.SurfaceCall, data: WorkspaceDigestIn) -> api.DigestOut:
+    return await api.read_digest(
+        call.session,
+        call.caller.principal.workspace_context(),
+        consumer_id=_consumer(call),
+        scope="workspace",
+        project_id=None,
+        since=data.since,
+        limit=data.limit,
+        project_ids=call.project_ids,
+    )
+
+
+GET_PROJECT_DIGEST = surface.register_op(
+    surface.SurfaceOp(
+        name="get_project_digest",
+        description=(
+            "Read what changed in a project since your last acknowledged digest: human"
+            " decisions (label overrides, results accepted or rejected with feedback,"
+            " approvals, answers, accepted proposals), task changes and comments, estimate"
+            " against actual time, knowledge edits and the full text of newly linked items."
+            " Each entry comes once per caller: pass the previous answer's `next_cursor` as"
+            " `since` to acknowledge it, and read again while `has_more` is true."
+        ),
+        scope="tasks:read",
+        input_model=ProjectDigestIn,
+        output_model=api.DigestOut,
+        rest_method="GET",
+        rest_path="/v1/digests/project/{project_id}",
+        write=False,
+        updates_existing=False,
+        project_arg="project_id",
+        project_resolver=None,
+        handler=_project_digest,
+    )
+)
+
+GET_WORKSPACE_DIGEST = surface.register_op(
+    surface.SurfaceOp(
+        name="get_workspace_digest",
+        description=(
+            "Read the workspace-wide signals since your last acknowledged digest: label"
+            " overrides across projects, workspace knowledge base changes and focus setting"
+            " changes. Pass the previous answer's `next_cursor` as `since` to acknowledge"
+            " it, and read again while `has_more` is true."
+        ),
+        scope="tasks:read",
+        input_model=WorkspaceDigestIn,
+        output_model=api.DigestOut,
+        rest_method="GET",
+        rest_path="/v1/digests/workspace",
+        write=False,
+        updates_existing=False,
+        project_arg=None,
+        project_resolver=None,
+        handler=_workspace_digest,
     )
 )
 

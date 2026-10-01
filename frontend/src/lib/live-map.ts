@@ -170,4 +170,8 @@ export const NOT_LIVE = [
   "decisionsGetCalibration",
   // The local metrics are a summary over days, read when Settings > Metrics opens (P1-18).
   "planningGetMetricsSummary",
+  // The digests are an agent's read-once feed (P2-03): each read moves the caller's
+  // cursor, so the UI never caches or refetches them.
+  "agentsGetProjectDigest",
+  "agentsGetWorkspaceDigest",
 ] as const;
