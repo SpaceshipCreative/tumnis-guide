@@ -4,7 +4,7 @@
 // scroll at 1280 x 800), one column on a phone with quick add in thumb reach. Each part is
 // a card (DS-01, ADR-0012). The route loader has filled the cache, so the first render
 // has data. From 16:00 local a Close the day button opens the day-close panel (P1-18, J7)
-// through the `?panel=close` search param.
+// through the `?panel=close` search param. The focus level chip (P2-15) sits beside it.
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -14,6 +14,7 @@ import { ActivityFeed } from "./ActivityFeed";
 import { CalendarStrip } from "./CalendarStrip";
 import { CloseDayPanel } from "./CloseDayPanel";
 import { FitOfferList } from "./FitOfferRow";
+import { FocusLevel } from "./FocusLevel";
 import { formatToday, localDay, localHour } from "./format";
 import { ProjectCardGrid } from "./ProjectCardGrid";
 import {
@@ -127,6 +128,7 @@ export function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <FocusLevel />
           <CloseDayButton
             timeZone={timeZone}
             onOpen={() => {
