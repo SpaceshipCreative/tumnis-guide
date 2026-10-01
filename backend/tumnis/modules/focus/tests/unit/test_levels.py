@@ -10,7 +10,6 @@ import pytest
 
 @pytest.mark.req("FR-10.2", "FR-10.6")
 @pytest.mark.wp("P4-01")
-@pytest.mark.xfail(strict=True, reason="spec:P4-01")
 def test_detour_capture_only_at_guardrail() -> None:
     """T-P4-01-01
     `captures_detour` is true at Guardrail and nowhere else; Guardrail's events are still

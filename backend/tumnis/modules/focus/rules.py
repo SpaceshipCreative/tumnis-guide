@@ -229,21 +229,53 @@ class TaskLite:
     status: str
 
 
+_SKIPPED: Final[frozenset[str]] = frozenset({"done", "waiting_on_human"})
+
+
 def captures_detour(level: Level) -> bool:
-    raise NotImplementedError
+    """A switch is captured as a detour task only at Guardrail (FR-10.6)."""
+    return level == "guardrail"
+
+
+def _eligible(plan: Sequence[PlanItemLite], tasks: Mapping[UUID, TaskLite]) -> list[PlanItemLite]:
+    """Accepted items, by position, whose task exists and is neither Done nor waiting on
+    the human."""
+    return sorted(
+        (
+            item
+            for item in plan
+            if item.accepted
+            and item.task_id in tasks
+            and tasks[item.task_id].status not in _SKIPPED
+        ),
+        key=lambda item: item.position,
+    )
 
 
 def current_guardrail_task(
     plan: Sequence[PlanItemLite], tasks: Mapping[UUID, TaskLite]
 ) -> UUID | None:
-    raise NotImplementedError
+    """The In progress task if one is in today's plan; else the first eligible accepted
+    item by position; else None. An In progress task outside the plan (a detour) never
+    replaces the plan's task."""
+    eligible = _eligible(plan, tasks)
+    for item in eligible:
+        if tasks[item.task_id].status == "in_progress":
+            return item.task_id
+    return eligible[0].task_id if eligible else None
 
 
 def next_guardrail_task(
     plan: Sequence[PlanItemLite], tasks: Mapping[UUID, TaskLite], current: UUID | None
 ) -> UUID | None:
-    raise NotImplementedError
+    """The first eligible item after `current`'s position; None without a current task,
+    when it is not in the plan, or after the last one."""
+    at = next((item.position for item in plan if item.task_id == current), None)
+    if at is None:
+        return None
+    return next((item.task_id for item in _eligible(plan, tasks) if item.position > at), None)
 
 
 def is_detour(to_task_id: UUID | None, today_task_ids: frozenset[UUID]) -> bool:
-    raise NotImplementedError
+    """Free text (no task) or a task not in Today."""
+    return to_task_id is None or to_task_id not in today_task_ids

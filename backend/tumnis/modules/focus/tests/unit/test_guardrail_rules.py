@@ -100,7 +100,6 @@ TABLE: list[tuple[str, tuple[tuple[UUID, int, bool], ...], dict[str, str], Any, 
 
 @pytest.mark.req("FR-10.6")
 @pytest.mark.wp("P4-01")
-@pytest.mark.xfail(strict=True, reason="spec:P4-01")
 def test_current_and_next_task_table() -> None:
     """T-P4-01-02
     In progress (inside today's plan) wins; Done and waiting-on-the-human items are
@@ -124,7 +123,6 @@ def test_current_and_next_task_table() -> None:
 
 @pytest.mark.req("FR-10.6")
 @pytest.mark.wp("P4-01")
-@pytest.mark.xfail(strict=True, reason="spec:P4-01")
 def test_is_detour() -> None:
     """T-P4-01-03
     Free text (no task) and a task not in Today are detours; a task in Today is not.
