@@ -2307,6 +2307,18 @@
       },
       "FocusMessageOut": {
         "properties": {
+          "clip_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
           "fired_at": {
             "format": "date-time",
             "title": "Fired At",
@@ -2366,6 +2378,10 @@
             "title": "Rule",
             "type": "string"
           },
+          "speak": {
+            "title": "Speak",
+            "type": "boolean"
+          },
           "task_id": {
             "anyOf": [
               {
@@ -2387,7 +2403,9 @@
           "rule",
           "message",
           "fired_at",
-          "response"
+          "response",
+          "speak",
+          "clip_id"
         ],
         "title": "FocusMessageOut",
         "type": "object"
@@ -25551,6 +25569,121 @@
         "summary": "Setup Totp",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/v1/speech/clips/{speech_clip_id}": {
+      "get": {
+        "description": "A spoken focus message's clip (P4-03): `audio/wav` with `nosniff`, while it lives\n(`CLIP_TTL_MIN`); 404 once expired or in another workspace.",
+        "operationId": "speech_get_clip",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "speech_clip_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Speech Clip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Clip",
+        "tags": [
+          "speech"
         ]
       }
     },

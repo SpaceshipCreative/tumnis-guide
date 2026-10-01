@@ -362,7 +362,6 @@ export function KnowledgeSection({
                 );
               }}
               onTrash={() => {
-                setTrashed(doc);
                 run(
                   apiWrite({
                     // "create": apiWrite's kind without a version; trashing takes none.
@@ -370,6 +369,9 @@ export function KnowledgeSection({
                     method: "DELETE",
                     path: `/knowledge/documents/${doc.id}`,
                     idempotencyKey: crypto.randomUUID(),
+                  }).then(() => {
+                    // Only a trash that happened offers Undo.
+                    setTrashed(doc);
                   }),
                   `Could not move ${doc.title} to the trash.`,
                 );

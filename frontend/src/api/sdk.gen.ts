@@ -371,6 +371,9 @@ import type {
   SettingsSetModuleData,
   SettingsSetModuleErrors,
   SettingsSetModuleResponses,
+  SpeechGetClipData,
+  SpeechGetClipErrors,
+  SpeechGetClipResponses,
   TasksAddCommentData,
   TasksAddCommentErrors,
   TasksAddCommentResponses,
@@ -572,6 +575,7 @@ import {
   zSettingsPutWorkingHoursResponse,
   zSettingsPutWorkspaceSettingsResponse,
   zSettingsSetModuleResponse,
+  zSpeechGetClipResponse,
   zTasksAddCommentResponse,
   zTasksChangeStatusResponse,
   zTasksCreateTaskResponse,
@@ -3576,6 +3580,26 @@ export const authSetupTotp = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Get Clip
+ *
+ * A spoken focus message's clip (P4-03): `audio/wav` with `nosniff`, while it lives
+ * (`CLIP_TTL_MIN`); 404 once expired or in another workspace.
+ */
+export const speechGetClip = <ThrowOnError extends boolean = false>(
+  options: Options<SpeechGetClipData, ThrowOnError>,
+): RequestResult<SpeechGetClipResponses, SpeechGetClipErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    SpeechGetClipResponses,
+    SpeechGetClipErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSpeechGetClipResponse.parseAsync(data),
+    url: "/v1/speech/clips/{speech_clip_id}",
+    ...options,
   });
 
 /**

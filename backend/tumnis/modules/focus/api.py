@@ -133,6 +133,9 @@ class FocusMessageOut(BaseModel):
     message: str
     fired_at: datetime
     response: Response | None  # the latest answer, if any
+    # P4-03 (FR-10.8): voice is on for the message's level, and its server clip if made.
+    speak: bool
+    clip_id: UUID | None
 
 
 class GuardrailOut(BaseModel):
@@ -470,6 +473,12 @@ async def _current(
             .order_by(_events.c.fired_at, _events.c.created_at)
         )
     ).all()
+    voice = await decisions.voice_settings(ctx)
+    clips = (
+        await decisions.clip_ids(ctx, [e.id for e in events], now, session=s)
+        if voice.enabled_levels
+        else {}
+    )
     return FocusCurrentOut(
         level=level.effective,
         workspace_level=level.workspace,
@@ -487,6 +496,8 @@ async def _current(
                 message=e.message,
                 fired_at=e.fired_at,
                 response=e.response,
+                speak=e.level in voice.enabled_levels,
+                clip_id=clips.get(e.id),
             )
             for e in events
         ],

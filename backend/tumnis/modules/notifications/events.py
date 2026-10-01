@@ -11,6 +11,8 @@ push's workflow id is the row's id):
 - `task.status_changed` leaving In progress -> `notifications.flush_on_break` and
   `focus.level_changed` -> `notifications.flush_on_level`: release what Quiet held once
   `rules.flush_due` says the break came, or the level no longer batches.
+
+`speech` (P4-03) registers its own `focus.event` subscriber when it is imported here.
 """
 
 from typing import Final
@@ -19,7 +21,11 @@ from uuid import UUID
 from tumnis.core.events import EventEnvelope, subscribe
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.core.types import SYSTEM_ACTOR
-from tumnis.modules.notifications import api, workflows
+from tumnis.modules.notifications import (
+    api,
+    speech,  # noqa: F401  # P4-03: speak_focus_event
+    workflows,
+)
 
 __all__ = ["flush_on_break", "flush_on_level", "push_focus_event", "push_review_item"]
 
