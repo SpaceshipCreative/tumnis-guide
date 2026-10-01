@@ -1801,17 +1801,20 @@ def _runs_in_scope(scope: str, project_id: UUID | None) -> Any:
 
 
 def dispatched(stmt: Any) -> Any:
-    """Only `dispatch_run` runs (its workflow id is the run id) and the `supervise_run`
-    that took one over after a deploy (P2-05, `supervise:<run>:<version>`): a `run_skill`
-    run (P1-04 enrichment and planning) answers on its own timeout and has no cancel path
-    here."""
+    """Runs a workflow of ours supervises: `dispatch_run` runs (its workflow id is the run
+    id), the `supervise_run` that took one over after a deploy (P2-05,
+    `supervise:<run>:<version>`) and, since Scott decision 40, `run_skill` runs (P1-04
+    enrichment and planning, `run_skill:<run>`), whose workflow also stops its agent on a
+    `cancel`."""
     run_text = cast(_runs.c.id, Text)
     supervised = _runs.c.workflow_id.startswith("supervise:" + run_text + ":")  # a uuid: no %, _
-    return stmt.where((_runs.c.workflow_id == run_text) | supervised)
+    skill = _runs.c.workflow_id == "run_skill:" + run_text
+    return stmt.where((_runs.c.workflow_id == run_text) | supervised | skill)
 
 
 async def runs_to_cancel(s: AsyncSession, scope: str, project_id: UUID | None) -> list[UUID]:
-    """The running or waiting `dispatch_run` runs a pause of this scope stops."""
+    """The running or waiting runs a pause of this scope stops (`dispatch_run` and
+    `run_skill` runs alike, `dispatched`)."""
     stmt = _runs_in_scope(scope, project_id).where(
         _runs.c.status.in_((RunStatus.RUNNING.value, RunStatus.WAITING_ON_HUMAN.value))
     )

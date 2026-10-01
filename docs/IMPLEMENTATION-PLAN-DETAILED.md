@@ -13511,6 +13511,10 @@ Behavior:
 | T-P2-09-09 | `backend/tumnis/modules/agents/tests/integration/test_runaway.py::test_twenty_first_task_stops_run_with_review_item` | integration | 20 creates succeed; the 21st gets `run_limit_exceeded`; run `cancelled` with `stop_reason` `tasks_per_run`; review item `run_limit` | SAF-5 |
 | T-P2-09-10 | `backend/tumnis/modules/agents/tests/unit/test_pause_rules.py::test_pause_state_and_task_limit` | unit | Rule tables | SAF-4, SAF-5 |
 | T-P2-09-11 | `frontend/src/components/dashboard/KillSwitch.test.tsx::[P2-09][SAF-4] pause needs a reason and shows paused state` | unit (Vitest) | Confirm dialog, reason field, paused banner, resume button | SAF-4 |
+| T-P2-09-12 | `backend/tumnis/modules/agents/tests/integration/test_kill_switch_skill_runs.py::test_kill_switch_cancels_a_running_skill_run` | integration | Scott decision 40: a workspace pause counts a running `run_skill` run, its runner gets one `cancel`, and the run ends `cancelled` with `killswitch` | SAF-4 |
+| T-P2-09-13 | `backend/tumnis/modules/agents/tests/integration/test_kill_switch_skill_runs.py::test_no_skill_run_is_dispatched_while_paused` | integration | Decision 40: while paused, a new `run_skill` run is never sent and ends `cancelled` with `killswitch` | SAF-4 |
+| T-P2-09-14 | `backend/tumnis/modules/agents/tests/integration/test_kill_switch_skill_runs.py::test_project_pause_cancels_only_that_projects_skill_run` | integration | Decision 40: a project pause cancels only that project's `run_skill` run (`project_paused`); the other keeps running | SAF-4 |
+| T-P2-09-15 | `backend/tumnis/modules/agents/tests/integration/test_kill_switch_skill_runs.py::test_stop_ends_a_running_skill_run_cancelled` | integration | Regression: Stop on a running `run_skill` run sends one `cancel` and ends it `cancelled` with `stopped_by_user` (was `failed`, error "None") | SAF-4, FR-5.5 |
 
 - T-P2-09-09: the fake runner script calls `create_task` 21 times with its task token; subtasks count too. Assert exactly 20 tasks exist from that run and `runs.status = cancelled` and `runs.stop_reason = "tasks_per_run"`.
 
@@ -13524,6 +13528,7 @@ Behavior:
 6. T-P2-09-07: project scope.
 7. T-P2-09-09: task counter.
 8. T-P2-09-11: UI; then un-fail A2.5.
+9. T-P2-09-12..15 (second PR, Scott decision 40): `run_skill` runs in the pause's scope are cancelled through `run.signal{cancel}`, and `dispatch_step` checks the pause before and after it dispatches.
 
 **Implementation notes**
 
