@@ -321,8 +321,8 @@ async def test_api_key_without_run_refused(  # noqa: PLR0917
 ) -> None:
     """T-P2-05-13
     A key with no run (R-31) can never take a gated action or park a run: both ops answer
-    `denied` with rule `run_token_required`, on the REST twin and over MCP, and nothing is
-    queued for the human."""
+    200 `denied` with rule `run_token_required` (not 403: Scott decision 43), on the REST
+    twin and over MCP, and nothing is queued for the human."""
     from tests._mcp import mcp_call, mcp_running  # noqa: PLC0415
     from tumnis.modules.auth import api as auth  # noqa: PLC0415
 
@@ -349,6 +349,8 @@ async def test_api_key_without_run_refused(  # noqa: PLR0917
                         "idempotency_key": f"cron-{uuid.uuid4()}",
                     },
                 )
+    assert via_rest.status_code == 200, via_rest.text
+    assert question.status_code == 200, question.text
     for answer in (via_rest.json(), question.json(), via_mcp.data):
         assert answer["status"] == "denied", answer
         assert answer["rule"] == "run_token_required", answer

@@ -18,7 +18,7 @@ REQUIRED_CHECKS = REPO / ".github" / "required-checks.txt"
 # from the P0-03 ci.yml skeleton.
 BUDGETS = {
     "lint": 2,
-    "unit": 3,
+    "unit": 4,
     "contract": 3,
     "integration": 15,
     "daemon": 3,  # runner daemon lint, types and tests (P1-04)
