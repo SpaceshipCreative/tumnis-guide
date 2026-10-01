@@ -223,3 +223,49 @@ test("[P2-04][FR-5.4] a Run answer that lands after another task opens is ignore
   );
   unmount();
 });
+
+test.fails(
+  "[P2-04][FR-5.5] Back to the task keeps focus in the drawer, so Escape still closes it",
+  async () => {
+    // CodeRabbit on #120: Back removes the button that had focus; focus must stay in the
+    // drawer (not drop to <body>) so the drawer's Escape still reaches it.
+    for (const viewport of ["phone", "laptop"] as const) {
+      const project = makeProject({ name: "Acme site" });
+      const task = makeTask({
+        project_id: project.id,
+        title: "Fix footer link",
+        label: "ai",
+        status: "today",
+      });
+      const fake = new ProjectFake({ project, tasks: [task] });
+      const recorder = new Recorder();
+      server.resetHandlers();
+      server.use(
+        ...fake.handlers,
+        ...runHandlers(recorder, task.id, project.id),
+      );
+
+      const { user, unmount, router } = await renderRoute(
+        `/projects/${project.id}?view=tasks&task=${task.id}&run=${RUN_ID}`,
+        { viewport },
+      );
+      const drawer = await screen.findByRole("dialog", {
+        name: "Fix footer link",
+      });
+      await within(drawer).findByRole("log", { name: "Run log" });
+
+      await user.click(
+        within(drawer).getByRole("button", { name: "Back to the task" }),
+      );
+      await within(drawer).findByRole("textbox", { name: "Title" });
+      expect(drawer.contains(document.activeElement)).toBe(true);
+
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(router.state.location.search).not.toHaveProperty("task");
+      });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      unmount();
+    }
+  },
+);
