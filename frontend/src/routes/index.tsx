@@ -8,6 +8,7 @@ import { DashboardPage } from "../components/dashboard/DashboardPage";
 import { localDay } from "../components/dashboard/format";
 import {
   deployStatusQuery,
+  pausesQuery,
   planQuery,
   projectsQuery,
   reviewCountQuery,
@@ -45,6 +46,7 @@ export const Route = createFileRoute("/")({
           : undefined;
       }),
       loaderRead(queryClient, deployStatusQuery()),
+      loaderRead(queryClient, pausesQuery()),
     ]);
   },
   // Commit the match at once while the loader runs (an empty page, not a spinner): the

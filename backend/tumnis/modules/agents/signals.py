@@ -14,6 +14,7 @@ supervisor on this one before the send (`stale_workflow`, then the replacement t
 Split from workflows.py; the supervision loop that reads these stays there.
 """
 
+import contextlib
 from collections.abc import Awaitable, Callable
 from typing import Any, Final
 from uuid import UUID
@@ -99,3 +100,14 @@ async def deliver_signal(
         if row.status in api.TERMINAL:
             return
         raise
+
+
+async def release_held(run_id: UUID, key: str) -> None:
+    """Wake a held run's `dispatch_run` (P2-09) with a `release`, once per key; it checks
+    the pause again and goes on. A workflow not started yet needs none: it checks the
+    pause when it starts."""
+    target = api.dispatch_workflow_id(run_id)
+    with contextlib.suppress(DBOSNonExistentWorkflowError):
+        await DBOS.send_async(
+            target, {"kind": "release"}, topic=api.run_topic(run_id), idempotency_key=key
+        )

@@ -1,6 +1,6 @@
 """agents SQLAlchemy tables owned by this module (mirrors of revisions agents_0001, P1-04,
 agents_0002, P2-07, agents_0003, P1-06, agents_0004, P2-02, agents_0005, P2-04, agents_0006,
-P2-05, and agents_0007, P2-03).
+P2-05, agents_0007, P2-03, and agents_0008, P2-09).
 
 - runners: one per runner daemon; its device token lives in auth's `device_tokens`.
 - agent_profiles: the Hermes profiles Tumnis may run (one master, one per project);
@@ -10,6 +10,8 @@ P2-05, and agents_0007, P2-03).
   at most one active run of a kind per task.
 - run_events: what happened in a run, unique per (run, message) so a replayed message
   lands once; `seq` (P2-04) orders a run's events.
+- agent_pauses (P2-09, SAF-4): the kill switch. One open pause (not resumed) per
+  workspace, or per project; while one holds a project, its runs are not dispatched.
 - runner_messages: the mailbox between the worker and a runner's socket, both ways;
   `message_id` is unique, so a replayed step or frame is written once.
 - digest_entries and digest_cursors: what the project and workspace digests carry, and
@@ -180,3 +182,17 @@ class DigestCursor(TenantBase, Base):
     acked_seq: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
     issued_tx: Mapped[Decimal] = mapped_column(Numeric(20), server_default=text("0"))
     issued_seq: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
+
+
+class AgentPause(TenantBase, Base):
+    __tablename__ = "agent_pauses"
+
+    scope: Mapped[str]  # "workspace" | "project"
+    project_id: Mapped[UUID | None]  # the project's (no cross-module foreign key)
+    paused_at: Mapped[datetime]
+    paused_by: Mapped[str]  # the actor
+    reason: Mapped[str]
+    resumed_at: Mapped[datetime | None]
+    resumed_by: Mapped[str | None]
+    resume_reason: Mapped[str | None]
+    tainted: Mapped[bool] = mapped_column(server_default=text("false"))  # a key's pause (R-31)

@@ -1,15 +1,18 @@
 // The Context sections (P0-24, FR-2.7), shared by the laptop rail and the phone sheet;
-// one opens at a time. Agent joins with P1-06.
+// one opens at a time. Agent joins with P1-06; the project's agent pause (P2-09) sits last
+// until P2-17's agent section takes it.
 import { useState } from "react";
 
 import type { Project } from "../types";
+import { AgentPauseSection } from "./AgentPauseSection";
 import { BriefSection } from "./BriefSection";
 import { ConnectionsSection } from "./ConnectionsSection";
 import { KnowledgeSection } from "./KnowledgeSection";
 import { ScheduleSection } from "./ScheduleSection";
 import { SettingsSection } from "./SettingsSection";
 
-type Section = "brief" | "knowledge" | "connections" | "schedule" | "settings";
+type Section =
+  "brief" | "knowledge" | "connections" | "schedule" | "settings" | "pause";
 
 export function RailSections({
   project,
@@ -49,6 +52,11 @@ export function RailSections({
         project={project}
         open={open === "settings"}
         onToggle={toggle("settings")}
+      />
+      <AgentPauseSection
+        projectId={project.id}
+        open={open === "pause"}
+        onToggle={toggle("pause")}
       />
     </div>
   );

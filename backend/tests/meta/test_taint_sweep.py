@@ -37,6 +37,35 @@ def _create_ops() -> list[Any]:
     return [op for op in agent_surface.ops() if op.write and not op.updates_existing]
 
 
+async def _master_caller(workspace: WorkspaceHandle, clock: FixedClock) -> Any:
+    """The master key's caller (Scott decision 35): a master-only op (`pause_agents`, P2-09)
+    refuses a project run's token, so the sweep calls it as the master. The key has no run,
+    so what it writes is tainted (R-31)."""
+    from tests._mcp import ALL_SCOPES  # noqa: PLC0415
+    from tumnis.core import agent_surface  # noqa: PLC0415
+    from tumnis.core.principal import Principal  # noqa: PLC0415
+    from tumnis.modules.auth import api as auth  # noqa: PLC0415
+
+    key = await auth.create_key(
+        workspace.ctx,
+        auth.KeyIn(name="taint sweep master", scopes=sorted(ALL_SCOPES)),
+        now=clock.now(),
+    )
+
+    async def facts(principal: Any) -> Any:
+        if principal.subject_id == key.id:
+            return agent_surface.CallerFacts(profile_id=None, is_master=True, run_id=None)
+        return None
+
+    agent_surface.register_caller_facts("taint-sweep-master", facts)
+    try:
+        principal = await auth.authenticate_bearer(key.key, now=clock.now())
+        assert isinstance(principal, Principal)
+        return await agent_surface.resolve_caller(principal)
+    finally:
+        agent_surface.unregister_caller_facts("taint-sweep-master")
+
+
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P2-08")
 async def test_every_create_op_propagates_taint(
@@ -72,6 +101,7 @@ async def test_every_create_op_propagates_taint(
         await tasks.link_context_item(s, actor, outside.id, dirty_item, now=clock.now())
     tainted_caller = await runs.caller(await runs.run_of(outside.id))
     clean_caller = await runs.caller(uuid.uuid4())  # a run with nothing outside in it
+    master_caller = await _master_caller(workspace, clock)  # for master-only ops
 
     async def call(op: Any, caller: Any, args: dict[str, Any]) -> dict[str, Any]:
         answer = await agent_surface.invoke(op, caller, args, door="mcp", now=clock.now())
@@ -82,7 +112,8 @@ async def test_every_create_op_propagates_taint(
         fields = op.input_model.model_fields
         assert "tainted" in op.output_model.model_fields, f"{op.name} answers no taint"
 
-        made = await call(op, tainted_caller, await SAMPLES[op.name](world, "A"))
+        writer = master_caller if op.master_only else tainted_caller
+        made = await call(op, writer, await SAMPLES[op.name](world, "A"))
         assert made["tainted"] is True, (op.name, "tainted run", made)
 
         if "parent_id" in fields:
