@@ -7,7 +7,8 @@
 // as written. Pasted HTML only keeps what the schema models. StarterKit's TrailingNode
 // is off too: Markdown is the stored form, so the empty paragraph it appends after a
 // final list or code block has nothing to save and only adds blank lines to the
-// editor's Markdown (Gapcursor still reaches past such a block). `headless` (the round
+// editor's Markdown. Such a block is still left the usual ways: Enter on an empty list
+// item, Enter three times or ArrowDown at the end of a code block. `headless` (the round
 // trip) leaves the menus out.
 import type { AnyExtension } from "@tiptap/core";
 import Link from "@tiptap/extension-link";

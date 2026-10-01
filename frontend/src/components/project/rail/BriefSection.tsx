@@ -1,14 +1,15 @@
-// The brief (P0-24, FR-2.7): plain Markdown in a text field (Tiptap arrives with P1-17),
-// saved as the project's text entry with the version read. The save lives in the section,
-// not the editor: a save answers a new version, which re-creates the editor, and "Saved"
-// must outlast that.
+// The brief (P0-24, FR-2.7; P1-17): Markdown in the note editor (loaded on demand,
+// LazyMarkdownField), saved with "Save brief" as the project's text entry with the
+// version read. The save lives in the section, not the editor: a save answers a new
+// version, which re-creates the editor, and "Saved" must outlast that.
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { useSaveBrief } from "../mutations";
 import { briefQuery } from "../queries";
 import type { Brief } from "../types";
-import { fieldClass, RailSection, saveClass } from "./RailSection";
+import { LazyMarkdownField } from "../../../editor/LazyEditor";
+import { RailSection, saveClass } from "./RailSection";
 
 /** The first non-empty line, without Markdown heading marks. */
 export function firstLine(markdown: string | null | undefined): string | null {
@@ -37,14 +38,15 @@ function BriefEditor({
         save.mutate({ projectId, brief, bodyMd: text });
       }}
     >
-      <textarea
-        aria-label="Brief"
-        rows={8}
-        value={text}
-        onChange={(event) => {
-          setText(event.target.value);
+      <LazyMarkdownField
+        markdown={brief.body_md ?? ""}
+        label="Brief"
+        projectId={projectId}
+        onChange={(markdown) => {
+          // Saved without the editor's final newline, as the brief's text was before
+          // the editor (Scott decision 50); a note keeps ADR-0008's canonical form.
+          setText(markdown.replace(/\n$/, ""));
         }}
-        className={fieldClass}
       />
       <button type="submit" disabled={save.isPending} className={saveClass}>
         Save brief
