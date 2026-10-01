@@ -599,15 +599,24 @@ def _stop_queue_workers(earlier: set[threading.Thread], timeout_s: float = 10) -
 
 
 def _parked_in_recv(instance: Any) -> set[str]:
-    """IDs of the workflows waiting in `DBOS.recv` right now. Such a workflow (a focus
-    session, a run waiting on its runner) waits for a message no one will send once the
-    test is over, and holds no system-database connection while it waits: recv's setup and
-    its database re-check each run in a transaction of their own (dbos 3.1.0
-    `SystemDatabase.recv_async`), so waiting for it only ran out the timeout (10 s per
-    test). A workflow still running a step, or whose message has arrived (it is about to
-    consume it), is still waited for."""
-    entries = instance._sys_db.notifications_map.snapshot()
-    return {workflow_id for _, (workflow_id, _), event in entries if not event.is_set()}
+    """IDs of the workflows awaiting a message in `DBOS.recv_async` right now. Such a
+    workflow (a focus session, a run waiting on its runner) waits for a message no one will
+    send once the test is over, so waiting for it only ran out the timeout (10 s per test).
+
+    Parked means a coroutine is suspended in the recv event's `wait_async` (dbos 3.1.0
+    `SystemDatabase.recv_async` and `LoopAwareEvent`): its waiter future is registered and
+    not yet resolved, and no database work is in flight. The recv entry also stays
+    registered while recv runs its fallback re-check (`recv_check`) or consumes after a
+    timeout (`recv_consume`), each in a worker thread on a pooled connection; the waiter is
+    gone then, or its future is done, so those workflows are still waited for, as is a
+    workflow running a step or blocked in the sync `DBOS.recv`."""
+    parked = set()
+    for _, (workflow_id, _), event in instance._sys_db.notifications_map.snapshot():
+        with event._waiters_lock:
+            waiting = any(not future.done() for _, future in event._waiters)
+        if waiting and not event.is_set():
+            parked.add(workflow_id)
+    return parked
 
 
 def _close_late_checkins() -> threading.Event:
