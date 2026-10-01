@@ -582,11 +582,12 @@ async def task_creator(s: AsyncSession, task_id: UUID) -> tuple[str, UUID | None
 AI_LABEL_SOURCES: Final = frozenset({"jev", "fallback"})
 
 
-async def get_task(s: AsyncSession, task_id: UUID) -> TaskOut:
+async def get_task(s: AsyncSession, task_id: UUID, *, lock: bool = False) -> TaskOut:
     """The task. While its label is still the AI's own write (P1-07), or its latest write
     is the project agent's enrichment (P1-08), `change_id` names that write, so the open
-    UI can offer to undo it for the session (UX 9)."""
-    row = await _row(s, task_id)
+    UI can offer to undo it for the session (UX 9). With `lock`, the row stays locked to
+    the end of the caller's transaction, so a write there at its `version` is not stale."""
+    row = await _row(s, task_id, lock=lock)
     change_id = None
     if row["label_source"] in AI_LABEL_SOURCES or row["enrichment_status"] == "done":
         change_id = await s.scalar(

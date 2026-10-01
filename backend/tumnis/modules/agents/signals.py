@@ -10,6 +10,8 @@ Version-aware delivery (P2-05): DBOS recovers only the workflows of the applicat
 version it runs, so a run whose workflow is live on an older version gets a new
 supervisor on this one before the send (`stale_workflow`, then the replacement that
 `agents.workflows` registers with `on_stale_workflow`, since it owns `supervise_run`).
+A `run_skill` run's workflow (`run_skill:<run>`) is never replaced: it is sent to as it
+is.
 
 Split from workflows.py; the supervision loop that reads these stays there.
 """
@@ -32,6 +34,7 @@ from tumnis.modules.agents.models import RunRow
 _runs: Table = RunRow.__table__  # type: ignore[assignment]
 
 LIVE_WORKFLOW: Final = frozenset({"PENDING", "ENQUEUED"})
+SKILL_WORKFLOW_PREFIX: Final = "run_skill:"  # `workflows.run_workflow_id`
 
 # (session holding the run row locked, workspace id, run id, stale workflow id) -> the id
 # of the workflow that now supervises the run.
@@ -90,7 +93,10 @@ async def deliver_signal(
         if row is None:
             return
         target = row.workflow_id or api.dispatch_workflow_id(run_id)
-        if row.status not in api.TERMINAL and await stale_workflow(target):
+        # A `run_skill` workflow (P1-04) has no supervisor to take it over: the message
+        # goes to it as it is (Scott decision 40: the kill switch and Stop reach it).
+        skill = target.startswith(SKILL_WORKFLOW_PREFIX)
+        if row.status not in api.TERMINAL and not skill and await stale_workflow(target):
             if not _replace_supervisor:
                 raise RuntimeError("agents.workflows registers the supervisor replacement")
             target = await _replace_supervisor[0](s, workspace_id, run_id, target)

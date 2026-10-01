@@ -13,6 +13,11 @@ from typing import Any
 
 from tumnis.core.adapters.registry import register_adapter
 from tumnis.core.fake_scripts import register_fake_script
+from tumnis.modules.decisions.adapters.embeddings.fake import (
+    FakeEmbeddings,
+    FakeHostedEmbeddings,
+)
+from tumnis.modules.decisions.adapters.embeddings.port import EmbeddingsAdapter
 from tumnis.modules.decisions.adapters.fake import (
     GENERATION_HOOK,
     FakeDecisions,
@@ -24,6 +29,8 @@ from tumnis.modules.decisions.adapters.fake import (
 from tumnis.modules.decisions.adapters.port import DecisionsProvider, GenerationProvider
 
 JEV_MODULE = "tumnis.modules.decisions.adapters.jev"
+EMBEDDINGS_VLLM_MODULE = "tumnis.modules.decisions.adapters.embeddings.vllm"
+EMBEDDINGS_HOSTED_MODULE = "tumnis.modules.decisions.adapters.embeddings.hosted"
 VLLM_MODULE = "tumnis.modules.decisions.adapters.vllm"
 VLLM_GENERATION_MODULE = "tumnis.modules.decisions.adapters.vllm_generation"
 
@@ -49,7 +56,33 @@ def build_vllm_generation(**deps: Any) -> GenerationProvider:
     return provider
 
 
+def build_embeddings_vllm(**deps: Any) -> EmbeddingsAdapter:
+    """VllmEmbeddings(base_url, model, dims, clock=..., net_policy=...), on first use (P3-10)."""
+    vllm = importlib.import_module(EMBEDDINGS_VLLM_MODULE)
+    adapter: EmbeddingsAdapter = vllm.VllmEmbeddings(**deps)
+    return adapter
+
+
+def build_embeddings_hosted(**deps: Any) -> EmbeddingsAdapter:
+    """HostedEmbeddings(base_url, model, dims, api_key=..., ...), on first use (P3-10)."""
+    hosted = importlib.import_module(EMBEDDINGS_HOSTED_MODULE)
+    adapter: EmbeddingsAdapter = hosted.HostedEmbeddings(**deps)
+    return adapter
+
+
 register_adapter("decisions.jev", port=DecisionsProvider, real=build_jev, fake=FakeDecisions)
+register_adapter(
+    "decisions.embeddings_vllm",
+    port=EmbeddingsAdapter,
+    real=build_embeddings_vllm,
+    fake=FakeEmbeddings,
+)
+register_adapter(
+    "decisions.embeddings_hosted",
+    port=EmbeddingsAdapter,
+    real=build_embeddings_hosted,
+    fake=FakeHostedEmbeddings,
+)
 register_adapter("decisions.vllm", port=DecisionsProvider, real=build_vllm, fake=fake_vllm)
 register_adapter(
     "decisions.vllm_generation",

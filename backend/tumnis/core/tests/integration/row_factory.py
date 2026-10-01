@@ -74,6 +74,9 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("focus_events", "level"): "coach",  # ck_focus_events_level
     ("focus_responses", "response"): "still_on_it",  # ck_focus_responses_response
     ("focus_overrides", "level"): "nudge",  # ck_focus_overrides_level
+    ("embedding_models", "dims"): 3,  # ck_embedding_models_dims (P3-10)
+    ("embedding_models", "status"): "retired",  # ck_embedding_models_status
+    ("embeddings", "embedding"): "[1,0,0]",  # pgvector's text form (an untyped literal)
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
