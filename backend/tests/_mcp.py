@@ -470,6 +470,14 @@ async def _add_document(world: World, project: str) -> dict[str, Any]:
     }
 
 
+async def _get_project_digest(world: World, project: str) -> dict[str, Any]:
+    return {"project_id": str(world.projects[project]), "limit": 50}
+
+
+async def _get_workspace_digest(world: World, project: str) -> dict[str, Any]:
+    return {"limit": 50}
+
+
 # One entry per registered op; the sweeps fail on an op without one ("add a sample").
 SAMPLES: Final[dict[str, Sample]] = {
     "list_tasks": _list_tasks,
@@ -485,6 +493,8 @@ SAMPLES: Final[dict[str, Sample]] = {
     "search_knowledge": _search_knowledge,
     "get_document": _get_document,
     "add_document": _add_document,
+    "get_project_digest": _get_project_digest,
+    "get_workspace_digest": _get_workspace_digest,
 }
 
 

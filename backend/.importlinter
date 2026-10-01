@@ -228,3 +228,16 @@ broken_contract_guidance =
     generation-callers: only tumnis.modules.agents.workflows (enrichment, P1-08) and
     tumnis.modules.notifications (spoken focus messages, P2-16) may import the Generation
     slot. Planning, triage and reasoning go through decisions.api or the project agent.
+
+# P2-03 (FR-13.5): Tumnis feeds agent memory through the digests and never talks to a
+# memory system itself. Forbidden external packages absent from the environment are
+# skipped, so this bites the moment one is installed and imported.
+[importlinter:contract:no-memory-client]
+name = Tumnis never imports a memory-system client (FR-13.5)
+type = forbidden
+source_modules =
+    tumnis
+forbidden_modules =
+    hindsight
+    hindsight_client
+    vectorize

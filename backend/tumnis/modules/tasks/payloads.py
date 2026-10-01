@@ -13,6 +13,8 @@ calls `api.py` (no import cycle inside the module).
   P1-13 and P2-05 emit it.
 - `result.posted` (P2-04): an agent's result for its run is stored and the task is In
   review: the result's id, run, task, project, outcome, summary and links.
+- `task.commented` (P2-03): a comment added, with its author and text, for the digest.
+- `context_item.linked` (P2-03): a task newly linked to a ContextItem, for the digest.
 - `review_item.added` (P1-13): a new review item, by id, kind and target only (never the
   payload); decisions asks Jev how much it blocks.
 
@@ -93,6 +95,34 @@ class HumanDecidedV1(EventPayload):
     previous: dict[str, Any] | None = None
     payload: dict[str, Any] | None = None
     decision_id: UUID | None = None
+
+
+@event_type("task.commented", 1)
+class TaskCommentedV1(EventPayload):
+    """A comment on a task (P2-03: the digest carries it). `author` is the ActorRef that
+    wrote it (`user:<id>` for a person); the text is the comment's Markdown."""
+
+    event_name: ClassVar[str] = "task.commented"
+    schema_version: Literal[1] = 1
+    task_id: UUID
+    project_id: UUID
+    comment_id: UUID
+    author: str
+    text: str
+
+
+@event_type("context_item.linked", 1)
+class ContextItemLinkedV1(EventPayload):
+    """A task newly linked to outside content through a ContextItem (P2-03: the digest
+    carries the item's full text, read when the digest is read)."""
+
+    event_name: ClassVar[str] = "context_item.linked"
+    schema_version: Literal[1] = 1
+    context_item_id: UUID
+    task_id: UUID
+    project_id: UUID
+    target_type: str
+    target_id: UUID | None = None
 
 
 @event_type("review_item.added", 1)

@@ -93,9 +93,11 @@ from tumnis.modules.tasks.models import (
 )
 from tumnis.modules.tasks.payloads import (
     DOC_BODY_MAX_BYTES,
+    ContextItemLinkedV1,
     HumanDecidedV1,
     PostedLink,
     ResultPostedV1,
+    TaskCommentedV1,
     TaskCreatedV1,
     TaskDoc,
     TaskStatusChangedV1,
@@ -365,13 +367,13 @@ class DocumentResultLink(BaseModel):
     label: LinkLabel | None = None
 
 
-class ResultLink(
-    RootModel[Annotated[WebResultLink | DocumentResultLink, Field(discriminator="kind")]]
-):
+class ResultLink(RootModel[WebResultLink | DocumentResultLink]):
     """A link a result names. Only a `document` link may be a `tumnis://` citation: the
-    rule is the schema's (one variant per kind), so OpenAPI, the tools' JSON Schema and
-    anything generated from them (zod, test factories) hold it too. Built like a model,
-    `ResultLink(kind=..., url=...)`; `kind`, `url` and `label` read through."""
+    rule is the schema's (one variant per kind; `kind` tells them apart), so OpenAPI, the
+    tools' JSON Schema and anything generated from them (zod, test factories) hold it too.
+    A plain `anyOf`, not a discriminator: its mapping would name `#/$defs/...` in the tool
+    and `#/components/...` in OpenAPI. Built like a model, `ResultLink(kind=..., url=...)`;
+    `kind`, `url` and `label` read through."""
 
     def __init__(self, root: Any = PydanticUndefined, **data: Any) -> None:
         # RootModel takes keyword fields as its root; spelled out for type checkers.
@@ -1012,7 +1014,7 @@ async def create_task(
     values["tainted"] = rules.derive_taint(sources)
     created = await _insert(s, actor, values, now=now, source=source or _SOURCE[kind])
     for item in items:
-        await _link(s, actor, created.id, item.id)
+        await _link(s, actor, created.id, data.project_id, item, now=now)
     return created
 
 
@@ -1637,7 +1639,8 @@ async def undo_task(
 async def add_comment(
     s: AsyncSession, actor: ActorRef, task_id: UUID, body_md: str, *, now: datetime | None = None
 ) -> CommentOut:
-    """A markdown comment on the task; `task.updated` carries `comments` and the new doc."""
+    """A markdown comment on the task; `task.updated` carries `comments` and the new doc,
+    and `task.commented` the comment itself (P2-03)."""
     row = await _row(s, task_id)
     created = (
         (
@@ -1651,6 +1654,17 @@ async def add_comment(
         .one()
     )
     await _changed(s, row, ["comments"], now)
+    await emit(
+        s,
+        TaskCommentedV1(
+            task_id=task_id,
+            project_id=row["project_id"],
+            comment_id=created["id"],
+            author=str(actor),
+            text=body_md,
+        ),
+        occurred_at=_now(now),
+    )
     return CommentOut.model_validate(dict(created))
 
 
@@ -1812,8 +1826,25 @@ async def _raise_owner_taint(s: AsyncSession, task_id: UUID) -> None:
 integrations.register_owner_taint("task", _raise_owner_taint)
 
 
-async def _link(s: AsyncSession, actor: ActorRef, task_id: UUID, context_item_id: UUID) -> UUID:
-    """The live link row (made, or restored from a deleted one); its id."""
+async def _link(
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    project_id: UUID,
+    item: integrations.ContextItemOut,
+    *,
+    now: datetime | None = None,
+) -> UUID:
+    """The live link row (made, or restored from a deleted one); its id. A new (or
+    restored) link emits `context_item.linked`, so the digest carries the item (P2-03)."""
+    context_item_id = item.id
+    already: UUID | None = await s.scalar(
+        select(_links.c.id).where(
+            _links.c.task_id == task_id,
+            _links.c.context_item_id == context_item_id,
+            _links.c.deleted_at.is_(None),
+        )
+    )
     await s.execute(
         pg_insert(_links)
         .values(task_id=task_id, context_item_id=context_item_id, created_by=actor)
@@ -1829,6 +1860,18 @@ async def _link(s: AsyncSession, actor: ActorRef, task_id: UUID, context_item_id
         )
     )
     assert link_id is not None  # noqa: S101  # the upsert left one live link
+    if already is None:
+        await emit(
+            s,
+            ContextItemLinkedV1(
+                context_item_id=context_item_id,
+                task_id=task_id,
+                project_id=project_id,
+                target_type=item.target_type,
+                target_id=item.target_id,
+            ),
+            occurred_at=_now(now),
+        )
     return link_id
 
 
@@ -1842,11 +1885,12 @@ async def link_context_item(
 ) -> TaskContextItemOut:
     """Links the task to outside content through a ContextItem (FR-14.2), the only way a
     task reaches a message, note, event, artifact, file or URL. Linking again keeps one
-    link. 404 for a task or context item the caller cannot see. A tainted item taints the
-    task (`rules.raise_only`, P2-08)."""
+    link; a new (or restored) link emits `context_item.linked` (P2-03). 404 for a task or
+    context item the caller cannot see. A tainted item taints the task (`rules.raise_only`,
+    P2-08)."""
     row = await _row(s, task_id)
     item = await _context_item(s, context_item_id)
-    link_id = await _link(s, actor, task_id, context_item_id)
+    link_id = await _link(s, actor, task_id, row["project_id"], item, now=now)
     if rules.raise_only(row["tainted"], item.tainted) != row["tainted"]:
         await raise_taint(s, task_id, now=now)
     mark_changed(s, LIVE_ENTITY, task_id)
