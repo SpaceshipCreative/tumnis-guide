@@ -257,7 +257,7 @@ Integration tests carry `@pytest.mark.enable_socket` through a module-level `pyt
 | --- | --- | --- | --- | --- |
 | Unit | `uv run pytest -m "not integration and not contract"` | `rules.py`, pure code, sockets disabled | 4 min (PRD: backend rules under 30 s) | GitHub-hosted |
 | Contract | `uv run pytest -m contract` + `make gen && git diff --exit-code` + Schemathesis | Schemas, adapters, connectors | 3 min | GitHub-hosted |
-| Integration | `uv run pytest -m integration -n auto` | Postgres, DBOS, MinIO, SFTP, clamd, RLS, workflows | 15 min | GitHub-hosted |
+| Integration | `uv run pytest -m integration -n auto`, as two parallel CI jobs split by module (`integration-a`, `integration-b`; Scott decision 65) | Postgres, DBOS, MinIO, SFTP, clamd, RLS, workflows | 15 min per job | GitHub-hosted |
 | Frontend | `npm run test` (Vitest) | Components, machines, stores, lib | inside Unit budget | GitHub-hosted |
 | End to end | `npx playwright test` | Journeys and acceptance, phone and laptop | 10 min | GitHub-hosted, against compose.test with fakes |
 | Skills | `uv run python -m profiles.harness run` | Hermes skills, hostile set | 5 min | Homelab self-hosted runner |
