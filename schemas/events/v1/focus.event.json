@@ -3,6 +3,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "detour_task_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detour Task Id"
+    },
     "event_id": {
       "format": "uuid",
       "title": "Event Id",
@@ -39,6 +52,19 @@
     "message": {
       "title": "Message",
       "type": "string"
+    },
+    "return_to_task_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Return To Task Id"
     },
     "rule": {
       "title": "Rule",

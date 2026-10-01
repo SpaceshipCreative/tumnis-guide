@@ -839,6 +839,59 @@ export type DefaultIn = {
 };
 
 /**
+ * DetourIn
+ *
+ * Something not in Today the person switched to, captured as a task (P4-01). The
+ * person picks the project (only agents skip it, J2).
+ */
+export type DetourIn = {
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Title
+   */
+  title: string;
+};
+
+/**
+ * DetourOut
+ *
+ * A captured detour whose return question is still open (P4-01, FR-10.6).
+ */
+export type DetourOut = {
+  /**
+   * Detour Task Id
+   */
+  detour_task_id: string;
+  /**
+   * Detour Title
+   */
+  detour_title: string;
+  /**
+   * Event Id
+   */
+  event_id: string;
+  /**
+   * Message
+   */
+  message: string;
+  /**
+   * Return To Task Id
+   */
+  return_to_task_id: string | null;
+  /**
+   * Return To Title
+   */
+  return_to_title: string | null;
+  /**
+   * Rule
+   */
+  rule: string;
+};
+
+/**
  * DigestEntryOut
  */
 export type DigestEntryOut = {
@@ -1172,9 +1225,12 @@ export type FitOffer = {
  * FocusCurrentOut
  *
  * What the focus bar shows: the level in force, the open session and today's
- * messages, oldest first.
+ * messages, oldest first; at Guardrail also the one-task card's tasks, and an open
+ * detour's return question (P4-01).
  */
 export type FocusCurrentOut = {
+  detour: DetourOut | null;
+  guardrail: GuardrailOut | null;
   /**
    * Level
    */
@@ -1324,6 +1380,27 @@ export type FreeBlockOut = {
    * Start
    */
   start: string;
+};
+
+/**
+ * GuardrailOut
+ *
+ * The one-task dashboard at Guardrail (P4-01, FR-10.6): the task it shows, the one it
+ * prepares next, and how many other tasks of today's plan are still to do.
+ */
+export type GuardrailOut = {
+  /**
+   * Current Task Id
+   */
+  current_task_id: string | null;
+  /**
+   * Next Task Id
+   */
+  next_task_id: string | null;
+  /**
+   * Remaining
+   */
+  remaining: number;
 };
 
 /**
@@ -3467,6 +3544,7 @@ export type RequestApprovalBody = {
  * RespondIn
  */
 export type RespondIn = {
+  detour?: DetourIn | null;
   /**
    * Event Id
    */
@@ -3573,6 +3651,27 @@ export type ResumeOut = {
    * Schema Version
    */
   schema_version?: 1;
+};
+
+/**
+ * ReturnIn
+ *
+ * The answer to an open detour's return question (P4-01). `version` is the detour
+ * task's: Return moves it back to Backlog.
+ */
+export type ReturnIn = {
+  /**
+   * Decision
+   */
+  decision: "return" | "stay";
+  /**
+   * Event Id
+   */
+  event_id?: string | null;
+  /**
+   * Version
+   */
+  version: number;
 };
 
 /**
@@ -7734,6 +7833,61 @@ export type FocusRespondResponses = {
 
 export type FocusRespondResponse =
   FocusRespondResponses[keyof FocusRespondResponses];
+
+export type FocusReturnDetourData = {
+  body: ReturnIn;
+  path?: never;
+  query?: never;
+  url: "/v1/focus/return";
+};
+
+export type FocusReturnDetourErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type FocusReturnDetourError =
+  FocusReturnDetourErrors[keyof FocusReturnDetourErrors];
+
+export type FocusReturnDetourResponses = {
+  /**
+   * Successful Response
+   */
+  200: FocusCurrentOut;
+};
+
+export type FocusReturnDetourResponse =
+  FocusReturnDetourResponses[keyof FocusReturnDetourResponses];
 
 export type GithubWebhookData = {
   body?: never;
