@@ -57,11 +57,18 @@ def fake_runner(
     if "seed" not in request.fixturenames:
         yield fake_runner
         return
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+
     seed: SeedResult = request.getfixturevalue("seed")
     factory = _seed_factory(fake_runner, seed, db, clock)
+    # The runner's heartbeats are stamped on the test clock, so the enrichment judges the
+    # project agents on it too (as the P1-08 suite's `enrichment_settings` does); on the
+    # system clock every seed agent would read as offline.
+    agents.configure_enrichment(clock=clock)
     try:
         yield factory
     finally:
+        agents.configure_enrichment()
         factory.disconnect_all()
 
 
