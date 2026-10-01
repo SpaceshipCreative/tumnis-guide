@@ -42,14 +42,41 @@ export { expect };
 export type { TestFakes };
 
 /** The seed sets `POST /v1/test/reset?set=` loads (backend `tumnis.seed.SeedSet`). */
-export type SeedSetName = "seed" | "load" | "ten_projects";
+export type SeedSetName = "seed" | "load" | "ten_projects" | "acceptance";
+
+/**
+ * The acceptance journeys' Monday (2026-03-09): the acceptance set's dates are offsets from
+ * it, so "due today" and the calendar's busy events land on the day the specs plan.
+ */
+export const ACCEPTANCE_ANCHOR = "2026-03-09";
+
+/** A phase 1 or phase 2 acceptance tag (`@A1.1` to `@A2.7`). */
+const ACCEPTANCE_TAG = /^@A[12]\.\d+$/;
+
+/**
+ * The set a test's `seededApp` resets to before it runs, chosen by its tags: the phase 1
+ * and phase 2 acceptance specs get the acceptance set (Scott decision 37: `Acme site`,
+ * `Beta app`, their agents and the tasks the journeys name), every other spec the seed
+ * set, which stays as the phase 0 specs pin it.
+ */
+export function seedSetFor(tags: readonly string[]): SeedSetName {
+  return tags.some((tag) => ACCEPTANCE_TAG.test(tag)) ? "acceptance" : "seed";
+}
+
+/** The query `POST /v1/test/reset` takes for `set`. */
+function resetParams(set: SeedSetName): Record<string, string> {
+  if (set === "seed") return {};
+  if (set === "acceptance") return { set, anchor: ACCEPTANCE_ANCHOR };
+  return { set };
+}
 
 /** The compose.test stack reset to the seed set (TUMNIS_ADAPTERS=fake). */
 export interface SeededApp {
   readonly baseURL: string;
   /**
    * `POST /v1/test/reset` (`?set=load` for 10 projects and 2,000 tasks, `?set=ten_projects`
-   * for the seed plus 7 more projects, P0-23).
+   * for the seed plus 7 more projects, P0-23; `?set=acceptance&anchor=2026-03-09` for the
+   * acceptance journeys' rows, which the fixture picks for `@A1.x` and `@A2.x` specs).
    */
   reset(set?: SeedSetName): Promise<void>;
 }
@@ -179,7 +206,7 @@ async function postReset(
   // The load set (2,000 tasks) outlasts the 10 s action timeout on a busy host (P0-29).
   const send = () =>
     request.post("/v1/test/reset", {
-      params: set === "seed" ? {} : { set },
+      params: resetParams(set),
       timeout: RESET_TIMEOUT_MS,
     });
   let response = await send();
@@ -202,7 +229,7 @@ export const test = base.extend<E2EFixtures>({
     // The next test starts on the real clock even if it never resets the stack.
     if (follower.synced()) await request.post("/v1/test/reset");
   },
-  seededApp: async ({ baseURL, request, context }, use) => {
+  seededApp: async ({ baseURL, request, context }, use, testInfo) => {
     // Mounted only with fake adapters (compose.test and previews).
     const reset = async (set: SeedSetName = "seed"): Promise<void> => {
       // A reset empties every table, sessions and users included (P0-29): a browser
@@ -223,7 +250,7 @@ export const test = base.extend<E2EFixtures>({
       expect(response.status(), `POST /v1/test/reset (${set})`).toBe(204);
       if (signedIn) await signInAs(context.request, seedSetUser(set));
     };
-    await reset();
+    await reset(seedSetFor(testInfo.tags));
     await use({ baseURL: baseURL ?? "", reset });
   },
   fakes: async ({ page }, use) => {

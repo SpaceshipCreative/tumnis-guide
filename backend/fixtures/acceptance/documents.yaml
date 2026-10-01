@@ -1,0 +1,23 @@
+# One text brief per acceptance project (A1.5's packet starts with the project brief).
+schema_version: 1
+documents:
+  - key: d_acme_site_brief
+    project: p_acme_site
+    title: Acme site brief
+    role: brief
+    body: |
+      Acme's site needs a working footer, the new logo and a quote for the redesign.
+      Quote from the signed rate card; never promise dates before the proposal is accepted.
+  - key: d_beta_app_brief
+    project: p_beta_app
+    title: Beta app brief
+    role: brief
+    body: |
+      Beta is opening its app to the first hundred users. Keep the signup form short and
+      write every proposal against the three things Beta asked for.
+  - key: d_gamma_ops_brief
+    project: p_gamma_ops
+    title: Gamma ops brief
+    role: brief
+    body: |
+      The recurring work: the course lessons and the monthly analytics report.

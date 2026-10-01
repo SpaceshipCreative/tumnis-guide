@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "picks": [
+    {
+      "task_id": "title:Write proposal",
+      "reason": "Beta reads proposals this week; do it while the morning is clear"
+    }
+  ],
+  "alternates": [],
+  "notes": null
+}

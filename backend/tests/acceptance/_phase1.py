@@ -57,10 +57,18 @@ def seed_ctx(seed: SeedResult) -> WorkspaceContext:
 
 async def seed_client(app: Any, clock: FixedClock) -> SessionClient:
     """An httpx client on `app` signed in as the seed user (password, then TOTP at the
-    clock's time); writes carry `X-CSRF-Token` and an `Idempotency-Key`."""
+    clock's time); writes carry `X-CSRF-Token` and an `Idempotency-Key`.
+
+    The suites poll (`settle`) while the clock stands still, so the per-principal bucket
+    never refills: its default burst (50, P0-10) would end a slow settle in 429. Rate
+    limits are not what the acceptance suites check (P0-10's own tests do), so this app's
+    default bucket holds enough for any number of polls, as the meta sweeps' app does."""
     from tests._auth import Account, session_client_for, sign_in  # noqa: PLC0415
     from tests._auth import seed_user as seed_user_fields  # noqa: PLC0415
+    from tumnis.core.ratelimit import BUCKETS, Bucket, RateLimiter  # noqa: PLC0415
 
+    polls = Bucket(rate_per_s=BUCKETS["default"].rate_per_s, burst=10_000)
+    app.state.rate_limiter = RateLimiter(app.state.clock, {**BUCKETS, "default": polls})
     email, password, secret = seed_user_fields()
     http = session_client_for(app)
     unused = uuid.UUID(int=0)  # sign_in sends only the email, password and code
