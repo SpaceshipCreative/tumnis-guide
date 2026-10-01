@@ -11,7 +11,8 @@ export type LiveEntity =
   | "dead_letter"
   | "calendar_account"
   | "runner"
-  | "agent_profile";
+  | "agent_profile"
+  | "plan";
 
 export const LIVE_MAP: Record<
   LiveEntity,
@@ -35,6 +36,8 @@ export const LIVE_MAP: Record<
       "searchSearch",
       "searchTypeaheadTasks",
       "planningGetProjectWeek", // due dates and the tasks to schedule (P1-12)
+      "planningGetPlan", // an item's live status and blocked flag (P1-11)
+      "planningGetAlternates",
     ],
   },
   // A project's board, columns and agent context (P2-01) carry its id in their path:
@@ -96,6 +99,16 @@ export const LIVE_MAP: Record<
   agent_profile: {
     details: ["agentsGetProfileTools"],
     lists: ["agentsListProfiles"],
+  },
+  // A plan published, superseded or acted on (P1-11): its path names the day, not the
+  // plan, so every plan message refreshes the day's plan, its alternates and the week.
+  plan: {
+    details: [],
+    lists: [
+      "planningGetPlan",
+      "planningGetAlternates",
+      "planningGetProjectWeek",
+    ],
   },
 };
 

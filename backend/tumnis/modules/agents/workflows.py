@@ -316,6 +316,17 @@ async def run_skill(workspace_id: str, packet: dict[str, Any]) -> dict[str, Any]
     return await finish_step(workspace_id, packet, message)
 
 
+async def run_child_skill(workspace_id: UUID, packet: TaskPacket) -> dict[str, Any]:
+    """`run_skill` as a child of the calling workflow (P1-11's plan run): workflow id
+    `run_skill:<run id>`, so a replayed caller finds its child instead of dispatching
+    again."""
+    with SetWorkflowID(run_workflow_id(packet.run_id)):
+        return await run_skill(str(workspace_id), packet.model_dump(mode="json"))
+
+
+api.register_skill_runner(run_child_skill)
+
+
 async def start_run_skill(
     workspace_id: UUID, packet: TaskPacket
 ) -> "WorkflowHandleAsync[dict[str, Any]]":

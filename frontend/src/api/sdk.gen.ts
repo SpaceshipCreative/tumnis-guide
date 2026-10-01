@@ -158,15 +158,42 @@ import type {
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentErrors,
   KnowledgeUploadDocumentResponses,
+  PlanningAcceptAllData,
+  PlanningAcceptAllErrors,
+  PlanningAcceptAllResponses,
+  PlanningAcceptItemData,
+  PlanningAcceptItemErrors,
+  PlanningAcceptItemResponses,
+  PlanningGetAlternatesData,
+  PlanningGetAlternatesErrors,
+  PlanningGetAlternatesResponses,
   PlanningGetDayCalendarData,
   PlanningGetDayCalendarErrors,
   PlanningGetDayCalendarResponses,
+  PlanningGetPlanData,
+  PlanningGetPlanErrors,
+  PlanningGetPlanResponses,
   PlanningGetProjectWeekData,
   PlanningGetProjectWeekErrors,
   PlanningGetProjectWeekResponses,
+  PlanningMoveIssueData,
+  PlanningMoveIssueErrors,
+  PlanningMoveIssueResponses,
+  PlanningRemoveItemData,
+  PlanningRemoveItemErrors,
+  PlanningRemoveItemResponses,
+  PlanningReplanData,
+  PlanningReplanErrors,
+  PlanningReplanResponses,
   PlanningSchedulePlanItemData,
   PlanningSchedulePlanItemErrors,
   PlanningSchedulePlanItemResponses,
+  PlanningSplitIssueData,
+  PlanningSplitIssueErrors,
+  PlanningSplitIssueResponses,
+  PlanningSwapItemData,
+  PlanningSwapItemErrors,
+  PlanningSwapItemResponses,
   ProjectsArchiveProjectData,
   ProjectsArchiveProjectErrors,
   ProjectsArchiveProjectResponses,
@@ -354,9 +381,18 @@ import {
   zKnowledgeTestLocationResponse,
   zKnowledgeUpdateDocumentResponse,
   zKnowledgeUploadDocumentResponse,
+  zPlanningAcceptAllResponse,
+  zPlanningAcceptItemResponse,
+  zPlanningGetAlternatesResponse,
   zPlanningGetDayCalendarResponse,
+  zPlanningGetPlanResponse,
   zPlanningGetProjectWeekResponse,
+  zPlanningMoveIssueResponse,
+  zPlanningRemoveItemResponse,
+  zPlanningReplanResponse,
   zPlanningSchedulePlanItemResponse,
+  zPlanningSplitIssueResponse,
+  zPlanningSwapItemResponse,
   zProjectsArchiveProjectResponse,
   zProjectsCreateProjectResponse,
   zProjectsGetProjectContextResponse,
@@ -1394,6 +1430,27 @@ export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Replan
+ */
+export const planningReplan = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningReplanData, ThrowOnError>,
+): RequestResult<PlanningReplanResponses, PlanningReplanErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    PlanningReplanResponses,
+    PlanningReplanErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningReplanResponse.parseAsync(data),
+    url: "/v1/plan/replan",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Get Project Week
  */
 export const planningGetProjectWeek = <ThrowOnError extends boolean = false>(
@@ -1411,6 +1468,69 @@ export const planningGetProjectWeek = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zPlanningGetProjectWeekResponse.parseAsync(data),
     url: "/v1/plan/week/{monday}",
+    ...options,
+  });
+
+/**
+ * Get Plan
+ */
+export const planningGetPlan = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetPlanData, ThrowOnError>,
+): RequestResult<
+  PlanningGetPlanResponses,
+  PlanningGetPlanErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetPlanResponses,
+    PlanningGetPlanErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetPlanResponse.parseAsync(data),
+    url: "/v1/plan/{day}",
+    ...options,
+  });
+
+/**
+ * Accept All
+ */
+export const planningAcceptAll = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningAcceptAllData, ThrowOnError>,
+): RequestResult<
+  PlanningAcceptAllResponses,
+  PlanningAcceptAllErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningAcceptAllResponses,
+    PlanningAcceptAllErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningAcceptAllResponse.parseAsync(data),
+    url: "/v1/plan/{day}/accept-all",
+    ...options,
+  });
+
+/**
+ * Get Alternates
+ */
+export const planningGetAlternates = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningGetAlternatesData, ThrowOnError>,
+): RequestResult<
+  PlanningGetAlternatesResponses,
+  PlanningGetAlternatesErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    PlanningGetAlternatesResponses,
+    PlanningGetAlternatesErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetAlternatesResponse.parseAsync(data),
+    url: "/v1/plan/{day}/alternates",
     ...options,
   });
 
@@ -1436,6 +1556,48 @@ export const planningGetDayCalendar = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Move Issue
+ */
+export const planningMoveIssue = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningMoveIssueData, ThrowOnError>,
+): RequestResult<
+  PlanningMoveIssueResponses,
+  PlanningMoveIssueErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningMoveIssueResponses,
+    PlanningMoveIssueErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningMoveIssueResponse.parseAsync(data),
+    url: "/v1/plan/{day}/issues/{issue_id}/move",
+    ...options,
+  });
+
+/**
+ * Split Issue
+ */
+export const planningSplitIssue = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningSplitIssueData, ThrowOnError>,
+): RequestResult<
+  PlanningSplitIssueResponses,
+  PlanningSplitIssueErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningSplitIssueResponses,
+    PlanningSplitIssueErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningSplitIssueResponse.parseAsync(data),
+    url: "/v1/plan/{day}/issues/{issue_id}/split",
+    ...options,
+  });
+
+/**
  * Schedule Plan Item
  */
 export const planningSchedulePlanItem = <ThrowOnError extends boolean = false>(
@@ -1453,6 +1615,73 @@ export const planningSchedulePlanItem = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zPlanningSchedulePlanItemResponse.parseAsync(data),
     url: "/v1/plan/{day}/items/{task_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Accept Item
+ */
+export const planningAcceptItem = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningAcceptItemData, ThrowOnError>,
+): RequestResult<
+  PlanningAcceptItemResponses,
+  PlanningAcceptItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningAcceptItemResponses,
+    PlanningAcceptItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningAcceptItemResponse.parseAsync(data),
+    url: "/v1/plan/{day}/items/{task_id}/accept",
+    ...options,
+  });
+
+/**
+ * Remove Item
+ */
+export const planningRemoveItem = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningRemoveItemData, ThrowOnError>,
+): RequestResult<
+  PlanningRemoveItemResponses,
+  PlanningRemoveItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningRemoveItemResponses,
+    PlanningRemoveItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningRemoveItemResponse.parseAsync(data),
+    url: "/v1/plan/{day}/items/{task_id}/remove",
+    ...options,
+  });
+
+/**
+ * Swap Item
+ */
+export const planningSwapItem = <ThrowOnError extends boolean = false>(
+  options: Options<PlanningSwapItemData, ThrowOnError>,
+): RequestResult<
+  PlanningSwapItemResponses,
+  PlanningSwapItemErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    PlanningSwapItemResponses,
+    PlanningSwapItemErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningSwapItemResponse.parseAsync(data),
+    url: "/v1/plan/{day}/items/{task_id}/swap",
     ...options,
     headers: {
       "Content-Type": "application/json",

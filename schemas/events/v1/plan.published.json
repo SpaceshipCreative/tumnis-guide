@@ -1,0 +1,67 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/plan.published.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "day": {
+      "format": "date",
+      "title": "Day",
+      "type": "string"
+    },
+    "plan_id": {
+      "format": "uuid",
+      "title": "Plan Id",
+      "type": "string"
+    },
+    "reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source": {
+      "enum": [
+        "master",
+        "fallback",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "task_ids": {
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "title": "Task Ids",
+      "type": "array"
+    },
+    "trigger": {
+      "enum": [
+        "morning",
+        "replan",
+        "manual"
+      ],
+      "title": "Trigger",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "plan_id",
+    "day",
+    "task_ids",
+    "reasons",
+    "source",
+    "trigger"
+  ],
+  "title": "PlanPublishedV1",
+  "type": "object"
+}

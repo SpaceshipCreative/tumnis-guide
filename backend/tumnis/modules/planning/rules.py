@@ -490,3 +490,25 @@ def is_plan_due(
     if already_built or day.weekday() not in plan_weekdays:
         return None
     return day if now >= local_to_utc(day, plan_time, tz) else None
+
+
+def free_left(free: Sequence[Interval], taken: Sequence[Interval]) -> list[Interval]:
+    """The free blocks with the taken blocks cut out, in time order (a swap places its task
+    in what the plan's other blocks leave)."""
+    left: list[Interval] = []
+    for block in sorted(free, key=lambda b: b.start):
+        pieces = [block]
+        for cut in taken:
+            kept: list[Interval] = []
+            for piece in pieces:
+                if cut.end <= piece.start or piece.end <= cut.start:
+                    kept.append(piece)
+                    continue
+                kept += [
+                    Interval(a, b)
+                    for a, b in ((piece.start, cut.start), (cut.end, piece.end))
+                    if a < b
+                ]
+            pieces = kept
+        left += pieces
+    return left
