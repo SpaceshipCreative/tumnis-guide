@@ -2,16 +2,26 @@
 
 Scripted per skill with `script(skill, output_json, status=..., delay_ms=...)`; an
 unscripted skill answers `{}`. `offline()` makes every dispatch raise AgentUnavailable
-until `online()`. `calls` records each dispatched packet. In the compose.test stack it is
-scripted through `POST /v1/test/fakes/runner/script`.
+until `online()`. `calls` records each dispatched packet.
+
+In the compose.test stack (P2-04, R-37) it is scripted through `POST
+/v1/test/fakes/runner/script`, stored in Postgres (tumnis.core.fake_scripts) because the
+api and the worker are separate processes: `parse_runner_script` reads the phase 1 body
+(a recorded answer per profile and skill) and the phase 2 body (the steps of each run of
+a task, by title). While the store is enabled, each dispatch goes to the hooks registered
+with `on_dispatch`: `agents.fake_play` records it as the last packet and plays the task's
+steps.
 """
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Final, Literal, Self
 from uuid import UUID, uuid5
 
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from tumnis.core import fake_scripts
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.modules.agents.adapters.port import (
     AgentCapabilities,
@@ -23,6 +33,97 @@ from tumnis.modules.agents.adapters.port import (
 from tumnis.modules.agents.packet_builder import TaskPacket
 
 ScriptedStatus = Literal["succeeded", "failed", "timed_out"]
+
+
+MAX_STEP_TEXT: Final = 4000
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class Phase1Script(_Strict):
+    """A recorded answer for a profile and skill (phase 1: `runnerScript(profile, skill,
+    result)`, `recordings/runner/<result>`)."""
+
+    profile: str = Field(min_length=1, max_length=64)
+    skill: str = Field(min_length=1, max_length=64)
+    result: str = Field(min_length=1, max_length=255)
+    delay_ms: int = Field(default=0, ge=0, le=60_000)
+
+
+class StreamStep(_Strict):
+    kind: Literal["log", "tool_call", "file_touched"]
+    text: str = Field(min_length=1, max_length=MAX_STEP_TEXT)
+
+
+class ArtifactStep(_Strict):
+    name: str = Field(min_length=1, max_length=255)
+    media_type: str = Field(max_length=255)
+    content: str
+
+
+class ResultStep(BaseModel):
+    """The result the run posts; the whole body is checked as `post_result`'s input when
+    it is played (the same validation as any agent's result)."""
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    outcome: Literal["done", "partial", "blocked"]
+    summary: str = Field(min_length=1, max_length=20_000)
+
+
+class Step(_Strict):
+    """One thing a run does: exactly one of a stream line, an artifact or its result.
+    Questions and approvals (`ask_human`, P2-05) are not played yet: refused."""
+
+    stream: StreamStep | None = None
+    upload_artifact: ArtifactStep | None = None
+    result: ResultStep | None = None
+
+    @model_validator(mode="after")
+    def _one_action(self) -> Self:
+        given = [self.stream, self.upload_artifact, self.result]
+        if sum(step is not None for step in given) != 1:
+            raise ValueError("a step names exactly one of stream, upload_artifact or result")
+        return self
+
+
+class TaskScript(_Strict):
+    """What the fake runner does in each run of the task titled `task_title` (phase 2,
+    `fakes.runner.script(taskTitle, runs)`): `runs[n]` is the (n+1)th run's steps."""
+
+    task_title: str = Field(min_length=1, max_length=500)
+    runs: list[list[Step]] = Field(max_length=20)
+
+
+DispatchHook = Callable[[TaskPacket], Awaitable[None]]
+_dispatch_hooks: list[DispatchHook] = []
+
+
+def on_dispatch(hook: DispatchHook) -> None:
+    """Call `hook` with every packet a FakeAgent dispatches while the fake-script store is
+    enabled. `agents.fake_play` registers the scripted playback here when it is imported
+    (it reads the agents api, which this package must not import)."""
+    if hook not in _dispatch_hooks:
+        _dispatch_hooks.append(hook)
+
+
+def task_script_key(title: str) -> str:
+    return f"task:{title}"
+
+
+def parse_runner_script(body: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+    """The fake runner's stored script (R-37, `POST /v1/test/fakes/runner/script`): the
+    phase 1 body is keyed `<profile>/<skill>`, the phase 2 body `task:<title>` and stored
+    with `played: 0` (how many of its runs the fake has played). Raises ValueError
+    (pydantic's ValidationError) for anything else."""
+    if "task_title" in body:
+        script = TaskScript.model_validate(body)
+        stored = script.model_dump(mode="json", exclude_none=True)
+        return task_script_key(script.task_title), {**stored, "played": 0}
+    phase_1 = Phase1Script.model_validate(body)
+    return f"{phase_1.profile}/{phase_1.skill}", phase_1.model_dump(mode="json")
 
 
 @dataclass(frozen=True)
@@ -75,6 +176,9 @@ class FakeAgent:
         if self._offline_all or packet.profile_id in self._offline:
             raise AgentUnavailable(packet.profile_id, "offline")
         self.calls.append(packet)
+        if fake_scripts.enabled():  # the compose.test stack's worker (R-37)
+            for hook in _dispatch_hooks:
+                await hook(packet)
         script = self._scripts.get(packet.skill, _Script({}, "succeeded", 0))
         if script.delay_ms:
             await asyncio.sleep(script.delay_ms / 1000)

@@ -111,7 +111,7 @@ ACK_BATCH_MAX: Final = 50  # protocol 2: ids per batched ack (plan default)
 ACK_BATCH_S: Final = 0.5  # protocol 2: the longest an ack waits for its batch (plan default)
 PROTOCOL_2: Final = 2
 V1_TIMEOUT_MAX: Final = 3600  # a protocol-1 `run` carries at most an hour
-STREAM_EVENT_KIND: Final = {"log": "log", "tool_call": "tool_call", "file_touched": "file"}
+STREAM_EVENT_KIND: Final = api.STREAM_EVENT_KIND
 # never sent on protocol 1
 PROTOCOL_2_COMMANDS: Final = frozenset({"cancel", "archive", "restore", "purge_archive"})
 
@@ -878,20 +878,7 @@ class _RunnerSocket:
         payload = message.model_dump(mode="json", exclude={"schema_version", "sent_at"})
         if isinstance(message, Stream):  # redacted and cut before storage (P2-04)
             payload["text"] = api.log_text(message.text)
-        # The run's row is locked before its event takes a `seq`, as every run-event writer
-        # does (the others update or lock the row first): a run's events then commit in
-        # seq order, so a reader paging with `after_seq` never skips one although the
-        # sequence is global.
-        await s.execute(select(_runs.c.id).where(_runs.c.id == run_id).with_for_update())
-        await s.execute(
-            insert(_events)
-            .values(run_id=run_id, message_id=message.message_id, kind=kind, payload=payload)
-            .on_conflict_do_nothing(index_elements=["workspace_id", "message_id"])
-        )
-        await s.execute(
-            _NOTIFY,
-            {"channel": api.RUN_EVENTS_CHANNEL, "payload": json.dumps({"run": str(run_id)})},
-        )
+        await api.record_run_event(s, run_id, message.message_id, kind, payload)
 
     async def _status(self, s: Any, message: Status) -> None:
         """`started` with the profile's VERSION: recorded on the run and on the profile (a
