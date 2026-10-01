@@ -116,7 +116,6 @@ def _project(db: DbUrls, name: str) -> UUID:
 
 
 @pytest.mark.req("A1.2", "A1.1", "A2.6")
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_agents_ready_in_fakes_mode_until_their_runner_connects(
     client: httpx.AsyncClient, db: DbUrls
 ) -> None:
@@ -147,7 +146,6 @@ async def test_agents_ready_in_fakes_mode_until_their_runner_connects(
 
 
 @pytest.mark.req("A1.2", "A2.6")
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_planner_tick_publishes_the_masters_scripted_plan(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
 ) -> None:
@@ -205,7 +203,6 @@ async def test_planner_tick_publishes_the_masters_scripted_plan(
 
 
 @pytest.mark.req("A1.1", "A1.6")
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_enrichment_plays_the_project_agents_recording(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
 ) -> None:
@@ -235,7 +232,6 @@ async def test_enrichment_plays_the_project_agents_recording(
 
 
 @pytest.mark.req("A1.2")
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_unscripted_fake_dispatch_is_recorded_and_left_running(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
 ) -> None:

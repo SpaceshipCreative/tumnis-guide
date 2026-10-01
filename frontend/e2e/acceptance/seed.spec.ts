@@ -58,7 +58,6 @@ test(
   "T-SEED-21 one planner tick publishes the master's scripted Monday plan",
   { tag: ["@SEED"] },
   async ({ signedInPage: page, seededApp, fakes }) => {
-    test.fail();
     // The compose.test stack has no runner daemon: the acceptance master, whose runner
     // never connected, is the worker's FakeAgent, which plays the stored script.
     await seededApp.reset("acceptance");
