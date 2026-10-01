@@ -22,6 +22,9 @@ import type {
   AgentsCreateRunnerData,
   AgentsCreateRunnerErrors,
   AgentsCreateRunnerResponses,
+  AgentsDelegateTaskData,
+  AgentsDelegateTaskErrors,
+  AgentsDelegateTaskResponses,
   AgentsGetPausesData,
   AgentsGetPausesErrors,
   AgentsGetPausesResponses,
@@ -79,6 +82,9 @@ import type {
   AgentsUpdateProfileData,
   AgentsUpdateProfileErrors,
   AgentsUpdateProfileResponses,
+  AgentsWaitForTaskData,
+  AgentsWaitForTaskErrors,
+  AgentsWaitForTaskResponses,
   AuditExportAuditCsvData,
   AuditExportAuditCsvErrors,
   AuditExportAuditCsvResponses,
@@ -434,6 +440,7 @@ import {
   zAgentsCancelRunResponse,
   zAgentsCheckProfileHealthResponse,
   zAgentsCreateRunnerResponse,
+  zAgentsDelegateTaskResponse,
   zAgentsGetPausesResponse,
   zAgentsGetProfileToolsResponse,
   zAgentsGetProjectDigestResponse,
@@ -453,6 +460,7 @@ import {
   zAgentsResumeProjectResponse,
   zAgentsRotateRunnerTokenResponse,
   zAgentsUpdateProfileResponse,
+  zAgentsWaitForTaskResponse,
   zAuditListAuditResponse,
   zAuthConfirmTotpEnrolmentResponse,
   zAuthCreateKeyResponse,
@@ -1332,6 +1340,61 @@ export const decisionsEditThreshold = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Delegate Task
+ *
+ * Hand a task to its project's agent (the master key only; 403 `master_only` for any
+ * other caller): a run of the task starts, and the delegation id is its run's id. 409
+ * `agent_not_provisioned`, `agents_paused`, `delegation_depth_exceeded`,
+ * `delegation_loop`.
+ */
+export const agentsDelegateTask = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsDelegateTaskData, ThrowOnError>,
+): RequestResult<
+  AgentsDelegateTaskResponses,
+  AgentsDelegateTaskErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsDelegateTaskResponses,
+    AgentsDelegateTaskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsDelegateTaskResponse.parseAsync(data),
+    url: "/v1/delegations",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Wait For Task
+ *
+ * Wait for a delegated task up to `timeout_seconds` (the master key only): `done`,
+ * `waiting_on_human` with the question, or `still_running` at the timeout. The wait
+ * runs after the read's transaction, so it holds none.
+ */
+export const agentsWaitForTask = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsWaitForTaskData, ThrowOnError>,
+): RequestResult<
+  AgentsWaitForTaskResponses,
+  AgentsWaitForTaskErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    AgentsWaitForTaskResponses,
+    AgentsWaitForTaskErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsWaitForTaskResponse.parseAsync(data),
+    url: "/v1/delegations/{delegation_id}/wait",
+    ...options,
   });
 
 /**

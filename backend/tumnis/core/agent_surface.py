@@ -71,8 +71,6 @@ NAME_RE: Final = re.compile(r"^_?[a-z][a-z0-9_]*$")
 
 # Tools the PRD names that later WPs bring (T-P2-01-16 checks this against the registry).
 PENDING_TOOLS: Final[Mapping[str, str]] = {
-    "delegate_task": "P2-06",
-    "wait_for_task": "P2-06",
     "record_human_reply": "P2-16",
     "search_knowledge": "P2-17",
     "get_document": "P2-17",

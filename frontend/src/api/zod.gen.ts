@@ -225,6 +225,28 @@ export const zDefaultIn = z.object({
 });
 
 /**
+ * DelegateBody
+ *
+ * `POST /v1/delegations`'s body.
+ */
+export const zDelegateBody = z.object({
+  note: z.string().max(4000).nullish(),
+  schema_version: z.int().nullish(),
+  task_id: z.uuid(),
+});
+
+/**
+ * DelegateOut
+ */
+export const zDelegateOut = z.object({
+  delegation_id: z.uuid(),
+  depth: z.int(),
+  project_id: z.uuid(),
+  schema_version: z.literal(1).optional().default(1),
+  tainted: z.boolean(),
+});
+
+/**
  * DigestEntryOut
  */
 export const zDigestEntryOut = z.object({
@@ -2292,6 +2314,18 @@ export const zUsageRow = z.object({
 });
 
 /**
+ * WaitOut
+ */
+export const zWaitOut = z.object({
+  question: z.string().nullish(),
+  result_summary: z.string().nullish(),
+  run_status: zRunStatus,
+  schema_version: z.literal(1).optional().default(1),
+  status: z.enum(["done", "waiting_on_human", "still_running"]),
+  task_status: z.string(),
+});
+
+/**
  * WebhookOut
  */
 export const zWebhookOut = z.object({
@@ -2676,6 +2710,27 @@ export const zDecisionsEditThresholdPath = z.object({
  * Successful Response
  */
 export const zDecisionsEditThresholdResponse = zThresholdOut;
+
+export const zAgentsDelegateTaskBody = zDelegateBody;
+
+/**
+ * Successful Response
+ */
+export const zAgentsDelegateTaskResponse = zDelegateOut;
+
+export const zAgentsWaitForTaskPath = z.object({
+  delegation_id: z.uuid(),
+});
+
+export const zAgentsWaitForTaskQuery = z.object({
+  schema_version: z.int().nullish(),
+  timeout_seconds: z.int().gte(1).lte(600).optional().default(600),
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentsWaitForTaskResponse = zWaitOut;
 
 export const zAgentsGetProjectDigestPath = z.object({
   project_id: z.uuid(),
