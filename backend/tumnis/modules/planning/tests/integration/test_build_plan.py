@@ -92,7 +92,6 @@ def _picked_titles(name: str) -> list[str]:
 
 @pytest.mark.req("FR-4.3", "FR-1.2")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_master_plan_published_with_blocks_and_reasons(
     dbos: Any,
     fake_runner: FakeRunnerFactory,
@@ -151,7 +150,6 @@ def made_title(made: dict[str, Any], task_id: UUID) -> str:
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_master_unreachable_uses_fallback_with_notice(
     dbos: Any,
     fake_runner: FakeRunnerFactory,
@@ -193,7 +191,6 @@ INVALID: list[Any] = [
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 @pytest.mark.parametrize(("script", "code"), INVALID)
 async def test_invalid_master_reply_rejected_and_logged(  # noqa: PLR0917
     dbos: Any,
@@ -233,7 +230,6 @@ async def test_invalid_master_reply_rejected_and_logged(  # noqa: PLR0917
 
 @pytest.mark.req("J6")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_unplaceable_pick_gets_issue_and_offer(
     dbos: Any,
     fake_runner: FakeRunnerFactory,
@@ -276,7 +272,6 @@ async def test_unplaceable_pick_gets_issue_and_offer(
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_blocked_today_task_stays_until_replan(
     dbos: Any,
     workspace: WorkspaceHandle,
@@ -326,7 +321,6 @@ async def test_blocked_today_task_stays_until_replan(
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_replan_on_demand_supersedes_and_respects_now(
     dbos: Any,
     workspace: WorkspaceHandle,
@@ -360,7 +354,6 @@ async def test_replan_on_demand_supersedes_and_respects_now(
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_nothing_replans_during_the_day(
     dbos: Any, workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls
 ) -> None:
@@ -419,7 +412,6 @@ async def test_nothing_replans_during_the_day(
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_killed_worker_publishes_once(
     worker_killer: WorkerKillerFactory,
     workspace: WorkspaceHandle,

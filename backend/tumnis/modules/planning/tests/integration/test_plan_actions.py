@@ -59,7 +59,6 @@ def _window() -> tuple[datetime, datetime]:
 
 @pytest.mark.req("J1")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_accept_swap_remove(
     dbos: Any,
     workspace: WorkspaceHandle,
@@ -135,7 +134,6 @@ async def test_accept_swap_remove(
 
 @pytest.mark.req("J6")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_split_creates_subtasks_and_move_pins(  # noqa: PLR0917
     dbos: Any,
     fake_runner: FakeRunnerFactory,

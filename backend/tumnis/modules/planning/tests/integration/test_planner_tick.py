@@ -26,7 +26,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-4.3")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, reason="spec:P1-11")
 async def test_tick_enqueues_once_per_workspace(
     dbos: Any, workspace: WorkspaceHandle, db: DbUrls
 ) -> None:

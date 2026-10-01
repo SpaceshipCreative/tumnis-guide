@@ -23,7 +23,7 @@ from uuid import UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import Table, select, text, update
+from sqlalchemy import Table, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -887,12 +887,25 @@ class PlanDraft(BaseModel):
 async def publish_plan(ctx: WorkspaceContext, draft: PlanDraft) -> UUID:
     """Publishes the draft in one transaction under the day's lock: the day's published
     plan becomes `superseded`, the new plan, its items and its issues are written (each
-    issue also a `plan_issue` review item), and `plan.published` is emitted once. A draft
-    whose plan already exists (a replayed step) writes nothing and returns its id."""
+    issue also a `plan_issue` review item), and `plan.published` is emitted once (unless
+    the plan is empty: no items and no issues). The plan sorts after the day's earlier
+    plans (`built_at` is moved just past theirs when the caller's clock is behind). A
+    draft whose plan already exists (a replayed step) writes nothing and returns its id."""
     async with tenant_session(ctx) as s:
         await s.execute(_PLAN_LOCK, {"key": f"plan:{ctx.workspace_id}:{draft.day.isoformat()}"})
         if await s.scalar(select(_PLANS.c.id).where(_PLANS.c.id == draft.plan_id)) is not None:
             return draft.plan_id
+        # A plan supersedes the day's earlier plans, so it sorts after them even when the
+        # caller's clock is behind the morning build's planned time (a re-plan before the
+        # morning slot, or a test clock).
+        built_at = draft.built_at
+        latest = await s.scalar(
+            select(func.max(_PLANS.c.built_at)).where(
+                _PLANS.c.day == draft.day, _PLANS.c.deleted_at.is_(None)
+            )
+        )
+        if latest is not None and latest >= built_at:
+            built_at = latest + timedelta(microseconds=1)
         await s.execute(
             update(_PLANS)
             .where(
@@ -906,7 +919,7 @@ async def publish_plan(ctx: WorkspaceContext, draft: PlanDraft) -> UUID:
             _PLANS.insert().values(
                 id=draft.plan_id,
                 day=draft.day,
-                built_at=draft.built_at,
+                built_at=built_at,
                 source=draft.source,
                 trigger=draft.trigger,
                 status="published",
@@ -929,18 +942,21 @@ async def publish_plan(ctx: WorkspaceContext, draft: PlanDraft) -> UUID:
             )
         for issue in draft.issues:
             await _add_issue(s, draft, issue)
-        await emit(
-            s,
-            PlanPublishedV1(
-                plan_id=draft.plan_id,
-                day=draft.day,
-                task_ids=[item.task_id for item in draft.items],
-                reasons=[item.reason for item in draft.items],
-                source=draft.source,
-                trigger=draft.trigger,
-            ),
-            occurred_at=draft.built_at,
-        )
+        # Quiet by default: an empty day (nothing to do, nothing to fix) is still planned,
+        # so nothing re-plans it, but it announces nothing.
+        if draft.items or draft.issues:
+            await emit(
+                s,
+                PlanPublishedV1(
+                    plan_id=draft.plan_id,
+                    day=draft.day,
+                    task_ids=[item.task_id for item in draft.items],
+                    reasons=[item.reason for item in draft.items],
+                    source=draft.source,
+                    trigger=draft.trigger,
+                ),
+                occurred_at=built_at,
+            )
         live.mark_changed(s, "plan", draft.plan_id)
     return draft.plan_id
 
