@@ -1,0 +1,62 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/focus.responded.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "response": {
+      "enum": [
+        "still_on_it",
+        "switched",
+        "stuck",
+        "snooze",
+        "less_of_this"
+      ],
+      "title": "Response",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Session Id"
+    },
+    "task_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Task Id"
+    }
+  },
+  "required": [
+    "schema_version",
+    "event_id",
+    "task_id",
+    "session_id",
+    "response"
+  ],
+  "title": "FocusRespondedV1",
+  "type": "object"
+}

@@ -84,6 +84,7 @@ Goal = Annotated[str, StringConstraints(max_length=280)]
 Brief = Annotated[str, StringConstraints(max_length=BRIEF_MAX_CHARS)]
 # The subtask card threshold (FR-3.8), minutes; None: the workspace's (P0-18 lays out on it).
 Threshold = Annotated[int, Field(ge=1, le=MAX_ESTIMATE_MINUTES)]
+FocusCadence = Annotated[int, Field(ge=5, le=240)]  # minutes between check-ins (P2-15)
 
 
 class ProjectLinkIn(BaseModel):
@@ -126,6 +127,7 @@ class ProjectOut(ProjectCreate):
     last_agent_activity_at: datetime | None = None  # always None until P2-04
     subtask_threshold_min: int | None = None  # None: the workspace's threshold (FR-3.8)
     local_decisions_only: bool = False  # decisions never go to Jev (P1-02, Data flow rule 6)
+    focus_cadence_min: int | None = None  # None: the default check-in cadence (P2-15)
 
 
 class ProjectPatch(BaseModel):
@@ -142,6 +144,7 @@ class ProjectPatch(BaseModel):
     links: list[ProjectLinkIn] | None = None
     profile_name: str | None = None
     subtask_threshold_min: Threshold | None = None
+    focus_cadence_min: FocusCadence | None = None  # P2-15, the Settings rail; null clears
     # optional, never null in the contract; an explicit null still reaches the 422 below
     local_decisions_only: bool | SkipJsonSchema[None] = None
     version: Version
@@ -234,6 +237,7 @@ class _Row(BaseModel):
     archive_state: ArchiveState | None = None  # from project_archives (_ARCHIVE_STATE)
     subtask_threshold_min: int | None
     local_decisions_only: bool = False
+    focus_cadence_min: int | None = None
 
 
 def _now(now: datetime | None) -> datetime:
@@ -448,6 +452,12 @@ async def effective_subtask_threshold(s: AsyncSession, project_id: UUID) -> int:
     if row.subtask_threshold_min is not None:
         return row.subtask_threshold_min
     return (await auth.get_workspace_settings(_context())).subtask_threshold_min
+
+
+async def focus_cadence(s: AsyncSession, project_id: UUID) -> int | None:
+    """The project's own focus check-in cadence in minutes (P2-15), None when it keeps the
+    default; NotFound (404) for a project that is not there."""
+    return (await _row(s, project_id)).focus_cadence_min
 
 
 class ProjectLinkOut(BaseModel):
