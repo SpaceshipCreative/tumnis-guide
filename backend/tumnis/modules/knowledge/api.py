@@ -2597,9 +2597,14 @@ async def list_documents(
 
 
 def _search_stmt(
-    q: str, project_id: UUID | None, project_ids: frozenset[UUID] | None
+    q: str,
+    project_id: UUID | None,
+    project_ids: frozenset[UUID] | None,
+    *,
+    agent_written: bool = True,
 ) -> Select[Any]:
-    """The ranked hits of `q` in the reader's scope (`_scope`), best first, unlimited."""
+    """The ranked hits of `q` in the reader's scope (`_scope`), best first, unlimited;
+    without the documents agents added (`source` "agent") when `agent_written` is False."""
     query = func.websearch_to_tsquery(TS_CONFIG, q)
     rank = func.ts_rank_cd(_chunks.c.tsv, query).label("rank")
     stmt = (
@@ -2638,6 +2643,8 @@ def _search_stmt(
             _chunks.c.id,
         )
     )
+    if not agent_written:
+        stmt = stmt.where(_documents.c.source.is_distinct_from(AGENT_SOURCE))
     scope = _scope(project_id, project_ids)
     return stmt if scope is None else stmt.where(scope)
 
@@ -2650,6 +2657,7 @@ async def search_knowledge(  # R-36's parameters, plus the caller's limit
     limit: int = 10,
     mode: Literal["fts"] = "fts",
     project_ids: frozenset[UUID] | None = None,
+    agent_written: bool = True,
 ) -> list[KnowledgeHit]:
     """Full-text search (R-36; P3-10 adds `mode="hybrid"`) over the current versions'
     chunks of live, ready documents: a project's items and the workspace knowledge base
@@ -2659,7 +2667,9 @@ async def search_knowledge(  # R-36's parameters, plus the caller's limit
         raise ProblemError(422, "invalid_mode", "Only full-text search is available")
     if not q.strip():
         return []
-    stmt = _search_stmt(q, project_id, project_ids).limit(max(1, min(limit, SEARCH_LIMIT_MAX)))
+    stmt = _search_stmt(q, project_id, project_ids, agent_written=agent_written).limit(
+        max(1, min(limit, SEARCH_LIMIT_MAX))
+    )
     rows = (await s.execute(stmt)).mappings().all()
     return [KnowledgeHit.model_validate(dict(row)) for row in rows]
 
@@ -2722,7 +2732,11 @@ async def passages_for(
         )
     criteria = (task.acceptance_criteria or "").splitlines()
     q = passage_query(task.title, criteria, context.goal)
-    hits = await search_knowledge(s, q, project_id=task.project_id, limit=PASSAGE_SEARCH_LIMIT)
+    # What agents added stays out of packets (an agent finds it with `search_knowledge`),
+    # so one run's output never feeds the next run's packet on its own (P2-17, T-P2-08-06).
+    hits = await search_knowledge(
+        s, q, project_id=task.project_id, limit=PASSAGE_SEARCH_LIMIT, agent_written=False
+    )
     ranked = [
         Passage(
             chunk_id=h.chunk_id,
