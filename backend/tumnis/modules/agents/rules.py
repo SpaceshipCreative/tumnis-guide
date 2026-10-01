@@ -294,6 +294,39 @@ def can_dispatch(
     return None
 
 
+# --- the kill switch and runaway limits (P2-09, SAF-4, SAF-5) -----------------------------
+
+PauseScope = Literal["workspace", "project"]
+PauseState = Literal["running", "paused_workspace", "paused_project"]
+MAX_TASKS_PER_RUN_DEFAULT: Final = 20  # SAF-5; a project's policy may set its own
+
+
+@dataclass(frozen=True, slots=True)
+class PauseView:
+    """An open pause (not resumed): the whole workspace, or one project."""
+
+    scope: PauseScope
+    project_id: UUID | None
+
+
+def pause_state(open_pauses: Sequence[PauseView], project_id: UUID | None) -> PauseState:
+    """Whether a project's runs may go on: a workspace pause holds every project and wins
+    over a project pause; a project pause holds only its own project."""
+    if any(p.scope == "workspace" for p in open_pauses):
+        return "paused_workspace"
+    if project_id is not None and any(
+        p.scope == "project" and p.project_id == project_id for p in open_pauses
+    ):
+        return "paused_project"
+    return "running"
+
+
+def over_task_limit(created_after_increment: int, limit: int) -> bool:
+    """The run has created more tasks (subtasks included) than its limit allows: the
+    count after this task's increment is past the limit."""
+    return created_after_increment > limit
+
+
 # --- artifacts (P2-07) --------------------------------------------------------------------
 
 ARTIFACT_MAX_BYTES: Final = 256 * 1024  # plan default

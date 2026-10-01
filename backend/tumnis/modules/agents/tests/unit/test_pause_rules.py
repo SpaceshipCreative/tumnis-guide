@@ -13,7 +13,6 @@ BEACON = UUID("01950000-0000-7000-8000-000000000a02")
 
 @pytest.mark.req("SAF-4", "SAF-5")
 @pytest.mark.wp("P2-09")
-@pytest.mark.xfail(strict=True, reason="spec:P2-09")
 def test_pause_state_and_task_limit() -> None:
     """T-P2-09-10
     No open pause: running. A pause of another project leaves the project running; a pause
@@ -21,7 +20,7 @@ def test_pause_state_and_task_limit() -> None:
     over a project pause. A run is over its task limit only once the count after the
     increment exceeds the limit (the 20th task is allowed, the 21st is not; default 20).
     """
-    from tumnis.modules.agents.rules import (  # type: ignore[attr-defined]  # noqa: PLC0415
+    from tumnis.modules.agents.rules import (  # noqa: PLC0415
         MAX_TASKS_PER_RUN_DEFAULT,
         PauseView,
         over_task_limit,

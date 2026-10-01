@@ -403,9 +403,9 @@ async def test_pause_guards_before_flip_and_before_send(  # noqa: PLR0917
     run_id = await world.request(task.id)
 
     async def pause() -> None:
-        await agents.pause(  # type: ignore[attr-defined]
+        await agents.pause(
             world.ctx,
-            agents.PauseIn(scope="workspace", reason="Guard"),  # type: ignore[attr-defined]
+            agents.PauseIn(scope="workspace", reason="Guard"),
             now=clock.now(),
         )
 

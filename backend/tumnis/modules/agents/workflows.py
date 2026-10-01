@@ -22,6 +22,7 @@
 """
 
 import asyncio
+import contextlib
 import contextvars
 import hashlib
 import json
@@ -364,10 +365,12 @@ async def enqueue_run_skill(client: "DBOSClient", workspace_id: UUID, packet: Ta
 
 
 class Prepared(BaseModel):
-    """What `prepare_run` hands the workflow: an ended run, a refusal, or the run's caps."""
+    """What `prepare_run` hands the workflow: an ended run, a refusal, a run a pause holds,
+    or the run's caps."""
 
     status: str
     ended: bool = False  # the run had already ended (cancelled while queued)
+    held: bool = False  # a pause holds it (P2-09): the workflow waits for a release
     refusal: str | None = None
     max_active_seconds: float = 0.0
     ceiling_seconds: float = 0.0
@@ -382,6 +385,7 @@ class RunHandleData(BaseModel):
     profile_id: UUID
     correlation_id: str
     refused: str | None = None  # the agent was unavailable: nothing was dispatched
+    paused: str | None = None  # a pause landed before the send (P2-09): its stop reason
 
 
 dispatch_workflow_id = api.dispatch_workflow_id
@@ -394,12 +398,71 @@ def _requester(created_by: str) -> ActorRef | None:
     return None if tasks.actor_kind(actor) is tasks.ActorKind.SYSTEM else actor
 
 
+_PAUSE_REASON: Final[dict[str, str]] = {
+    "paused_workspace": api.KILLSWITCH,
+    "paused_project": api.PROJECT_PAUSED,
+}
+
+
+async def _hold_if_paused(
+    s: AsyncSession, run: UUID, status: RunStatus, state_seq: int, project_id: UUID | None
+) -> bool:
+    """In the caller's transaction, under the run's row lock: whether a pause holds the
+    run's project (P2-09); a queued run is moved to held."""
+    if await api.pause_state_for(s, project_id) == "running":
+        return False
+    if status is RunStatus.QUEUED:
+        run_transition(status, RunStatus.HELD)
+        await s.execute(
+            update(_runs)
+            .where(_runs.c.id == run)
+            .values(status=RunStatus.HELD.value, state_seq=state_seq + 1)
+        )
+        mark_changed(s, api.LIVE_RUN, run)
+    return True
+
+
+@DBOS.step()
+async def check_pause(workspace_id: str, run_id: str) -> bool:
+    """Before any status flip (P2-09, SAF-4): True when the workspace or the run's project
+    is paused, the run then `held` (a queued run moves queued -> held); False when it may
+    go on, or has already ended or started (a replay after a crash)."""
+    run = UUID(run_id)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        row = (
+            await s.execute(
+                select(_runs.c.status, _runs.c.state_seq, _profiles.c.project_id)
+                .select_from(_runs.join(_profiles, _profiles.c.id == _runs.c.profile_id))
+                .where(_runs.c.id == run)
+                .with_for_update(of=_runs)
+            )
+        ).one()
+        status = RunStatus(row.status)
+        if status not in (RunStatus.QUEUED, RunStatus.HELD):
+            return False
+        return await _hold_if_paused(s, run, status, row.state_seq, row.project_id)
+
+
+async def _wait_while_held(workspace_id: str, run_id: str) -> str | None:
+    """While a pause holds the run, wait on its topic for a release (a resume) or a cancel
+    (Stop); the cancel's reason, or None once nothing holds it."""
+    while await check_pause(workspace_id, run_id):
+        message = await DBOS.recv_async(api.run_topic(UUID(run_id)), timeout_seconds=WAIT_SLICE_S)
+        if message is not None:
+            kind, reason = _signal(message)
+            if kind == "cancel":
+                return reason or "cancel"
+    return None
+
+
 @DBOS.step()
 async def prepare_run(workspace_id: str, run_id: str) -> Prepared:
-    """One transaction: `can_dispatch` again (the task may have changed while queued); the
-    run queued -> running with `started_at` and its workflow id; the task to In progress as
-    the requester; `run.started`. A replay after a crash finds the run running and answers
-    the stored values; an ended run (cancelled while queued) is answered as it is."""
+    """One transaction: the pause again, under the run's row lock (a pause that landed
+    since `check_pause` holds the run: `held`); `can_dispatch` again (the task may have
+    changed while queued); the run queued or held -> running with `started_at` and its
+    workflow id; the task to In progress as the requester; `run.started`. A replay after
+    a crash finds the run running and answers the stored values; an ended run (cancelled
+    while queued) is answered as it is."""
     run = UUID(run_id)
     now = SystemClock().now()
     async with tenant_session(_ctx(workspace_id)) as s:
@@ -418,6 +481,10 @@ async def prepare_run(workspace_id: str, run_id: str) -> Prepared:
         status = RunStatus(row["status"])
         if status in TERMINAL_STATUSES:
             return Prepared(status=status.value, ended=True)
+        if status in (RunStatus.QUEUED, RunStatus.HELD) and await _hold_if_paused(
+            s, run, status, row["state_seq"], row["project_id"]
+        ):
+            return Prepared(status=RunStatus.HELD.value, held=True)
         policy = await projects.get_policy(s, row["project_id"])
         active_cap, ceiling = api.run_caps(policy.max_run_minutes)
         if status in (RunStatus.RUNNING, RunStatus.WAITING_ON_HUMAN):
@@ -497,8 +564,10 @@ def _redacted(packet: TaskPacket) -> dict[str, Any]:
 
 @DBOS.step()
 async def send_to_agent(workspace_id: str, run_id: str) -> RunHandleData:
-    """Builds the run's packet (`build_packet`, P2-02), issues its task token from the
-    profile's key and dispatches it through the profile's adapter, in one step, so the
+    """Checks the pause first (P2-09): a pause that landed after `prepare_run` flipped the
+    run to running stops it here, before anything is sent. Then builds the run's packet
+    (`build_packet`, P2-02), issues its task token from the profile's key and dispatches it
+    through the profile's adapter, in one step, so the
     token is never a recorded step output. The runner dedupes `run` by run id (the mailbox
     row is uuid5(run, "run")), so a replay after a crash dispatches nothing twice. The
     packet is stored on the run with its token redacted."""
@@ -512,10 +581,18 @@ async def send_to_agent(workspace_id: str, run_id: str) -> RunHandleData:
                 ).where(_runs.c.id == run)
             )
         ).one()
-        runner_id = await s.scalar(
-            select(_profiles.c.runner_id).where(_profiles.c.id == row.profile_id)
-        )
+        profile = (
+            await s.execute(
+                select(_profiles.c.runner_id, _profiles.c.project_id).where(
+                    _profiles.c.id == row.profile_id
+                )
+            )
+        ).one()
+        runner_id = profile.runner_id
+        state = await api.pause_state_for(s, profile.project_id)
     handle = RunHandleData(run_id=run, profile_id=row.profile_id, correlation_id=row.correlation_id)
+    if state != "running":  # P2-09: nothing is sent; the workflow ends the run cancelled
+        return handle.model_copy(update={"paused": _PAUSE_REASON[state]})
     try:
         packet = await build_packet(
             RunKind(row.kind), task_id=row.task_id, run_id=run, profile_id=row.profile_id, ctx=ctx
@@ -687,16 +764,28 @@ async def _supervise(  # noqa: PLR0917  # the plan's one loop over every signal
 
 @DBOS.workflow(name="dispatch_run")
 async def dispatch_run(workspace_id: str, run_id: str) -> str:
-    """A run from the queue to its end (P2-04): prepare (running, task In progress), send
-    the packet, then supervise until a result, a stop or a limit; returns the terminal
-    status. Its workflow id is the run id, so a redelivered `run.requested` runs it once."""
-    prep = await prepare_run(workspace_id, run_id)
+    """A run from the queue to its end (P2-04): held while a pause covers it (P2-09:
+    `check_pause` before any status flip, then a wait for a release or a cancel), prepare
+    (running, task In progress), send the packet (`send_to_agent` stops a run a pause
+    caught after prepare), then supervise until a result, a stop or a limit; returns the
+    terminal status. Its workflow id is the run id, so a redelivered `run.requested` runs
+    it once."""
+    while True:
+        cancelled = await _wait_while_held(workspace_id, run_id)
+        if cancelled is not None:
+            return await _end(workspace_id, run_id, RunStatus.CANCELLED, cancelled)
+        prep = await prepare_run(workspace_id, run_id)
+        if not prep.held:
+            break
     if prep.ended:
         return prep.status
     if prep.refusal is not None:
         return await _end(workspace_id, run_id, RunStatus.FAILED, prep.refusal)
+    faults.killpoint("agents.dispatch_run.after_prepare")  # running, nothing sent yet
     handle = await send_to_agent(workspace_id, run_id)
     faults.killpoint("agents.dispatch_run.after_send")  # send_to_agent's output recorded
+    if handle.paused is not None:
+        return await _end(workspace_id, run_id, RunStatus.CANCELLED, handle.paused)
     if handle.refused is not None:
         return await _end(workspace_id, run_id, RunStatus.FAILED, handle.refused)
     return await _supervise(
@@ -749,6 +838,17 @@ async def deliver_signal(
         if row.status in api.TERMINAL:
             return
         raise
+
+
+async def release_held(workspace_id: UUID, run_id: UUID, key: str) -> None:
+    """Wake a held run's `dispatch_run` (P2-09) with a `release`, once per key; it checks
+    the pause again and goes on. A workflow not started yet needs none: it checks the
+    pause when it starts."""
+    target = dispatch_workflow_id(run_id)
+    with contextlib.suppress(DBOSNonExistentWorkflowError):
+        await DBOS.send_async(
+            target, {"kind": "release"}, topic=api.run_topic(run_id), idempotency_key=key
+        )
 
 
 # --- runner_sweep ---------------------------------------------------------------------------
