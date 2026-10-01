@@ -269,9 +269,32 @@ async def run_row(project_id: uuid.UUID) -> uuid.UUID:
     return run_id
 
 
+async def delegation_row(project_id: uuid.UUID) -> uuid.UUID:
+    """A delegation of a task in project `project_id`: `run_row`'s run and a delegations
+    row with the same id, written as the owner (P2-06's `lookup:delegations` route)."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from tumnis.core import db  # noqa: PLC0415
+
+    run_id = await run_row(project_id)
+    async with db.owner_sessionmaker()() as s, s.begin():
+        await s.execute(
+            text(
+                "INSERT INTO delegations (id, workspace_id, child_task_id, project_id, depth,"
+                " delegated_at, created_by)"
+                " SELECT id, workspace_id, task_id, :p, 1, now(), 'system' FROM runs"
+                " WHERE id = :id"
+            ),
+            {"id": run_id, "p": project_id},
+        )
+        await s.execute(text("UPDATE runs SET delegation_id = id WHERE id = :id"), {"id": run_id})
+    return run_id
+
+
 # module -> make a row of that module in the project; returns its id (lookup:<module>).
 LOOKUP_TARGETS: dict[str, Callable[[uuid.UUID], Awaitable[uuid.UUID]]] = {
     "authz_canary": canary_row,
+    "delegations": delegation_row,
     "knowledge": document_row,
     "runs": run_row,
     "tasks": task_row,
