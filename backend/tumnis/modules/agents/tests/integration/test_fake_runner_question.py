@@ -61,7 +61,7 @@ def scripted(
 
     monkeypatch.setattr(fake_play, "STEP_PAUSE_S", 0.0)
     monkeypatch.setattr(fake_play, "RESULT_HOLD_S", 0.0)
-    monkeypatch.setattr(fake_play, "QUESTION_POLL_S", 0.05, raising=False)
+    monkeypatch.setattr(fake_play, "QUESTION_POLL_S", 0.05)
     fake_scripts.enable()
     try:
         yield
@@ -71,7 +71,6 @@ def scripted(
 
 @pytest.mark.req("FR-5.7", "FR-5.5")
 @pytest.mark.wp("P2-04")
-@pytest.mark.xfail(strict=True, reason="spec:SPEC-54-55")
 async def test_scripted_fake_asks_the_human_and_posts_the_answer(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],
