@@ -54,73 +54,67 @@ function runHandlers(recorder: Recorder, taskId: string, projectId: string) {
   ];
 }
 
-test.fails(
-  "[P2-04][FR-5.4] Run in the drawer asks for a run and shows it",
-  async () => {
-    for (const viewport of ["phone", "laptop"] as const) {
-      const project = makeProject({ name: "Acme site" });
-      const task = makeTask({
-        project_id: project.id,
-        title: "Fix footer link",
-        label: "ai",
-        status: "today",
-      });
-      const fake = new ProjectFake({ project, tasks: [task] });
-      const recorder = new Recorder();
-      server.resetHandlers();
-      server.use(
-        ...fake.handlers,
-        ...runHandlers(recorder, task.id, project.id),
-      );
+test("[P2-04][FR-5.4] Run in the drawer asks for a run and shows it", async () => {
+  for (const viewport of ["phone", "laptop"] as const) {
+    const project = makeProject({ name: "Acme site" });
+    const task = makeTask({
+      project_id: project.id,
+      title: "Fix footer link",
+      label: "ai",
+      status: "today",
+    });
+    const fake = new ProjectFake({ project, tasks: [task] });
+    const recorder = new Recorder();
+    server.resetHandlers();
+    server.use(...fake.handlers, ...runHandlers(recorder, task.id, project.id));
 
-      const { user, unmount, router } = await renderRoute(
-        `/projects/${project.id}?view=tasks&task=${task.id}`,
-        { viewport },
-      );
-      const drawer = await screen.findByRole("dialog", {
-        name: "Fix footer link",
-      });
-      await user.click(within(drawer).getByRole("button", { name: "Run" }));
+    const { user, unmount, router } = await renderRoute(
+      `/projects/${project.id}?view=tasks&task=${task.id}`,
+      { viewport },
+    );
+    const drawer = await screen.findByRole("dialog", {
+      name: "Fix footer link",
+    });
+    await user.click(within(drawer).getByRole("button", { name: "Run" }));
 
-      // One request for a run, sent once with an Idempotency-Key.
-      await waitFor(() => {
-        expect(recorder.writes()).toEqual([`POST /v1/tasks/${task.id}/run`]);
-      });
-      expect(recorder.sent[0]?.idempotencyKey).toBeTruthy();
+    // One request for a run, sent once with an Idempotency-Key.
+    await waitFor(() => {
+      expect(recorder.writes()).toEqual([`POST /v1/tasks/${task.id}/run`]);
+    });
+    expect(recorder.sent[0]?.idempotencyKey).toBeTruthy();
 
-      // The run goes into the URL after the task, and the drawer shows it.
-      await waitFor(() => {
-        expect(router.state.location.search).toMatchObject({
-          task: task.id,
-          run: RUN_ID,
-        });
+    // The run goes into the URL after the task, and the drawer shows it.
+    await waitFor(() => {
+      expect(router.state.location.search).toMatchObject({
+        task: task.id,
+        run: RUN_ID,
       });
-      expect(router.state.location.href).toMatch(
-        new RegExp(`[?&]task=${task.id}(&.*)?[&]run=${RUN_ID}`),
-      );
-      const open = screen.getByRole("dialog", { name: "Fix footer link" });
-      const log = await within(open).findByRole("log", { name: "Run log" });
-      expect(
-        await within(log).findByText("Reading the footer component"),
-      ).toBeVisible();
-      expect(within(open).getByRole("button", { name: "Stop" })).toBeVisible();
+    });
+    expect(router.state.location.href).toMatch(
+      new RegExp(`[?&]task=${task.id}(&.*)?[&]run=${RUN_ID}`),
+    );
+    const open = screen.getByRole("dialog", { name: "Fix footer link" });
+    const log = await within(open).findByRole("log", { name: "Run log" });
+    expect(
+      await within(log).findByText("Reading the footer component"),
+    ).toBeVisible();
+    expect(within(open).getByRole("button", { name: "Stop" })).toBeVisible();
 
-      // Back to the task: the run leaves the URL, the details come back.
-      await user.click(
-        within(open).getByRole("button", { name: "Back to the task" }),
-      );
-      await waitFor(() => {
-        expect(router.state.location.search).not.toHaveProperty("run");
-      });
-      expect(
-        await within(open).findByRole("textbox", { name: "Title" }),
-      ).toHaveValue("Fix footer link");
-      unmount();
-    }
-  },
-);
+    // Back to the task: the run leaves the URL, the details come back.
+    await user.click(
+      within(open).getByRole("button", { name: "Back to the task" }),
+    );
+    await waitFor(() => {
+      expect(router.state.location.search).not.toHaveProperty("run");
+    });
+    expect(
+      await within(open).findByRole("textbox", { name: "Title" }),
+    ).toHaveValue("Fix footer link");
+    unmount();
+  }
+});
 
-test.fails("[P2-04][FR-5.4] a Human task has no Run button", async () => {
+test("[P2-04][FR-5.4] a Human task has no Run button", async () => {
   const project = makeProject({ name: "Acme site" });
   const task = makeTask({
     project_id: project.id,

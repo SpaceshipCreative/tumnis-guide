@@ -61,41 +61,35 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test.fails(
-  "[P2-04][FR-5.5] the run view lists the files touched once each",
-  async () => {
-    useRun();
-    renderWithProviders(<RunView runId={RUN_ID} />);
+test("[P2-04][FR-5.5] the run view lists the files touched once each", async () => {
+  useRun();
+  renderWithProviders(<RunView runId={RUN_ID} />);
 
-    const files = await screen.findByRole("region", { name: "Files touched" });
-    expect(await within(files).findByText("src/header.tsx")).toBeVisible();
-    expect(
-      within(files)
-        .getAllByRole("listitem")
-        .map((li) => li.textContent),
-    ).toEqual(["src/footer.tsx", "src/header.tsx"]);
-  },
-);
+  const files = await screen.findByRole("region", { name: "Files touched" });
+  expect(await within(files).findByText("src/header.tsx")).toBeVisible();
+  expect(
+    within(files)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent),
+  ).toEqual(["src/footer.tsx", "src/header.tsx"]);
+});
 
-test.fails(
-  "[P2-04][FR-5.5] elapsed counts each second in a run's first minute",
-  async () => {
-    vi.useFakeTimers({
-      shouldAdvanceTime: true,
-      toFake: ["Date", "setInterval", "setTimeout"],
-    });
-    vi.setSystemTime(new Date("2026-03-09T12:00:12Z"));
-    useRun();
-    renderWithProviders(<RunView runId={RUN_ID} />);
+test("[P2-04][FR-5.5] elapsed counts each second in a run's first minute", async () => {
+  vi.useFakeTimers({
+    shouldAdvanceTime: true,
+    toFake: ["Date", "setInterval", "setTimeout"],
+  });
+  vi.setSystemTime(new Date("2026-03-09T12:00:12Z"));
+  useRun();
+  renderWithProviders(<RunView runId={RUN_ID} />);
 
-    const elapsed = await screen.findByTestId("run-elapsed");
-    expect(elapsed).toHaveAccessibleName("Elapsed");
-    const shown = elapsed.textContent;
-    expect(shown).toMatch(/^0:1[2-4]$/);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
-    });
-    expect(elapsed.textContent).not.toBe(shown);
-    expect(elapsed.textContent).toMatch(/^0:1[4-6]$/);
-  },
-);
+  const elapsed = await screen.findByTestId("run-elapsed");
+  expect(elapsed).toHaveAccessibleName("Elapsed");
+  const shown = elapsed.textContent;
+  expect(shown).toMatch(/^0:1[2-4]$/);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2_000);
+  });
+  expect(elapsed.textContent).not.toBe(shown);
+  expect(elapsed.textContent).toMatch(/^0:1[4-6]$/);
+});
