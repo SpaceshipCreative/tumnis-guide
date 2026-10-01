@@ -10,7 +10,13 @@ import {
   reviewCount,
   todayTasks,
 } from "../../test/msw/dashboard";
+import {
+  mondayPlan,
+  ninetyMinuteIssue,
+  planHandlers,
+} from "../../test/msw/planning";
 import { server } from "../../test/msw/server";
+import { Recorder } from "../../test/msw/settings";
 import { renderRoute } from "../../test/render";
 import { DASHBOARD_READY_MARK } from "./DashboardPage";
 
@@ -140,4 +146,23 @@ test("[P0-23][UX 11] the quick-add button opens quick add", async () => {
 
   expect(uiStore.getSnapshot().context.quickAddOpen).toBe(true);
   uiStore.trigger.closeQuickAdd();
+});
+
+test("[P1-11][FR-1.2][J6] with a published plan, Today shows its items and the issues their offers", async () => {
+  server.use(
+    ...planHandlers(
+      new Recorder(),
+      mondayPlan({ issues: [ninetyMinuteIssue()] }),
+    ),
+  );
+  for (const viewport of ["phone", "laptop"] as const) {
+    const { unmount } = await renderRoute("/", { viewport });
+    const today = screen.getByRole("region", { name: "Today" });
+    expect(within(today).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(today).getByText("Send logo drafts")).toBeInTheDocument();
+    const offers = screen.getByRole("region", { name: "Doesn't fit today" });
+    expect(offers).toHaveTextContent("Write Acme proposal");
+    expect(offers).toHaveTextContent("No 90-minute gap today");
+    unmount();
+  }
 });

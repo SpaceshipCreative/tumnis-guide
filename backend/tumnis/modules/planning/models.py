@@ -1,10 +1,12 @@
-"""planning SQLAlchemy tables owned by this module (mirrors of revisions planning_0001 and
-planning_0002)."""
+"""planning SQLAlchemy tables owned by this module (mirrors of revisions planning_0001 to
+planning_0003)."""
 
 from datetime import date, datetime, time
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, Integer
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tumnis.core.base import Base, TenantBase
@@ -46,3 +48,23 @@ class PlanItem(TenantBase, Base):
     accepted_at: Mapped[datetime | None]
     removed_at: Mapped[datetime | None]
     swapped_from_task_id: Mapped[UUID | None]
+
+
+class PlanIssue(TenantBase, Base):
+    """Mirror of revision planning_0003."""
+
+    __tablename__ = "plan_issues"
+
+    plan_id: Mapped[UUID] = mapped_column(ForeignKey("daily_plans.id"))
+    task_id: Mapped[UUID]  # no foreign key: see planning_0003
+    kind: Mapped[str]  # no_gap or no_estimate
+    offer: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    review_item_id: Mapped[UUID | None]
+    resolved_at: Mapped[datetime | None]
+
+
+class PlanPin(TenantBase, Base):
+    __tablename__ = "plan_pins"
+
+    task_id: Mapped[UUID]
+    day: Mapped[date]

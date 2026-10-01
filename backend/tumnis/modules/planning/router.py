@@ -16,7 +16,14 @@
   weekday: 422 `validation_error`). `create_app` mounts it before the generic
   `/v1/settings/{section}` route.
 
-All session-only; the PUT is idempotent and runs in the request's transaction.
+P1-11, the daily plan: `GET /{day}` (the published plan with each item's live task
+status and `blocked` flag, its issues and notice; 404 when the day has none), `POST
+/replan` (202; enqueues `build_plan` with trigger `replan`), `POST
+/{day}/items/{task_id}/accept|remove|swap` (`{with_task_id}`), `POST /{day}/accept-all`,
+`GET /{day}/alternates` and `POST /{day}/issues/{plan_issue_id}/split|move`. Each write answers the
+plan as it now is.
+
+All session-only; every write is idempotent and runs in the request's transaction.
 """
 
 from datetime import date
@@ -71,6 +78,87 @@ async def schedule_plan_item(  # noqa: PLR0917  # path, body and the injected re
 ) -> api.PlanItemOut:
     return await api.schedule_block(
         ctx, day, task_id, body, now=_clock(request).now(), session=session
+    )
+
+
+# --- The daily plan (P1-11) ------------------------------------------------------------------
+
+
+@router.post("/replan", status_code=202)
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def replan(body: api.ReplanIn, request: Request, ctx: Session) -> api.ReplanAccepted:
+    return await api.request_replan(ctx, body, now=_clock(request).now())
+
+
+@router.get("/{day}")
+@route_policy(RoutePolicy(auth="session"))
+async def get_plan(day: date, ctx: Session) -> api.PlanOut:
+    return await api.get_plan(ctx, day)
+
+
+@router.get("/{day}/alternates")
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        unpaginated_reason="at most 20 tasks a swap can bring in (api.MAX_ALTERNATES)",
+    )
+)
+async def get_alternates(day: date, ctx: Session) -> list[api.AlternateOut]:
+    return await api.alternates(ctx, day)
+
+
+@router.post("/{day}/accept-all")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def accept_all(day: date, request: Request, ctx: Session, session: SessionDep) -> api.PlanOut:
+    return await api.accept_all(ctx, day, now=_clock(request).now(), session=session)
+
+
+@router.post("/{day}/items/{task_id}/accept")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def accept_item(
+    day: date, task_id: UUID, request: Request, ctx: Session, session: SessionDep
+) -> api.PlanOut:
+    return await api.accept_item(ctx, day, task_id, now=_clock(request).now(), session=session)
+
+
+@router.post("/{day}/items/{task_id}/remove")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def remove_item(
+    day: date, task_id: UUID, request: Request, ctx: Session, session: SessionDep
+) -> api.PlanOut:
+    return await api.remove_item(ctx, day, task_id, now=_clock(request).now(), session=session)
+
+
+@router.post("/{day}/items/{task_id}/swap")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def swap_item(  # noqa: PLR0917  # path, body and the injected request
+    day: date,
+    task_id: UUID,
+    body: api.SwapIn,
+    request: Request,
+    ctx: Session,
+    session: SessionDep,
+) -> api.PlanOut:
+    return await api.swap_item(ctx, day, task_id, body, now=_clock(request).now(), session=session)
+
+
+@router.post("/{day}/issues/{plan_issue_id}/split")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def split_issue(
+    day: date, plan_issue_id: UUID, request: Request, ctx: Session, session: SessionDep
+) -> api.PlanOut:
+    return await api.resolve_issue(
+        ctx, day, plan_issue_id, "split", now=_clock(request).now(), session=session
+    )
+
+
+@router.post("/{day}/issues/{plan_issue_id}/move")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def move_issue(
+    day: date, plan_issue_id: UUID, request: Request, ctx: Session, session: SessionDep
+) -> api.PlanOut:
+    return await api.resolve_issue(
+        ctx, day, plan_issue_id, "move", now=_clock(request).now(), session=session
     )
 
 

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "picks": [
+    {
+      "task_id": "title:Write Acme proposal",
+      "reason": "Due today; Acme decides this week"
+    },
+    {
+      "task_id": "title:Book a guest for lesson three",
+      "reason": "Guests need a week's notice"
+    },
+    {
+      "task_id": "title:Generate March analytics report",
+      "reason": "Runs while you work"
+    }
+  ],
+  "alternates": [],
+  "notes": null
+}

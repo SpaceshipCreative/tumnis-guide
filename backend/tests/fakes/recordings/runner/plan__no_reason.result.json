@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "picks": [
+    {
+      "task_id": "title:Invoice Acme for phase one",
+      "reason": ""
+    },
+    {
+      "task_id": "title:Send logo drafts to Acme",
+      "reason": "Acme expects the drafts today"
+    }
+  ],
+  "alternates": [],
+  "notes": null
+}

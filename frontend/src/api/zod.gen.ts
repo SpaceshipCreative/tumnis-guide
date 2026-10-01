@@ -30,6 +30,18 @@ export const zAgentProfileChoice = z.object({
 });
 
 /**
+ * AlternateOut
+ */
+export const zAlternateOut = z.object({
+  due_on: z.iso.date().nullable(),
+  estimate_minutes: z.int().nullable(),
+  id: z.uuid(),
+  label: z.string().nullable(),
+  project_id: z.uuid(),
+  title: z.string(),
+});
+
+/**
  * AuditEntry
  */
 export const zAuditEntry = z.object({
@@ -46,6 +58,14 @@ export const zAuditEntry = z.object({
   target_id: z.uuid().nullable(),
   target_type: z.string().nullable(),
   user_agent: z.string().nullable(),
+});
+
+/**
+ * BlockOut
+ */
+export const zBlockOut = z.object({
+  end: z.iso.datetime(),
+  start: z.iso.datetime(),
 });
 
 /**
@@ -249,6 +269,16 @@ export const zEstimateBody = z.object({
 export const zFileTouched = z.object({
   change: z.enum(["added", "modified", "deleted"]),
   path: z.string().min(1).max(1024),
+});
+
+/**
+ * FitOffer
+ *
+ * What a task with no big enough gap is offered (J6).
+ */
+export const zFitOffer = z.object({
+  move_to: z.iso.date().nullable(),
+  split: z.array(z.int()).nullable(),
 });
 
 /**
@@ -492,6 +522,20 @@ export const zPageKeyOut = z.object({
 });
 
 /**
+ * PlanIssueOut
+ */
+export const zPlanIssueOut = z.object({
+  estimate_minutes: z.int().nullable(),
+  id: z.uuid(),
+  kind: z.string(),
+  offer: zFitOffer,
+  resolved_at: z.iso.datetime().nullable(),
+  review_item_id: z.uuid().nullable(),
+  task_id: z.uuid(),
+  title: z.string(),
+});
+
+/**
  * PlanItemOut
  */
 export const zPlanItemOut = z.object({
@@ -503,6 +547,50 @@ export const zPlanItemOut = z.object({
   reason: z.string(),
   task_id: z.uuid(),
   version: z.int(),
+});
+
+/**
+ * PlanItemViewOut
+ *
+ * One item as the Today panel shows it: the plan's facts plus the task as it is now
+ * (`blocked` from its live status: a task waiting on the person stays at its position,
+ * flagged, until Re-plan).
+ */
+export const zPlanItemViewOut = z.object({
+  accepted_at: z.iso.datetime().nullable(),
+  block: zBlockOut.nullable(),
+  blocked: z.boolean(),
+  estimate_minutes: z.int().nullable(),
+  first_action: z.string().nullable(),
+  id: z.uuid(),
+  label: z.string().nullable(),
+  position: z.int(),
+  project_id: z.uuid(),
+  project_name: z.string(),
+  reason: z.string(),
+  removed_at: z.iso.datetime().nullable(),
+  status: z.string(),
+  swapped_from_task_id: z.uuid().nullable(),
+  task_id: z.uuid(),
+  title: z.string(),
+  version: z.int(),
+});
+
+/**
+ * PlanOut
+ */
+export const zPlanOut = z.object({
+  built_at: z.iso.datetime(),
+  day: z.iso.date(),
+  fallback_reason: z.string().nullable(),
+  id: z.uuid(),
+  issues: z.array(zPlanIssueOut),
+  items: z.array(zPlanItemViewOut),
+  notice: z.string().nullable(),
+  source: z.string(),
+  status: z.string(),
+  timezone: z.string(),
+  trigger: z.string(),
 });
 
 /**
@@ -842,6 +930,21 @@ export const zReorderIn = z.object({
   after_id: z.uuid().nullish(),
   before_id: z.uuid().nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * ReplanAccepted
+ */
+export const zReplanAccepted = z.object({
+  day: z.iso.date(),
+  workflow_id: z.string(),
+});
+
+/**
+ * ReplanIn
+ */
+export const zReplanIn = z.object({
+  day: z.iso.date().nullish(),
 });
 
 /**
@@ -1272,6 +1375,13 @@ export const zStatusBody = z.object({
   schema_version: z.int().nullish(),
   to: zStatus,
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * SwapIn
+ */
+export const zSwapIn = z.object({
+  with_task_id: z.uuid(),
 });
 
 /**
@@ -2267,6 +2377,13 @@ export const zKnowledgeSetProjectFolderPath = z.object({
  */
 export const zKnowledgeSetProjectFolderResponse = zProjectFolderOut;
 
+export const zPlanningReplanBody = zReplanIn;
+
+/**
+ * Successful Response
+ */
+export const zPlanningReplanResponse = zReplanAccepted;
+
 export const zPlanningGetProjectWeekPath = z.object({
   monday: z.iso.date(),
 });
@@ -2280,6 +2397,35 @@ export const zPlanningGetProjectWeekQuery = z.object({
  */
 export const zPlanningGetProjectWeekResponse = zWeekOut;
 
+export const zPlanningGetPlanPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetPlanResponse = zPlanOut;
+
+export const zPlanningAcceptAllPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningAcceptAllResponse = zPlanOut;
+
+export const zPlanningGetAlternatesPath = z.object({
+  day: z.iso.date(),
+});
+
+/**
+ * Response Planning Get Alternates
+ *
+ * Successful Response
+ */
+export const zPlanningGetAlternatesResponse = z.array(zAlternateOut);
+
 export const zPlanningGetDayCalendarPath = z.object({
   day: z.iso.date(),
 });
@@ -2288,6 +2434,26 @@ export const zPlanningGetDayCalendarPath = z.object({
  * Successful Response
  */
 export const zPlanningGetDayCalendarResponse = zDayCalendarOut;
+
+export const zPlanningMoveIssuePath = z.object({
+  day: z.iso.date(),
+  plan_issue_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningMoveIssueResponse = zPlanOut;
+
+export const zPlanningSplitIssuePath = z.object({
+  day: z.iso.date(),
+  plan_issue_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningSplitIssueResponse = zPlanOut;
 
 export const zPlanningSchedulePlanItemBody = zManualBlockIn;
 
@@ -2300,6 +2466,38 @@ export const zPlanningSchedulePlanItemPath = z.object({
  * Successful Response
  */
 export const zPlanningSchedulePlanItemResponse = zPlanItemOut;
+
+export const zPlanningAcceptItemPath = z.object({
+  day: z.iso.date(),
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningAcceptItemResponse = zPlanOut;
+
+export const zPlanningRemoveItemPath = z.object({
+  day: z.iso.date(),
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningRemoveItemResponse = zPlanOut;
+
+export const zPlanningSwapItemBody = zSwapIn;
+
+export const zPlanningSwapItemPath = z.object({
+  day: z.iso.date(),
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningSwapItemResponse = zPlanOut;
 
 export const zProjectsListProjectsQuery = z.object({
   include_archived: z.boolean().optional().default(false),
