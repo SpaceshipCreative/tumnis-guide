@@ -57,6 +57,8 @@ from tumnis.modules.planning.rules import (
     PlanPick,
     PlanTask,
     ProjectLink,
+    RunFacts,
+    TaskFacts,
     Unplaceable,
     Violation,
     assign_blocks,
@@ -67,8 +69,10 @@ from tumnis.modules.planning.rules import (
     validate_manual_block,
     working_window,
 )
+from tumnis.modules.planning.rules import day_summary as summarise_day
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
+from tumnis.modules.usage import api as usage
 
 FREE_BLOCKS_CACHE: Final = "free_blocks"  # the day calendar's cache namespace
 DAY_CALENDAR_TTL_S: Final = 300.0  # bounds what no invalidation reaches (event writes
@@ -1577,8 +1581,51 @@ class DaySummaryOut(DaySummary, frozen=True):
     timezone: str
 
 
+async def _zone(ctx: WorkspaceContext) -> ZoneInfo:
+    return ZoneInfo((await auth.get_workspace_settings(ctx)).timezone)
+
+
+def _local_bounds(start: date, end: date, tz: ZoneInfo) -> tuple[datetime, datetime]:
+    """Local midnight starting `start` to local midnight after `end`, in UTC."""
+    return local_to_utc(start, time(0), tz), local_to_utc(end + timedelta(days=1), time(0), tz)
+
+
+def _task_facts(facts: tasks.DayTaskFacts) -> TaskFacts:
+    return TaskFacts(
+        task_id=facts.task_id,
+        project_id=facts.project_id,
+        title=facts.title,
+        label=facts.label,
+        status=facts.status,
+        completed_at=facts.completed_at,
+        rollover_count=facts.rollover_count,
+        result_posted_at=facts.result_posted_at,
+    )
+
+
 async def day_summary(ctx: WorkspaceContext, day: date) -> DaySummaryOut:
-    raise NotImplementedError  # P1-18
+    """The close-the-day panel for local `day` (J7): read only; skipping it costs nothing."""
+    tz = await _zone(ctx)
+    start, end = _local_bounds(day, day, tz)
+    async with tenant_session(ctx) as s:
+        facts = await tasks.day_task_facts(s, start, end)
+        runs = await agents.finished_runs(s, start, end)
+    summary = summarise_day(
+        [_task_facts(f) for f in facts],
+        [
+            RunFacts(
+                run_id=r.run_id,
+                task_id=r.task_id,
+                kind=r.kind,
+                status=r.status.value,
+                finished_at=r.finished_at,
+            )
+            for r in runs
+        ],
+        day,
+        tz,
+    )
+    return DaySummaryOut(**summary.model_dump(), day=day, timezone=tz.key)
 
 
 MetricKey = Literal[
@@ -1613,11 +1660,126 @@ class MetricsSummaryOut(BaseModel):
     metrics: list[MetricOut]
 
 
+EXIT_GATE_DAYS: Final = 10  # two working weeks planned in a row (phase 1 exit gate)
+METRICS_RANGE_MAX_DAYS: Final = 366
+ESTIMATED_LABELS: Final = frozenset({"human", "hybrid"})  # their estimates are human time
+_TARGETS: Final[dict[MetricKey, str]] = {  # PRD, Success metrics
+    "daily_open_rate": "5 of 7 days",
+    "tasks_completed_per_working_day": "+50% vs a 2-week baseline",
+    "rollover_rate": "under 20% of planned tasks",
+    "estimate_error": "under 30%",
+    "agent_share": "30% of completed tasks",
+    "agent_acceptance_rate": "70% accepted without rework",
+    "unattended_runs_per_week": "at least 3 per week",
+}
+_LATER: Final[dict[MetricKey, Literal["phase 2", "phase 4"]]] = {
+    "agent_share": "phase 2",
+    "agent_acceptance_rate": "phase 2",
+    "unattended_runs_per_week": "phase 4",
+}
+
+
 async def record_app_open(ctx: WorkspaceContext, *, now: datetime, session: AsyncSession) -> None:
-    raise NotImplementedError  # P1-18
+    """The PWA's app-start ping (P1-18): one more `app_open` on the workspace's local day,
+    in the request's transaction. Nothing leaves the server."""
+    tz = await _zone(ctx)
+    await usage.record_open(session, ctx.workspace_id, now.astimezone(tz).date())
+
+
+async def _plan_days(s: AsyncSession, until: date) -> dict[date, usage.PlanDayFacts]:
+    """Each local day up to `until` with a plan (published, or superseded by a re-plan), and
+    whether the human accepted, swapped or removed one of its items."""
+    decided = func.bool_or(
+        _ITEMS.c.accepted_at.is_not(None)
+        | _ITEMS.c.removed_at.is_not(None)
+        | _ITEMS.c.swapped_from_task_id.is_not(None)
+    )
+    rows = await s.execute(
+        select(_PLANS.c.day, decided.label("decided"))
+        .select_from(
+            _PLANS.outerjoin(
+                _ITEMS, (_ITEMS.c.plan_id == _PLANS.c.id) & _ITEMS.c.deleted_at.is_(None)
+            )
+        )
+        .where(_PLANS.c.deleted_at.is_(None), _PLANS.c.day <= until)
+        .group_by(_PLANS.c.day)
+    )
+    return {row.day: usage.PlanDayFacts(published=True, decided=bool(row.decided)) for row in rows}
+
+
+async def _planned_task_ids(s: AsyncSession, start: date, end: date) -> set[UUID]:
+    rows = await s.execute(
+        select(_ITEMS.c.task_id)
+        .join(_PLANS, _PLANS.c.id == _ITEMS.c.plan_id)
+        .where(
+            _PLANS.c.deleted_at.is_(None),
+            _ITEMS.c.deleted_at.is_(None),
+            _ITEMS.c.removed_at.is_(None),
+            _PLANS.c.day.between(start, end),
+        )
+        .distinct()
+    )
+    return {row.task_id for row in rows}
 
 
 async def metrics_summary(
     ctx: WorkspaceContext, start: date, end: date, *, now: datetime
 ) -> MetricsSummaryOut:
-    raise NotImplementedError  # P1-18
+    """The PRD's success metrics over the local days `start` to `end`, read from the tables
+    alone (P1-18: nothing is sent anywhere), and the exit gate as of today: working days in
+    a row with a plan and a decision on it. Today counts once it qualifies; until then the
+    run ends yesterday."""
+    if (end - start).days >= METRICS_RANGE_MAX_DAYS:
+        raise ProblemError(422, "invalid_range", f"at most {METRICS_RANGE_MAX_DAYS} days")
+    tz = await _zone(ctx)
+    weekdays = frozenset((await planning_settings(ctx)).plan_weekdays)
+    today = now.astimezone(tz).date()
+    lo, hi = _local_bounds(start, end, tz)
+    async with tenant_session(ctx) as s:
+        opened = await usage.open_days(s, start, end)
+        facts = await tasks.day_task_facts(s, lo, hi)
+        days = await _plan_days(s, today)
+        planned = await tasks.tasks_by_ids(s, await _planned_task_ids(s, start, end))
+    done = [
+        f
+        for f in facts
+        if f.status == "done" and f.completed_at is not None and lo <= f.completed_at < hi
+    ]
+    pairs = [
+        (f.estimate_minutes, f.actual_minutes)
+        for f in done
+        if f.label in ESTIMATED_LABELS
+        and f.estimate_minutes is not None
+        and f.actual_minutes is not None
+    ]
+    gate_today = days.get(today)
+    gate_end = (
+        today
+        if gate_today and gate_today.published and gate_today.decided
+        else today - timedelta(days=1)
+    )
+    values: dict[MetricKey, float | None] = {
+        "daily_open_rate": usage.daily_open_rate(opened, start, end),
+        "tasks_completed_per_working_day": usage.tasks_completed_per_working_day(
+            [f.completed_at for f in done if f.completed_at is not None], tz, start, end, weekdays
+        ),
+        "rollover_rate": usage.rollover_rate(
+            [usage.PlannedOutcome(task_id=t.id, rollover_count=t.rollover_count) for t in planned]
+        ),
+        "estimate_error": usage.estimate_error(pairs),
+    }
+    return MetricsSummaryOut(
+        start=start,
+        end=end,
+        plan_days_in_a_row=usage.consecutive_plan_days(days, gate_end, weekdays),
+        exit_gate_days=EXIT_GATE_DAYS,
+        metrics=[
+            MetricOut(
+                key=key,
+                value=values.get(key),
+                target=target,
+                available_after=_LATER.get(key),
+            )
+            for key, target in _TARGETS.items()
+        ],
+    )

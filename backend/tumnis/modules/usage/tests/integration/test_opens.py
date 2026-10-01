@@ -26,7 +26,6 @@ MONDAY = date(2026, 3, 9)
 
 @pytest.mark.req("Success metrics")
 @pytest.mark.wp("P1-18")
-@pytest.mark.xfail(strict=True, reason="spec:P1-18")
 async def test_open_counted_once_per_day(
     db: DbUrls, workspace: WorkspaceHandle, session_client: SessionClient, clock: FixedClock
 ) -> None:

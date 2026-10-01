@@ -19,7 +19,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("Success metrics")
 @pytest.mark.wp("P1-18")
-@pytest.mark.xfail(strict=True, reason="spec:P1-18")
 async def test_summary_makes_no_outbound_calls(
     session_client: SessionClient, clock: FixedClock
 ) -> None:
