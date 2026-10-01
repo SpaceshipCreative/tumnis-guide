@@ -432,6 +432,22 @@
       "title": "RepoLocation",
       "type": "object"
     },
+    "StuckStep": {
+      "additionalProperties": false,
+      "description": "What a stuck run's first step may be (P4-02, FR-10.5): the person's part fits in\n`max_minutes`.",
+      "properties": {
+        "max_minutes": {
+          "minimum": 1,
+          "title": "Max Minutes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_minutes"
+      ],
+      "title": "StuckStep",
+      "type": "object"
+    },
     "TaskMetadata": {
       "properties": {
         "capability_hints": {
@@ -542,7 +558,7 @@
   "$id": "https://tumnis.dev/schemas/packet/v1/task_run_request.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The body of a task, proposal or stuck packet (P2-02).",
+  "description": "The body of a task, proposal or stuck packet (P2-02). A stuck packet (P4-02) also\ncarries the task's newest comments (`recent_comments`, at most 5, the comments' own\nblocks) and the first step's limits (`stuck_step`); other kinds leave both out.",
   "properties": {
     "context_items": {
       "items": {
@@ -557,11 +573,37 @@
     "project": {
       "$ref": "#/$defs/ProjectSection"
     },
+    "recent_comments": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Block"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recent Comments"
+    },
     "schema_version": {
       "const": 1,
       "default": 1,
       "title": "Schema Version",
       "type": "integer"
+    },
+    "stuck_step": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StuckStep"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "task": {
       "$ref": "#/$defs/TaskSection"

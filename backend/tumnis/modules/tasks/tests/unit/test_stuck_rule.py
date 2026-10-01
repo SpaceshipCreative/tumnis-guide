@@ -11,7 +11,6 @@ STUCK = uuid.uuid4()
 OTHER = uuid.uuid4()
 
 
-@pytest.mark.xfail(strict=True, reason="spec:P4-02")
 @pytest.mark.req("FR-10.5")
 @pytest.mark.wp("P4-02")
 def test_stuck_create_task_rules() -> None:

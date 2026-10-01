@@ -2255,6 +2255,16 @@
             "title": "Messages",
             "type": "array"
           },
+          "next_step": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextStepOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "override_level": {
             "anyOf": [
               {
@@ -2300,7 +2310,8 @@
           "session",
           "messages",
           "guardrail",
-          "detour"
+          "detour",
+          "next_step"
         ],
         "title": "FocusCurrentOut",
         "type": "object"
@@ -3631,6 +3642,110 @@
           "version"
         ],
         "title": "MoveIn",
+        "type": "object"
+      },
+      "NextStepOut": {
+        "description": "What the focus bar shows after \"Stuck\" (FR-10.5): `working` while the project agent\nworks on a first step; `split` with the subtask it posted (`step`); `took_step` with\nits report (`summary`); `fallback` when no answer came within the deadline or the agent\nis down: the task's `first_action` with a `timer_minutes` timer.",
+        "properties": {
+          "fallback_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback At"
+          },
+          "first_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Action"
+          },
+          "focus_event_id": {
+            "format": "uuid",
+            "title": "Focus Event Id",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "state": {
+            "enum": [
+              "working",
+              "split",
+              "took_step",
+              "fallback"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StuckStepOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "timer_minutes": {
+            "default": 10,
+            "title": "Timer Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "focus_event_id",
+          "task_id",
+          "run_id",
+          "state",
+          "requested_at",
+          "first_action",
+          "fallback_at",
+          "step",
+          "summary"
+        ],
+        "title": "NextStepOut",
         "type": "object"
       },
       "OAuthStartOut": {
@@ -8203,6 +8318,48 @@
           "version"
         ],
         "title": "StatusBody",
+        "type": "object"
+      },
+      "StuckStepOut": {
+        "properties": {
+          "estimate_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate Minutes"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "title",
+          "label",
+          "estimate_minutes"
+        ],
+        "title": "StuckStepOut",
         "type": "object"
       },
       "SwapIn": {

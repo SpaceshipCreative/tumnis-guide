@@ -170,6 +170,7 @@ def configure_agents(settings: Settings) -> None:
         active_cap_seconds=settings.agents.run_active_cap_seconds,
         wall_clock_ceiling_seconds=settings.agents.run_wall_clock_ceiling_seconds,
     )
+    agents.configure_stuck(deadline_seconds=settings.agents.stuck_deadline_seconds)
 
 
 def configure_folder_sync(settings: Settings) -> None:

@@ -1239,6 +1239,7 @@ export type FocusCurrentOut = {
    * Messages
    */
   messages: Array<FocusMessageOut>;
+  next_step: NextStepOut | null;
   /**
    * Override Level
    */
@@ -1985,6 +1986,54 @@ export type MoveIn = {
    * Version
    */
   version: number;
+};
+
+/**
+ * NextStepOut
+ *
+ * What the focus bar shows after "Stuck" (FR-10.5): `working` while the project agent
+ * works on a first step; `split` with the subtask it posted (`step`); `took_step` with
+ * its report (`summary`); `fallback` when no answer came within the deadline or the agent
+ * is down: the task's `first_action` with a `timer_minutes` timer.
+ */
+export type NextStepOut = {
+  /**
+   * Fallback At
+   */
+  fallback_at: string | null;
+  /**
+   * First Action
+   */
+  first_action: string | null;
+  /**
+   * Focus Event Id
+   */
+  focus_event_id: string;
+  /**
+   * Requested At
+   */
+  requested_at: string;
+  /**
+   * Run Id
+   */
+  run_id: string | null;
+  /**
+   * State
+   */
+  state: "working" | "split" | "took_step" | "fallback";
+  step: StuckStepOut | null;
+  /**
+   * Summary
+   */
+  summary: string | null;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Timer Minutes
+   */
+  timer_minutes?: number;
 };
 
 /**
@@ -4354,6 +4403,25 @@ export type StatusBody = {
    * Version
    */
   version: number;
+};
+
+/**
+ * StuckStepOut
+ */
+export type StuckStepOut = {
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes: number | null;
+  label: Label | null;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Title
+   */
+  title: string;
 };
 
 /**
