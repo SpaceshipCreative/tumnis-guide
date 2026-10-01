@@ -444,8 +444,9 @@ async def reembed_batch(ctx: WorkspaceContext, model: str) -> int:
 
 async def reembed_finish(ctx: WorkspaceContext, model: str, replaces: str | None) -> int:
     """`model` active, `replaces` retired and its rows deleted, in one transaction, when no
-    chunk still lacks a vector from `model`; else nothing changes. How many still lack one
-    (the workflow embeds those and tries again)."""
+    chunk still lacks a vector from `model`; else nothing changes. `replaces` stays active
+    while some project's text may not go to `model`. How many still lack one (the workflow
+    embeds those and tries again)."""
     with tenancy.use_workspace(ctx):
         async with tenant_session(ctx) as s:
             stmt = await _pending_stmt(s, model)
@@ -457,7 +458,10 @@ async def reembed_finish(ctx: WorkspaceContext, model: str, replaces: str | None
                 .where(_models.c.model == model)
                 .values(status="active", updated_at=func.now())
             )
-            if replaces is not None and replaces != model:
+            # A project `model` may not take (local-only, hosted model) keeps searching
+            # with `replaces`, so it stays active with its vectors.
+            blocked, kb_blocked = await _blocked_projects(s, model)
+            if replaces is not None and replaces != model and not blocked and not kb_blocked:
                 await s.execute(
                     update(_models)
                     .where(_models.c.model == replaces)
