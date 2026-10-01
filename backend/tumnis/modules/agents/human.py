@@ -482,10 +482,17 @@ async def long_poll_decision(
 
 
 def open_waits_query(run_id: UUID, *, except_id: UUID | None = None) -> Iterable[Any]:
-    """Selects of the run's pending questions and approvals (other than `except_id`)."""
+    """Selects of the run's pending questions and approvals (other than `except_id`) that
+    were opened for the human (a review item; they parked the run). An approval still
+    waiting for Decisions (`unknown_needs_decision`) has none: it parks the run only if
+    `open_approval_in` opens it later, and an auto-approved one never does."""
     found = []
     for table in (_questions, _approvals):
-        stmt = select(table.c.id).where(table.c.run_id == run_id, table.c.status == "pending")
+        stmt = select(table.c.id).where(
+            table.c.run_id == run_id,
+            table.c.status == "pending",
+            table.c.review_item_id.is_not(None),
+        )
         if except_id is not None:
             stmt = stmt.where(table.c.id != except_id)
         found.append(stmt)

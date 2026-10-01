@@ -737,17 +737,24 @@ async def deliver_signal(
     workspace_id: UUID, run_id: UUID, kind: str, reason: str | None, key: str
 ) -> None:
     """Send a `run.signal` to the run's workflow, once per event (`key`). A workflow that
-    does not exist yet is retried (the delivery raises), unless the run already ended."""
+    does not exist yet is retried (the delivery raises), unless the run already ended.
+    The run row stays locked from reading its workflow id until a stale one is replaced,
+    so a concurrent delivery waits and then reads the new id instead of sending to the
+    cancelled workflow."""
     message = {"kind": kind, "reason": reason}
     async with tenant_session(_ctx(str(workspace_id))) as s:
         row = (
-            await s.execute(select(_runs.c.status, _runs.c.workflow_id).where(_runs.c.id == run_id))
+            await s.execute(
+                select(_runs.c.status, _runs.c.workflow_id)
+                .where(_runs.c.id == run_id)
+                .with_for_update()
+            )
         ).first()
-    if row is None:
-        return
-    target = row.workflow_id or dispatch_workflow_id(run_id)
-    if row.status not in api.TERMINAL and await stale_workflow(target):
-        target = await _replace_supervisor(workspace_id, run_id, target)
+        if row is None:
+            return
+        target = row.workflow_id or dispatch_workflow_id(run_id)
+        if row.status not in api.TERMINAL and await stale_workflow(target):
+            target = await _replace_supervisor(s, workspace_id, run_id, target)
     try:
         await DBOS.send_async(target, message, topic=api.run_topic(run_id), idempotency_key=key)
     except DBOSNonExistentWorkflowError:
@@ -864,14 +871,13 @@ async def stale_workflow(workflow_id: str | None) -> bool | None:
     return status.app_version != DBOS.application_version
 
 
-async def _replace_supervisor(workspace_id: UUID, run_id: UUID, old: str) -> str:
+async def _replace_supervisor(s: AsyncSession, workspace_id: UUID, run_id: UUID, old: str) -> str:
     """Cancels the run's workflow of an older version and starts `supervise_run` on this
-    one; the run row names the new workflow."""
+    one; the run row (locked by the caller, in `s`) names the new workflow."""
     new = supervise_workflow_id(run_id, str(DBOS.application_version))
     await DBOS.cancel_workflow_async(old)
     await _start_detached(new, supervise_run, str(workspace_id), str(run_id))
-    async with tenant_session(_ctx(str(workspace_id))) as s:
-        await s.execute(update(_runs).where(_runs.c.id == run_id).values(workflow_id=new))
+    await s.execute(update(_runs).where(_runs.c.id == run_id).values(workflow_id=new))
     _log.info("run %s: workflow %s of an older version replaced by %s", run_id, old, new)
     return new
 
