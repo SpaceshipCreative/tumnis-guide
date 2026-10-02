@@ -128,8 +128,12 @@ def test_minio_put_on_another_prefix_does_not_count() -> None:
         (["s3:PutObject"], f"arn:aws:s3:::{BUCKET}/acme/sub/*", (False, "key_can_write")),
         (["s3:PutObject"], f"arn:aws:s3:::{BUCKET}/acme/report.md", (False, "key_can_write")),
         (["s3:DeleteObjectVersion"], f"arn:aws:s3:::{BUCKET}/acme/a?/*", (False, "key_can_delete")),
-        # ... and so does one wider than it that a wildcard cuts short.
+        (["s3:PutObject"], f"arn:aws:s3:::{BUCKET}/acme/reports/*", (False, "key_can_write")),
+        # ... and so does one wider than it that a wildcard reaches into.
         (["s3:PutObject"], f"arn:aws:s3:::{BUCKET}/ac*", (False, "key_can_write")),
+        (["s3:DeleteObject"], f"arn:aws:s3:::{BUCKET}/a*/x", (False, "key_can_delete")),
+        # `?` takes exactly one character: `acme?` names no object under `acme/`.
+        (["s3:PutObject"], f"arn:aws:s3:::{BUCKET}/acme?", (True, None)),
         # A sibling prefix that only shares a start with the mapped one does not.
         (["s3:PutObject"], f"arn:aws:s3:::{BUCKET}/acme-old/*", (True, None)),
         (["s3:DeleteObject"], f"arn:aws:s3:::{BUCKET}/uploads/acme/*", (True, None)),

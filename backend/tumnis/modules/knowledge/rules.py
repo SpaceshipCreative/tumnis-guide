@@ -228,18 +228,40 @@ def _deletes(pattern: str) -> bool:
     )
 
 
-def _overlaps(pattern: str, bucket_arn: str, bases: Sequence[str]) -> bool:
-    """Whether a Resource pattern can name the bucket itself or any object under one of
-    `bases` (`<bucket arn>/<prefix>`): a narrower grant (`.../acme/sub/*`) counts, and so
-    does a wider one a wildcard cuts short (`.../ac*`). Compared without case, so it only
-    ever errs towards overlapping."""
-    if _wildcard(pattern).match(bucket_arn):
-        return True
+def _reaches_under(pattern: str, base: str) -> bool:
+    """Whether an IAM pattern (`*` any run, `?` one character) matches some `base + s`
+    with `s` not empty: the pattern is run over `base` as a set of positions, and any
+    position short of its end can still take more characters."""
     p = pattern.lower()
-    if "*" not in p and "?" not in p:
-        return any(p.startswith(b.lower()) for b in bases)
-    fixed = re.split(r"[*?]", p, maxsplit=1)[0]
-    return any(fixed.startswith(b.lower()) or b.lower().startswith(fixed) for b in bases)
+
+    def stars(states: set[int]) -> set[int]:  # a `*` may also match nothing
+        out, todo = set(states), list(states)
+        while todo:
+            i = todo.pop()
+            if i < len(p) and p[i] == "*" and i + 1 not in out:
+                out.add(i + 1)
+                todo.append(i + 1)
+        return out
+
+    states = stars({0})
+    for ch in base.lower():
+        states = stars(
+            {i if p[i] == "*" else i + 1 for i in states if i < len(p) and p[i] in ("*", "?", ch)}
+        )
+        if not states:
+            return False
+    return any(i < len(p) for i in states)
+
+
+def _overlaps(pattern: str, bucket_arn: str, bases: Sequence[str]) -> bool:
+    """Whether a Resource pattern can name the bucket itself or an object under one of
+    `bases` (`<bucket arn>/<prefix>`): a narrower grant (`.../acme/sub/*`) counts, and so
+    does a wider one a wildcard reaches into (`.../ac*`); `.../acme?` does not (it names
+    only `acme` plus one character). Compared without case, so it only ever errs towards
+    overlapping."""
+    return _wildcard(pattern).match(bucket_arn) is not None or any(
+        _reaches_under(pattern, b) for b in bases
+    )
 
 
 def _on_any(statement: Mapping[str, object], bucket_arn: str, bases: Sequence[str]) -> bool:
