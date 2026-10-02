@@ -236,50 +236,65 @@ async def test_enrichment_plays_the_project_agents_recording(
     assert runs == [{"status": "succeeded", "kind": "enrich"}]
 
 
+NO_SCRIPT_S = 5.0  # "at once": far under the 90 s run timeout a silent fake would hold
+
+
+@pytest.mark.xfail(strict=True, reason="spec:SEED")
 @pytest.mark.req("A1.2")
-async def test_unscripted_fake_dispatch_is_recorded_and_left_running(
+async def test_unscripted_fake_dispatch_fails_at_once(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
 ) -> None:
-    """T-SEED-20
+    """T-SEED-20 (rewritten by Scott decision 74)
     With no script for the master's `plan`, the fake takes the dispatch (the run is
-    written `running` with its `dispatched` event, as a daemon's would be) and answers
-    nothing, like a runner that never replies: the tick gives up waiting at its bound and
-    nothing is published yet."""
-    from tumnis.modules.planning import testing as planning_testing  # noqa: PLC0415
-
+    written with its `dispatched` event, as a daemon's would be) and answers at once with
+    a 'no script' failure, instead of staying silent for the run timeout: the run ends
+    `failed` with a `no_script` error and a `result` event, and the one planner tick
+    publishes the due-date fallback plan within seconds."""
     del dbos
     await _reset(client)
     clock = await client.post("/v1/test/clock", json={"time": MONDAY_PLAN_TIME})
     assert clock.status_code == 200, clock.text
-    bound = planning_testing.TICK_WAIT_S
-    planning_testing.TICK_WAIT_S = 2.0
-    try:
-        tick = await client.post("/v1/test/tick/planner-tick")
-    finally:
-        planning_testing.TICK_WAIT_S = bound
+    started = time.monotonic()
+    tick = await client.post("/v1/test/tick/planner-tick")
     assert tick.status_code == 200, tick.text
     assert tick.json() == {"woken": 1}
-    runs = await _until(lambda: _rows(db, "SELECT id, status, kind FROM runs"))
-    assert [(r["status"], r["kind"]) for r in runs] == [("running", "plan")]
-    kinds = _rows(db, "SELECT kind FROM run_events WHERE run_id = %s", runs[0]["id"])
-    assert [k["kind"] for k in kinds] == ["dispatched"]
-    assert _rows(db, "SELECT id FROM daily_plans") == []
+    plans = await _until(
+        lambda: _rows(db, "SELECT source, master_run_id FROM daily_plans WHERE day = %s", MONDAY),
+        NO_SCRIPT_S,
+    )
+    assert time.monotonic() - started < NO_SCRIPT_S
+    runs = _rows(db, "SELECT id, status, kind, error FROM runs")
+    assert [(r["status"], r["kind"]) for r in runs] == [("failed", "plan")]
+    assert str(runs[0]["error"]).startswith("no_script")
+    kinds = _rows(
+        db, "SELECT kind FROM run_events WHERE run_id = %s ORDER BY created_at", runs[0]["id"]
+    )
+    assert [k["kind"] for k in kinds] == ["dispatched", "result"]
+    assert plans == [{"source": "fallback", "master_run_id": runs[0]["id"]}]
 
 
+SLOW_SCRIPT_MS = 60_000  # far past SILENT_END_S: the fake is still waiting when the reset comes
+
+
+@pytest.mark.xfail(strict=True, reason="spec:SEED")
 @pytest.mark.req("A1.2", "A2.6")
 async def test_a_silent_fake_run_ends_when_a_reset_removes_it(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
 ) -> None:
-    """T-SEED-23
-    A morning build left waiting on an unscripted (silent) fake master would hold the
-    one-at-a-time maintenance queue for the whole run timeout, into the next test. Once a
-    reset has removed its run, the fake tells the waiting run its runner is lost, so the
-    build ends within seconds and the next test's planner tick builds its plan at once
+    """T-SEED-23 (setup moved to a slow script by coordinator decision 79, after Scott
+    decision 74 made an unscripted fake fail at once)
+    A morning build left waiting on a fake master whose scripted answer is still far off
+    would hold the one-at-a-time maintenance queue until the answer, into the next test.
+    Once a reset has removed its run, the fake tells the waiting run its runner is lost, so
+    the build ends within seconds and the next test's planner tick builds its plan at once
     instead of queueing behind it."""
     from tumnis.modules.planning import api as planning  # noqa: PLC0415
     from tumnis.modules.planning import testing as planning_testing  # noqa: PLC0415
 
     await _reset(client)
+    await _script(
+        client, "tumnis-master", "plan", "plan__monday_four_picks", delay_ms=SLOW_SCRIPT_MS
+    )
     clock = await client.post("/v1/test/clock", json={"time": MONDAY_PLAN_TIME})
     assert clock.status_code == 200, clock.text
     stale = planning.plan_workflow_id(_ctx(db).workspace_id, MONDAY, "morning")
