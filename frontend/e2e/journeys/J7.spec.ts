@@ -1,5 +1,7 @@
 // A1.6 · Close the day (journey J7). Phase 1 acceptance, committed red on the
-// phase's first day. Turns green with P1-18.
+// phase's first day. Green with P1-18 and, in fakes mode, run ends stamped at
+// the test clock's time (decision 86, #164); its `test.fail()` came off once
+// CI run 36969631899 showed it passing.
 import { expect, test } from "../fixtures";
 import { arrangeCloseTheDay, closeDayPanel } from "../phase1";
 
@@ -14,7 +16,6 @@ test(
   "A1.6 close the day",
   { tag: ["@A1.6", "@J7", "@P1-18"] },
   async ({ signedInPage: page, fakes }, testInfo) => {
-    test.fail();
     const phone = testInfo.project.name === "phone";
     // A published plan with 4 accepted items: 2 Done (one Human by the user,
     // one AI with an agent result link), 2 still Today; one enrichment run

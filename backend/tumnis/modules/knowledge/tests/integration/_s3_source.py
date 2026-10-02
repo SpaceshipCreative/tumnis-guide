@@ -182,7 +182,7 @@ async def create_source(ws: WorkspaceHandle, body: Any) -> Any:
     knowledge: Any = importlib.import_module("tumnis.modules.knowledge.api")
 
     async with tenant_session(ws.ctx) as s:
-        return await knowledge.create_s3_source(s, body, net=NetPolicy(mode="self-hosted"))
+        return await knowledge.create_s3_source(ws.ctx, s, body, net=NetPolicy(mode="self-hosted"))
 
 
 async def source_documents(

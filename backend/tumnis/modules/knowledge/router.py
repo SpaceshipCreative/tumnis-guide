@@ -748,7 +748,7 @@ async def create_s3_source(
 ) -> api.S3SourceCreated:
     async with tenant_session(ctx) as s:
         return await api.create_s3_source(
-            s, body, net=_net(request), base_url=str(request.base_url)
+            ctx, s, body, net=_net(request), base_url=str(request.base_url)
         )
 
 

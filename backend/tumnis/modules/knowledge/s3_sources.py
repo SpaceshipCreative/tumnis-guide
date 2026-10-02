@@ -11,9 +11,11 @@ UNVERIFIED_KEY warning). Only then are the connection row and the `s3_sources` r
 the keys sealed with the workspace data key (aad `s3_sources:<id>`), the webhook token
 kept as its SHA-256 and shown once.
 
-Connection rows: until P3-02's `create_connection` lands, the row comes from
-`integrations.seed_connection` (kind `knowledge`, provider `s3`, account `s3:<uuid>`),
-behind the one seam `_new_connection`.
+Connection rows: a linked source's connection is knowledge's own, made with
+`integrations.upsert_connection` (kind `knowledge`, provider `s3`, account `s3:<uuid>`,
+status `ok`) like calendar's and github's. `s3` is not a P3-02 framework provider: the
+framework syncs only registered providers, and a linked bucket has no sign-in, so its
+listing runs on knowledge's own `knowledge-s3-source-tick`.
 
 Notifications (`accept_minio_notification`): MinIO's webhook target sends its configured
 `auth_token` as `Authorization: Bearer <token>` (minio/minio
@@ -44,6 +46,7 @@ from tumnis.core.adapters.errors import AdapterError
 from tumnis.core.errors import ProblemError
 from tumnis.core.ids import uuid7
 from tumnis.core.net import NetPolicy, Resolver, SsrfBlocked, resolve_and_check, system_resolver
+from tumnis.core.tenancy import WorkspaceContext
 from tumnis.core.versioning import NotFound
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.knowledge.adapters.port import KeyCapabilityCheck, S3SourceReader
@@ -229,10 +232,11 @@ async def _capabilities(
         ) from exc
 
 
-async def _new_connection(s: AsyncSession) -> UUID:
-    """The connection row the source hangs off. Seam: P3-02's `create_connection` replaces
-    `seed_connection` here once it lands."""
-    return await integrations.seed_connection(s, "knowledge", PROVIDER, f"s3:{uuid7()}")
+async def _new_connection(ctx: WorkspaceContext, s: AsyncSession) -> UUID:
+    """The connection row the source hangs off, in the caller's transaction."""
+    return await integrations.upsert_connection(
+        ctx, kind="knowledge", provider=PROVIDER, account=f"s3:{uuid7()}", session=s
+    )
 
 
 def _out(row: Mapping[Any, Any]) -> S3SourceOut:
@@ -265,7 +269,8 @@ def minio_commands(connection_id: UUID, token: str, bucket: str, base_url: str) 
     ]
 
 
-async def create_s3_source(  # the session, the form, and the SSRF policy
+async def create_s3_source(  # the workspace, its session, the form, the SSRF policy
+    ctx: WorkspaceContext,
     s: AsyncSession,
     body: S3SourceIn,
     *,
@@ -286,7 +291,7 @@ async def create_s3_source(  # the session, the form, and the SSRF policy
     accepted, reason = capabilities_acceptable(caps)
     if not accepted:
         raise _bad("key_not_read_only", f"Use a read-only key for this bucket ({reason}).")
-    connection_id = await _new_connection(s)
+    connection_id = await _new_connection(ctx, s)
     source_id = uuid7()
     workspace_id = await s.scalar(text("SELECT app.current_workspace_id()"))
     config = S3Config(

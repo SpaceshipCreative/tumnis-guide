@@ -52,6 +52,9 @@ ALLOWED: dict[str, str] = {
         "P3-13: the MinIO webhook route finds a linked bucket's workspace and token hash by "
         "its connection id before the workspace is known"
     ),
+    "app.connector_sync_ages": (
+        "P3-02: /metrics reads each provider's oldest sync age and items seen across workspaces"
+    ),
 }
 
 _DEFINERS = """

@@ -109,6 +109,11 @@ class Fakes:
             self._built[name] = resolve(name, self.mode)
         return self._built[name]
 
+    @property
+    def oauth_server(self) -> Any:
+        """The fake OAuth server (P3-02): `integrations.oauth` in this mode."""
+        return self["integrations.oauth"]
+
     def names(self) -> tuple[str, ...]:
         return tuple(spec.name for spec in registered())
 
@@ -1043,6 +1048,14 @@ async def worker_killer(
 
 
 # --- The FastAPI app and an HTTP client on it (P0-04) -------------------------------------
+
+
+def build_app(settings: Settings, clock: FixedClock) -> FastAPI:
+    """create_app for module test helpers, which may not import the composition root
+    themselves (import-linter: modules reach each other only through api.py)."""
+    from tumnis.app import create_app  # noqa: PLC0415
+
+    return create_app(settings=settings, clock=clock)
 
 
 def settings_for(db: DbUrls, dbos_db: DbUrls | None = None, **overrides: Any) -> Settings:
