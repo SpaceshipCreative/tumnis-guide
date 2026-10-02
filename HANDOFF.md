@@ -18,7 +18,22 @@ ending the body with a blank line and the Claude Code line. Do NOT request a ful
 | 14a4d461 | fix(frontend): first live message after a quiet moment is read at once, the rest per 200 ms window |
 | ea4de82f, d8936556, 409199fd | merges of origin/main (#155, #161, #172) |
 
+| 6fd38c7d + next | chore: this handoff |
+
 `make check` passed at 409199fd.
+
+## CI and review state
+
+No PR yet, so there are no PR CI runs and no CodeRabbit threads. A branch push may have
+started branch CI: `gh run list -R SpaceshipCreative/tumnis-guide --branch fix/board-drag`.
+The local `tumnis-bd` stack is still up on port 18957, built at d8936556 (not HEAD).
+
+## Verify commands
+
+- `make check` at HEAD.
+- From `frontend/`: `npx vitest run src/components/board/keyboard.test.ts src/lib/ws.burst.test.ts src/lib/ws.test.ts`
+- `/usr/bin/git ls-remote origin refs/heads/fix/board-drag` should show the handoff SHA.
+- Playwright and docker: see Next steps.
 
 ## 1. T-P0-24-05 keyboard drag (root cause found and fixed)
 
@@ -63,7 +78,7 @@ ending the body with a blank line and the Claude Code line. Do NOT request a ful
 - #171 job 110756781396 failed on Lighthouse LAN TBT of the dashboard `/`: 218.5 ms vs 200
   (median of 3); every k6 line said ok.
 - History of ~107 performance jobs (2026-10-02 05:10-09:25, logs in
-  `$TMPDIR/FIX-board-drag-c0/perflogs`, artifacts in `.../artifacts`, scripts
+  `/tmp/claude-1002/FIX-board-drag-c0/perflogs`, artifacts in `.../artifacts`, scripts
   `perfhist.py`, `lhfail.py`, `lhdist.py`):
   - k6 quick_add p95: typically 25-40 ms; ~10% of runs have a long tail
     (p90 100-180 ms, max 300-560 ms, median unchanged, typeahead unaffected); 2 runs over the
@@ -86,7 +101,7 @@ ending the body with a blank line and the Claude Code line. Do NOT request a ful
 
 1. Rebuild the local stack at HEAD and re-run: full e2e once, `board.spec.ts
    --repeat-each=20`, and the throttled diag spec (copies parked in
-   `$TMPDIR/FIX-board-drag-c0/parked/`: `pw-bd.config.ts` goes in `frontend/`,
+   `/tmp/claude-1002/FIX-board-drag-c0/parked/`: `pw-bd.config.ts` goes in `frontend/`,
    `zz-diag-drag.spec.ts` in `frontend/e2e/`; never commit them).
    Stack: `docker compose -p tumnis-bd --env-file /tmp/claude-1002/FIX-board-drag-c0/compose.env -f <worktree>/deploy/compose.test.yaml up -d --wait --build`
    (port 18957, image tumnis:board-drag). Playwright runs in the
@@ -105,6 +120,12 @@ ending the body with a blank line and the Claude Code line. Do NOT request a ful
 
 - Red test commits were made without `make check` (red by design), as FIX-main-red did.
 - Regression tests are plain Vitest tests named after the issue, not spec T-IDs.
+- The handoff commits (docs only) were made with `make check` red on one test only:
+  `tests/meta/test_security_job.py::test_semgrep_rules_pass_their_own_tests` failed because
+  the sandbox now makes `~/.semgrep` read-only (`Errno 30` on settings and semgrep.log);
+  1962 other tests passed. The same check passed at 409199fd in an earlier sandbox. Re-run
+  `make check` before the next code commit; if it still fails, report it to main rather than
+  working around the sandbox.
 
 ## Scott items
 
