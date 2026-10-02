@@ -23,5 +23,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migration notes
 
-- A new install needs no manual step: `migrate` runs first on every start, and the api and workers wait for it. Every migration is expand-only, so the previous release keeps working on the newer schema; roll back by redeploying the previous image, never by downgrading the database ([docs/OPERATIONS.md](docs/OPERATIONS.md#rollback)).
+- A new install needs no manual step: `migrate` runs first on every start, and the api and workers wait for it. Migrations expand the schema first, and a later contract migration (such as `integrations_0004`) removes only what the previous release no longer uses; every release's rollback rehearsal deploys N, N+1, then N again on one database. Roll back by redeploying the previous image, never by downgrading the database ([docs/OPERATIONS.md](docs/OPERATIONS.md#rollback)).
 - Releasing: v1.0.0 stays under `## [Unreleased]` until the tag; renaming this section is row 11 of `docs/RELEASE-CHECKLIST.md`.

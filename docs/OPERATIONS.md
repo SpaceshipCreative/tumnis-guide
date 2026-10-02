@@ -83,7 +83,7 @@ The drill only ever restores into its own scratch volume (`tumnis-drill-pgdata`)
 
 ## Upgrade
 
-Releases are tags `vX.Y.Z` with a [CHANGELOG.md](../CHANGELOG.md) section each; read it first, including its migration notes. Migrations are expand-only (squawk checks them in CI, and every release is rehearsed N, N+1, N), so the previous release keeps working on the new schema, which is what makes the rollback below safe. Back up first if backups are not on.
+Releases are tags `vX.Y.Z` with a [CHANGELOG.md](../CHANGELOG.md) section each; read it first, including its migration notes. Migrations expand the schema first (squawk checks them in CI), and a later contract migration, such as `integrations_0004`, removes only what the previous release no longer uses. The rollback rehearsal deploys N, N+1, then N again on one database for every release, and that tested path is what the rollback below follows. Back up first if backups are not on.
 
 Set `TUMNIS_RELEASE` to the release you are moving to, for example `export TUMNIS_RELEASE=v1.1.0`. Keep the running image as `previous`, so a rollback needs no build:
 

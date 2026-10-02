@@ -178,7 +178,7 @@ Coolify's own proxy serves HTTPS, so leave `COMPOSE_PROFILES` unset (no Caddy). 
 
 Open `https://<TUMNIS_HOST>/setup` in a browser on your tailnet (for a `localhost` install, on the server itself). Enter your email, a password of at least 12 characters and your time zone, then scan the QR code with an authenticator app (any TOTP app) and type its 6-digit code. You are signed in, and the setup page closes for good: Tumnis has one owner per install.
 
-Without a browser, the same steps from the server's shell. The script prints the `otpauth://` link to add to your authenticator app, then signs in again with a fresh code to prove the account works. Set `TUMNIS_PASSWORD` first to choose the password; otherwise it makes one and prints it once.
+Without a browser, the same steps from the server's shell. The script prints the `otpauth://` link to add to your authenticator app, then signs in again with a fresh code to prove the account works. Export `TUMNIS_PASSWORD` first (`export TUMNIS_PASSWORD=...`) to choose the password, since the script reads it from the environment; otherwise it makes one and prints it once.
 
 ```bash readme:first-run:10 timeout=300 expect=^Signed\sin\sas\s
 python3 - "$TUMNIS_HOST" "$TUMNIS_CA" "$TUMNIS_EMAIL" "$TUMNIS_TIMEZONE" <<'PY'
@@ -233,6 +233,7 @@ Then, in the app:
 
 ## Your day
 
+- **Capture.** Press `/` (or **Quick add** on the phone) anywhere and type the task; it works offline too. Tumnis labels it AI, Human or Hybrid with a one-line reason you can override in one click, and adds a first action and an estimate. Today's captures show under **Just added** on the dashboard, and a task's drawer has its **History**: every change, who made it and when.
 - **Daily plan.** At 08:30 on weekdays Tumnis proposes the day's plan from your tasks; accept it, swap a task or remove one. From 16:00, **Close the day** wraps it up.
 - **Focus.** The focus bar shows the one next step. Pick how hard Tumnis keeps you on it: quiet, nudge, coach or guardrail (guardrail notices detours and offers the way back). Press **Stuck** and the project's agent works on a first step: it splits off a small subtask or takes the step itself, and if nothing comes back in time you get the task's first action with a 10-minute timer.
 - **Review.** `/review` is the queue of what waits for you, such as agent results to accept. Accepting the result of a run started from **Stuck** marks that step done and keeps the task in progress; rejecting it reopens the step with your reason.
