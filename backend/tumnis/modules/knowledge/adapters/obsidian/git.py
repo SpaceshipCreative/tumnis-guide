@@ -9,8 +9,10 @@ https://git-scm.com/docs/git, https://git-scm.com/docs/git-push):
   <dir>`, then the write probe `git push --dry-run origin
   HEAD:refs/heads/tumnis-write-probe`. The probe must fail: if it succeeds the key can
   write, the clone is removed and the connection refused (`WritableDeployKey`,
-  `writable_deploy_key`). GitHub deploy keys are read-only unless "Allow write access" is
-  ticked (https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys);
+  `writable_deploy_key`). It fails closed: only a refusal for want of write access proves
+  the key read-only; a host key mismatch, the network or DNS, or an answer Tumnis cannot
+  read also remove the clone and refuse the connection (`write_probe_inconclusive`).
+  GitHub deploy keys are read-only unless "Allow write access" is ticked (https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys);
   the probe proves it for any host. A `file://` remote has no key and no probe.
 - refresh: `git fetch --no-tags --depth 1 origin <branch>`, then
   `git reset --hard FETCH_HEAD`.
@@ -62,6 +64,7 @@ __all__ = [
     "InvalidRemote",
     "SubprocessGitRunner",
     "WritableDeployKey",
+    "WriteProbeInconclusive",
 ]
 
 PROBE_REF: Final = "HEAD:refs/heads/tumnis-write-probe"
@@ -85,6 +88,28 @@ _AUTH_FAILURES: Final = (
     "repository not found",
     "does not appear to be a git repository",
 )
+# ssh's own errors when it never reached the server: the probe proved nothing; try again.
+_NETWORK_FAILURES: Final = (
+    "could not resolve hostname",
+    "connection timed out",
+    "connection refused",
+    "network is unreachable",
+    "no route to host",
+    "connection reset",
+    "connection closed",
+)
+# How Git hosts word a push refused for want of write access (GitHub "marked as read
+# only", GitLab "not allowed to push", Gitea/Forgejo "permission denied for writing",
+# Bitbucket "deployment key is read-only", a plain server "insufficient permission").
+_WRITE_REFUSALS: Final = (
+    "read only",
+    "read-only",
+    "denied",
+    "not allowed",
+    "insufficient permission",
+    "no write access",
+    "not authorized",
+)
 
 
 class InvalidRemote(AdapterRejected):
@@ -103,6 +128,18 @@ class WritableDeployKey(AdapterRejected):
 
     def __init__(self) -> None:
         super().__init__(GitReader.name, "connect", "the deploy key can write to the repository")
+
+
+class WriteProbeInconclusive(AdapterRejected):
+    """The dry-run push failed without saying the key may not write: nothing proves the
+    key read-only, so the connection is refused (the probe fails closed)."""
+
+    code = "write_probe_inconclusive"
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(
+            GitReader.name, "connect", f"could not prove the deploy key read-only: {detail}"
+        )
 
 
 class HostKeyChanged(AdapterRejected):
@@ -233,9 +270,10 @@ class GitReader(Adapter):
         probe = await self._git(
             "push", "--dry-run", "origin", PROBE_REF, network=True, in_clone=True
         )
-        if probe.returncode == 0:
+        refusal = _probe_refusal(probe)
+        if refusal is not None:
             await asyncio.to_thread(shutil.rmtree, self.dir, True)
-            raise WritableDeployKey
+            raise refusal
 
     async def refresh(self) -> None:
         if not await asyncio.to_thread((self.dir / ".git").is_dir):
@@ -374,3 +412,21 @@ def _write_private(path: Path, data: bytes) -> None:
         os.write(fd, data if data.endswith(b"\n") else data + b"\n")
     finally:
         os.close(fd)
+
+
+def _probe_refusal(probe: CommandResult) -> Exception | None:
+    """Why the write probe refuses the connection, or None when the server refused the
+    dry-run push for want of write access (the one answer that proves the key read-only).
+    A push that went through is a writable key; a host key that does not match, the
+    network or DNS (unavailable: try again), or any other answer refuse it too."""
+    if probe.returncode == 0:
+        return WritableDeployKey()
+    err = probe.stderr.lower()
+    detail = (probe.stderr.strip().splitlines()[-1:] or [f"exit {probe.returncode}"])[0]
+    if "host key verification failed" in err:
+        return HostKeyChanged("connect")
+    if any(failure in err for failure in _NETWORK_FAILURES):
+        return AdapterUnavailable(GitReader.name, "connect", detail)
+    if any(refused in err for refused in _WRITE_REFUSALS):
+        return None
+    return WriteProbeInconclusive(detail)

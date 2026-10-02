@@ -139,3 +139,73 @@ async def test_writable_key_refused(tmp_path: Path, clock: FixedClock) -> None:
     pushes = [call.argv for call in runner.calls if _verb(call.argv) == "push"]
     assert pushes
     assert all("--dry-run" in argv for argv in pushes)
+
+
+# The write probe fails closed (CodeRabbit on #157): only a push the server refuses for
+# want of write access proves the key read-only. Hosts word that refusal their own way.
+READ_ONLY_ANSWERS = (
+    READ_ONLY,  # GitHub
+    "remote: GitLab: You are not allowed to push code to this project.\n",
+    "remote: Forgejo: User permission denied for writing.\n",
+    "repository access denied. deployment key is read-only.\n",  # Bitbucket
+    "error: insufficient permission for adding an object to repository database ./objects\n",
+)
+
+
+@pytest.mark.req("Data flow 1")
+@pytest.mark.wp("P3-12")
+@pytest.mark.parametrize("stderr", READ_ONLY_ANSWERS)
+async def test_write_probe_refused_for_write_access_connects(
+    tmp_path: Path, clock: FixedClock, stderr: str
+) -> None:
+    """A dry-run push the server refuses for want of write access proves the key
+    read-only: the connection is made and the clone kept."""
+    _fake = importlib.import_module("tumnis.modules.knowledge.adapters.obsidian.fake")
+    runner = _fake.FakeGitRunner()
+    runner.script("push", returncode=128, stderr=stderr)
+    reader = _reader(tmp_path, runner, clock)
+
+    await reader.connect()
+
+    assert (tmp_path / "obsidian" / str(CONNECTION)).exists()
+
+
+@pytest.mark.req("Data flow 1")
+@pytest.mark.wp("P3-12")
+@pytest.mark.parametrize(
+    ("stderr", "refusal"),
+    [
+        (
+            "ssh: connect to host vault.example.com port 22: Connection timed out\n"
+            "fatal: Could not read from remote repository.\n",
+            None,
+        ),
+        (
+            "ssh: Could not resolve hostname vault.example.com: Name or service not known\n"
+            "fatal: Could not read from remote repository.\n",
+            None,
+        ),
+        ("Host key verification failed.\n", "host_key_changed"),
+        ("fatal: the remote end hung up unexpectedly\n", "write_probe_inconclusive"),
+    ],
+)
+async def test_write_probe_without_a_write_refusal_fails_closed(
+    tmp_path: Path, clock: FixedClock, stderr: str, refusal: str | None
+) -> None:
+    """A probe that failed for any other reason (the network or DNS: unavailable, try
+    again; the host key; an answer Tumnis cannot read) proves nothing: the connection is
+    refused and the clone removed, so a key that can write is never taken for a read-only
+    one."""
+    from tumnis.core.adapters.base import AdapterRejected, AdapterUnavailable  # noqa: PLC0415
+
+    _fake = importlib.import_module("tumnis.modules.knowledge.adapters.obsidian.fake")
+    runner = _fake.FakeGitRunner()
+    runner.script("push", returncode=128, stderr=stderr)
+    reader = _reader(tmp_path, runner, clock)
+
+    expected = AdapterUnavailable if refusal is None else AdapterRejected
+    with pytest.raises(expected) as refused:
+        await reader.connect()
+    if refusal is not None:
+        assert getattr(refused.value, "code", None) == refusal
+    assert not (tmp_path / "obsidian" / str(CONNECTION)).exists()
