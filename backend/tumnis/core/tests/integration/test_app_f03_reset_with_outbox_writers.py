@@ -70,7 +70,6 @@ async def _write_then_emit(
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("P0-04")
-@pytest.mark.xfail(strict=True, reason="spec:FIX-app-final-minor")
 async def test_app_f03_reset_answers_204_while_writers_emit(
     db: DbUrls, client: httpx.AsyncClient
 ) -> None:
