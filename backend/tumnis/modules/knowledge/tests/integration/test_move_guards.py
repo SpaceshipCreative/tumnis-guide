@@ -308,3 +308,62 @@ async def test_move_switch_run_again_changes_nothing(  # fixtures
     assert _rows(
         db, "SELECT status, verified_count FROM folder_moves WHERE project_id = %s", project_id
     ) == [("switched", len(before))]
+
+
+@pytest.mark.req("FR-15.12", "REL-3")
+@pytest.mark.wp("P3-14")
+async def test_move_switch_out_of_retries_fails_the_move(  # noqa: PLR0917  # fixtures
+    db: DbUrls,
+    dbos: type[DBOS],
+    knowledge_ws: WorkspaceHandle,
+    clock: FixedClock,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A switch step that runs out of retries ends the move `failed` (`switch_failed`)
+    instead of leaving it `copying`: the project's folder and its file records still point
+    at the source, and a later move of the project is accepted and switches."""
+    from dbos import SetWorkflowID  # noqa: PLC0415
+
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+    from tumnis.modules.knowledge import move, workflows  # noqa: PLC0415
+
+    ws = knowledge_ws
+    root = make_root(tmp_path / "share")
+    source, project_id, folder = await _project_with_files(ws, clock, root)
+    records = _rows(db, "SELECT path, etag FROM folder_files WHERE location_id = %s", source)
+    before = _tree(root / folder)
+    target = await _server_path_location(
+        ws, make_root(tmp_path / "target"), "target", default=False
+    )
+    attempts: list[str] = []
+
+    async def broken_switch(*_args: Any) -> str | None:
+        attempts.append("switch")
+        raise RuntimeError("the database went away mid-switch")
+
+    with monkeypatch.context() as patched, SetWorkflowID(f"move-{uuid.uuid4()}"):
+        patched.setattr(move, "switch", broken_switch)
+        result = await workflows.move_project_folder(
+            str(ws.id), str(project_id), str(target), "acme-moved"
+        )
+    assert (result["status"], result["reason"]) == ("failed", "switch_failed"), result
+    assert len(attempts) == workflows.STEP_RETRY["max_attempts"]
+    assert _rows(
+        db, "SELECT status, reason FROM folder_moves WHERE project_id = %s", project_id
+    ) == [("failed", "switch_failed")]
+
+    async with tenant_session(ws.ctx) as s:
+        now = await knowledge.get_project_folder(s, project_id)
+    assert (now.location_id, now.root_path) == (source, folder)
+    assert (
+        _rows(db, "SELECT path, etag FROM folder_files WHERE location_id = %s", source) == records
+    )
+    assert _tree(root / folder) == before
+
+    with SetWorkflowID(f"move-{uuid.uuid4()}"):
+        again = await workflows.move_project_folder(
+            str(ws.id), str(project_id), str(target), "acme-moved-again"
+        )
+    assert again["status"] == "switched", again
