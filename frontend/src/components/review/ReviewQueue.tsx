@@ -63,6 +63,53 @@ function deviceTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+/** JSON with object keys sorted, so two reads of one payload compare equal. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value ?? null, (_key, v: unknown) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v as Record<string, unknown>).sort(([a], [b]) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+        )
+      : v,
+  );
+}
+
+function sameInstant(a: unknown, b: unknown): boolean {
+  if (a == null || b == null) return a == null && b == null;
+  return (
+    typeof a === "string" &&
+    typeof b === "string" &&
+    Date.parse(a) === Date.parse(b)
+  );
+}
+
+/**
+ * The worker re-ranks open items after they are made (blocking impact, Jev's factor), and
+ * every write bumps an item's version, so a decision sent right after the queue loaded can
+ * meet 409 stale_version although nothing the person decided on changed (A2.1). Then the
+ * current version, to send the decision once more; null when the conflict is anything
+ * else: the item decided, trashed or snoozed meanwhile, or its content changed.
+ */
+function rerankedOnly(seen: ReviewItemOut, error: unknown): number | null {
+  if (!(error instanceof ConflictError)) return null;
+  if (error.problem.code !== "stale_version") return null;
+  const now = error.current;
+  if (typeof now !== "object" || now === null) return null;
+  const row = now as Record<string, unknown>;
+  if (typeof row.version !== "number" || row.version <= seen.version) {
+    return null;
+  }
+  const unchanged =
+    row.decided_at == null &&
+    row.deleted_at == null &&
+    row.kind === seen.kind &&
+    sameInstant(row.snoozed_until, seen.snoozed_until) &&
+    canonical(row.payload) === canonical(seen.payload);
+  return unchanged ? row.version : null;
+}
+
 function Shortcuts() {
   return (
     <section
@@ -184,7 +231,7 @@ export function ReviewQueue({
   );
 
   const decide = useWrite<Decision, ReviewItemOut>({
-    mutationFn: ({ item, action, payload, snooze, idempotencyKey }) => {
+    mutationFn: async ({ item, action, payload, snooze, idempotencyKey }) => {
       const until =
         snooze === undefined
           ? undefined
@@ -194,14 +241,23 @@ export function ReviewQueue({
               hours.data?.days ?? [],
               workspace.data?.timezone ?? deviceTimeZone(),
             ).toISOString();
-      return apiWrite<ReviewItemOut>({
-        kind: "update",
-        method: "POST",
-        path: `/review/${encodeURIComponent(item.id)}/decide`,
-        body: { action, payload, snooze_until: until },
-        version: item.version,
-        idempotencyKey,
-      });
+      const send = (version: number, key: string) =>
+        apiWrite<ReviewItemOut>({
+          kind: "update",
+          method: "POST",
+          path: `/review/${encodeURIComponent(item.id)}/decide`,
+          body: { action, payload, snooze_until: until },
+          version,
+          idempotencyKey: key,
+        });
+      try {
+        return await send(item.version, idempotencyKey);
+      } catch (error) {
+        const version = rerankedOnly(item, error);
+        if (version === null) throw error;
+        // A new key: the server keeps the 409 under the first one.
+        return send(version, crypto.randomUUID());
+      }
     },
     onSuccess: (_row, { item }) => {
       setMessage(null);

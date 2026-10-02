@@ -6,6 +6,8 @@ import type { QueryClient } from "@tanstack/react-query";
 
 const TASK_VIEWS = new Set([
   "tasksListTasks",
+  "tasksListJustAdded", // the dashboard's Just added list (A1.1)
+  "tasksListTaskHistory", // the drawer's History (A1.1)
   "tasksGetBoard",
   "tasksGetTask",
   "tasksListComments",

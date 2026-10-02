@@ -1733,6 +1733,18 @@ export type HumanWaitOut = {
 };
 
 /**
+ * JustAddedOut
+ *
+ * The dashboard's Just added list (A1.1, coordinator decision 83).
+ */
+export type JustAddedOut = {
+  /**
+   * Items
+   */
+  items: Array<TaskOut>;
+};
+
+/**
  * KeyCreated
  */
 export type KeyCreated = {
@@ -2559,6 +2571,20 @@ export type PageSessionOut = {
    * Items
    */
   items: Array<SessionOut>;
+  /**
+   * Next Cursor
+   */
+  next_cursor: string | null;
+};
+
+/**
+ * Page[TaskChangeOut]
+ */
+export type PageTaskChangeOut = {
+  /**
+   * Items
+   */
+  items: Array<TaskChangeOut>;
   /**
    * Next Cursor
    */
@@ -4971,6 +4997,40 @@ export type SweepRow = {
    * Threshold
    */
   threshold: number;
+};
+
+/**
+ * TaskChangeOut
+ *
+ * One write in a task's history (`task_changes`): when, by whom (`by_you`: the
+ * caller), the undoable fields it changed (`created`, `trashed` or `restored` for the
+ * task itself) and whether it was undone.
+ */
+export type TaskChangeOut = {
+  /**
+   * Actor
+   */
+  actor: string;
+  /**
+   * At
+   */
+  at: string;
+  /**
+   * By You
+   */
+  by_you: boolean;
+  /**
+   * Change Id
+   */
+  change_id: string;
+  /**
+   * Fields
+   */
+  fields: Array<string>;
+  /**
+   * Undone
+   */
+  undone: boolean;
 };
 
 /**
@@ -9391,6 +9451,61 @@ export type GithubWebhookResponses = {
 
 export type GithubWebhookResponse =
   GithubWebhookResponses[keyof GithubWebhookResponses];
+
+export type TasksListJustAddedData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/just-added";
+};
+
+export type TasksListJustAddedErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksListJustAddedError =
+  TasksListJustAddedErrors[keyof TasksListJustAddedErrors];
+
+export type TasksListJustAddedResponses = {
+  /**
+   * Successful Response
+   */
+  200: JustAddedOut;
+};
+
+export type TasksListJustAddedResponse =
+  TasksListJustAddedResponses[keyof TasksListJustAddedResponses];
 
 export type AuthListKeysData = {
   body?: never;
@@ -15392,6 +15507,75 @@ export type TasksUpdateEstimateResponses = {
 
 export type TasksUpdateEstimateResponse =
   TasksUpdateEstimateResponses[keyof TasksUpdateEstimateResponses];
+
+export type TasksListTaskHistoryData = {
+  body?: never;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: {
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+  };
+  url: "/v1/tasks/{task_id}/history";
+};
+
+export type TasksListTaskHistoryErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksListTaskHistoryError =
+  TasksListTaskHistoryErrors[keyof TasksListTaskHistoryErrors];
+
+export type TasksListTaskHistoryResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageTaskChangeOut;
+};
+
+export type TasksListTaskHistoryResponse =
+  TasksListTaskHistoryResponses[keyof TasksListTaskHistoryResponses];
 
 export type TasksMoveTaskData = {
   body: MoveIn;

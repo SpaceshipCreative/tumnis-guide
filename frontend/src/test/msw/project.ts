@@ -19,6 +19,7 @@ import type {
   CommentOut,
   PullRequestOut,
   Status,
+  TaskChangeOut,
 } from "../../api/types.gen";
 import type { zProjectOut, zTaskOut } from "../../api/zod.gen";
 import { between, nKeys } from "../../lib/rank";
@@ -112,6 +113,8 @@ export class ProjectFake {
   readonly tasks = new Map<string, Row>();
   readonly changes = new Map<string, Change>();
   readonly comments = new Map<string, CommentOut[]>();
+  /** Each task's history (A1.1), newest first: what `GET /v1/tasks/{id}/history` answers. */
+  readonly history = new Map<string, TaskChangeOut[]>();
   /** Pull requests by task (P2-13): what `GET /v1/tasks/{id}/pull-requests` answers. */
   readonly pullRequests = new Map<string, PullRequestOut[]>();
   /** Answer the next link with this 422 problem code (`not_a_pull_request`, ...). */
@@ -425,6 +428,12 @@ export class ProjectFake {
           this.write(row, { ...change.before, version: row.version }),
         );
       }),
+      http.get("/v1/tasks/:id/history", ({ params }) =>
+        HttpResponse.json({
+          items: this.history.get(String(params.id)) ?? [],
+          next_cursor: null,
+        }),
+      ),
       http.get("/v1/tasks/:id/comments", ({ params }) =>
         HttpResponse.json({
           items: this.comments.get(String(params.id)) ?? [],
