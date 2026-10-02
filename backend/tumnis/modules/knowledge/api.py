@@ -3493,6 +3493,19 @@ async def record_delete_refused(ctx: WorkspaceContext, document_id: UUID) -> Non
         )
 
 
+NOT_AN_OUTSIDE_FILE: Final = "not_an_outside_file"
+
+
+async def _outside_file_target(s: AsyncSession, document_id: UUID) -> None:
+    """The delete-at-source flow serves outside files only: a document whose file Tumnis
+    made goes to its trash instead (409 `not_an_outside_file`)."""
+    policy, origin = await _delete_target(s, document_id)
+    if may_delete(policy, origin, ActorKind.user, confirmed_by_user=True) != "delete_at_source":
+        raise ProblemError(
+            409, NOT_AN_OUTSIDE_FILE, "Only a file Tumnis did not make is deleted at its source."
+        )
+
+
 class DeleteConfirmationOut(BaseModel):
     confirm_token: str
     expires_at: datetime
@@ -3506,8 +3519,9 @@ async def issue_delete_confirmation(
     s: AsyncSession, document_id: UUID, *, user_id: UUID
 ) -> DeleteConfirmationOut:
     """A one-time token for the delete-confirmation dialog: deleting this document's file
-    at its source, by this user, within `CONFIRM_TTL`. Only its hash is stored."""
-    await _delete_target(s, document_id)
+    at its source, by this user, within `CONFIRM_TTL`. Only its hash is stored. A document
+    without an outside file is refused (409 `not_an_outside_file`)."""
+    await _outside_file_target(s, document_id)
     token = secrets.token_urlsafe(32)
     expires_at = SystemClock().now() + CONFIRM_TTL
     await s.execute(
@@ -3528,8 +3542,9 @@ async def delete_at_source(
     the token must be one issued to this user for this document, unused and unexpired
     (422 `confirmation_invalid`). The Document is trashed and its file record marked
     confirmed; the next folder sync deletes the file (only if it is still what was
-    synced). Audited as `knowledge.deleted_at_source` with the reason."""
-    await _delete_target(s, document_id)
+    synced). Audited as `knowledge.deleted_at_source` with the reason. A document without
+    an outside file is refused (409 `not_an_outside_file`) before the token is looked at."""
+    await _outside_file_target(s, document_id)
     now = SystemClock().now()
     offered = _token_hash(confirm_token)
     issued = await s.execute(

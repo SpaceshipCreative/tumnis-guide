@@ -3,18 +3,24 @@ switch, keep the old copy.
 
 What `knowledge_move_project_folder` (workflows.py) runs, one call per DBOS step:
 
-1. `begin`: check the target (online, a path no other project's folder overlaps) and
-   record the move (`folder_moves`, `copying`).
-2. `list_source`: every file in the project's folder with its sha256 (Tumnis's own
-   `.tumnis/` or `Tumnis/` included; temp files left out), recorded by DBOS.
+1. `begin`: check the target (online, a path neither the project's own folder nor another
+   project's overlaps, no other move of the project still `copying`) and record the move
+   (`folder_moves`, `copying`) under the id the workflow gives it, so a re-run step
+   returns the same move.
+2. `list_source`: every file in the project's folder with its sha256 and etag (Tumnis's
+   own `.tumnis/` or `Tumnis/` included; temp files left out), recorded by DBOS.
 3. `copy_batch`: batches of `BATCH` files (plan default 100), create-only on the target. A
-   file already there with the same bytes (a batch re-run after a kill) is left as it is.
+   file already there with the same bytes (a batch re-run after a kill) is left as it is;
+   one with other bytes fails the move (`target_conflict`).
 4. `verify`: read every copy back and compare its hash with the source's; any mismatch
    fails the move (`hash_mismatch`) and nothing is switched.
-5. `switch`: one transaction: the project's folder, its file records (origin and Document
-   kept, the target's size, mtime and etag), its Documents' location and its queued
-   writes move to the target; the move is `switched` with the old copy kept, and a
-   `folder_move_old_copy` review item asks the user about it.
+5. `switch`: one transaction, with the move and the project's folder locked: unless the
+   folder still is the move's source and the source still holds exactly the listed files
+   (same etags), the move fails (`changed_during_move`) and nothing is switched. Else the
+   project's folder, its file records (origin and Document kept, the target's size, mtime
+   and etag), its Documents' location and its queued writes move to the target; the move
+   is `switched` with the old copy kept, and a `folder_move_old_copy` review item asks the
+   user about it. Run again after it committed, it changes nothing.
 
 The source is never written, moved or deleted by the move job.
 """
@@ -27,7 +33,7 @@ from typing import Any, Final
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import Table, func, insert, select, update
+from sqlalchemy import RowMapping, Table, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core.errors import ProblemError
@@ -46,7 +52,12 @@ from tumnis.modules.knowledge.models import (
     StorageLocation,
 )
 from tumnis.modules.knowledge.rules import PathRejected, safe_rel_path
-from tumnis.modules.knowledge.storage import PreconditionFailed, StorageBackend, StorageError
+from tumnis.modules.knowledge.storage import (
+    FileStat,
+    PreconditionFailed,
+    StorageBackend,
+    StorageError,
+)
 from tumnis.modules.tasks import api as tasks
 
 Fault = Callable[[str, bytes], bytes]
@@ -109,6 +120,14 @@ async def _read_all(backend: StorageBackend, path: str) -> bytes:
     return b"".join([chunk async for chunk in backend.read(path)])
 
 
+async def _hash_file(backend: StorageBackend, path: str) -> str:
+    """sha256 hex of a stored file, read as a stream (a content hash, no secret)."""
+    digest = hashlib.sha256()
+    async for chunk in backend.read(path):
+        digest.update(chunk)
+    return digest.hexdigest()
+
+
 async def _one(data: bytes) -> AsyncIterator[bytes]:
     yield data
 
@@ -118,11 +137,24 @@ def _sha(data: bytes) -> str:
 
 
 async def _check(
-    s: AsyncSession, project: UUID, target_id: UUID, to_path: str
+    s: AsyncSession, project: UUID, target_id: UUID, to_path: str, *, own: UUID | None = None
 ) -> tuple[api.ProjectFolderOut, str] | str:
     """The project's folder and the target root, or the code of why the target cannot
-    take the folder (`path_rejected`, `location_offline`, `same_folder`, `folder_taken`)."""
+    take the folder (`path_rejected`, `location_offline`, `same_folder`, `folder_taken`,
+    `move_in_progress`: a move other than `own` is still copying the folder)."""
     folder = await api.get_project_folder(s, project)
+    copying = await s.scalar(
+        select(_moves.c.id)
+        .where(
+            _moves.c.project_id == project,
+            _moves.c.status == "copying",
+            _moves.c.deleted_at.is_(None),
+            *([_moves.c.id != own] if own is not None else []),
+        )
+        .limit(1)
+    )
+    if copying is not None:
+        return "move_in_progress"
     try:
         to_root = safe_rel_path(to_path.strip("/"))
     except PathRejected:
@@ -134,7 +166,7 @@ async def _check(
     )
     if target != "online":
         return "location_offline"
-    if (folder.location_id, folder.root_path) == (target_id, to_root):
+    if folder.location_id == target_id and _overlaps(folder.root_path, to_root):
         return "same_folder"
     others: list[str] = list(
         await s.scalars(
@@ -167,69 +199,112 @@ async def precheck(s: AsyncSession, project_id: UUID, to_location: UUID, to_path
         raise refuse(checked)
 
 
-async def begin(
-    workspace_id: str, project_id: str, to_location: str, to_path: str
-) -> dict[str, Any]:
-    """The move's record, or {"error": code} when the target cannot take the folder
-    (checked again here: the location may have gone offline since the route's check)."""
-    project, target_id = UUID(project_id), UUID(to_location)
-    async with tenant_session(_ctx(workspace_id)) as s:
-        checked = await _check(s, project, target_id, to_path)
-        if isinstance(checked, str):
-            return {"error": checked}
-        folder, to_root = checked
-        move_id = await s.scalar(
-            insert(_moves)
-            .values(
-                project_id=project,
-                from_location=folder.location_id,
-                from_path=folder.root_path,
-                to_location=target_id,
-                to_path=to_root,
-            )
-            .returning(_moves.c.id)
-        )
+def _record(row: RowMapping) -> dict[str, Any]:
     return {
-        "move_id": str(move_id),
-        "project_id": project_id,
-        "from_location": str(folder.location_id),
-        "from_path": folder.root_path,
-        "to_location": to_location,
-        "to_path": to_root,
+        "move_id": str(row["id"]),
+        "project_id": str(row["project_id"]),
+        "from_location": str(row["from_location"]),
+        "from_path": row["from_path"],
+        "to_location": str(row["to_location"]),
+        "to_path": row["to_path"],
     }
 
 
+async def _lock_folder(s: AsyncSession, project: UUID) -> RowMapping | None:
+    """The project's folder row, locked to the end of the transaction: moves of one
+    project begin and switch one at a time."""
+    return (
+        (
+            await s.execute(
+                select(_folders.c.location_id, _folders.c.root_path)
+                .where(_folders.c.project_id == project, _folders.c.deleted_at.is_(None))
+                .with_for_update()
+            )
+        )
+        .mappings()
+        .first()
+    )
+
+
+async def begin(
+    workspace_id: str, project_id: str, to_location: str, to_path: str, *, move_id: UUID
+) -> dict[str, Any]:
+    """The move's record, or {"error": code} when the target cannot take the folder
+    (checked again here: the location may have gone offline since the route's check).
+    `move_id` comes from the workflow: a step run again returns the move it recorded."""
+    project, target_id = UUID(project_id), UUID(to_location)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        await _lock_folder(s, project)
+        recorded = (
+            (await s.execute(select(*_moves.c).where(_moves.c.id == move_id))).mappings().first()
+        )
+        if recorded is not None:
+            return _record(recorded)
+        checked = await _check(s, project, target_id, to_path, own=move_id)
+        if isinstance(checked, str):
+            return {"error": checked}
+        folder, to_root = checked
+        row = (
+            (
+                await s.execute(
+                    insert(_moves)
+                    .values(
+                        id=move_id,
+                        project_id=project,
+                        from_location=folder.location_id,
+                        from_path=folder.root_path,
+                        to_location=target_id,
+                        to_path=to_root,
+                    )
+                    .returning(*_moves.c)
+                )
+            )
+            .mappings()
+            .one()
+        )
+    return _record(row)
+
+
+async def _source_files(backend: StorageBackend, root: str) -> AsyncIterator[FileStat]:
+    """Every file in the folder `root`, temp files left out."""
+    cursor: str | None = None
+    while True:
+        page = await backend.list(root + "/", cursor)
+        for stat in page.items:
+            if not stat.path.rsplit("/", 1)[-1].startswith(TMP_PREFIX):
+                yield stat
+        cursor = page.next_cursor
+        if cursor is None:
+            return
+
+
 async def list_source(workspace_id: str, move: Mapping[str, Any]) -> list[list[str]]:
-    """[path inside the folder, sha256 hex] of every file in the source folder."""
+    """[path inside the folder, sha256 hex, etag] of every file in the source folder."""
     root = move["from_path"]
     found: list[list[str]] = []
     async with (
         tenant_session(_ctx(workspace_id)) as s,
         api.open_backend(s, UUID(move["from_location"]), net=_net_policy()) as backend,
     ):
-        cursor: str | None = None
-        while True:
-            page = await backend.list(root + "/", cursor)
-            for stat in page.items:
-                inside = stat.path[len(root) + 1 :]
-                if inside.rsplit("/", 1)[-1].startswith(TMP_PREFIX):
-                    continue
-                found.append([inside, _sha(await _read_all(backend, stat.path))])
-            cursor = page.next_cursor
-            if cursor is None:
-                break
+        async for stat in _source_files(backend, root):
+            inside = stat.path[len(root) + 1 :]
+            found.append([inside, await _hash_file(backend, stat.path), stat.etag])
     return sorted(found)
 
 
-async def copy_batch(workspace_id: str, move: Mapping[str, Any], batch: list[list[str]]) -> None:
-    """Copy one batch, create-only; a copy already there with the source's bytes stays."""
+async def copy_batch(
+    workspace_id: str, move: Mapping[str, Any], batch: list[list[str]]
+) -> str | None:
+    """Copy one batch, create-only; a copy already there with the source's bytes stays.
+    `target_conflict` when the target already holds other bytes at a copy's path (a
+    retry would not change that), else None."""
     src_root, dst_root = move["from_path"], move["to_path"]
     async with (
         tenant_session(_ctx(workspace_id)) as s,
         api.open_backend(s, UUID(move["from_location"]), net=_net_policy()) as source,
         api.open_backend(s, UUID(move["to_location"]), net=_net_policy()) as target,
     ):
-        for inside, _digest in batch:
+        for inside, *_listed in batch:
             data = await _read_all(source, f"{src_root}/{inside}")
             path = f"{dst_root}/{inside}"
             hook = _fault[0]
@@ -238,8 +313,9 @@ async def copy_batch(workspace_id: str, move: Mapping[str, Any], batch: list[lis
             try:
                 await target.write(path, _one(data), None)
             except PreconditionFailed:
-                if _sha(await _read_all(target, path)) != _sha(data):
-                    raise
+                if await _hash_file(target, path) != _sha(data):
+                    return "target_conflict"
+    return None
 
 
 async def verify(
@@ -253,10 +329,10 @@ async def verify(
         tenant_session(_ctx(workspace_id)) as s,
         api.open_backend(s, UUID(move["to_location"]), net=_net_policy()) as target,
     ):
-        for inside, digest in files:
+        for inside, digest, *_etag in files:
             path = f"{dst_root}/{inside}"
             try:
-                held = _sha(await _read_all(target, path))
+                held = await _hash_file(target, path)
             except StorageError:
                 return None
             stat = await target.stat(path)
@@ -275,14 +351,55 @@ async def fail(workspace_id: str, move_id: str, reason: str) -> None:
         )
 
 
+CHANGED: Final = "changed_during_move"
+
+
+async def _source_changed(s: AsyncSession, move: Mapping[str, Any], files: list[list[str]]) -> bool:
+    """Whether the project's folder (locked) is no longer the move's source, or the
+    source no longer holds exactly the listed files with their listed etags."""
+    folder = await _lock_folder(s, UUID(move["project_id"]))
+    src_loc, src_root = UUID(move["from_location"]), move["from_path"]
+    if folder is None or (folder["location_id"], folder["root_path"]) != (src_loc, src_root):
+        return True
+    listed = {inside: etag for inside, _digest, etag in files}
+    async with api.open_backend(s, src_loc, net=_net_policy()) as backend:
+        now = {
+            stat.path[len(src_root) + 1 :]: stat.etag
+            async for stat in _source_files(backend, src_root)
+        }
+    return now != listed
+
+
 async def switch(
-    workspace_id: str, move: Mapping[str, Any], stats: Mapping[str, list[Any]]
-) -> None:
-    """Point the project at the copy, in one transaction (see the module docstring)."""
-    project = UUID(move["project_id"])
+    workspace_id: str,
+    move: Mapping[str, Any],
+    files: list[list[str]],
+    stats: Mapping[str, list[Any]],
+) -> str | None:
+    """Point the project at the copy, in one transaction (see the module docstring): None
+    once the move is switched, else why it failed (`changed_during_move`)."""
+    project, move_id = UUID(move["project_id"]), UUID(move["move_id"])
     src_loc, dst_loc = UUID(move["from_location"]), UUID(move["to_location"])
     src_root, dst_root = move["from_path"], move["to_path"]
     async with tenant_session(_ctx(workspace_id)) as s:
+        status, reason = (
+            await s.execute(
+                select(_moves.c.status, _moves.c.reason)
+                .where(_moves.c.id == move_id)
+                .with_for_update()
+            )
+        ).one()
+        if status == "switched":
+            return None
+        if status == "failed":
+            return str(reason)
+        if await _source_changed(s, move, files):
+            await s.execute(
+                update(_moves)
+                .where(_moves.c.id == move_id)
+                .values(status="failed", reason=CHANGED, updated_at=func.now())
+            )
+            return CHANGED
         await s.execute(
             update(_folders)
             .where(_folders.c.project_id == project, _folders.c.deleted_at.is_(None))
@@ -312,7 +429,7 @@ async def switch(
             )
         await s.execute(
             update(_moves)
-            .where(_moves.c.id == UUID(move["move_id"]))
+            .where(_moves.c.id == move_id)
             .values(status="switched", verified_count=len(stats), old_kept=True)
         )
         await tasks.add_review_item(
@@ -320,12 +437,13 @@ async def switch(
             target=tasks.TargetRef(type="project", id=project),
             project_id=project,
             payload=OldCopyReviewPayload(
-                move_id=UUID(move["move_id"]), location_id=src_loc, path=src_root
+                move_id=move_id, location_id=src_loc, path=src_root
             ).model_dump(mode="json"),
             dedupe_key=f"{OLD_COPY_REVIEW_KIND}:{move['move_id']}",
             session=s,
         )
         mark_changed(s, "project", project)
+    return None
 
 
 async def _move_records(
