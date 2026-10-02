@@ -20,7 +20,6 @@ def _note(path: str, text: str) -> Any:
 
 @pytest.mark.req("FR-15.10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 def test_mapping_precedence() -> None:
     """T-P3-12-04
     The frontmatter key beats the `#tumnis/<project>` tag, which beats the longest
@@ -70,7 +69,6 @@ def test_mapping_precedence() -> None:
 
 @pytest.mark.req("FR-15.10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 def test_excluded_folders_skipped() -> None:
     """T-P3-12-05
     `.obsidian/`, `.trash/`, the vault's templates folder (from `.obsidian/templates.json`
@@ -121,7 +119,6 @@ def test_excluded_folders_skipped() -> None:
 
 @pytest.mark.req("FR-15.10", "SAF-1")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 def test_clippings_tainted_others_trusted() -> None:
     """T-P3-12-06
     A note under the clippings folder (`Clippings/` by default, configurable) is

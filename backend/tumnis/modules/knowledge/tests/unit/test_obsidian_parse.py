@@ -27,7 +27,6 @@ def _note(rel: str) -> Any:
 
 @pytest.mark.req("FR-15.10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 def test_frontmatter_tags_headings() -> None:
     """T-P3-12-01
     Fixture notes parse to the expected frontmatter (a safe YAML load), the lowercased tag
@@ -96,7 +95,6 @@ def _rows() -> list[dict[str, Any]]:
 
 @pytest.mark.req("FR-15.10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 def test_wikilinks_and_embeds() -> None:
     """T-P3-12-02
     Every row of the link-forms table (`tests/unit/data/obsidian_links.yaml`) parses to its
@@ -148,7 +146,6 @@ _FRONTMATTERISH = st.lists(
 
 @pytest.mark.req("FR-15.10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 @settings(deadline=None, database=None, max_examples=300)
 @given(head=_FRONTMATTERISH, text=st.text())
 def test_parse_never_raises(head: str, text: str) -> None:
