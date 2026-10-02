@@ -26,7 +26,6 @@ def _clean_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k not in REPOSITORY_VARIABLES}
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-followups-2")
 def test_workdir_git_ignores_inherited_repository_variables(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
