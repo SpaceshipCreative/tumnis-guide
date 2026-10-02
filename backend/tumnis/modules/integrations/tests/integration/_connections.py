@@ -204,14 +204,11 @@ async def metrics_app(
     """The app with METRICS_TOKEN_FILE holding METRICS_TOKEN, and a client on it."""
     import httpx  # noqa: PLC0415
 
-    from tests.fixtures import settings_for  # noqa: PLC0415
-    from tumnis.app import create_app  # noqa: PLC0415
+    from tests.fixtures import build_app, settings_for  # noqa: PLC0415
 
     token_file = token_dir / "metrics_token"
     token_file.write_text(METRICS_TOKEN + "\n")
-    app = create_app(
-        settings=settings_for(db, dbos_sys_db, metrics_token_file=str(token_file)), clock=clock
-    )
+    app = build_app(settings_for(db, dbos_sys_db, metrics_token_file=str(token_file)), clock)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="https://test") as http:
         yield http

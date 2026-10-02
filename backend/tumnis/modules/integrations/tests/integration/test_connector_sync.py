@@ -187,7 +187,8 @@ async def test_failing_sync_shows_status_and_metric(  # noqa: PLR0917
             assert seen.status_detail == "Server error from provider, retrying"
             assert seen.next_sync_at is not None
             backoff.append(seen.next_sync_at - clock.now())
-        assert backoff == sorted(backoff) and backoff[0] < backoff[-1]
+        assert backoff == sorted(backoff)
+        assert backoff[0] < backoff[-1]
 
         await run_sync(workspace.id, connection_id)
         failed = await get_connection(workspace.ctx, connection_id)
@@ -267,6 +268,6 @@ async def test_tick_enqueues_each_due_connection_once(  # noqa: PLR0917
                 break
             await asyncio.sleep(0.1)
 
-    synced = sorted(f.input.args[1] for f in flows if f.input is not None)
+    synced = sorted(f.input["args"][1] for f in flows if f.input is not None)
     assert synced == sorted([str(due_a), str(due_b)])
     assert all(f.status == "SUCCESS" for f in flows)

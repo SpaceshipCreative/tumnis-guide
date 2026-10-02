@@ -120,7 +120,8 @@ async def test_rotated_refresh_token_persisted_before_next_call(
     connection_id = await connected(workspace.ctx, oauth_server, clock, expires_in=1)
     storage = ConnectionTokenStorage(workspace.ctx, connection_id, clock=clock)
     before = await storage.get_tokens()
-    assert before is not None and before.refresh_token
+    assert before is not None
+    assert before.refresh_token
     clock.advance(timedelta(seconds=2))
 
     first, second = await asyncio.gather(
@@ -132,7 +133,8 @@ async def test_rotated_refresh_token_persisted_before_next_call(
     after = await storage.get_tokens()
     assert after is not None
     assert first == second == after.access_token != before.access_token
-    assert after.refresh_token and after.refresh_token != before.refresh_token
+    assert after.refresh_token
+    assert after.refresh_token != before.refresh_token
     assert not oauth_server.refresh_token_live(before.refresh_token)
 
     server = await oauth_server_of(workspace.ctx, connection_id)

@@ -25,4 +25,4 @@ async def _logged(self: FakeSource, cursor: dict[str, Any] | None) -> Any:
     return await _served(self, cursor)
 
 
-FakeSource.sync = _logged  # type: ignore[method-assign]
+FakeSource.sync = _logged  # type: ignore[method-assign,assignment]

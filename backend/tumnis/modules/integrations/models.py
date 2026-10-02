@@ -1,5 +1,5 @@
 """integrations SQLAlchemy tables owned by this module (mirrors of revisions
-integrations_0001 and integrations_0002)."""
+integrations_0001 to integrations_0004)."""
 
 from datetime import datetime
 from typing import Any
@@ -26,6 +26,14 @@ class Connection(TenantBase, Base):
     key_version: Mapped[int | None]
     last_sync_at: Mapped[datetime | None]
     last_error: Mapped[str | None]
+    # P3-02
+    account_label: Mapped[str] = mapped_column(server_default=text("''"))
+    settings: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    status_detail: Mapped[str | None]
+    last_success_at: Mapped[datetime | None]
+    next_sync_at: Mapped[datetime | None]
+    consent_ack_at: Mapped[datetime | None]
+    failures: Mapped[int] = mapped_column(server_default=text("0"))
 
 
 class RawPayload(TenantBase, Base):
@@ -42,7 +50,9 @@ class SyncState(TenantBase, Base):
     __tablename__ = "sync_state"
 
     connection_id: Mapped[UUID] = mapped_column(ForeignKey("connections.id"))
+    scope: Mapped[str] = mapped_column(server_default=text("'default'"))  # P3-02
     cursor: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    page_no: Mapped[int] = mapped_column(server_default=text("0"))  # P3-02
     last_page_at: Mapped[datetime | None]
     items_seen: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
 
@@ -58,6 +68,9 @@ class OAuthPending(TenantBase, Base):
     redirect_uri: Mapped[str]
     expires_at: Mapped[datetime]
     used_at: Mapped[datetime | None]
+    connection_id: Mapped[UUID | None]  # P3-02: the connection a connect_oauth is for
+    workflow_id: Mapped[str | None]
+    iss: Mapped[str | None]
 
 
 class Person(CanonicalColumns, TenantBase, Base):

@@ -5,6 +5,10 @@
   deployment finished). The module that reads the outside system (github, coolify) writes
   the status through `api.set_artifact_status`, which emits this only when the state or
   the checks differ from what was stored; `tasks` flags review items on it.
+- `items.ingested` (P3-02): a sync page stored records of a connection; ids only, the
+  subscribers (triage, P3-06) read the records through `integrations.api`.
+- `connection.auth_required` (P3-02): a connection's grant stopped working; `tasks` queues
+  one `connection_auth` review item for it (dedupe key `conn_auth:<id>`).
 """
 
 from typing import Any, ClassVar, Literal
@@ -22,3 +26,20 @@ class ArtifactUpdatedV1(EventPayload):
     url: str | None
     state: str | None
     checks: dict[str, Any]
+
+
+@event_type("items.ingested", 1)
+class ItemsIngestedV1(EventPayload):
+    event_name: ClassVar[str] = "items.ingested"
+    schema_version: Literal[1] = 1
+    connection_id: UUID
+    item_ids: list[UUID]
+
+
+@event_type("connection.auth_required", 1)
+class ConnectionAuthRequiredV1(EventPayload):
+    event_name: ClassVar[str] = "connection.auth_required"
+    schema_version: Literal[1] = 1
+    connection_id: UUID
+    provider: str
+    account_label: str

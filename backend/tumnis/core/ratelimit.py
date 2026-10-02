@@ -7,11 +7,16 @@ a signed-in principal draws from its own bucket, an anonymous caller from its ad
 
 State is per process; hosted mode with more than one api replica moves the buckets to the
 Redis cache backend (config only).
+
+`SlidingWindows` (P3-02) holds outbound limits: at most `limit` starts in any `period`
+seconds per key (a provider account, `provider:<name>:<account>`). The connector sync
+asks it before each provider request and waits the seconds it answers.
 """
 
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Final
 
 from tumnis.core.clock import Clock
@@ -60,3 +65,25 @@ class RateLimiter:
             spec = self._buckets[key[0]]
             if tokens + (now - at).total_seconds() * spec.rate_per_s >= spec.burst:
                 del self._state[key]
+
+
+class SlidingWindows:
+    """At most `limit` admissions in any `period_s` window per key (P3-02: a provider's
+    documented request limit, so a token bucket's burst could overrun it). An admission
+    is recorded when granted; a caller refused waits the seconds `admit` returns, then
+    asks again. Per process, like the buckets."""
+
+    def __init__(self) -> None:
+        self._starts: dict[str, deque[datetime]] = {}
+
+    def admit(self, key: str, limit: int, period_s: float, now: datetime) -> float | None:
+        """None when admitted (the start is recorded at `now`), else the seconds until the
+        oldest start in the window leaves it."""
+        period = timedelta(seconds=period_s)
+        starts = self._starts.setdefault(key, deque())
+        while starts and starts[0] <= now - period:
+            starts.popleft()
+        if len(starts) < limit:
+            starts.append(now)
+            return None
+        return max((starts[0] + period - now).total_seconds(), 0.001)

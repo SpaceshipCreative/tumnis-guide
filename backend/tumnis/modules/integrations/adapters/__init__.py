@@ -6,6 +6,9 @@ dependency: its real side is the same class, and its contract runs on recordings
 """
 
 from tumnis.modules.integrations.adapters.fake import ScriptedConnector
+from tumnis.modules.integrations.adapters.fake_source import FakeSource
 from tumnis.modules.integrations.api import register_connector
 
 register_connector("scripted", "email", real=ScriptedConnector, fake=ScriptedConnector)
+# P3-02: the sync framework's scriptable connector (provider "fake", shown in fake mode only).
+register_connector("fake", "email", real=FakeSource, fake=FakeSource)

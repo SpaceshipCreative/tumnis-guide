@@ -85,7 +85,8 @@ async def test_grant_stored_encrypted_per_account(
     }
     assert set(stored) == {work, home}
     assert stored[work]["provider"] == stored[home]["provider"] == "fake"
-    assert stored[work]["credentials_enc"] and stored[home]["credentials_enc"]
+    assert stored[work]["credentials_enc"]
+    assert stored[home]["credentials_enc"]
     assert bytes(stored[work]["credentials_enc"]) != bytes(stored[home]["credentials_enc"])
 
     opened = {
@@ -123,7 +124,8 @@ async def test_connection_api_never_returns_credentials(  # noqa: PLR0917
 
     connection_id = await connected(workspace.ctx, oauth_server, clock, label="Work")
     tokens = await ConnectionTokenStorage(workspace.ctx, connection_id, clock=clock).get_tokens()
-    assert tokens is not None and tokens.refresh_token
+    assert tokens is not None
+    assert tokens.refresh_token
     secrets = (tokens.access_token, tokens.refresh_token)
 
     one = await session_client.get(f"/v1/connections/{connection_id}")
