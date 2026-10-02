@@ -68,7 +68,6 @@ def _matches(chunk: Any, want: dict[str, Any]) -> bool:
 
 @pytest.mark.req("FR-15.2")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 @pytest.mark.parametrize("fixture", FIXTURES)
 def test_expected_chunks(fixture: str) -> None:
     """T-P1-16-06
