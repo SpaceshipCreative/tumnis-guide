@@ -3,7 +3,8 @@
 // Docling fake returning the stored chunks of
 // backend/fixtures/extraction/rate-card-table.pdf. Turns green with P1-14
 // (storage), P1-16 (scan and extraction) and P1-17 (Knowledge rail and packet
-// preview); the `test.fail()` comes off when P1-17, the last of them, merges.
+// preview). Green since the acceptance fixes (CI run 36969221870), so it is
+// unmarked.
 // The integration part is backend/tests/acceptance/test_a1_5_pdf_to_packet.py.
 import { expect, projectIdByName, test } from "../fixtures";
 import {
@@ -24,7 +25,6 @@ test(
     tag: ["@A1.5", "@FR-15.2", "@FR-15.3", "@FR-15.4", "@SEC-10", "@P1-17"],
   },
   async ({ signedInPage: page }) => {
-    test.fail();
     const acme = await projectIdByName(page.request, ACME);
     const { id: taskId } = await createTask(page.request, ACME, TASK);
     await page.goto(`/projects/${acme}`);
