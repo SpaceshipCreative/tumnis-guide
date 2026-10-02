@@ -9,12 +9,17 @@ the PKCE verifier (RFC 7636) and the resource indicator (RFC 8707); refresh toke
 Discovery order and parsing are the MCP SDK's helpers (`mcp.client.auth.utils`, SDK
 1.30.0), so they follow the SDK's reading of the spec; the HTTP goes through
 `core.net.guarded_client` (SSRF checks on every request, no redirects, no proxy
-variables). A refused grant (HTTP 400/401 with an OAuth `error`) raises `OAuthRefused`;
+variables). No grant crosses the network in clear: every request goes over https, or over
+plain http only when the address it connects to is a private (LAN) one (Scott's decision
+7), and discovery refuses a server whose metadata names an endpoint that breaks that rule
+or a sign-in page that is not https (`require_https`: the browser opens it, unguarded).
+A refused grant (HTTP 400/401 with an OAuth `error`) raises `OAuthRefused`;
 an unreachable server, a 5xx, a 408 or a 429 raises `AdapterUnavailable`; any other
 non-200 answer raises `AdapterRejected`.
 """
 
 import re
+from ipaddress import ip_address
 from typing import Final
 
 import httpx
@@ -39,8 +44,22 @@ from pydantic import ValidationError
 
 from tumnis.core.adapters.errors import AdapterRejected, AdapterUnavailable
 from tumnis.core.adapters.registry import Health
-from tumnis.core.net import NetPolicy, Resolver, guarded_client, system_resolver
-from tumnis.modules.integrations.oauth_port import ADAPTER, OAuthRefused, OAuthServer
+from tumnis.core.net import (
+    PRIVATE,
+    SCHEME_PORTS,
+    NetPolicy,
+    Resolver,
+    SsrfBlocked,
+    guarded_client,
+    resolve_and_check,
+    system_resolver,
+)
+from tumnis.modules.integrations.oauth_port import (
+    ADAPTER,
+    OAuthRefused,
+    OAuthServer,
+    require_https,
+)
 
 TIMEOUT_S: Final = 15.0  # plan default for one authorization server call
 _ERROR_CODE: Final = re.compile(r"[a-z_]{1,64}")  # RFC 6749 error codes
@@ -48,6 +67,35 @@ _ERROR_CODE: Final = re.compile(r"[a-z_]{1,64}")  # RFC 6749 error codes
 # signing in again. A timeout or rate limit is transient and is retried with the grant kept.
 _REFUSED: Final = frozenset({400, 401})
 _TRANSIENT: Final = frozenset({408, 429})
+
+
+_PLAIN_HTTP: Final = "plain http only to a LAN address; use https"
+
+
+def _lan(host: str) -> bool:
+    try:
+        address = ip_address(host.removeprefix("[").removesuffix("]"))
+    except ValueError:
+        return False
+    return any(address in network for network in PRIVATE)
+
+
+class _HttpsOrLan(httpx.AsyncBaseTransport):
+    """Inside `PinnedTransport`, so the URL already names the address it connects to:
+    https passes; plain http passes only to a private (LAN) address (decision 7)."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        self.inner = inner
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.scheme != "https" and not (url.scheme == "http" and _lan(url.host)):
+            name = str(request.extensions.get("sni_hostname") or url.host)
+            raise SsrfBlocked(name, _PLAIN_HTTP)
+        return await self.inner.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        await self.inner.aclose()
 
 
 class McpOAuthClient:
@@ -67,9 +115,27 @@ class McpOAuthClient:
         self._timeout_s = timeout_s
 
     def _http(self) -> httpx.AsyncClient:
+        inner = self._transport or httpx.AsyncHTTPTransport(retries=0, trust_env=False)
         return guarded_client(
-            self._policy, timeout=self._timeout_s, resolver=self._resolver, inner=self._transport
+            self._policy,
+            timeout=self._timeout_s,
+            resolver=self._resolver,
+            inner=_HttpsOrLan(inner),
         )
+
+    async def _https_or_lan(self, url: str, op: str) -> None:
+        """AdapterRejected unless `url` is https, or plain http to a name that resolves to a
+        private (LAN) address under the deployment's policy (decision 7). Each request is
+        checked again against the address it connects to (`_HttpsOrLan`)."""
+        parsed = httpx.URL(url)
+        if parsed.scheme == "https" and parsed.host:
+            return
+        if parsed.scheme == "http" and parsed.host:
+            port = parsed.port or SCHEME_PORTS["http"]
+            address = await resolve_and_check(parsed.host, port, self._policy, self._resolver)
+            if any(address in network for network in PRIVATE):
+                return
+        raise AdapterRejected(ADAPTER, op, f"{parsed.host or url}: {_PLAIN_HTTP}")
 
     async def _send(
         self, http: httpx.AsyncClient, op: str, request: httpx.Request
@@ -105,6 +171,10 @@ class McpOAuthClient:
                 validate_metadata_issuer(metadata, issuer)
             except OAuthFlowError:
                 raise AdapterRejected(ADAPTER, op, "issuer mismatch") from None
+        require_https(str(metadata.authorization_endpoint), op)
+        for endpoint in (metadata.issuer, metadata.token_endpoint, metadata.registration_endpoint):
+            if endpoint is not None:
+                await self._https_or_lan(str(endpoint), op)
         scopes = (resource.scopes_supported if resource else None) or metadata.scopes_supported
         return OAuthServer(
             resource=server_url,
