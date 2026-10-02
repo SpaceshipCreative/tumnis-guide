@@ -327,6 +327,32 @@ async function agentPostsResult(
 }
 
 /**
+ * The person accepts the AI task's result in the review queue (FR-5.8): the
+ * open `result` item for the task is accepted (`POST /v1/review/{id}/decide`),
+ * which finishes the task; waits until it is Done.
+ */
+async function acceptResult(
+  request: APIRequestContext,
+  task: TaskDetail,
+): Promise<void> {
+  const queue = await getJson<{
+    items: { id: string; target_id: string; version: number }[];
+  }>(request, "/v1/review?kind=result");
+  const item = queue.items.find((i) => i.target_id === task.id);
+  if (!item) throw new Error(`no result review item for ${task.title}`);
+  await postJson(request, `/v1/review/${item.id}/decide`, {
+    action: "accept",
+    version: item.version,
+  });
+  await waitForTask(
+    request,
+    task.id,
+    (t) => t.status === "done",
+    `${task.title} did not reach Done after its result was accepted`,
+  );
+}
+
+/**
  * Polls `GET /v1/tasks/{id}` until `done(task)`, at most RESULT_WAIT_MS. The
  * server clock stands still at the plan time; the wait moves it on as well
  * (the per-principal rate limit, P0-10, refills on real time either way).
@@ -370,7 +396,7 @@ export async function arrangeCloseTheDay(
   if (!ai || !human)
     throw new Error("the Monday plan needs a Human and an AI item");
   await agentPostsResult(request, fakes, ai);
-  await walk(request, ai.id, ["done"]);
+  await acceptResult(request, ai);
   await walk(request, human.id, ["in_progress", "done"]);
 
   // The enrichment recording answers for a Hybrid task (estimate and split),
