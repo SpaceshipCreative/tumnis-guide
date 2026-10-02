@@ -494,8 +494,9 @@ async def move_project_folder(
     `knowledge.move_project_folder.batch_<n>` after batch n), verify every hash, switch.
     A resumed move copies only the batches left. The source is never changed. Once begun,
     a move never stays `copying`: a copy that cannot be made (`target_conflict`, or
-    `copy_failed` once a step's retries run out), a hash mismatch or a source changed
-    while copying (`changed_during_move`) ends it `failed` with nothing switched."""
+    `copy_failed` once a step's retries run out), a hash mismatch, a source changed
+    while copying (`changed_during_move`) or a switch whose retries run out
+    (`switch_failed`) ends it `failed` with nothing switched."""
     move_id = str(uuid.uuid5(_MOVE_IDS, DBOS.workflow_id or str(uuid.uuid4())))
     record = await move_begin_step(workspace_id, project_id, to_location, to_path, move_id)
     if "error" in record:
@@ -505,7 +506,12 @@ async def move_project_folder(
         await move_fail_step(workspace_id, record["move_id"], copied)
         return {"status": "failed", "reason": copied, "move_id": record["move_id"]}
     files, stats = copied
-    failed = await move_switch_step(workspace_id, record, files, stats)
+    try:
+        failed = await move_switch_step(workspace_id, record, files, stats)
+    except DBOSMaxStepRetriesExceeded:
+        log.exception("knowledge: the move of project %s could not switch", record["project_id"])
+        failed = "switch_failed"
+        await move_fail_step(workspace_id, record["move_id"], failed)
     if failed is not None:
         return {"status": "failed", "reason": failed, "move_id": record["move_id"]}
     return {"status": "switched", "move_id": record["move_id"], "verified": len(stats)}
