@@ -67,7 +67,12 @@ from tumnis.modules.integrations.models import (
     SyncState,
     Thread,
 )
-from tumnis.modules.integrations.oauth_port import OAuthPort, OAuthRefused, OAuthServer
+from tumnis.modules.integrations.oauth_port import (
+    OAuthPort,
+    OAuthRefused,
+    OAuthServer,
+    require_https,
+)
 from tumnis.modules.integrations.payloads import (
     ArtifactUpdatedV1,
     ConnectionAuthRequiredV1,
@@ -1786,16 +1791,18 @@ async def prepare_oauth(
     """Discovery (once), dynamic client registration (once per connection: the client
     is kept with the grant), then a consent in flight: a random `state` (only its hash
     kept) and a PKCE verifier (sealed), valid for OAUTH_PENDING_TTL, tied to this
-    connection and the waiting workflow."""
+    connection and the waiting workflow. A sign-in page that is not https, discovered or
+    stored, is refused (AdapterRejected) before anything is registered or kept."""
     async with tenant_session(ctx) as s:
         row = await _row(s, connection_id)
     spec = provider_spec(row.provider)
     if spec.server_url is None:
         raise ValueError(f"{spec.provider} has no MCP server to sign in at")
     storage = ConnectionTokenStorage(ctx, connection_id, clock=_NoClock())
-    server = await oauth_server_of(ctx, connection_id)
-    if server is None:
-        server = await oauth.discover(spec.server_url)
+    stored = await oauth_server_of(ctx, connection_id)
+    server = stored or await oauth.discover(spec.server_url)
+    require_https(server.authorization_endpoint, "authorize")  # a stored one too (SEC-9)
+    if stored is None:
         await store_oauth_server(ctx, connection_id, server)
     client = await storage.get_client_info()
     if client is None or redirect_uri not in {str(u) for u in client.redirect_uris or []}:
