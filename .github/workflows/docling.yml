@@ -33,7 +33,7 @@ env:
 jobs:
   docling:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15 # cold model cache about 3.5 min, warm less (PR #166)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Its own uv cache (cache-suffix): the torch wheels would never land in the cache the
@@ -83,12 +83,6 @@ jobs:
           # Pull the service images while xdist starts, so no worker's first test waits on one.
           uv run --group docling python -c "from tests._services import CLAMD_IMAGE, MINIO_IMAGE, SFTP_IMAGE; from tests.fixtures import PG_IMAGE, PGBOUNCER_IMAGE; print(PG_IMAGE, PGBOUNCER_IMAGE, MINIO_IMAGE, SFTP_IMAGE, CLAMD_IMAGE)" | xargs -n1 -P5 docker pull -q > /dev/null &
           uv run --group docling pytest -m docling -n 2 --dist worksteal --durations=20 -rA
-      # TEMPORARY (removed before review): why A1.5 step 4 still fails with real Docling.
-      - name: Diagnostic, A1.5 step 4 without its marker
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        working-directory: backend
-        run: uv run --group docling pytest --runxfail -p no:randomly -n 0 "tests/acceptance/test_a1_5_pdf_to_packet.py::test_task_packet_carries_brief_and_table_passage"
       - name: Model cache size
         if: ${{ !cancelled() }}
         run: du -sh ~/.cache/huggingface "${{ steps.models.outputs.rapidocr }}" || true
