@@ -1,7 +1,7 @@
 # HANDOFF: FIX-main-red (continuation 0 to 1)
 
 PR: #171 (draft), https://github.com/SpaceshipCreative/tumnis-guide/pull/171, branch `fix/main-red`.
-Push with `/usr/bin/git push origin HEAD:fix/main-red` from a worktree whose HEAD has these commits. `.git/config` is read-only, so the local branch is the throwaway worktree branch. Base is main ddb94871.
+Push with `/usr/bin/git push origin HEAD:fix/main-red` from a worktree whose HEAD has these commits. `.git/config` is read-only, so the local branch is the throwaway worktree branch. Base: main 969dc447 (#162), merged into the branch at 34faf5df.
 
 ## Commits
 
@@ -57,7 +57,7 @@ Main's red is several independent intermittent failures, not one conflict betwee
 
 ## Next steps
 
-1. Find the root cause of T-P0-07-05 and fix it, test first. Then T-P0-24-05.
+1. Find the root cause of T-P0-07-05 and fix it, test first. Then T-P0-24-05. Then the flake the coordinator added: `tumnis/modules/agents/tests/integration/test_enrich.py::test_relabel_during_run_gets_estimate_afterwards`, which timed out with "no follow-up estimate in time" in #162's CI. Find its root cause; no retries. It could be the same recovery or queue stall as T-P0-07-05. CI on #171 hasn't run yet against the merge with 969dc447.
 2. Run `make check` before each commit; semgrep needs the `SEMGREP_*` variables pointed at `$TMPDIR` files. Push.
 3. Mark the PR ready when CI is green, and don't request a full CodeRabbit review. Then send "#171 MERGE-READY at <sha>" to main.
 
