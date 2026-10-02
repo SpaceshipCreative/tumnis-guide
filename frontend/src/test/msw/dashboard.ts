@@ -7,6 +7,7 @@ import { http, HttpResponse, type RequestHandler } from "msw";
 
 import type {
   AgentFeedOut,
+  JustAddedOut,
   PausesOut,
   ProjectDeployStatus,
   ReviewCountOut,
@@ -40,6 +41,12 @@ export function todayTasks(
     const page: TaskPage = { items: [...items], next_cursor: null, total };
     return HttpResponse.json(page);
   });
+}
+
+/** `GET /v1/just-added`: the dashboard's Just added list (A1.1), these tasks. */
+export function justAdded(items: readonly TaskOut[]): RequestHandler {
+  const body: JustAddedOut = { items: [...items] };
+  return http.get("/v1/just-added", () => HttpResponse.json(body));
 }
 
 /** `GET /v1/review/count`: the review badge count (P0-18). */
@@ -87,13 +94,14 @@ export function agentPauses(body: Partial<PausesOut> = {}): RequestHandler {
 
 /** The dashboard's reads, empty: no projects, nothing today, nothing to review, no apps,
  * no working hours or events today, no plan for the day (P1-11), no agent runs in the
- * activity feed (P2-17) and no agents paused (P2-09). */
+ * activity feed (P2-17), no agents paused (P2-09) and nothing just added (A1.1). */
 export const dashboardDefaults: RequestHandler[] = [
   agentFeed(),
   agentPauses(),
   deployStatus(),
   projectsList([]),
   todayTasks([]),
+  justAdded([]),
   reviewCount(0),
   workspaceTimezone("America/New_York"),
   dayCalendar(NO_WINDOW),
