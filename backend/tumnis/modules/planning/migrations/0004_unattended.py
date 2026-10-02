@@ -33,8 +33,7 @@ def upgrade() -> None:
         sa.Column("start_local", sa.Time, nullable=False),
         sa.Column("end_local", sa.Time, nullable=False),
         sa.CheckConstraint(
-            "cardinality(weekdays) BETWEEN 1 AND 7"
-            " AND weekdays <@ ARRAY[0,1,2,3,4,5,6]::int[]",
+            "cardinality(weekdays) BETWEEN 1 AND 7 AND weekdays <@ ARRAY[0,1,2,3,4,5,6]::int[]",
             name="ck_unattended_windows_weekdays",
         ),
         sa.CheckConstraint("start_local <> end_local", name="ck_unattended_windows_span"),
