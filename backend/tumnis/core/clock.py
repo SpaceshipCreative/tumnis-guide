@@ -38,7 +38,8 @@ class OverridableClock:
     """A clock the test routes can fix (fakes only, `POST /v1/test/clock`): it reads its
     base clock until `set` fixes an instant, which then moves only with `advance`; `clear`
     goes back to the base. `create_app` wraps the app's clock in one when adapters are
-    fakes, so the rate limiter, the cache and every route read the same time."""
+    fakes, so the cache and every route read the same time. The rate limiter reads `base`:
+    request rates are wall-clock, and a pinned instant would stop its refill."""
 
     def __init__(self, base: Clock) -> None:
         self.base = base

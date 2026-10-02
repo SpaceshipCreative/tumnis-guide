@@ -29,7 +29,18 @@ from uuid import UUID, uuid5
 
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
 from pydantic import AnyUrl, AwareDatetime, BaseModel, Field, StringConstraints, model_validator
-from sqlalchemy import ColumnElement, Table, and_, func, or_, select, text, tuple_, update
+from sqlalchemy import (
+    ColumnElement,
+    Table,
+    and_,
+    delete,
+    func,
+    or_,
+    select,
+    text,
+    tuple_,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import ScalarResult
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
@@ -1931,10 +1942,11 @@ async def complete_oauth(
     clock: Clock,
     actor: str,
 ) -> ConnectionStatus:
-    """Exchanges the stored code with the verifier, stores the tokens sealed, consumes
-    the consent and marks the connection `ok` (due now), auditing `connector.connected`
-    as `actor` (the user who started it), all but the exchange in one transaction. A code
-    the server refuses leaves the connection `pending_auth` (the user connects again)."""
+    """Exchanges the stored code with the verifier, stores the tokens sealed, deletes
+    the consent's `oauth_pending` row and marks the connection `ok` (due now), auditing
+    `connector.connected` as `actor` (the user who started it), all but the exchange in
+    one transaction. A code the server refuses consumes the consent and leaves the
+    connection `pending_auth` (the user connects again)."""
     grant = await read_oauth_grant(ctx, pending_id)
     if grant is None:
         return _status((await get_connection(ctx, connection_id)).status)
@@ -1960,7 +1972,9 @@ async def complete_oauth(
         await put_credentials(
             ctx, connection_id, {**blob, "tokens": _tokens_in(tokens, now)}, session=s
         )
-        await consume_oauth_grant(ctx, pending_id, session=s)
+        # The consent is finished and the grant lives in the connection's credentials: its
+        # row goes (a replayed callback finds no state, a mismatch as before).
+        await s.execute(delete(_pending).where(_pending.c.id == pending_id))
         await s.execute(
             update(_connections)
             .where(_connections.c.id == connection_id)
