@@ -5,7 +5,7 @@ from datetime import date, datetime, time
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Integer, SmallInteger
+from sqlalchemy import ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -77,7 +77,7 @@ class UnattendedWindow(TenantBase, Base):
     __tablename__ = "unattended_windows"
 
     project_id: Mapped[UUID | None]
-    weekdays: Mapped[list[int]] = mapped_column(ARRAY(SmallInteger))
+    weekdays: Mapped[list[int]] = mapped_column(ARRAY(Integer))
     start_local: Mapped[time]
     end_local: Mapped[time]
 

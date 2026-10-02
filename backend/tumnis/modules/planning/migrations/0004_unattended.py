@@ -29,12 +29,12 @@ def upgrade() -> None:
     create_tenant_table(
         "unattended_windows",
         sa.Column("project_id", UUID(as_uuid=True), nullable=True),
-        sa.Column("weekdays", ARRAY(sa.SmallInteger), nullable=False),
+        sa.Column("weekdays", ARRAY(sa.Integer), nullable=False),
         sa.Column("start_local", sa.Time, nullable=False),
         sa.Column("end_local", sa.Time, nullable=False),
         sa.CheckConstraint(
             "cardinality(weekdays) BETWEEN 1 AND 7"
-            " AND weekdays <@ ARRAY[0,1,2,3,4,5,6]::smallint[]",
+            " AND weekdays <@ ARRAY[0,1,2,3,4,5,6]::int[]",
             name="ck_unattended_windows_weekdays",
         ),
         sa.CheckConstraint("start_local <> end_local", name="ck_unattended_windows_span"),

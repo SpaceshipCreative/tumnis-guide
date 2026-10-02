@@ -33,6 +33,7 @@ export const LIVE_MAP: Record<
       "tasksGetRecurrence",
       "tasksListPullRequests",
       "agentsGetTaskPacket", // the task's packet (P2-02) changes with its task
+      "tasksGetUnattended", // its unattended queue flag (P4-04), consumed when it runs
     ],
     lists: [
       "tasksListTasks",
@@ -191,4 +192,7 @@ export const NOT_LIVE = [
   // The master's long poll on a delegation (P2-06): an agent's call that waits up to ten
   // minutes, never a cached query of the app.
   "agentsWaitForTask",
+  // The unattended window (P4-04) changes only from Settings or a project's Schedule rail,
+  // and each writes the saved answer into its own cache.
+  "planningGetUnattendedWindow",
 ] as const;
