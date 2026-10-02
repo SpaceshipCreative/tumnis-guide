@@ -5,8 +5,9 @@
 //
 // A1.1 · Quick-add with AI label and enrichment (journey J2). Phase 1
 // acceptance, committed red on the phase's first day. Turns green with P1-07
-// (label step), P1-03 (placeholder) and P1-08 (estimate and first action); the
-// `test.fail()` comes off when P1-08, the last of them, merges.
+// (label step), P1-03 (placeholder) and P1-08 (estimate and first action), with
+// the dashboard's Just added list and the drawer's History (decision 83); the
+// `test.fail()` came off once CI run 36971618979 showed it passing (decision 78).
 import type { Request } from "@playwright/test";
 
 import {
@@ -218,7 +219,6 @@ test.describe("A1.1 quick-add with AI", () => {
     "A1.1 label under 1 s, enrichment streams in, one-click override persists",
     { tag: ["@A1.1", "@J2", "@FR-3.3", "@FR-4.1", "@FR-4.4", "@P1-08"] },
     async ({ signedInPage: page, fakes }, testInfo) => {
-      test.fail();
       const phone = testInfo.project.name === "phone";
       // Jev answers `hybrid` (0.93) at its recorded p50 of 250 ms; Generation
       // gives the placeholder; the acme-site runner enriches after 1,500 ms.
