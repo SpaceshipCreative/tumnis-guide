@@ -112,7 +112,7 @@ docker image tag ghcr.io/spaceshipcreative/tumnis:previous ghcr.io/spaceshipcrea
 docker compose up -d --wait --wait-timeout 600
 ```
 
-If the release also changed `deploy/`, check out the previous tag before that `docker compose up` so the compose file matches the image. DBOS resumes a workflow only on the application version that started it: with work in flight, keep one worker on the newer image running until its queues drain. On a Coolify install, point `TUMNIS_VERSION` back at the previous tag (or `sha-<commit>`) and deploy.
+If the release also changed `deploy/`, check out the previous tag before that `docker compose up` so the compose file matches the image. The deploy host needs Docker Compose 2.24.0 or later: `deploy/compose.yaml` gives the worker `deploy/hosted-keys.env` through the long `env_file` form with `required: false`, which older Compose releases reject. Rolling back to a build older than the hosted provider settings (before commit 3f678e79): remove `deploy/hosted-keys.env` first, or that build's worker refuses the unknown variables and does not start. On any build that has them, a hosted key set with a base URL that is not `https://` stops the worker at startup (`hosted_url_requires_https`). DBOS resumes a workflow only on the application version that started it: with work in flight, keep one worker on the newer image running until its queues drain. On a Coolify install, point `TUMNIS_VERSION` back at the previous tag (or `sha-<commit>`) and deploy.
 
 ## Master key rotation
 

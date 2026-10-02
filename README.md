@@ -13,7 +13,7 @@ Under the hood it is a modular Python monolith (FastAPI, DBOS, Postgres 18) with
 ## Requirements
 
 - A Linux server or VM (the README job uses Ubuntu 24.04) with `sudo` rights.
-- Docker Engine with a current Docker Compose v2 plugin, `git`, `openssl`, `curl` and `python3`.
+- Docker Engine with the Docker Compose plugin 2.24.0 or later, `git`, `openssl`, `curl` and `python3`.
 - [Tailscale](https://tailscale.com/) (or another VPN) to reach it from your phone. Tumnis never needs a port open to the internet, and you should not open one.
 - For agents: a second machine (or the same one) with [Hermes](https://hermes-agent.nousresearch.com/docs/) and the runner daemon ([Agents](#agents)).
 
@@ -150,7 +150,7 @@ echo "Tumnis answers at https://$TUMNIS_HOST"
 
 ### With Coolify instead
 
-On a server managed by [Coolify](https://coolify.io/), Tumnis deploys from `main` after CI is green (`.github/workflows/deploy.yml` on a self-hosted runner). Create the three secret files as in step 4, create a Docker Compose resource from this repository with `deploy/compose.yaml`, and set its environment in Coolify ([deploy/.env.example](deploy/.env.example) lists every variable, including the optional hosted providers):
+On a server managed by [Coolify](https://coolify.io/), Tumnis deploys from `main` after CI is green (`.github/workflows/deploy.yml` on a self-hosted runner). Create the three secret files as in step 4, create a Docker Compose resource from this repository with `deploy/compose.yaml`, and set its environment in Coolify ([deploy/.env.example](deploy/.env.example) lists every variable; the optional hosted provider keys go in `deploy/hosted-keys.env` instead, as in [Agents](#agents)):
 
 ```bash readme:manual
 APP_DB_PASSWORD=<openssl rand -hex 24>
@@ -268,7 +268,7 @@ claude mcp add --env TUMNIS_API_KEY=<your key> --env TUMNIS_URL=https://tumnis.e
 
 **Optional local models.** A vLLM server on your network can write placeholder first actions and spoken focus messages (`GENERATION__BASE_URL`, `GENERATION__MODEL`), embed knowledge for hybrid search (`EMBEDDINGS__BASE_URL`, `EMBEDDINGS__MODEL`, `EMBEDDINGS__DIMS`) and read hard scanned pages (`KNOWLEDGE__VISION_BASE_URL`, `KNOWLEDGE__VISION_MODEL`). Without them Tumnis works the same, with full-text search. Set them on the api and worker services through a compose override file of your own, `deploy/compose.local.yaml`, and `COMPOSE_FILE=deploy/compose.yaml:deploy/compose.local.yaml` in `.env`.
 
-**Optional hosted providers.** Instead of your own servers, an OpenAI-compatible hosted API can speak focus messages (`SPEECH__HOSTED_BASE_URL`, `SPEECH__HOSTED_MODEL`, optionally `SPEECH__HOSTED_VOICE`, and `SPEECH__HOSTED_API_KEY`) or embed knowledge (`EMBEDDINGS__HOSTED_BASE_URL`, `EMBEDDINGS__HOSTED_MODEL`, `EMBEDDINGS__HOSTED_DIMS` (1024 when blank, at most 2000) and `EMBEDDINGS__HOSTED_API_KEY`). Set them in `.env`; each provider is off until its URL, model and key are all set, only the worker receives them, and the keys never go into the database. A local-only project's text is never sent to a hosted provider, and a local embedder stays preferred when both are set.
+**Optional hosted providers.** Instead of your own servers, an OpenAI-compatible hosted API can speak focus messages (`SPEECH__HOSTED_BASE_URL`, `SPEECH__HOSTED_MODEL`, optionally `SPEECH__HOSTED_VOICE`, and `SPEECH__HOSTED_API_KEY`) or embed knowledge (`EMBEDDINGS__HOSTED_BASE_URL`, `EMBEDDINGS__HOSTED_MODEL`, `EMBEDDINGS__HOSTED_DIMS` (1024 when blank, at most 2000) and `EMBEDDINGS__HOSTED_API_KEY`). Set them in `deploy/hosted-keys.env`, not in `.env`: copy [deploy/hosted-keys.env.example](deploy/hosted-keys.env.example) to `deploy/hosted-keys.env` (mode 600; git ignores it) and uncomment only the lines you use. Only the worker reads that file. Each provider is off until its URL, model and key are all set, a base URL must be `https://` when its key is set (otherwise the worker refuses to start: `hosted_url_requires_https`), and the keys never go into the database. A local-only project's text is never sent to a hosted provider, and a local embedder stays preferred when both are set.
 
 ## On the phone
 
@@ -289,8 +289,8 @@ Tumnis is a PWA: open `https://<TUMNIS_HOST>` on your phone over Tailscale and a
 
 These are planned but not in this release:
 
-- **Inbox Zero, Granola and chat connectors**, matching what they bring in to your tasks, and proposal runs on it; **Google Docs** as a source. They wait for recorded tests against the real services. Discord is the chosen first chat provider (an ADR, 0014, will record it); today Discord already reaches the master agent through its Hermes profile ([Agents](#agents)).
-- **More sources:** Obsidian vaults and S3 buckets as knowledge sources (beyond S3 as a storage location), and a shared connections screen for them. Coming in a later update.
+- **Inbox Zero, Granola and chat connectors**, matching what they bring in to your tasks, and proposal runs on it; **Google Docs** as a source. They wait for recorded tests against the real services. Discord is the chosen first chat provider (an ADR, 0014, will record it); today Discord already reaches the master agent through its Hermes profile ([Agents](#agents)). **Settings > Connections**, where these accounts will be connected, synced and signed in again, is in place, but it has no provider to connect yet.
+- **More sources:** Obsidian vaults and S3 buckets as knowledge sources (beyond S3 as a storage location). Coming in a later update.
 - **Unattended run windows** (agents working through your tasks on a schedule while you're away) and **retention rules** for old data. Coming in a later update.
 - **A search page and Settings screens for GitHub and Coolify.** Today Ctrl+K (Cmd+K on a Mac) searches tasks and projects, agents and the API search knowledge (`GET /v1/knowledge/search`), and GitHub and Coolify are set through the API ([Connect sources](#connect-sources)).
 - **Hosted mode** (Tumnis run for several customers) is v2.
