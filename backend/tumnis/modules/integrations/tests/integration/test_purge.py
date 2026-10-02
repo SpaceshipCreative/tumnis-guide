@@ -162,7 +162,6 @@ async def test_retention_purge_removes_old_content_and_raw_payloads(world: Purge
 
 @pytest.mark.req("FR-5.10", "SEC-3")
 @pytest.mark.wp("P3-09")
-@pytest.mark.xfail(strict=True, reason="spec:P3-09")
 async def test_project_purge_removes_content_and_is_audited(world: PurgeWorld) -> None:
     """T-P3-09-03
     An archived project's content: the records its own context items and its tasks' point
