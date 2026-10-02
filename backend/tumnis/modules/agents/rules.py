@@ -327,6 +327,71 @@ def over_task_limit(created_after_increment: int, limit: int) -> bool:
     return created_after_increment > limit
 
 
+# --- delegation (P2-06, SAF-5, design decisions 3 and 6) -----------------------------------
+
+MAX_DELEGATION_DEPTH: Final = 2  # SAF-5, design decision 3
+LOOP_REPEAT_LIMIT: Final = 3  # plan default: the third delegation of a task in the window
+LOOP_WINDOW: Final = timedelta(minutes=60)  # plan default
+WaitStatus = Literal["done", "waiting_on_human", "still_running"]
+
+
+@dataclass(frozen=True, slots=True)
+class DelegationRecord:
+    """A delegation as the rules read it: the task it handed over, when, and whether (and
+    when) its run's result was accepted since. An acceptance with no time counts as at
+    the delegation's own time."""
+
+    delegation_id: UUID
+    task_id: UUID
+    delegated_at: datetime
+    accepted: bool = False
+    accepted_at: datetime | None = None
+
+
+def delegation_depth(chain: Sequence[DelegationRecord]) -> int:
+    """Depth comes from the task's delegation chain, not from the caller's run (R-34):
+    `chain` lists the delegations that produced this task and its ancestors (walking
+    parent_id and the delegated run that created each task), nearest first. The new
+    delegation's depth is len(chain) + 1."""
+    return len(chain) + 1
+
+
+def depth_exceeded(depth: int) -> bool:
+    """A delegation deeper than MAX_DELEGATION_DEPTH is refused (SAF-5)."""
+    return depth > MAX_DELEGATION_DEPTH
+
+
+def is_delegation_loop(
+    history: Sequence[DelegationRecord],
+    task_id: UUID,
+    now: datetime,
+    *,
+    chain: Sequence[DelegationRecord] = (),
+) -> bool:
+    """True when task_id was delegated LOOP_REPEAT_LIMIT - 1 times in the window (a
+    delegation exactly LOOP_WINDOW old has left it) without an accepted result in between,
+    or when the chain that produced the task already contains task_id (a cycle)."""
+    if any(record.task_id == task_id for record in chain):
+        return True
+    mine = [r for r in history if r.task_id == task_id]
+    # (time, is_acceptance): in the window, delegations count; an acceptance resets the
+    # count at its own time, after a delegation made at that same instant.
+    events = [(r.delegated_at, False) for r in mine if now - r.delegated_at < LOOP_WINDOW]
+    events += [(r.accepted_at or r.delegated_at, True) for r in mine if r.accepted]
+    since_accepted = 0
+    for _, acceptance in sorted(events):
+        since_accepted = 0 if acceptance else since_accepted + 1
+    return since_accepted >= LOOP_REPEAT_LIMIT - 1
+
+
+def wait_status(run_status: RunStatus) -> WaitStatus:
+    """What `wait_for_task` answers for the child run's status (design decision 6): the
+    master is never parked on a human."""
+    if run_status is RunStatus.WAITING_ON_HUMAN:
+        return "waiting_on_human"
+    return "done" if run_status in TERMINAL_STATUSES else "still_running"
+
+
 # --- a stuck run's report, reviewed (P4-02, FR-10.5, Scott decision 73) ---------------------
 
 StuckStepDecided = Literal["done", "reopened"]

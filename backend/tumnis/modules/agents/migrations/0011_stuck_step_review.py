@@ -12,8 +12,8 @@
 
 from alembic import op
 
-revision = "agents_0010"
-down_revision = "agents_0009"
+revision = "agents_0011"
+down_revision = "agents_0010"
 branch_labels = None
 depends_on = None
 phase = "expand"

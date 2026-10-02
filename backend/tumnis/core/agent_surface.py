@@ -71,8 +71,6 @@ NAME_RE: Final = re.compile(r"^_?[a-z][a-z0-9_]*$")
 
 # Tools the PRD names that later WPs bring (T-P2-01-16 checks this against the registry).
 PENDING_TOOLS: Final[Mapping[str, str]] = {
-    "delegate_task": "P2-06",
-    "wait_for_task": "P2-06",
     "ingest_items": "P3-02",
     "get_context_item": "P3-03",
     "draft_reply": "P3-07",
@@ -333,9 +331,10 @@ async def _project(op: SurfaceOp, caller: Caller, raw: Mapping[str, Any]) -> UUI
     """The project the call names. A read looks it up only for a project-limited caller
     (the others may read every project). A write always locates its project or row, so a
     write aimed at a row the caller cannot see is 404 before anything in its body is
-    judged (A0.3), as its REST twin would say."""
+    judged (A0.3), as its REST twin would say. So does a master-only read (P2-06's
+    `wait_for_task`): a row the caller cannot see is 404 before `master_only`."""
     principal = caller.principal
-    if principal.project_ids is None and not op.write:
+    if principal.project_ids is None and not op.write and not op.master_only:
         return None
     ctx = principal.workspace_context()
     if op.project_arg is not None:

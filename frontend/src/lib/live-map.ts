@@ -188,4 +188,7 @@ export const NOT_LIVE = [
   "notificationsGetVapidPublicKey",
   // A clip is audio the voice engine plays from its URL (P4-03), never a cached query.
   "speechGetClip",
+  // The master's long poll on a delegation (P2-06): an agent's call that waits up to ten
+  // minutes, never a cached query of the app.
+  "agentsWaitForTask",
 ] as const;
