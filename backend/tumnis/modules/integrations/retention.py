@@ -301,6 +301,11 @@ async def project_targets(s: AsyncSession, project_id: UUID) -> dict[str, list[s
             )
         )
         targets -= {(str(row.target_type), row.target_id) for row in elsewhere}
+        # So does one another archived project links: its links live in its archive.
+        for other in sorted(await projects.archived_project_ids(s) - {project_id}, key=str):
+            if not targets:
+                break
+            targets -= {(t, i) for _item, t, i in await _archived_items(s, other)}
     return {
         record_type: sorted(str(i) for t, i in targets if t == record_type) for record_type in ORDER
     }
