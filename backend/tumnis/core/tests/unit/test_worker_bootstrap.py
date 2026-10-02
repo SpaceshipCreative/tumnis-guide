@@ -31,26 +31,28 @@ class StubDBOS:
     destroyed: ClassVar[int] = 0
 
     def __init__(self, *, config: dict[str, Any]) -> None:
+        """Record the config DBOS would be built with."""
         StubDBOS.configs.append(config)
 
     @staticmethod
     def listen_queues(_queues: list[str]) -> None:
-        return None
+        """Nothing to listen on."""
 
     @staticmethod
     def launch() -> None:
-        return None
+        """No system database to connect to."""
 
     @staticmethod
     def register_queue(_name: str, **_: Any) -> None:
-        return None
+        """Queues are not persisted."""
 
     @staticmethod
     def apply_schedules(_schedules: list[dict[str, Any]]) -> None:
-        return None
+        """Schedules are not persisted."""
 
     @staticmethod
     def destroy() -> None:
+        """Count the shutdowns."""
         StubDBOS.destroyed += 1
 
 
@@ -118,7 +120,7 @@ def fresh_process(monkeypatch: pytest.MonkeyPatch) -> type[StubDBOS]:
     monkeypatch.delenv("TUMNIS_KILLPOINT", raising=False)
 
     async def no_serve(_settings: Settings, *, relay: bool = True) -> None:
-        return None
+        """The serve loop returns at once (no relay, watchers or signal handlers)."""
 
     StubDBOS.configs = []
     StubDBOS.destroyed = 0

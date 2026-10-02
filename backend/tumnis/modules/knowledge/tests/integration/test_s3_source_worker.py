@@ -42,6 +42,7 @@ EXTRACT_WORKFLOW = "knowledge_extract_document"
 
 
 async def _project(ws: WorkspaceHandle, clock: FixedClock) -> UUID:
+    """A project with its folder record, for the bucket prefix to map to."""
     from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
     from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
     from tumnis.modules.projects import api as projects  # noqa: PLC0415
@@ -55,6 +56,7 @@ async def _project(ws: WorkspaceHandle, clock: FixedClock) -> UUID:
 
 
 def _version_ids(db: DbUrls, document_id: UUID) -> list[str]:
+    """The ids of the document's versions (read as the owner role)."""
     with psycopg.connect(db.libpq(OWNER)) as conn:
         found = conn.execute(
             "SELECT id FROM document_versions WHERE document_id = %s", (document_id,)
