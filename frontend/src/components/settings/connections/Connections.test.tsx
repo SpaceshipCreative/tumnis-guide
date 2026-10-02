@@ -62,46 +62,43 @@ const CONNECTIONS = [
 ];
 
 describe("Connections", () => {
-  test.fails(
-    "[P3-02][FR-14.4] T-P3-02-14 shows status, last sync and reconnect",
-    async () => {
-      server.use(
-        http.get("*/v1/connections", () => HttpResponse.json(CONNECTIONS)),
-      );
-      // Imported here, so this file loads before the screen exists (the spec is red).
-      const screenModule = "./Connections";
-      const { Connections } = (await import(
-        /* @vite-ignore */ screenModule
-      )) as { Connections: () => React.JSX.Element };
-      renderWithProviders(<Connections />, { viewport: "phone" });
+  test("[P3-02][FR-14.4] T-P3-02-14 shows status, last sync and reconnect", async () => {
+    server.use(
+      http.get("*/v1/connections", () => HttpResponse.json(CONNECTIONS)),
+    );
+    // Imported here, so this file loads before the screen exists (the spec is red).
+    const screenModule = "./Connections";
+    const { Connections } = (await import(/* @vite-ignore */ screenModule)) as {
+      Connections: () => React.JSX.Element;
+    };
+    renderWithProviders(<Connections />, { viewport: "phone" });
 
-      const work = await screen.findByRole("group", { name: "Work mail" });
-      const notes = screen.getByRole("group", { name: "Meeting notes" });
-      const personal = screen.getByRole("group", { name: "Personal mail" });
+    const work = await screen.findByRole("group", { name: "Work mail" });
+    const notes = screen.getByRole("group", { name: "Meeting notes" });
+    const personal = screen.getByRole("group", { name: "Personal mail" });
 
-      // A status chip on every account, with what went wrong when it is not healthy.
-      expect(within(work).getByText("Connected")).toBeInTheDocument();
-      expect(within(notes).getByText("Retrying")).toBeInTheDocument();
-      expect(
-        within(notes).getByText("Server error from provider, retrying"),
-      ).toBeInTheDocument();
-      expect(within(personal).getByText("Sign in needed")).toBeInTheDocument();
-      expect(within(personal).getByText("Sign in again")).toBeInTheDocument();
+    // A status chip on every account, with what went wrong when it is not healthy.
+    expect(within(work).getByText("Connected")).toBeInTheDocument();
+    expect(within(notes).getByText("Retrying")).toBeInTheDocument();
+    expect(
+      within(notes).getByText("Server error from provider, retrying"),
+    ).toBeInTheDocument();
+    expect(within(personal).getByText("Sign in needed")).toBeInTheDocument();
+    expect(within(personal).getByText("Sign in again")).toBeInTheDocument();
 
-      // When it last synced, or that it never has.
-      expect(within(work).getByText(/Last synced/)).toBeInTheDocument();
-      expect(within(personal).getByText(/Never synced/)).toBeInTheDocument();
+    // When it last synced, or that it never has.
+    expect(within(work).getByText(/Last synced/)).toBeInTheDocument();
+    expect(within(personal).getByText(/Never synced/)).toBeInTheDocument();
 
-      // Reconnect only where the sign-in expired; Sync now everywhere else.
-      expect(
-        within(personal).getByRole("button", { name: "Reconnect" }),
-      ).toBeInTheDocument();
-      expect(
-        within(work).queryByRole("button", { name: "Reconnect" }),
-      ).not.toBeInTheDocument();
-      expect(
-        within(work).getByRole("button", { name: "Sync now" }),
-      ).toBeInTheDocument();
-    },
-  );
+    // Reconnect only where the sign-in expired; Sync now everywhere else.
+    expect(
+      within(personal).getByRole("button", { name: "Reconnect" }),
+    ).toBeInTheDocument();
+    expect(
+      within(work).queryByRole("button", { name: "Reconnect" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(work).getByRole("button", { name: "Sync now" }),
+    ).toBeInTheDocument();
+  });
 });
