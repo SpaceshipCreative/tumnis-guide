@@ -39,3 +39,8 @@ groups:
         expr: time() - tumnis_ops_check_timestamp_seconds{check="audit_chain"} > 26 * 3600
         labels: { severity: warning }
         annotations: { summary: "Audit chain has not been verified in 26 hours" }
+      - alert: TumnisConnectorSyncStale # P3-02; plan default: 2 hours, against cadences of 5 to 30 minutes
+        expr: max by (provider) (tumnis_connector_sync_age_seconds) > 2 * 3600
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "A {{ $labels.provider }} connection has not synced for over 2 hours" }

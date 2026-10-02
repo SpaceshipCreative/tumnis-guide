@@ -162,6 +162,35 @@ import type {
   CalendarSyncNowData,
   CalendarSyncNowErrors,
   CalendarSyncNowResponses,
+  ConnectionsCreateConnectionData,
+  ConnectionsCreateConnectionErrors,
+  ConnectionsCreateConnectionResponses,
+  ConnectionsDisconnectData,
+  ConnectionsDisconnectErrors,
+  ConnectionsDisconnectResponses,
+  ConnectionsGetConnectionData,
+  ConnectionsGetConnectionErrors,
+  ConnectionsGetConnectionResponses,
+  ConnectionsListConnectionsData,
+  ConnectionsListConnectionsErrors,
+  ConnectionsListConnectionsResponses,
+  ConnectionsListProvidersData,
+  ConnectionsListProvidersErrors,
+  ConnectionsListProvidersResponses,
+  ConnectionsOauthCallbackData,
+  ConnectionsOauthCallbackErrors,
+  ConnectionsOauthUrlData,
+  ConnectionsOauthUrlErrors,
+  ConnectionsOauthUrlResponses,
+  ConnectionsStartOauthData,
+  ConnectionsStartOauthErrors,
+  ConnectionsStartOauthResponses,
+  ConnectionsSyncNowData,
+  ConnectionsSyncNowErrors,
+  ConnectionsSyncNowResponses,
+  ConnectionsUpdateConnectionData,
+  ConnectionsUpdateConnectionErrors,
+  ConnectionsUpdateConnectionResponses,
   CoolifyListDeployStatusData,
   CoolifyListDeployStatusErrors,
   CoolifyListDeployStatusResponses,
@@ -530,6 +559,15 @@ import {
   zCalendarOauthStartResponse,
   zCalendarSelectCalendarsResponse,
   zCalendarSyncNowResponse,
+  zConnectionsCreateConnectionResponse,
+  zConnectionsDisconnectResponse,
+  zConnectionsGetConnectionResponse,
+  zConnectionsListConnectionsResponse,
+  zConnectionsListProvidersResponse,
+  zConnectionsOauthUrlResponse,
+  zConnectionsStartOauthResponse,
+  zConnectionsSyncNowResponse,
+  zConnectionsUpdateConnectionResponse,
   zCoolifyListDeployStatusResponse,
   zDeadLettersGetDeadLettersResponse,
   zDeadLettersPostDiscardResponse,
@@ -1257,6 +1295,227 @@ export const calendarOauthStart = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zCalendarOauthStartResponse.parseAsync(data),
     url: "/v1/calendar/oauth/start",
+    ...options,
+  });
+
+/**
+ * List Connections
+ */
+export const connectionsListConnections = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<ConnectionsListConnectionsData, ThrowOnError>,
+): RequestResult<
+  ConnectionsListConnectionsResponses,
+  ConnectionsListConnectionsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ConnectionsListConnectionsResponses,
+    ConnectionsListConnectionsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsListConnectionsResponse.parseAsync(data),
+    url: "/v1/connections",
+    ...options,
+  });
+
+/**
+ * Create Connection
+ */
+export const connectionsCreateConnection = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ConnectionsCreateConnectionData, ThrowOnError>,
+): RequestResult<
+  ConnectionsCreateConnectionResponses,
+  ConnectionsCreateConnectionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ConnectionsCreateConnectionResponses,
+    ConnectionsCreateConnectionErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsCreateConnectionResponse.parseAsync(data),
+    url: "/v1/connections",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Oauth Callback
+ */
+export const connectionsOauthCallback = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsOauthCallbackData, ThrowOnError>,
+): RequestResult<unknown, ConnectionsOauthCallbackErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    unknown,
+    ConnectionsOauthCallbackErrors,
+    ThrowOnError
+  >({ url: "/v1/connections/oauth/callback", ...options });
+
+/**
+ * List Providers
+ */
+export const connectionsListProviders = <ThrowOnError extends boolean = false>(
+  options?: Options<ConnectionsListProvidersData, ThrowOnError>,
+): RequestResult<
+  ConnectionsListProvidersResponses,
+  ConnectionsListProvidersErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ConnectionsListProvidersResponses,
+    ConnectionsListProvidersErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsListProvidersResponse.parseAsync(data),
+    url: "/v1/connections/providers",
+    ...options,
+  });
+
+/**
+ * Disconnect
+ *
+ * Disconnects with a reason (audited); what it synced stays until purged (P3-09).
+ */
+export const connectionsDisconnect = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsDisconnectData, ThrowOnError>,
+): RequestResult<
+  ConnectionsDisconnectResponses,
+  ConnectionsDisconnectErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    ConnectionsDisconnectResponses,
+    ConnectionsDisconnectErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsDisconnectResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Connection
+ */
+export const connectionsGetConnection = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsGetConnectionData, ThrowOnError>,
+): RequestResult<
+  ConnectionsGetConnectionResponses,
+  ConnectionsGetConnectionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ConnectionsGetConnectionResponses,
+    ConnectionsGetConnectionErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsGetConnectionResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}",
+    ...options,
+  });
+
+/**
+ * Update Connection
+ */
+export const connectionsUpdateConnection = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ConnectionsUpdateConnectionData, ThrowOnError>,
+): RequestResult<
+  ConnectionsUpdateConnectionResponses,
+  ConnectionsUpdateConnectionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    ConnectionsUpdateConnectionResponses,
+    ConnectionsUpdateConnectionErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsUpdateConnectionResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Start Oauth
+ */
+export const connectionsStartOauth = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsStartOauthData, ThrowOnError>,
+): RequestResult<
+  ConnectionsStartOauthResponses,
+  ConnectionsStartOauthErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ConnectionsStartOauthResponses,
+    ConnectionsStartOauthErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsStartOauthResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}/oauth/start",
+    ...options,
+  });
+
+/**
+ * Oauth Url
+ */
+export const connectionsOauthUrl = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsOauthUrlData, ThrowOnError>,
+): RequestResult<
+  ConnectionsOauthUrlResponses,
+  ConnectionsOauthUrlErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ConnectionsOauthUrlResponses,
+    ConnectionsOauthUrlErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsOauthUrlResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}/oauth/url",
+    ...options,
+  });
+
+/**
+ * Sync Now
+ */
+export const connectionsSyncNow = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsSyncNowData, ThrowOnError>,
+): RequestResult<
+  ConnectionsSyncNowResponses,
+  ConnectionsSyncNowErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ConnectionsSyncNowResponses,
+    ConnectionsSyncNowErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsSyncNowResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}/sync",
     ...options,
   });
 
