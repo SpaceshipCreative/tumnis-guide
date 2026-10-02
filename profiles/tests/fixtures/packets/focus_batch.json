@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "kind": "notify",
+  "run_id": "91f8aaf5-da16-5e94-99f9-76d018851e07",
+  "profile_id": "a118b87c-5c5b-5ad5-902c-e853237ee3de",
+  "skill": "focus",
+  "output_schema": {
+    "family": "harness",
+    "name": "focus_message",
+    "version": 1
+  },
+  "correlation_id": "run:91f8aaf5-da16-5e94-99f9-76d018851e07",
+  "timeout_s": 60,
+  "prompt_text": "Tumnis has a focus message for the person.\n\nUse the skill focus. Reply with one JSON object matching harness/focus_message/1.\n\n<packet>\n{\n  \"schema_version\": 1,\n  \"kind\": \"notify\",\n  \"event\": null,\n  \"item\": null,\n  \"batch\": {\n    \"count\": 3,\n    \"link\": \"/review\"\n  },\n  \"task\": null,\n  \"project\": null,\n  \"return_to\": null,\n  \"answers\": []\n}\n</packet>\n",
+  "body": {
+    "schema_version": 1,
+    "kind": "notify",
+    "event": null,
+    "item": null,
+    "batch": {
+      "count": 3,
+      "link": "/review"
+    },
+    "task": null,
+    "project": null,
+    "return_to": null,
+    "answers": []
+  },
+  "tainted": false
+}
