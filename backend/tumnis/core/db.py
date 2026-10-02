@@ -10,9 +10,19 @@
 - `direct`: the app role straight to Postgres, for DBOS and LISTEN (`DATABASE_DIRECT_URL`).
 - `owner`: the owner role (`DATABASE_OWNER_URL`), for migrations and test-only resets;
   never used to serve requests.
+
+Each event loop gets its own engine per role. An AsyncEngine must not be shared between
+loops (SQLAlchemy, "Using multiple asyncio event loops"): its pool and its first-connect
+mutex are asyncio objects bound to one loop. The worker runs two loops, its own (relay,
+watchers, cache listener) and DBOS's background loop for enqueued workflows; one shared
+engine let a watcher and a workflow step race its first connection and hang the step
+(T-P0-07-05's drain stall).
 """
 
-from dataclasses import dataclass
+import asyncio
+import threading
+import weakref
+from dataclasses import dataclass, field
 
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
@@ -30,12 +40,19 @@ class _State:
     direct_url: str | None = None
     owner_url: str | None = None
     pooled: bool = True
-    app: AsyncEngine | None = None
-    direct: AsyncEngine | None = None
-    owner: AsyncEngine | None = None
+    # role -> engine, per event loop; `unbound` serves callers outside any running loop
+    by_loop: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, AsyncEngine]]" = field(
+        default_factory=weakref.WeakKeyDictionary
+    )
+    unbound: dict[str, AsyncEngine] = field(default_factory=dict)
+    # (pool_size, max_overflow) for the engines a loop builds, where it asked for less
+    limits: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, tuple[int, int]]" = field(
+        default_factory=weakref.WeakKeyDictionary
+    )
 
 
 _state = _State()
+_lock = threading.Lock()  # the worker's two loops build engines from two threads
 
 
 def configure(
@@ -51,35 +68,64 @@ def configure(
     _state.direct_url = direct_url or app_url
     _state.owner_url = owner_url
     _state.pooled = pooled
-    _state.app = None
-    _state.direct = None
-    _state.owner = None
+    with _lock:
+        _state.by_loop = weakref.WeakKeyDictionary()
+        _state.unbound = {}
 
 
-def _build(url: str | None, role: str) -> AsyncEngine:
+def limit_pools(*, pool_size: int, max_overflow: int) -> None:
+    """Cap the pools of the engines the running loop builds from now on. The worker's own
+    loop calls it: only the relay and the watchers use it, while DBOS's loop runs the
+    workflows with SQLAlchemy's default pools (5 + 10 overflow)."""
+    loop = asyncio.get_running_loop()
+    with _lock:
+        _state.limits[loop] = (pool_size, max_overflow)
+
+
+def _build(url: str | None, role: str, loop: asyncio.AbstractEventLoop | None) -> AsyncEngine:
     if url is None:
         raise RuntimeError(f"tumnis.core.db has no {role} URL; call configure() first")
-    if _state.pooled:
+    # Outside any loop no pool: whichever loops later use the engine share it, and only a
+    # NullPool engine may be shared between loops (SQLAlchemy asyncio docs).
+    if not _state.pooled or loop is None:
+        return create_async_engine(url, poolclass=NullPool)
+    limits = _state.limits.get(loop)
+    if limits is None:
         return create_async_engine(url, pool_pre_ping=True)
-    return create_async_engine(url, poolclass=NullPool)
+    pool_size, max_overflow = limits
+    return create_async_engine(
+        url, pool_pre_ping=True, pool_size=pool_size, max_overflow=max_overflow
+    )
+
+
+def _running_loop() -> asyncio.AbstractEventLoop | None:
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+
+def _engine(role: str, url: str | None) -> AsyncEngine:
+    """The running loop's engine for `role`, built on first use in that loop."""
+    loop = _running_loop()
+    with _lock:
+        engines = _state.unbound if loop is None else _state.by_loop.setdefault(loop, {})
+        engine = engines.get(role)
+        if engine is None:
+            engine = engines[role] = _build(url, role, loop)
+        return engine
 
 
 def app_engine() -> AsyncEngine:
-    if _state.app is None:
-        _state.app = _build(_state.app_url, "app")
-    return _state.app
+    return _engine("app", _state.app_url)
 
 
 def direct_engine() -> AsyncEngine:
-    if _state.direct is None:
-        _state.direct = _build(_state.direct_url, "direct")
-    return _state.direct
+    return _engine("direct", _state.direct_url)
 
 
 def owner_engine() -> AsyncEngine:
-    if _state.owner is None:
-        _state.owner = _build(_state.owner_url, "owner")
-    return _state.owner
+    return _engine("owner", _state.owner_url)
 
 
 def app_sessionmaker() -> async_sessionmaker[AsyncSession]:
@@ -105,10 +151,14 @@ def owner_sessionmaker() -> async_sessionmaker[AsyncSession]:
 
 
 async def dispose() -> None:
-    """Close every pooled connection (application shutdown)."""
-    for engine in (_state.app, _state.direct, _state.owner):
-        if engine is not None:
-            await engine.dispose()
-    _state.app = None
-    _state.direct = None
-    _state.owner = None
+    """Close the running loop's pooled connections (and those of engines built outside any
+    loop) and forget those engines; the next use in this loop builds new ones. Each loop
+    disposes what it built: an engine's connections belong to the loop that opened them,
+    and another loop may still be using its own. The api disposes in its lifespan and each
+    CLI command before its loop ends; the worker's two loops live as long as the process."""
+    loop = asyncio.get_running_loop()
+    with _lock:
+        engines = [*_state.by_loop.pop(loop, {}).values(), *_state.unbound.values()]
+        _state.unbound = {}
+    for engine in engines:
+        await engine.dispose()

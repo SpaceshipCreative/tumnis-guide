@@ -11,7 +11,7 @@ import signal
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from tumnis.core import audit_workflows, cache, events, faults, modules, workflows_ops
+from tumnis.core import audit_workflows, cache, db, events, faults, modules, workflows_ops
 from tumnis.core.clock import SystemClock
 from tumnis.settings import Settings, install_master_keys, install_peppers
 
@@ -275,7 +275,7 @@ def main(
     from dbos import DBOS  # noqa: PLC0415
 
     import tumnis.wiring  # noqa: F401, PLC0415  # registers adapters, events and workflows
-    from tumnis.core import db, fake_scripts  # noqa: PLC0415
+    from tumnis.core import fake_scripts  # noqa: PLC0415
 
     db.configure(settings.database_direct_url, settings.database_direct_url)
     if settings.tumnis_adapters == "fake":
@@ -314,11 +314,22 @@ def main(
         DBOS.destroy()
 
 
+# The worker's own loop (relay, folder and vault watchers): at most 2 + 2 connections per
+# engine (app, direct), beside DBOS's loop's default 5 + 10 (see `_serve`).
+MAIN_LOOP_POOL_SIZE = 2
+MAIN_LOOP_MAX_OVERFLOW = 2
+
+
 async def _serve(settings: Settings, *, relay: bool = True) -> None:
     """The relay and the folder watcher (both skipped when `relay` is off: a queue-limited
     worker) and the cache invalidation listener (P0-08) on this thread's event loop (DBOS
     runs workflows on its own) until a signal; then all are cancelled, not waited for (any
-    may sit in a LISTEN wait)."""
+    may sit in a LISTEN wait).
+
+    This loop gets its own database engines (tumnis.core.db keeps one per loop), with small
+    pools: the relay, the watchers and the module-flag reads the relay makes use at most a
+    few connections at once, and DBOS's loop keeps the default pools for the workflows."""
+    db.limit_pools(pool_size=MAIN_LOOP_POOL_SIZE, max_overflow=MAIN_LOOP_MAX_OVERFLOW)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGTERM, signal.SIGINT):
