@@ -88,6 +88,9 @@ export function ObsidianSection() {
   const projects = useQuery(projectsListProjectsOptions(PROJECT_LIST));
   const [draft, setDraft] = useState<VaultOut | null>(null);
   const [adding, setAdding] = useState(false);
+  // The vault whose DELETE is in flight: each click sends a new idempotency key, so a
+  // second one would answer 404 for the vault the first just removed.
+  const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = () =>
@@ -195,12 +198,16 @@ export function ObsidianSection() {
   }
 
   async function disconnect(id: string) {
+    if (removing !== null) return;
+    setRemoving(id);
     setError(null);
     try {
       await remove(id);
       await refresh();
     } catch (e) {
       setError(problem(e).message);
+    } finally {
+      setRemoving(null);
     }
   }
 
@@ -238,6 +245,7 @@ export function ObsidianSection() {
                 <button
                   type="button"
                   className={SECONDARY}
+                  disabled={removing !== null}
                   onClick={() => void disconnect(v.id)}
                 >
                   Disconnect
@@ -280,6 +288,7 @@ export function ObsidianSection() {
               <button
                 type="button"
                 className={SECONDARY}
+                disabled={removing !== null}
                 onClick={() => void disconnect(v.id)}
               >
                 Discard
