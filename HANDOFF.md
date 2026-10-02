@@ -34,6 +34,20 @@ lines 16546-16676.
 | 358fda84 | T-07/08/11/12 markers off (run 36961890399) |
 | this one | `chore: P3-12 handoff` |
 
+## c2 progress (2026-10-02)
+
+- dddb0375: `frontend/src/components/knowledge/ObsidianSetup.tsx` + Vitest, props-driven
+  (`onProbeHostKey`, `onPreview({settings, knownHosts})`, `onConnect(...)`, `deployKey`,
+  `hosted`, `projects`). Wire it to generated hooks after the routes exist. CI run
+  36965673503 all green (preview pending as expected). PR body updated; scratch copy at
+  `/tmp/claude-1002/P3-12-c2/pr-body.md`.
+- #154's DELETE handler (origin/wp/P3-14-clean-impl-2) calls `api.delete_document(s, id,
+  actor=...)`: on merge, put `await _refuse_synced(s, document_id)` first in
+  `api.delete_document`, and drop the guard from `api.trash` if `trash` goes away.
+- P3-02 adds `connections.settings` JSONB (integrations_0003): non-secret vault settings go
+  there, the deploy key (and pinned known_hosts) in sealed credentials. The vault watcher
+  mirrors `workflows.local_watch` (awatch, debounce 5000 ms) with roots from those settings.
+
 ## Remaining steps
 
 1. Wait for CI on the pushed head; confirm every job green (preview stays pending; re-run
