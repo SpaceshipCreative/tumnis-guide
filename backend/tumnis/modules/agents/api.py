@@ -6,7 +6,7 @@ Hermes profiles Tumnis may run: one master, one per project).
 """
 
 import json
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Protocol
 from uuid import UUID, uuid4, uuid5
@@ -1746,6 +1746,24 @@ class PostResultIn(tasks.ResultFields):
 ResultOut = tasks.ResultOut
 ResultFields = tasks.ResultFields
 
+# The result batch (P4-04, FR-4.5, FR-8.4): planning says whether a run was started by the
+# unattended tick, so its result waits for the morning review (`batch` "overnight" and the
+# release time on the `result` item). Registered by planning at import (agents cannot
+# import planning: planning imports agents).
+ResultBatchLookup = Callable[[AsyncSession, UUID], Awaitable[tuple[str, datetime] | None]]
+_result_batch: list[ResultBatchLookup] = []
+
+
+def register_result_batch(lookup: ResultBatchLookup) -> None:
+    """Set how `accept_result` finds a run's result batch: `lookup(session, run_id)` answers
+    (batch, release_at), or None for a run nobody batches."""
+    _result_batch[:] = [lookup]
+
+
+async def _batch_of(s: AsyncSession, run_id: UUID) -> dict[str, Any]:
+    found = await _result_batch[0](s, run_id) if _result_batch else None
+    return {} if found is None else {"batch": found[0], "release_at": found[1]}
+
 
 async def accept_result(
     s: AsyncSession,
@@ -1805,7 +1823,9 @@ async def accept_result(
             RESULT,
             target=tasks.TargetRef(type="task", id=run.task_id),
             project_id=None,
-            payload=ResultPayload(run_id=inp.run_id, **fields.model_dump()).model_dump(mode="json"),
+            payload=ResultPayload(
+                run_id=inp.run_id, **fields.model_dump(), **await _batch_of(s, inp.run_id)
+            ).model_dump(mode="json"),
             dedupe_key=f"result:{inp.run_id}",
             session=s,
         )
