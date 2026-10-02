@@ -1,12 +1,12 @@
 """planning SQLAlchemy tables owned by this module (mirrors of revisions planning_0001 to
-planning_0003)."""
+planning_0004)."""
 
 from datetime import date, datetime, time
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Integer
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import ForeignKey, Integer, SmallInteger
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tumnis.core.base import Base, TenantBase
@@ -68,3 +68,28 @@ class PlanPin(TenantBase, Base):
 
     task_id: Mapped[UUID]
     day: Mapped[date]
+
+
+class UnattendedWindow(TenantBase, Base):
+    """Mirror of revision planning_0004: the workspace's window (`project_id` NULL) or one
+    project's override."""
+
+    __tablename__ = "unattended_windows"
+
+    project_id: Mapped[UUID | None]
+    weekdays: Mapped[list[int]] = mapped_column(ARRAY(SmallInteger))
+    start_local: Mapped[time]
+    end_local: Mapped[time]
+
+
+class UnattendedRun(TenantBase, Base):
+    """Mirror of revision planning_0004: a run the unattended tick started."""
+
+    __tablename__ = "unattended_runs"
+
+    run_id: Mapped[UUID]
+    task_id: Mapped[UUID]
+    project_id: Mapped[UUID]
+    window_start: Mapped[datetime]
+    window_end: Mapped[datetime]
+    release_at: Mapped[datetime]
