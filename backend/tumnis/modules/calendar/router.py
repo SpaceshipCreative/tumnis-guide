@@ -29,6 +29,7 @@ from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.core.versioning import NotFound, Version
 from tumnis.modules.calendar import api
+from tumnis.modules.calendar import testing as _testing  # noqa: F401  # registers `calendar-sync`
 
 router = v1_router("calendar", prefixed=True, tags=["calendar"])
 
