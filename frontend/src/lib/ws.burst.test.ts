@@ -67,3 +67,31 @@ test("[P0-22][ADR-0004] a burst of live messages refetches a shown query once", 
   unsubscribe();
   queryClient.clear();
 });
+
+test("[P0-22][ADR-0004] a message no shown query reads does not hold back the next one", async () => {
+  vi.useFakeTimers();
+  const queryClient = new QueryClient();
+  const fetches = vi.fn(() => Promise.resolve({ count: 1 }));
+  const observer = new QueryObserver(queryClient, {
+    queryKey: REVIEW_COUNT,
+    queryFn: fetches,
+  });
+  const unsubscribe = observer.subscribe(() => undefined);
+  await vi.runAllTimersAsync();
+  expect(fetches).toHaveBeenCalledTimes(1);
+
+  const stop = connectLive(queryClient, "ws://localhost:3000/ws");
+  FakeSocket.latest().open();
+  // A settings change: nothing shown reads it.
+  FakeSocket.latest().receive({ entity: "settings", id: message(0).id });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetches).toHaveBeenCalledTimes(1);
+  // The review badge's message right after it is read at once.
+  FakeSocket.latest().receive(message(1));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetches).toHaveBeenCalledTimes(2);
+
+  stop();
+  unsubscribe();
+  queryClient.clear();
+});
