@@ -33,7 +33,7 @@ Lose the master key file and every sealed secret (OAuth clients, storage keys, W
 | `TumnisCertificateExpiring` | the HTTPS certificate expires within 14 days |
 | `TumnisAuditChainBroken` | the audit log's hash chain failed verification (critical) |
 | `TumnisAuditChainNotVerified` | the audit chain has not been verified in 26 hours |
-| `TumnisConnectorSyncStale` | for 10 minutes, a provider's oldest connection has not synced for over 2 hours. A connection whose sign-in was never finished (`pending_auth`) does not count; one that needs signing in again (`auth_required`) does. With no provider to connect yet (Settings > Connections), it stays quiet |
+| `TumnisConnectorSyncStale` | for 10 minutes, a provider's oldest connection has not synced for over 2 hours. A connection whose sign-in was never finished (`pending_auth`), or that is disabled, does not count; one that needs signing in again (`auth_required`) does. With no provider to connect yet (Settings > Connections), it stays quiet |
 
 The audit chain can be checked by hand at any time: `docker compose exec worker tumnis audit verify`.
 

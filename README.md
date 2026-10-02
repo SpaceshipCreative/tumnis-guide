@@ -242,7 +242,7 @@ Then, in the app:
 
 ## Connect sources
 
-Everything a project knows lives in its knowledge base: documents, notes and links, searched by you and quoted to agents. Files go through a virus scan (ClamAV) and text extraction (Docling) before anyone reads them.
+Everything a project knows lives in its knowledge base: documents, notes and links, searched by you and quoted to agents. Files go through a virus scan (ClamAV) before anyone reads them. Text extraction (Docling) is not in this release's image yet: on an install, an uploaded or synced file is scanned and then marked failed (`extraction_failed`), so its text is not searchable or quoted to agents ([Not yet available](#not-yet-available)). Notes written in the editor are indexed without Docling and stay searchable.
 
 - **Upload** files in a project's Knowledge section (or drop one on the project's composer), up to 50 MiB each: PDF, Word, Excel, PowerPoint, text, Markdown, CSV, HTML and images (PNG, JPEG, TIFF, WebP).
 - **Notes and links** written in the editor, or saved from a URL.
@@ -305,7 +305,8 @@ Tumnis is a PWA: open `https://<TUMNIS_HOST>` on your phone over Tailscale and a
 
 These are planned but not in this release:
 
-- **Inbox Zero, Granola and chat connectors**, matching what they bring in to your tasks, and proposal runs on it; **Google Docs** as a source. They wait for recorded tests against the real services. Discord is the chosen first chat provider (an ADR, 0014, will record it); today Discord already reaches the master agent through its Hermes profile ([Agents](#agents)). **Settings > Connections**, where these accounts will be connected, synced and signed in again, is in place, but it has no provider to connect yet.
+- **Text extraction from files.** Docling, which reads the text and tables out of uploaded and synced files, is not installed in the v1 image, so on an install every file ends `extraction_failed` after its virus scan. Notes and links are not affected.
+- **Inbox Zero, Granola and chat connectors**, matching what they bring in to your tasks, and proposal runs on it; **Google Docs** as a source. They wait for recorded tests against the real services. Discord is the chosen first chat provider (an ADR, 0014, will record it); today Discord already reaches the master agent through its Hermes profile ([Agents](#agents)). **Settings > Connections**, where these accounts will be connected, synced and signed in again, is in place, but it has no provider to connect yet. Its rules already hold: the sign-in page must use https (otherwise Tumnis says "The sign-in page is not secure (it must use https), so it was not opened."), the other OAuth endpoints must use https or plain http to a LAN address, a connection whose sync stopped half way recovers on the next sync cycle, and a settings save that crosses someone else's edit is refused (409) and the form reloads their version to edit again.
 - **More sources:** Obsidian vaults and S3 buckets as knowledge sources (beyond S3 as a storage location). Coming in a later update.
 - **Retention rules** for old data. Coming in a later update.
 - **Settings screens for GitHub and Coolify, and knowledge in search results.** Today GitHub and Coolify are set through the API ([Connect sources](#connect-sources)), and agents and the API search knowledge (`GET /v1/knowledge/search`).
@@ -336,6 +337,8 @@ The local stack with fakes and the seed set (the one CI's end-to-end job and Pla
 make up     # build and start deploy/compose.test.yaml; api on 127.0.0.1:8080 (TUMNIS_TEST_PORT moves it)
 make down   # stop it and delete its volumes
 ```
+
+The tests that run the real Docling pipeline (the `docling` marker: A1.5's integration tests and the extraction set) are skipped unless the optional `docling` dependency group is installed: `cd backend && uv sync --group docling`, then `uv run --group docling pytest -m docling`. It takes torch's CPU wheels from `https://download.pytorch.org/whl/cpu` and, on the first run, about 570 MB of models from Hugging Face and ModelScope. CI runs them in their own workflow (`.github/workflows/docling.yml`), which is not a required check. The group needs typer below 0.27, so Renovate holds typer there.
 
 Every process refuses to start (exit 78) on a configuration that would put a preview near production: `DEPLOYMENT_ENV=preview` needs `TUMNIS_ADAPTERS=fake` and no Jev key, and every process checks the database's `deployment_marker` against `DEPLOYMENT_ENV`.
 
