@@ -30,8 +30,10 @@ from tumnis.core.types import SYSTEM_ACTOR
 
 GENESIS: Final = bytes(32)
 PROJECT_KEY: Final = "project_id"  # the details key a project's rows carry (P2-17)
+# "text" inside "context" is no text (P3-09: a purge's `context_items` count is audited).
 SENSITIVE_KEY: Final = re.compile(
-    r"(token|secret|password|passwd|hmac|key|authorization|cookie|body|prompt|content|text)",
+    r"(token|secret|password|passwd|hmac|key|authorization|cookie|body|prompt|content"
+    r"|(?<!con)text)",
     re.IGNORECASE,
 )
 MAX_DETAIL_STR: Final = 200  # plan default

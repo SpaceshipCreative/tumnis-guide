@@ -388,6 +388,9 @@ import type {
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectErrors,
   ProjectsUpdateProjectResponses,
+  PurgesGetPurgeData,
+  PurgesGetPurgeErrors,
+  PurgesGetPurgeResponses,
   PurgesPurgeData,
   PurgesPurgeErrors,
   PurgesPurgeResponses,
@@ -633,6 +636,7 @@ import {
   zProjectsUnarchiveProjectResponse,
   zProjectsUpdatePolicyResponse,
   zProjectsUpdateProjectResponse,
+  zPurgesGetPurgeResponse,
   zPurgesPurgeResponse,
   zSearchSearchResponse,
   zSearchTypeaheadProjectsResponse,
@@ -3389,6 +3393,23 @@ export const purgesPurge = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Get Purge
+ */
+export const purgesGetPurge = <ThrowOnError extends boolean = false>(
+  options: Options<PurgesGetPurgeData, ThrowOnError>,
+): RequestResult<PurgesGetPurgeResponses, PurgesGetPurgeErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    PurgesGetPurgeResponses,
+    PurgesGetPurgeErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPurgesGetPurgeResponse.parseAsync(data),
+    url: "/v1/purges/{purge_id}",
+    ...options,
   });
 
 /**

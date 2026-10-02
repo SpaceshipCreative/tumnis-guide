@@ -276,12 +276,10 @@ class PurgeWorld:
         )
 
     def outbox(self, name: str) -> list[dict[str, Any]]:
-        return [
-            r["payload"]
-            for r in owner_rows(
-                self.db, "SELECT payload FROM outbox WHERE name = %s ORDER BY id", name
-            )
-        ]
+        """The outbox rows of event `name`, oldest first: `event_id` and `payload`."""
+        return owner_rows(
+            self.db, "SELECT event_id, payload FROM outbox WHERE name = %s ORDER BY id", name
+        )
 
     def context_item(self, item_id: uuid.UUID) -> dict[str, Any]:
         [row] = owner_rows(self.db, "SELECT * FROM context_items WHERE id = %s", item_id)

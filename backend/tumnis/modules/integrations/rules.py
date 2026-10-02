@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, Final, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 RecordOwner = Literal["integrations", "calendar", "knowledge"]
 
@@ -160,6 +160,7 @@ def status_after(prev: ConnectionStatus, outcome: SyncOutcome) -> ConnectionStat
 # --- Retention (P3-09, SAAS-2) ----------------------------------------------------------------
 
 RETENTION_MIN_DAYS: Final = 7  # plan default
+RETENTION_MAX_DAYS: Final = 36_500  # a hundred years: keeps the cutoff a valid datetime
 
 
 class RetentionSetting(BaseModel):
@@ -168,7 +169,13 @@ class RetentionSetting(BaseModel):
     is purged; `days` is opt-in and needs a number of days, 7 at least."""
 
     mode: Literal["keep_until_project_purged", "days"] = "keep_until_project_purged"
-    days: int | None = Field(default=None, ge=RETENTION_MIN_DAYS)
+    days: int | None = Field(default=None, ge=RETENTION_MIN_DAYS, le=RETENTION_MAX_DAYS)
+
+    @model_validator(mode="after")
+    def _days_with_days_mode(self) -> "RetentionSetting":
+        if self.mode == "days" and self.days is None:
+            raise ValueError("the days mode needs a number of days")
+        return self
 
 
 @dataclass(frozen=True)
@@ -182,10 +189,16 @@ class IngestedLite:
 
 
 def purge_cutoff(now: datetime, s: RetentionSetting) -> datetime | None:
-    raise NotImplementedError("P3-09")
+    """The instant before which ingested content goes; None keeps everything (the
+    default, and a days mode without its number of days)."""
+    if s.mode != "days" or s.days is None:
+        return None
+    return now - timedelta(days=s.days)
 
 
 def purge_candidates(item: IngestedLite, cutoff: datetime | None, project_archived: bool) -> bool:
     """True if older than cutoff, not archived, not linked to an open task (plan default:
     keep while a task is open)."""
-    raise NotImplementedError("P3-09")
+    if cutoff is None or project_archived or item.linked_to_open_task:
+        return False
+    return item.at < cutoff

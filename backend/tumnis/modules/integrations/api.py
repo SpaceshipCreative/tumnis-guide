@@ -25,10 +25,10 @@ from datetime import datetime, timedelta
 from functools import partial
 from typing import Annotated, Any, Final, Literal, Protocol
 from urllib.parse import urlencode
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
-from pydantic import AnyUrl, AwareDatetime, BaseModel, Field, StringConstraints
+from pydantic import AnyUrl, AwareDatetime, BaseModel, Field, StringConstraints, model_validator
 from sqlalchemy import ColumnElement, Table, and_, func, or_, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import ScalarResult
@@ -50,11 +50,17 @@ from tumnis.core.metrics import CONNECTOR_ITEMS, CONNECTOR_SYNC_AGE
 from tumnis.core.outbox import emit
 from tumnis.core.ratelimit import SlidingWindows
 from tumnis.core.schemas import versioned
-from tumnis.core.settings_store import open_for_workspace, seal_for_workspace
+from tumnis.core.settings_store import (
+    SettingSection,
+    get_setting,
+    open_for_workspace,
+    register_section,
+    seal_for_workspace,
+)
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
 from tumnis.core.types import ActorRef
 from tumnis.core.versioning import NotFound, StaleVersion, Version, update_versioned
-from tumnis.modules.integrations import rules
+from tumnis.modules.integrations import retention, rules
 from tumnis.modules.integrations.models import (
     Artifact,
     Connection,
@@ -63,6 +69,7 @@ from tumnis.modules.integrations.models import (
     Note,
     OAuthPending,
     Person,
+    Purge,
     RawPayload,
     SyncState,
     Thread,
@@ -72,6 +79,7 @@ from tumnis.modules.integrations.payloads import (
     ArtifactUpdatedV1,
     ConnectionAuthRequiredV1,
     ItemsIngestedV1,
+    PurgeRequestedV1,
 )
 from tumnis.modules.projects import api as projects
 from tumnis.seed import LinkSeed, register_seed_writer
@@ -512,6 +520,11 @@ class ContextItemOut(BaseModel):
     target_purged_at: datetime | None = None
     purged: bool = False
 
+    @model_validator(mode="after")
+    def _purged_from_target(self) -> "ContextItemOut":
+        self.purged = self.target_purged_at is not None
+        return self
+
 
 TaintLookup = Callable[[AsyncSession, UUID], Awaitable[bool | None]]
 _TAINT_LOOKUPS: dict[str, TaintLookup] = {}
@@ -713,7 +726,9 @@ async def context_item_texts(s: AsyncSession, ids: Sequence[UUID]) -> list[Conte
         attrs: dict[str, str] = {}
         text, source = item.target_url or "", str(item.target_type)
         table = _TABLES.get(item.target_type)
-        if table is not None and item.target_id is not None:
+        if item.target_purged_at is not None:  # P3-09: the item stays, its content went
+            text = retention.PURGED_TEXT
+        elif table is not None and item.target_id is not None:
             row = (
                 await s.execute(
                     select(table).where(table.c.id == item.target_id, table.c.deleted_at.is_(None))
@@ -2335,9 +2350,22 @@ async def context_targets(
         return [target for target in targets if target is not None]
 
 
-# --- purge (P2-18, R-37) ----------------------------------------------------------------------
+# --- purge (P2-18, R-37; P3-09 adds connections, the status and retention) --------------------
 
-PurgeScope = Literal["project", "connection"]  # what `POST /v1/purges` takes (P3-09 adds one)
+PurgeScope = Literal["project", "connection"]  # what `POST /v1/purges` takes
+PurgeKind = Literal["retention", "project", "connection"]  # what a `purges` row records
+RETENTION_SECTION: Final = "integrations.retention"
+PURGED_TEXT: Final = retention.PURGED_TEXT
+RetentionSetting = rules.RetentionSetting
+LinkRef = retention.LinkRef
+Holds = retention.Holds
+ProjectHolders = retention.ProjectHolders
+register_retention_hold = retention.register_retention_hold
+register_project_holders = retention.register_project_holders
+
+register_section(SettingSection(RETENTION_SECTION, RetentionSetting))
+
+_purges: Table = Purge.__table__  # type: ignore[assignment]
 
 
 class PurgeIn(BaseModel):
@@ -2356,12 +2384,193 @@ class PurgeOut(BaseModel):
     purge_id: UUID | None = None  # P3-09: `GET /v1/purges/{purge_id}` follows it
 
 
+class PurgeStatusOut(BaseModel):
+    """`GET /v1/purges/{purge_id}`: where a purge stands, and what it removed so far."""
+
+    id: UUID
+    scope: PurgeKind
+    target_id: UUID | None
+    reason: str
+    status: Literal["queued", "running", "done"]
+    counts: dict[str, int]
+    created_at: datetime
+    finished_at: datetime | None
+
+
+def retention_purge_id(workspace_id: UUID, scheduled_at: datetime) -> UUID:
+    """One retention purge per workspace and scheduled run (a retried start finds it)."""
+    return uuid5(workspace_id, f"retention:{scheduled_at.isoformat()}")
+
+
+async def _new_purge(  # one row's columns
+    s: AsyncSession,
+    *,
+    purge_id: UUID,
+    kind: PurgeKind,
+    target_id: UUID | None,
+    reason: str,
+    cutoff: datetime | None = None,
+    targets: Mapping[str, list[str]] | None = None,
+) -> None:
+    """Inserts the purge row. Its counts start at zero: the batches add what they remove
+    (the audit row carries what the purge planned)."""
+    await s.execute(
+        pg_insert(_purges).values(
+            id=purge_id,
+            scope=kind,
+            target_id=target_id,
+            reason=reason,
+            cutoff=cutoff,
+            targets=dict(targets) if targets is not None else None,
+            counts=dict(retention.ZERO_COUNTS),
+        )
+    )
+
+
+async def _any_connection(s: AsyncSession, connection_id: UUID) -> None:
+    """NotFound unless the workspace has, or had, this connection: a disconnected one keeps
+    what it synced until it is purged."""
+    found = await s.scalar(select(_connections.c.id).where(_connections.c.id == connection_id))
+    if found is None:
+        raise NotFound("connections", connection_id)
+
+
 async def purge(s: AsyncSession, body: PurgeIn, *, now: datetime) -> PurgeOut:
-    """Purge for good, audited as `data.purged` in this transaction; what the purged thing
-    kept elsewhere (the agent server's archive, packed folders, blobs) goes in the worker
-    (`project.purged` starts `purge_project_archive`)."""
-    await projects.purge_project(s, body.id, body.reason, now=now)
-    return PurgeOut(scope=body.scope, id=body.id)
+    """Purge for good, audited once as `data.purged` in this transaction (the reason, the
+    purge's id and the counts it plans); the deletes run in the worker (`purge.requested`
+    starts `purge_scope`, workflow `purge:<id>`). Nothing is deleted at the provider.
+
+    - `project`: 409 `not_archived` unless archived. Its records (`retention.project_targets`)
+      are snapshotted into the purge first, since what its archive kept elsewhere (the
+      agent server's archive, packed folders, blobs) goes meanwhile (`project.purged`
+      starts `purge_project_archive`).
+    - `connection` (P3-09): its messages, notes and threads with their raw payloads; 404
+      for none. The connection itself stays."""
+    purge_id = uuid7()
+    targets: dict[str, list[str]] | None = None
+    if body.scope == "project":
+        targets = await retention.project_targets(s, body.id)
+        scope = retention.Scope(
+            kind="project",
+            target_id=body.id,
+            targets={t: frozenset(UUID(i) for i in ids) for t, ids in targets.items()},
+        )
+    else:
+        await _any_connection(s, body.id)
+        scope = retention.Scope(kind="connection", target_id=body.id)
+    counts = await retention.plan(s, scope)
+    await _new_purge(
+        s,
+        purge_id=purge_id,
+        kind=body.scope,
+        target_id=body.id,
+        reason=body.reason,
+        targets=targets,
+    )
+    details = {"purge_id": str(purge_id), "counts": counts}
+    if body.scope == "project":
+        await projects.purge_project(s, body.id, body.reason, now=now, details=details)
+    else:
+        await audit.record(
+            s,
+            "data.purged",
+            target=("connection", body.id),
+            reason=body.reason,
+            details={**details, "scope": "connection"},
+            occurred_at=now,
+        )
+    await emit(s, PurgeRequestedV1(purge_id=purge_id, scope=body.scope), occurred_at=now)
+    return PurgeOut(scope=body.scope, id=body.id, purge_id=purge_id)
+
+
+async def get_purge(ctx: WorkspaceContext, purge_id: UUID) -> PurgeStatusOut:
+    """A purge of the caller's workspace; NotFound for any other."""
+    async with tenant_session(ctx) as s:
+        row = (await s.execute(select(_purges).where(_purges.c.id == purge_id))).first()
+    if row is None:
+        raise NotFound("purges", purge_id)
+    return PurgeStatusOut(
+        id=row.id,
+        scope=row.scope,
+        target_id=row.target_id,
+        reason=row.reason,
+        status=row.status,
+        counts={**retention.ZERO_COUNTS, **(row.counts or {})},
+        created_at=row.created_at,
+        finished_at=row.finished_at,
+    )
+
+
+async def retention_setting(ctx: WorkspaceContext) -> RetentionSetting:
+    """The workspace's retention setting; the default (keep everything) when never set."""
+    found = await get_setting(ctx, RETENTION_SECTION, RetentionSetting)
+    return RetentionSetting() if found is None else found.value
+
+
+async def start_retention_purge(
+    ctx: WorkspaceContext, *, scheduled_at: datetime, now: datetime
+) -> UUID | None:
+    """This scheduled run's retention purge, recorded and audited once (as the system), or
+    None: the setting keeps everything, nothing is past the cutoff, the run's purge is
+    done, or an earlier retention purge is unfinished (its own workflow carries it on). A
+    retried start returns the unfinished purge it recorded."""
+    setting = await retention_setting(ctx)
+    cutoff = rules.purge_cutoff(now, setting)
+    if cutoff is None:
+        return None
+    purge_id = retention_purge_id(ctx.workspace_id, scheduled_at)
+    async with tenant_session(ctx) as s:
+        await s.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended('purge:retention:' || :ws, 0))"),
+            {"ws": str(ctx.workspace_id)},
+        )
+        unfinished = await s.scalar(
+            select(_purges.c.id).where(_purges.c.scope == "retention", _purges.c.status != "done")
+        )
+        if unfinished is not None:
+            return purge_id if unfinished == purge_id else None
+        if await s.scalar(select(_purges.c.id).where(_purges.c.id == purge_id)) is not None:
+            return None
+        open_task, archived = await retention.holds(s)
+        scope = retention.Scope(
+            kind="retention", cutoff=cutoff, open_task=open_task, archived=archived
+        )
+        counts = await retention.plan(s, scope)
+        if not any(counts[retention.COUNT_KEYS[t]] for t in retention.ORDER):
+            return None
+        reason = f"Retention: content older than {setting.days} days"
+        await _new_purge(
+            s, purge_id=purge_id, kind="retention", target_id=None, reason=reason, cutoff=cutoff
+        )
+        await audit.record(
+            s,
+            "data.purged",
+            target=("workspace", ctx.workspace_id),
+            reason=reason,
+            details={
+                "scope": "retention",
+                "purge_id": str(purge_id),
+                "counts": counts,
+                "cutoff": cutoff.isoformat(),
+            },
+            occurred_at=now,
+        )
+    return purge_id
+
+
+async def purge_batch(
+    ctx: WorkspaceContext, purge_id: UUID, batch_no: int, *, limit: int, now: datetime
+) -> int:
+    """Batch `batch_no` of the purge, in one transaction (`retention.run_batch`): the
+    records removed, -1 when it committed already, 0 when nothing is left."""
+    async with tenant_session(ctx) as s:
+        return await retention.run_batch(s, purge_id, batch_no, limit=limit, now=now)
+
+
+async def finish_purge(ctx: WorkspaceContext, purge_id: UUID, *, now: datetime) -> dict[str, int]:
+    """The purge is done; its counts."""
+    async with tenant_session(ctx) as s:
+        return await retention.finish(s, purge_id, now)
 
 
 # --- Seed writer (the acceptance seed, Scott decision 37) -------------------------------------

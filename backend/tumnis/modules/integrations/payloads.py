@@ -9,6 +9,11 @@
   subscribers (triage, P3-06) read the records through `integrations.api`.
 - `connection.auth_required` (P3-02): a connection's grant stopped working; `tasks` queues
   one `connection_auth` review item for it (dedupe key `conn_auth:<id>`).
+- `purge.requested` (P3-09): a purge was accepted (a user's, or the retention setting's);
+  integrations' own subscriber starts its `purge_scope` workflow (`purge:<id>`).
+- `items.purged` (P3-09): one batch of a purge deleted these records; ids only, so an
+  index of them (search, embeddings) can drop its rows. Nothing indexes messages, threads
+  or notes yet.
 """
 
 from typing import Any, ClassVar, Literal
@@ -43,3 +48,20 @@ class ConnectionAuthRequiredV1(EventPayload):
     connection_id: UUID
     provider: str
     account_label: str
+
+
+@event_type("purge.requested", 1)
+class PurgeRequestedV1(EventPayload):
+    event_name: ClassVar[str] = "purge.requested"
+    schema_version: Literal[1] = 1
+    purge_id: UUID
+    scope: Literal["retention", "project", "connection"]
+
+
+@event_type("items.purged", 1)
+class ItemsPurgedV1(EventPayload):
+    event_name: ClassVar[str] = "items.purged"
+    schema_version: Literal[1] = 1
+    purge_id: UUID
+    record_type: Literal["message", "thread", "note"]
+    ids: list[UUID]

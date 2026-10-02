@@ -138,6 +138,7 @@ import {
   projectsUnarchiveProject,
   projectsUpdatePolicy,
   projectsUpdateProject,
+  purgesGetPurge,
   purgesPurge,
   searchSearch,
   searchTypeaheadProjects,
@@ -555,6 +556,9 @@ import type {
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectError,
   ProjectsUpdateProjectResponse,
+  PurgesGetPurgeData,
+  PurgesGetPurgeError,
+  PurgesGetPurgeResponse,
   PurgesPurgeData,
   PurgesPurgeError,
   PurgesPurgeResponse,
@@ -4621,6 +4625,31 @@ export const purgesPurgeMutation = (
   };
   return mutationOptions;
 };
+
+export const purgesGetPurgeQueryKey = (options: Options<PurgesGetPurgeData>) =>
+  createQueryKey("purgesGetPurge", options);
+
+/**
+ * Get Purge
+ */
+export const purgesGetPurgeOptions = (options: Options<PurgesGetPurgeData>) =>
+  queryOptions<
+    PurgesGetPurgeResponse,
+    PurgesGetPurgeError,
+    PurgesGetPurgeResponse,
+    ReturnType<typeof purgesGetPurgeQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await purgesGetPurge({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: purgesGetPurgeQueryKey(options),
+  });
 
 /**
  * Subscribe
