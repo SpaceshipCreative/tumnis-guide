@@ -309,8 +309,9 @@ async def test_lost_attachment_extraction_is_requested_again(
         await sync(lose)
     diagram = (await vault_documents(env))[DIAGRAM]
     assert diagram["status"] == "pending_scan"
-    assert lost == [diagram["current_version_id"]]
-    spooled = extract_dirs.spool / str(diagram["current_version_id"])
+    assert len(lost) == 1
+    version_id = lost[0]
+    spooled = extract_dirs.spool / str(version_id)
     spooled.unlink()
 
     await sync(env.extract)
@@ -318,6 +319,6 @@ async def test_lost_attachment_extraction_is_requested_again(
 
     clock.advance(hours=1)
     await sync(env.extract)
-    assert env.extractions == [(knowledge_ws.id, diagram["current_version_id"], DIAGRAM)]
+    assert env.extractions == [(knowledge_ws.id, version_id, DIAGRAM)]
     assert spooled.read_bytes() == (vault / DIAGRAM).read_bytes()
     assert await version_numbers(env, diagram["id"]) == [1]

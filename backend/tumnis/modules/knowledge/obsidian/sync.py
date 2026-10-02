@@ -59,7 +59,7 @@ from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.modules.knowledge import api, pipeline
 from tumnis.modules.knowledge.adapters.obsidian.port import FileStat, VaultReader
-from tumnis.modules.knowledge.models import Document, DocumentLink
+from tumnis.modules.knowledge.models import Document, DocumentLink, DocumentVersion
 from tumnis.modules.knowledge.obsidian.parse import Link, ParsedNote, parse_note
 from tumnis.modules.knowledge.obsidian.rules import (
     TEMPLATES_CONFIG,
@@ -97,6 +97,7 @@ ExtractHook = Callable[[UUID, UUID, str], Awaitable[None]]  # (workspace, versio
 
 _documents: Table = Document.__table__  # type: ignore[assignment]
 _links: Table = DocumentLink.__table__  # type: ignore[assignment]
+_versions: Table = DocumentVersion.__table__  # type: ignore[assignment]
 _hooks: dict[str, ExtractHook] = {}
 
 
@@ -434,7 +435,9 @@ async def _apply_attachments(
                     update(_documents).where(_documents.c.id == doc["id"]).values(**values)
                 )
             if _extraction_lost(doc, now):
-                await _request_again(reader, scan, doc["current_version_id"], path)
+                pending = await _pending_version(s, doc["id"])
+                if pending is not None:
+                    await _request_again(reader, scan, pending, path)
             scan.kept.add(path)
             continue
         try:
@@ -515,10 +518,23 @@ def _extraction_lost(doc: Mapping[str, Any], now: datetime) -> bool:
     """Still `pending_scan` a while after its extraction was requested (`fetched_at`)."""
     return (
         doc["status"] == "pending_scan"
-        and doc["current_version_id"] is not None
         and doc["fetched_at"] is not None
         and now - doc["fetched_at"] >= EXTRACTION_RETRY_AFTER
     )
+
+
+async def _pending_version(s: AsyncSession, document_id: UUID) -> UUID | None:
+    """The Document's latest version while it still waits for the pipeline (a file's
+    `current_version_id` is set only when the pipeline releases it)."""
+    latest = (
+        await s.execute(
+            select(_versions.c.id, _versions.c.status)
+            .where(_versions.c.document_id == document_id)
+            .order_by(_versions.c.version_no.desc())
+            .limit(1)
+        )
+    ).first()
+    return latest.id if latest is not None and latest.status == "pending_scan" else None
 
 
 async def _request_again(reader: VaultReader, scan: _Scan, version_id: UUID, path: str) -> None:
