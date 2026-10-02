@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import configparser
 import ipaddress
+import json
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -166,3 +170,94 @@ def test_worker_extract_has_memory_limit_and_clamd() -> None:
     assert "--queues" not in services["worker"]["command"]
     assert any(str(v).startswith("spool:") for v in services["api"].get("volumes") or [])
     assert {"spool", "scratch"} <= compose["volumes"].keys()
+
+
+# The hosted speech and embedding providers' variables (Scott decisions 75 and 90).
+HOSTED_KEYS = (
+    "SPEECH__HOSTED_BASE_URL",
+    "SPEECH__HOSTED_MODEL",
+    "SPEECH__HOSTED_VOICE",
+    "SPEECH__HOSTED_API_KEY",
+    "EMBEDDINGS__HOSTED_BASE_URL",
+    "EMBEDDINGS__HOSTED_MODEL",
+    "EMBEDDINGS__HOSTED_DIMS",
+    "EMBEDDINGS__HOSTED_API_KEY",
+)
+HOSTED_KEYS_FILE = "hosted-keys.env"
+
+
+def _env_files(service: dict[str, Any]) -> list[dict[str, Any]]:
+    """A service's `env_file` entries in long form ({path, required})."""
+    raw = service.get("env_file") or []
+    entries = [raw] if isinstance(raw, str | dict) else list(raw)
+    return [e if isinstance(e, dict) else {"path": e, "required": True} for e in entries]
+
+
+@pytest.mark.req("REL-4")
+def test_hosted_keys_reach_only_the_worker_and_only_when_set() -> None:
+    """Rollback compatibility (Scott decision 90): compose.yaml never passes the hosted
+    provider variables itself, so an image older than them (its settings forbid unknown
+    keys) still starts under this compose file. They reach the worker, and only the worker,
+    through the optional deploy/hosted-keys.env (`required: false`), which holds just those
+    keys; the repository ships a commented-out example and never the real file."""
+    services = load_compose("compose.yaml")["services"]
+    for name, service in services.items():
+        leaked = sorted(set(_environment(service or {})) & set(HOSTED_KEYS))
+        assert not leaked, f"{name} passes {leaked} even when they are unset"
+
+    worker_files = [e for e in _env_files(services["worker"]) if e["path"] == HOSTED_KEYS_FILE]
+    assert worker_files == [{"path": HOSTED_KEYS_FILE, "required": False}], services["worker"]
+    for name, service in services.items():
+        if name != "worker":
+            paths = [str(e["path"]) for e in _env_files(service or {})]
+            assert not any(p.endswith(HOSTED_KEYS_FILE) for p in paths), (name, paths)
+
+    example = (DEPLOY / f"{HOSTED_KEYS_FILE}.example").read_text().splitlines()
+    assert not [line for line in example if line.strip() and not line.startswith("#")], (
+        "every line of the example is a comment: copied as it is, it sets nothing"
+    )
+    listed = {line.lstrip("# ").split("=", 1)[0] for line in example if "=" in line}
+    assert set(HOSTED_KEYS) <= listed
+    ignored = (REPO / ".gitignore").read_text().splitlines()
+    assert f"deploy/{HOSTED_KEYS_FILE}" in ignored
+
+
+def _render(project_dir: Path) -> dict[str, Any]:
+    """`docker compose config` of compose.yaml (no daemon needed), with no .env and the
+    hosted keys file looked up in `project_dir`."""
+    docker = shutil.which("docker")
+    if docker is None:
+        if os.environ.get("CI"):
+            pytest.fail("docker is not available in CI")
+        pytest.skip("docker is not available")
+    command = [docker, "compose", "-f", str(DEPLOY / "compose.yaml")]
+    command += ["--project-directory", str(project_dir), "--env-file", os.devnull]
+    command += ["config", "--format", "json"]
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("SPEECH__", "EMBEDDINGS__"))}
+    done = subprocess.run(command, env=env, capture_output=True, text=True, check=False)  # noqa: S603
+    assert done.returncode == 0, done.stderr
+    rendered: dict[str, Any] = json.loads(done.stdout)
+    return rendered
+
+
+@pytest.mark.req("REL-4")
+def test_rendered_compose_gives_hosted_keys_to_the_worker_only_when_the_file_has_them(
+    tmp_path: Path,
+) -> None:
+    """Rendered by Compose itself (Scott decision 90): without the hosted keys file the
+    worker gets none of the hosted variables, not even as empty strings; with the file, the
+    worker gets exactly its values and no other service gets any."""
+    services = _render(tmp_path)["services"]
+    for name, service in services.items():
+        leaked = sorted(set(service.get("environment") or {}) & set(HOSTED_KEYS))
+        assert not leaked, f"{name} gets {leaked} without the hosted keys file"
+
+    values = {key: f"test-{key.lower()}" for key in HOSTED_KEYS}  # placeholders, not keys
+    (tmp_path / HOSTED_KEYS_FILE).write_text("".join(f"{k}={v}\n" for k, v in values.items()))
+    services = _render(tmp_path)["services"]
+    worker_env = services["worker"].get("environment") or {}
+    assert {k: worker_env.get(k) for k in HOSTED_KEYS} == values
+    for name, service in services.items():
+        if name != "worker":
+            leaked = sorted(set(service.get("environment") or {}) & set(HOSTED_KEYS))
+            assert not leaked, f"{name} gets {leaked}"

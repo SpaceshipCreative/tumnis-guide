@@ -80,6 +80,16 @@ export const zAuditEntry = z.object({
 });
 
 /**
+ * AuthorizeUrlOut
+ *
+ * `GET /v1/connections/{id}/oauth/url`: the provider's sign-in page once the
+ * workflow has prepared it, else null (poll again).
+ */
+export const zAuthorizeUrlOut = z.object({
+  authorize_url: z.string().nullable(),
+});
+
+/**
  * BlockOut
  */
 export const zBlockOut = z.object({
@@ -152,6 +162,84 @@ export const zCommentOut = z.object({
   id: z.uuid(),
   task_id: z.uuid(),
   version: z.int(),
+});
+
+/**
+ * ConnectionSettings
+ *
+ * What the user sets per connection; never credentials.
+ */
+export const zConnectionSettings = z.object({
+  allowlist: z.array(z.string()).max(500).optional(),
+  backfill_days: z.int().gte(1).lte(3650).optional().default(30),
+  extra: z.record(z.string(), z.unknown()).optional(),
+  sync_every_min: z.int().gte(1).lte(1440).nullish(),
+});
+
+/**
+ * ConnectionCreate
+ */
+export const zConnectionCreate = z.object({
+  account_label: z.string().min(1).max(120),
+  consent_acknowledged: z.boolean().optional().default(false),
+  provider: z.string().min(1).max(60),
+  settings: zConnectionSettings.optional(),
+});
+
+/**
+ * ConnectionPatch
+ */
+export const zConnectionPatch = z.object({
+  account_label: z.string().min(1).max(120).nullish(),
+  settings: zConnectionSettings.nullish(),
+  version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * ConnectionStatus
+ */
+export const zConnectionStatus = z.enum([
+  "pending_auth",
+  "ok",
+  "syncing",
+  "degraded",
+  "auth_required",
+  "disabled",
+]);
+
+/**
+ * ConnectionOut
+ *
+ * A connection as the api answers it: never its credentials (Data flow rule 5).
+ */
+export const zConnectionOut = z.object({
+  account_label: z.string(),
+  id: z.uuid(),
+  kind: z.enum([
+    "email",
+    "notes",
+    "chat",
+    "calendar",
+    "code",
+    "deploy",
+    "knowledge",
+  ]),
+  last_success_at: z.iso.datetime().nullable(),
+  next_sync_at: z.iso.datetime().nullable(),
+  provider: z.string(),
+  settings: zConnectionSettings,
+  status: zConnectionStatus,
+  status_detail: z.string().nullable(),
+  version: z.int(),
+});
+
+/**
+ * ConnectionsOAuthStart
+ *
+ * `POST /v1/connections/{id}/oauth/start`: the `connect_oauth` workflow to poll.
+ */
+export const zConnectionsOAuthStart = z.object({
+  workflow_id: z.string(),
 });
 
 /**
@@ -254,6 +342,29 @@ export const zDelegateOut = z.object({
 });
 
 /**
+ * DeleteAtSourceIn
+ */
+export const zDeleteAtSourceIn = z.object({
+  confirm_token: z.string().min(16).max(200),
+  reason: z.string().min(1).max(500),
+});
+
+/**
+ * DeleteConfirmationOut
+ */
+export const zDeleteConfirmationOut = z.object({
+  confirm_token: z.string(),
+  expires_at: z.iso.datetime(),
+});
+
+/**
+ * DeleteOut
+ */
+export const zDeleteOut = z.object({
+  outcome: z.string(),
+});
+
+/**
  * DetourIn
  *
  * Something not in Today the person switched to, captured as a task (P4-01). The
@@ -306,6 +417,13 @@ export const zDigestOut = z.object({
   next_cursor: z.string(),
   schema_version: z.literal(1).optional().default(1),
   scope: z.enum(["project", "workspace"]),
+});
+
+/**
+ * DisconnectIn
+ */
+export const zDisconnectIn = z.object({
+  reason: z.string().min(1).max(500),
 });
 
 /**
@@ -375,6 +493,14 @@ export const zEstimateBody = z.object({
   reason: z.string().min(1).max(500),
   schema_version: z.int().nullish(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * ExistingFolderIn
+ */
+export const zExistingFolderIn = z.object({
+  location_id: z.uuid(),
+  path: z.string().min(1).max(1024),
 });
 
 /**
@@ -747,6 +873,13 @@ export const zMoveIn = z.object({
   board_rank: z.string().min(1).max(48),
   column_id: z.uuid(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * MoveStarted
+ */
+export const zMoveStarted = z.object({
+  workflow_id: z.string(),
 });
 
 /**
@@ -1199,6 +1332,27 @@ export const zProjectPauseIn = z.object({
  */
 export const zProjectResumeIn = z.object({
   reason: z.string().max(500).nullish(),
+});
+
+/**
+ * ProviderOut
+ */
+export const zProviderOut = z.object({
+  auth: z.enum(["oauth", "none"]),
+  backfill_cap_days: z.int().nullable(),
+  consent_notice: z.string().nullable(),
+  kind: z.enum([
+    "email",
+    "notes",
+    "chat",
+    "calendar",
+    "code",
+    "deploy",
+    "knowledge",
+  ]),
+  label: z.string(),
+  provider: z.string(),
+  sync_every_min: z.int(),
 });
 
 /**
@@ -2938,6 +3092,92 @@ export const zCalendarOauthCallbackQuery = z.object({
  */
 export const zCalendarOauthStartResponse = zOAuthStartOut;
 
+/**
+ * Response Connections List Connections
+ *
+ * Successful Response
+ */
+export const zConnectionsListConnectionsResponse = z.array(zConnectionOut);
+
+export const zConnectionsCreateConnectionBody = zConnectionCreate;
+
+/**
+ * Successful Response
+ */
+export const zConnectionsCreateConnectionResponse = zConnectionOut;
+
+export const zConnectionsOauthCallbackQuery = z.object({
+  state: z.string().max(256),
+  code: z.string().max(2048).nullish(),
+  error: z.string().max(256).nullish(),
+  iss: z.string().max(2048).nullish(),
+});
+
+/**
+ * Response Connections List Providers
+ *
+ * Successful Response
+ */
+export const zConnectionsListProvidersResponse = z.array(zProviderOut);
+
+export const zConnectionsDisconnectBody = zDisconnectIn;
+
+export const zConnectionsDisconnectPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zConnectionsDisconnectResponse = z.void();
+
+export const zConnectionsGetConnectionPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zConnectionsGetConnectionResponse = zConnectionOut;
+
+export const zConnectionsUpdateConnectionBody = zConnectionPatch;
+
+export const zConnectionsUpdateConnectionPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zConnectionsUpdateConnectionResponse = zConnectionOut;
+
+export const zConnectionsStartOauthPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zConnectionsStartOauthResponse = zConnectionsOAuthStart;
+
+export const zConnectionsOauthUrlPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zConnectionsOauthUrlResponse = zAuthorizeUrlOut;
+
+export const zConnectionsSyncNowPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zConnectionsSyncNowResponse = zConnectionOut;
+
 export const zCoolifyListDeployStatusQuery = z.object({
   project_id: z.uuid().nullish(),
 });
@@ -3186,14 +3426,11 @@ export const zKnowledgeCreateTextEntryBody = zTextEntryIn;
  */
 export const zKnowledgeCreateTextEntryResponse = zDocumentDto;
 
-export const zKnowledgeTrashDocumentPath = z.object({
+export const zKnowledgeDeleteDocumentPath = z.object({
   document_id: z.uuid(),
 });
 
-/**
- * Successful Response
- */
-export const zKnowledgeTrashDocumentResponse = z.void();
+export const zKnowledgeDeleteDocumentResponse = z.union([zDeleteOut, z.void()]);
 
 export const zKnowledgeGetDocumentPath = z.object({
   document_id: z.uuid(),
@@ -3218,6 +3455,26 @@ export const zKnowledgeUpdateDocumentPath = z.object({
  * Successful Response
  */
 export const zKnowledgeUpdateDocumentResponse = zDocumentDto;
+
+export const zKnowledgeDeleteAtSourceBody = zDeleteAtSourceIn;
+
+export const zKnowledgeDeleteAtSourcePath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeDeleteAtSourceResponse = zDeleteOut;
+
+export const zKnowledgeIssueDeleteConfirmationPath = z.object({
+  document_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeIssueDeleteConfirmationResponse = zDeleteConfirmationOut;
 
 export const zKnowledgeRestoreDocumentPath = z.object({
   document_id: z.uuid(),
@@ -3295,6 +3552,17 @@ export const zKnowledgeTestLocationPath = z.object({
  */
 export const zKnowledgeTestLocationResponse = zLocationOut;
 
+export const zKnowledgeUseExistingFolderBody = zExistingFolderIn;
+
+export const zKnowledgeUseExistingFolderPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeUseExistingFolderResponse = zProjectFolderOut;
+
 export const zKnowledgeSetProjectFolderBody = zFolderIn;
 
 export const zKnowledgeSetProjectFolderPath = z.object({
@@ -3305,6 +3573,17 @@ export const zKnowledgeSetProjectFolderPath = z.object({
  * Successful Response
  */
 export const zKnowledgeSetProjectFolderResponse = zProjectFolderOut;
+
+export const zKnowledgeMoveProjectFolderBody = zExistingFolderIn;
+
+export const zKnowledgeMoveProjectFolderPath = z.object({
+  project_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeMoveProjectFolderResponse = zMoveStarted;
 
 export const zKnowledgeGetQuotaQuery = z.object({
   project_id: z.uuid().nullish(),

@@ -7,6 +7,8 @@ import { AgentsSection } from "../components/settings/AgentsSection";
 import { AuditSection } from "../components/settings/AuditSection";
 import { CalendarSection } from "../components/settings/CalendarSection";
 import { CalibrationSection } from "../components/settings/calibration/Calibration";
+import { connectionsQuery } from "../components/settings/connections/api";
+import { Connections } from "../components/settings/connections/Connections";
 import { DeadLettersSection } from "../components/settings/DeadLettersSection";
 import { KeysSection } from "../components/settings/KeysSection";
 import {
@@ -52,6 +54,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   workspace: WorkspaceSection,
   "working-hours": WorkingHoursSection,
   calendar: () => <CalendarSection />,
+  connections: () => <Connections />,
   storage: StorageSection,
   calibration: CalibrationSection,
   metrics: MetricsSection,
@@ -98,6 +101,9 @@ export const Route = createFileRoute("/settings/$section")({
         break;
       case "calendar":
         started(queryClient.query(calendarAccountsQuery()));
+        break;
+      case "connections":
+        started(queryClient.query(connectionsQuery()));
         break;
       case "storage":
         started(queryClient.query(storageQuery()));

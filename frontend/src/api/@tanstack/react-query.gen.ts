@@ -61,6 +61,16 @@ import {
   calendarOauthStart,
   calendarSelectCalendars,
   calendarSyncNow,
+  connectionsCreateConnection,
+  connectionsDisconnect,
+  connectionsGetConnection,
+  connectionsListConnections,
+  connectionsListProviders,
+  connectionsOauthCallback,
+  connectionsOauthUrl,
+  connectionsStartOauth,
+  connectionsSyncNow,
+  connectionsUpdateConnection,
   coolifyListDeployStatus,
   deadLettersGetDeadLetters,
   deadLettersPostDiscard,
@@ -79,22 +89,26 @@ import {
   knowledgeConfirmHostKey,
   knowledgeCreateLocation,
   knowledgeCreateTextEntry,
+  knowledgeDeleteAtSource,
+  knowledgeDeleteDocument,
   knowledgeGetBrief,
   knowledgeGetDocument,
   knowledgeGetFile,
   knowledgeGetQuota,
+  knowledgeIssueDeleteConfirmation,
   knowledgeListDocuments,
   knowledgeListLocations,
   knowledgeListVersions,
+  knowledgeMoveProjectFolder,
   knowledgeRestoreDocument,
   knowledgeSearch,
   knowledgeSetDefaultLocation,
   knowledgeSetProjectFolder,
   knowledgeSetTrust,
   knowledgeTestLocation,
-  knowledgeTrashDocument,
   knowledgeUpdateDocument,
   knowledgeUploadDocument,
+  knowledgeUseExistingFolder,
   notificationsGetVapidPublicKey,
   notificationsSubscribe,
   notificationsUnsubscribe,
@@ -317,6 +331,35 @@ import type {
   CalendarSyncNowData,
   CalendarSyncNowError,
   CalendarSyncNowResponse,
+  ConnectionsCreateConnectionData,
+  ConnectionsCreateConnectionError,
+  ConnectionsCreateConnectionResponse,
+  ConnectionsDisconnectData,
+  ConnectionsDisconnectError,
+  ConnectionsDisconnectResponse,
+  ConnectionsGetConnectionData,
+  ConnectionsGetConnectionError,
+  ConnectionsGetConnectionResponse,
+  ConnectionsListConnectionsData,
+  ConnectionsListConnectionsError,
+  ConnectionsListConnectionsResponse,
+  ConnectionsListProvidersData,
+  ConnectionsListProvidersError,
+  ConnectionsListProvidersResponse,
+  ConnectionsOauthCallbackData,
+  ConnectionsOauthCallbackError,
+  ConnectionsOauthUrlData,
+  ConnectionsOauthUrlError,
+  ConnectionsOauthUrlResponse,
+  ConnectionsStartOauthData,
+  ConnectionsStartOauthError,
+  ConnectionsStartOauthResponse,
+  ConnectionsSyncNowData,
+  ConnectionsSyncNowError,
+  ConnectionsSyncNowResponse,
+  ConnectionsUpdateConnectionData,
+  ConnectionsUpdateConnectionError,
+  ConnectionsUpdateConnectionResponse,
   CoolifyListDeployStatusData,
   CoolifyListDeployStatusError,
   CoolifyListDeployStatusResponse,
@@ -368,6 +411,12 @@ import type {
   KnowledgeCreateTextEntryData,
   KnowledgeCreateTextEntryError,
   KnowledgeCreateTextEntryResponse,
+  KnowledgeDeleteAtSourceData,
+  KnowledgeDeleteAtSourceError,
+  KnowledgeDeleteAtSourceResponse,
+  KnowledgeDeleteDocumentData,
+  KnowledgeDeleteDocumentError,
+  KnowledgeDeleteDocumentResponse,
   KnowledgeGetBriefData,
   KnowledgeGetBriefError,
   KnowledgeGetBriefResponse,
@@ -380,6 +429,9 @@ import type {
   KnowledgeGetQuotaData,
   KnowledgeGetQuotaError,
   KnowledgeGetQuotaResponse,
+  KnowledgeIssueDeleteConfirmationData,
+  KnowledgeIssueDeleteConfirmationError,
+  KnowledgeIssueDeleteConfirmationResponse,
   KnowledgeListDocumentsData,
   KnowledgeListDocumentsError,
   KnowledgeListDocumentsResponse,
@@ -389,6 +441,9 @@ import type {
   KnowledgeListVersionsData,
   KnowledgeListVersionsError,
   KnowledgeListVersionsResponse,
+  KnowledgeMoveProjectFolderData,
+  KnowledgeMoveProjectFolderError,
+  KnowledgeMoveProjectFolderResponse,
   KnowledgeRestoreDocumentData,
   KnowledgeRestoreDocumentError,
   KnowledgeRestoreDocumentResponse,
@@ -407,15 +462,15 @@ import type {
   KnowledgeTestLocationData,
   KnowledgeTestLocationError,
   KnowledgeTestLocationResponse,
-  KnowledgeTrashDocumentData,
-  KnowledgeTrashDocumentError,
-  KnowledgeTrashDocumentResponse,
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentError,
   KnowledgeUpdateDocumentResponse,
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentError,
   KnowledgeUploadDocumentResponse,
+  KnowledgeUseExistingFolderData,
+  KnowledgeUseExistingFolderError,
+  KnowledgeUseExistingFolderResponse,
   NotificationsGetVapidPublicKeyData,
   NotificationsGetVapidPublicKeyError,
   NotificationsGetVapidPublicKeyResponse,
@@ -1646,6 +1701,283 @@ export const calendarOauthStartOptions = (
     queryKey: calendarOauthStartQueryKey(options),
   });
 
+export const connectionsListConnectionsQueryKey = (
+  options?: Options<ConnectionsListConnectionsData>,
+) => createQueryKey("connectionsListConnections", options);
+
+/**
+ * List Connections
+ */
+export const connectionsListConnectionsOptions = (
+  options?: Options<ConnectionsListConnectionsData>,
+) =>
+  queryOptions<
+    ConnectionsListConnectionsResponse,
+    ConnectionsListConnectionsError,
+    ConnectionsListConnectionsResponse,
+    ReturnType<typeof connectionsListConnectionsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await connectionsListConnections({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: connectionsListConnectionsQueryKey(options),
+  });
+
+/**
+ * Create Connection
+ */
+export const connectionsCreateConnectionMutation = (
+  options?: Partial<Options<ConnectionsCreateConnectionData>>,
+): UseMutationOptions<
+  ConnectionsCreateConnectionResponse,
+  ConnectionsCreateConnectionError,
+  Options<ConnectionsCreateConnectionData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ConnectionsCreateConnectionResponse,
+    ConnectionsCreateConnectionError,
+    Options<ConnectionsCreateConnectionData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await connectionsCreateConnection({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const connectionsOauthCallbackQueryKey = (
+  options: Options<ConnectionsOauthCallbackData>,
+) => createQueryKey("connectionsOauthCallback", options);
+
+/**
+ * Oauth Callback
+ */
+export const connectionsOauthCallbackOptions = (
+  options: Options<ConnectionsOauthCallbackData>,
+) =>
+  queryOptions<
+    unknown,
+    ConnectionsOauthCallbackError,
+    unknown,
+    ReturnType<typeof connectionsOauthCallbackQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await connectionsOauthCallback({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: connectionsOauthCallbackQueryKey(options),
+  });
+
+export const connectionsListProvidersQueryKey = (
+  options?: Options<ConnectionsListProvidersData>,
+) => createQueryKey("connectionsListProviders", options);
+
+/**
+ * List Providers
+ */
+export const connectionsListProvidersOptions = (
+  options?: Options<ConnectionsListProvidersData>,
+) =>
+  queryOptions<
+    ConnectionsListProvidersResponse,
+    ConnectionsListProvidersError,
+    ConnectionsListProvidersResponse,
+    ReturnType<typeof connectionsListProvidersQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await connectionsListProviders({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: connectionsListProvidersQueryKey(options),
+  });
+
+/**
+ * Disconnect
+ *
+ * Disconnects with a reason (audited); what it synced stays until purged (P3-09).
+ */
+export const connectionsDisconnectMutation = (
+  options?: Partial<Options<ConnectionsDisconnectData>>,
+): UseMutationOptions<
+  ConnectionsDisconnectResponse,
+  ConnectionsDisconnectError,
+  Options<ConnectionsDisconnectData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ConnectionsDisconnectResponse,
+    ConnectionsDisconnectError,
+    Options<ConnectionsDisconnectData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await connectionsDisconnect({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const connectionsGetConnectionQueryKey = (
+  options: Options<ConnectionsGetConnectionData>,
+) => createQueryKey("connectionsGetConnection", options);
+
+/**
+ * Get Connection
+ */
+export const connectionsGetConnectionOptions = (
+  options: Options<ConnectionsGetConnectionData>,
+) =>
+  queryOptions<
+    ConnectionsGetConnectionResponse,
+    ConnectionsGetConnectionError,
+    ConnectionsGetConnectionResponse,
+    ReturnType<typeof connectionsGetConnectionQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await connectionsGetConnection({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: connectionsGetConnectionQueryKey(options),
+  });
+
+/**
+ * Update Connection
+ */
+export const connectionsUpdateConnectionMutation = (
+  options?: Partial<Options<ConnectionsUpdateConnectionData>>,
+): UseMutationOptions<
+  ConnectionsUpdateConnectionResponse,
+  ConnectionsUpdateConnectionError,
+  Options<ConnectionsUpdateConnectionData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ConnectionsUpdateConnectionResponse,
+    ConnectionsUpdateConnectionError,
+    Options<ConnectionsUpdateConnectionData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await connectionsUpdateConnection({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Start Oauth
+ */
+export const connectionsStartOauthMutation = (
+  options?: Partial<Options<ConnectionsStartOauthData>>,
+): UseMutationOptions<
+  ConnectionsStartOauthResponse,
+  ConnectionsStartOauthError,
+  Options<ConnectionsStartOauthData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ConnectionsStartOauthResponse,
+    ConnectionsStartOauthError,
+    Options<ConnectionsStartOauthData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await connectionsStartOauth({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const connectionsOauthUrlQueryKey = (
+  options: Options<ConnectionsOauthUrlData>,
+) => createQueryKey("connectionsOauthUrl", options);
+
+/**
+ * Oauth Url
+ */
+export const connectionsOauthUrlOptions = (
+  options: Options<ConnectionsOauthUrlData>,
+) =>
+  queryOptions<
+    ConnectionsOauthUrlResponse,
+    ConnectionsOauthUrlError,
+    ConnectionsOauthUrlResponse,
+    ReturnType<typeof connectionsOauthUrlQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await connectionsOauthUrl({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: connectionsOauthUrlQueryKey(options),
+  });
+
+/**
+ * Sync Now
+ */
+export const connectionsSyncNowMutation = (
+  options?: Partial<Options<ConnectionsSyncNowData>>,
+): UseMutationOptions<
+  ConnectionsSyncNowResponse,
+  ConnectionsSyncNowError,
+  Options<ConnectionsSyncNowData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ConnectionsSyncNowResponse,
+    ConnectionsSyncNowError,
+    Options<ConnectionsSyncNowData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await connectionsSyncNow({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const coolifyListDeployStatusQueryKey = (
   options?: Options<CoolifyListDeployStatusData>,
 ) => createQueryKey("coolifyListDeployStatus", options);
@@ -2573,24 +2905,28 @@ export const knowledgeCreateTextEntryMutation = (
 };
 
 /**
- * Trash Document
+ * Delete Document
  *
- * To the trash: hidden from lists, reads and search until restored.
+ * Delete a document. To the trash (FR-15.6, P1-17): 204, hidden from lists, reads and
+ * search until restored; this is every text entry, link and upload, and Tumnis's own
+ * folder file. An outside file in an existing folder (FR-15.12, P3-14) is only unindexed
+ * and stays where it is: 200 `{"outcome": "index_only"}`. An agent may not delete an
+ * outside file (403, audited).
  */
-export const knowledgeTrashDocumentMutation = (
-  options?: Partial<Options<KnowledgeTrashDocumentData>>,
+export const knowledgeDeleteDocumentMutation = (
+  options?: Partial<Options<KnowledgeDeleteDocumentData>>,
 ): UseMutationOptions<
-  KnowledgeTrashDocumentResponse,
-  KnowledgeTrashDocumentError,
-  Options<KnowledgeTrashDocumentData>
+  KnowledgeDeleteDocumentResponse,
+  KnowledgeDeleteDocumentError,
+  Options<KnowledgeDeleteDocumentData>
 > => {
   const mutationOptions: UseMutationOptions<
-    KnowledgeTrashDocumentResponse,
-    KnowledgeTrashDocumentError,
-    Options<KnowledgeTrashDocumentData>
+    KnowledgeDeleteDocumentResponse,
+    KnowledgeDeleteDocumentError,
+    Options<KnowledgeDeleteDocumentData>
   > = {
     mutationFn: async (fnOptions) => {
-      const { data } = await knowledgeTrashDocument({
+      const { data } = await knowledgeDeleteDocument({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -2654,6 +2990,65 @@ export const knowledgeUpdateDocumentMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await knowledgeUpdateDocument({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Delete At Source
+ *
+ * Delete an outside file at its source, with the dialog's token and a reason; the
+ * next folder sync deletes it.
+ */
+export const knowledgeDeleteAtSourceMutation = (
+  options?: Partial<Options<KnowledgeDeleteAtSourceData>>,
+): UseMutationOptions<
+  KnowledgeDeleteAtSourceResponse,
+  KnowledgeDeleteAtSourceError,
+  Options<KnowledgeDeleteAtSourceData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeDeleteAtSourceResponse,
+    KnowledgeDeleteAtSourceError,
+    Options<KnowledgeDeleteAtSourceData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeDeleteAtSource({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Issue Delete Confirmation
+ *
+ * A one-time token for the delete-at-source dialog.
+ */
+export const knowledgeIssueDeleteConfirmationMutation = (
+  options?: Partial<Options<KnowledgeIssueDeleteConfirmationData>>,
+): UseMutationOptions<
+  KnowledgeIssueDeleteConfirmationResponse,
+  KnowledgeIssueDeleteConfirmationError,
+  Options<KnowledgeIssueDeleteConfirmationData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeIssueDeleteConfirmationResponse,
+    KnowledgeIssueDeleteConfirmationError,
+    Options<KnowledgeIssueDeleteConfirmationData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeIssueDeleteConfirmation({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -2891,6 +3286,36 @@ export const knowledgeTestLocationMutation = (
 };
 
 /**
+ * Use Existing Folder
+ *
+ * Make a folder the user already keeps the project's folder (Tumnis writes only in
+ * its `Tumnis/` subfolder).
+ */
+export const knowledgeUseExistingFolderMutation = (
+  options?: Partial<Options<KnowledgeUseExistingFolderData>>,
+): UseMutationOptions<
+  KnowledgeUseExistingFolderResponse,
+  KnowledgeUseExistingFolderError,
+  Options<KnowledgeUseExistingFolderData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeUseExistingFolderResponse,
+    KnowledgeUseExistingFolderError,
+    Options<KnowledgeUseExistingFolderData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeUseExistingFolder({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Set Project Folder
  */
 export const knowledgeSetProjectFolderMutation = (
@@ -2907,6 +3332,37 @@ export const knowledgeSetProjectFolderMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await knowledgeSetProjectFolder({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Move Project Folder
+ *
+ * Copy the project's folder to another location, verify every hash, switch; the old
+ * copy is kept. A target that cannot take the folder is refused here (409, or 422 for an
+ * unsafe path), not after a 202.
+ */
+export const knowledgeMoveProjectFolderMutation = (
+  options?: Partial<Options<KnowledgeMoveProjectFolderData>>,
+): UseMutationOptions<
+  KnowledgeMoveProjectFolderResponse,
+  KnowledgeMoveProjectFolderError,
+  Options<KnowledgeMoveProjectFolderData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeMoveProjectFolderResponse,
+    KnowledgeMoveProjectFolderError,
+    Options<KnowledgeMoveProjectFolderData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeMoveProjectFolder({
         ...options,
         ...fnOptions,
         throwOnError: true,

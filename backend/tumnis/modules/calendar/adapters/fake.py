@@ -11,10 +11,19 @@ raises), `fail_calendar_list` (the next calendarList calls raise), `script_calen
 (the next calendarList answers these calendars), `hold_events` (the next events.list of a
 calendar waits until released). `calls` records every
 call as (op, kwargs) without secrets; `refreshed` lists the refresh tokens used.
+
+Across processes (R-37, compose.test): `POST /v1/test/fakes/calendar.google/script` with
+`{"scenario": "<name>"}` stores the events.list answer of each calendar that
+`tests/recordings/google_calendar/scenarios/<name>.json` names (`parse_calendar_script`).
+While the fake-script store is enabled (fakes mode), events.list of a calendar the stored
+scenario names answers that, after this process's own scripting hooks and before the
+recordings.
 """
 
 import asyncio
 import json
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
@@ -22,6 +31,7 @@ from typing import Any
 
 from pydantic import AwareDatetime
 
+from tumnis.core import fake_scripts
 from tumnis.core.adapters.errors import AdapterError, AdapterRejected
 from tumnis.core.adapters.registry import Health
 from tumnis.core.clock import Clock, SystemClock
@@ -38,6 +48,21 @@ RECORDINGS = Path(__file__).resolve().parents[1] / "tests" / "recordings" / "goo
 ACCOUNTS = {"a": "avery@example.com", "b": "blake@example.org"}
 TIME_ZONE = "America/New_York"
 TOKEN_LIFETIME = timedelta(hours=1)
+SCENARIOS = RECORDINGS / "scenarios"
+_SCENARIO_NAME = re.compile(r"[a-z0-9_]{1,64}")
+
+
+def parse_calendar_script(body: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+    """`{"scenario": "<name>"}`: the scenario's events.list answer per calendar, stored
+    under the one key `""`. ValueError for any other body or an unknown scenario."""
+    name = body.get("scenario")
+    if set(body) != {"scenario"} or not isinstance(name, str):
+        raise ValueError('calendar.google takes {"scenario": "<name>"} only')
+    path = SCENARIOS / f"{name}.json"
+    if not _SCENARIO_NAME.fullmatch(name) or not path.is_file():
+        raise ValueError(f"unknown calendar scenario {name!r}")
+    calendars: dict[str, Any] = json.loads(path.read_text())["calendars"]
+    return "", {"scenario": name, "calendars": calendars}
 
 
 def _recorded_pages() -> dict[tuple[str, str | None], dict[str, Any]]:
@@ -162,6 +187,9 @@ class FakeGoogleCalendar:
             if not scripted:
                 del self._scripted[calendar_id]
             return _copy(response)
+        stored = await fake_scripts.lookup(NAME)
+        if stored is not None and calendar_id in stored.get("calendars", {}):
+            return _copy(stored["calendars"][calendar_id])
         recorded = self._pages.get((calendar_id, page_token))
         if recorded is None:
             raise AdapterRejected(NAME, "list_events", "404 NOT_FOUND")

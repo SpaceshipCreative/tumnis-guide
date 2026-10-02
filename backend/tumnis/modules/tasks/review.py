@@ -750,6 +750,30 @@ register_review_kind(LOW_CONFIDENCE_LABEL)
 register_review_kind(ESTIMATE_OUTLIER)
 
 
+# --- integrations' connection sign-in kind (P3-02) ----------------------------------------------
+# Registered here because tasks imports integrations, never the reverse; the subscriber
+# `tasks.connection_auth_review` queues it on `connection.auth_required`.
+
+CONNECTION_AUTH_KIND: Final = "connection_auth"
+
+
+class ConnectionAuthPayload(BaseModel):
+    """A connection's grant is gone: the user signs in again (accept opens Reconnect)."""
+
+    provider: Annotated[str, StringConstraints(max_length=60)]
+    account_label: Annotated[str, StringConstraints(max_length=200)]
+
+
+CONNECTION_AUTH: Final = ReviewKindSpec(
+    kind=CONNECTION_AUTH_KIND,
+    owner_module="integrations",
+    payload_schema=ConnectionAuthPayload,
+    actions=("accept", "snooze"),  # accept = reconnect (primary)
+    impact_scope="workspace",
+)
+register_review_kind(CONNECTION_AUTH)
+
+
 # --- Flags (P2-13) ---------------------------------------------------------------------------
 
 RESULT_KIND: Final = "result"  # P2-04 queues these: an agent's finished work, with its links

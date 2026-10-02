@@ -16,9 +16,16 @@ the exact key and falls back to `""`.
 The fake runner (P2-04) also keeps the last `run` packet it received here, with a count
 (`record_run_packet`, read by `GET /v1/test/fakes/runner/last-packet`); its task token is
 redacted when its run ends (`redact_run_token`).
+
+The test clock (Scott decision 86): `POST /v1/test/clock` keeps the instant it fixed the
+api's clock at here too (`store_fixed_clock`), and `worker_now` (the time the worker stamps
+a run's end with) answers it while the store is enabled, so a run ends on the journey's
+day. With nothing fixed, after a reset, or with the store off (every real deployment) it
+is the system clock.
 """
 
 from collections.abc import Callable, Mapping
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Column, Integer, Table, Text, cast, func, literal, or_, select, update
@@ -26,6 +33,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, insert
 
 from tumnis.core import db
 from tumnis.core.base import Base
+from tumnis.core.clock import SystemClock
 
 Parser = Callable[[Mapping[str, Any]], tuple[str, dict[str, Any]]]
 
@@ -173,3 +181,25 @@ async def redact_run_token(run_id: object, marker: str) -> None:
     )
     async with db.app_sessionmaker()() as session, session.begin():
         await session.execute(stmt)
+
+
+# --- The test clock (Scott decision 86, `POST /v1/test/clock`) -------------------------------
+
+FIXED_CLOCK = "core.fixed_clock"  # {"at": "<ISO instant>"}: the api's fixed clock
+
+
+async def store_fixed_clock(at: datetime) -> None:
+    """Keep `at`, the instant the api's clock is now fixed at, for the other processes."""
+    await put(FIXED_CLOCK, "", {"at": at.isoformat()})
+
+
+async def fixed_clock_instant() -> datetime | None:
+    """The api's fixed clock instant; None while the store is disabled or nothing is fixed."""
+    stored = await lookup(FIXED_CLOCK)
+    return None if stored is None else datetime.fromisoformat(stored["at"])
+
+
+async def worker_now() -> datetime:
+    """The time the worker stamps a run's end with: the api's fixed test clock in fakes
+    mode while one is set, else the system clock."""
+    return await fixed_clock_instant() or SystemClock().now()

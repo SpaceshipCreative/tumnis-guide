@@ -162,6 +162,35 @@ import type {
   CalendarSyncNowData,
   CalendarSyncNowErrors,
   CalendarSyncNowResponses,
+  ConnectionsCreateConnectionData,
+  ConnectionsCreateConnectionErrors,
+  ConnectionsCreateConnectionResponses,
+  ConnectionsDisconnectData,
+  ConnectionsDisconnectErrors,
+  ConnectionsDisconnectResponses,
+  ConnectionsGetConnectionData,
+  ConnectionsGetConnectionErrors,
+  ConnectionsGetConnectionResponses,
+  ConnectionsListConnectionsData,
+  ConnectionsListConnectionsErrors,
+  ConnectionsListConnectionsResponses,
+  ConnectionsListProvidersData,
+  ConnectionsListProvidersErrors,
+  ConnectionsListProvidersResponses,
+  ConnectionsOauthCallbackData,
+  ConnectionsOauthCallbackErrors,
+  ConnectionsOauthUrlData,
+  ConnectionsOauthUrlErrors,
+  ConnectionsOauthUrlResponses,
+  ConnectionsStartOauthData,
+  ConnectionsStartOauthErrors,
+  ConnectionsStartOauthResponses,
+  ConnectionsSyncNowData,
+  ConnectionsSyncNowErrors,
+  ConnectionsSyncNowResponses,
+  ConnectionsUpdateConnectionData,
+  ConnectionsUpdateConnectionErrors,
+  ConnectionsUpdateConnectionResponses,
   CoolifyListDeployStatusData,
   CoolifyListDeployStatusErrors,
   CoolifyListDeployStatusResponses,
@@ -215,6 +244,12 @@ import type {
   KnowledgeCreateTextEntryData,
   KnowledgeCreateTextEntryErrors,
   KnowledgeCreateTextEntryResponses,
+  KnowledgeDeleteAtSourceData,
+  KnowledgeDeleteAtSourceErrors,
+  KnowledgeDeleteAtSourceResponses,
+  KnowledgeDeleteDocumentData,
+  KnowledgeDeleteDocumentErrors,
+  KnowledgeDeleteDocumentResponses,
   KnowledgeGetBriefData,
   KnowledgeGetBriefErrors,
   KnowledgeGetBriefResponses,
@@ -227,6 +262,9 @@ import type {
   KnowledgeGetQuotaData,
   KnowledgeGetQuotaErrors,
   KnowledgeGetQuotaResponses,
+  KnowledgeIssueDeleteConfirmationData,
+  KnowledgeIssueDeleteConfirmationErrors,
+  KnowledgeIssueDeleteConfirmationResponses,
   KnowledgeListDocumentsData,
   KnowledgeListDocumentsErrors,
   KnowledgeListDocumentsResponses,
@@ -236,6 +274,9 @@ import type {
   KnowledgeListVersionsData,
   KnowledgeListVersionsErrors,
   KnowledgeListVersionsResponses,
+  KnowledgeMoveProjectFolderData,
+  KnowledgeMoveProjectFolderErrors,
+  KnowledgeMoveProjectFolderResponses,
   KnowledgeRestoreDocumentData,
   KnowledgeRestoreDocumentErrors,
   KnowledgeRestoreDocumentResponses,
@@ -254,15 +295,15 @@ import type {
   KnowledgeTestLocationData,
   KnowledgeTestLocationErrors,
   KnowledgeTestLocationResponses,
-  KnowledgeTrashDocumentData,
-  KnowledgeTrashDocumentErrors,
-  KnowledgeTrashDocumentResponses,
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentErrors,
   KnowledgeUpdateDocumentResponses,
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentErrors,
   KnowledgeUploadDocumentResponses,
+  KnowledgeUseExistingFolderData,
+  KnowledgeUseExistingFolderErrors,
+  KnowledgeUseExistingFolderResponses,
   NotificationsGetVapidPublicKeyData,
   NotificationsGetVapidPublicKeyErrors,
   NotificationsGetVapidPublicKeyResponses,
@@ -518,6 +559,15 @@ import {
   zCalendarOauthStartResponse,
   zCalendarSelectCalendarsResponse,
   zCalendarSyncNowResponse,
+  zConnectionsCreateConnectionResponse,
+  zConnectionsDisconnectResponse,
+  zConnectionsGetConnectionResponse,
+  zConnectionsListConnectionsResponse,
+  zConnectionsListProvidersResponse,
+  zConnectionsOauthUrlResponse,
+  zConnectionsStartOauthResponse,
+  zConnectionsSyncNowResponse,
+  zConnectionsUpdateConnectionResponse,
   zCoolifyListDeployStatusResponse,
   zDeadLettersGetDeadLettersResponse,
   zDeadLettersPostDiscardResponse,
@@ -535,22 +585,26 @@ import {
   zKnowledgeConfirmHostKeyResponse,
   zKnowledgeCreateLocationResponse,
   zKnowledgeCreateTextEntryResponse,
+  zKnowledgeDeleteAtSourceResponse,
+  zKnowledgeDeleteDocumentResponse,
   zKnowledgeGetBriefResponse,
   zKnowledgeGetDocumentResponse,
   zKnowledgeGetFileResponse,
   zKnowledgeGetQuotaResponse,
+  zKnowledgeIssueDeleteConfirmationResponse,
   zKnowledgeListDocumentsResponse,
   zKnowledgeListLocationsResponse,
   zKnowledgeListVersionsResponse,
+  zKnowledgeMoveProjectFolderResponse,
   zKnowledgeRestoreDocumentResponse,
   zKnowledgeSearchResponse,
   zKnowledgeSetDefaultLocationResponse,
   zKnowledgeSetProjectFolderResponse,
   zKnowledgeSetTrustResponse,
   zKnowledgeTestLocationResponse,
-  zKnowledgeTrashDocumentResponse,
   zKnowledgeUpdateDocumentResponse,
   zKnowledgeUploadDocumentResponse,
+  zKnowledgeUseExistingFolderResponse,
   zNotificationsGetVapidPublicKeyResponse,
   zNotificationsSubscribeResponse,
   zNotificationsUnsubscribeResponse,
@@ -1245,6 +1299,227 @@ export const calendarOauthStart = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List Connections
+ */
+export const connectionsListConnections = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<ConnectionsListConnectionsData, ThrowOnError>,
+): RequestResult<
+  ConnectionsListConnectionsResponses,
+  ConnectionsListConnectionsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ConnectionsListConnectionsResponses,
+    ConnectionsListConnectionsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsListConnectionsResponse.parseAsync(data),
+    url: "/v1/connections",
+    ...options,
+  });
+
+/**
+ * Create Connection
+ */
+export const connectionsCreateConnection = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ConnectionsCreateConnectionData, ThrowOnError>,
+): RequestResult<
+  ConnectionsCreateConnectionResponses,
+  ConnectionsCreateConnectionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ConnectionsCreateConnectionResponses,
+    ConnectionsCreateConnectionErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsCreateConnectionResponse.parseAsync(data),
+    url: "/v1/connections",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Oauth Callback
+ */
+export const connectionsOauthCallback = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsOauthCallbackData, ThrowOnError>,
+): RequestResult<unknown, ConnectionsOauthCallbackErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    unknown,
+    ConnectionsOauthCallbackErrors,
+    ThrowOnError
+  >({ url: "/v1/connections/oauth/callback", ...options });
+
+/**
+ * List Providers
+ */
+export const connectionsListProviders = <ThrowOnError extends boolean = false>(
+  options?: Options<ConnectionsListProvidersData, ThrowOnError>,
+): RequestResult<
+  ConnectionsListProvidersResponses,
+  ConnectionsListProvidersErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ConnectionsListProvidersResponses,
+    ConnectionsListProvidersErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsListProvidersResponse.parseAsync(data),
+    url: "/v1/connections/providers",
+    ...options,
+  });
+
+/**
+ * Disconnect
+ *
+ * Disconnects with a reason (audited); what it synced stays until purged (P3-09).
+ */
+export const connectionsDisconnect = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsDisconnectData, ThrowOnError>,
+): RequestResult<
+  ConnectionsDisconnectResponses,
+  ConnectionsDisconnectErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    ConnectionsDisconnectResponses,
+    ConnectionsDisconnectErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsDisconnectResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Connection
+ */
+export const connectionsGetConnection = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsGetConnectionData, ThrowOnError>,
+): RequestResult<
+  ConnectionsGetConnectionResponses,
+  ConnectionsGetConnectionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ConnectionsGetConnectionResponses,
+    ConnectionsGetConnectionErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsGetConnectionResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}",
+    ...options,
+  });
+
+/**
+ * Update Connection
+ */
+export const connectionsUpdateConnection = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ConnectionsUpdateConnectionData, ThrowOnError>,
+): RequestResult<
+  ConnectionsUpdateConnectionResponses,
+  ConnectionsUpdateConnectionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    ConnectionsUpdateConnectionResponses,
+    ConnectionsUpdateConnectionErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsUpdateConnectionResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Start Oauth
+ */
+export const connectionsStartOauth = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsStartOauthData, ThrowOnError>,
+): RequestResult<
+  ConnectionsStartOauthResponses,
+  ConnectionsStartOauthErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ConnectionsStartOauthResponses,
+    ConnectionsStartOauthErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsStartOauthResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}/oauth/start",
+    ...options,
+  });
+
+/**
+ * Oauth Url
+ */
+export const connectionsOauthUrl = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsOauthUrlData, ThrowOnError>,
+): RequestResult<
+  ConnectionsOauthUrlResponses,
+  ConnectionsOauthUrlErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ConnectionsOauthUrlResponses,
+    ConnectionsOauthUrlErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsOauthUrlResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}/oauth/url",
+    ...options,
+  });
+
+/**
+ * Sync Now
+ */
+export const connectionsSyncNow = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsSyncNowData, ThrowOnError>,
+): RequestResult<
+  ConnectionsSyncNowResponses,
+  ConnectionsSyncNowErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ConnectionsSyncNowResponses,
+    ConnectionsSyncNowErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zConnectionsSyncNowResponse.parseAsync(data),
+    url: "/v1/connections/{connection_id}/sync",
+    ...options,
+  });
+
+/**
  * List Deploy Status
  *
  * Deploy status per project in board order; projects without apps are left out.
@@ -1864,24 +2139,28 @@ export const knowledgeCreateTextEntry = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Trash Document
+ * Delete Document
  *
- * To the trash: hidden from lists, reads and search until restored.
+ * Delete a document. To the trash (FR-15.6, P1-17): 204, hidden from lists, reads and
+ * search until restored; this is every text entry, link and upload, and Tumnis's own
+ * folder file. An outside file in an existing folder (FR-15.12, P3-14) is only unindexed
+ * and stays where it is: 200 `{"outcome": "index_only"}`. An agent may not delete an
+ * outside file (403, audited).
  */
-export const knowledgeTrashDocument = <ThrowOnError extends boolean = false>(
-  options: Options<KnowledgeTrashDocumentData, ThrowOnError>,
+export const knowledgeDeleteDocument = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeDeleteDocumentData, ThrowOnError>,
 ): RequestResult<
-  KnowledgeTrashDocumentResponses,
-  KnowledgeTrashDocumentErrors,
+  KnowledgeDeleteDocumentResponses,
+  KnowledgeDeleteDocumentErrors,
   ThrowOnError
 > =>
   (options.client ?? client).delete<
-    KnowledgeTrashDocumentResponses,
-    KnowledgeTrashDocumentErrors,
+    KnowledgeDeleteDocumentResponses,
+    KnowledgeDeleteDocumentErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zKnowledgeTrashDocumentResponse.parseAsync(data),
+      await zKnowledgeDeleteDocumentResponse.parseAsync(data),
     url: "/v1/knowledge/documents/{document_id}",
     ...options,
   });
@@ -1938,6 +2217,59 @@ export const knowledgeUpdateDocument = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Delete At Source
+ *
+ * Delete an outside file at its source, with the dialog's token and a reason; the
+ * next folder sync deletes it.
+ */
+export const knowledgeDeleteAtSource = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeDeleteAtSourceData, ThrowOnError>,
+): RequestResult<
+  KnowledgeDeleteAtSourceResponses,
+  KnowledgeDeleteAtSourceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeDeleteAtSourceResponses,
+    KnowledgeDeleteAtSourceErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeDeleteAtSourceResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}/delete-at-source",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Issue Delete Confirmation
+ *
+ * A one-time token for the delete-at-source dialog.
+ */
+export const knowledgeIssueDeleteConfirmation = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeIssueDeleteConfirmationData, ThrowOnError>,
+): RequestResult<
+  KnowledgeIssueDeleteConfirmationResponses,
+  KnowledgeIssueDeleteConfirmationErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeIssueDeleteConfirmationResponses,
+    KnowledgeIssueDeleteConfirmationErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeIssueDeleteConfirmationResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}/delete-confirmation",
+    ...options,
   });
 
 /**
@@ -2135,6 +2467,36 @@ export const knowledgeTestLocation = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Use Existing Folder
+ *
+ * Make a folder the user already keeps the project's folder (Tumnis writes only in
+ * its `Tumnis/` subfolder).
+ */
+export const knowledgeUseExistingFolder = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeUseExistingFolderData, ThrowOnError>,
+): RequestResult<
+  KnowledgeUseExistingFolderResponses,
+  KnowledgeUseExistingFolderErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeUseExistingFolderResponses,
+    KnowledgeUseExistingFolderErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeUseExistingFolderResponse.parseAsync(data),
+    url: "/v1/knowledge/projects/{project_id}/existing-folder",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Set Project Folder
  */
 export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
@@ -2152,6 +2514,37 @@ export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zKnowledgeSetProjectFolderResponse.parseAsync(data),
     url: "/v1/knowledge/projects/{project_id}/folder",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Move Project Folder
+ *
+ * Copy the project's folder to another location, verify every hash, switch; the old
+ * copy is kept. A target that cannot take the folder is refused here (409, or 422 for an
+ * unsafe path), not after a 202.
+ */
+export const knowledgeMoveProjectFolder = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeMoveProjectFolderData, ThrowOnError>,
+): RequestResult<
+  KnowledgeMoveProjectFolderResponses,
+  KnowledgeMoveProjectFolderErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeMoveProjectFolderResponses,
+    KnowledgeMoveProjectFolderErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeMoveProjectFolderResponse.parseAsync(data),
+    url: "/v1/knowledge/projects/{project_id}/folder/move",
     ...options,
     headers: {
       "Content-Type": "application/json",

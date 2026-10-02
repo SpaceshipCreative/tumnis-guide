@@ -230,7 +230,7 @@ __all__ = [
 _log = structlog.get_logger(__name__)
 
 Slot = Literal["decisions", "generation", "speech", "embeddings"]
-# Slots whose hosted provider key lives in the server's .env only (Scott decision 75):
+# Slots whose hosted provider key lives on the server only (hosted-keys.env, decisions 75, 90):
 # `SPEECH__HOSTED_API_KEY`, `EMBEDDINGS__HOSTED_API_KEY`. Never sealed into provider_configs.
 ENV_KEY_SLOTS: Final = frozenset({"speech", "embeddings"})
 PINNED_JEV_DEFAULT: Final = "jev-1.13.0"  # plan default; the row's model_version wins
@@ -258,7 +258,7 @@ class ProviderConfigIn(BaseModel):
             )
         if self.slot in ENV_KEY_SLOTS and self.api_key is not None:
             raise ValueError(
-                f"the {self.slot} slot's key lives in the server's .env, not the database"
+                f"the {self.slot} slot's key lives in hosted-keys.env, not in the database"
             )
         return self
 

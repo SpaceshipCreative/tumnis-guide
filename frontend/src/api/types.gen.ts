@@ -336,6 +336,19 @@ export type AuditEntry = {
 };
 
 /**
+ * AuthorizeUrlOut
+ *
+ * `GET /v1/connections/{id}/oauth/url`: the provider's sign-in page once the
+ * workflow has prepared it, else null (poll again).
+ */
+export type AuthorizeUrlOut = {
+  /**
+   * Authorize Url
+   */
+  authorize_url: string | null;
+};
+
+/**
  * BlockOut
  */
 export type BlockOut = {
@@ -649,6 +662,127 @@ export type CommentOut = {
 };
 
 /**
+ * ConnectionCreate
+ */
+export type ConnectionCreate = {
+  /**
+   * Account Label
+   */
+  account_label: string;
+  /**
+   * Consent Acknowledged
+   */
+  consent_acknowledged?: boolean;
+  /**
+   * Provider
+   */
+  provider: string;
+  settings?: ConnectionSettings;
+};
+
+/**
+ * ConnectionOut
+ *
+ * A connection as the api answers it: never its credentials (Data flow rule 5).
+ */
+export type ConnectionOut = {
+  /**
+   * Account Label
+   */
+  account_label: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Kind
+   */
+  kind:
+    "email" | "notes" | "chat" | "calendar" | "code" | "deploy" | "knowledge";
+  /**
+   * Last Success At
+   */
+  last_success_at: string | null;
+  /**
+   * Next Sync At
+   */
+  next_sync_at: string | null;
+  /**
+   * Provider
+   */
+  provider: string;
+  settings: ConnectionSettings;
+  status: ConnectionStatus;
+  /**
+   * Status Detail
+   */
+  status_detail: string | null;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * ConnectionPatch
+ */
+export type ConnectionPatch = {
+  /**
+   * Account Label
+   */
+  account_label?: string | null;
+  settings?: ConnectionSettings | null;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * ConnectionSettings
+ *
+ * What the user sets per connection; never credentials.
+ */
+export type ConnectionSettings = {
+  /**
+   * Allowlist
+   */
+  allowlist?: Array<string>;
+  /**
+   * Backfill Days
+   */
+  backfill_days?: number;
+  /**
+   * Extra
+   */
+  extra?: {
+    [key: string]: unknown;
+  };
+  /**
+   * Sync Every Min
+   */
+  sync_every_min?: number | null;
+};
+
+/**
+ * ConnectionStatus
+ */
+export type ConnectionStatus =
+  "pending_auth" | "ok" | "syncing" | "degraded" | "auth_required" | "disabled";
+
+/**
+ * ConnectionsOAuthStart
+ *
+ * `POST /v1/connections/{id}/oauth/start`: the `connect_oauth` workflow to poll.
+ */
+export type ConnectionsOAuthStart = {
+  /**
+   * Workflow Id
+   */
+  workflow_id: string;
+};
+
+/**
  * ContextItemIn
  */
 export type ContextItemIn = {
@@ -887,6 +1021,44 @@ export type DelegateOut = {
 };
 
 /**
+ * DeleteAtSourceIn
+ */
+export type DeleteAtSourceIn = {
+  /**
+   * Confirm Token
+   */
+  confirm_token: string;
+  /**
+   * Reason
+   */
+  reason: string;
+};
+
+/**
+ * DeleteConfirmationOut
+ */
+export type DeleteConfirmationOut = {
+  /**
+   * Confirm Token
+   */
+  confirm_token: string;
+  /**
+   * Expires At
+   */
+  expires_at: string;
+};
+
+/**
+ * DeleteOut
+ */
+export type DeleteOut = {
+  /**
+   * Outcome
+   */
+  outcome: string;
+};
+
+/**
  * DetourIn
  *
  * Something not in Today the person switched to, captured as a task (P4-01). The
@@ -1019,6 +1191,16 @@ export type DigestOut = {
    * Scope
    */
   scope: "project" | "workspace";
+};
+
+/**
+ * DisconnectIn
+ */
+export type DisconnectIn = {
+  /**
+   * Reason
+   */
+  reason: string;
 };
 
 /**
@@ -1209,6 +1391,20 @@ export type Evaluation = {
    * Threshold
    */
   threshold: number;
+};
+
+/**
+ * ExistingFolderIn
+ */
+export type ExistingFolderIn = {
+  /**
+   * Location Id
+   */
+  location_id: string;
+  /**
+   * Path
+   */
+  path: string;
 };
 
 /**
@@ -2065,6 +2261,16 @@ export type MoveIn = {
    * Version
    */
   version: number;
+};
+
+/**
+ * MoveStarted
+ */
+export type MoveStarted = {
+  /**
+   * Workflow Id
+   */
+  workflow_id: string;
 };
 
 /**
@@ -3390,6 +3596,41 @@ export type ProjectResumeIn = {
    * Reason
    */
   reason?: string | null;
+};
+
+/**
+ * ProviderOut
+ */
+export type ProviderOut = {
+  /**
+   * Auth
+   */
+  auth: "oauth" | "none";
+  /**
+   * Backfill Cap Days
+   */
+  backfill_cap_days: number | null;
+  /**
+   * Consent Notice
+   */
+  consent_notice: string | null;
+  /**
+   * Kind
+   */
+  kind:
+    "email" | "notes" | "chat" | "calendar" | "code" | "deploy" | "knowledge";
+  /**
+   * Label
+   */
+  label: string;
+  /**
+   * Provider
+   */
+  provider: string;
+  /**
+   * Sync Every Min
+   */
+  sync_every_min: number;
 };
 
 /**
@@ -7301,6 +7542,597 @@ export type CalendarOauthStartResponses = {
 export type CalendarOauthStartResponse =
   CalendarOauthStartResponses[keyof CalendarOauthStartResponses];
 
+export type ConnectionsListConnectionsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/connections";
+};
+
+export type ConnectionsListConnectionsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ConnectionsListConnectionsError =
+  ConnectionsListConnectionsErrors[keyof ConnectionsListConnectionsErrors];
+
+export type ConnectionsListConnectionsResponses = {
+  /**
+   * Response Connections List Connections
+   *
+   * Successful Response
+   */
+  200: Array<ConnectionOut>;
+};
+
+export type ConnectionsListConnectionsResponse =
+  ConnectionsListConnectionsResponses[keyof ConnectionsListConnectionsResponses];
+
+export type ConnectionsCreateConnectionData = {
+  body: ConnectionCreate;
+  path?: never;
+  query?: never;
+  url: "/v1/connections";
+};
+
+export type ConnectionsCreateConnectionErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ConnectionsCreateConnectionError =
+  ConnectionsCreateConnectionErrors[keyof ConnectionsCreateConnectionErrors];
+
+export type ConnectionsCreateConnectionResponses = {
+  /**
+   * Successful Response
+   */
+  201: ConnectionOut;
+};
+
+export type ConnectionsCreateConnectionResponse =
+  ConnectionsCreateConnectionResponses[keyof ConnectionsCreateConnectionResponses];
+
+export type ConnectionsOauthCallbackData = {
+  body?: never;
+  path?: never;
+  query: {
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Code
+     */
+    code?: string | null;
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Iss
+     */
+    iss?: string | null;
+  };
+  url: "/v1/connections/oauth/callback";
+};
+
+export type ConnectionsOauthCallbackErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ConnectionsOauthCallbackError =
+  ConnectionsOauthCallbackErrors[keyof ConnectionsOauthCallbackErrors];
+
+export type ConnectionsListProvidersData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/connections/providers";
+};
+
+export type ConnectionsListProvidersErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ConnectionsListProvidersError =
+  ConnectionsListProvidersErrors[keyof ConnectionsListProvidersErrors];
+
+export type ConnectionsListProvidersResponses = {
+  /**
+   * Response Connections List Providers
+   *
+   * Successful Response
+   */
+  200: Array<ProviderOut>;
+};
+
+export type ConnectionsListProvidersResponse =
+  ConnectionsListProvidersResponses[keyof ConnectionsListProvidersResponses];
+
+export type ConnectionsDisconnectData = {
+  body: DisconnectIn;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}";
+};
+
+export type ConnectionsDisconnectErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ConnectionsDisconnectError =
+  ConnectionsDisconnectErrors[keyof ConnectionsDisconnectErrors];
+
+export type ConnectionsDisconnectResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type ConnectionsDisconnectResponse =
+  ConnectionsDisconnectResponses[keyof ConnectionsDisconnectResponses];
+
+export type ConnectionsGetConnectionData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}";
+};
+
+export type ConnectionsGetConnectionErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ConnectionsGetConnectionError =
+  ConnectionsGetConnectionErrors[keyof ConnectionsGetConnectionErrors];
+
+export type ConnectionsGetConnectionResponses = {
+  /**
+   * Successful Response
+   */
+  200: ConnectionOut;
+};
+
+export type ConnectionsGetConnectionResponse =
+  ConnectionsGetConnectionResponses[keyof ConnectionsGetConnectionResponses];
+
+export type ConnectionsUpdateConnectionData = {
+  body: ConnectionPatch;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}";
+};
+
+export type ConnectionsUpdateConnectionErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ConnectionsUpdateConnectionError =
+  ConnectionsUpdateConnectionErrors[keyof ConnectionsUpdateConnectionErrors];
+
+export type ConnectionsUpdateConnectionResponses = {
+  /**
+   * Successful Response
+   */
+  200: ConnectionOut;
+};
+
+export type ConnectionsUpdateConnectionResponse =
+  ConnectionsUpdateConnectionResponses[keyof ConnectionsUpdateConnectionResponses];
+
+export type ConnectionsStartOauthData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}/oauth/start";
+};
+
+export type ConnectionsStartOauthErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ConnectionsStartOauthError =
+  ConnectionsStartOauthErrors[keyof ConnectionsStartOauthErrors];
+
+export type ConnectionsStartOauthResponses = {
+  /**
+   * Successful Response
+   */
+  202: ConnectionsOAuthStart;
+};
+
+export type ConnectionsStartOauthResponse =
+  ConnectionsStartOauthResponses[keyof ConnectionsStartOauthResponses];
+
+export type ConnectionsOauthUrlData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}/oauth/url";
+};
+
+export type ConnectionsOauthUrlErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ConnectionsOauthUrlError =
+  ConnectionsOauthUrlErrors[keyof ConnectionsOauthUrlErrors];
+
+export type ConnectionsOauthUrlResponses = {
+  /**
+   * Successful Response
+   */
+  200: AuthorizeUrlOut;
+};
+
+export type ConnectionsOauthUrlResponse =
+  ConnectionsOauthUrlResponses[keyof ConnectionsOauthUrlResponses];
+
+export type ConnectionsSyncNowData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}/sync";
+};
+
+export type ConnectionsSyncNowErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type ConnectionsSyncNowError =
+  ConnectionsSyncNowErrors[keyof ConnectionsSyncNowErrors];
+
+export type ConnectionsSyncNowResponses = {
+  /**
+   * Successful Response
+   */
+  202: ConnectionOut;
+};
+
+export type ConnectionsSyncNowResponse =
+  ConnectionsSyncNowResponses[keyof ConnectionsSyncNowResponses];
+
 export type CoolifyListDeployStatusData = {
   body?: never;
   path?: never;
@@ -8859,7 +9691,7 @@ export type KnowledgeCreateTextEntryResponses = {
 export type KnowledgeCreateTextEntryResponse =
   KnowledgeCreateTextEntryResponses[keyof KnowledgeCreateTextEntryResponses];
 
-export type KnowledgeTrashDocumentData = {
+export type KnowledgeDeleteDocumentData = {
   body?: never;
   path: {
     /**
@@ -8871,7 +9703,7 @@ export type KnowledgeTrashDocumentData = {
   url: "/v1/knowledge/documents/{document_id}";
 };
 
-export type KnowledgeTrashDocumentErrors = {
+export type KnowledgeDeleteDocumentErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -8906,18 +9738,22 @@ export type KnowledgeTrashDocumentErrors = {
   429: Problem;
 };
 
-export type KnowledgeTrashDocumentError =
-  KnowledgeTrashDocumentErrors[keyof KnowledgeTrashDocumentErrors];
+export type KnowledgeDeleteDocumentError =
+  KnowledgeDeleteDocumentErrors[keyof KnowledgeDeleteDocumentErrors];
 
-export type KnowledgeTrashDocumentResponses = {
+export type KnowledgeDeleteDocumentResponses = {
   /**
    * Successful Response
+   */
+  200: DeleteOut;
+  /**
+   * Trashed: hidden until restored (P1-17)
    */
   204: void;
 };
 
-export type KnowledgeTrashDocumentResponse =
-  KnowledgeTrashDocumentResponses[keyof KnowledgeTrashDocumentResponses];
+export type KnowledgeDeleteDocumentResponse =
+  KnowledgeDeleteDocumentResponses[keyof KnowledgeDeleteDocumentResponses];
 
 export type KnowledgeGetDocumentData = {
   body?: never;
@@ -9043,6 +9879,126 @@ export type KnowledgeUpdateDocumentResponses = {
 
 export type KnowledgeUpdateDocumentResponse =
   KnowledgeUpdateDocumentResponses[keyof KnowledgeUpdateDocumentResponses];
+
+export type KnowledgeDeleteAtSourceData = {
+  body: DeleteAtSourceIn;
+  path: {
+    /**
+     * Document Id
+     */
+    document_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/documents/{document_id}/delete-at-source";
+};
+
+export type KnowledgeDeleteAtSourceErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeDeleteAtSourceError =
+  KnowledgeDeleteAtSourceErrors[keyof KnowledgeDeleteAtSourceErrors];
+
+export type KnowledgeDeleteAtSourceResponses = {
+  /**
+   * Successful Response
+   */
+  202: DeleteOut;
+};
+
+export type KnowledgeDeleteAtSourceResponse =
+  KnowledgeDeleteAtSourceResponses[keyof KnowledgeDeleteAtSourceResponses];
+
+export type KnowledgeIssueDeleteConfirmationData = {
+  body?: never;
+  path: {
+    /**
+     * Document Id
+     */
+    document_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/documents/{document_id}/delete-confirmation";
+};
+
+export type KnowledgeIssueDeleteConfirmationErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeIssueDeleteConfirmationError =
+  KnowledgeIssueDeleteConfirmationErrors[keyof KnowledgeIssueDeleteConfirmationErrors];
+
+export type KnowledgeIssueDeleteConfirmationResponses = {
+  /**
+   * Successful Response
+   */
+  200: DeleteConfirmationOut;
+};
+
+export type KnowledgeIssueDeleteConfirmationResponse =
+  KnowledgeIssueDeleteConfirmationResponses[keyof KnowledgeIssueDeleteConfirmationResponses];
 
 export type KnowledgeRestoreDocumentData = {
   body?: never;
@@ -9518,6 +10474,66 @@ export type KnowledgeTestLocationResponses = {
 export type KnowledgeTestLocationResponse =
   KnowledgeTestLocationResponses[keyof KnowledgeTestLocationResponses];
 
+export type KnowledgeUseExistingFolderData = {
+  body: ExistingFolderIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/projects/{project_id}/existing-folder";
+};
+
+export type KnowledgeUseExistingFolderErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeUseExistingFolderError =
+  KnowledgeUseExistingFolderErrors[keyof KnowledgeUseExistingFolderErrors];
+
+export type KnowledgeUseExistingFolderResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProjectFolderOut;
+};
+
+export type KnowledgeUseExistingFolderResponse =
+  KnowledgeUseExistingFolderResponses[keyof KnowledgeUseExistingFolderResponses];
+
 export type KnowledgeSetProjectFolderData = {
   body: FolderIn;
   path: {
@@ -9577,6 +10593,66 @@ export type KnowledgeSetProjectFolderResponses = {
 
 export type KnowledgeSetProjectFolderResponse =
   KnowledgeSetProjectFolderResponses[keyof KnowledgeSetProjectFolderResponses];
+
+export type KnowledgeMoveProjectFolderData = {
+  body: ExistingFolderIn;
+  path: {
+    /**
+     * Project Id
+     */
+    project_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/projects/{project_id}/folder/move";
+};
+
+export type KnowledgeMoveProjectFolderErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeMoveProjectFolderError =
+  KnowledgeMoveProjectFolderErrors[keyof KnowledgeMoveProjectFolderErrors];
+
+export type KnowledgeMoveProjectFolderResponses = {
+  /**
+   * Successful Response
+   */
+  202: MoveStarted;
+};
+
+export type KnowledgeMoveProjectFolderResponse =
+  KnowledgeMoveProjectFolderResponses[keyof KnowledgeMoveProjectFolderResponses];
 
 export type KnowledgeGetQuotaData = {
   body?: never;
