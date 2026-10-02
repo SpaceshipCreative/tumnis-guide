@@ -99,7 +99,6 @@ def test_every_runtime_folder_setting_is_classified() -> None:
 
 @pytest.mark.req("FR-15.10", "FR-15.11", "SEC-10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-data-dirs")
 def test_image_makes_every_runtime_folder_for_its_user() -> None:
     """The image runs as tumnis (uid 10001) and makes each runtime folder owned by it, so
     the worker can clone a vault under `obsidian_dir` (a root-owned /var/lib/tumnis refused
@@ -132,7 +131,6 @@ def _mounts(service: dict[str, Any]) -> dict[str, str]:
 
 @pytest.mark.req("FR-15.10", "FR-15.11", "SEC-10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-data-dirs")
 def test_compose_mounts_each_runtime_folder_on_every_service_that_uses_it() -> None:
     """Each runtime folder is a declared named volume, mounted read-write at the setting's
     default on every service that uses it: the worker shares the spool with the api and
@@ -172,7 +170,6 @@ def _render(*files: str) -> dict[str, Any]:
 
 @pytest.mark.req("FR-15.10", "FR-15.11", "SEC-10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-data-dirs")
 def test_preview_overrides_keep_the_runtime_volumes() -> None:
     """Rendered by Compose itself: the preview overrides (which the CI stack includes)
     replace each service's secrets mount but keep its runtime volumes, because Compose
