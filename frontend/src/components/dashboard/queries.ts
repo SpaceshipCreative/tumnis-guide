@@ -14,6 +14,7 @@ import {
   tasksListJustAddedOptions,
   tasksListTasksOptions,
 } from "../../api/@tanstack/react-query.gen";
+import { isRateLimited, retryDelay, retryRateLimited } from "../../lib/retry";
 import { workspaceQuery } from "../settings/queries";
 
 export { workspaceQuery };
@@ -29,8 +30,10 @@ export const TODAY_QUERY = {
   limit: 5,
 } as const;
 
-// One retry for network and server errors; a problem+json 4xx will not change on a retry.
+// One retry for network and server errors; a problem+json 4xx will not change on a retry,
+// except a 429, which is asked again after its Retry-After (lib/retry.ts, J1 A1.2).
 function retryOnce(failureCount: number, error: unknown): boolean {
+  if (isRateLimited(error)) return retryRateLimited(failureCount, error);
   const status =
     typeof error === "object" && error !== null && "status" in error
       ? error.status
@@ -43,6 +46,7 @@ export function todayQuery() {
   return queryOptions({
     ...tasksListTasksOptions({ query: TODAY_QUERY }),
     retry: retryOnce,
+    retryDelay,
   });
 }
 
@@ -51,6 +55,7 @@ export function justAddedQuery() {
   return queryOptions({
     ...tasksListJustAddedOptions(),
     retry: retryOnce,
+    retryDelay,
   });
 }
 
@@ -61,6 +66,7 @@ export function planQuery(day: string) {
   return queryOptions({
     ...planningGetPlanOptions({ path: { day } }),
     retry: retryOnce,
+    retryDelay,
     retryOnMount: false,
   });
 }
@@ -70,6 +76,7 @@ export function alternatesQuery(day: string) {
   return queryOptions({
     ...planningGetAlternatesOptions({ path: { day } }),
     retry: retryOnce,
+    retryDelay,
   });
 }
 
@@ -78,6 +85,7 @@ export function reviewCountQuery() {
   return queryOptions({
     ...tasksGetReviewCountOptions(),
     retry: retryOnce,
+    retryDelay,
   });
 }
 
@@ -86,6 +94,7 @@ export function deployStatusQuery() {
   return queryOptions({
     ...coolifyListDeployStatusOptions(),
     retry: retryOnce,
+    retryDelay,
   });
 }
 
@@ -94,6 +103,7 @@ export function pausesQuery() {
   return queryOptions({
     ...agentsGetPausesOptions(),
     retry: retryOnce,
+    retryDelay,
   });
 }
 
