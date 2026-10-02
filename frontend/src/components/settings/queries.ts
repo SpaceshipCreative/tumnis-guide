@@ -12,6 +12,7 @@ import {
   decisionsGetCalibrationOptions,
   knowledgeListLocationsOptions,
   planningGetMetricsSummaryOptions,
+  planningGetUnattendedWindowOptions,
   settingsGetSectionOptions,
   settingsGetWorkingHoursOptions,
   settingsGetWorkspaceSettingsOptions,
@@ -55,3 +56,9 @@ export const calibrationQuery = () => decisionsGetCalibrationOptions();
 // Settings > Metrics (P1-18): the success metrics over local days `from` to `to`.
 export const metricsSummaryQuery = (range: { from: string; to: string }) =>
   planningGetMetricsSummaryOptions({ query: range });
+// Unattended runs (P4-04, FR-4.5): the window in force for the workspace, or for one
+// project (its own window, else the workspace's), and where it comes from.
+export const unattendedWindowQuery = (projectId: string | null = null) =>
+  planningGetUnattendedWindowOptions(
+    projectId === null ? undefined : { query: { project_id: projectId } },
+  );

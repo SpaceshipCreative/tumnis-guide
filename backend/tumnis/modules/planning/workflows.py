@@ -99,8 +99,52 @@ def schedules() -> list[Any]:
             "workflow_fn": planner_tick,
             "schedule": PLANNER_TICK_SCHEDULE,
             "queue_name": api.MAINTENANCE_QUEUE,
-        }
+        },
+        {
+            "schedule_name": UNATTENDED_TICK_NAME,
+            "workflow_fn": unattended_tick,
+            "schedule": UNATTENDED_TICK_SCHEDULE,
+            "queue_name": api.MAINTENANCE_QUEUE,
+        },
     ]
+
+
+# --- unattended_tick (P4-04) --------------------------------------------------------------
+
+UNATTENDED_TICK_NAME: Final = "unattended-tick"
+UNATTENDED_TICK_SCHEDULE: Final = "*/5 * * * *"  # a window opens at most 5 minutes late
+
+
+@DBOS.step()
+async def unattended_workspaces_step() -> list[str]:
+    """The workspaces that have an unattended window."""
+    return [str(w) for w in await api.unattended_workspaces()]
+
+
+@DBOS.step()
+async def unattended_workspace_step(workspace_id: str, scheduled_time: str) -> dict[str, int]:
+    """One workspace's tick: each task's start consumes its queue flag in the transaction
+    that requests its run, so a replayed step starts nothing twice."""
+    out = await api.unattended_tick_for(_ctx(workspace_id), datetime.fromisoformat(scheduled_time))
+    return out.model_dump()
+
+
+@DBOS.workflow(name="unattended_tick")
+async def unattended_tick(scheduled_time: datetime, context: Any) -> int:
+    """Scheduled every 5 minutes (P4-04, FR-4.5): in each workspace with a window open at
+    the scheduled time (in its own timezone), green-light queued tasks start unattended and
+    the others are refused with a review item (`api.unattended_tick_for`); returns how many
+    runs it started. One workspace's failure never holds up the others."""
+    del context
+    started = 0
+    for workspace_id in await unattended_workspaces_step():
+        try:
+            out = await unattended_workspace_step(workspace_id, scheduled_time.isoformat())
+        except Exception:  # logged; the next tick tries the workspace again
+            _log.exception("unattended tick: workspace %s", workspace_id)
+            continue
+        started += out["started"]
+    return started
 
 
 # --- build_plan ---------------------------------------------------------------------------

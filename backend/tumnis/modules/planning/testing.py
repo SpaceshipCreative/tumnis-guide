@@ -1,11 +1,18 @@
-"""The `planner-tick` test tick (SEED, R-37; fakes only): `POST /v1/test/tick/planner-tick`
-does what one run of the scheduled `planner_tick` does, at the server clock's time: it
-enqueues `build_plan` (trigger `morning`) for every workspace whose morning plan is due
-(`api.due_plan_day`), under the same workflow id, so a plan is built once however often it
-fires. It then waits, at most TICK_WAIT_S, for those builds to end, so a journey reads the
-published plan as soon as the tick answers; a build still waiting on its agent then goes
-on in the worker. Registered at import; the router imports this module so the api process
-has it (the workflow is named, not imported: the api process never imports workflows)."""
+"""planning's test ticks (R-37; fakes only). Registered at import; the router imports this
+module so the api process has them (the workflows are named, not imported: the api process
+never imports workflows).
+
+- `planner-tick` (SEED): `POST /v1/test/tick/planner-tick` does what one run of the
+  scheduled `planner_tick` does, at the server clock's time: it enqueues `build_plan`
+  (trigger `morning`) for every workspace whose morning plan is due (`api.due_plan_day`),
+  under the same workflow id, so a plan is built once however often it fires. It then
+  waits, at most TICK_WAIT_S, for those builds to end, so a journey reads the published
+  plan as soon as the tick answers; a build still waiting on its agent then goes on in the
+  worker.
+- `unattended-tick` (P4-04): `POST /v1/test/tick/unattended-tick` runs one unattended tick
+  at the server clock's time in the api process, the same work the scheduled
+  `unattended_tick` workflow does.
+"""
 
 import asyncio
 import logging
@@ -21,6 +28,7 @@ from tumnis.modules.planning import api
 _log = logging.getLogger(__name__)
 
 TICK_NAME: Final = "planner-tick"  # workflows.PLANNER_TICK_NAME
+UNATTENDED_TICK_NAME: Final = "unattended-tick"  # workflows.UNATTENDED_TICK_NAME
 TICK_WAIT_S: float = 8.0  # under the e2e request timeout (10 s); read per call
 TRIGGER: Final = "morning"
 
@@ -53,4 +61,11 @@ async def tick(client: Any, now: datetime) -> int:
     return len(handles)
 
 
+async def unattended(client: Any, now: datetime) -> int:
+    """One unattended tick at `now` (no DBOS client needed); how many runs it started."""
+    del client
+    return await api.run_unattended_tick(now)
+
+
 register_tick(TICK_NAME, tick)
+register_tick(UNATTENDED_TICK_NAME, unattended)

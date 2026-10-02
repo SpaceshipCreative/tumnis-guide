@@ -29,6 +29,11 @@ rolls over, for the workspace's local day), `POST /metrics/open` (204; the PWA's
 ping raises the `app_open` counter on the local day) and `GET /metrics/summary?from=&to=`
 (the PRD's success metrics, each with its target, null where there is no data yet).
 
+P4-04, unattended run windows (`root_router`): `GET /unattended/window?project_id=` (the
+window in force for the workspace or a project, and where it comes from) and `PUT
+/unattended/window` (`{project_id, window, version}`; `window` null turns it off; stale:
+409 `stale_version`; a repeated weekday or a start equal to the end: 422).
+
 All session-only; every write is idempotent and runs in the request's transaction.
 """
 
@@ -46,7 +51,9 @@ from tumnis.core.idempotency import SessionDep
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.modules.planning import api
-from tumnis.modules.planning import testing as _testing  # noqa: F401  # registers `planner-tick`
+
+# Registers the `planner-tick` and `unattended-tick` test ticks.
+from tumnis.modules.planning import testing as _testing  # noqa: F401
 
 router = v1_router("planning", prefix="/plan", tags=["planning"])
 settings_router = v1_router("planning", prefix="/settings", tags=["settings"])
@@ -202,6 +209,22 @@ async def get_metrics_summary(
     if day_to < day_from:
         raise ProblemError(422, "invalid_range", "`to` is before `from`")
     return await api.metrics_summary(ctx, day_from, day_to, now=_clock(request).now())
+
+
+@root_router.get("/unattended/window")
+@route_policy(RoutePolicy(auth="session"))
+async def get_unattended_window(
+    ctx: Session, project_id: UUID | None = None
+) -> api.UnattendedWindowOut:
+    return await api.get_unattended_window(ctx, project_id)
+
+
+@root_router.put("/unattended/window")
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def put_unattended_window(
+    body: api.UnattendedWindowIn, request: Request, ctx: Session, session: SessionDep
+) -> api.UnattendedWindowOut:
+    return await api.put_unattended_window(ctx, body, now=_clock(request).now(), session=session)
 
 
 @settings_router.get("/working-hours")
