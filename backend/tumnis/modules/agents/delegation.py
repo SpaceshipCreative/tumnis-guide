@@ -254,8 +254,8 @@ async def _stop_loop(
             DELEGATION_LOOP_KIND,
             target=tasks.TargetRef(type="task", id=task.id),
             project_id=task.project_id,
-            payload=DelegationLoopPayload(
-                task_id=task.id, delegations=len(history), cycle=cycle, stopped_runs=stopped
+            payload=DelegationLoopPayload.of(
+                task.id, delegations=len(history), cycle=cycle, stopped=stopped
             ).model_dump(mode="json"),
             dedupe_key=f"delegation_loop:{task.id}:{latest}",
             session=own,

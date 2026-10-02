@@ -231,17 +231,32 @@ tasks.register_review_kind(
 # --- Delegation (P2-06, SAF-5) ---------------------------------------------------------------
 
 DELEGATION_LOOP_KIND: Final = "delegation_loop"
+STOPPED_RUNS_SAMPLE: Final = 100  # the ids kept on the item; stopped_count has them all
 
 
 class DelegationLoopPayload(BaseModel):
     """A refused delegation: the task, how many times it was delegated in the window,
     whether it was a cycle (the task is in its own delegation chain), and the master's
-    runs that were stopped."""
+    runs that were stopped (how many, and the first STOPPED_RUNS_SAMPLE ids)."""
 
     task_id: UUID
     delegations: int = Field(ge=0)
     cycle: bool = False
-    stopped_runs: list[UUID] = Field(default=[], max_length=100)
+    stopped_runs: list[UUID] = Field(default=[], max_length=STOPPED_RUNS_SAMPLE)
+    stopped_count: int = Field(default=0, ge=0)
+
+    @classmethod
+    def of(
+        cls, task_id: UUID, *, delegations: int, cycle: bool, stopped: list[UUID]
+    ) -> "DelegationLoopPayload":
+        """The payload for any number of stopped runs: a bounded sample and the count."""
+        return cls(
+            task_id=task_id,
+            delegations=delegations,
+            cycle=cycle,
+            stopped_runs=stopped[:STOPPED_RUNS_SAMPLE],
+            stopped_count=len(stopped),
+        )
 
 
 tasks.register_review_kind(
