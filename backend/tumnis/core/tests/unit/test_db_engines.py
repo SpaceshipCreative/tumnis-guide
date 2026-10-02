@@ -8,6 +8,7 @@ import threading
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 from tumnis.core import db
 
@@ -41,3 +42,64 @@ def test_each_event_loop_gets_its_own_engine() -> None:
     assert other[0] is other[1]
     assert other[0] is not first
     assert other[2] is not direct
+
+
+def _limits(engine: AsyncEngine) -> tuple[int, int]:
+    """(pool_size, max_overflow) of an engine's pool."""
+    pool = engine.pool
+    assert isinstance(pool, AsyncAdaptedQueuePool)
+    return pool.size(), getattr(pool, "_max_overflow", -1)  # no public reader
+
+
+def _in_thread_loop() -> tuple[asyncio.AbstractEventLoop, threading.Thread]:
+    """A running event loop on a thread of its own, as DBOS's background loop is."""
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+    return loop, thread
+
+
+def _stop(loop: asyncio.AbstractEventLoop, thread: threading.Thread) -> None:
+    loop.call_soon_threadsafe(loop.stop)
+    thread.join(10)
+    loop.close()
+
+
+@pytest.mark.req("ADR-0002")
+@pytest.mark.wp("P0-07")
+def test_a_loop_can_keep_smaller_pools() -> None:
+    """The worker's own loop serves only the relay and the watchers: `limit_pools` caps the
+    engines it builds there, and leaves every other loop's at SQLAlchemy's defaults."""
+
+    async def limited() -> AsyncEngine:
+        db.limit_pools(pool_size=2, max_overflow=1)
+        return db.app_engine()
+
+    assert _limits(asyncio.run(limited())) == (2, 1)
+    assert _limits(asyncio.run(_engines())[0]) == (5, 10)  # SQLAlchemy's QueuePool defaults
+
+
+@pytest.mark.req("ADR-0002")
+@pytest.mark.wp("P0-07")
+def test_dispose_closes_only_the_running_loops_engines() -> None:
+    """Each loop disposes what it built: `dispose` closes the running loop's pools and the
+    next use there builds a fresh engine, while another loop's engine, which may be in use
+    on that loop, is left alone."""
+    other, thread = _in_thread_loop()
+    try:
+        theirs = asyncio.run_coroutine_threadsafe(_engines(), other).result(10)[0]
+        theirs_pool = theirs.pool
+
+        async def dispose_here() -> tuple[AsyncEngine, AsyncEngine]:
+            mine = db.app_engine()
+            mine_pool = mine.pool
+            await db.dispose()
+            assert mine.pool is not mine_pool  # AsyncEngine.dispose() swaps in a new pool
+            return mine, db.app_engine()
+
+        mine, fresh = asyncio.run(dispose_here())
+        assert fresh is not mine
+        assert theirs.pool is theirs_pool
+        assert asyncio.run_coroutine_threadsafe(_engines(), other).result(10)[0] is theirs
+    finally:
+        _stop(other, thread)
