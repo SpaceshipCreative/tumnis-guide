@@ -16,3 +16,6 @@ trace.md
 traceability.json
 .hypothesis/
 .lighthouseci/
+
+# A local compose override for optional settings (README, Agents); never committed.
+deploy/compose.local.yaml
