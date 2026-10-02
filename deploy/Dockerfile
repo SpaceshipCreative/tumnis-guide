@@ -63,9 +63,14 @@ COPY --from=frontend /src/frontend/dist /app/frontend/dist
 
 # The runtime needs no pip (uv built the virtualenv); its vendored libraries only add
 # findings to the Trivy scan (P0-16).
+# Every folder the processes write at runtime (the KnowledgeSettings *_dir defaults) is made
+# here, owned by tumnis: /var/lib/tumnis itself stays root's, and an empty named volume
+# mounted on one of these takes its contents and owner from the image. The spool (api,
+# worker, worker-extract), the extract worker's scratch, and the worker's Git vault clones
+# (P3-12).
 RUN /usr/local/bin/python -m pip uninstall --yes --quiet pip \
     && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin tumnis \
-    && install -d -o tumnis -g tumnis /var/lib/tumnis/spool /scratch
+    && install -d -o tumnis -g tumnis /var/lib/tumnis/spool /scratch /var/lib/tumnis/obsidian
 # The release this image is (a tag, or sha-<commit> for main): tumnis.__version__ and the
 # Tumnis-Version header on /health/live (P0-30). Last, so a new version reuses every layer.
 ARG VERSION=0.0.0+dev
