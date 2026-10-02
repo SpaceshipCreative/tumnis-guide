@@ -1,7 +1,7 @@
 // A burst of live messages refetches each query once (P0-22, ADR-0004). Each message used
-// to start its own refetch, cancelling the one before: a quick-add's few `review_item`
-// and `task` messages sent GET /v1/review/count several times within 30 ms, and an e2e
-// run 18 times in 5 s, eating into the session's rate-limit burst.
+// to start its own refetch, cancelling the one before: the `review_item` messages after
+// one quick-add sent GET /v1/review/count ten times in a second in an e2e run, eating
+// into the session's rate-limit burst.
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
