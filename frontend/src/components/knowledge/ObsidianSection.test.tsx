@@ -190,4 +190,70 @@ describe("ObsidianSection", () => {
     if (!item) throw new Error("the vault is listed");
     expect(within(item).getByText("connecting")).toBeInTheDocument();
   });
+
+  test("[P3-12][FR-15.10] a draft left from an earlier setup is shown and can be discarded", async () => {
+    // CodeRabbit on #174: a pending vault this page doesn't hold (the setup was left
+    // or the page reloaded) may hold a deploy key, so it must be visible and removable.
+    const recorder = new Recorder();
+    server.use(...handlers(recorder, [BROKEN, DRAFT]));
+    const { user } = renderWithProviders(<ObsidianSection />);
+
+    const left = within(
+      await screen.findByRole("region", { name: "Unfinished setups" }),
+    );
+    // Still not a connected vault.
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+
+    await user.click(left.getByRole("button", { name: "Discard" }));
+    await waitFor(() => {
+      expect(recorder.writes()).toEqual([
+        `DELETE /v1/knowledge/obsidian/vaults/${DRAFT.id}`,
+      ]);
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("region", { name: "Unfinished setups" }),
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(BROKEN.remote ?? "")).toBeInTheDocument();
+  });
+
+  test("[P3-12][FR-15.10] removing a vault sends one DELETE however often it is clicked", async () => {
+    // CodeRabbit on #177: each click sends a new idempotency key, so a second click
+    // while the first DELETE is in flight would answer 404 and show it as an error.
+    const recorder = new Recorder();
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // The first matching handler answers, so the held DELETE goes before the list's.
+    server.use(
+      http.delete("*/v1/knowledge/obsidian/vaults/:id", async ({ request }) => {
+        await recorder.record(request);
+        await held;
+        return new HttpResponse(null, { status: 204 });
+      }),
+      ...handlers(recorder, [BROKEN, DRAFT]),
+    );
+    const { user } = renderWithProviders(<ObsidianSection />);
+
+    const item = (await screen.findByText(BROKEN.remote ?? "")).closest("li");
+    if (!item) throw new Error("the vault is listed");
+    const disconnect = within(item).getByRole("button", { name: "Disconnect" });
+    const discard = screen.getByRole("button", { name: "Discard" });
+    await user.click(disconnect);
+    await waitFor(() => {
+      expect(disconnect).toBeDisabled();
+    });
+    expect(discard).toBeDisabled();
+    await user.click(disconnect);
+    await user.click(discard);
+    release?.();
+    await waitFor(() => {
+      expect(disconnect).toBeEnabled();
+    });
+    expect(recorder.writes()).toEqual([
+      `DELETE /v1/knowledge/obsidian/vaults/${BROKEN.id}`,
+    ]);
+  });
 });
