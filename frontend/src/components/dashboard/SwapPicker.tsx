@@ -1,7 +1,8 @@
 // Swap one plan item for another task (P1-11, J1): a dialog listing what the day can
 // bring in instead (`GET /v1/plan/{day}/alternates`, read when it opens). Picking one
 // swaps it in at the same place (the dialog stays open, its options disabled, while the
-// swap is `saving`); Escape or Cancel closes it with nothing changed. Tab
+// swap is `saving`); Escape or Cancel closes it with nothing changed (TodayPanel ignores
+// them while a swap is saving, so the swap's answer closes it). Tab
 // stays inside the dialog, and focus goes back to what opened it when it closes.
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef } from "react";

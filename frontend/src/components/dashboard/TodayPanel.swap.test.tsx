@@ -79,6 +79,26 @@ test("[P1-11][J1] the swap picker stays open until the swap is saved", async () 
   expect(planRows()[2]).toHaveTextContent(ALTERNATES[0]?.title ?? "");
 });
 
+test("[P1-11][J1] Escape and Cancel wait for a pending swap, so its answer closes only its own picker", async () => {
+  const { user, recorder, release } = await renderGated();
+  const picker = await pickFirstAlternate(user);
+  await waitFor(() => {
+    expect(recorder.writes()).toHaveLength(1);
+  });
+
+  // While the swap is in flight the picker cannot be dismissed, so no other
+  // picker can open and be closed by this swap's answer.
+  await user.keyboard("{Escape}");
+  await user.click(within(picker).getByRole("button", { name: "Cancel" }));
+  expect(screen.getByRole("dialog", { name: "Swap" })).toBe(picker);
+
+  release();
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog", { name: "Swap" })).toBeNull();
+  });
+  expect(planRows()[2]).toHaveTextContent(ALTERNATES[0]?.title ?? "");
+});
+
 test("[P1-11][J1] a failed swap closes the picker with the plan unchanged", async () => {
   const { user, release } = await renderGated("swap");
   const before = planRows()[2]?.textContent;

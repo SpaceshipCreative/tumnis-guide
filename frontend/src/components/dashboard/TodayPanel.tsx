@@ -82,6 +82,9 @@ function PlanList({ plan }: { plan: PlanOut }) {
           title={swapping.title}
           saving={swapSaving}
           onClose={() => {
+            // A pending swap keeps its picker: its answer closes that picker, and no
+            // other picker can open meanwhile and be closed by it.
+            if (swapSaving) return;
             setSwapping(null);
           }}
           onPick={(alternate) => {

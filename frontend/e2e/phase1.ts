@@ -341,9 +341,12 @@ async function waitForTask(
   while (!done(await getTask(request, taskId))) {
     if (Date.now() > deadline) throw new Error(failure);
     await new Promise((resolve) => setTimeout(resolve, RESULT_POLL_MS));
-    await request.post("/v1/test/clock", {
+    const advanced = await request.post("/v1/test/clock", {
       data: { advance_seconds: RESULT_POLL_MS / 1_000 },
     });
+    if (!advanced.ok()) {
+      throw new Error(`POST /v1/test/clock -> ${String(advanced.status())}`);
+    }
   }
 }
 
