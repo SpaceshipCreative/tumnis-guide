@@ -71,6 +71,65 @@ async def test_delete_confirmation_only_for_outside_files(
     assert _rows(db, "SELECT deleted_at FROM documents WHERE id = %s", note) == [(None,)]
 
 
+def _outside_record(
+    db: DbUrls, ws: WorkspaceHandle, location: uuid.UUID, doc: uuid.UUID, path: str
+) -> None:
+    with psycopg.connect(db.libpq(OWNER)) as conn:
+        conn.execute(
+            "INSERT INTO folder_files (workspace_id, location_id, path, size, mtime,"
+            " content_hash, etag, origin, document_id)"
+            " VALUES (%s, %s, %s, 1, now(), 'h1', 'e1', 'external', %s)",
+            (ws.id, location, path, doc),
+        )
+
+
+@pytest.mark.req("FR-15.12", "SEC-3")
+@pytest.mark.wp("P3-14")
+async def test_delete_at_source_needs_one_outside_file(
+    db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, tmp_path: Path
+) -> None:
+    """A confirmation deletes one file: a document with more than one live file record is
+    refused (409 `several_files`) before a token is issued or used; with one outside file
+    the token is issued, and using it marks only that record."""
+    from tumnis.core.errors import ProblemError  # noqa: PLC0415
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+
+    ws = knowledge_ws
+    location = await _server_path_location(ws, make_root(tmp_path / "a"), "a")
+    project_id = await _project(ws, clock)
+    async with tenant_session(ws.ctx) as s:
+        doc = await knowledge.put_text_document(
+            s, project_id, title="SOW", body_md="statement\n", role=None
+        )
+    _outside_record(db, ws, location, doc, "acme/SOW.txt")
+    _outside_record(db, ws, location, doc, "acme/copy/SOW.txt")
+    user = uuid.uuid4()
+    with pytest.raises(ProblemError) as issued:
+        async with tenant_session(ws.ctx) as s:
+            await knowledge.issue_delete_confirmation(s, doc, user_id=user)
+    assert (issued.value.status, issued.value.code) == (409, "several_files")
+    with pytest.raises(ProblemError) as used:
+        async with tenant_session(ws.ctx) as s:
+            await knowledge.delete_at_source(
+                s, doc, confirm_token="x" * 32, reason="cleanup", user_id=user
+            )
+    assert (used.value.status, used.value.code) == (409, "several_files")
+
+    with psycopg.connect(db.libpq(OWNER)) as conn:
+        conn.execute("DELETE FROM folder_files WHERE path = 'acme/copy/SOW.txt'")
+    async with tenant_session(ws.ctx) as s:
+        token = (await knowledge.issue_delete_confirmation(s, doc, user_id=user)).confirm_token
+    async with tenant_session(ws.ctx) as s:
+        outcome = await knowledge.delete_at_source(
+            s, doc, confirm_token=token, reason="cleanup", user_id=user
+        )
+    assert outcome == "delete_at_source"
+    assert _rows(
+        db, "SELECT path, delete_confirmed FROM folder_files WHERE document_id = %s", doc
+    ) == [("acme/SOW.txt", True)]
+
+
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
 async def test_move_refuses_own_folder_and_a_second_move(
