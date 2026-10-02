@@ -1,5 +1,5 @@
 """integrations SQLAlchemy tables owned by this module (mirrors of revisions
-integrations_0001 to integrations_0004)."""
+integrations_0001 to integrations_0006)."""
 
 from datetime import datetime
 from typing import Any
@@ -135,3 +135,20 @@ class ContextItem(TenantBase, Base):
     target_url: Mapped[str | None]
     tainted: Mapped[bool] = mapped_column(server_default=text("true"))
     added_by: Mapped[str]
+    target_purged_at: Mapped[datetime | None]  # P3-09: what it points at was purged
+
+
+class Purge(TenantBase, Base):
+    """One purge (P3-09): retention's, or a user's of a project or a connection."""
+
+    __tablename__ = "purges"
+
+    scope: Mapped[str]
+    target_id: Mapped[UUID | None]
+    reason: Mapped[str]
+    cutoff: Mapped[datetime | None]
+    targets: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    counts: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    batches: Mapped[int] = mapped_column(server_default=text("0"))
+    status: Mapped[str] = mapped_column(server_default=text("'queued'"))
+    finished_at: Mapped[datetime | None]

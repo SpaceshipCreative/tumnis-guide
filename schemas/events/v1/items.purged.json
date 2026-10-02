@@ -1,0 +1,43 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/items.purged.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "ids": {
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "title": "Ids",
+      "type": "array"
+    },
+    "purge_id": {
+      "format": "uuid",
+      "title": "Purge Id",
+      "type": "string"
+    },
+    "record_type": {
+      "enum": [
+        "message",
+        "thread",
+        "note"
+      ],
+      "title": "Record Type",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "purge_id",
+    "record_type",
+    "ids"
+  ],
+  "title": "ItemsPurgedV1",
+  "type": "object"
+}

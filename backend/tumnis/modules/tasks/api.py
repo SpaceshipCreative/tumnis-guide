@@ -2013,6 +2013,64 @@ async def _raise_owner_taint(s: AsyncSession, task_id: UUID) -> None:
 integrations.register_owner_taint("task", _raise_owner_taint)
 
 
+async def _retention_holds(
+    s: AsyncSession, refs: Sequence[integrations.LinkRef]
+) -> integrations.Holds:
+    """integrations' retention hook (P3-09): of these context items, those a task owns or
+    links (`task_context_items`) whose task is open (not done, not in the trash) keep
+    their content past the cutoff; those of a task in an archived project are held by
+    the archive (compressed, never purged by retention)."""
+    pairs = {(ref.id, ref.owner_id) for ref in refs if ref.owner_type == "task"}
+    ids = sorted({ref.id for ref in refs}, key=str)
+    if ids:
+        linked = await s.execute(
+            select(_links.c.context_item_id, _links.c.task_id).where(
+                _links.c.context_item_id.in_(ids), _links.c.deleted_at.is_(None)
+            )
+        )
+        pairs |= {(row.context_item_id, row.task_id) for row in linked}
+    if not pairs:
+        return integrations.Holds()
+    tasks = {
+        row.id: row
+        for row in await s.execute(
+            select(_tasks.c.id, _tasks.c.status, _tasks.c.deleted_at, _tasks.c.project_id).where(
+                _tasks.c.id.in_(sorted({task for _item, task in pairs}, key=str))
+            )
+        )
+    }
+    dormant = await projects.dormant_projects(s, {row.project_id for row in tasks.values()})
+    archived = {item for item, task in pairs if task in tasks and tasks[task].project_id in dormant}
+    open_ = {
+        item
+        for item, task in pairs
+        if task in tasks and tasks[task].status != "done" and tasks[task].deleted_at is None
+    }
+    return integrations.Holds(open_task=frozenset(open_), archived=frozenset(archived))
+
+
+async def _project_holders(s: AsyncSession, project_id: UUID) -> integrations.ProjectHolders:
+    """integrations' project purge hook (P3-09): the project's tasks own context items, and
+    the items its tasks link are the project's too."""
+    task_ids: set[UUID] = set(
+        await s.scalars(select(_tasks.c.id).where(_tasks.c.project_id == project_id))
+    )
+    if not task_ids:
+        return integrations.ProjectHolders()
+    linked: ScalarResult[UUID] = await s.scalars(
+        select(_links.c.context_item_id).where(
+            _links.c.task_id.in_(sorted(task_ids, key=str)), _links.c.deleted_at.is_(None)
+        )
+    )
+    return integrations.ProjectHolders(
+        owners={"task": frozenset(task_ids)}, item_ids=frozenset(linked)
+    )
+
+
+integrations.register_retention_hold("tasks", _retention_holds)
+integrations.register_project_holders("tasks", _project_holders)
+
+
 async def _link(
     s: AsyncSession,
     actor: ActorRef,
