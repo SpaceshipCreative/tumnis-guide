@@ -1,0 +1,55 @@
+# Link forms (T-P3-12-02): each row is a line of a note at `Notes/Here.md` and the Link
+# objects `parse_note` gives for it, in order. Wikilinks per https://obsidian.md/help/links,
+# embeds per https://obsidian.md/help/embeds. Every bug in link parsing adds a row here
+# first (plan: "the parse table grows with each bug").
+# Fields left out of a link are null (`embed` false).
+- text: "[[Target]]"
+  links: [{target: Target}]
+- text: "[[Target#Heading]]"
+  links: [{target: Target, heading: Heading}]
+- text: "[[Target#^block-id]]"
+  links: [{target: Target, block: block-id}]
+- text: "[[Target|Alias]]"
+  links: [{target: Target, alias: Alias}]
+- text: "[[Target#Heading|Alias text]]"
+  links: [{target: Target, heading: Heading, alias: Alias text}]
+- text: "[[Help and support#Questions and advice#Report bugs]]"
+  links: [{target: Help and support, heading: "Questions and advice#Report bugs"}]
+- text: "[[Folder/Sub/Target.md]]"
+  links: [{target: Folder/Sub/Target.md}]
+- text: "[[ Spaced target ]]"
+  links: [{target: Spaced target}]
+- text: "[[#Local heading]]"
+  links: [{target: "", heading: Local heading}]
+- text: "[[Café notes]] and [[日本語のノート]]"
+  links: [{target: Café notes}, {target: 日本語のノート}]
+- text: "![[Target]]"
+  links: [{target: Target, embed: true}]
+- text: "![[Target#Heading]]"
+  links: [{target: Target, heading: Heading, embed: true}]
+- text: "![[Target#^b15695]]"
+  links: [{target: Target, block: b15695, embed: true}]
+- text: "![[image.png|300]]"
+  links: [{target: image.png, alias: "300", embed: true}]
+- text: "![[Engelbart.jpg|100x145]]"
+  links: [{target: Engelbart.jpg, alias: 100x145, embed: true}]
+- text: "![[Document.pdf#page=3]]"
+  links: [{target: Document.pdf, heading: page=3, embed: true}]
+- text: "[text](Other.md)"
+  links: [{target: Notes/Other.md, alias: text}]
+- text: "[text](../Inbox/Rates.md#Pricing)"
+  links: [{target: Inbox/Rates.md, heading: Pricing, alias: text}]
+- text: "[spaced](Two%20words.md)"
+  links: [{target: Notes/Two words.md, alias: spaced}]
+- text: "![chart](../Attachments/chart.png)"
+  links: [{target: Attachments/chart.png, alias: chart, embed: true}]
+- text: "[site](https://example.com/page.md) and [mail](mailto:someone@example.com)"
+  links: []
+- text: "[escape](../../outside.md)"
+  links: []
+- text: "Not a link: [[unclosed and [single](brackets"
+  links: []
+- text: "`[[In a code span]]` and [[Outside]]"
+  links: [{target: Outside}]
+- text: "[[A]][[B]] ![[C]]"
+  links: [{target: A}, {target: B}, {target: C, embed: true}]
