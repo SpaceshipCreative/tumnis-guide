@@ -57,7 +57,7 @@ from dbos._error import DBOSMaxStepRetriesExceeded  # documented, not re-exporte
 from tumnis.core import faults
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.core.types import SYSTEM_ACTOR
-from tumnis.modules.knowledge import api, embeddings, move, pipeline, sync
+from tumnis.modules.knowledge import api, embeddings, move, pipeline, s3_sync, sync
 from tumnis.modules.knowledge.rules import EMBED_BATCH, EMBED_QUEUE, REEMBED_WORKFLOW
 
 log = logging.getLogger(__name__)
@@ -65,6 +65,9 @@ log = logging.getLogger(__name__)
 SYNC_QUEUE: Final = "sync"  # A9, registered by the worker
 FOLDER_SYNC_WORKFLOW: Final = "knowledge_folder_sync"
 TICK_SCHEDULE_NAME: Final = "knowledge-folder-sync-tick"
+S3_TICK_SCHEDULE_NAME: Final = "knowledge-s3-source-tick"
+S3_SYNC_WORKFLOW: Final = "knowledge_s3_source_sync"
+S3_RECHECK_WORKFLOW: Final = "knowledge_s3_source_recheck"
 TICK_EVERY_MINUTES: Final = 15  # plan default
 TICK_SCHEDULE: Final = f"*/{TICK_EVERY_MINUTES} * * * *"
 WATCH_DEBOUNCE_MS: Final = 5_000  # plan default (partial files from Syncthing and the like)
@@ -144,7 +147,13 @@ def schedules() -> list[Any]:
             "workflow_fn": sync_tick,
             "schedule": TICK_SCHEDULE,
             "queue_name": SYNC_QUEUE,
-        }
+        },
+        {
+            "schedule_name": S3_TICK_SCHEDULE_NAME,
+            "workflow_fn": s3_source_tick,
+            "schedule": TICK_SCHEDULE,
+            "queue_name": SYNC_QUEUE,
+        },
     ]
 
 
@@ -519,6 +528,63 @@ async def move_project_folder(
     if failed is not None:
         return {"status": "failed", "reason": failed, "move_id": record["move_id"]}
     return {"status": "switched", "move_id": record["move_id"], "verified": len(stats)}
+
+
+# --- S3 buckets as linked sources (P3-13, FR-15.11) -------------------------------------------
+#
+# `knowledge_s3_source_sync(workspace_id, connection_id)`: one listing of the source's
+# prefixes, compared with its records (`s3_sync.sync_source`), every 15 minutes from
+# `knowledge-s3-source-tick` (until P3-02's connector tick takes linked sources over).
+# `knowledge_s3_source_recheck(workspace_id, connection_id, key)`: what a MinIO
+# notification queues, a HEAD of one key in the source's own bucket (`s3_sync.recheck_key`).
+# Both run on the `sync` queue as one step each: a retried step compares again, so a
+# version already taken in is not taken in twice, and each version's extraction is
+# requested as soon as it is taken in (idempotent per version), so a retry loses none.
+
+
+@DBOS.step(name="knowledge_s3_source_sync_step", **STEP_RETRY)
+async def s3_sync_step(workspace_id: str, connection_id: str) -> dict[str, int]:
+    return await s3_sync.sync_source(
+        _workspace(workspace_id), UUID(connection_id), net=s3_sync.net()
+    )
+
+
+@DBOS.workflow(name=S3_SYNC_WORKFLOW)
+async def s3_source_sync(workspace_id: str, connection_id: str) -> dict[str, int]:
+    return await s3_sync_step(workspace_id, connection_id)
+
+
+@DBOS.step(name="knowledge_s3_source_recheck_step", **STEP_RETRY)
+async def s3_recheck_step(workspace_id: str, connection_id: str, key: str) -> bool:
+    return await s3_sync.recheck_key(
+        _workspace(workspace_id), UUID(connection_id), key, net=s3_sync.net()
+    )
+
+
+@DBOS.workflow(name=S3_RECHECK_WORKFLOW)
+async def s3_source_recheck(workspace_id: str, connection_id: str, key: str) -> bool:
+    return await s3_recheck_step(workspace_id, connection_id, key)
+
+
+@DBOS.step()
+async def s3_sources_step() -> list[tuple[str, str]]:
+    return await s3_sync.sources()
+
+
+@DBOS.workflow(name="knowledge_s3_source_tick")
+async def s3_source_tick(scheduled_at: datetime, context: Any) -> None:
+    """Every 15 minutes on the sync queue: one sync per live S3 source, deduplicated per
+    source like the folder syncs."""
+    for workspace_id, connection_id in await s3_sources_step():
+        with (
+            SetWorkflowID(f"s3-sync:{connection_id}:{scheduled_at.isoformat()}"),
+            SetEnqueueOptions(
+                deduplication_id=f"s3-sync:{connection_id}", duplication_policy="return-existing"
+            ),
+        ):
+            await DBOS.enqueue_workflow_async(
+                SYNC_QUEUE, s3_source_sync, workspace_id, connection_id
+            )
 
 
 # P2-18: the folder steps of the project archive workflows register with projects.

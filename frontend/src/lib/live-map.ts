@@ -168,6 +168,10 @@ export const NOT_LIVE = [
   "calendarOauthCallback",
   // Storage locations change only from the Settings screen, which refetches after each write.
   "knowledgeListLocations",
+  // S3 linked sources (P3-13) are read when Settings > Linked sources opens, which
+  // refetches after each connect or remove; a sync's progress shows on the next open.
+  "knowledgeListS3Sources",
+  "knowledgeGetS3Source",
   // An upload's status is polled until extraction settles (P1-16; no document live message
   // yet), and a file is a download, never a cached query.
   "knowledgeGetDocument",

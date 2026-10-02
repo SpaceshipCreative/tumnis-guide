@@ -13,6 +13,12 @@ when the fingerprint typed matches the key it shows; a reason when re-pinning), 
 and `PUT /knowledge/projects/{project_id}/folder` (move an empty project folder to another
 location). Each handler finds its row (404) before any rule about the body. Storage calls
 take the deployment's SSRF policy from the settings.
+
+S3 buckets as linked sources (P3-13, FR-15.11), `auth="session"` (Settings): `GET` and
+`POST /knowledge/s3-sources` (201; the MinIO webhook token in the answer is shown once),
+`GET` and `DELETE /knowledge/s3-sources/{connection_id}`. MinIO's bucket notifications
+arrive at `POST /webhooks/minio/{connection_id}` with no session: the bearer token made at
+create is the proof (MinIO does not sign the body; plan deviation for Scott).
 """
 
 from collections.abc import Callable, Coroutine, Mapping
@@ -708,4 +714,72 @@ async def get_file(
             "Content-Length": str(info.size),
             "X-Content-Type-Options": "nosniff",
         },
+    )
+
+
+# --- P3-13: S3 buckets as linked sources -----------------------------------------------------
+
+
+@router.get("/knowledge/s3-sources")
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        unpaginated_reason="a workspace's linked buckets: a handful, set up by hand",
+    )
+)
+async def list_s3_sources(ctx: Session) -> list[api.S3SourceOut]:
+    async with tenant_session(ctx) as s:
+        return await api.list_s3_sources(s)
+
+
+@router.post("/knowledge/s3-sources", status_code=201)
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason=(
+            "the answer carries the webhook token, shown once and never stored, so a replay"
+            " cannot answer it again"
+        ),
+    )
+)
+async def create_s3_source(
+    body: api.S3SourceIn, request: Request, ctx: Session
+) -> api.S3SourceCreated:
+    async with tenant_session(ctx) as s:
+        return await api.create_s3_source(
+            ctx, s, body, net=_net(request), base_url=str(request.base_url)
+        )
+
+
+@router.get("/knowledge/s3-sources/{connection_id}")
+@route_policy(RoutePolicy(auth="session"))
+async def get_s3_source(connection_id: UUID, ctx: Session) -> api.S3SourceOut:
+    async with tenant_session(ctx) as s:
+        return await api.get_s3_source(s, connection_id)
+
+
+@router.delete("/knowledge/s3-sources/{connection_id}", status_code=204)
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def delete_s3_source(connection_id: UUID, ctx: Session) -> Response:
+    async with tenant_session(ctx) as s:
+        await api.delete_s3_source(s, connection_id)
+    return Response(status_code=204)
+
+
+MINIO_WEBHOOK = RoutePolicy(
+    auth="none",
+    idempotent=False,
+    not_idempotent_reason="each notification queues a re-check; a repeat only stats again",
+    csrf=False,
+    csrf_exempt_reason="MinIO's servers call it, not a browser: the bearer token is the proof",
+    max_body_bytes=1_048_576,
+)
+
+
+@router.post("/webhooks/minio/{connection_id}", status_code=202)
+@route_policy(MINIO_WEBHOOK)
+async def minio_notification(connection_id: UUID, request: Request) -> api.NotificationAccepted:
+    return await api.accept_minio_notification(
+        connection_id, request.headers.get("Authorization"), await request.body()
     )

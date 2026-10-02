@@ -12,6 +12,7 @@ import re
 import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Final, Literal
 from uuid import UUID
@@ -94,6 +95,255 @@ def etag_equal(a: str | None, b: str | None) -> bool:
     if a is None or b is None:
         return a is b
     return a.strip().strip('"').lower() == b.strip().strip('"').lower()
+
+
+# --- S3 buckets as a linked source (P3-13, FR-15.11) --------------------------------------
+
+UNVERIFIED_KEY: Final = "Tumnis could not verify this key is read-only"
+CapabilitySource = Literal["b2_authorize_account", "minio_account_info", "none"]
+S3Change = Literal["new", "changed", "unchanged", "deleted"]
+_B2_MASTER_KEY_ID: Final = re.compile(r"^[0-9a-f]{12}$")
+_ARN_S3: Final = "arn:aws:s3:::"
+_PROBE_OBJECT: Final = ".tumnis-capability-probe"
+
+
+class KeyCapabilities(BaseModel, frozen=True):
+    """What a linked source's key may do, as far as its provider lets Tumnis check
+    (`checked` False, every field None, when it does not)."""
+
+    checked: bool
+    can_read: bool | None = None
+    can_list: bool | None = None
+    can_write: bool | None = None
+    can_delete: bool | None = None
+    bucket_scoped: bool | None = None
+    prefix: str | None = None
+    source: CapabilitySource = "none"
+
+
+UNCHECKED: Final = KeyCapabilities(checked=False)
+
+
+def capabilities_acceptable(c: KeyCapabilities) -> tuple[bool, str | None]:
+    """(accepted, reason or warning). A checked key that can write (checked first), can
+    delete or is not limited to the bucket is refused with `key_can_write`,
+    `key_can_delete` or `key_not_scoped`; a checked read-only scoped key is accepted with
+    nothing to say; an unchecked key is accepted with the visible UNVERIFIED_KEY warning."""
+    if not c.checked:
+        return True, UNVERIFIED_KEY
+    if c.can_write:
+        return False, "key_can_write"
+    if c.can_delete:
+        return False, "key_can_delete"
+    if not c.bucket_scoped:
+        return False, "key_not_scoped"
+    return True, None
+
+
+def b2_key_capabilities(allowed: Mapping[str, object], bucket: str) -> KeyCapabilities:
+    """`apiInfo.storageApi.allowed` of a `b2_authorize_account` answer (API v4) for a key
+    meant for `bucket`: any `write*` or `delete*` capability counts (files, buckets,
+    retention, ...); scoped only when the key is restricted to that one bucket."""
+    raw_caps = allowed.get("capabilities")
+    caps = {str(c) for c in raw_caps} if isinstance(raw_caps, list) else set()
+    buckets = allowed.get("buckets")
+    names = (
+        {b.get("name") if isinstance(b, Mapping) else None for b in buckets}
+        if isinstance(buckets, list)
+        else set()
+    )
+    prefix = allowed.get("namePrefix")
+    return KeyCapabilities(
+        checked=True,
+        can_read="readFiles" in caps,
+        can_list="listFiles" in caps,
+        can_write=any(c.startswith("write") for c in caps),
+        can_delete=any(c.startswith("delete") for c in caps),
+        bucket_scoped=names == {bucket},
+        prefix=prefix if isinstance(prefix, str) and prefix else None,
+        source="b2_authorize_account",
+    )
+
+
+def _wildcard(pattern: str) -> re.Pattern[str]:
+    """An IAM pattern (`*` any run, `?` one character) as a whole-string regex."""
+    parts = (".*" if ch == "*" else "." if ch == "?" else re.escape(ch) for ch in pattern)
+    return re.compile("^" + "".join(parts) + "$", re.IGNORECASE)
+
+
+def _strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [v for v in value if isinstance(v, str)]
+    return []
+
+
+def _allows(statement: Mapping[str, object], action: str, resource: str) -> bool:
+    """Whether an Allow statement grants `action` on `resource`. `NotAction` and
+    `NotResource` count as granting everything they do not name (the cautious reading)."""
+    if "NotAction" in statement:
+        action_ok = not any(_wildcard(p).match(action) for p in _strings(statement["NotAction"]))
+    else:
+        action_ok = any(_wildcard(p).match(action) for p in _strings(statement.get("Action")))
+    if "NotResource" in statement:
+        listed = _strings(statement["NotResource"])
+        resource_ok = not any(_wildcard(p).match(resource) for p in listed)
+    else:
+        resource_ok = any(_wildcard(p).match(resource) for p in _strings(statement.get("Resource")))
+    return action_ok and resource_ok
+
+
+def _scoped_resource(pattern: str, bucket: str) -> bool:
+    """A resource naming only `bucket` (or objects in it): no wildcard in the bucket part."""
+    if not pattern.startswith(_ARN_S3):
+        return False
+    name, _, _ = pattern[len(_ARN_S3) :].partition("/")
+    return name == bucket
+
+
+_READ_ACTION_PREFIXES: Final = ("s3:get", "s3:list")  # a pattern starting so only reads
+_DELETE_ACTIONS: Final = ("s3:DeleteObject", "s3:DeleteObjectVersion", "s3:DeleteBucket")
+
+
+def _s3_action(pattern: str) -> bool:
+    return pattern == "*" or pattern.lower().startswith("s3:")
+
+
+def _only_reads(pattern: str) -> bool:
+    """Whether an action pattern can match only Get/List actions: its fixed start is
+    `s3:Get` or `s3:List` (a wildcard earlier than that could match anything)."""
+    fixed = re.split(r"[*?]", pattern, maxsplit=1)[0].lower()
+    return any(fixed.startswith(p) for p in _READ_ACTION_PREFIXES)
+
+
+def _only_deletes(pattern: str) -> bool:
+    """Whether an action pattern can match only Delete actions (its fixed start)."""
+    return re.split(r"[*?]", pattern, maxsplit=1)[0].lower().startswith("s3:delete")
+
+
+def _deletes(pattern: str) -> bool:
+    return pattern.lower().startswith("s3:delete") or any(
+        _wildcard(pattern).match(a) for a in _DELETE_ACTIONS
+    )
+
+
+def _on_any(statement: Mapping[str, object], resources: Sequence[str]) -> bool:
+    if "NotResource" in statement:
+        listed = _strings(statement["NotResource"])
+        return any(not any(_wildcard(p).match(r) for p in listed) for r in resources)
+    patterns = _strings(statement.get("Resource"))
+    return any(_wildcard(p).match(r) for p in patterns for r in resources)
+
+
+def minio_key_capabilities(
+    policy: Mapping[str, object] | None, bucket: str, prefixes: Sequence[str]
+) -> KeyCapabilities:
+    """The key's own policy, as MinIO's account info reports it, for objects under each of
+    `prefixes` in `bucket`. Conditions are ignored and Deny statements are not relied on,
+    so the answer only ever errs towards refusing: a write or delete granted anywhere on
+    those prefixes counts, and so does any `admin:` action (it can change policies). On the
+    bucket itself, or those prefixes, any S3 action that is not a Get or List counts too:
+    a delete as `can_delete`, anything else (a lifecycle rule, a bucket policy,
+    versioning) as `can_write`."""
+    raw = (policy or {}).get("Statement")
+    statements = [s for s in (raw if isinstance(raw, list) else []) if isinstance(s, Mapping)]
+    allow = [s for s in statements if str(s.get("Effect", "")).lower() == "allow"]
+    bucket_arn = f"{_ARN_S3}{bucket}"
+    objects = [f"{bucket_arn}/{p}{_PROBE_OBJECT}" for p in (prefixes or [""])]
+
+    def granted(action: str, resources: Sequence[str]) -> bool:
+        return any(_allows(s, action, r) for s in allow for r in resources)
+
+    admin = any(
+        _wildcard(p).match("admin:SetPolicy") for s in allow for p in _strings(s.get("Action"))
+    ) or any("NotAction" in s for s in allow)
+    scoped = all(
+        "NotResource" not in s
+        and all(_scoped_resource(r, bucket) for r in _strings(s.get("Resource")))
+        for s in allow
+        if any(a.lower().startswith("s3:") or a == "*" for a in _strings(s.get("Action")))
+        or "NotAction" in s
+    )
+    mine = [bucket_arn, *objects]
+    beyond_reads = [
+        pattern
+        for s in allow
+        if _on_any(s, mine)
+        for pattern in _strings(s.get("Action"))
+        if _s3_action(pattern) and not _only_reads(pattern)
+    ]
+    return KeyCapabilities(
+        checked=True,
+        can_read=granted("s3:GetObject", objects),
+        can_list=granted("s3:ListBucket", [bucket_arn]),
+        can_write=admin
+        or granted("s3:PutObject", objects)
+        or any(not _only_deletes(p) for p in beyond_reads),
+        can_delete=admin
+        or granted("s3:DeleteObject", objects)
+        or granted("s3:DeleteObjectVersion", objects)
+        or any(_deletes(p) for p in beyond_reads),
+        bucket_scoped=scoped and bool(allow),
+        prefix=None,
+        source="minio_account_info",
+    )
+
+
+def looks_like_b2_master_key_id(key_id: str) -> bool:
+    """A B2 master application key's id is the account id, 12 hex characters (plan
+    default heuristic); application keys are longer. Tumnis never takes the master key."""
+    return bool(_B2_MASTER_KEY_ID.match(key_id.strip()))
+
+
+def normalize_prefix(prefix: str) -> str:
+    """A bucket prefix as a folder: no leading `/`, one trailing `/` (`acme` -> `acme/`), so
+    `acme/` never matches `acme-old/...`; empty stays empty (the whole bucket)."""
+    p = prefix.strip().lstrip("/")
+    return p if not p or p.endswith("/") else p + "/"
+
+
+def prefix_for(key: str, prefixes: Iterable[str]) -> str | None:
+    """The longest mapped prefix `key` lies under; None outside every prefix, and for a
+    folder placeholder (a key ending in `/`)."""
+    if key.endswith("/"):
+        return None
+    under = [p for p in prefixes if key.startswith(p) and len(key) > len(p)]
+    return max(under, key=len) if under else None
+
+
+class FolderFileLite(BaseModel, frozen=True):
+    """What the last sync recorded for an object (its `folder_files` row)."""
+
+    etag: str
+    size: int
+    mtime: datetime
+
+
+class S3ObjectLite(BaseModel, frozen=True):
+    """One object as `ListObjectsV2` (or a HEAD) reports it."""
+
+    key: str
+    etag: str
+    size: int
+    last_modified: datetime
+
+
+def s3_change(prev: FolderFileLite | None, obj: S3ObjectLite | None) -> S3Change:
+    """new (not seen before), deleted (seen, now gone), changed (another ETag, or the same
+    ETag with a newer time and another size: a multipart ETag is no content hash), else
+    unchanged. Both None is a caller error."""
+    if obj is None:
+        if prev is None:
+            raise ValueError("s3_change needs a previous record or a listed object")
+        return "deleted"
+    if prev is None:
+        return "new"
+    if not etag_equal(prev.etag, obj.etag):
+        return "changed"
+    if obj.last_modified > prev.mtime and obj.size != prev.size:
+        return "changed"
+    return "unchanged"
 
 
 # --- Upload safety and extraction (P1-16, SEC-10, FR-15.2) --------------------------------
