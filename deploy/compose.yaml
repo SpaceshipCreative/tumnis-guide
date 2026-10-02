@@ -98,6 +98,11 @@ services:
       # worker-extract, as the api's uploads do.
       - spool:/var/lib/tumnis/spool
       - obsidian:/var/lib/tumnis/obsidian # Git vault clones (P3-12)
+    # A running git command's deploy key and known_hosts (GitReader, <obsidian_dir>/.keys)
+    # live in memory, private to tumnis, never on the obsidian volume: a worker killed
+    # mid-command leaves no key behind once its container restarts.
+    tmpfs:
+      - /var/lib/tumnis/obsidian/.keys:uid=10001,mode=0700,size=1m,noexec,nosuid,nodev
     depends_on:
       migrate: { condition: service_completed_successfully }
 
@@ -269,7 +274,8 @@ volumes:
   spool: {} # uploads between the api and worker-extract (P1-16)
   scratch: {} # worker-extract's working space
   # The worker's Git vault clones (P3-12): a cache, cloned again from the remote when lost.
-  # The deploy keys live sealed in Postgres; a key file exists here only while git runs.
+  # The deploy keys live sealed in Postgres; a running command's key file is on the worker's
+  # .keys tmpfs, never in this volume.
   obsidian: {}
   clamd_db: {}
   pgsocket: {}
