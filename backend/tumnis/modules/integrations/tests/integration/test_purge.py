@@ -366,7 +366,6 @@ async def test_tasks_keep_link_marked_purged(world: PurgeWorld) -> None:
 @pytest.mark.req("REL-3")
 @pytest.mark.wp("P3-09")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P3-09")
 async def test_purge_resumes_after_kill(
     app_db: DbUrls,
     workspace: WorkspaceHandle,
