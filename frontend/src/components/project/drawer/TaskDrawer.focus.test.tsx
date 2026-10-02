@@ -34,55 +34,49 @@ async function openDrawer(viewport: (typeof VIEWPORTS)[number]) {
   return { ...rendered, drawer, fake, task };
 }
 
-test.fails(
-  "[P0-24][UX 11] APP-F04 focus goes back to the comment field after Add comment",
-  async () => {
-    for (const viewport of VIEWPORTS) {
-      const { user, drawer, unmount } = await openDrawer(viewport);
-      const field = within(drawer).getByRole("textbox", { name: "Comment" });
-      await user.type(field, "Drafts attached");
-      await user.click(
-        within(drawer).getByRole("button", { name: "Add comment" }),
-      );
+test("[P0-24][UX 11] APP-F04 focus goes back to the comment field after Add comment", async () => {
+  for (const viewport of VIEWPORTS) {
+    const { user, drawer, unmount } = await openDrawer(viewport);
+    const field = within(drawer).getByRole("textbox", { name: "Comment" });
+    await user.type(field, "Drafts attached");
+    await user.click(
+      within(drawer).getByRole("button", { name: "Add comment" }),
+    );
 
+    expect(
+      await within(drawer).findByText("Drafts attached"),
+      viewport,
+    ).toBeVisible();
+    await waitFor(() => {
+      expect(field, viewport).toHaveFocus();
+    });
+    expect(field, viewport).toHaveValue("");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
       expect(
-        await within(drawer).findByText("Drafts attached"),
+        screen.queryByRole("dialog", { name: "Send logo drafts to Acme" }),
         viewport,
-      ).toBeVisible();
-      await waitFor(() => {
-        expect(field, viewport).toHaveFocus();
-      });
-      expect(field, viewport).toHaveValue("");
+      ).toBeNull();
+    });
+    unmount();
+  }
+});
 
-      await user.keyboard("{Escape}");
-      await waitFor(() => {
-        expect(
-          screen.queryByRole("dialog", { name: "Send logo drafts to Acme" }),
-          viewport,
-        ).toBeNull();
-      });
-      unmount();
-    }
-  },
-);
+test("[P0-24][UX 11] APP-F04 Escape closes the open drawer while focus is on the page body", async () => {
+  for (const viewport of VIEWPORTS) {
+    const { user, drawer, unmount } = await openDrawer(viewport);
+    within(drawer).getByRole("button", { name: "Add comment" }).focus();
+    (document.activeElement as HTMLElement).blur();
+    expect(document.activeElement, viewport).toBe(document.body);
 
-test.fails(
-  "[P0-24][UX 11] APP-F04 Escape closes the open drawer while focus is on the page body",
-  async () => {
-    for (const viewport of VIEWPORTS) {
-      const { user, drawer, unmount } = await openDrawer(viewport);
-      within(drawer).getByRole("button", { name: "Add comment" }).focus();
-      (document.activeElement as HTMLElement).blur();
-      expect(document.activeElement, viewport).toBe(document.body);
-
-      await user.keyboard("{Escape}");
-      await waitFor(() => {
-        expect(
-          screen.queryByRole("dialog", { name: "Send logo drafts to Acme" }),
-          viewport,
-        ).toBeNull();
-      });
-      unmount();
-    }
-  },
-);
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: "Send logo drafts to Acme" }),
+        viewport,
+      ).toBeNull();
+    });
+    unmount();
+  }
+});

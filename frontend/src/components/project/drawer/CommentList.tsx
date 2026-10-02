@@ -1,6 +1,9 @@
-// A task's comments (P0-24): oldest first, and a field to add one.
+// A task's comments (P0-24): oldest first, and a field to add one. APP-F04: the button
+// stays focusable while a comment saves (aria-disabled, not disabled: a disabled control
+// drops focus to <body>, outside the drawer), and focus goes back to the field once the
+// comment is added, ready for the next one.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { zCommentOut } from "../../../api/zod.gen";
 import { apiWrite, useWrite } from "../../../lib/fetch";
@@ -14,6 +17,8 @@ export function CommentList({ taskId }: { taskId: string }) {
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const id = useId();
+  const field = useRef<HTMLTextAreaElement>(null);
+  const form = useRef<HTMLFormElement>(null);
   const add = useWrite<{ body: string; idempotencyKey?: string }, unknown>({
     mutationFn: (v) =>
       apiWrite({
@@ -26,6 +31,10 @@ export function CommentList({ taskId }: { taskId: string }) {
       }),
     onSuccess: () => {
       setText("");
+      // Back to the field, unless the user has moved on to another control meanwhile.
+      const at = document.activeElement;
+      if (at === null || at === document.body || form.current?.contains(at))
+        field.current?.focus();
     },
     onError: () => {
       uiStore.trigger.showNotice({
@@ -57,16 +66,19 @@ export function CommentList({ taskId }: { taskId: string }) {
         </ul>
       )}
       <form
+        ref={form}
         className="flex flex-col gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          if (text.trim() !== "") add.mutate({ body: text.trim() });
+          if (!add.isPending && text.trim() !== "")
+            add.mutate({ body: text.trim() });
         }}
       >
         <label htmlFor={`${id}-new`} className="sr-only">
           Comment
         </label>
         <textarea
+          ref={field}
           id={`${id}-new`}
           rows={2}
           placeholder="Add a comment"
@@ -76,7 +88,11 @@ export function CommentList({ taskId }: { taskId: string }) {
           }}
           className={fieldClass}
         />
-        <button type="submit" disabled={add.isPending} className={saveClass}>
+        <button
+          type="submit"
+          aria-disabled={add.isPending}
+          className={`${saveClass} aria-disabled:cursor-not-allowed aria-disabled:opacity-60`}
+        >
           Add comment
         </button>
       </form>

@@ -372,6 +372,25 @@ export function TaskDrawer({
     const at = document.activeElement;
     if (at === null || at === document.body) panel.current?.focus();
   }, [runId]);
+  // APP-F04: Escape closes the open drawer even when focus has fallen to <body> (a control
+  // that had it went away), where the panel's own keydown never hears it. Only from
+  // <body>: a dialog opened over the drawer keeps its own Escape.
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing)
+        return;
+      const at = document.activeElement;
+      if (at !== null && at !== document.body) return;
+      event.preventDefault();
+      close.current();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
   // The task the drawer has open now (none once it closes): a Run answer for any other
   // task is late and is dropped.
   const openTask = useRef<string | undefined>(taskId);
