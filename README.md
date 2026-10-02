@@ -263,6 +263,8 @@ Agents run on a machine of your own (the "agent server"), in [Hermes](https://he
    - Master profile, for Discord: `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_USERS` (your Discord user id) and `DISCORD_ALLOWED_CHANNELS` with `DISCORD_HOME_CHANNEL` (one channel id). Focus messages and urgent notifications then reach you there, and you can answer the master agent from Discord.
 4. **Run a task.** On a task, **Run** hands it to the project's agent: a run streams its log, may ask you a question or ask for approval, and ends with a result for you to accept. The master agent can delegate work to project agents. The kill switch in the header stops every agent at once; a project can be paused on its own.
 
+**Unattended runs.** Settings > Unattended runs sets the nights and the hours when queued AI tasks run while you sleep, in the workspace's time zone (an end before the start runs overnight); a project can set its own window in its Schedule section. On an AI task, **Run unattended** queues it for the next window; a task that took in outside content never runs unattended. **Close the day** lists what is queued overnight, and the night's results, and each task that could not run with its reason, go to `/review`; their notifications are held until 15 minutes before your first working hour.
+
 The profile health check (every 15 minutes, and on demand in Settings > Agents) marks a profile degraded when a token reaches another project's repository or app, or when it has an MCP server outside the project's tool allowlist.
 
 **Any MCP client.** Agents reach Tumnis through MCP tools at `/mcp` (Streamable HTTP, stateless) and a REST twin for every tool under `/v1` with the same schema. The tool list, each tool's scope and its REST twin are in [schemas/mcp/v1/tools.json](schemas/mcp/v1/tools.json). Give each client its own API key with only the scopes it needs. For Claude Code:
@@ -304,7 +306,7 @@ These are planned but not in this release:
 
 - **Inbox Zero, Granola and chat connectors**, matching what they bring in to your tasks, and proposal runs on it; **Google Docs** as a source. They wait for recorded tests against the real services. Discord is the chosen first chat provider (an ADR, 0014, will record it); today Discord already reaches the master agent through its Hermes profile ([Agents](#agents)). **Settings > Connections**, where these accounts will be connected, synced and signed in again, is in place, but it has no provider to connect yet.
 - **More sources:** Obsidian vaults and S3 buckets as knowledge sources (beyond S3 as a storage location). Coming in a later update.
-- **Unattended run windows** (agents working through your tasks on a schedule while you're away) and **retention rules** for old data. Coming in a later update.
+- **Retention rules** for old data. Coming in a later update.
 - **Settings screens for GitHub and Coolify, and knowledge in search results.** Today GitHub and Coolify are set through the API ([Connect sources](#connect-sources)), and agents and the API search knowledge (`GET /v1/knowledge/search`).
 - **Hosted mode** (Tumnis run for several customers) is v2.
 
