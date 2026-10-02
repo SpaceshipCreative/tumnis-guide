@@ -101,11 +101,13 @@ async def test_seed_agent_adopts_the_profile_a_provision_wrote_first(
     assert client.cancelled == [f"provision:{project_id}"]
 
 
+@pytest.mark.parametrize("own_provision", [False, True])
 async def test_seed_agent_still_refuses_a_name_another_project_holds(
-    session_client: SessionClient, db: DbUrls
+    session_client: SessionClient, db: DbUrls, own_provision: bool
 ) -> None:
-    """Only the project's own provision row is adopted: a name another project's agent
-    holds is still 409 `profile_exists`."""
+    """Only the project's own provision row is adopted, and only for a name it may take: a
+    name another project's agent holds is still 409 `profile_exists`, whether or not this
+    project's provision has written a row of its own (then under another name)."""
     from tumnis.core.errors import ProblemError  # noqa: PLC0415
     from tumnis.modules.agents import api as agents  # noqa: PLC0415
     from tumnis.seed import AgentSeed  # noqa: PLC0415
@@ -115,6 +117,8 @@ async def test_seed_agent_still_refuses_a_name_another_project_holds(
     other = await _project(session_client, "Beta app")
     _provisioned(db, other, "acme-site")
     project_id = await _project(session_client, "Acme site")
+    if own_provision:
+        _provisioned(db, project_id, "acme-site-2")
 
     with pytest.raises(ProblemError) as refused:
         await agents.seed_agent(
