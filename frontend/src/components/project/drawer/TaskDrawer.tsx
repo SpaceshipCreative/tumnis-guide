@@ -7,6 +7,7 @@ import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 
 import type { RunRequested } from "../../../api/types.gen";
 import { ApiError, apiWrite, useWrite } from "../../../lib/fetch";
+import { dialogKeyDown } from "../../../lib/focusTrap";
 
 import {
   taskQueryKey,
@@ -15,6 +16,7 @@ import {
 } from "../../../lib/optimistic";
 import { invalidateTaskViews } from "../../../lib/task-cache";
 import { undo } from "../../../lib/undo";
+import { uiStore } from "../../../stores/uiStore";
 import { FirstActionLine } from "../../common/FirstAction";
 import { TaintBadge } from "../../common/TaintBadge";
 import { formatDay, formatMinutes } from "../../dashboard/format";
@@ -367,6 +369,14 @@ export function TaskDrawer({
   const runFor = (run: string, forTask: string) => {
     if (forTask === openTask.current) onRun(run);
   };
+  // On the phone the drawer is a modal sheet: Quick add hides while it is open (APP-15).
+  useEffect(() => {
+    if (laptop) return;
+    uiStore.trigger.sheetOpened();
+    return () => {
+      uiStore.trigger.sheetClosed();
+    };
+  }, [laptop]);
   const data = task.data as Task | undefined;
   return (
     <div
@@ -383,7 +393,10 @@ export function TaskDrawer({
         aria-labelledby={titleId}
         tabIndex={-1}
         onKeyDown={(event) => {
-          if (event.key === "Escape") onClose();
+          // The phone sheet is modal: Tab and Shift+Tab wrap inside it (APP-14). The
+          // laptop panel is not, so Tab may leave it.
+          if (!laptop) dialogKeyDown(event, onClose);
+          else if (event.key === "Escape") onClose();
         }}
         className="flex w-full flex-col gap-4 overflow-y-auto border-l border-border bg-surface px-4 py-4 shadow-xl outline-none md:px-6"
       >
