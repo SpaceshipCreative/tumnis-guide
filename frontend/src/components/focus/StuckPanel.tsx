@@ -1,7 +1,9 @@
 // The stuck panel (P4-02, FR-10.5): after "Stuck", the project agent works on a first
 // step. The panel says so, then shows what came back: the subtask it split off with its
 // minutes, its report when it took the step itself, or the fallback (the task's first
-// action with a 10-minute timer) when nothing arrived in time. `GET /v1/focus/current`
+// action with a 10-minute timer) when nothing arrived in time. Once the person reviews
+// the agent's report (Scott decision 73): "Step done" when they accepted it, or "Back to
+// you" with the task's first action when they rejected it. `GET /v1/focus/current`
 // carries the state as `next_step`, refreshed over /ws, so one live region changes its
 // content and screen readers hear each change.
 import { useEffect, useState } from "react";
@@ -48,6 +50,24 @@ function Content({ step }: { step: NextStepOut }) {
         <span className="min-w-0 break-words">
           {step.summary ?? "The agent took the next step."}
         </span>
+      );
+    case "done":
+      return (
+        <>
+          <span className="text-xs text-muted">Step done</span>
+          <span className="min-w-0 break-words">
+            {step.summary ?? "The agent took the next step."}
+          </span>
+        </>
+      );
+    case "reopened":
+      return (
+        <>
+          <span className="text-xs text-muted">Back to you</span>
+          <span className="min-w-0 break-words font-medium">
+            {step.first_action ?? "Pick the smallest next step"}
+          </span>
+        </>
       );
     case "fallback":
       return (
