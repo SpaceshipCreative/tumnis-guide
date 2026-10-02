@@ -3517,14 +3517,31 @@ async def record_delete_refused(ctx: WorkspaceContext, document_id: UUID) -> Non
 
 NOT_AN_OUTSIDE_FILE: Final = "not_an_outside_file"
 SEVERAL_FILES: Final = "several_files"
+LINKED_SOURCE_READ_ONLY: Final = "linked_source_read_only"
 
 
 async def _outside_file_target(s: AsyncSession, document_id: UUID) -> None:
     """The delete-at-source flow serves outside files only: a document whose file Tumnis
-    made goes to its trash instead (409 `not_an_outside_file`). A confirmation deletes one
-    file: a document with more than one live file record is refused (409
-    `several_files`)."""
+    made goes to its trash instead (409 `not_an_outside_file`), and a document from a
+    linked source (an S3 bucket, P3-13), which Tumnis never changes, is refused (409
+    `linked_source_read_only`, decision 89). A confirmation deletes one file: a document
+    with more than one live file record is refused (409 `several_files`)."""
     policy, origin = await _delete_target(s, document_id)
+    linked = await s.scalar(
+        select(func.count())
+        .select_from(_files)
+        .where(
+            _files.c.document_id == document_id,
+            _files.c.connection_id.is_not(None),
+            _files.c.deleted_at.is_(None),
+        )
+    )
+    if linked:
+        raise ProblemError(
+            409,
+            LINKED_SOURCE_READ_ONLY,
+            "This file lives in a linked source, which Tumnis never changes; delete it there.",
+        )
     if may_delete(policy, origin, ActorKind.user, confirmed_by_user=True) != "delete_at_source":
         raise ProblemError(
             409, NOT_AN_OUTSIDE_FILE, "Only a file Tumnis did not make is deleted at its source."
