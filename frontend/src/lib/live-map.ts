@@ -183,6 +183,9 @@ export const NOT_LIVE = [
   // cursor, so the UI never caches or refetches them.
   "agentsGetProjectDigest",
   "agentsGetWorkspaceDigest",
+  // The VAPID public key is read once, when "Enable push" is pressed (P4-05); it never
+  // changes for a workspace.
+  "notificationsGetVapidPublicKey",
   // A clip is audio the voice engine plays from its URL (P4-03), never a cached query.
   "speechGetClip",
 ] as const;
