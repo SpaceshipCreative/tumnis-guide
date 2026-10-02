@@ -1,10 +1,18 @@
 // Quick add on the phone (P0-23, UX 11): a round button in the bottom third, right side
 // for the right thumb, above the bottom bar and the safe area. It opens the quick-add
 // dialog through the ui store; on a laptop `/` does. The shell's quick-add host shows it
-// on every route (P0-25).
+// on every route (P0-25). While a modal sheet is open (the phone task drawer, the Context
+// sheet) it is not shown: it would cover the sheet and sit in its Tab order (APP-15).
+import { useSelector } from "@xstate/store-react";
+
 import { uiStore } from "../../stores/uiStore";
 
 export function QuickAddFab() {
+  const sheetOpen = useSelector(
+    uiStore,
+    (s) => s.context.modalSheets > 0 || s.context.contextSheetOpen,
+  );
+  if (sheetOpen) return null;
   return (
     <button
       type="button"
