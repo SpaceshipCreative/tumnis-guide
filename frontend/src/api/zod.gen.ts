@@ -2294,6 +2294,30 @@ export const zEvaluation = z.object({
 });
 
 /**
+ * TaskChangeOut
+ *
+ * One write in a task's history (`task_changes`): when, by whom (`by_you`: the
+ * caller), the undoable fields it changed (`created`, `trashed` or `restored` for the
+ * task itself) and whether it was undone.
+ */
+export const zTaskChangeOut = z.object({
+  actor: z.string(),
+  at: z.iso.datetime(),
+  by_you: z.boolean(),
+  change_id: z.uuid(),
+  fields: z.array(z.string()),
+  undone: z.boolean(),
+});
+
+/**
+ * Page[TaskChangeOut]
+ */
+export const zPageTaskChangeOut = z.object({
+  items: z.array(zTaskChangeOut),
+  next_cursor: z.string().nullable(),
+});
+
+/**
  * TaskContextItemOut
  *
  * A task's link to outside content: the ContextItem and what it points at.
@@ -2403,6 +2427,15 @@ export const zBoardOut = z.object({
   columns: z.array(zBoardColumnOut),
   project_id: z.uuid(),
   threshold_min: z.int(),
+});
+
+/**
+ * JustAddedOut
+ *
+ * The dashboard's Just added list (A1.1, coordinator decision 83).
+ */
+export const zJustAddedOut = z.object({
+  items: z.array(zTaskOut),
 });
 
 /**
@@ -3547,6 +3580,11 @@ export const zGithubWebhookPath = z.object({
  */
 export const zGithubWebhookResponse = zWebhookOut;
 
+/**
+ * Successful Response
+ */
+export const zTasksListJustAddedResponse = zJustAddedOut;
+
 export const zAuthListKeysQuery = z.object({
   cursor: z.string().max(2048).nullish(),
   limit: z.int().gte(1).lte(200).optional().default(50),
@@ -4537,6 +4575,20 @@ export const zTasksUpdateEstimatePath = z.object({
  * Successful Response
  */
 export const zTasksUpdateEstimateResponse = zTaskWithLayoutOut;
+
+export const zTasksListTaskHistoryPath = z.object({
+  task_id: z.uuid(),
+});
+
+export const zTasksListTaskHistoryQuery = z.object({
+  cursor: z.string().max(2048).nullish(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksListTaskHistoryResponse = zPageTaskChangeOut;
 
 export const zTasksMoveTaskBody = zMoveIn;
 

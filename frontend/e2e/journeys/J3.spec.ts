@@ -30,7 +30,6 @@ test(
     tag: ["@A2.1", "@J3", "@FR-5.4", "@FR-5.5", "@FR-5.8", "@P2-04"],
   },
   async ({ signedInPage: page, fakes }) => {
-    test.fail();
     await fakes.runner.script(FIX_FOOTER, FOOTER_RUNS);
     const acme = await projectIdByName(page.request, ACME);
     const task = await taskByTitle(page.request, ACME, FIX_FOOTER);
