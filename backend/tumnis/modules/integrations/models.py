@@ -1,5 +1,5 @@
 """integrations SQLAlchemy tables owned by this module (mirrors of revisions
-integrations_0001 to integrations_0005)."""
+integrations_0001 to integrations_0006)."""
 
 from datetime import datetime
 from typing import Any

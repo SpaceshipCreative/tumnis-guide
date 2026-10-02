@@ -15,8 +15,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from tumnis.core.migration_helpers import create_tenant_table, drop_tenant_table
 
-revision = "integrations_0005"
-down_revision = "integrations_0004"
+revision = "integrations_0006"
+down_revision = "integrations_0005"
 branch_labels = None
 depends_on = None
 phase = "expand"
