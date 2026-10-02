@@ -52,11 +52,12 @@ from typing import Any, Final
 from uuid import UUID
 
 from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
+from dbos._error import DBOSMaxStepRetriesExceeded  # documented, not re-exported (3.1.0)
 
 from tumnis.core import faults
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.core.types import SYSTEM_ACTOR
-from tumnis.modules.knowledge import api, embeddings, pipeline, sync
+from tumnis.modules.knowledge import api, embeddings, move, pipeline, sync
 from tumnis.modules.knowledge.rules import EMBED_BATCH, EMBED_QUEUE, REEMBED_WORKFLOW
 
 log = logging.getLogger(__name__)
@@ -418,15 +419,96 @@ async def enqueue_reembed(
 embeddings.register_reembed_starter(enqueue_reembed)
 
 
-# --- Moving a project folder (P3-14): red-phase seam ---------------------------------------
+# --- Moving a project folder (P3-14, FR-15.12, REL-3) ---------------------------------------
+
+MOVE_WORKFLOW: Final = "knowledge_move_project_folder"
+_MOVE_IDS: Final = uuid.UUID("5d0c0a43-6a4e-4c55-9a3e-6d6f76650000")  # uuid5 namespace
 
 
-@DBOS.workflow(name="knowledge_move_project_folder")
+@DBOS.step(**STEP_RETRY)
+async def move_begin_step(
+    workspace_id: str, project_id: str, to_location: str, to_path: str, move_id: str
+) -> dict[str, Any]:
+    return await move.begin(workspace_id, project_id, to_location, to_path, move_id=UUID(move_id))
+
+
+@DBOS.step(**STEP_RETRY)
+async def move_list_step(workspace_id: str, record: dict[str, Any]) -> list[list[str]]:
+    return await move.list_source(workspace_id, record)
+
+
+@DBOS.step(**STEP_RETRY)
+async def move_copy_step(
+    workspace_id: str, record: dict[str, Any], batch: list[list[str]]
+) -> str | None:
+    return await move.copy_batch(workspace_id, record, batch)
+
+
+@DBOS.step(**STEP_RETRY)
+async def move_verify_step(
+    workspace_id: str, record: dict[str, Any], files: list[list[str]]
+) -> dict[str, list[Any]] | None:
+    return await move.verify(workspace_id, record, files)
+
+
+@DBOS.step(**STEP_RETRY)
+async def move_fail_step(workspace_id: str, move_id: str, reason: str) -> None:
+    await move.fail(workspace_id, move_id, reason)
+
+
+@DBOS.step(**STEP_RETRY)
+async def move_switch_step(
+    workspace_id: str,
+    record: dict[str, Any],
+    files: list[list[str]],
+    stats: dict[str, list[Any]],
+) -> str | None:
+    return await move.switch(workspace_id, record, files, stats)
+
+
+async def _copy_and_verify(
+    workspace_id: str, record: dict[str, Any]
+) -> tuple[list[list[str]], dict[str, list[Any]]] | str:
+    """(the listed files, the copies' stats), or why the move fails."""
+    try:
+        files = await move_list_step(workspace_id, record)
+        for n, start in enumerate(range(0, len(files), move.BATCH), start=1):
+            conflict = await move_copy_step(workspace_id, record, files[start : start + move.BATCH])
+            if conflict is not None:
+                return conflict
+            faults.killpoint(f"knowledge.move_project_folder.batch_{n}")
+        stats = await move_verify_step(workspace_id, record, files)
+    except DBOSMaxStepRetriesExceeded:
+        log.exception("knowledge: the move of project %s could not copy", record["project_id"])
+        return "copy_failed"
+    if stats is None:
+        return "hash_mismatch"
+    return files, stats
+
+
+@DBOS.workflow(name=MOVE_WORKFLOW)
 async def move_project_folder(
     workspace_id: str, project_id: str, to_location: str, to_path: str
 ) -> dict[str, Any]:
-    """Copy the project's folder to `to_location`/`to_path`, verify every hash, switch."""
-    raise NotImplementedError("P3-14")
+    """Copy the project's folder to `to_location`/`to_path` in batches (kill point
+    `knowledge.move_project_folder.batch_<n>` after batch n), verify every hash, switch.
+    A resumed move copies only the batches left. The source is never changed. Once begun,
+    a move never stays `copying`: a copy that cannot be made (`target_conflict`, or
+    `copy_failed` once a step's retries run out), a hash mismatch or a source changed
+    while copying (`changed_during_move`) ends it `failed` with nothing switched."""
+    move_id = str(uuid.uuid5(_MOVE_IDS, DBOS.workflow_id or str(uuid.uuid4())))
+    record = await move_begin_step(workspace_id, project_id, to_location, to_path, move_id)
+    if "error" in record:
+        return {"status": "refused", "reason": record["error"]}
+    copied = await _copy_and_verify(workspace_id, record)
+    if isinstance(copied, str):
+        await move_fail_step(workspace_id, record["move_id"], copied)
+        return {"status": "failed", "reason": copied, "move_id": record["move_id"]}
+    files, stats = copied
+    failed = await move_switch_step(workspace_id, record, files, stats)
+    if failed is not None:
+        return {"status": "failed", "reason": failed, "move_id": record["move_id"]}
+    return {"status": "switched", "move_id": record["move_id"], "verified": len(stats)}
 
 
 # P2-18: the folder steps of the project archive workflows register with projects.
