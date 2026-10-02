@@ -10,6 +10,7 @@ imports it and `adapters/__init__` imports the api.
 
 from typing import Protocol
 
+import httpx
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
 from pydantic import BaseModel, Field
 
@@ -39,6 +40,19 @@ class OAuthRefused(AdapterRejected):
     def __init__(self, op: str, error: str) -> None:
         super().__init__(ADAPTER, op, error)
         self.error = error
+
+
+def require_https(url: str, op: str) -> None:
+    """AdapterRejected unless `url` is an absolute https URL. For the sign-in page, which
+    the user's browser opens: no SSRF guard sees that request, so the LAN allowance for
+    plain http (decision 7) cannot apply, and the MCP authorization spec serves every
+    authorization server endpoint over HTTPS."""
+    try:
+        parsed = httpx.URL(url)
+    except httpx.InvalidURL:
+        parsed = None
+    if parsed is None or parsed.scheme != "https" or not parsed.host:
+        raise AdapterRejected(ADAPTER, op, "the sign-in page must use https")
 
 
 class OAuthPort(Protocol):

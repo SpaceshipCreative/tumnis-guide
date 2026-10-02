@@ -289,21 +289,22 @@ async def connect_oauth(
 @DBOS.step(name="integrations_due_syncs")
 async def due_syncs() -> list[tuple[str, str]]:
     """(workspace, connection) for every due connection whose sync is not already queued
-    or running."""
+    or running. The running syncs are read first: one still running then is left out, and
+    one that ended before has left its connection not due (its finish sets the next sync
+    in the same transaction), so a due `syncing` connection here is a lapsed lease, never
+    one whose sync just ended."""
     now = _now_clock().now()
+    running = await DBOS.list_workflows_async(
+        name=api.SYNC_WORKFLOW, status=_ACTIVE, load_output=False
+    )
+    busy = {str(f.input["args"][1]) for f in running if f.input and len(f.input["args"]) > 1}
     async with db.app_sessionmaker()() as s, s.begin():
         workspaces = [str(w) for w in await audit.workspace_ids(s)]
     due: list[tuple[str, str]] = []
     for workspace_id in workspaces:
         found = await api.due_connections(_ctx(workspace_id), now=now)
-        due += [(workspace_id, str(conn)) for conn in found]
-    if not due:
-        return []
-    running = await DBOS.list_workflows_async(
-        name=api.SYNC_WORKFLOW, status=_ACTIVE, load_output=False
-    )
-    busy = {str(f.input["args"][1]) for f in running if f.input and len(f.input["args"]) > 1}
-    return [(ws, conn) for ws, conn in due if conn not in busy]
+        due += [(workspace_id, str(conn)) for conn in found if str(conn) not in busy]
+    return due
 
 
 @DBOS.workflow(name=api.TICK_WORKFLOW)

@@ -117,9 +117,35 @@ export class SignInNotReady extends Error {
   }
 }
 
+/** The provider's sign-in page is not an https URL, so the browser does not go there. */
+export class UnsafeSignInUrl extends Error {
+  constructor() {
+    super("The sign-in page is not an https URL.");
+    this.name = "UnsafeSignInUrl";
+  }
+}
+
+/**
+ * `url` when it is an absolute https URL; anything else (plain http, `javascript:`,
+ * `data:`, a relative path) throws UnsafeSignInUrl. The URL comes from the provider's
+ * metadata, and the MCP authorization spec serves every authorization server endpoint
+ * over HTTPS (the fakes do too).
+ */
+export function httpsOnly(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new UnsafeSignInUrl();
+  }
+  if (parsed.protocol !== "https:") throw new UnsafeSignInUrl();
+  return url;
+}
+
 /**
  * Starts the provider sign-in (`connect_oauth`) and polls until its page is ready: the
- * server never waits on the provider, so the URL may take a moment to appear.
+ * server never waits on the provider, so the URL may take a moment to appear. Only an
+ * https page is answered (`httpsOnly`).
  */
 export async function signInUrl(
   id: string,
@@ -139,7 +165,7 @@ export async function signInUrl(
       path: { connection_id: id },
       throwOnError: true,
     });
-    if (data.authorize_url) return data.authorize_url;
+    if (data.authorize_url) return httpsOnly(data.authorize_url);
     await wait(pollMs);
   }
   throw new SignInNotReady();
@@ -152,5 +178,7 @@ export function problemText(error: unknown, fallback: string): string {
   if (error instanceof ApiError) return error.problem.detail ?? error.message;
   if (error instanceof SignInNotReady)
     return "The sign-in page is taking too long. Try again in a moment.";
+  if (error instanceof UnsafeSignInUrl)
+    return "The sign-in page is not secure (it must use https), so it was not opened.";
   return fallback;
 }
