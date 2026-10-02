@@ -56,7 +56,37 @@ async def at(http: SessionClient, when: datetime) -> None:
 
 
 async def fire(http: SessionClient, name: str) -> httpx.Response:
+    """Fires the named test tick once the events already written have reached their
+    subscribers, as hours of night give them in production: a tick fired while a review
+    item's `review_item.added` is still on its way would not see that item's notification
+    (the morning release would count it in tomorrow's batch)."""
+    await _settled()
     return await http.post(f"/v1/test/tick/{name}")
+
+
+_RELAY_GRACE_S: Final = 1.0  # several relay polls (0.1 s) and events-queue polls (0.2 s)
+_SETTLE_TIMEOUT_S: Final = 30.0
+
+
+async def _settled() -> None:
+    """Waits for the relay to pick up what is in the outbox, then for every queued event
+    delivery to finish (bounded: a stuck delivery shows up in the test's own assertions)."""
+    import asyncio  # noqa: PLC0415
+
+    from dbos import DBOS  # noqa: PLC0415
+
+    from tumnis.core.events import EVENTS_QUEUE  # noqa: PLC0415
+
+    await asyncio.sleep(_RELAY_GRACE_S)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _SETTLE_TIMEOUT_S
+    while loop.time() < deadline:
+        queued = await DBOS.list_queued_workflows_async(
+            queue_name=EVENTS_QUEUE, load_input=False, load_output=False
+        )
+        if not queued:
+            return
+        await asyncio.sleep(0.1)
 
 
 async def _project(world: World, name: str) -> uuid.UUID:
