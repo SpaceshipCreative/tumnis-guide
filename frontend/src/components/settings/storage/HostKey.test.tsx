@@ -19,40 +19,37 @@ async function load<T>(path: string): Promise<T> {
 }
 
 describe("HostKey", () => {
-  test(
-    "[P3-14][FR-15.7] T-P3-14-19 fingerprint must be confirmed",
-    async () => {
-      const { HostKey } = await load<HostKeyModule>("./HostKey");
-      const onConfirm = vi.fn();
-      const user = userEvent.setup();
-      render(<HostKey fingerprint={SHOWN} onConfirm={onConfirm} />);
+  test("[P3-14][FR-15.7] T-P3-14-19 fingerprint must be confirmed", async () => {
+    const { HostKey } = await load<HostKeyModule>("./HostKey");
+    const onConfirm = vi.fn();
+    const user = userEvent.setup();
+    render(<HostKey fingerprint={SHOWN} onConfirm={onConfirm} />);
 
-      // The server's fingerprint is shown, with where to find the server's own.
-      expect(screen.getByText(SHOWN)).toBeInTheDocument();
-      expect(screen.getByText(/ssh-keygen -lf/)).toBeInTheDocument();
-      const field = screen.getByLabelText("Fingerprint from the server");
-      const confirm = screen.getByRole("button", { name: "Trust this server" });
-      expect(confirm).toBeDisabled();
+    // The server's fingerprint is shown, with where to find the server's own.
+    expect(screen.getByText(SHOWN)).toBeInTheDocument();
+    expect(screen.getByText(/ssh-keygen -lf/)).toBeInTheDocument();
+    const field = screen.getByLabelText("Fingerprint from the server");
+    const confirm = screen.getByRole("button", { name: "Trust this server" });
+    expect(confirm).toBeDisabled();
 
-      // A wrong fingerprint, typed: still disabled, and nothing sent.
-      await user.type(field, OTHER);
-      expect(confirm).toBeDisabled();
-      await user.click(confirm);
-      expect(onConfirm).not.toHaveBeenCalled();
+    // A wrong fingerprint, typed: still disabled, and nothing sent.
+    await user.type(field, OTHER);
+    expect(confirm).toBeDisabled();
+    await user.click(confirm);
+    expect(onConfirm).not.toHaveBeenCalled();
 
-      // Almost right (one character short): still disabled.
-      await user.clear(field);
-      await user.type(field, SHOWN.slice(0, -1));
-      expect(confirm).toBeDisabled();
+    // Almost right (one character short): still disabled.
+    await user.clear(field);
+    await user.type(field, SHOWN.slice(0, -1));
+    expect(confirm).toBeDisabled();
 
-      // The exact fingerprint, pasted with stray whitespace: enabled.
-      await user.clear(field);
-      await user.click(field);
-      await user.paste(`  ${SHOWN}\n`);
-      expect(confirm).toBeEnabled();
-      await user.click(confirm);
-      expect(onConfirm).toHaveBeenCalledTimes(1);
-      expect(onConfirm).toHaveBeenCalledWith(SHOWN);
-    },
-  );
+    // The exact fingerprint, pasted with stray whitespace: enabled.
+    await user.clear(field);
+    await user.click(field);
+    await user.paste(`  ${SHOWN}\n`);
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledWith(SHOWN);
+  });
 });
