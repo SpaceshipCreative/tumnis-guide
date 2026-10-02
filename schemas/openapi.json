@@ -3226,6 +3226,96 @@
         "title": "JustAddedOut",
         "type": "object"
       },
+      "KeyCapabilities": {
+        "description": "What a linked source's key may do, as far as its provider lets Tumnis check\n(`checked` False, every field None, when it does not).",
+        "properties": {
+          "bucket_scoped": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket Scoped"
+          },
+          "can_delete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Delete"
+          },
+          "can_list": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can List"
+          },
+          "can_read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Read"
+          },
+          "can_write": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Write"
+          },
+          "checked": {
+            "title": "Checked",
+            "type": "boolean"
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefix"
+          },
+          "source": {
+            "default": "none",
+            "enum": [
+              "b2_authorize_account",
+              "minio_account_info",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checked"
+        ],
+        "title": "KeyCapabilities",
+        "type": "object"
+      },
       "KeyCreated": {
         "properties": {
           "created_at": {
@@ -4331,6 +4421,25 @@
           "summary"
         ],
         "title": "NextStepOut",
+        "type": "object"
+      },
+      "NotificationAccepted": {
+        "properties": {
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "status": {
+            "const": "accepted",
+            "default": "accepted",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "queued"
+        ],
+        "title": "NotificationAccepted",
         "type": "object"
       },
       "OAuthStartOut": {
@@ -9003,6 +9112,304 @@
           "secret_key"
         ],
         "title": "S3ConfigIn",
+        "type": "object"
+      },
+      "S3PrefixMap": {
+        "description": "A bucket prefix and the project its files go to (None: the workspace knowledge\nbase).",
+        "properties": {
+          "prefix": {
+            "maxLength": 500,
+            "title": "Prefix",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          }
+        },
+        "required": [
+          "prefix"
+        ],
+        "title": "S3PrefixMap",
+        "type": "object"
+      },
+      "S3SourceCreated": {
+        "description": "The source as created, with its MinIO webhook token: shown once, never stored.",
+        "properties": {
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/KeyCapabilities"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "minio_commands": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Minio Commands",
+            "type": "array"
+          },
+          "path_style": {
+            "title": "Path Style",
+            "type": "boolean"
+          },
+          "prefixes": {
+            "items": {
+              "$ref": "#/components/schemas/S3PrefixMap"
+            },
+            "title": "Prefixes",
+            "type": "array"
+          },
+          "provider": {
+            "enum": [
+              "minio",
+              "b2",
+              "other"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "trusted": {
+            "title": "Trusted",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          },
+          "webhook_path": {
+            "title": "Webhook Path",
+            "type": "string"
+          },
+          "webhook_token": {
+            "title": "Webhook Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "endpoint",
+          "region",
+          "bucket",
+          "path_style",
+          "trusted",
+          "prefixes",
+          "capabilities",
+          "warning",
+          "last_sync_at",
+          "version",
+          "webhook_token",
+          "webhook_path",
+          "minio_commands"
+        ],
+        "title": "S3SourceCreated",
+        "type": "object"
+      },
+      "S3SourceIn": {
+        "properties": {
+          "access_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Access Key",
+            "type": "string"
+          },
+          "bucket": {
+            "maxLength": 63,
+            "title": "Bucket",
+            "type": "string"
+          },
+          "endpoint": {
+            "maxLength": 500,
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "path_style": {
+            "default": true,
+            "title": "Path Style",
+            "type": "boolean"
+          },
+          "prefixes": {
+            "items": {
+              "$ref": "#/components/schemas/S3PrefixMap"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Prefixes",
+            "type": "array"
+          },
+          "provider": {
+            "enum": [
+              "minio",
+              "b2",
+              "other"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "region": {
+            "default": "us-east-1",
+            "maxLength": 64,
+            "title": "Region",
+            "type": "string"
+          },
+          "secret_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Secret Key",
+            "type": "string"
+          },
+          "trusted": {
+            "default": false,
+            "title": "Trusted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider",
+          "endpoint",
+          "bucket",
+          "access_key",
+          "secret_key",
+          "prefixes"
+        ],
+        "title": "S3SourceIn",
+        "type": "object"
+      },
+      "S3SourceOut": {
+        "properties": {
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/KeyCapabilities"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "path_style": {
+            "title": "Path Style",
+            "type": "boolean"
+          },
+          "prefixes": {
+            "items": {
+              "$ref": "#/components/schemas/S3PrefixMap"
+            },
+            "title": "Prefixes",
+            "type": "array"
+          },
+          "provider": {
+            "enum": [
+              "minio",
+              "b2",
+              "other"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "trusted": {
+            "title": "Trusted",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "endpoint",
+          "region",
+          "bucket",
+          "path_style",
+          "trusted",
+          "prefixes",
+          "capabilities",
+          "warning",
+          "last_sync_at",
+          "version"
+        ],
+        "title": "S3SourceOut",
         "type": "object"
       },
       "SchemaRef": {
@@ -22827,6 +23234,437 @@
         ]
       }
     },
+    "/v1/knowledge/s3-sources": {
+      "get": {
+        "operationId": "knowledge_list_s3_sources",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/S3SourceOut"
+                  },
+                  "title": "Response Knowledge List S3 Sources",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "List S3 Sources",
+        "tags": [
+          "knowledge"
+        ]
+      },
+      "post": {
+        "operationId": "knowledge_create_s3_source",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/S3SourceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/S3SourceCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Create S3 Source",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/v1/knowledge/s3-sources/{connection_id}": {
+      "delete": {
+        "operationId": "knowledge_delete_s3_source",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Delete S3 Source",
+        "tags": [
+          "knowledge"
+        ]
+      },
+      "get": {
+        "operationId": "knowledge_get_s3_source",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/S3SourceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get S3 Source",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
     "/v1/knowledge/search": {
       "get": {
         "description": "Full-text search of a project's items and the workspace knowledge base (none: every\nproject the caller sees), citing document, heading path and page (FR-15.3), best\nfirst, a page at a time; the `search_knowledge` tool's twin. The parameters are\n`tools.SearchKnowledgeIn`'s, spelled out so the page's `cursor` and `limit` show.",
@@ -34253,6 +35091,172 @@
         "summary": "Get Usage",
         "tags": [
           "usage"
+        ]
+      }
+    },
+    "/v1/webhooks/minio/{connection_id}": {
+      "post": {
+        "operationId": "knowledge_minio_notification",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "EventName": {
+                    "type": "string"
+                  },
+                  "Key": {
+                    "type": "string"
+                  },
+                  "Records": {
+                    "items": {
+                      "properties": {
+                        "eventName": {
+                          "type": "string"
+                        },
+                        "s3": {
+                          "properties": {
+                            "bucket": {
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "object": {
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "Records"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Minio Notification",
+        "tags": [
+          "knowledge"
         ]
       }
     }

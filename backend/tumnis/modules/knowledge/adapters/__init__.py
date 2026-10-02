@@ -7,6 +7,8 @@ when the extract worker builds it (import-linter `api-never-calls-out`). Docling
 (`DoclingExtractor`, `FakeDocling`) is not an outside call: the pipeline builds it in the
 extract worker, and the extraction set (T-P1-16-06) runs it for real. The Obsidian vault
 readers (P3-12), `knowledge.obsidian_folder` and `knowledge.obsidian_git`, share `FakeVault`.
+An S3 linked source (P3-13) has its read-only connector, `knowledge.s3_source`, and the
+key capability check, `knowledge.key_capabilities`.
 """
 
 import importlib
@@ -19,8 +21,16 @@ from tumnis.modules.knowledge.adapters.obsidian.fake import FakeVault
 from tumnis.modules.knowledge.adapters.obsidian.folder import FolderReader
 from tumnis.modules.knowledge.adapters.obsidian.git import GitReader
 from tumnis.modules.knowledge.adapters.obsidian.port import VaultReader
-from tumnis.modules.knowledge.adapters.port import Scanner, Vision
+from tumnis.modules.knowledge.adapters.port import (
+    KeyCapabilityCheck,
+    S3SourceReader,
+    Scanner,
+    Vision,
+)
 from tumnis.modules.knowledge.adapters.s3 import S3Storage
+from tumnis.modules.knowledge.adapters.s3_source.capability import KeyCapabilityChecker
+from tumnis.modules.knowledge.adapters.s3_source.connector import S3SourceConnector
+from tumnis.modules.knowledge.adapters.s3_source.fake import FakeKeyCapabilities, FakeS3Source
 from tumnis.modules.knowledge.adapters.server_path import ServerPathStorage
 from tumnis.modules.knowledge.adapters.sftp import SftpStorage
 from tumnis.modules.knowledge.storage import StorageBackend
@@ -43,3 +53,12 @@ register_adapter("knowledge.clamav", port=Scanner, real=ClamAV, fake=FakeClamAV)
 register_adapter("knowledge.vision", port=Vision, real=build_vision, fake=FakeVision)
 register_adapter("knowledge.obsidian_folder", port=VaultReader, real=FolderReader, fake=FakeVault)
 register_adapter("knowledge.obsidian_git", port=VaultReader, real=GitReader, fake=FakeVault)
+register_adapter(
+    "knowledge.s3_source", port=S3SourceReader, real=S3SourceConnector, fake=FakeS3Source
+)
+register_adapter(
+    "knowledge.key_capabilities",
+    port=KeyCapabilityCheck,
+    real=KeyCapabilityChecker,
+    fake=FakeKeyCapabilities,
+)

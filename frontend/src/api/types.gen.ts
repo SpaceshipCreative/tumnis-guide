@@ -1785,6 +1785,47 @@ export type JustAddedOut = {
 };
 
 /**
+ * KeyCapabilities
+ *
+ * What a linked source's key may do, as far as its provider lets Tumnis check
+ * (`checked` False, every field None, when it does not).
+ */
+export type KeyCapabilities = {
+  /**
+   * Bucket Scoped
+   */
+  bucket_scoped?: boolean | null;
+  /**
+   * Can Delete
+   */
+  can_delete?: boolean | null;
+  /**
+   * Can List
+   */
+  can_list?: boolean | null;
+  /**
+   * Can Read
+   */
+  can_read?: boolean | null;
+  /**
+   * Can Write
+   */
+  can_write?: boolean | null;
+  /**
+   * Checked
+   */
+  checked: boolean;
+  /**
+   * Prefix
+   */
+  prefix?: string | null;
+  /**
+   * Source
+   */
+  source?: "b2_authorize_account" | "minio_account_info" | "none";
+};
+
+/**
  * KeyCreated
  */
 export type KeyCreated = {
@@ -2379,6 +2420,20 @@ export type NextStepOut = {
    * Timer Minutes
    */
   timer_minutes?: number;
+};
+
+/**
+ * NotificationAccepted
+ */
+export type NotificationAccepted = {
+  /**
+   * Queued
+   */
+  queued: number;
+  /**
+   * Status
+   */
+  status?: "accepted";
 };
 
 /**
@@ -4790,6 +4845,181 @@ export type S3ConfigIn = {
    * Sse
    */
   sse?: "AES256" | null;
+};
+
+/**
+ * S3PrefixMap
+ *
+ * A bucket prefix and the project its files go to (None: the workspace knowledge
+ * base).
+ */
+export type S3PrefixMap = {
+  /**
+   * Prefix
+   */
+  prefix: string;
+  /**
+   * Project Id
+   */
+  project_id?: string | null;
+};
+
+/**
+ * S3SourceCreated
+ *
+ * The source as created, with its MinIO webhook token: shown once, never stored.
+ */
+export type S3SourceCreated = {
+  /**
+   * Bucket
+   */
+  bucket: string;
+  capabilities: KeyCapabilities;
+  /**
+   * Endpoint
+   */
+  endpoint: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Last Sync At
+   */
+  last_sync_at: string | null;
+  /**
+   * Minio Commands
+   */
+  minio_commands: Array<string>;
+  /**
+   * Path Style
+   */
+  path_style: boolean;
+  /**
+   * Prefixes
+   */
+  prefixes: Array<S3PrefixMap>;
+  /**
+   * Provider
+   */
+  provider: "minio" | "b2" | "other";
+  /**
+   * Region
+   */
+  region: string;
+  /**
+   * Trusted
+   */
+  trusted: boolean;
+  /**
+   * Version
+   */
+  version: number;
+  /**
+   * Warning
+   */
+  warning: string | null;
+  /**
+   * Webhook Path
+   */
+  webhook_path: string;
+  /**
+   * Webhook Token
+   */
+  webhook_token: string;
+};
+
+/**
+ * S3SourceIn
+ */
+export type S3SourceIn = {
+  /**
+   * Access Key
+   */
+  access_key: string;
+  /**
+   * Bucket
+   */
+  bucket: string;
+  /**
+   * Endpoint
+   */
+  endpoint: string;
+  /**
+   * Path Style
+   */
+  path_style?: boolean;
+  /**
+   * Prefixes
+   */
+  prefixes: Array<S3PrefixMap>;
+  /**
+   * Provider
+   */
+  provider: "minio" | "b2" | "other";
+  /**
+   * Region
+   */
+  region?: string;
+  /**
+   * Secret Key
+   */
+  secret_key: string;
+  /**
+   * Trusted
+   */
+  trusted?: boolean;
+};
+
+/**
+ * S3SourceOut
+ */
+export type S3SourceOut = {
+  /**
+   * Bucket
+   */
+  bucket: string;
+  capabilities: KeyCapabilities;
+  /**
+   * Endpoint
+   */
+  endpoint: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Last Sync At
+   */
+  last_sync_at: string | null;
+  /**
+   * Path Style
+   */
+  path_style: boolean;
+  /**
+   * Prefixes
+   */
+  prefixes: Array<S3PrefixMap>;
+  /**
+   * Provider
+   */
+  provider: "minio" | "b2" | "other";
+  /**
+   * Region
+   */
+  region: string;
+  /**
+   * Trusted
+   */
+  trusted: boolean;
+  /**
+   * Version
+   */
+  version: number;
+  /**
+   * Warning
+   */
+  warning: string | null;
 };
 
 /**
@@ -11742,6 +11972,238 @@ export type KnowledgeGetQuotaResponses = {
 export type KnowledgeGetQuotaResponse =
   KnowledgeGetQuotaResponses[keyof KnowledgeGetQuotaResponses];
 
+export type KnowledgeListS3SourcesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/knowledge/s3-sources";
+};
+
+export type KnowledgeListS3SourcesErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeListS3SourcesError =
+  KnowledgeListS3SourcesErrors[keyof KnowledgeListS3SourcesErrors];
+
+export type KnowledgeListS3SourcesResponses = {
+  /**
+   * Response Knowledge List S3 Sources
+   *
+   * Successful Response
+   */
+  200: Array<S3SourceOut>;
+};
+
+export type KnowledgeListS3SourcesResponse =
+  KnowledgeListS3SourcesResponses[keyof KnowledgeListS3SourcesResponses];
+
+export type KnowledgeCreateS3SourceData = {
+  body: S3SourceIn;
+  path?: never;
+  query?: never;
+  url: "/v1/knowledge/s3-sources";
+};
+
+export type KnowledgeCreateS3SourceErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeCreateS3SourceError =
+  KnowledgeCreateS3SourceErrors[keyof KnowledgeCreateS3SourceErrors];
+
+export type KnowledgeCreateS3SourceResponses = {
+  /**
+   * Successful Response
+   */
+  201: S3SourceCreated;
+};
+
+export type KnowledgeCreateS3SourceResponse =
+  KnowledgeCreateS3SourceResponses[keyof KnowledgeCreateS3SourceResponses];
+
+export type KnowledgeDeleteS3SourceData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/s3-sources/{connection_id}";
+};
+
+export type KnowledgeDeleteS3SourceErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeDeleteS3SourceError =
+  KnowledgeDeleteS3SourceErrors[keyof KnowledgeDeleteS3SourceErrors];
+
+export type KnowledgeDeleteS3SourceResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type KnowledgeDeleteS3SourceResponse =
+  KnowledgeDeleteS3SourceResponses[keyof KnowledgeDeleteS3SourceResponses];
+
+export type KnowledgeGetS3SourceData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/s3-sources/{connection_id}";
+};
+
+export type KnowledgeGetS3SourceErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeGetS3SourceError =
+  KnowledgeGetS3SourceErrors[keyof KnowledgeGetS3SourceErrors];
+
+export type KnowledgeGetS3SourceResponses = {
+  /**
+   * Successful Response
+   */
+  200: S3SourceOut;
+};
+
+export type KnowledgeGetS3SourceResponse =
+  KnowledgeGetS3SourceResponses[keyof KnowledgeGetS3SourceResponses];
+
 export type KnowledgeSearchData = {
   body?: never;
   path?: never;
@@ -17432,3 +17894,77 @@ export type UsageGetUsageResponses = {
 
 export type UsageGetUsageResponse =
   UsageGetUsageResponses[keyof UsageGetUsageResponses];
+
+export type KnowledgeMinioNotificationData = {
+  body: {
+    EventName?: string;
+    Key?: string;
+    Records: Array<{
+      eventName?: string;
+      s3?: {
+        bucket?: {
+          name?: string;
+        };
+        object?: {
+          key?: string;
+        };
+      };
+    }>;
+  };
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/webhooks/minio/{connection_id}";
+};
+
+export type KnowledgeMinioNotificationErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeMinioNotificationError =
+  KnowledgeMinioNotificationErrors[keyof KnowledgeMinioNotificationErrors];
+
+export type KnowledgeMinioNotificationResponses = {
+  /**
+   * Successful Response
+   */
+  202: NotificationAccepted;
+};
+
+export type KnowledgeMinioNotificationResponse =
+  KnowledgeMinioNotificationResponses[keyof KnowledgeMinioNotificationResponses];

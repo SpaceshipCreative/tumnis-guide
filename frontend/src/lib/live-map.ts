@@ -171,6 +171,10 @@ export const NOT_LIVE = [
   "calendarOauthCallback",
   // Storage locations change only from the Settings screen, which refetches after each write.
   "knowledgeListLocations",
+  // S3 linked sources (P3-13) are read when Settings > Linked sources opens, which
+  // refetches after each connect or remove; a sync's progress shows on the next open.
+  "knowledgeListS3Sources",
+  "knowledgeGetS3Source",
   // Obsidian vaults (P3-12) are read when Settings > Obsidian opens, which refetches after
   // each create, connect or remove and polls a preview until the worker answers it.
   "knowledgeListObsidianVaults",

@@ -90,21 +90,26 @@ import {
   knowledgeConnectObsidianVault,
   knowledgeCreateLocation,
   knowledgeCreateObsidianVault,
+  knowledgeCreateS3Source,
   knowledgeCreateTextEntry,
   knowledgeDeleteAtSource,
   knowledgeDeleteDocument,
   knowledgeDeleteObsidianVault,
+  knowledgeDeleteS3Source,
   knowledgeGetBrief,
   knowledgeGetDocument,
   knowledgeGetFile,
   knowledgeGetObsidianPreview,
   knowledgeGetObsidianVault,
   knowledgeGetQuota,
+  knowledgeGetS3Source,
   knowledgeIssueDeleteConfirmation,
   knowledgeListDocuments,
   knowledgeListLocations,
   knowledgeListObsidianVaults,
+  knowledgeListS3Sources,
   knowledgeListVersions,
+  knowledgeMinioNotification,
   knowledgeMoveProjectFolder,
   knowledgePreviewObsidianVault,
   knowledgeProbeObsidianHostKey,
@@ -429,6 +434,9 @@ import type {
   KnowledgeCreateObsidianVaultData,
   KnowledgeCreateObsidianVaultError,
   KnowledgeCreateObsidianVaultResponse,
+  KnowledgeCreateS3SourceData,
+  KnowledgeCreateS3SourceError,
+  KnowledgeCreateS3SourceResponse,
   KnowledgeCreateTextEntryData,
   KnowledgeCreateTextEntryError,
   KnowledgeCreateTextEntryResponse,
@@ -441,6 +449,9 @@ import type {
   KnowledgeDeleteObsidianVaultData,
   KnowledgeDeleteObsidianVaultError,
   KnowledgeDeleteObsidianVaultResponse,
+  KnowledgeDeleteS3SourceData,
+  KnowledgeDeleteS3SourceError,
+  KnowledgeDeleteS3SourceResponse,
   KnowledgeGetBriefData,
   KnowledgeGetBriefError,
   KnowledgeGetBriefResponse,
@@ -459,6 +470,9 @@ import type {
   KnowledgeGetQuotaData,
   KnowledgeGetQuotaError,
   KnowledgeGetQuotaResponse,
+  KnowledgeGetS3SourceData,
+  KnowledgeGetS3SourceError,
+  KnowledgeGetS3SourceResponse,
   KnowledgeIssueDeleteConfirmationData,
   KnowledgeIssueDeleteConfirmationError,
   KnowledgeIssueDeleteConfirmationResponse,
@@ -471,9 +485,15 @@ import type {
   KnowledgeListObsidianVaultsData,
   KnowledgeListObsidianVaultsError,
   KnowledgeListObsidianVaultsResponse,
+  KnowledgeListS3SourcesData,
+  KnowledgeListS3SourcesError,
+  KnowledgeListS3SourcesResponse,
   KnowledgeListVersionsData,
   KnowledgeListVersionsError,
   KnowledgeListVersionsResponse,
+  KnowledgeMinioNotificationData,
+  KnowledgeMinioNotificationError,
+  KnowledgeMinioNotificationResponse,
   KnowledgeMoveProjectFolderData,
   KnowledgeMoveProjectFolderError,
   KnowledgeMoveProjectFolderResponse,
@@ -3713,6 +3733,116 @@ export const knowledgeGetQuotaOptions = (
       return data;
     },
     queryKey: knowledgeGetQuotaQueryKey(options),
+  });
+
+export const knowledgeListS3SourcesQueryKey = (
+  options?: Options<KnowledgeListS3SourcesData>,
+) => createQueryKey("knowledgeListS3Sources", options);
+
+/**
+ * List S3 Sources
+ */
+export const knowledgeListS3SourcesOptions = (
+  options?: Options<KnowledgeListS3SourcesData>,
+) =>
+  queryOptions<
+    KnowledgeListS3SourcesResponse,
+    KnowledgeListS3SourcesError,
+    KnowledgeListS3SourcesResponse,
+    ReturnType<typeof knowledgeListS3SourcesQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeListS3Sources({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeListS3SourcesQueryKey(options),
+  });
+
+/**
+ * Create S3 Source
+ */
+export const knowledgeCreateS3SourceMutation = (
+  options?: Partial<Options<KnowledgeCreateS3SourceData>>,
+): UseMutationOptions<
+  KnowledgeCreateS3SourceResponse,
+  KnowledgeCreateS3SourceError,
+  Options<KnowledgeCreateS3SourceData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeCreateS3SourceResponse,
+    KnowledgeCreateS3SourceError,
+    Options<KnowledgeCreateS3SourceData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeCreateS3Source({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Delete S3 Source
+ */
+export const knowledgeDeleteS3SourceMutation = (
+  options?: Partial<Options<KnowledgeDeleteS3SourceData>>,
+): UseMutationOptions<
+  KnowledgeDeleteS3SourceResponse,
+  KnowledgeDeleteS3SourceError,
+  Options<KnowledgeDeleteS3SourceData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeDeleteS3SourceResponse,
+    KnowledgeDeleteS3SourceError,
+    Options<KnowledgeDeleteS3SourceData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeDeleteS3Source({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const knowledgeGetS3SourceQueryKey = (
+  options: Options<KnowledgeGetS3SourceData>,
+) => createQueryKey("knowledgeGetS3Source", options);
+
+/**
+ * Get S3 Source
+ */
+export const knowledgeGetS3SourceOptions = (
+  options: Options<KnowledgeGetS3SourceData>,
+) =>
+  queryOptions<
+    KnowledgeGetS3SourceResponse,
+    KnowledgeGetS3SourceError,
+    KnowledgeGetS3SourceResponse,
+    ReturnType<typeof knowledgeGetS3SourceQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetS3Source({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetS3SourceQueryKey(options),
   });
 
 export const knowledgeSearchQueryKey = (
@@ -7023,3 +7153,30 @@ export const usageGetUsageOptions = (options: Options<UsageGetUsageData>) =>
     },
     queryKey: usageGetUsageQueryKey(options),
   });
+
+/**
+ * Minio Notification
+ */
+export const knowledgeMinioNotificationMutation = (
+  options?: Partial<Options<KnowledgeMinioNotificationData>>,
+): UseMutationOptions<
+  KnowledgeMinioNotificationResponse,
+  KnowledgeMinioNotificationError,
+  Options<KnowledgeMinioNotificationData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeMinioNotificationResponse,
+    KnowledgeMinioNotificationError,
+    Options<KnowledgeMinioNotificationData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeMinioNotification({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
