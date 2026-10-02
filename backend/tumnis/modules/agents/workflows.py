@@ -1475,10 +1475,12 @@ async def pick_runner_step(workspace_id: str, link_name: str | None = None) -> s
 @DBOS.step()
 async def send_provision_step(  # noqa: PLR0917  # the message's fields, spelled out
     workspace_id: str, workflow_id: str, profile_id: str, runner_id: str, name: str, mode: str
-) -> None:
+) -> bool:
     """The profile on its runner and the `provision` mailbox row (message id
     uuid5(request id, "provision"), request id uuid5 of the workflow id, so a replayed step
-    queues nothing new), then the NOTIFY that wakes the runner's socket."""
+    queues nothing new), then the NOTIFY that wakes the runner's socket. Only while the
+    profile is still `provisioning`: one taken over meanwhile (the seed adopts it; DBOS
+    cannot stop a step already running) keeps its runner and gets no message (False)."""
     request_id = api.provision_request_id(workflow_id)
     message = Provision(
         message_id=api.provision_message_id(request_id),
@@ -1491,11 +1493,14 @@ async def send_provision_step(  # noqa: PLR0917  # the message's fields, spelled
         template_version=api.TEMPLATE_VERSION,
     )
     async with tenant_session(_ctx(workspace_id)) as s:
-        await s.execute(
+        placed = await s.scalar(
             update(_profiles)
-            .where(_profiles.c.id == UUID(profile_id))
+            .where(_profiles.c.id == UUID(profile_id), _profiles.c.status == "provisioning")
             .values(runner_id=UUID(runner_id))
+            .returning(_profiles.c.id)
         )
+        if placed is None:
+            return False
         await s.execute(
             insert(_messages)
             .values(
@@ -1509,6 +1514,7 @@ async def send_provision_step(  # noqa: PLR0917  # the message's fields, spelled
         )
         await api.notify_runner(s, UUID(runner_id))
     faults.killpoint("agents.send_provision_step")  # the mailbox row has committed
+    return True
 
 
 def _failure(reply: ProvisionResult | None) -> tuple[str, str | None]:
@@ -1628,9 +1634,11 @@ async def provision_profile(
             workspace_id, project_id, chosen, attempt, None, "no_runner"
         )
     workflow_id = api.provision_workflow_id(UUID(project_id), attempt)
-    await send_provision_step(
+    sent = await send_provision_step(
         workspace_id, workflow_id, chosen["profile_id"], runner, chosen["name"], chosen["mode"]
     )
+    if not sent:  # the profile was taken over meanwhile: nothing to wait for
+        return "superseded"
     reply = await DBOS.recv_async(
         topic=api.provision_topic(UUID(project_id)), timeout_seconds=api.provision_timeout_s()
     )

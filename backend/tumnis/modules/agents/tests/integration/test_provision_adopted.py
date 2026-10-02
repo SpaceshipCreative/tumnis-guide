@@ -146,3 +146,37 @@ async def test_a_ready_provision_leaves_an_adopted_profile_alone(
     ) == [("acme-seed", "ready", None)]
     [(inventory,)] = _owner(db, "SELECT inventory FROM runners WHERE id = %s", (runner_id,))
     assert all(entry.get("name") != "acme-site" for entry in inventory or [])
+
+
+async def test_sending_a_provision_leaves_an_adopted_profile_alone(
+    dbos: type[DBOS],
+    workspace: WorkspaceHandle,
+    clock: FixedClock,
+    db: DbUrls,
+    pepper_file: PepperFile,  # the runners' device tokens are HMACs with the pepper
+) -> None:
+    """The provision's send step runs after the seed adopted the profile: the profile keeps
+    the seed's runner, no `provision` message is queued under the old name, and the step
+    says nothing was sent."""
+    from tests.fakes.fake_runner import create_runner  # noqa: PLC0415
+    from tumnis.modules.agents import workflows  # noqa: PLC0415
+
+    project_id = await _project(workspace, clock, "Acme site")
+    seed_runner, _token = create_runner(workspace, clock, "homelab")
+    other_runner, _other = create_runner(workspace, clock, "spare")
+    profile_id = _adopted(db, project_id, seed_runner)
+
+    sent = await workflows.send_provision_step(
+        str(workspace.id),
+        f"provision:{project_id}",
+        str(profile_id),
+        str(other_runner),
+        "acme-site",
+        "create",
+    )
+
+    assert sent is False
+    assert _owner(db, "SELECT runner_id FROM agent_profiles WHERE id = %s", (profile_id,)) == [
+        (seed_runner,)
+    ]
+    assert _owner(db, "SELECT count(*) FROM runner_messages WHERE type = 'provision'", ()) == [(0,)]
