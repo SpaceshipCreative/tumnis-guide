@@ -27,10 +27,12 @@ run's `runs` row and `dispatched` event as a daemon dispatch does (`record_dispa
 mailbox row), then plays the script stored for `<profile>/<skill>`
 (`fakes.runner.script(profile, skill, result)`): after the script's delay, the named
 recording, fitted to the packet (`scripted_output`), is the run's `result` event and is
-sent to the waiting workflow, as the api hands over a daemon's result. Without a script
-the fake answers nothing, like a runner that never replies (the workflow times out), until
-a test reset removes the run: then it reports its runner lost, so the workflow ends at once
-instead of holding its queue slot into the next test (`_watch_silent`, T-SEED-23).
+sent to the waiting workflow, as the api hands over a daemon's result. A test reset that
+removes the run while the script's delay runs makes the fake report its runner lost, so the
+workflow ends at once instead of holding its queue slot into the next test (T-SEED-23,
+T-SEED-24). Without a script for the skill the fake answers at once with a failed result,
+error `no_script: <profile>/<skill>` (Scott decision 74, T-SEED-20), instead of staying
+silent for the run timeout.
 Phase 1 dispatches never reach the phase 2 hook (`dispatched`): they are not `run` packets.
 
 The playback is not durable: a worker that dies mid-script loses the rest (a fake).
@@ -75,7 +77,7 @@ _log = logging.getLogger(__name__)
 STEP_PAUSE_S: float = 0.1
 RESULT_HOLD_S: float = 4.0
 QUESTION_POLL_S: float = 0.5  # how often a question's playback re-reads the answer
-SILENT_POLL_S: float = 0.5  # how often a silent (unscripted) run checks it still exists
+DELAY_POLL_S: float = 0.5  # how often a phase 1 run checks it still exists while it waits
 # The fake runner speaks as a device, as a real runner's handler does (`device:<runner>`);
 # it has no runner row, so the nil id.
 FAKE_RUNNER_ACTOR: Final = ActorRef(f"device:{UUID(int=0)}")
@@ -289,8 +291,8 @@ async def dispatch_skill(ctx: WorkspaceContext, packet: TaskPacket) -> None:
         return
     if script is not None and (script.profile, script.skill) == (profile.name, packet.skill):
         work = _answer(ctx, packet, script, workflow_id)
-    else:  # no script for this skill: the fake stays silent (T-SEED-20) until a reset
-        work = _watch_silent(ctx, packet, workflow_id)
+    else:  # no script for this skill: an immediate failure (Scott decision 74, T-SEED-20)
+        work = _refuse(ctx, packet, profile.name, workflow_id)
     # A fresh context: the playback outlives this step and must not act inside its workflow.
     playback = asyncio.get_running_loop().create_task(work, context=contextvars.Context())
     _playing.add(playback)
@@ -300,17 +302,18 @@ async def dispatch_skill(ctx: WorkspaceContext, packet: TaskPacket) -> None:
 async def _answer(
     ctx: WorkspaceContext, packet: TaskPacket, script: Phase1Script, workflow_id: str
 ) -> None:
-    """The recording as the run's result, after the script's delay: a `result` run event
-    (once per run) and the message the waiting `run_skill` receives (idempotent too). A
-    run a test reset removed meanwhile is told its runner is lost instead (T-SEED-24)."""
-    await asyncio.sleep(script.delay_ms / 1000)
+    """The recording as the run's result, after the script's delay. A run a test reset
+    removed during the delay, or before the answer, is told its runner is lost instead
+    (T-SEED-23, T-SEED-24)."""
+    run_id = packet.run_id
+    if not await _wait_while_present(ctx, run_id, script.delay_ms / 1000):
+        await _runner_lost(workflow_id, run_id)
+        return
     try:
         output = scripted_output(recorded_reply(script.result), packet.model_dump(mode="json"))
     except ValueError:
         _log.warning("the fake runner has no usable recording for %s", packet.skill)
         return
-    run_id = packet.run_id
-    message_id = uuid5(run_id, "fake-result")
     message = {
         "type": "result",
         "run_id": str(run_id),
@@ -319,6 +322,34 @@ async def _answer(
         "output_json": output,
         "error": None,
     }
+    await _deliver(ctx, workflow_id, run_id, message)
+
+
+async def _refuse(
+    ctx: WorkspaceContext, packet: TaskPacket, profile: str, workflow_id: str
+) -> None:
+    """No script for this skill: a failed result at once, as a runner that cannot run the
+    skill answers (Scott decision 74), so the waiting workflow ends now instead of at its
+    run timeout."""
+    run_id = packet.run_id
+    message = {
+        "type": "result",
+        "run_id": str(run_id),
+        "status": "failed",
+        "exit_code": 1,
+        "output_json": None,
+        "error": f"no_script: {profile}/{packet.skill}",
+    }
+    await _deliver(ctx, workflow_id, run_id, message)
+
+
+async def _deliver(
+    ctx: WorkspaceContext, workflow_id: str, run_id: UUID, message: dict[str, Any]
+) -> None:
+    """The fake's result as the run's `result` event (once per run) and the message the
+    waiting `run_skill` receives (idempotent too), as the api hands over a daemon's
+    result; a run a test reset removed is told its runner is lost instead."""
+    message_id = uuid5(run_id, "fake-result")
     async with tenant_session(ctx) as s:
         present = await s.scalar(select(_runs.c.id).where(_runs.c.id == run_id))
         if present is not None:
@@ -331,25 +362,17 @@ async def _answer(
     )
 
 
-async def _watch_silent(ctx: WorkspaceContext, packet: TaskPacket, workflow_id: str) -> None:
-    """An unscripted run answers nothing, like a runner that never replies, while its
-    `runs` row lasts. Once a test reset has removed it (T-SEED-23), the fake tells the
-    waiting `run_skill` its runner is lost: the workflow then ends within seconds instead
-    of holding its queue slot (a morning build holds the one-at-a-time maintenance queue)
-    for the run timeout into the next test. A run that ends, or outlives its timeout, is
-    no longer watched."""
-    run_id = packet.run_id
+async def _wait_while_present(ctx: WorkspaceContext, run_id: UUID, delay_s: float) -> bool:
+    """Wait `delay_s`, checking every DELAY_POLL_S that the run's row still exists. False
+    as soon as it is gone (a test reset removed it), True once the delay has passed."""
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + packet.timeout_s
-    while loop.time() < deadline:
+    deadline = loop.time() + delay_s
+    while (remaining := deadline - loop.time()) > 0:
+        await asyncio.sleep(min(DELAY_POLL_S, remaining))
         async with tenant_session(ctx) as s:
-            status = await s.scalar(select(_runs.c.status).where(_runs.c.id == run_id))
-        if status is None:
-            await _runner_lost(workflow_id, run_id)
-            return
-        if status not in _OPEN:
-            return
-        await asyncio.sleep(SILENT_POLL_S)
+            if await s.scalar(select(_runs.c.id).where(_runs.c.id == run_id)) is None:
+                return False
+    return True
 
 
 async def _runner_lost(workflow_id: str, run_id: UUID) -> None:
