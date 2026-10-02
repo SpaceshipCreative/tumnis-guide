@@ -80,12 +80,18 @@ class DeliveryWorld(PushWorld):
     # --- reading -----------------------------------------------------------------------
 
     def notify_runs(self) -> list[dict[str, Any]]:
-        return rows(
-            self.db,
-            "SELECT * FROM runs WHERE workspace_id = %s AND kind = 'notify'"
-            " ORDER BY created_at, id",
-            self.workspace.id,
-        )
+        """The workspace's `notify` runs, each with the packet the runner received for it
+        (`packet`): a skill run (`run_skill`) keeps no packet on its `runs` row."""
+        sent = {str(m.run_id): m.packet for m in self.runner.runs()}
+        return [
+            {**run, "packet": sent.get(str(run["id"]), run.get("packet"))}
+            for run in rows(
+                self.db,
+                "SELECT * FROM runs WHERE workspace_id = %s AND kind = 'notify'"
+                " ORDER BY created_at, id",
+                self.workspace.id,
+            )
+        ]
 
     def runs_of(self, profile_id: UUID) -> list[dict[str, Any]]:
         return rows(
