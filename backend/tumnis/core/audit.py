@@ -30,12 +30,13 @@ from tumnis.core.types import SYSTEM_ACTOR
 
 GENESIS: Final = bytes(32)
 PROJECT_KEY: Final = "project_id"  # the details key a project's rows carry (P2-17)
-# "text" inside "context" is no text (P3-09: a purge's `context_items` count is audited).
 SENSITIVE_KEY: Final = re.compile(
-    r"(token|secret|password|passwd|hmac|key|authorization|cookie|body|prompt|content"
-    r"|(?<!con)text)",
+    r"(token|secret|password|passwd|hmac|key|authorization|cookie|body|prompt|content|text)",
     re.IGNORECASE,
 )
+# Exact keys SENSITIVE_KEY matches that hold no secret, checked first. `context_items` is
+# a count (P3-09: how many context items a purge marked), whose name holds "text".
+NOT_SENSITIVE_KEYS: Final = frozenset({"context_items"})
 MAX_DETAIL_STR: Final = 200  # plan default
 # A Tumnis credential (API key, task token, device token) wherever it sits in a string.
 CREDENTIAL: Final = re.compile(r"tm[ntd]_[A-Za-z0-9_\-]")
@@ -60,7 +61,7 @@ def redact_details(details: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _redact_value(key: str, value: Any) -> Any:
-    if SENSITIVE_KEY.search(key):
+    if key not in NOT_SENSITIVE_KEYS and SENSITIVE_KEY.search(key):
         return REDACTED
     return _clean(value)
 
