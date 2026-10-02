@@ -77,6 +77,7 @@ from tumnis.modules.decisions.embeddings_slot import (
     configure_embeddings,
     embed,
     embedders_for,
+    hosted_embeddings_state,
     query_timeout_s,
     use_embedders,
 )
@@ -135,6 +136,7 @@ from tumnis.modules.decisions.speech_slot import (
     clip_ids,
     configure_speech,
     get_clip,
+    hosted_speech_state,
     speak,
     use_speech,
     voice_settings,
@@ -206,6 +208,8 @@ __all__ = [
     "evaluate",
     "get_clip",
     "get_provider_config",
+    "hosted_embeddings_state",
+    "hosted_speech_state",
     "labeled_decisions",
     "load_set",
     "put_provider_config",
@@ -226,6 +230,9 @@ __all__ = [
 _log = structlog.get_logger(__name__)
 
 Slot = Literal["decisions", "generation", "speech", "embeddings"]
+# Slots whose hosted provider key lives in the server's .env only (Scott decision 75):
+# `SPEECH__HOSTED_API_KEY`, `EMBEDDINGS__HOSTED_API_KEY`. Never sealed into provider_configs.
+ENV_KEY_SLOTS: Final = frozenset({"speech", "embeddings"})
 PINNED_JEV_DEFAULT: Final = "jev-1.13.0"  # plan default; the row's model_version wins
 
 
@@ -248,6 +255,10 @@ class ProviderConfigIn(BaseModel):
         if self.primary == "jev" and not is_pinned_model(self.model_version):
             raise ValueError(
                 f"model_version must be a pinned versioned id, not {self.model_version!r}"
+            )
+        if self.slot in ENV_KEY_SLOTS and self.api_key is not None:
+            raise ValueError(
+                f"the {self.slot} slot's key lives in the server's .env, not the database"
             )
         return self
 

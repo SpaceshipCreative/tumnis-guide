@@ -6,9 +6,12 @@ keeps for `CLIP_TTL_MIN` minutes. Re-exported by `decisions.api`.
   the browser's own speech synthesis as the engine. Only `engine: server` makes clips here.
 - Engines: the worker configures the slot from `Settings.speech` (`configure_speech`): a
   local Piper HTTP server, or nothing (unset `SPEECH__PIPER_URL`: no server engine, so the
-  PWA speaks with the browser's voice). Under `TUMNIS_ADAPTERS=fake` a configured Piper
-  answers with the fake. A hosted provider is never configured from the environment (its
-  key storage is a Scott item). Tests install engines with `use_speech`.
+  PWA speaks with the browser's voice), and the optional hosted provider from
+  `SPEECH__HOSTED_*`. Its key comes from the server's .env through Settings only, never
+  from the database (Scott decision 75); without the endpoint, the model and the key the
+  hosted engine is `not_configured` (`hosted_speech_state`), and a partial setup is
+  logged once by variable name. Under `TUMNIS_ADAPTERS=fake` a configured engine answers
+  with its fake. Tests install engines with `use_speech`.
 - Routing (`rules.speech_route`): hosted only when the workspace allowed it and never for a
   local-only project; Piper is local.
 - `speak` runs in the worker (the notifications subscriber); the real engines are built
@@ -22,9 +25,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 from uuid import UUID
 
+import structlog
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Table, delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -43,7 +47,7 @@ from tumnis.modules.decisions.adapters.speech.base import (
     WAV_MIME,
     SpeechTTS,
 )
-from tumnis.modules.decisions.adapters.speech.fake import FakeTTS
+from tumnis.modules.decisions.adapters.speech.fake import FakeHostedTTS, FakeTTS
 from tumnis.modules.decisions.models import SpeechClip
 from tumnis.modules.decisions.rules import SpeechRoute, VoiceSettings, speech_route
 from tumnis.modules.projects import api as projects
@@ -62,9 +66,11 @@ __all__ = [
     "VOICE_SECTION",
     "Clip",
     "ClipAudio",
+    "HostedState",
     "clip_ids",
     "configure_speech",
     "get_clip",
+    "hosted_speech_state",
     "speak",
     "use_speech",
     "voice_settings",
@@ -73,6 +79,16 @@ __all__ = [
 VOICE_SECTION: Final = "voice"
 SPEECH_LIVE_ENTITY: Final = "speech_clip"  # its id is the message's: the focus bar refetches
 PIPER_ADAPTER: Final = "decisions.speech_piper"
+HOSTED_ADAPTER: Final = "decisions.speech_hosted"
+# The variables that switch the hosted provider on, by the settings field they fill.
+HOSTED_VARIABLES: Final = {
+    "hosted_base_url": "SPEECH__HOSTED_BASE_URL",
+    "hosted_model": "SPEECH__HOSTED_MODEL",
+    "hosted_api_key": "SPEECH__HOSTED_API_KEY",
+}
+HostedState = Literal["configured", "not_configured"]
+
+_log = structlog.get_logger(__name__)
 
 register_section(SettingSection(VOICE_SECTION, VoiceSettings))
 
@@ -108,10 +124,26 @@ _slot = _Slot()
 _override: list[Mapping[str, SpeechTTS] | None] = [None]
 
 
+def _hosted_missing(cfg: SpeechSettings) -> list[str]:
+    """The variables the hosted provider still needs (all of them: it is simply off)."""
+    return [env for name, env in HOSTED_VARIABLES.items() if getattr(cfg, name) is None]
+
+
 def configure_speech(settings: SpeechSettings, *, net_policy: NetPolicy | None) -> None:
-    """The worker's call at start: the engines are built from `settings` on first use."""
+    """The worker's call at start: the engines are built from `settings` on first use. A
+    hosted provider set up only in part is logged once, naming the missing variables (never
+    a value)."""
     global _slot  # noqa: PLW0603  # one Speech slot per process
     _slot = _Slot(settings, net_policy or NetPolicy(mode="self-hosted"))
+    missing = _hosted_missing(settings)
+    if 0 < len(missing) < len(HOSTED_VARIABLES):
+        _log.warning("decisions.speech_hosted_not_configured", missing=missing)
+
+
+def hosted_speech_state() -> HostedState:
+    """`configured` when the hosted provider's endpoint, model and key are all set in the
+    server's environment, else `not_configured` (it makes no clips)."""
+    return "not_configured" if _hosted_missing(_slot.settings) else "configured"
 
 
 def use_speech(engines: Mapping[str, SpeechTTS] | None) -> None:
@@ -121,19 +153,38 @@ def use_speech(engines: Mapping[str, SpeechTTS] | None) -> None:
 
 
 def _build(cfg: SpeechSettings, net_policy: NetPolicy) -> dict[str, SpeechTTS]:
-    if cfg.piper_url is None:
-        return {}
-    if current_mode() == "fake":
-        return {"piper": FakeTTS()}
-    engine: SpeechTTS = resolve(
-        PIPER_ADAPTER,
-        "real",
-        base_url=cfg.piper_url,
-        voice=cfg.piper_voice,
-        clock=SystemClock(),
-        net_policy=net_policy,
-    )
-    return {"piper": engine}
+    engines: dict[str, SpeechTTS] = {}
+    fake = current_mode() == "fake"
+    if cfg.piper_url is not None:
+        engines["piper"] = (
+            FakeTTS()
+            if fake
+            else resolve(
+                PIPER_ADAPTER,
+                "real",
+                base_url=cfg.piper_url,
+                voice=cfg.piper_voice,
+                clock=SystemClock(),
+                net_policy=net_policy,
+            )
+        )
+    if cfg.hosted_base_url and cfg.hosted_model and cfg.hosted_api_key:
+        voice = {} if cfg.hosted_voice is None else {"voice": cfg.hosted_voice}
+        engines["hosted"] = (
+            FakeHostedTTS()
+            if fake
+            else resolve(
+                HOSTED_ADAPTER,
+                "real",
+                base_url=cfg.hosted_base_url,
+                model=cfg.hosted_model,
+                api_key=cfg.hosted_api_key.get_secret_value(),
+                clock=SystemClock(),
+                net_policy=net_policy,
+                **voice,
+            )
+        )
+    return engines
 
 
 def _engines() -> Mapping[str, SpeechTTS]:
@@ -174,6 +225,7 @@ async def speak(  # the message's facts, spelled out
         return None
     engine = _engines().get(route)
     if engine is None:
+        _log.info("decisions.speech_not_configured", route=route)
         return None
     audio = await engine.synthesize(text, voice)
     expires_at = now + timedelta(minutes=CLIP_TTL_MIN)

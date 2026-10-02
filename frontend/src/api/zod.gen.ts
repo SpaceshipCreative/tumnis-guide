@@ -1969,7 +1969,10 @@ export const zStuckStepOut = z.object({
  * What the focus bar shows after "Stuck" (FR-10.5): `working` while the project agent
  * works on a first step; `split` with the subtask it posted (`step`); `took_step` with
  * its report (`summary`); `fallback` when no answer came within the deadline or the agent
- * is down: the task's `first_action` with a `timer_minutes` timer.
+ * is down: the task's `first_action` with a `timer_minutes` timer. Once the person
+ * reviews a `took_step` report (Scott decision 73): `done` when they accepted it (the
+ * step is done, the report stays in `summary`), `reopened` when they rejected it (the
+ * step is theirs again: the task's `first_action`).
  */
 export const zNextStepOut = z.object({
   fallback_at: z.iso.datetime().nullable(),
@@ -1977,7 +1980,14 @@ export const zNextStepOut = z.object({
   focus_event_id: z.uuid(),
   requested_at: z.iso.datetime(),
   run_id: z.uuid().nullable(),
-  state: z.enum(["working", "split", "took_step", "fallback"]),
+  state: z.enum([
+    "working",
+    "split",
+    "took_step",
+    "fallback",
+    "done",
+    "reopened",
+  ]),
   step: zStuckStepOut.nullable(),
   summary: z.string().nullable(),
   task_id: z.uuid(),

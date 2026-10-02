@@ -2135,7 +2135,10 @@ export type MoveStarted = {
  * What the focus bar shows after "Stuck" (FR-10.5): `working` while the project agent
  * works on a first step; `split` with the subtask it posted (`step`); `took_step` with
  * its report (`summary`); `fallback` when no answer came within the deadline or the agent
- * is down: the task's `first_action` with a `timer_minutes` timer.
+ * is down: the task's `first_action` with a `timer_minutes` timer. Once the person
+ * reviews a `took_step` report (Scott decision 73): `done` when they accepted it (the
+ * step is done, the report stays in `summary`), `reopened` when they rejected it (the
+ * step is theirs again: the task's `first_action`).
  */
 export type NextStepOut = {
   /**
@@ -2161,7 +2164,7 @@ export type NextStepOut = {
   /**
    * State
    */
-  state: "working" | "split" | "took_step" | "fallback";
+  state: "working" | "split" | "took_step" | "fallback" | "done" | "reopened";
   step: StuckStepOut | null;
   /**
    * Summary
