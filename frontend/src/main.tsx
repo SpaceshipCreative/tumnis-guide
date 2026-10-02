@@ -1,5 +1,5 @@
-// The app (P0-22): the generated client configured once, one QueryClient, the router,
-// the live socket and the service worker.
+// The app (P0-22): the generated client configured once, one QueryClient, the router
+// and the service worker. The live socket opens in the shell once signed in (APP-11).
 import "./lib/zodConfig";
 // Inter, self-hosted (DS-01): the variable weight axis, normal style; each script's file
 // loads only when the page uses it (unicode-range).
@@ -17,7 +17,6 @@ import { appHotkeys, installHotkeys } from "./lib/hotkeys";
 import { forgetProjects, trackKnownProjects } from "./lib/knownProjects";
 import { registerServiceWorker } from "./lib/serviceWorker";
 import { PUBLIC_PATHS, sessionProbeOptions } from "./lib/session";
-import { connectLive } from "./lib/ws";
 import { createQueryClient } from "./queryClient";
 import { createAppRouter } from "./router";
 
@@ -31,7 +30,6 @@ setUnauthorizedHandler(() => {
     void router.navigate({ to: "/login", replace: true });
   }
 });
-connectLive(queryClient);
 trackKnownProjects(queryClient);
 installHotkeys(
   appHotkeys,
