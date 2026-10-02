@@ -43,7 +43,6 @@ def _runs(job: dict[str, Any]) -> str:
 
 @pytest.mark.req("REL-4")
 @pytest.mark.wp("P4-06")
-@pytest.mark.xfail(strict=True, reason="spec:P4-06")
 def test_operations_doc_commands_are_tagged() -> None:
     """T-P4-06-08
     OPERATIONS.md's Upgrade and Rollback sections have no untagged shell block and at
@@ -65,7 +64,6 @@ def test_operations_doc_commands_are_tagged() -> None:
 
 @pytest.mark.req("A4.4")
 @pytest.mark.wp("P4-06")
-@pytest.mark.xfail(strict=True, reason="spec:P4-06")
 def test_readme_install_is_tagged_and_run_on_a_clean_vm() -> None:
     """T-P4-06-05
     The README's Install section has no untagged shell block and its install suite is not

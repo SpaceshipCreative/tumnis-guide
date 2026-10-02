@@ -55,7 +55,6 @@ def on_release(env: Mapping[str, str]) -> bool:
 
 @pytest.mark.req("REL-4", "SEC-7")
 @pytest.mark.wp("P4-06")
-@pytest.mark.xfail(strict=True, reason="spec:P4-06")
 def test_checklist_items_have_evidence_links() -> None:
     """T-P4-06-06
     RELEASE-CHECKLIST.md has rows 1 to 13, each with a check; on a release branch or tag
