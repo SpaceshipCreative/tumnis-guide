@@ -7,7 +7,7 @@ Hermes profiles Tumnis may run: one master, one per project).
 
 import contextlib
 import json
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Protocol
 from uuid import UUID, uuid4, uuid5
@@ -1788,6 +1788,24 @@ class PostResultIn(tasks.ResultFields):
 ResultOut = tasks.ResultOut
 ResultFields = tasks.ResultFields
 
+# The result batch (P4-04, FR-4.5, FR-8.4): planning says whether a run was started by the
+# unattended tick, so its result waits for the morning review (`batch` "overnight" and the
+# release time on the `result` item). Registered by planning at import (agents cannot
+# import planning: planning imports agents).
+ResultBatchLookup = Callable[[AsyncSession, UUID], Awaitable[tuple[str, datetime] | None]]
+_result_batch: list[ResultBatchLookup] = []
+
+
+def register_result_batch(lookup: ResultBatchLookup) -> None:
+    """Set how `accept_result` finds a run's result batch: `lookup(session, run_id)` answers
+    (batch, release_at), or None for a run nobody batches."""
+    _result_batch[:] = [lookup]
+
+
+async def _batch_of(s: AsyncSession, run_id: UUID) -> dict[str, Any]:
+    found = await _result_batch[0](s, run_id) if _result_batch else None
+    return {} if found is None else {"batch": found[0], "release_at": found[1]}
+
 
 async def accept_result(
     s: AsyncSession,
@@ -1847,7 +1865,9 @@ async def accept_result(
             RESULT,
             target=tasks.TargetRef(type="task", id=run.task_id),
             project_id=None,
-            payload=ResultPayload(run_id=inp.run_id, **fields.model_dump()).model_dump(mode="json"),
+            payload=ResultPayload(
+                run_id=inp.run_id, **fields.model_dump(), **await _batch_of(s, inp.run_id)
+            ).model_dump(mode="json"),
             dedupe_key=f"result:{inp.run_id}",
             session=s,
         )
@@ -3223,19 +3243,86 @@ async def seed_agent(
         runner_id=runner_id,
         project_id=project_id,
     )
+    adopted: UUID | None = None  # the project whose provision the seed took over
     async with tenant_session(ctx) as s:
-        profile = await register_profile(s, body, now=now)
+        try:
+            profile_id = (await register_profile(s, body, now=now)).id
+        except ProblemError as exc:
+            if rec.role != "project" or project_id is None:
+                raise
+            found = await _seed_adopt_provisioned(s, exc, project_id, body)
+            if found is None:
+                raise
+            profile_id, adopted = found, project_id
         if rec.role == "project":
             await s.execute(
-                update(_profiles).where(_profiles.c.id == profile.id).values(status="ready")
+                update(_profiles).where(_profiles.c.id == profile_id).values(status="ready")
             )
-            mark_changed(s, LIVE_PROFILE, profile.id)
+            mark_changed(s, LIVE_PROFILE, profile_id)
+    if adopted is not None:
+        await _seed_cancel_provision(adopted)
     if rec.key_scopes:
         key = await auth.create_key(
             ctx, auth.KeyIn(name=f"{rec.name} key", scopes=list(rec.key_scopes)), now=now
         )
-        await set_profile_key(ctx, profile.id, key.id, now=now)
-    return profile.id
+        await set_profile_key(ctx, profile_id, key.id, now=now)
+    return profile_id
+
+
+# The 409s a seed project agent meets when the worker's provision (`project.created` of
+# the seed's own project) wrote the project's profile first (APP-04).
+_SEED_PROVISION_RACE: Final = frozenset({"profile_exists", "project_agent_exists"})
+
+
+async def _seed_adopt_provisioned(
+    s: AsyncSession, exc: ProblemError, project_id: UUID, body: ProfileIn
+) -> UUID | None:
+    """The id of the project's own live profile, made the seed's (its name, runner and
+    transport), when `exc` is the seed losing the race to the project's provision; None
+    otherwise (the name is another project's, say), and the caller re-raises."""
+    if exc.problem.code not in _SEED_PROVISION_RACE:
+        return None
+    found = await s.scalar(
+        select(_profiles.c.id)
+        .where(
+            _profiles.c.role == "project",
+            _profiles.c.project_id == project_id,
+            _live_profiles(),
+        )
+        .with_for_update()
+    )
+    if found is None:
+        return None
+    profile_id: UUID = found
+    holder = await s.scalar(
+        select(_profiles.c.id).where(_profiles.c.name == body.name, _live_profiles())
+    )
+    if holder is not None and holder != profile_id:
+        return None  # another project's profile holds the name: still `profile_exists`
+    await s.execute(
+        update(_profiles)
+        .where(_profiles.c.id == profile_id)
+        .values(
+            name=body.name,
+            runner_id=body.runner_id,
+            transport=body.transport,
+            endpoint=None,
+            provision_mode="create",
+        )
+    )
+    return profile_id
+
+
+async def _seed_cancel_provision(project_id: UUID) -> None:
+    """Cancel the project's first provision once the seed has taken its profile over, so
+    it cannot later mark that profile `not_provisioned` (DBOS stops a running workflow at
+    its next step; an unknown or finished id is a no-op). Only where the api has a DBOS
+    system database (the compose.test stack)."""
+    from tumnis.core import deadletter  # noqa: PLC0415
+
+    if not deadletter.dbos_configured():
+        return
+    await deadletter.dbos_client().cancel_workflows_async([provision_workflow_id(project_id)])
 
 
 register_seed_writer("runner", seed_runner)
