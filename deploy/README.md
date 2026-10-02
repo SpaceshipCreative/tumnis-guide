@@ -2,7 +2,7 @@
 
 Container and host configuration: the Dockerfile, the compose files (main, preview, test), and config for Postgres, pgBackRest, PgBouncer, clamd and Prometheus alerts.
 
-The image includes `git` and the OpenSSH client, which the worker uses to fetch an Obsidian vault from its Git remote with a read-only deploy key (P3-12). Its clones live in the `obsidian` volume, on the worker only; it is a cache that needs no backup. The `spool` volume is shared by `api`, `worker` and `worker-extract`. Host-specific mounts go only in an override such as `deploy/compose.local.yaml`, never in `compose.yaml` (README, Connect sources): a server folder or share at the same absolute path on `api`, `worker` and `worker-extract`, writable by uid 10001 and holding the `.tumnis-root` marker; a folder vault read-only at `/vaults/<name>` on `worker` only.
+The image includes `git` and the OpenSSH client, which the worker uses to fetch an Obsidian vault from its Git remote with a read-only deploy key (P3-12). Its clones live in the `obsidian` volume, on the worker only; it is a cache that needs no backup. The deploy key and `known_hosts` are written only to a tmpfs at `/var/lib/tumnis/obsidian/.keys`, and only while a git command runs. The `spool` volume is shared by `api`, `worker` and `worker-extract`. Host-specific mounts go only in an override such as `deploy/compose.local.yaml`, never in `compose.yaml` (README, Connect sources): a server folder or share at the same absolute path on `api`, `worker` and `worker-extract`, writable by uid 10001 and holding the `.tumnis-root` marker; a folder vault read-only at `/vaults/<name>` on `worker` only.
 
 ## Backups (P0-28, REL-1)
 
