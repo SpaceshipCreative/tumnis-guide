@@ -94,7 +94,6 @@ async def _project_with_files(
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_move_copies_verifies_switches_keeps_old(  # noqa: PLR0917  # fixtures
     db: DbUrls,
     dbos: type[DBOS],
@@ -183,7 +182,6 @@ async def test_move_copies_verifies_switches_keeps_old(  # noqa: PLR0917  # fixt
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_move_hash_mismatch_aborts_without_switch(  # fixtures
     db: DbUrls,
     dbos: type[DBOS],
@@ -238,7 +236,6 @@ async def test_move_hash_mismatch_aborts_without_switch(  # fixtures
 @pytest.mark.req("REL-3")
 @pytest.mark.wp("P3-14")
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_move_resumes_after_kill(  # noqa: PLR0917  # fixtures
     db: DbUrls,
     knowledge_ws: WorkspaceHandle,
