@@ -142,6 +142,14 @@ from tumnis.modules.agents.rules import (
 from tumnis.modules.agents.skill_io import (
     EnrichmentRequest,
     EnrichmentResult,
+    FocusMessage,
+    NotifyBatch,
+    NotifyEvent,
+    NotifyItem,
+    NotifyProject,
+    NotifyRequest,
+    NotifyReturnTo,
+    NotifyTask,
     PlanningRequest,
     PlanningResult,
     ProjectAgentEntry,
@@ -173,6 +181,7 @@ __all__ = [
     "DigestOut",
     "EnrichmentRequest",
     "EnrichmentResult",
+    "FocusMessage",
     "ForeignReach",
     "HealthCheckAccepted",
     "HumanApproval",
@@ -180,6 +189,13 @@ __all__ = [
     "HumanWaitOut",
     "MasterAgentOut",
     "McpServerInfo",
+    "NotifyBatch",
+    "NotifyEvent",
+    "NotifyItem",
+    "NotifyProject",
+    "NotifyRequest",
+    "NotifyReturnTo",
+    "NotifyTask",
     "PauseScope",
     "PlanningRequest",
     "PlanningResult",
@@ -210,6 +226,7 @@ __all__ = [
     "issue_run_token",
     "long_poll_decision",
     "master_agent",
+    "notify_packet",
     "plan_packet",
     "planning_request",
     "read_digest",
@@ -222,6 +239,7 @@ __all__ = [
     "retry_provision",
     "run_ended",
     "run_log",
+    "run_notify",
     "run_plan",
     "run_token_scopes",
     "set_profile_key",
@@ -2701,6 +2719,54 @@ async def run_plan(workspace_id: UUID, packet: TaskPacket) -> RunOutcome:
     if not _skill_runner:
         raise RuntimeError("agents.workflows is not loaded: nothing can run a skill")
     return RunOutcome.model_validate(await _skill_runner[0](workspace_id, packet))
+
+
+# --- The master's notify runs (P2-16, FR-8.2) ---------------------------------------------
+#
+# notifications decides what reaches the person and when; agents owns the master profile,
+# the notify packet and the run. The master's `focus` skill words the message and posts it
+# to the one Discord channel itself (its gateway; the credentials live only in Hermes,
+# design decision 7), then replies with the message. The run's task token is workspace
+# scoped with `tasks:read` only (Scott decision 30, `RUN_TOKEN_SCOPES`).
+
+NOTIFY_SKILL: Final = "focus"
+NOTIFY_RESULT: Final = SchemaRef(family="result", name="focus_message", version=1)
+NOTIFY_TIMEOUT_S: Final = 60  # the plan's notify run cap
+
+
+def notify_packet(
+    *,
+    run_id: UUID,
+    profile_id: UUID,
+    request: NotifyRequest,
+    correlation_id: str,
+    tainted: bool = False,
+    timeout_s: int = NOTIFY_TIMEOUT_S,
+) -> TaskPacket:
+    """The master's `notify` packet for `request` (R-24): skill `focus`, reply validated
+    against result/focus_message v1. `tainted` when a text it carries came from outside
+    (P2-08), so the run is tainted and every gated action refused (SAF-1)."""
+    from tumnis.modules.agents.packet_builder import render_prompt  # noqa: PLC0415
+
+    body = request.model_dump(mode="json")
+    return TaskPacket(
+        kind=RunKind.NOTIFY,
+        run_id=run_id,
+        profile_id=profile_id,
+        skill=NOTIFY_SKILL,
+        output_schema=NOTIFY_RESULT,
+        correlation_id=correlation_id,
+        timeout_s=timeout_s,
+        prompt_text=render_prompt(NOTIFY_SKILL, NOTIFY_RESULT, body),
+        body=body,
+        tainted=tainted,
+    )
+
+
+async def run_notify(workspace_id: UUID, packet: TaskPacket) -> RunOutcome:
+    """Run the notify packet from inside the caller's DBOS workflow, as `run_plan` does: a
+    child `run_skill` with workflow id `run_skill:<run id>`."""
+    return await run_plan(workspace_id, packet)
 
 
 # --- Focus activity (P2-15) ---------------------------------------------------------------

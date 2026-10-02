@@ -3,7 +3,10 @@
 Delivery (P2-16's interface, built here as the smallest seam P4-05 needs; P2-16 adds the
 Discord channel on top of the same rules, so level and batching are never duplicated):
 - `delivery_decision(level, any_task_in_progress, kind)`: "now" or "batch";
-- `flush_due(batch, any_task_in_progress, now, day_end_at)`: the next natural break.
+- `flush_due(batch, any_task_in_progress, now, day_end_at)`: the next natural break;
+- `channels_now(decision)`: the channels a notification reaches at once (P2-16): in-app
+  always (the badge and the focus bar, FR-8.1), Discord through the master and browser
+  push only when the decision is "now".
 
 Browser push (P4-05, FR-8.3):
 - `deep_link_for(item)`: `/review?kind=<kind>&item=<id>`, the review route's own params;
@@ -23,6 +26,7 @@ from pydantic import AnyUrl, BaseModel, ValidationError
 
 Level = Literal["quiet", "nudge", "coach", "guardrail"]
 Decision = Literal["now", "batch"]
+Channel = Literal["in_app", "push", "discord"]
 NotificationKind = str  # a registered review kind (R-05), or "focus.<event kind>"
 FOCUS_PREFIX: Final = "focus."
 
@@ -90,6 +94,14 @@ def flush_due(
 ) -> bool:
     """Next natural break: no task In progress, or the day's working hours ended."""
     return bool(batch) and (not any_task_in_progress or now >= day_end_at)
+
+
+def channels_now(decision: Decision) -> tuple[Channel, ...]:
+    """The channels a notification reaches at once: the in-app review badge and focus bar
+    whatever was decided (FR-8.1: they never wait), Discord (the master's notify run) and
+    browser push only when the decision is "now"; a batched one reaches them with its
+    batch, at the next natural break."""
+    return ("in_app", "discord", "push") if decision == "now" else ("in_app",)
 
 
 def deep_link_for(item: ReviewItemLite) -> str:

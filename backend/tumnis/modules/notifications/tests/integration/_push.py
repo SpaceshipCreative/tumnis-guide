@@ -36,7 +36,13 @@ if TYPE_CHECKING:
 
 SETTLE_S = 30.0
 QUIET_S = 0.3
-WORKFLOWS = ("deliver_event", "notifications.deliver_push")
+# P2-16 adds Discord delivery: its workflow and the master's notify runs.
+WORKFLOWS = (
+    "deliver_event",
+    "notifications.deliver_push",
+    "notifications.deliver_notification",
+    "run_skill",
+)
 
 # Every module's workflows and subscribers, registered before DBOS launches.
 importlib.import_module("tumnis.wiring")

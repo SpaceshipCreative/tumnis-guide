@@ -1,0 +1,25 @@
+# P2-16 (FR-8.2): an agent's question reaches the Discord channel as one message with the
+# prompt word for word, its choices and the reference the relay skill reads, so the
+# person can answer it in the chat.
+id: focus-question-item
+profile: master
+skill: focus
+input: ../../fixtures/packets/focus_question_item.json
+output_schema: {family: harness, name: focus_message, version: 1}
+meta: {req: [FR-8.2], wp: P2-16, xfail: "spec:P2-16"}
+expect:
+  calls:
+    - server: discord
+      tool: send_message
+      min: 1
+      max: 1
+      where:
+        - {path: "$.target", equals: discord}
+        - {path: "$.message", matches: "(?s).*Which client name goes on the cover page\\?.*"}
+        - {path: "$.message", matches: "(?s).*Acme Ltd.*Acme Group.*"}
+        - {path: "$.message", matches: "(?s).*ref question:5c35eb86-807e-5966-891d-f170baed2d90.*"}
+  forbid:
+    - {tool: record_human_reply}
+    - {tool: pause_agents}
+  json:
+    - {path: "$.message", matches: "(?s).*ref question:5c35eb86-807e-5966-891d-f170baed2d90.*"}

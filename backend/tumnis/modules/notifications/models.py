@@ -1,4 +1,5 @@
-"""notifications SQLAlchemy tables owned by this module (mirrors of notifications_0001)."""
+"""notifications SQLAlchemy tables owned by this module (mirrors of notifications_0001 and
+notifications_0002)."""
 
 from datetime import datetime
 from typing import Any
@@ -23,6 +24,7 @@ class Notification(TenantBase, Base):
     released_at: Mapped[datetime | None]  # a batched row: when its batch went
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
     dedupe_key: Mapped[str]
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # the notify packet's facts
 
 
 class PushSubscription(TenantBase, Base):
@@ -46,3 +48,5 @@ class DeliveryAttempt(TenantBase, Base):
     status: Mapped[str]
     status_code: Mapped[int | None]
     attempted_at: Mapped[datetime]
+    run_id: Mapped[UUID | None]  # a Discord attempt's notify run (no foreign key: agents')
+    error: Mapped[str | None]

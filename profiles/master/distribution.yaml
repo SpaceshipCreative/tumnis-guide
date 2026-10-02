@@ -4,7 +4,7 @@
 # The repo never holds the profile's .env, memories or sessions; .env.example lists the
 # variables config.yaml's MCP servers and its Discord gateway read.
 name: tumnis-master
-version: 1.2.0
+version: 1.2.1
 description: Tumnis master agent (plan, orchestrate-master, workspace-digest, focus and relay skills)
 env_requires:
   - name: TUMNIS_URL

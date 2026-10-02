@@ -333,7 +333,7 @@ Base columns on every tenant table: `id uuid default uuidv7()`, `workspace_id uu
 | calendar | `calendar_accounts`, `events(connection_id, external_id, start_at, end_at, attendees jsonb, busy, title)` | P1-09 |
 | github | `pr_status` on `artifacts.checks`, `webhook_deliveries(delivery_id, received_at)` | P2-13 |
 | coolify | `app_links(project_id, app_uuid)`, `deployment_status(app_uuid, status, finished_at, commit)` | P2-14 |
-| notifications | `notifications(kind, target, level, batched_until)`, `push_subscriptions`, `delivery_attempts` | P2-16, P4-05 |
+| notifications | `notifications(kind, target, level, batched_until, details)`, `push_subscriptions`, `delivery_attempts(channel, run_id, error)` | P2-16, P4-05 |
 | usage | `usage_counters(day, counter, value)` | P0-21 |
 
 ### A8 · Event catalogue
@@ -356,6 +356,7 @@ All events use `EventEnvelope{event_id, name, schema_version, workspace_id, occu
 | `document.added`, `document.changed` | knowledge (P1-16, P1-17) | document_id, version, trust | search, digest |
 | `plan.published` | planning (P1-11) | day, task_ids, reasons | notifications, focus |
 | `focus.event` | focus (P2-15) | kind, task_id, rule, level | notifications, agents (master speaks) |
+| `notification.ready` | notifications (P2-16) | notification_id, kind | notifications (`deliver_notification` to Discord through the master) |
 | `key.created`, `key.revoked`, `auth.failed` | auth (P0-13, P0-14) | key_id / user_id, source_ip | audit, cache |
 | `calendar.synced` | calendar (P1-09) | connection_id, window | planning, focus |
 | `artifact.updated` | github, coolify (P2-13, P2-14) | artifact_id, state | tasks (review flag), notifications |
@@ -374,6 +375,7 @@ Queues are registered in `tumnis/worker.py` with the DBOS queue API (`DBOS.regis
 | `decisions` | limiter 1,200 per 60 s | triage_item, label (P1-07, P3-06) |
 | `extract` | worker 1 to 2, listened to only by `worker-extract` | extract_document (P1-16) |
 | `focus` | none | focus_session (P2-15) |
+| `notifications` | none | browser pushes (P4-05), `deliver_notification` (P2-16) |
 | `maintenance` | worker 1 | housekeeping (P0-19), backups check (P0-28), audit verify (P0-15) |
 
 Static schedules register in `worker.py` after `DBOS.launch()` with `DBOS.apply_schedules([...])`, per the [DBOS scheduled workflows guide](https://docs.dbos.dev/python/tutorials/scheduled-workflows); the older `@DBOS.scheduled` decorator is not used. `DBOS.recv` is only called in a workflow body (R-30).
