@@ -304,3 +304,67 @@ async def test_swap_completes_while_a_lock_request_waits(
                     await locker
     live = [item.task_id for item in out.items if item.removed_at is None]
     assert live == [world.spare]
+
+
+async def _monday_hours_in(ctx: WorkspaceContext, s: AsyncSession, now: datetime) -> None:
+    """Monday's working hours set to 10:00 to 12:00 (14:00 to 16:00 UTC) in `s`."""
+    from tumnis.modules.planning import api as planning  # noqa: PLC0415
+
+    current = await planning.get_working_hours(ctx, session=s)
+    body = planning.WorkingHoursIn(
+        days=[planning.WorkingDay(weekday=0, start="10:00", end="12:00")],
+        version=current.version,
+    )
+    await planning.put_working_hours(ctx, body, now=now, session=s)
+
+
+class _RollbackError(Exception):
+    """Raised to end a transaction with a rollback."""
+
+
+@pytest.mark.req("FR-2.6")
+@pytest.mark.wp("P1-12")
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-followups-2")
+async def test_day_calendar_in_a_transaction_sees_its_hours(
+    workspace: WorkspaceHandle, clock: FixedClock
+) -> None:
+    """With the day already cached, the day calendar read in a transaction that changed
+    the working hours shows that transaction's hours, not the cached ones."""
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.planning import api as planning  # noqa: PLC0415
+
+    ctx = user_ctx(workspace)
+    with _cold_caches():
+        cached = await planning.day_calendar(ctx, MONDAY)
+        assert cached.window is not None
+        assert cached.window.start == datetime(2026, 3, 9, 13, tzinfo=UTC)
+        with contextlib.suppress(_RollbackError):
+            async with tenant_session(ctx) as s:
+                await _monday_hours_in(ctx, s, clock.now())
+                seen = await planning.day_calendar(ctx, MONDAY, session=s)
+                raise _RollbackError
+    assert seen.window is not None
+    assert seen.window.start == datetime(2026, 3, 9, 14, tzinfo=UTC)
+
+
+@pytest.mark.req("FR-2.6")
+@pytest.mark.wp("P1-12")
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-followups-2")
+async def test_rolled_back_day_calendar_is_not_cached(
+    workspace: WorkspaceHandle, clock: FixedClock
+) -> None:
+    """A day calendar read in a transaction that changed the working hours and then rolled
+    back leaves nothing in the cache: the next read shows the committed hours."""
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.planning import api as planning  # noqa: PLC0415
+
+    ctx = user_ctx(workspace)
+    with _cold_caches():
+        with contextlib.suppress(_RollbackError):
+            async with tenant_session(ctx) as s:
+                await _monday_hours_in(ctx, s, clock.now())
+                await planning.day_calendar(ctx, MONDAY, session=s)
+                raise _RollbackError
+        after = await planning.day_calendar(ctx, MONDAY)
+    assert after.window is not None
+    assert after.window.start == datetime(2026, 3, 9, 13, tzinfo=UTC)
