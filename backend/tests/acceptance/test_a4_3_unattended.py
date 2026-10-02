@@ -62,7 +62,6 @@ pytestmark = [
 
 
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 async def test_window_runs_green_light_untainted_only(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,
