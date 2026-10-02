@@ -55,6 +55,11 @@ export function knowledgeSummary(
 
 type Adding = "text" | "link" | null;
 
+/** A file (an upload or a folder file, of whatever type), not a text entry or a link. */
+function isFile(doc: DocumentDto): boolean {
+  return doc.kind !== "text" && doc.kind !== "link";
+}
+
 /** Where a file stands in the scan and extraction pipeline (P1-16), in plain words. */
 export const FILE_STATUS: Record<DocumentDto["status"], string> = {
   pending_scan: "Scanning",
@@ -232,7 +237,7 @@ function ItemRow({
             {doc.title}
           </span>
         )}
-        {doc.kind === "file" && (
+        {isFile(doc) && (
           <span className="shrink-0 text-xs text-muted">
             {FILE_STATUS[doc.status]}
           </span>

@@ -80,9 +80,10 @@ test("[P1-17][FR-15.2] a dropped file's item turns Ready once extraction settles
   const item = await within(rail).findByRole("listitem");
   expect(item).toHaveTextContent("Scanning");
 
-  // The worker finishes; the list, polling while an item settles, shows it Ready.
+  // The worker finishes (the server names the file by its type); the list, polling
+  // while an item settles, shows it Ready.
   for (const doc of knowledge.documents.values()) {
-    knowledge.documents.set(doc.id, { ...doc, status: "ready" });
+    knowledge.documents.set(doc.id, { ...doc, kind: "pdf", status: "ready" });
   }
   await waitFor(
     () => {
