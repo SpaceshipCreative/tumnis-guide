@@ -225,3 +225,49 @@ async def test_ssrf_guard_on_endpoint(
         assert (refused.value.status, refused.value.code) == (422, "ssrf_blocked")
     assert _count(db, "SELECT count(*) FROM s3_sources") == 0
     assert _count(db, "SELECT count(*) FROM connections WHERE provider = 's3'") == 0
+
+
+@pytest.mark.req("FR-15.11", "FR-15.12", "SEC-3")
+@pytest.mark.wp("P3-13")
+async def test_linked_document_is_never_deleted_at_source(
+    db: DbUrls, knowledge_ws: WorkspaceHandle, minio: S3Endpoint, clock: FixedClock
+) -> None:
+    """Decision 89: a linked source is read-only, so the delete-at-source flow refuses a
+    document synced from an S3 bucket (409 `linked_source_read_only`) before a token is
+    issued or used: no confirmation row, the document stays live, its record is not
+    marked, and nothing is audited as deleted at the source."""
+    import uuid  # noqa: PLC0415
+
+    from tumnis.core.errors import ProblemError  # noqa: PLC0415
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+
+    ws = knowledge_ws
+    project_id = await _project(ws, clock, "Acme")
+    bucket = await new_bucket(minio)
+    key = "acme/brief.md"
+    await put(minio, bucket, key, b"# Brief\n")
+    created = await create_source(ws, source_in(minio, bucket, {"acme/": project_id}))
+    await _sync(ws, created.id, ExtractLog([]))
+    doc = (await source_documents(ws, created.id))[key]["id"]
+
+    user = uuid.uuid4()
+    with pytest.raises(ProblemError) as issued:
+        async with tenant_session(ws.ctx) as s:
+            await knowledge.issue_delete_confirmation(s, doc, user_id=user)
+    assert (issued.value.status, issued.value.code) == (409, "linked_source_read_only")
+    with pytest.raises(ProblemError) as used:
+        async with tenant_session(ws.ctx) as s:
+            await knowledge.delete_at_source(
+                s, doc, confirm_token="x" * 32, reason="cleanup", user_id=user
+            )
+    assert (used.value.status, used.value.code) == (409, "linked_source_read_only")
+
+    confirmations = "SELECT count(*) FROM delete_confirmations WHERE document_id = %s"
+    marked = "SELECT count(*) FROM folder_files WHERE document_id = %s AND delete_confirmed"
+    live = "SELECT count(*) FROM documents WHERE id = %s AND deleted_at IS NULL"
+    audited = "SELECT count(*) FROM audit_log WHERE action = 'knowledge.deleted_at_source'"
+    assert _count(db, confirmations, doc) == 0
+    assert _count(db, marked, doc) == 0
+    assert _count(db, live, doc) == 1
+    assert _count(db, audited) == 0
