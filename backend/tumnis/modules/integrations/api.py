@@ -78,7 +78,12 @@ from tumnis.modules.integrations.models import (
     SyncState,
     Thread,
 )
-from tumnis.modules.integrations.oauth_port import OAuthPort, OAuthRefused, OAuthServer
+from tumnis.modules.integrations.oauth_port import (
+    OAuthPort,
+    OAuthRefused,
+    OAuthServer,
+    require_https,
+)
 from tumnis.modules.integrations.payloads import (
     ArtifactUpdatedV1,
     ConnectionAuthRequiredV1,
@@ -1642,6 +1647,12 @@ class SyncStart(BaseModel):
     scopes: list[str] = Field(default_factory=list)
 
 
+# The statuses a sync starts from; `syncing` only as a lapsed lease (`begin_sync`).
+_SYNCABLE: Final = frozenset(
+    {ConnectionStatus.ok, ConnectionStatus.degraded, ConnectionStatus.syncing}
+)
+
+
 def _first_cursor(scope: str, since: datetime) -> dict[str, Any]:
     return {"schema_version": 1, "scope": scope, "since": since.isoformat()}
 
@@ -1649,12 +1660,18 @@ def _first_cursor(scope: str, since: datetime) -> dict[str, Any]:
 async def begin_sync(
     ctx: WorkspaceContext, connection_id: UUID, scopes: Sequence[str], *, now: datetime
 ) -> SyncStart:
-    """A sync starts: the connection (only `ok` or `degraded` ones sync) goes `syncing`,
-    and every scope's page count restarts. A scope with no cursor starts at its backfill
-    window (first sync, Data flow rule 3) or at the last success."""
+    """A sync starts: the connection (only `ok`, `degraded` or `syncing` ones sync) goes
+    `syncing`, and every scope's page count restarts. A scope with no cursor starts at its
+    backfill window (first sync, Data flow rule 3) or at the last success.
+
+    `syncing` is a lease held by the one sync workflow that set it. Every sync is enqueued
+    with the deduplication ID `sync:<id>` (the tick and `request_sync`), so at most one is
+    queued or running per connection; a sync that finds `syncing` is therefore that
+    workflow's own retry or recovery, or follows one that ended without its finish step
+    (out of retries, DBOS ERROR). Either way it takes the lease over."""
     async with tenant_session(ctx) as s:
         row = await _row(s, connection_id, lock=True)
-        if _status(row.status) not in {ConnectionStatus.ok, ConnectionStatus.degraded}:
+        if _status(row.status) not in _SYNCABLE:
             return SyncStart(status="skipped", provider=row.provider)
         settings = ConnectionSettings.model_validate(row.settings or {})
         cap = _PROVIDERS[row.provider].backfill_cap_days
@@ -1756,17 +1773,17 @@ async def finish_sync(
 
 
 async def due_connections(ctx: WorkspaceContext, *, now: datetime) -> list[UUID]:
-    """The workspace's connections a sync tick enqueues: `ok` or `degraded`, of a
-    registered provider, and due (`next_sync_at` unset or reached)."""
+    """The workspace's connections a sync tick enqueues: `ok`, `degraded` or `syncing`, of
+    a registered provider, and due (`next_sync_at` unset or reached). The tick leaves out
+    any whose sync is queued or running, so a `syncing` one here is a lapsed lease: its
+    sync ended without the finish step, and the next sync recovers it (`begin_sync`)."""
     async with tenant_session(ctx) as s:
         rows: ScalarResult[UUID] = await s.scalars(
             select(_connections.c.id)
             .where(
                 _connections.c.deleted_at.is_(None),
                 _framework(),
-                _connections.c.status.in_(
-                    [ConnectionStatus.ok.value, ConnectionStatus.degraded.value]
-                ),
+                _connections.c.status.in_([status.value for status in _SYNCABLE]),
                 or_(_connections.c.next_sync_at.is_(None), _connections.c.next_sync_at <= now),
             )
             .order_by(_connections.c.next_sync_at.nulls_first(), _connections.c.id)
@@ -1797,16 +1814,18 @@ async def prepare_oauth(
     """Discovery (once), dynamic client registration (once per connection: the client
     is kept with the grant), then a consent in flight: a random `state` (only its hash
     kept) and a PKCE verifier (sealed), valid for OAUTH_PENDING_TTL, tied to this
-    connection and the waiting workflow."""
+    connection and the waiting workflow. A sign-in page that is not https, discovered or
+    stored, is refused (AdapterRejected) before anything is registered or kept."""
     async with tenant_session(ctx) as s:
         row = await _row(s, connection_id)
     spec = provider_spec(row.provider)
     if spec.server_url is None:
         raise ValueError(f"{spec.provider} has no MCP server to sign in at")
     storage = ConnectionTokenStorage(ctx, connection_id, clock=_NoClock())
-    server = await oauth_server_of(ctx, connection_id)
-    if server is None:
-        server = await oauth.discover(spec.server_url)
+    stored = await oauth_server_of(ctx, connection_id)
+    server = stored or await oauth.discover(spec.server_url)
+    require_https(server.authorization_endpoint, "authorize")  # a stored one too (SEC-9)
+    if stored is None:
         await store_oauth_server(ctx, connection_id, server)
     client = await storage.get_client_info()
     if client is None or redirect_uri not in {str(u) for u in client.redirect_uris or []}:

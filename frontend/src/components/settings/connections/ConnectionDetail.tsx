@@ -31,6 +31,17 @@ function nextSyncText(connection: ConnectionOut): string {
   return `Next sync ${relativeTime(new Date(connection.next_sync_at))}.`;
 }
 
+/** A 409's `current` when it is this connection as the server shows it. */
+function isConnection(value: unknown, id: string): value is ConnectionOut {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Partial<ConnectionOut>;
+  return (
+    row.id === id &&
+    typeof row.version === "number" &&
+    typeof row.settings === "object"
+  );
+}
+
 export function ConnectionDetail({
   connection,
   onMessage,
@@ -45,6 +56,10 @@ export function ConnectionDetail({
     every: useId(),
     reason: useId(),
   };
+  // The connection as this form loaded it. A save sends its version (and keeps its other
+  // settings), never the version of a later read, so an edit made elsewhere since the
+  // form loaded answers 409 instead of being overwritten by the fields shown here.
+  const [loaded, setLoaded] = useState(connection);
   const [label, setLabel] = useState(connection.account_label);
   const [backfill, setBackfill] = useState(
     String(connection.settings.backfill_days ?? 30),
@@ -63,13 +78,19 @@ export function ConnectionDetail({
     ConnectionOut
   >({
     mutationFn: ({ body, idempotencyKey }) =>
-      updateConnection(connection, body, idempotencyKey),
+      updateConnection(loaded, body, idempotencyKey),
     onSuccess: (next) => {
+      setLoaded(next);
       storeConnection(queryClient, next);
       onMessage(`Saved ${next.account_label}.`);
     },
     onError: (failure) => {
       if (failure instanceof ConflictError) {
+        // The 409 carries the connection as it is now: the form shows it, to edit again.
+        if (isConnection(failure.current, loaded.id)) {
+          reload(failure.current);
+          storeConnection(queryClient, failure.current);
+        }
         void queryClient.invalidateQueries({
           queryKey: connectionsQueryKey(),
         });
@@ -96,6 +117,17 @@ export function ConnectionDetail({
       setError(problemText(failure, "The account could not be disconnected."));
     },
   });
+
+  function reload(next: ConnectionOut) {
+    setLoaded(next);
+    setLabel(next.account_label);
+    setBackfill(String(next.settings.backfill_days ?? 30));
+    setEvery(
+      next.settings.sync_every_min == null
+        ? ""
+        : String(next.settings.sync_every_min),
+    );
+  }
 
   const backfillDays = Number(backfill);
   const everyMin = every.trim() === "" ? null : Number(every);
@@ -125,7 +157,7 @@ export function ConnectionDetail({
             body: {
               account_label: label.trim(),
               settings: {
-                ...connection.settings,
+                ...loaded.settings,
                 backfill_days: backfillDays,
                 sync_every_min: everyMin,
               },
