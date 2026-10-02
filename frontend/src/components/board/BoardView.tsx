@@ -26,7 +26,10 @@ import { useMoveTask } from "../project/mutations";
 import { boardQuery } from "../project/queries";
 import type { Board } from "../project/types";
 import { BoardColumn, COLUMN_PREFIX } from "./BoardColumn";
-import { SettledKeyboardSensor } from "./keyboard";
+import {
+  SettledKeyboardSensor,
+  type SettledKeyboardSensorOptions,
+} from "./keyboard";
 import { planMove } from "./move";
 
 interface Drop {
@@ -133,7 +136,9 @@ export function BoardView({
       // On a phone an arrow key scrolls the board to the next column instead of moving
       // the card; an instant scroll lets that land before the next key is handled.
       scrollBehavior: "auto",
-    }),
+      // The sensor holds a drop until `over` agrees with this detection (keyboard.ts).
+      collisionDetection: closestCorners,
+    } satisfies SettledKeyboardSensorOptions),
   );
 
   // The first render of a full board (hundreds of sortable cards) runs as a transition,

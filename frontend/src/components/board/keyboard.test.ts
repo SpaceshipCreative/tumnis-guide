@@ -7,7 +7,6 @@ import type {
   ClientRect,
   KeyboardCoordinateGetter,
   KeyboardSensorProps,
-  SensorContext,
 } from "@dnd-kit/core";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
@@ -57,7 +56,7 @@ test("[P0-24][UX-7] T-P0-24-05 flake: a Space after an arrow waits for over to r
         ["today-card", rect(316)],
       ]),
       droppableContainers: { getEnabled: () => containers },
-      over: { id: "backlog-card" },
+      over: { id: "backlog-card" } as { id: string } | null,
       scrollableAncestors: [] as Element[],
     },
   };
@@ -74,7 +73,7 @@ test("[P0-24][UX-7] T-P0-24-05 flake: a Space after an arrow waits for over to r
   const pickUp = new KeyboardEvent("keydown", { code: "Space" });
   Object.defineProperty(pickUp, "target", { value: card });
 
-  const sensor = new SettledKeyboardSensor({
+  new SettledKeyboardSensor({
     active: "backlog-card",
     activeNode: { id: "backlog-card", key: "k", node: { current: card } },
     event: pickUp,
@@ -95,10 +94,7 @@ test("[P0-24][UX-7] T-P0-24-05 flake: a Space after an arrow waits for over to r
   frames(10);
   expect(onEnd).not.toHaveBeenCalled();
 
-  (context.current as Pick<SensorContext, "over">).over = {
-    id: "today-card",
-  } as SensorContext["over"];
+  context.current.over = { id: "today-card" };
   frames(5);
   expect(onEnd).toHaveBeenCalledTimes(1);
-  void sensor;
 });
