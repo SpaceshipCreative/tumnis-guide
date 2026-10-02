@@ -7,10 +7,16 @@
 - `local_to_utc`: `core.clock.local_to_utc` (R-12). The rules may import only pure stdlib
   (T-P0-01-09), so `core.clock` is not imported here; T-P1-10-08 pins that they agree (as
   P0-19's `rules_recurrence` does).
+- Unattended windows (P4-04, FR-4.5, SAF-1): `window_bounds` and `window_open` (a window's
+  instance in UTC from local wall times), `green_light` (why a queued task may not run
+  now, or None), `too_late_to_start`, `batch_release_at` and `next_working_start` (when
+  overnight results notify).
 """
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from enum import StrEnum
 from typing import Final, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -634,3 +640,134 @@ def day_summary(
             for t in today
         ],
     )
+
+
+# --- Unattended run windows (P4-04, FR-4.5, SAF-1) -------------------------------------------
+
+
+@dataclass(frozen=True)
+class Window:
+    """An unattended window: weekdays (0 = Monday) and two local wall times in the
+    workspace timezone. An end before the start crosses midnight; an end equal to the start
+    is a whole day (the api refuses it)."""
+
+    weekdays: frozenset[int]
+    start_local: time
+    end_local: time
+
+    @property
+    def crosses_midnight(self) -> bool:
+        return self.end_local <= self.start_local
+
+
+def window_instance(w: Window, day: date, tz: ZoneInfo) -> tuple[datetime, datetime] | None:
+    """The window instance starting on local `day`, in UTC; None on a day it does not run.
+    A crossing window belongs to the weekday it starts on, and both ends come from local
+    wall time (R-12), so a 22:00 to 06:00 night is 7 or 9 hours long when the clocks change."""
+    if day.weekday() not in w.weekdays:
+        return None
+    end_day = day + timedelta(days=1) if w.crosses_midnight else day
+    start, end = local_to_utc(day, w.start_local, tz), local_to_utc(end_day, w.end_local, tz)
+    return (start, end) if start < end else None
+
+
+def window_bounds(w: Window, now: datetime, tz: ZoneInfo) -> tuple[datetime, datetime] | None:
+    """The window instance containing `now` (UTC bounds, start inclusive, end exclusive), or
+    None. A crossing window belongs to the weekday it starts on. On DST days bounds come
+    from local wall times, so a 22:00 to 06:00 window is 7 or 9 hours long."""
+    today = now.astimezone(tz).date()
+    for day in (today - timedelta(days=1), today):
+        bounds = window_instance(w, day, tz)
+        if bounds is not None and bounds[0] <= now < bounds[1]:
+            return bounds
+    return None
+
+
+def window_open(w: Window, now: datetime, tz: ZoneInfo) -> bool:
+    return window_bounds(w, now, tz) is not None
+
+
+class Refusal(StrEnum):
+    """Why a queued task may not run unattended now (`green_light`'s answer)."""
+
+    tainted = "tainted"
+    not_ai = "not_ai"
+    paused = "paused"
+    kill_switch = "kill_switch"
+    no_acceptance_criteria = "no_acceptance_criteria"
+    not_queued = "not_queued"
+    done = "done"
+    waiting_on_human = "waiting_on_human"
+
+
+# The plain words the day close and the refusal's review item show (J7).
+REFUSAL_WORDS: Final[Mapping[Refusal, str]] = {
+    Refusal.tainted: "From outside content: needs you",
+    Refusal.not_ai: "Only AI tasks run unattended",
+    Refusal.paused: "Project paused",
+    Refusal.kill_switch: "All agents paused",
+    Refusal.no_acceptance_criteria: "No acceptance criteria",
+    Refusal.not_queued: "Not queued",
+    Refusal.done: "Already done",
+    Refusal.waiting_on_human: "Waiting on you",
+}
+
+
+class TaskLite(BaseModel, frozen=True):
+    """What the green light reads of a queued task."""
+
+    label: Label | None
+    status: TaskStatus
+    queued: bool
+    has_acceptance_criteria: bool
+
+
+def green_light(
+    t: TaskLite, *, may_run_unattended: bool, project_paused: bool, kill_switch: bool
+) -> Refusal | None:
+    """None means it may run. Order: kill_switch, paused, not_queued, done, not_ai, tainted
+    (from may_run_unattended, SAF-1), waiting_on_human, no_acceptance_criteria. Green light
+    (plan default reading of FR-4.5): an AI task the user queued, with acceptance criteria,
+    untainted, its project not paused and the kill switch off."""
+    checks: tuple[tuple[bool, Refusal], ...] = (
+        (kill_switch, Refusal.kill_switch),
+        (project_paused, Refusal.paused),
+        (not t.queued, Refusal.not_queued),
+        (t.status == "done", Refusal.done),
+        (t.label != "ai", Refusal.not_ai),
+        (not may_run_unattended, Refusal.tainted),
+        (t.status == "waiting_on_human", Refusal.waiting_on_human),
+        (not t.has_acceptance_criteria, Refusal.no_acceptance_criteria),
+    )
+    return next((refusal for failed, refusal in checks if failed), None)
+
+
+def too_late_to_start(now: datetime, window_end: datetime, max_run_minutes: int) -> bool:
+    """Plan default: a run is not started when less than half the project's maximum run
+    time is left before the window ends (it could not finish inside it)."""
+    return window_end - now < timedelta(minutes=max_run_minutes) / 2
+
+
+RELEASE_LEAD: Final = timedelta(minutes=15)  # plan default: results arrive before work starts
+
+
+def batch_release_at(window_end: datetime, working_hours_start: datetime) -> datetime:
+    """Results notify at the first working-hours start after the window, minus 15 minutes
+    (plan default), and never before the window ends."""
+    return max(window_end, working_hours_start - RELEASE_LEAD)
+
+
+RELEASE_SEARCH_DAYS: Final = 14
+
+
+def next_working_start(
+    after: datetime, tz: ZoneInfo, hours: Mapping[int, tuple[time, time]]
+) -> datetime:
+    """The first working-window start at or after `after` (P1-10's `working_window`, never
+    a Re-plan's weekend), within the next 14 days; `after` itself when none is found."""
+    first = after.astimezone(tz).date()
+    for offset in range(RELEASE_SEARCH_DAYS + 1):
+        window = working_window(first + timedelta(days=offset), tz, hours, replan=False)
+        if window is not None and window.start >= after:
+            return window.start
+    return after
