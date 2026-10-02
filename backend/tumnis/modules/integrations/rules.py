@@ -10,7 +10,7 @@ provider's request limit.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, Final, Literal
 
@@ -102,28 +102,56 @@ MAX_BACKOFF_MIN: Final = 60  # plan default
 
 # What a sync outcome makes of each status (T-P3-02-08). A transient error leaves a
 # connection that never synced, or that waits for a new sign-in, where it is.
-STATUS_TABLE: Final[Mapping[tuple[ConnectionStatus, SyncOutcome], ConnectionStatus]] = {}
+_S = ConnectionStatus
+_O = SyncOutcome
+STATUS_TABLE: Final[Mapping[tuple[ConnectionStatus, SyncOutcome], ConnectionStatus]] = {
+    **{(status, _O.success): (_S.disabled if status is _S.disabled else _S.ok) for status in _S},
+    **{
+        (status, _O.auth_error): (_S.disabled if status is _S.disabled else _S.auth_required)
+        for status in _S
+    },
+    **{
+        (status, _O.transient_error): (
+            _S.degraded if status in (_S.ok, _S.syncing, _S.degraded) else status
+        )
+        for status in _S
+    },
+}
 
 
 def provider_limit(provider: str) -> ProviderLimit:
-    raise NotImplementedError
+    """The provider's request limit per account (plan default for one not listed)."""
+    return PROVIDER_LIMITS.get(provider, DEFAULT_LIMIT)
 
 
 def sync_every(provider: str, settings: ConnectionSettings) -> int:
-    raise NotImplementedError
+    """Minutes between syncs: the connection's setting, else the provider's default."""
+    return settings.sync_every_min or DEFAULT_SYNC_MIN.get(provider, FALLBACK_SYNC_MIN)
 
 
 def backfill_start(
     now: datetime, settings: ConnectionSettings, provider_cap_days: int | None
 ) -> datetime:
-    raise NotImplementedError
+    """How far back the first sync reaches (Data flow rule 3): the connection's backfill
+    window, never past what the provider keeps."""
+    days = settings.backfill_days
+    if provider_cap_days is not None:
+        days = min(days, provider_cap_days)
+    return now - timedelta(days=days)
 
 
 def next_sync_at(
     now: datetime, last: datetime | None, every_min: int, failures: int, jitter_s: float = 0
 ) -> datetime:
-    raise NotImplementedError
+    """When the next sync is due. After a success, one interval after the last sync (or
+    now); after `failures` failures in a row, an exponential backoff from now, capped at
+    MAX_BACKOFF_MIN, plus jitter."""
+    if failures <= 0:
+        return (last or now) + timedelta(minutes=every_min)
+    backoff = min(MAX_BACKOFF_MIN, every_min * 2 ** min(failures, 16))
+    return now + timedelta(minutes=backoff, seconds=jitter_s)
 
 
 def status_after(prev: ConnectionStatus, outcome: SyncOutcome) -> ConnectionStatus:
-    raise NotImplementedError
+    """What a sync outcome makes of a connection's status (T-P3-02-08)."""
+    return STATUS_TABLE[(prev, outcome)]
