@@ -59,7 +59,7 @@ from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.modules.knowledge import api, pipeline
 from tumnis.modules.knowledge.adapters.obsidian.port import FileStat, VaultReader
-from tumnis.modules.knowledge.models import Document, DocumentLink, DocumentVersion
+from tumnis.modules.knowledge.models import Document, DocumentLink, DocumentVersion, ObsidianVault
 from tumnis.modules.knowledge.obsidian.parse import Link, ParsedNote, parse_note
 from tumnis.modules.knowledge.obsidian.rules import (
     TEMPLATES_CONFIG,
@@ -98,6 +98,7 @@ ExtractHook = Callable[[UUID, UUID, str], Awaitable[None]]  # (workspace, versio
 _documents: Table = Document.__table__  # type: ignore[assignment]
 _links: Table = DocumentLink.__table__  # type: ignore[assignment]
 _versions: Table = DocumentVersion.__table__  # type: ignore[assignment]
+_vaults: Table = ObsidianVault.__table__  # type: ignore[assignment]
 _hooks: dict[str, ExtractHook] = {}
 
 
@@ -166,6 +167,8 @@ async def sync_vault(  # the connection, its reader and mapping, and the hooks
     scan = _Scan(listing={item.path: item for item in listed}, docs=docs)
     await _read_notes(reader, scan, mapping, known)
     async with tenant_session(ctx) as s:
+        if await _disconnected(s, connection_id):
+            return scan.report
         await _apply_notes(s, scan, connection_id, now)
         await _apply_attachments(s, reader, scan, connection_id, now)
         await _trash_missing(s, scan)
@@ -173,6 +176,21 @@ async def sync_vault(  # the connection, its reader and mapping, and the hooks
     for version_id, path in scan.extractions:
         await request(ctx.workspace_id, version_id, path)
     return scan.report
+
+
+async def _disconnected(s: AsyncSession, connection_id: UUID) -> bool:
+    """Lock the connection's vault rows for this apply, so a disconnect (`delete_vault`
+    soft-deletes the row) waits for it, and say whether the vault was disconnected already:
+    then nothing is written, as its Documents are the person's to edit now. A connection
+    with no vault row (a direct caller) is synced."""
+    rows = (
+        await s.execute(
+            select(_vaults.c.deleted_at)
+            .where(_vaults.c.connection_id == connection_id)
+            .with_for_update()
+        )
+    ).all()
+    return bool(rows) and all(row.deleted_at is not None for row in rows)
 
 
 @dataclass(frozen=True)

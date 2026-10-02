@@ -286,3 +286,38 @@ async def test_sync_tick_keeps_clones_in_use_and_disconnect_wins(
         await vaults.delete_vault(ws.ctx, s, made["ok"])
     await vaults._set_status(ws.ctx, made["ok"], "ok", last_error=None)
     assert (await _connection(ws, made["ok"]))["status"] == "disabled"
+
+
+@pytest.mark.req("FR-15.10")
+@pytest.mark.wp("P3-12")
+async def test_a_sync_after_disconnect_writes_nothing(
+    knowledge_ws: WorkspaceHandle, tmp_path: Path
+) -> None:
+    """A scan whose apply starts after the vault was disconnected writes nothing: the
+    vault's Documents are the person's to edit from then on. (The apply locks the vault
+    row, so a disconnect during an apply waits for it.)"""
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge.adapters.obsidian.folder import FolderReader  # noqa: PLC0415
+    from tumnis.modules.knowledge.obsidian import sync as vault_sync  # noqa: PLC0415
+    from tumnis.modules.knowledge.obsidian import vaults  # noqa: PLC0415
+    from tumnis.modules.knowledge.obsidian.rules import VaultMapping  # noqa: PLC0415
+
+    ws = knowledge_ws
+    folder = copy_vault(tmp_path / "vault")
+    async with tenant_session(ws.ctx) as s:
+        made = await vaults.create_vault(
+            ws.ctx, s, vaults.VaultCreateIn(mode="folder"), net=_net("self-hosted")
+        )
+    async with tenant_session(ws.ctx) as s:
+        await vaults.delete_vault(ws.ctx, s, made.id)
+    requested: list[object] = []
+
+    async def extract(*args: object) -> None:
+        requested.append(args)
+
+    report = await vault_sync.sync_vault(
+        ws.ctx, made.id, FolderReader(folder), VaultMapping(), extract=extract
+    )
+    assert (report.created, report.attachments, requested) == (0, 0, [])
+    env = VaultEnv(ws=ws, connection_id=made.id, projects={})
+    assert await vault_documents(env) == {}
