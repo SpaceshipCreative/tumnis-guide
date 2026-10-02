@@ -106,7 +106,9 @@ import {
   planningGetMetricsSummary,
   planningGetPlan,
   planningGetProjectWeek,
+  planningGetUnattendedWindow,
   planningMoveIssue,
+  planningPutUnattendedWindow,
   planningRecordAppOpen,
   planningRemoveItem,
   planningReplan,
@@ -146,6 +148,7 @@ import {
   tasksGetRecurrence,
   tasksGetReviewCount,
   tasksGetTask,
+  tasksGetUnattended,
   tasksLinkContextItem,
   tasksLinkPullRequest,
   tasksListComments,
@@ -158,6 +161,7 @@ import {
   tasksMoveTask,
   tasksPutColumns,
   tasksPutRecurrence,
+  tasksPutUnattended,
   tasksTrashTask,
   tasksUndoTask,
   tasksUpdateEstimate,
@@ -445,9 +449,15 @@ import type {
   PlanningGetProjectWeekData,
   PlanningGetProjectWeekError,
   PlanningGetProjectWeekResponse,
+  PlanningGetUnattendedWindowData,
+  PlanningGetUnattendedWindowError,
+  PlanningGetUnattendedWindowResponse,
   PlanningMoveIssueData,
   PlanningMoveIssueError,
   PlanningMoveIssueResponse,
+  PlanningPutUnattendedWindowData,
+  PlanningPutUnattendedWindowError,
+  PlanningPutUnattendedWindowResponse,
   PlanningRecordAppOpenData,
   PlanningRecordAppOpenError,
   PlanningRecordAppOpenResponse,
@@ -565,6 +575,9 @@ import type {
   TasksGetTaskData,
   TasksGetTaskError,
   TasksGetTaskResponse,
+  TasksGetUnattendedData,
+  TasksGetUnattendedError,
+  TasksGetUnattendedResponse,
   TasksLinkContextItemData,
   TasksLinkContextItemError,
   TasksLinkContextItemResponse,
@@ -601,6 +614,9 @@ import type {
   TasksPutRecurrenceData,
   TasksPutRecurrenceError,
   TasksPutRecurrenceResponse,
+  TasksPutUnattendedData,
+  TasksPutUnattendedError,
+  TasksPutUnattendedResponse,
   TasksTrashTaskData,
   TasksTrashTaskError,
   TasksTrashTaskResponse,
@@ -5882,6 +5898,67 @@ export const tasksChangeStatusMutation = (
   return mutationOptions;
 };
 
+export const tasksGetUnattendedQueryKey = (
+  options: Options<TasksGetUnattendedData>,
+) => createQueryKey("tasksGetUnattended", options);
+
+/**
+ * Get Unattended
+ *
+ * Whether the task is queued for the unattended window (P4-04).
+ */
+export const tasksGetUnattendedOptions = (
+  options: Options<TasksGetUnattendedData>,
+) =>
+  queryOptions<
+    TasksGetUnattendedResponse,
+    TasksGetUnattendedError,
+    TasksGetUnattendedResponse,
+    ReturnType<typeof tasksGetUnattendedQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksGetUnattended({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksGetUnattendedQueryKey(options),
+  });
+
+/**
+ * Put Unattended
+ *
+ * Queue the task for the unattended window or take it off (P4-04, FR-4.5): the
+ * person's choice, so a key or token gets 403 `session_required`; 422 `not_ai` for a
+ * task that is not labelled AI.
+ */
+export const tasksPutUnattendedMutation = (
+  options?: Partial<Options<TasksPutUnattendedData>>,
+): UseMutationOptions<
+  TasksPutUnattendedResponse,
+  TasksPutUnattendedError,
+  Options<TasksPutUnattendedData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksPutUnattendedResponse,
+    TasksPutUnattendedError,
+    Options<TasksPutUnattendedData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksPutUnattended({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 /**
  * Undo Task
  *
@@ -5971,6 +6048,61 @@ export const searchTypeaheadTasksOptions = (
     },
     queryKey: searchTypeaheadTasksQueryKey(options),
   });
+
+export const planningGetUnattendedWindowQueryKey = (
+  options?: Options<PlanningGetUnattendedWindowData>,
+) => createQueryKey("planningGetUnattendedWindow", options);
+
+/**
+ * Get Unattended Window
+ */
+export const planningGetUnattendedWindowOptions = (
+  options?: Options<PlanningGetUnattendedWindowData>,
+) =>
+  queryOptions<
+    PlanningGetUnattendedWindowResponse,
+    PlanningGetUnattendedWindowError,
+    PlanningGetUnattendedWindowResponse,
+    ReturnType<typeof planningGetUnattendedWindowQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await planningGetUnattendedWindow({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: planningGetUnattendedWindowQueryKey(options),
+  });
+
+/**
+ * Put Unattended Window
+ */
+export const planningPutUnattendedWindowMutation = (
+  options?: Partial<Options<PlanningPutUnattendedWindowData>>,
+): UseMutationOptions<
+  PlanningPutUnattendedWindowResponse,
+  PlanningPutUnattendedWindowError,
+  Options<PlanningPutUnattendedWindowData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningPutUnattendedWindowResponse,
+    PlanningPutUnattendedWindowError,
+    Options<PlanningPutUnattendedWindowData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningPutUnattendedWindow({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const usageGetUsageQueryKey = (options: Options<UsageGetUsageData>) =>
   createQueryKey("usageGetUsage", options);
