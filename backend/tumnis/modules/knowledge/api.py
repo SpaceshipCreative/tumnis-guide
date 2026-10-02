@@ -3502,15 +3502,27 @@ async def record_delete_refused(ctx: WorkspaceContext, document_id: UUID) -> Non
 
 
 NOT_AN_OUTSIDE_FILE: Final = "not_an_outside_file"
+SEVERAL_FILES: Final = "several_files"
 
 
 async def _outside_file_target(s: AsyncSession, document_id: UUID) -> None:
     """The delete-at-source flow serves outside files only: a document whose file Tumnis
-    made goes to its trash instead (409 `not_an_outside_file`)."""
+    made goes to its trash instead (409 `not_an_outside_file`). A confirmation deletes one
+    file: a document with more than one live file record is refused (409
+    `several_files`)."""
     policy, origin = await _delete_target(s, document_id)
     if may_delete(policy, origin, ActorKind.user, confirmed_by_user=True) != "delete_at_source":
         raise ProblemError(
             409, NOT_AN_OUTSIDE_FILE, "Only a file Tumnis did not make is deleted at its source."
+        )
+    live = await s.scalar(
+        select(func.count())
+        .select_from(_files)
+        .where(_files.c.document_id == document_id, _files.c.deleted_at.is_(None))
+    )
+    if live != 1:
+        raise ProblemError(
+            409, SEVERAL_FILES, "This document has more than one file; delete them one by one."
         )
 
 
@@ -3582,7 +3594,11 @@ async def delete_at_source(
         raise ProblemError(422, "confirmation_invalid", "Confirm the delete again.")
     await s.execute(
         update(_files)
-        .where(_files.c.document_id == document_id, _files.c.deleted_at.is_(None))
+        .where(
+            _files.c.document_id == document_id,
+            _files.c.origin == "external",
+            _files.c.deleted_at.is_(None),
+        )
         .values(delete_confirmed=True)
     )
     await trash_document(s, document_id)

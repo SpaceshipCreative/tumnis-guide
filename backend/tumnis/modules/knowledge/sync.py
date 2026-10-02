@@ -951,7 +951,8 @@ def _unchanged(item: Mapping[Any, Any], record: RowMapping | None, doc: RowMappi
     if doc is None:
         return False
     same: bool = doc["version"] == local["version"]
-    return same and (doc["deleted_at"] is not None) == local["trashed"]
+    confirmed = record is None or bool(record["delete_confirmed"]) == local["delete_confirmed"]
+    return same and confirmed and (doc["deleted_at"] is not None) == local["trashed"]
 
 
 async def apply(workspace_id: str, location_id: str, item: Mapping[Any, Any]) -> list[list[str]]:
