@@ -4,8 +4,9 @@ catalog, for tables no seed covers (P0-06).
 NOT NULL columns without a default get a value by type (`text` "x", numbers 0, `boolean`
 false, `jsonb` {}, arrays {}); a foreign key picks an existing row of the referenced table
 in the same workspace, creating one recursively when there is none. A column whose check
-constraint the type rule cannot meet gets its value from `COLUMN_VALUES`; a type with no
-rule raises, naming the column to add there.
+constraint the type rule cannot meet gets its value from `COLUMN_VALUES`; a nullable column
+that a check constraint still needs set is filled like a NOT NULL one when listed in
+`FILLED_COLUMNS`; a type with no rule raises, naming the column to add there.
 
 Run it on an owner connection: the owner bypasses row-level security, so it can see and
 create rows in any workspace.
@@ -87,10 +88,18 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("notifications", "decision"): "now",  # ck_notifications_decision
     ("delivery_attempts", "channel"): "push",  # ck_delivery_attempts_channel
     ("delivery_attempts", "status"): "sent",  # ck_delivery_attempts_status
+    ("s3_sources", "provider"): "minio",  # ck_s3_sources_provider (P3-13)
     ("unattended_windows", "weekdays"): [0],  # ck_unattended_windows_weekdays (P4-04)
     ("unattended_windows", "start_local"): time(22, 0),  # ck_unattended_windows_span
     ("unattended_windows", "end_local"): time(6, 0),
 }
+
+# Nullable columns a check constraint still needs set (one of a pair), filled as NOT NULL.
+FILLED_COLUMNS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("folder_files", "location_id"),  # ck_folder_files_location_or_connection (P3-13)
+    }
+)
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
 _BY_TYPE: dict[str, Any] = {
@@ -216,7 +225,7 @@ def _build(
             row[column] = workspace_id
         elif (table, column) in COLUMN_VALUES:
             row[column] = COLUMN_VALUES[table, column]
-        elif nullable or default is not None:
+        elif (nullable and (table, column) not in FILLED_COLUMNS) or default is not None:
             continue
         elif column in foreign:
             ref, ref_col = foreign[column]

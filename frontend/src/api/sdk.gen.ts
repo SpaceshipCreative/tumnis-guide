@@ -247,6 +247,9 @@ import type {
   KnowledgeCreateObsidianVaultData,
   KnowledgeCreateObsidianVaultErrors,
   KnowledgeCreateObsidianVaultResponses,
+  KnowledgeCreateS3SourceData,
+  KnowledgeCreateS3SourceErrors,
+  KnowledgeCreateS3SourceResponses,
   KnowledgeCreateTextEntryData,
   KnowledgeCreateTextEntryErrors,
   KnowledgeCreateTextEntryResponses,
@@ -259,6 +262,9 @@ import type {
   KnowledgeDeleteObsidianVaultData,
   KnowledgeDeleteObsidianVaultErrors,
   KnowledgeDeleteObsidianVaultResponses,
+  KnowledgeDeleteS3SourceData,
+  KnowledgeDeleteS3SourceErrors,
+  KnowledgeDeleteS3SourceResponses,
   KnowledgeGetBriefData,
   KnowledgeGetBriefErrors,
   KnowledgeGetBriefResponses,
@@ -277,6 +283,9 @@ import type {
   KnowledgeGetQuotaData,
   KnowledgeGetQuotaErrors,
   KnowledgeGetQuotaResponses,
+  KnowledgeGetS3SourceData,
+  KnowledgeGetS3SourceErrors,
+  KnowledgeGetS3SourceResponses,
   KnowledgeIssueDeleteConfirmationData,
   KnowledgeIssueDeleteConfirmationErrors,
   KnowledgeIssueDeleteConfirmationResponses,
@@ -289,9 +298,15 @@ import type {
   KnowledgeListObsidianVaultsData,
   KnowledgeListObsidianVaultsErrors,
   KnowledgeListObsidianVaultsResponses,
+  KnowledgeListS3SourcesData,
+  KnowledgeListS3SourcesErrors,
+  KnowledgeListS3SourcesResponses,
   KnowledgeListVersionsData,
   KnowledgeListVersionsErrors,
   KnowledgeListVersionsResponses,
+  KnowledgeMinioNotificationData,
+  KnowledgeMinioNotificationErrors,
+  KnowledgeMinioNotificationResponses,
   KnowledgeMoveProjectFolderData,
   KnowledgeMoveProjectFolderErrors,
   KnowledgeMoveProjectFolderResponses,
@@ -628,21 +643,26 @@ import {
   zKnowledgeConnectObsidianVaultResponse,
   zKnowledgeCreateLocationResponse,
   zKnowledgeCreateObsidianVaultResponse,
+  zKnowledgeCreateS3SourceResponse,
   zKnowledgeCreateTextEntryResponse,
   zKnowledgeDeleteAtSourceResponse,
   zKnowledgeDeleteDocumentResponse,
   zKnowledgeDeleteObsidianVaultResponse,
+  zKnowledgeDeleteS3SourceResponse,
   zKnowledgeGetBriefResponse,
   zKnowledgeGetDocumentResponse,
   zKnowledgeGetFileResponse,
   zKnowledgeGetObsidianPreviewResponse,
   zKnowledgeGetObsidianVaultResponse,
   zKnowledgeGetQuotaResponse,
+  zKnowledgeGetS3SourceResponse,
   zKnowledgeIssueDeleteConfirmationResponse,
   zKnowledgeListDocumentsResponse,
   zKnowledgeListLocationsResponse,
   zKnowledgeListObsidianVaultsResponse,
+  zKnowledgeListS3SourcesResponse,
   zKnowledgeListVersionsResponse,
+  zKnowledgeMinioNotificationResponse,
   zKnowledgeMoveProjectFolderResponse,
   zKnowledgePreviewObsidianVaultResponse,
   zKnowledgeProbeObsidianHostKeyResponse,
@@ -2856,6 +2876,94 @@ export const knowledgeGetQuota = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List S3 Sources
+ */
+export const knowledgeListS3Sources = <ThrowOnError extends boolean = false>(
+  options?: Options<KnowledgeListS3SourcesData, ThrowOnError>,
+): RequestResult<
+  KnowledgeListS3SourcesResponses,
+  KnowledgeListS3SourcesErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    KnowledgeListS3SourcesResponses,
+    KnowledgeListS3SourcesErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeListS3SourcesResponse.parseAsync(data),
+    url: "/v1/knowledge/s3-sources",
+    ...options,
+  });
+
+/**
+ * Create S3 Source
+ */
+export const knowledgeCreateS3Source = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeCreateS3SourceData, ThrowOnError>,
+): RequestResult<
+  KnowledgeCreateS3SourceResponses,
+  KnowledgeCreateS3SourceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeCreateS3SourceResponses,
+    KnowledgeCreateS3SourceErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeCreateS3SourceResponse.parseAsync(data),
+    url: "/v1/knowledge/s3-sources",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Delete S3 Source
+ */
+export const knowledgeDeleteS3Source = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeDeleteS3SourceData, ThrowOnError>,
+): RequestResult<
+  KnowledgeDeleteS3SourceResponses,
+  KnowledgeDeleteS3SourceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    KnowledgeDeleteS3SourceResponses,
+    KnowledgeDeleteS3SourceErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeDeleteS3SourceResponse.parseAsync(data),
+    url: "/v1/knowledge/s3-sources/{connection_id}",
+    ...options,
+  });
+
+/**
+ * Get S3 Source
+ */
+export const knowledgeGetS3Source = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeGetS3SourceData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetS3SourceResponses,
+  KnowledgeGetS3SourceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeGetS3SourceResponses,
+    KnowledgeGetS3SourceErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeGetS3SourceResponse.parseAsync(data),
+    url: "/v1/knowledge/s3-sources/{connection_id}",
+    ...options,
+  });
+
+/**
  * Search
  *
  * Full-text search of a project's items and the workspace knowledge base (none: every
@@ -5061,4 +5169,31 @@ export const usageGetUsage = <ThrowOnError extends boolean = false>(
       await zUsageGetUsageResponse.parseAsync(data),
     url: "/v1/usage",
     ...options,
+  });
+
+/**
+ * Minio Notification
+ */
+export const knowledgeMinioNotification = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeMinioNotificationData, ThrowOnError>,
+): RequestResult<
+  KnowledgeMinioNotificationResponses,
+  KnowledgeMinioNotificationErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeMinioNotificationResponses,
+    KnowledgeMinioNotificationErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeMinioNotificationResponse.parseAsync(data),
+    url: "/v1/webhooks/minio/{connection_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });

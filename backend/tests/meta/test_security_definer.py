@@ -48,6 +48,10 @@ ALLOWED: dict[str, str] = {
     ),
     "app.dead_letter_counts": "P0-27: /metrics counts dead letters by status across workspaces",
     "app.usage_totals": "P0-27: /metrics sums usage counters per counter across workspaces",
+    "app.s3_source_webhook": (
+        "P3-13: the MinIO webhook route finds a linked bucket's workspace and token hash by "
+        "its connection id before the workspace is known"
+    ),
     "app.connector_sync_ages": (
         "P3-02: /metrics reads each provider's oldest sync age and items seen across workspaces"
     ),

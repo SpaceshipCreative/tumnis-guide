@@ -1,15 +1,17 @@
 """The extraction pipeline's ports (P1-16): the virus scanner, the vision model and the
-document extractor. Callers depend on these only; each has a fake beside its real adapter.
+document extractor; and an S3 linked source's (P3-13): its read-only listing and the key
+capability check. Callers depend on these only; each has a fake beside its real adapter.
 """
 
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
-from tumnis.modules.knowledge.rules import DocKind
+from tumnis.modules.knowledge.rules import DocKind, KeyCapabilities
+from tumnis.modules.knowledge.storage import FileStat, Health, Page
 
 
 class ScanResult(BaseModel, frozen=True):
@@ -67,3 +69,42 @@ class Extractor(Protocol):
     def chunk_markdown(self, markdown: str) -> list[ChunkRow]: ...
 
     def page_image(self, path: Path, page: int) -> bytes: ...
+
+
+@runtime_checkable
+class S3SourceReader(Protocol):
+    """An S3 bucket linked as a knowledge source (P3-13, FR-15.11): read only, never a
+    write. Keys are whole object keys in the bucket; `list` pages `ListObjectsV2` (current
+    versions only, so a versioned bucket shows its latest version and a delete marker
+    shows as the key missing)."""
+
+    async def list(self, prefix: str, cursor: str | None) -> Page[FileStat]: ...
+
+    async def stat(self, key: str) -> FileStat | None: ...
+
+    def read(self, key: str) -> AsyncIterator[bytes]: ...
+
+    async def health(self) -> Health: ...
+
+    async def aclose(self) -> None: ...
+
+
+@runtime_checkable
+class KeyCapabilityCheck(Protocol):
+    """What a linked source's key may do, asked of its provider (P3-13): Backblaze B2's
+    `b2_authorize_account` and MinIO's account info. Other providers have no check."""
+
+    async def check_b2(
+        self, key_id: str, application_key: str, *, bucket: str
+    ) -> KeyCapabilities: ...
+
+    async def check_minio(  # where, who, and what the key is for
+        self,
+        endpoint: str,
+        region: str,
+        access_key: str,
+        secret_key: str,
+        *,
+        bucket: str,
+        prefixes: Sequence[str],
+    ) -> KeyCapabilities: ...
