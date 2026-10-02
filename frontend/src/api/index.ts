@@ -930,6 +930,7 @@ export type {
   SetupIn,
   SetupOut,
   SetupTotpIn,
+  SftpConfigIn,
   SignedInOut,
   SpeechGetClipData,
   SpeechGetClipError,
