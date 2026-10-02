@@ -36,6 +36,8 @@ jobs:
     timeout-minutes: 15 # cold model cache about 3.5 min, warm less (PR #166)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # nothing here uses git after checkout
       # Its own uv cache (cache-suffix): the torch wheels would never land in the cache the
       # ci.yml jobs share, since whichever job saves a key first wins.
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
