@@ -76,8 +76,14 @@ async function showAccepted(
 ): Promise<void> {
   const options = knowledgeListDocumentsOptions(knowledgeListArgs(projectId));
   // The list may not be loaded yet (the phone's Context sheet is closed): load it first,
-  // so the new row joins the whole list rather than standing in for it.
-  await client.query({ ...options, staleTime: "static" });
+  // so the new row joins the whole list rather than standing in for it. The server has
+  // already accepted the file, so a failing list GET must not report the upload as
+  // failed (a retry would store it twice): the list then simply refetches when shown.
+  try {
+    await client.query({ ...options, staleTime: "static" });
+  } catch {
+    await client.invalidateQueries({ queryKey: options.queryKey });
+  }
   client.setQueryData(options.queryKey, (old) =>
     old === undefined || old.items.some((d) => d.id === doc.id)
       ? old

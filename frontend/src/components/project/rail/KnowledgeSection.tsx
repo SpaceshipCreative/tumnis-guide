@@ -238,7 +238,7 @@ function ItemRow({
           </span>
         )}
         {isFile(doc) && (
-          <span className="shrink-0 text-xs text-muted">
+          <span aria-live="polite" className="shrink-0 text-xs text-muted">
             {FILE_STATUS[doc.status]}
           </span>
         )}
