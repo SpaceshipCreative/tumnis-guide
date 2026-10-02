@@ -2829,12 +2829,15 @@ async def queue_unattended(
 ) -> UnattendedOut:
     """Queues the task for the unattended window, or takes it off, in the caller's
     transaction. Only AI tasks can be queued (Human, Hybrid or a pending label: 422
-    `not_ai`); taking a task off works for any label. Queueing a queued task keeps its
+    `not_ai`), and not a done one (422 `task_done`: every window would refuse it again);
+    taking a task off works for any task. Queueing a queued task keeps its
     first time, and taking off one that is not queued changes nothing. The live views
     refresh; no event (the flag is not part of the task's document)."""
     row = await _row(s, task_id, lock=True)
     if queued and row["label"] != Label.AI:
         raise ProblemError(422, "not_ai", "Only AI tasks can run unattended")
+    if queued and row["status"] == Status.DONE:
+        raise ProblemError(422, "task_done", "A done task cannot run unattended")
     if queued == (row["unattended_queued_at"] is not None):
         return _unattended_out(row)
     values: dict[str, Any] = (

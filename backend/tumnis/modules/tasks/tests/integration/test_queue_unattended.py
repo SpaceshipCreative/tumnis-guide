@@ -12,7 +12,7 @@ import pytest
 if TYPE_CHECKING:
     from tests._auth import SessionClient
     from tests.fixtures import WorkspaceHandle
-    from tumnis.modules.tasks.tests.conftest import MakeTask
+    from tumnis.modules.tasks.tests.conftest import MakeTask, SetStatus
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
@@ -72,3 +72,21 @@ async def test_only_ai_tasks_can_be_queued(
     cleared = await session_client.put(_path(human.id), json={"queued": False})
     assert cleared.status_code == 200, cleared.text
     assert cleared.json()["queued"] is False
+
+
+@pytest.mark.req("FR-4.5")
+@pytest.mark.wp("P4-04")
+async def test_a_done_task_cannot_be_queued(
+    make_task: MakeTask, set_status: SetStatus, session_client: SessionClient
+) -> None:
+    """A done AI task answers 422 `task_done` and stays off the queue (every window would
+    only refuse it again); taking it off still works."""
+    task = await make_task(label="ai", acceptance_criteria="The page loads", status="today")
+    working = await set_status(task, "in_progress", actor="agent")
+    done = await set_status(await set_status(working, "in_review", actor="agent"), "done")
+    refused = await session_client.put(_path(done.id), json={"queued": True})
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["code"] == "task_done"
+    assert (await session_client.get(_path(done.id))).json()["queued"] is False
+    cleared = await session_client.put(_path(done.id), json={"queued": False})
+    assert cleared.status_code == 200, cleared.text

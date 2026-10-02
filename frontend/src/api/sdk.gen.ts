@@ -4355,7 +4355,7 @@ export const tasksGetUnattended = <ThrowOnError extends boolean = false>(
  *
  * Queue the task for the unattended window or take it off (P4-04, FR-4.5): the
  * person's choice, so a key or token gets 403 `session_required`; 422 `not_ai` for a
- * task that is not labelled AI.
+ * task that is not labelled AI, 422 `task_done` for a done task.
  */
 export const tasksPutUnattended = <ThrowOnError extends boolean = false>(
   options: Options<TasksPutUnattendedData, ThrowOnError>,
