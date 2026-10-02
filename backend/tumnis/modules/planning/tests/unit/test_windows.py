@@ -164,7 +164,6 @@ CASES: dict[str, tuple[frozenset[int], time, time, datetime, ZoneInfo, tuple[str
 
 @pytest.mark.req("FR-4.5", "REL-6")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 @pytest.mark.parametrize("case", list(CASES))
 def test_window_bounds_table(case: str) -> None:
     """T-P4-04-01
@@ -188,7 +187,6 @@ def test_window_bounds_table(case: str) -> None:
 
 @pytest.mark.req("FR-4.5", "REL-6")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 def test_window_lengths_follow_wall_time_on_dst_nights() -> None:
     """T-P4-04-01
     The same 22:00 to 06:00 window lasts 7 hours on a spring-forward night and 9 hours on a
@@ -211,7 +209,6 @@ def test_window_lengths_follow_wall_time_on_dst_nights() -> None:
 
 @pytest.mark.req("REL-6")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 def test_timezone_change_moves_window() -> None:
     """T-P4-04-02
     The same window (Monday to Friday, 22:00 to 06:00) read in another zone keeps its wall

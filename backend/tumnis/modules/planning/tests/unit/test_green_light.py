@@ -88,7 +88,6 @@ CASES: dict[str, tuple[dict[str, Any], dict[str, bool], str | None]] = {
 
 @pytest.mark.req("FR-4.5")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 @pytest.mark.parametrize("case", list(CASES))
 def test_green_light_table(case: str) -> None:
     """T-P4-04-03
@@ -110,7 +109,6 @@ def test_green_light_table(case: str) -> None:
 
 @pytest.mark.req("FR-4.5")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 def test_every_refusal_has_plain_words() -> None:
     """T-P4-04-03
     Each refusal reason has the plain words the day close and its review item show; the two
@@ -126,7 +124,6 @@ def test_every_refusal_has_plain_words() -> None:
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 @given(
     label=st.sampled_from(LABELS),
     status=st.sampled_from(STATUSES),
