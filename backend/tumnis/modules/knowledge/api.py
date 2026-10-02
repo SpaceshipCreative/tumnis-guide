@@ -1387,18 +1387,17 @@ async def _folder_name(s: AsyncSession, project_id: UUID, location_id: UUID) -> 
     return dedupe_name(sanitize_filename(name), frozenset(p.casefold() for p in taken))
 
 
-async def _folder_row(s: AsyncSession, project_id: UUID) -> RowMapping:
-    row = (
-        (
-            await s.execute(
-                select(_folders).where(
-                    _folders.c.project_id == project_id, _folders.c.deleted_at.is_(None)
-                )
-            )
-        )
-        .mappings()
-        .first()
+async def _folder_row(s: AsyncSession, project_id: UUID, *, write: bool = False) -> RowMapping:
+    """The project's folder row. A file write takes it with a share lock (`write`) to the
+    end of its transaction: writes run side by side, but the move job's switch, which
+    locks the row for update, waits for them and sees their files, and a write that waits
+    for a switch reads the folder's new place (P3-14)."""
+    query = select(_folders).where(
+        _folders.c.project_id == project_id, _folders.c.deleted_at.is_(None)
     )
+    if write:
+        query = query.with_for_update(read=True)
+    row = (await s.execute(query)).mappings().first()
     if row is None:
         raise NotFound("project_folders", project_id)
     return row
@@ -1468,7 +1467,7 @@ async def write_project_file(
 ) -> FileStat:
     """Write a file into the project's folder; 409 `location_offline` while the location
     is offline, whether marked so or found so now, and nothing reaches it."""
-    folder = await _folder_row(s, project_id)
+    folder = await _folder_row(s, project_id, write=True)
     location = await _location_row(s, folder["location_id"])
     _require_online(location)
     try:
@@ -1519,7 +1518,7 @@ async def save_note(  # noqa: PLR0912  # queue, write and record, one branch eac
     )
     if doc is None or doc["project_id"] is None:
         raise NotFound("documents", document_id)
-    folder = await _folder_row(s, doc["project_id"])
+    folder = await _folder_row(s, doc["project_id"], write=True)
     location = await _location_row(s, folder["location_id"])
     text_body = doc["body_md"] or ""
     body = render_note(document_id, text_body).encode()
@@ -2041,7 +2040,7 @@ async def place_upload(  # the upload and where it goes
     `enqueue_extract(ctx, placed.version_id, "storage")` (scanned where it lies, never
     placed again). The file is written before the scan, unlike the upload route's
     spool-first path, so an infected file stays in the folder, quarantined."""
-    folder = await _folder_row(s, project_id)
+    folder = await _folder_row(s, project_id, write=True)
     location = await _location_row(s, folder["location_id"])
     _require_online(location)
     try:
