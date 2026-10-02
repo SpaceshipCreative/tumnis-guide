@@ -1,6 +1,6 @@
 # Operations
 
-How to run a Tumnis install day to day: health, backups and the restore drill, upgrades and rollback, the master key, certificates and alerts. It assumes the install from the [README](../README.md): the repository checked out on the server, a `.env` in its root, and every command run from that root. Commands that change the stack are tested: the Upgrade and Rollback blocks are tagged `readme:upgrade`, and the README job (`.github/workflows/readme.yml`) runs them every night from the previous release to the current commit.
+How to run a Tumnis install day to day: health, backups and the restore drill, upgrades and rollback, the master key, certificates and alerts. It assumes the install from the [README](../README.md): the repository checked out on the server, a `.env` in its root, and every command run from that root. Commands that change the stack are tested: the Upgrade and Rollback blocks are tagged `readme:upgrade`, and the README job (`.github/workflows/readme.yml`) runs them every night from the previous release to the current commit, once a release tag contains the README harness; until then that nightly job skips.
 
 Where things live:
 
@@ -13,7 +13,7 @@ Where things live:
 | Database, local backups, uploads | Docker volumes of the compose project `tumnis` (`pgdata`, `pgbackrest_repo1`, `spool`, ...) |
 | Per-workspace secrets (OAuth clients, storage keys, Web Push keys) | Sealed in the database with the workspace's data key |
 
-Lose the master key file or the pepper file and every sealed secret, every API key and every session is unreadable: keep a copy of both off the server (a password manager is fine), next to the backup cipher passphrase (ADR-0010).
+Lose the master key file and every sealed secret (OAuth clients, storage keys, Web Push keys, TOTP secrets) is unreadable: the secrets must be entered again and each person's TOTP reset (`tumnis admin reset-totp`). Lose the pepper file and every API key, runner token and session stops working: everyone signs in again and every key and runner token is issued again. Neither loss touches what only the other file protects. Keep a copy of both off the server (a password manager is fine), next to the backup cipher passphrase (ADR-0010).
 
 ## Health and monitoring
 
@@ -70,7 +70,7 @@ Project folders are backed up separately (REL-1): `scripts/backup/folders.sh REM
 
 ## Restore drill
 
-A point-in-time restore from repo2 must meet the 15-minute RPO and the 1-hour RTO; the drill is the test, quarterly (REL-1). `scripts/drill/restore_drill.sh --mode prod` never touches the running containers: it reads from them, restores repo2 into a new volume and a scratch Postgres on a drill network, runs the checks, and records the result in the audit log (`tumnis drill record`; it exits 1 when the RPO or RTO was missed).
+A point-in-time restore from repo2 must meet the 15-minute RPO and the 1-hour RTO; the drill is the test, quarterly (REL-1). `scripts/drill/restore_drill.sh --mode prod` never stops or restores the production database: it reads from the production containers, restores repo2 into a new volume and a scratch Postgres on a drill network, runs the checks, and records the result in the production audit log (`tumnis drill record`; it exits 1 when the RPO or RTO was missed).
 
 ```bash
 DRILL_SOURCE_PG=tumnis-postgres-1 DRILL_SOURCE_APP=tumnis-worker-1 \

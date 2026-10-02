@@ -19,7 +19,7 @@ Under the hood it is a modular Python monolith (FastAPI, DBOS, Postgres 18) with
 
 ## Install
 
-These steps install Tumnis on one server with Docker Compose, without any other tooling. Every command below is tested: the README job (`.github/workflows/readme.yml`) runs them, in order, on a fresh Ubuntu 24.04 VM for every change to this file or to `deploy/`, every night and on every release.
+These steps install Tumnis on one server with Docker Compose, without any other tooling. The automated install and first-run commands below are tested: the README job (`.github/workflows/readme.yml`) runs them, in order, on a fresh Ubuntu 24.04 VM for every change to this file or to `deploy/`, every night and on every release.
 
 ### 1. Check the tools
 
@@ -40,7 +40,7 @@ Run every command from here on in that folder.
 
 ### 3. Choose the address
 
-Set these four values in your shell. `TUMNIS_HOST` is the name you will open in the browser: `localhost` to try Tumnis on the server itself, or the server's Tailscale name (for example `tumnis.tailnet-name.ts.net`) to use it from your phone. `TUMNIS_EMAIL` is your sign-in address, and `TUMNIS_TIMEZONE` your IANA time zone (for example `Europe/Berlin`).
+Set these four values in your shell. `TUMNIS_HOST` is the name you will open in the browser: `localhost` to try Tumnis on the server itself, or the server's Tailscale name (for example `tumnis.tailnet-name.ts.net`) to use it from your phone. `TUMNIS_EMAIL` is your sign-in address, and `TUMNIS_TIMEZONE` your IANA time zone (for example `Europe/Berlin`). `TUMNIS_CA` is what the checks below trust: the self-signed certificate made in step 6, or, with a Tailscale certificate, the system's own store (step 6 sets it).
 
 ```bash readme:env
 TUMNIS_HOST=localhost
@@ -70,7 +70,7 @@ done
 sudo ls -l /etc/tumnis/secrets
 ```
 
-Copy the master key and the pepper to a password manager now. If either is lost, every stored secret, API key and session becomes unreadable ([docs/OPERATIONS.md](docs/OPERATIONS.md)).
+Copy the master key and the pepper to a password manager now. Without the master key, every secret Tumnis stores (and each sign-in's TOTP secret) is unreadable; without the pepper, every API key and session stops working ([docs/OPERATIONS.md](docs/OPERATIONS.md)).
 
 ### 5. Write the settings
 
@@ -80,7 +80,13 @@ Copy the master key and the pepper to a password manager now. If either is lost,
 [ -e .env ] || cp .env.example .env
 chmod 600 .env
 for name in APP_DB_PASSWORD OWNER_DB_PASSWORD POSTGRES_PASSWORD; do
-  grep -q "^$name=." .env || sed -i "s/^$name=.*/$name=$(openssl rand -hex 24)/" .env
+  grep -q "^$name=." .env && continue
+  value="$(openssl rand -hex 24)"
+  if grep -q "^$name=" .env; then
+    sed -i "s/^$name=.*/$name=$value/" .env
+  else
+    printf '%s=%s\n' "$name" "$value" >> .env
+  fi
 done
 sed -i -e "s|^TUMNIS_HOST=.*|TUMNIS_HOST=$TUMNIS_HOST|" \
   -e "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=https://$TUMNIS_HOST|" .env
@@ -100,6 +106,7 @@ sudo install -d -m 0755 /etc/tumnis/https
 sed -i "s|^TUMNIS_BIND_ADDRESS=.*|TUMNIS_BIND_ADDRESS=$(tailscale ip -4)|" .env
 sudo tailscale cert --cert-file /etc/tumnis/https/tumnis.crt \
   --key-file /etc/tumnis/https/tumnis.key "$TUMNIS_HOST"
+TUMNIS_CA=/etc/ssl/certs/ca-certificates.crt  # a Let's Encrypt certificate: trust the system's roots
 ```
 
 The certificate lasts 90 days; [docs/OPERATIONS.md, Certificates](docs/OPERATIONS.md#certificates) has the monthly renewal.
