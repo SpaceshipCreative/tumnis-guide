@@ -218,12 +218,17 @@ export function RecurrencePicker({
 }) {
   // `GET /v1/tasks/{id}/recurrence` answers 404 for a task that does not repeat (P0-19),
   // a failed request on every drawer open (APP-09). The project's recurring tasks (the
-  // Schedule rail's list) say whether the task is one; only then is its rule read. A
-  // rule this drawer saved stays shown from the cache until the list catches up.
+  // Schedule rail's list) say whether the task is one; only then is its rule read. If the
+  // list fails, the drawer asks for the rule anyway (one possible 404 beats hiding a
+  // rule). A rule this drawer saved stays shown from the cache until the list catches up.
   const recurring = useQuery(projectRecurrenceQuery(task.project_id));
-  const repeats =
-    recurring.data?.some((r) => r.latest_task_id === task.id) ?? false;
+  const repeats = recurring.isSuccess
+    ? recurring.data.some((r) => r.latest_task_id === task.id)
+    : recurring.isError;
   const rule = useQuery({ ...taskRecurrenceQuery(task.id), enabled: repeats });
+  // The form shows while the list loads, as it did while the rule loaded (T-P0-24-16): a
+  // save in that moment is still safe, because the server applies a PUT to the task's
+  // existing rule (P0-19), so it changes that rule rather than adding a second one.
   const current = rule.data ?? null;
   return (
     <section aria-label="Repeat" className="flex flex-col gap-2">
