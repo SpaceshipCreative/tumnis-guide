@@ -58,7 +58,25 @@ the sandbox) and quote the result in the PR body.
    `frontend/src/components/settings/connections/{Connections,ConnectWizard,ConnectionDetail}.tsx`,
    `api.ts`, `status.ts`, `ConnectionsFlows.test.tsx`, `frontend/src/test/msw/connections.ts`, plus edits
    to `components/settings/sections.ts`, `routes/settings.$section.tsx`, `lib/live-map.ts`. Its final
-   report did not reach c2: treat them as unverified. Check against the spec test
+   report arrived after the handoff commit. It says:
+   - T-14 body passes: vitest shows "Expect test to fail" (and a throwaway unmarked copy passed, then
+     deleted);
+   - its 6 `ConnectionsFlows.test.tsx` tests pass;
+   - `npm run typecheck` is clean on the final code;
+   - full vitest shows 350 passed and 1 "failed" (T-14, "Expect test to fail" only);
+   - `live-map.test.ts` T-P0-22-11 passes. The 5 connection ops are in `NOT_LIVE` because there is no
+     live entity for connections;
+   - lint was clean before the rename and live-map change; after them only `prettier --write` ran.
+   It did NOT run `npm run build`, `npm run bundle`, or
+   `node --test ../scripts/ci/check_bundle.test.mjs ../perf/thresholds.test.mjs`.
+   Context7 it used: `/tanstack/query/v5.90.3` (pinned version is 5.104.0) for refetchInterval,
+   enabled/skipToken and useMutation; `/websites/mswjs_io` (pinned version is 3.0.0) for
+   request.clone().json() and HttpResponse.
+   Open notes:
+   - pending_auth shows "Sign in", and disabled rows show no action. Disconnected rows are
+     soft-deleted, so they never appear in the list.
+   - `e2e/fixtures.ts` SETTINGS_SECTIONS does not include Connections (left alone).
+   Still verify it yourself against the spec test
    `Connections.test.tsx` (never edit it); run `cd frontend && npx vitest run src/components/settings/connections --maxWorkers=4`,
    `npm run typecheck`, `npm run lint`, full `npx vitest run --maxWorkers=4`, and the bundle check.
    SDK names are `connections*` (e.g. `connectionsListConnections`). Remove the `test.fails` marker only
