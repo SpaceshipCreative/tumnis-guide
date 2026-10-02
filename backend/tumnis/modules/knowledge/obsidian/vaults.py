@@ -658,13 +658,22 @@ async def vaults_to_sync() -> list[tuple[str, str]]:
 
 def _prune_clones(keep: set[str]) -> None:
     """Remove every clone under the data folder that is not in `keep` (a deleted vault's,
-    or one whose connect was refused)."""
+    or one whose connect was refused). Only a clone, a folder named by a connection id, is
+    removed: `.keys` holds a running command's deploy key and known_hosts, and the folder is
+    also git's and ssh's HOME."""
     root = data_dir()
     if not root.is_dir():
         return
     for child in root.iterdir():
-        if child.is_dir() and child.name not in keep:
+        if child.is_dir() and _is_clone(child.name) and child.name not in keep:
             shutil.rmtree(child, ignore_errors=True)
+
+
+def _is_clone(name: str) -> bool:
+    try:
+        return str(UUID(name)) == name
+    except ValueError:
+        return False
 
 
 async def watched_vaults() -> list[tuple[str, str, str]]:
