@@ -2,9 +2,10 @@
 
 A seed set is one YAML file or a folder of them; each document carries `schema_version: 1`
 and any of the sections `workspace`, `users`, `projects` (tasks nested, subtasks under
-tasks, a task's context `links` under it), `day` + `events`, `documents`, `runners` and
+tasks, a task's context `links` under it), `day` + `events`, `documents`, `runners`,
 `agents` (agent profiles, each with the scopes of the key its runs issue task tokens
-from). Dates are offsets from an anchor day (`+21d`, `-3d`) and event times are wall-clock
+from) and `locations` (knowledge storage locations, each giving the set's projects their
+folders). Dates are offsets from an anchor day (`+21d`, `-3d`) and event times are wall-clock
 times in the workspace timezone, so the set is the same whichever day it loads. Records
 reach a `SeedSink`: `InMemorySink` for tests, `DatabaseSink` for `tumnis seed`, which
 writes through each module's api as the entity writers register (projects P0-17, tasks
@@ -137,6 +138,16 @@ class AgentSeed(_Record):
     key_scopes: tuple[str, ...] = ()
 
 
+class LocationSeed(_Record):
+    """A knowledge storage location (P1-14) on a server folder; the default one also gets
+    a folder for every project of the set, so uploads have somewhere to go (A1.5)."""
+
+    name: str
+    kind: Literal["server_path"] = "server_path"
+    root: str
+    is_default: bool = True
+
+
 class LinkSeed(_Record):
     """A task's context link to a bare URL (outside content, so tainted: P2-08)."""
 
@@ -210,6 +221,7 @@ class _SeedDocument(_Yaml):
     documents: list[_DocumentYaml] = []
     runners: list[RunnerSeed] = []
     agents: list[_AgentYaml] = []
+    locations: list[LocationSeed] = []
 
     @model_validator(mode="after")
     def _events_need_a_day(self) -> _SeedDocument:
@@ -233,6 +245,7 @@ class SeedSink(Protocol):
         self, ws: UUID, runner: UUID | None, project: UUID | None, rec: AgentSeed
     ) -> UUID: ...
     async def link(self, ws: UUID, task: UUID, rec: LinkSeed) -> UUID: ...
+    async def location(self, ws: UUID, projects: Sequence[UUID], rec: LocationSeed) -> UUID: ...
 
 
 @dataclass(frozen=True)
@@ -282,6 +295,10 @@ class InMemorySink:
 
     async def link(self, ws: UUID, task: UUID, rec: LinkSeed) -> UUID:
         return self._add("link", rec, workspace=ws, task=task)
+
+    async def location(self, ws: UUID, projects: Sequence[UUID], rec: LocationSeed) -> UUID:
+        del projects  # the folders are the location writer's business
+        return self._add("location", rec, workspace=ws)
 
 
 SeedWriter = Callable[..., Awaitable[UUID]]
@@ -365,6 +382,9 @@ class DatabaseSink:
 
     async def link(self, ws: UUID, task: UUID, rec: LinkSeed) -> UUID:
         return await self._write("link", ws, task, rec)
+
+    async def location(self, ws: UUID, projects: Sequence[UUID], rec: LocationSeed) -> UUID:
+        return await self._write("location", ws, projects, rec)
 
 
 # --- Loader -----------------------------------------------------------------------------
@@ -485,6 +505,12 @@ async def load_seed(
             project_id = await sink.project(ws, project_rec)
             remember("project", project.key, project_id)
             await add_tasks(project_id, None, project.tasks)
+
+    # A storage location comes after the projects, so its writer can give each its folder.
+    projects = [loaded.ids[project.key] for doc in docs for project in doc.projects]
+    for doc in docs:
+        for location in doc.locations:
+            remember("location", location.key, await sink.location(ws, projects, location))
 
     for doc in docs:
         on = _day(day0, doc.day)
