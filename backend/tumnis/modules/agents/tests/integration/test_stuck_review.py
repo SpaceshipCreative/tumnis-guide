@@ -107,7 +107,6 @@ async def _took_step(
 
 @pytest.mark.req("FR-10.5")
 @pytest.mark.wp("P4-02")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-stuck-review")
 async def test_accepted_stuck_result_marks_step_done(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
@@ -137,7 +136,6 @@ async def test_accepted_stuck_result_marks_step_done(  # noqa: PLR0917
 
 @pytest.mark.req("FR-10.5")
 @pytest.mark.wp("P4-02")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-stuck-review")
 async def test_rejected_stuck_result_reopens_step_with_reason(  # noqa: PLR0917
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
