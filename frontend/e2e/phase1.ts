@@ -229,11 +229,58 @@ async function walk(
   }
 }
 
+const RESULT_WAIT_MS = 20_000;
+const RESULT_POLL_MS = 1_000;
+
+/**
+ * The AI task's result, the way an agent posts it (FR-5.8: only an agent moves
+ * work to In review): the fake runner is scripted to post one result for the
+ * task (P2-04), the person starts the run (Today to In progress), and the task
+ * reaches In review.
+ */
+async function agentPostsResult(
+  request: APIRequestContext,
+  fakes: TestFakes,
+  task: TaskDetail,
+): Promise<void> {
+  await fakes.runner.script(task.title, [
+    [
+      {
+        result: {
+          outcome: "done",
+          summary: "The March analytics report is ready",
+          files_touched: [],
+          links: [
+            {
+              kind: "url",
+              url: "https://example.test/runs/monday-report",
+              label: "Agent result",
+            },
+          ],
+        },
+      },
+    ],
+  ]);
+  await postJson(request, `/v1/tasks/${task.id}/run`);
+  const deadline = Date.now() + RESULT_WAIT_MS;
+  while ((await getTask(request, task.id)).status !== "in_review") {
+    if (Date.now() > deadline) {
+      throw new Error(`${task.title} did not reach In review`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, RESULT_POLL_MS));
+    // The server clock stands still at the plan time; moving it on with the wait
+    // refills the per-principal rate limit (P0-10) the polling spends.
+    await request.post("/v1/test/clock", {
+      data: { advance_seconds: RESULT_POLL_MS / 1_000 },
+    });
+  }
+}
+
 /**
  * A1.6's day: the Monday plan published and accepted (4 items, one AI); one
- * Human item and the AI item Done (the AI one with an agent result link in its
- * comments); the other two still Today; one enrichment run finished today.
- * Returns the tasks by role.
+ * Human item and the AI item Done (the AI one through a run whose result,
+ * with its agent result link, the person accepts); the other two still Today;
+ * one enrichment run finished today. Returns the tasks by role.
  */
 export async function arrangeCloseTheDay(
   request: APIRequestContext,
@@ -248,10 +295,8 @@ export async function arrangeCloseTheDay(
   const human = tasks.find((t) => t.label === "human");
   if (!ai || !human)
     throw new Error("the Monday plan needs a Human and an AI item");
-  await postJson(request, `/v1/tasks/${ai.id}/comments`, {
-    body_md: "[Agent result](https://example.test/runs/monday-report)",
-  });
-  await walk(request, ai.id, ["in_review", "done"]);
+  await agentPostsResult(request, fakes, ai);
+  await walk(request, ai.id, ["done"]);
   await walk(request, human.id, ["in_progress", "done"]);
 
   await fakes.runner.script(
