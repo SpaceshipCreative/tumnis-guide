@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+import tumnis.modules.integrations.adapters  # noqa: F401  # registers provider `fake` (P3-02)
 from tumnis.modules.integrations.tests.integration import _integrations
 
 if TYPE_CHECKING:
