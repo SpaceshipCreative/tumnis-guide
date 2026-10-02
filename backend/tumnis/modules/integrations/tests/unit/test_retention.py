@@ -16,7 +16,6 @@ NOW = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
 
 @pytest.mark.req("SAAS-2")
 @pytest.mark.wp("P3-09")
-@pytest.mark.xfail(strict=True, reason="spec:P3-09")
 def test_cutoff_and_candidates_table() -> None:
     """T-P3-09-01
     Default keeps everything; days mode cuts; archived and open-task-linked items kept.
