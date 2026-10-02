@@ -1,8 +1,11 @@
 """Deployment-level settings only (pydantic-settings), the preview guard and the boot checks.
 
 Everything per workspace lives encrypted in `workspace_settings` (P0-08); this is only what
-a deployment needs to start. Secrets never sit in the environment: the only secret-related
-variables are file paths (AGENTS.md, Never).
+a deployment needs to start. Secrets stay out of the environment (AGENTS.md, Never): the
+secret-related variables are file paths, except the deployment's own service credentials,
+the Jev key (`TYPESAFE_API_KEY`) and the hosted speech and embedding providers' keys
+(`SPEECH__HOSTED_API_KEY`, `EMBEDDINGS__HOSTED_API_KEY`; Scott decision 75), which live in
+the server's .env, held as `SecretStr` and never written to the database.
 """
 
 import asyncio
@@ -14,7 +17,7 @@ from pathlib import Path
 from typing import Literal, Self
 
 from psycopg import errors as pg_errors
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
@@ -54,6 +57,16 @@ BOOT_DB_ATTEMPTS = 30
 BOOT_DB_RETRY_S = 2.0
 
 
+def _blank_is_unset(value: object) -> object:
+    """Compose passes an unset `${VAR:-}` as "": a blank optional value means unset."""
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
+HOSTED_DIMS_DEFAULT = 1024
+
+
 class GenerationSettings(BaseModel):
     """The Generation slot (P1-03, FR-11.8): the local OpenAI-compatible endpoint (vLLM) the
     worker asks for placeholder first actions and spoken focus messages, and how long a
@@ -75,9 +88,14 @@ class GenerationSettings(BaseModel):
 class EmbeddingsSettings(BaseModel):
     """The Embeddings slot (P3-10, FR-11.10): the local OpenAI-compatible endpoint (vLLM)
     that embeds knowledge chunks and search queries, its model and the model's dimension.
-    Unset `base_url` leaves the slot off: chunks are not embedded and hybrid search answers
-    with full-text results. Env: `EMBEDDINGS__BASE_URL` and so on. A hosted embedder is
-    optional and not configured here (Scott item: its key storage)."""
+    Unset `base_url` leaves the local embedder off. Env: `EMBEDDINGS__BASE_URL` and so on.
+
+    The optional hosted embedder (an OpenAI-compatible `/v1/embeddings` API, Data flow rule
+    6) is on only when `hosted_base_url`, `hosted_model` and `hosted_api_key` are all set:
+    `EMBEDDINGS__HOSTED_BASE_URL`, `EMBEDDINGS__HOSTED_MODEL`, `EMBEDDINGS__HOSTED_DIMS` and
+    `EMBEDDINGS__HOSTED_API_KEY`. The key lives in the server's .env only (Scott decision
+    75), never in the database. With a local embedder too, the local one stays preferred.
+    With neither, chunks are not embedded and hybrid search answers with full text."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -85,6 +103,19 @@ class EmbeddingsSettings(BaseModel):
     model: str = "BAAI/bge-m3"  # plan default
     dims: int = Field(default=1024, ge=1, le=2000)  # pgvector's HNSW limit is 2,000
     query_timeout_ms: int = Field(default=2000, gt=0)  # a search waits this long, then FTS
+    hosted_base_url: str | None = None  # e.g. https://api.openai.com (/v1 is appended)
+    hosted_model: str | None = None  # e.g. text-embedding-3-small
+    hosted_dims: int = Field(default=HOSTED_DIMS_DEFAULT, ge=1, le=2000)
+    hosted_api_key: SecretStr | None = None
+
+    _blank = field_validator("hosted_base_url", "hosted_model", "hosted_api_key", mode="before")(
+        _blank_is_unset
+    )
+
+    @field_validator("hosted_dims", mode="before")
+    @classmethod
+    def _blank_dims(cls, value: object) -> object:
+        return HOSTED_DIMS_DEFAULT if _blank_is_unset(value) is None else value
 
 
 class SpeechSettings(BaseModel):
@@ -92,13 +123,27 @@ class SpeechSettings(BaseModel):
     (`python3 -m piper.http_server -m <voice>`, port 5000 by default) and the voice to ask
     for (unset: the one Piper started with). Unset `piper_url` leaves the server engine
     off: the PWA speaks with the browser's own voice. Env: `SPEECH__PIPER_URL`,
-    `SPEECH__PIPER_VOICE`. A hosted provider is not configured here (Scott item: its key
-    storage)."""
+    `SPEECH__PIPER_VOICE`.
+
+    The optional hosted provider (an OpenAI-compatible `/v1/audio/speech` API, used only
+    when a workspace allows it, Data flow rule 6) is on only when `hosted_base_url`,
+    `hosted_model` and `hosted_api_key` are all set: `SPEECH__HOSTED_BASE_URL`,
+    `SPEECH__HOSTED_MODEL`, `SPEECH__HOSTED_VOICE` (unset: the adapter's default) and
+    `SPEECH__HOSTED_API_KEY`. The key lives in the server's .env only (Scott decision 75),
+    never in the database."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     piper_url: str | None = None  # e.g. http://agents.lan:5000
     piper_voice: str | None = None  # e.g. en_US-lessac-medium
+    hosted_base_url: str | None = None  # e.g. https://api.openai.com (/v1 is appended)
+    hosted_model: str | None = None  # e.g. gpt-4o-mini-tts
+    hosted_voice: str | None = None  # e.g. alloy
+    hosted_api_key: SecretStr | None = None
+
+    _blank = field_validator(
+        "hosted_base_url", "hosted_model", "hosted_voice", "hosted_api_key", mode="before"
+    )(_blank_is_unset)
 
 
 class KnowledgeSettings(BaseModel):
@@ -184,6 +229,18 @@ class Settings(BaseSettings):
                 )
             if self.typesafe_api_key is not None:
                 raise SettingsError("preview_has_production_secret", "a Jev key is set in preview")
+            hosted = [
+                name
+                for name, key in (
+                    ("SPEECH__HOSTED_API_KEY", self.speech.hosted_api_key),
+                    ("EMBEDDINGS__HOSTED_API_KEY", self.embeddings.hosted_api_key),
+                )
+                if key is not None
+            ]
+            if hosted:
+                raise SettingsError(
+                    "preview_has_production_secret", f"{', '.join(hosted)} set in preview"
+                )
         try:
             parse_allowlist(self.outbound_allowlist.split(","))
         except ValueError as exc:
