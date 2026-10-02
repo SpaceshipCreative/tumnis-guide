@@ -283,15 +283,18 @@ async def day_calendar(
     ctx: WorkspaceContext, day: date, *, session: AsyncSession | None = None
 ) -> DayCalendarOut:
     """The day's working window, events and free blocks in the workspace timezone (a
-    weekend day has no window; Re-plan is P1-11's). From the cache when it holds the day;
-    otherwise computed in one transaction (the caller's `session` when it passes one) and
-    cached."""
+    weekend day has no window; Re-plan is P1-11's). With the caller's `session`, computed
+    in that transaction and neither read from nor written to the cache (the cached day may
+    predate the transaction's own writes, and its rows may yet roll back). Otherwise from
+    the cache when it holds the day, else computed in one transaction and cached."""
+    if session is not None:
+        return await _compute_day(ctx, day, replan=False, session=session)
     key = day_calendar_key(ctx.workspace_id, day)
     cached = await _CACHE.get(key)
     if cached is not None:
         return DayCalendarOut.model_validate_json(cached)
     token = _CACHE.token()
-    out = await _compute_day(ctx, day, replan=False, session=session)
+    out = await _compute_day(ctx, day, replan=False)
     tags = (free_blocks_tag(ctx.workspace_id), auth.workspace_settings_tag(ctx.workspace_id))
     await _CACHE.fill(key, out.model_dump_json().encode(), since=token, tags=tags)
     return out
