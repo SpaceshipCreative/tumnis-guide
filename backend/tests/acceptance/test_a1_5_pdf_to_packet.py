@@ -77,7 +77,6 @@ def _table_chunk(db: DbUrls, document_id: str) -> dict[str, Any]:
 
 
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 async def test_pdf_is_scanned_extracted_and_filed(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,
@@ -108,7 +107,6 @@ async def test_pdf_is_scanned_extracted_and_filed(  # noqa: PLR0917
 
 
 @pytest.mark.wp("P1-17")
-@pytest.mark.xfail(strict=True, reason="spec:P1-17")
 async def test_table_chunk_is_searchable_with_page(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,
