@@ -47,7 +47,6 @@ def _truncate_waits(db: DbUrls) -> bool:
 
 @pytest.mark.req("REL-7")
 @pytest.mark.wp("SEED")
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 async def test_reset_gives_way_to_a_request_it_blocks_unseen_and_tries_again(
     db: DbUrls, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

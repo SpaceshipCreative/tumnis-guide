@@ -357,7 +357,6 @@ OLD_WORLD_MIN = 9  # more than the events queue runs at once (worker_concurrency
 CANCEL_SEEN_S = 2.0
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 @pytest.mark.req("A2.1", "A2.2")
 async def test_a_reset_cancels_the_event_deliveries_of_the_world_it_removed(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
