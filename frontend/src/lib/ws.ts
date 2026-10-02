@@ -57,6 +57,9 @@ export function liveUrl(): string {
 
 const MAX_DELAY_MS = 30_000;
 const BASE_DELAY_MS = 500;
+/** The live reads' window: a message in a quiet moment is read again at once, and the
+ * messages that follow within this long are read together when it ends. */
+const LIVE_WINDOW_MS = 200;
 
 export function connectLive(
   qc: QueryClient,
@@ -66,6 +69,46 @@ export function connectLive(
   let attempt = 0;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // One change often sends a run of messages within a second (one per row it touched: a
+  // quick-add recomputes the blocking impact of the open review items in its project).
+  // Each message used to start its own refetch, cancelling the one before, so a shown
+  // query was read once per message: ten review counts in the second after one quick-add
+  // in an e2e run, 22 in 5 s, against a session burst of 50 requests. Now every message
+  // marks its queries stale as it comes; the first after a quiet moment is read at once
+  // (a label still shows within a second of Enter, A1.1), and the rest of its window are
+  // read together when the window ends. That later read restarts one still running, so
+  // it cannot miss what the window's messages announced.
+  let pending: LiveMessage[] = [];
+  let windowTimer: ReturnType<typeof setTimeout> | undefined;
+  const refetch = (messages: LiveMessage[]) => {
+    void qc.refetchQueries({
+      type: "active",
+      predicate: (query) =>
+        messages.some((msg) => matchesLive(query.queryKey, msg)),
+    });
+  };
+  const endWindow = () => {
+    windowTimer = undefined;
+    if (pending.length === 0) return; // quiet: the next message reads at once
+    const messages = pending;
+    pending = [];
+    refetch(messages);
+    windowTimer = setTimeout(endWindow, LIVE_WINDOW_MS);
+  };
+  const read = (msg: LiveMessage) => {
+    // A message nothing shown reads opens no window, so it holds no later message back.
+    const shown = qc.getQueryCache().findAll({
+      type: "active",
+      predicate: (query) => matchesLive(query.queryKey, msg),
+    });
+    if (shown.length === 0) return;
+    if (windowTimer === undefined) {
+      refetch([msg]);
+      windowTimer = setTimeout(endWindow, LIVE_WINDOW_MS);
+    } else {
+      pending.push(msg);
+    }
+  };
 
   const open = () => {
     ws = new WebSocket(url);
@@ -78,7 +121,9 @@ export function connectLive(
       if (msg) {
         void qc.invalidateQueries({
           predicate: (query) => matchesLive(query.queryKey, msg),
+          refetchType: "none", // read below, at most twice per window
         });
+        read(msg);
       }
     };
     ws.onclose = () => {
@@ -94,6 +139,7 @@ export function connectLive(
   return () => {
     stopped = true;
     clearTimeout(timer);
+    clearTimeout(windowTimer);
     ws?.close();
   };
 }
