@@ -73,7 +73,7 @@ STEPS: Final = (
     "emit",
     "fail",
 )
-Source = Literal["spool", "storage"]
+Source = Literal["spool", "storage", "vault"]  # vault: an Obsidian attachment (P3-12)
 
 SNIFF_BYTES: Final = 8 * 1024
 READ_BYTES: Final = 1024 * 1024
@@ -111,6 +111,11 @@ def configure(settings: KnowledgeSettings, *, net: NetPolicy | None = None) -> K
     if net is not None:
         _net = net
     return previous
+
+
+def current() -> KnowledgeSettings:
+    """The settings `configure` set (P3-12: where the worker keeps Obsidian Git clones)."""
+    return _settings
 
 
 def use(**parts: Any) -> dict[str, Any]:
@@ -178,6 +183,13 @@ def _spool_file(version_id: str) -> Path:
     return Path(_settings.spool_dir) / version_id
 
 
+def spool_file(version_id: UUID) -> Path:
+    """Where a version's bytes wait for the extract worker: an upload (the api writes it)
+    or an Obsidian attachment (the vault sync writes it, P3-12; `source = "vault"` reads it
+    from here and never places it in a project folder)."""
+    return _spool_file(str(version_id))
+
+
 def _scratch_dir(version_id: str) -> Path:
     return Path(_settings.scratch_dir) / version_id
 
@@ -223,7 +235,7 @@ async def _fetch(
     """Copy the version's file to `dest`: the spool file when there is one, else the file
     on its location (a folder file, or an upload that was already placed)."""
     spool = _spool_file(version_id)
-    if source == "spool" and spool.is_file():
+    if source in {"spool", "vault"} and spool.is_file():
         return await _copy(_file_chunks(spool), dest)
     async with tenant_session(ctx) as s:
         info = await records.version_info(s, UUID(version_id))

@@ -89,6 +89,7 @@ from tumnis.modules.knowledge.models import (
     DocumentVersion,
     ExtractionArtifact,
     FolderFile,
+    ObsidianVault,
     PendingWrite,
     ProjectFolder,
     StorageLocation,
@@ -2947,6 +2948,52 @@ async def set_pinned(
     return await _set_fields(s, document_id, {"pinned": pinned}, expected_version)
 
 
+async def _refuse_synced(s: AsyncSession, document_id: UUID) -> None:
+    """A Document a connection syncs (an Obsidian note or attachment, P3-12) is read-only
+    in Tumnis (FR-15.8): its source is the one place to change it, and the next sync would
+    undo the change. 409 `read_only_source`; nothing is written."""
+    connection_id = await s.scalar(
+        select(_documents.c.connection_id).where(_documents.c.id == document_id)
+    )
+    if connection_id is not None and not await _vault_disconnected(s, connection_id):
+        raise ProblemError(
+            409, "read_only_source", "This document is synced from its source; change it there"
+        )
+
+
+async def _vault_disconnected(s: AsyncSession, connection_id: UUID) -> bool:
+    """Whether the connection is an Obsidian vault that was disconnected: its Documents
+    are no longer synced, so they are the person's to change (P3-12)."""
+    vaults = ObsidianVault.__table__
+    found = await s.scalar(
+        select(vaults.c.id).where(
+            vaults.c.connection_id == connection_id, vaults.c.deleted_at.is_not(None)
+        )
+    )
+    live = await s.scalar(
+        select(vaults.c.id).where(
+            vaults.c.connection_id == connection_id, vaults.c.deleted_at.is_(None)
+        )
+    )
+    return found is not None and live is None
+
+
+async def write_synced_text(
+    s: AsyncSession, row: Row, body: str, *, expected_version: int, added: bool
+) -> DocumentDTO:
+    """A synced note's text as a new version (P3-12): versioned, indexed and announced like
+    a text entry (`document.added` for a new note, else `document.changed`), and never
+    written to a project folder (the vault is the note's home)."""
+    return await _write_text(
+        s,
+        row,
+        body,
+        expected_version=expected_version,
+        net=None,
+        event=DocumentAddedV1 if added else DocumentChangedV1,
+    )
+
+
 async def edit_document(  # the patchable fields, each optional
     s: AsyncSession,
     document_id: UUID,
@@ -2963,7 +3010,8 @@ async def edit_document(  # the patchable fields, each optional
     """One versioned edit of a document (the rail's PATCH): its metadata (title, tags,
     pin) first, then a text entry's body as a new version (`origin` and `tainted` as in
     `update_text_entry`). The first change takes `expected_version`; a body change after
-    it takes the version that change left."""
+    it takes the version that change left. A synced Document is 409 `read_only_source`."""
+    await _refuse_synced(s, document_id)
     values: dict[str, Any] = {}
     if title is not None:
         values["title"] = title
@@ -2998,7 +3046,9 @@ async def edit_document(  # the patchable fields, each optional
 
 
 async def trash(s: AsyncSession, document_id: UUID) -> None:
-    """To the trash (FR-15.6): hidden from lists, reads and search until restored."""
+    """To the trash (FR-15.6): hidden from lists, reads and search until restored. A
+    synced Document is 409 `read_only_source`: its sync owns its place (P3-12)."""
+    await _refuse_synced(s, document_id)
     await trash_document(s, document_id)
 
 
@@ -3497,7 +3547,10 @@ async def delete_document(s: AsyncSession, document_id: UUID, *, actor: ActorKin
     """Delete a document as `actor` (FR-15.12): the outcome `may_delete` gives without a
     confirmation. `trash`: Tumnis's own file goes to its trash on the next sync;
     `index_only`: an outside file is only unindexed, it stays where it is. An agent is
-    refused an outside file whatever its scopes (403 `external_delete_forbidden`)."""
+    refused an outside file whatever its scopes (403 `external_delete_forbidden`). A
+    synced Document (an Obsidian note, P3-12) is 409 `read_only_source` before any of
+    these: delete it at its source."""
+    await _refuse_synced(s, document_id)
     policy, origin = await _delete_target(s, document_id)
     outcome = may_delete(policy, origin, actor, confirmed_by_user=False)
     if outcome == "refuse":
@@ -3526,7 +3579,9 @@ async def _outside_file_target(s: AsyncSession, document_id: UUID) -> None:
     """The delete-at-source flow serves outside files only: a document whose file Tumnis
     made goes to its trash instead (409 `not_an_outside_file`). A confirmation deletes one
     file: a document with more than one live file record is refused (409
-    `several_files`)."""
+    `several_files`). A synced Document (P3-12) is 409 `read_only_source` first: its
+    sync, not this flow, owns its file."""
+    await _refuse_synced(s, document_id)
     policy, origin = await _delete_target(s, document_id)
     if may_delete(policy, origin, ActorKind.user, confirmed_by_user=True) != "delete_at_source":
         raise ProblemError(

@@ -197,6 +197,12 @@ def _folder_watch(stop: asyncio.Event) -> "asyncio.Task[None]":
     return asyncio.create_task(knowledge.local_watch(stop), name="folder-watch")
 
 
+def _vault_watch(stop: asyncio.Event) -> "asyncio.Task[None]":
+    """The Obsidian folder-vault watcher (P3-12) beside the folder watcher."""
+    knowledge = importlib.import_module("tumnis.modules.knowledge.workflows")
+    return asyncio.create_task(knowledge.vault_watch(stop), name="vault-watch")
+
+
 def register_module_schedules() -> None:
     """Module schedules (A9), applied after DBOS.launch(): a module's `workflows.schedules()`
     lists its own (P1-09: the calendar sync tick every 10 minutes on the sync queue)."""
@@ -322,6 +328,7 @@ async def _serve(settings: Settings, *, relay: bool = True) -> None:
         [
             asyncio.create_task(events.relay_forever(stop), name="outbox-relay"),
             _folder_watch(stop),
+            _vault_watch(stop),
         ]
         if relay
         else []

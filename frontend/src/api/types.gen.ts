@@ -225,7 +225,7 @@ export type AppDeployStatus = {
   /**
    * Previews
    */
-  previews: Array<PreviewOut>;
+  previews: Array<TumnisModulesCoolifyApiPreviewOut>;
 };
 
 /**
@@ -1599,6 +1599,22 @@ export type FolderIn = {
 };
 
 /**
+ * FolderRule
+ *
+ * A vault folder and the project its notes go to (the longest matching folder wins).
+ */
+export type FolderRule = {
+  /**
+   * Folder
+   */
+  folder: string;
+  /**
+   * Project Id
+   */
+  project_id: string;
+};
+
+/**
  * ForeignReach
  *
  * A token reaching another project's repo (`github`) or app (`coolify`).
@@ -1692,6 +1708,30 @@ export type HostKeyIn = {
    * Sha256
    */
   sha256: string;
+};
+
+/**
+ * HostKeyOut
+ */
+export type HostKeyOut = {
+  /**
+   * Known Hosts
+   */
+  known_hosts: string;
+  /**
+   * Sha256
+   */
+  sha256: string;
+};
+
+/**
+ * HostKeyProbeIn
+ */
+export type HostKeyProbeIn = {
+  /**
+   * Remote
+   */
+  remote: string;
 };
 
 /**
@@ -3044,29 +3084,35 @@ export type PostResultBody = {
 export type Preset = "daily" | "weekdays" | "weekly" | "monthly";
 
 /**
- * PreviewOut
+ * PreviewRowOut
  */
-export type PreviewOut = {
+export type PreviewRowOut = {
   /**
-   * Commit
+   * Ignored
    */
-  commit?: string | null;
+  ignored: boolean;
   /**
-   * Finished At
+   * Path
    */
-  finished_at?: string | null;
+  path: string;
   /**
-   * Pull Request Id
+   * Project Id
    */
-  pull_request_id: number;
+  project_id: string | null;
   /**
-   * Status
+   * Untrusted
    */
-  status: string;
+  untrusted: boolean;
+};
+
+/**
+ * PreviewStarted
+ */
+export type PreviewStarted = {
   /**
-   * Url
+   * Preview Id
    */
-  url: string;
+  preview_id: string;
 };
 
 /**
@@ -6001,6 +6047,141 @@ export type VapidPublicKeyOut = {
 };
 
 /**
+ * VaultCreateIn
+ */
+export type VaultCreateIn = {
+  /**
+   * Mode
+   */
+  mode: "folder" | "git";
+};
+
+/**
+ * VaultOut
+ */
+export type VaultOut = {
+  /**
+   * Branch
+   */
+  branch: string;
+  /**
+   * Clippings Folder
+   */
+  clippings_folder: string;
+  /**
+   * Deploy Public Key
+   */
+  deploy_public_key: string | null;
+  /**
+   * Extra Excludes
+   */
+  extra_excludes: Array<string>;
+  /**
+   * Folder Path
+   */
+  folder_path: string | null;
+  /**
+   * Folders
+   */
+  folders: Array<FolderRule>;
+  /**
+   * Host Key Sha256
+   */
+  host_key_sha256: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Last Error
+   */
+  last_error: string | null;
+  /**
+   * Last Sync At
+   */
+  last_sync_at: string | null;
+  /**
+   * Mode
+   */
+  mode: "folder" | "git";
+  /**
+   * Remote
+   */
+  remote: string | null;
+  /**
+   * Status
+   */
+  status: "pending" | "connecting" | "ok" | "error";
+  /**
+   * Unmapped
+   */
+  unmapped: "workspace" | "ignore";
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * VaultSettingsIn
+ *
+ * Where the vault is read from and how its notes map (ObsidianSetup's form). For Git,
+ * `known_hosts` is the host key line the person confirmed or pasted.
+ */
+export type VaultSettingsIn = {
+  /**
+   * Branch
+   */
+  branch?: string;
+  /**
+   * Clippings Folder
+   */
+  clippings_folder?: string;
+  /**
+   * Extra Excludes
+   */
+  extra_excludes?: Array<string>;
+  /**
+   * Folder Path
+   */
+  folder_path?: string | null;
+  /**
+   * Folders
+   */
+  folders?: Array<FolderRule>;
+  /**
+   * Known Hosts
+   */
+  known_hosts?: string | null;
+  /**
+   * Mode
+   */
+  mode: "folder" | "git";
+  /**
+   * Remote
+   */
+  remote?: string | null;
+  /**
+   * Unmapped
+   */
+  unmapped?: "workspace" | "ignore";
+};
+
+/**
+ * VaultsOut
+ */
+export type VaultsOut = {
+  /**
+   * Folder Allowed
+   */
+  folder_allowed: boolean;
+  /**
+   * Vaults
+   */
+  vaults: Array<VaultOut>;
+};
+
+/**
  * WaitOut
  */
 export type WaitOut = {
@@ -6257,6 +6438,50 @@ export type TumnisCoreDeadletterVersionIn = {
    * Version
    */
   version: number;
+};
+
+/**
+ * PreviewOut
+ */
+export type TumnisModulesCoolifyApiPreviewOut = {
+  /**
+   * Commit
+   */
+  commit?: string | null;
+  /**
+   * Finished At
+   */
+  finished_at?: string | null;
+  /**
+   * Pull Request Id
+   */
+  pull_request_id: number;
+  /**
+   * Status
+   */
+  status: string;
+  /**
+   * Url
+   */
+  url: string;
+};
+
+/**
+ * PreviewOut
+ */
+export type TumnisModulesKnowledgeObsidianVaultsPreviewOut = {
+  /**
+   * Error
+   */
+  error: string | null;
+  /**
+   * Rows
+   */
+  rows: Array<PreviewRowOut>;
+  /**
+   * Status
+   */
+  status: "running" | "done" | "failed";
 };
 
 /**
@@ -10761,6 +10986,475 @@ export type KnowledgeTestLocationResponses = {
 
 export type KnowledgeTestLocationResponse =
   KnowledgeTestLocationResponses[keyof KnowledgeTestLocationResponses];
+
+export type KnowledgeProbeObsidianHostKeyData = {
+  body: HostKeyProbeIn;
+  path?: never;
+  query?: never;
+  url: "/v1/knowledge/obsidian/host-key/probe";
+};
+
+export type KnowledgeProbeObsidianHostKeyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeProbeObsidianHostKeyError =
+  KnowledgeProbeObsidianHostKeyErrors[keyof KnowledgeProbeObsidianHostKeyErrors];
+
+export type KnowledgeProbeObsidianHostKeyResponses = {
+  /**
+   * Successful Response
+   */
+  200: HostKeyOut;
+};
+
+export type KnowledgeProbeObsidianHostKeyResponse =
+  KnowledgeProbeObsidianHostKeyResponses[keyof KnowledgeProbeObsidianHostKeyResponses];
+
+export type KnowledgeListObsidianVaultsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/knowledge/obsidian/vaults";
+};
+
+export type KnowledgeListObsidianVaultsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeListObsidianVaultsError =
+  KnowledgeListObsidianVaultsErrors[keyof KnowledgeListObsidianVaultsErrors];
+
+export type KnowledgeListObsidianVaultsResponses = {
+  /**
+   * Successful Response
+   */
+  200: VaultsOut;
+};
+
+export type KnowledgeListObsidianVaultsResponse =
+  KnowledgeListObsidianVaultsResponses[keyof KnowledgeListObsidianVaultsResponses];
+
+export type KnowledgeCreateObsidianVaultData = {
+  body: VaultCreateIn;
+  path?: never;
+  query?: never;
+  url: "/v1/knowledge/obsidian/vaults";
+};
+
+export type KnowledgeCreateObsidianVaultErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeCreateObsidianVaultError =
+  KnowledgeCreateObsidianVaultErrors[keyof KnowledgeCreateObsidianVaultErrors];
+
+export type KnowledgeCreateObsidianVaultResponses = {
+  /**
+   * Successful Response
+   */
+  201: VaultOut;
+};
+
+export type KnowledgeCreateObsidianVaultResponse =
+  KnowledgeCreateObsidianVaultResponses[keyof KnowledgeCreateObsidianVaultResponses];
+
+export type KnowledgeDeleteObsidianVaultData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/obsidian/vaults/{connection_id}";
+};
+
+export type KnowledgeDeleteObsidianVaultErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeDeleteObsidianVaultError =
+  KnowledgeDeleteObsidianVaultErrors[keyof KnowledgeDeleteObsidianVaultErrors];
+
+export type KnowledgeDeleteObsidianVaultResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type KnowledgeDeleteObsidianVaultResponse =
+  KnowledgeDeleteObsidianVaultResponses[keyof KnowledgeDeleteObsidianVaultResponses];
+
+export type KnowledgeGetObsidianVaultData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/obsidian/vaults/{connection_id}";
+};
+
+export type KnowledgeGetObsidianVaultErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeGetObsidianVaultError =
+  KnowledgeGetObsidianVaultErrors[keyof KnowledgeGetObsidianVaultErrors];
+
+export type KnowledgeGetObsidianVaultResponses = {
+  /**
+   * Successful Response
+   */
+  200: VaultOut;
+};
+
+export type KnowledgeGetObsidianVaultResponse =
+  KnowledgeGetObsidianVaultResponses[keyof KnowledgeGetObsidianVaultResponses];
+
+export type KnowledgeConnectObsidianVaultData = {
+  body: VaultSettingsIn;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/obsidian/vaults/{connection_id}/connect";
+};
+
+export type KnowledgeConnectObsidianVaultErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeConnectObsidianVaultError =
+  KnowledgeConnectObsidianVaultErrors[keyof KnowledgeConnectObsidianVaultErrors];
+
+export type KnowledgeConnectObsidianVaultResponses = {
+  /**
+   * Successful Response
+   */
+  202: VaultOut;
+};
+
+export type KnowledgeConnectObsidianVaultResponse =
+  KnowledgeConnectObsidianVaultResponses[keyof KnowledgeConnectObsidianVaultResponses];
+
+export type KnowledgePreviewObsidianVaultData = {
+  body: VaultSettingsIn;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/obsidian/vaults/{connection_id}/preview";
+};
+
+export type KnowledgePreviewObsidianVaultErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgePreviewObsidianVaultError =
+  KnowledgePreviewObsidianVaultErrors[keyof KnowledgePreviewObsidianVaultErrors];
+
+export type KnowledgePreviewObsidianVaultResponses = {
+  /**
+   * Successful Response
+   */
+  202: PreviewStarted;
+};
+
+export type KnowledgePreviewObsidianVaultResponse =
+  KnowledgePreviewObsidianVaultResponses[keyof KnowledgePreviewObsidianVaultResponses];
+
+export type KnowledgeGetObsidianPreviewData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+    /**
+     * Preview Id
+     */
+    preview_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/obsidian/vaults/{connection_id}/preview/{preview_id}";
+};
+
+export type KnowledgeGetObsidianPreviewErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeGetObsidianPreviewError =
+  KnowledgeGetObsidianPreviewErrors[keyof KnowledgeGetObsidianPreviewErrors];
+
+export type KnowledgeGetObsidianPreviewResponses = {
+  /**
+   * Successful Response
+   */
+  200: TumnisModulesKnowledgeObsidianVaultsPreviewOut;
+};
+
+export type KnowledgeGetObsidianPreviewResponse =
+  KnowledgeGetObsidianPreviewResponses[keyof KnowledgeGetObsidianPreviewResponses];
 
 export type KnowledgeUseExistingFolderData = {
   body: ExistingFolderIn;
