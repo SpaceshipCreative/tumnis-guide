@@ -1853,6 +1853,118 @@ async def post_result(  # the result, plus who and when
     return ResultOut.model_validate(dict(created)), True
 
 
+JUST_ADDED_LIMIT: Final = 3
+
+
+class JustAddedOut(BaseModel):
+    """The dashboard's Just added list (A1.1, coordinator decision 83)."""
+
+    items: list[TaskOut]
+
+
+async def just_added(s: AsyncSession, actor: ActorRef) -> JustAddedOut:
+    """`actor`'s own tasks added today (the workspace's day) and still in Backlog, newest
+    first, at most JUST_ADDED_LIMIT: a capture stays on the dashboard, after a reload too,
+    until it is planned, started, done or trashed (decision 83). "Today" is the database
+    clock's, the one that stamps `created_at`."""
+    tz = (await _zone(s)).key
+    rows = await s.execute(
+        select(_tasks)
+        .where(
+            _live(_tasks),
+            _tasks.c.created_by == str(actor),
+            _tasks.c.status == Status.BACKLOG,
+            func.date(func.timezone(tz, _tasks.c.created_at))
+            == func.date(func.timezone(tz, func.now())),
+        )
+        .order_by(_tasks.c.created_at.desc(), _tasks.c.id.desc())
+        .limit(JUST_ADDED_LIMIT)
+    )
+    return JustAddedOut(items=[_out(row) for row in rows.mappings()])
+
+
+# The history names a change of the task itself by what it did (the undo log stores it as
+# `deleted` flipping; a create leaves version 1).
+CREATED: Final = "created"
+TRASHED: Final = "trashed"
+RESTORED: Final = "restored"
+
+
+class TaskChangeOut(BaseModel):
+    """One write in a task's history (`task_changes`): when, by whom (`by_you`: the
+    caller), the undoable fields it changed (`created`, `trashed` or `restored` for the
+    task itself) and whether it was undone."""
+
+    change_id: UUID
+    at: datetime
+    actor: str
+    by_you: bool
+    fields: list[str]
+    undone: bool
+
+
+class _ChangeRow(BaseModel):
+    change_id: UUID
+    created_at: datetime
+    actor: str
+    after: dict[str, Any]
+    task_version: int
+    undone_at: datetime | None
+
+
+def _change_fields(row: _ChangeRow) -> list[str]:
+    if "deleted" in row.after:
+        if row.after["deleted"]:
+            return [TRASHED]
+        return [CREATED if row.task_version == 1 else RESTORED]
+    return sorted(f for f in row.after if f in rules.UNDO_FIELDS)
+
+
+async def task_history(
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    *,
+    cursor: str | None = None,
+    limit: int = 50,
+) -> Page[TaskChangeOut]:
+    """The task's writes, newest first (404 for a task the caller cannot see); A1.1's drawer
+    says who set each field ("you" for the caller's own)."""
+    await _row(s, task_id)
+    stmt = select(
+        _changes.c.change_id,
+        _changes.c.created_at,
+        _changes.c.actor,
+        _changes.c.after,
+        _changes.c.task_version,
+        _changes.c.undone_at,
+    ).where(_changes.c.task_id == task_id)
+    page = await paginate(
+        s,
+        stmt,
+        keys=[],
+        id_col=_changes.c.id,
+        cursor=cursor,
+        limit=limit,
+        model=_ChangeRow,
+        descending=True,
+    )
+    return Page[TaskChangeOut](
+        items=[
+            TaskChangeOut(
+                change_id=row.change_id,
+                at=row.created_at,
+                actor=row.actor,
+                by_you=row.actor == str(actor),
+                fields=_change_fields(row),
+                undone=row.undone_at is not None,
+            )
+            for row in page.items
+        ],
+        next_cursor=page.next_cursor,
+    )
+
+
 async def list_comments(
     s: AsyncSession, task_id: UUID, *, cursor: str | None = None, limit: int = 50
 ) -> Page[CommentOut]:

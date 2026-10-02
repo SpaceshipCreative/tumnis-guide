@@ -8,9 +8,17 @@
 // At Guardrail (P4-01, FR-10.6) the body is the one-task view instead: the header stays.
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { focusGetCurrentOptions } from "../../api/@tanstack/react-query.gen";
+import { useIsLaptop } from "../../lib/media";
 import { BUTTON_SECONDARY } from "../common/ui";
 import { ActivityFeed } from "./ActivityFeed";
 import { CalendarStrip } from "./CalendarStrip";
@@ -19,6 +27,7 @@ import { FitOfferList } from "./FitOfferRow";
 import { FocusLevel } from "./FocusLevel";
 import { formatToday, localDay, localHour } from "./format";
 import { GuardrailDashboard } from "./GuardrailDashboard";
+import { JustAdded } from "./JustAdded";
 import { KillSwitch } from "./KillSwitch";
 import { ProjectCardGrid } from "./ProjectCardGrid";
 import {
@@ -34,6 +43,14 @@ import { TodayPanel } from "./TodayPanel";
 import type { DashboardProject } from "./types";
 
 const dashboardRoute = getRouteApi("/");
+
+// The task drawer loads only when a task is open (`?task=`), so the dashboard's first
+// paint does not carry its code (P0-29's blocking-time budget).
+const TaskDrawer = lazy(() =>
+  import("../project/drawer/TaskDrawer").then((m) => ({
+    default: m.TaskDrawer,
+  })),
+);
 
 /** The Close the day button shows from this hour, local time (plan default). */
 export const CLOSE_DAY_FROM_HOUR = 16;
@@ -83,8 +100,9 @@ function activeInBoardOrder(
 }
 
 export function DashboardPage() {
-  const { panel } = dashboardRoute.useSearch();
+  const { panel, task: taskId, run: runId } = dashboardRoute.useSearch();
   const navigate = dashboardRoute.useNavigate();
+  const laptop = useIsLaptop();
   const projects = useQuery(projectsQuery());
   const today = useQuery(todayQuery());
   const reviewCount = useQuery(reviewCountQuery());
@@ -114,6 +132,12 @@ export function DashboardPage() {
   const closeDay = planDay ?? localDay(new Date(), timeZone);
   const setPanel = (next: "close" | undefined) => {
     void navigate({ search: (prev) => ({ ...prev, panel: next }) });
+  };
+  // Another task (or none) leaves the run behind, as on the project page.
+  const openTask = (next: string | undefined) => {
+    void navigate({
+      search: (prev) => ({ ...prev, task: next, run: undefined }),
+    });
   };
 
   const ready = projects.isSuccess && today.isSuccess;
@@ -150,6 +174,7 @@ export function DashboardPage() {
       ) : (
         <div className="flex flex-col gap-6 md:grid md:min-h-0 md:flex-1 md:grid-cols-12">
           <div className="flex min-h-0 flex-col gap-4 md:col-span-5">
+            <JustAdded onOpen={openTask} className="shrink-0" />
             {planDay !== undefined && <CalendarStrip day={planDay} />}
             <TodayPanel
               items={today.data?.items ?? []}
@@ -178,6 +203,21 @@ export function DashboardPage() {
             className="md:col-span-7"
           />
         </div>
+      )}
+      {taskId !== undefined && (
+        <Suspense fallback={null}>
+          <TaskDrawer
+            taskId={taskId}
+            runId={runId}
+            laptop={laptop}
+            onRun={(next) => {
+              void navigate({ search: (prev) => ({ ...prev, run: next }) });
+            }}
+            onClose={() => {
+              openTask(undefined);
+            }}
+          />
+        </Suspense>
       )}
       {panel === "close" && (
         <CloseDayPanel
