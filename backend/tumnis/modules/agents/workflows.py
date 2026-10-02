@@ -1531,7 +1531,13 @@ async def finish_provision_step(  # noqa: PLR0917  # the provision's facts, spel
 ) -> str:
     """`ready` (the profile's version recorded and its name added to its runner's
     inventory, so runs dispatch to it at once) or `not_provisioned` with a
-    `provisioning_failed` review item on the project (one open item per project)."""
+    `provisioning_failed` review item on the project (one open item per project).
+
+    Only while the profile is still in the state `choose_name_step` left it in
+    (`provisioning`, or `not_provisioned` for a provision that ended before it started):
+    a profile taken over meanwhile (the seed adopts it and cancels the provision, but DBOS
+    cannot stop a step already running) is left alone, with no review item and no
+    inventory entry, and the step answers `superseded`."""
     pick = _Chosen.model_validate(chosen)
     answer = None if reply is None else ProvisionResult.model_validate(reply)
     outcome = (
@@ -1539,24 +1545,35 @@ async def finish_provision_step(  # noqa: PLR0917  # the provision's facts, spel
     )
     pid = UUID(project_id)
     assert pick.profile_id is not None  # noqa: S101  # choose_name_step wrote the row
+    still_ours = (
+        _profiles.c.id == pick.profile_id,
+        _profiles.c.status == ("not_provisioned" if pick.error_code else "provisioning"),
+    )
     async with tenant_session(_ctx(workspace_id)) as s:
         if outcome == "ready" and answer is not None:
-            runner_id = await s.scalar(
-                update(_profiles)
-                .where(_profiles.c.id == pick.profile_id)
-                .values(status="ready", profile_version=answer.distribution_version)
-                .returning(_profiles.c.runner_id)
-            )
-            if runner_id is not None:
-                await _list_on_runner(s, runner_id, pick.name, answer.distribution_version)
-                mark_changed(s, api.LIVE_RUNNER, runner_id)
+            row = (
+                await s.execute(
+                    update(_profiles)
+                    .where(*still_ours)
+                    .values(status="ready", profile_version=answer.distribution_version)
+                    .returning(_profiles.c.runner_id)
+                )
+            ).first()
+            if row is None:
+                return "superseded"
+            if row.runner_id is not None:
+                await _list_on_runner(s, row.runner_id, pick.name, answer.distribution_version)
+                mark_changed(s, api.LIVE_RUNNER, row.runner_id)
         else:
             code, detail = (error_code, None) if error_code is not None else _failure(answer)
-            await s.execute(
+            changed = await s.scalar(
                 update(_profiles)
-                .where(_profiles.c.id == pick.profile_id)
+                .where(*still_ours)
                 .values(status="not_provisioned")
+                .returning(_profiles.c.id)
             )
+            if changed is None:
+                return "superseded"
             await tasks.add_review_item(
                 api.PROVISIONING_FAILED,
                 target=tasks.TargetRef(type="project", id=pid),
