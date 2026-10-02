@@ -208,9 +208,12 @@ export async function runTask(
 
 // --- Locators ----------------------------------------------------------------------
 
-/** The dashboard's review badge (a link to /review with the open count). */
+/**
+ * The dashboard's review badge (a link to /review with the open count, `3 to review`); not
+ * the rail's Review link, nor the header's bell, which hides its count at 0.
+ */
 export function reviewBadge(page: Page): Locator {
-  return page.getByRole("link", { name: /^Review/ });
+  return page.getByRole("main").getByRole("link", { name: /^\d+ to review$/ });
 }
 
 /** The count inside the review badge. */

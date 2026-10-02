@@ -176,10 +176,12 @@ import {
   tasksLinkPullRequest,
   tasksListComments,
   tasksListInbox,
+  tasksListJustAdded,
   tasksListPullRequests,
   tasksListRecurrence,
   tasksListReview,
   tasksListReviewKinds,
+  tasksListTaskHistory,
   tasksListTasks,
   tasksMoveTask,
   tasksPutColumns,
@@ -681,6 +683,9 @@ import type {
   TasksListInboxData,
   TasksListInboxError,
   TasksListInboxResponse,
+  TasksListJustAddedData,
+  TasksListJustAddedError,
+  TasksListJustAddedResponse,
   TasksListPullRequestsData,
   TasksListPullRequestsError,
   TasksListPullRequestsResponse,
@@ -693,6 +698,9 @@ import type {
   TasksListReviewKindsError,
   TasksListReviewKindsResponse,
   TasksListReviewResponse,
+  TasksListTaskHistoryData,
+  TasksListTaskHistoryError,
+  TasksListTaskHistoryResponse,
   TasksListTasksData,
   TasksListTasksError,
   TasksListTasksResponse,
@@ -2602,6 +2610,37 @@ export const githubWebhookMutation = (
   };
   return mutationOptions;
 };
+
+export const tasksListJustAddedQueryKey = (
+  options?: Options<TasksListJustAddedData>,
+) => createQueryKey("tasksListJustAdded", options);
+
+/**
+ * List Just Added
+ *
+ * The dashboard's Just added list (A1.1, decision 83): the signed-in person's tasks
+ * added today and still in Backlog, newest first, at most three.
+ */
+export const tasksListJustAddedOptions = (
+  options?: Options<TasksListJustAddedData>,
+) =>
+  queryOptions<
+    TasksListJustAddedResponse,
+    TasksListJustAddedError,
+    TasksListJustAddedResponse,
+    ReturnType<typeof tasksListJustAddedQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListJustAdded({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListJustAddedQueryKey(options),
+  });
 
 export const authListKeysQueryKey = (options?: Options<AuthListKeysData>) =>
   createQueryKey("authListKeys", options);
@@ -6364,6 +6403,93 @@ export const tasksUpdateEstimateMutation = (
     },
   };
   return mutationOptions;
+};
+
+export const tasksListTaskHistoryQueryKey = (
+  options: Options<TasksListTaskHistoryData>,
+) => createQueryKey("tasksListTaskHistory", options);
+
+/**
+ * List Task History
+ *
+ * The task's writes, newest first: the fields each changed, by whom, and whether that
+ * was the caller (A1.1's drawer History).
+ */
+export const tasksListTaskHistoryOptions = (
+  options: Options<TasksListTaskHistoryData>,
+) =>
+  queryOptions<
+    TasksListTaskHistoryResponse,
+    TasksListTaskHistoryError,
+    TasksListTaskHistoryResponse,
+    ReturnType<typeof tasksListTaskHistoryQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListTaskHistory({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListTaskHistoryQueryKey(options),
+  });
+
+export const tasksListTaskHistoryInfiniteQueryKey = (
+  options: Options<TasksListTaskHistoryData>,
+): QueryKey<Options<TasksListTaskHistoryData>> =>
+  createQueryKey("tasksListTaskHistory", options, true);
+
+/**
+ * List Task History
+ *
+ * The task's writes, newest first: the fields each changed, by whom, and whether that
+ * was the caller (A1.1's drawer History).
+ */
+export const tasksListTaskHistoryInfiniteOptions = (
+  options: Options<TasksListTaskHistoryData>,
+) => {
+  const opts = infiniteQueryOptions<
+    TasksListTaskHistoryResponse,
+    TasksListTaskHistoryError,
+    InfiniteData<TasksListTaskHistoryResponse>,
+    QueryKey<Options<TasksListTaskHistoryData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<TasksListTaskHistoryData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<TasksListTaskHistoryData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await tasksListTaskHistory({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: tasksListTaskHistoryInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
 };
 
 /**
