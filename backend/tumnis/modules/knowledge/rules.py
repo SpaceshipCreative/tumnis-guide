@@ -202,13 +202,50 @@ def _scoped_resource(pattern: str, bucket: str) -> bool:
     return name == bucket
 
 
+_READ_ACTION_PREFIXES: Final = ("s3:get", "s3:list")  # a pattern starting so only reads
+_DELETE_ACTIONS: Final = ("s3:DeleteObject", "s3:DeleteObjectVersion", "s3:DeleteBucket")
+
+
+def _s3_action(pattern: str) -> bool:
+    return pattern == "*" or pattern.lower().startswith("s3:")
+
+
+def _only_reads(pattern: str) -> bool:
+    """Whether an action pattern can match only Get/List actions: its fixed start is
+    `s3:Get` or `s3:List` (a wildcard earlier than that could match anything)."""
+    fixed = re.split(r"[*?]", pattern, maxsplit=1)[0].lower()
+    return any(fixed.startswith(p) for p in _READ_ACTION_PREFIXES)
+
+
+def _only_deletes(pattern: str) -> bool:
+    """Whether an action pattern can match only Delete actions (its fixed start)."""
+    return re.split(r"[*?]", pattern, maxsplit=1)[0].lower().startswith("s3:delete")
+
+
+def _deletes(pattern: str) -> bool:
+    return pattern.lower().startswith("s3:delete") or any(
+        _wildcard(pattern).match(a) for a in _DELETE_ACTIONS
+    )
+
+
+def _on_any(statement: Mapping[str, object], resources: Sequence[str]) -> bool:
+    if "NotResource" in statement:
+        listed = _strings(statement["NotResource"])
+        return any(not any(_wildcard(p).match(r) for p in listed) for r in resources)
+    patterns = _strings(statement.get("Resource"))
+    return any(_wildcard(p).match(r) for p in patterns for r in resources)
+
+
 def minio_key_capabilities(
     policy: Mapping[str, object] | None, bucket: str, prefixes: Sequence[str]
 ) -> KeyCapabilities:
     """The key's own policy, as MinIO's account info reports it, for objects under each of
     `prefixes` in `bucket`. Conditions are ignored and Deny statements are not relied on,
     so the answer only ever errs towards refusing: a write or delete granted anywhere on
-    those prefixes counts, and so does any `admin:` action (it can change policies)."""
+    those prefixes counts, and so does any `admin:` action (it can change policies). On the
+    bucket itself, or those prefixes, any S3 action that is not a Get or List counts too:
+    a delete as `can_delete`, anything else (a lifecycle rule, a bucket policy,
+    versioning) as `can_write`."""
     raw = (policy or {}).get("Statement")
     statements = [s for s in (raw if isinstance(raw, list) else []) if isinstance(s, Mapping)]
     allow = [s for s in statements if str(s.get("Effect", "")).lower() == "allow"]
@@ -228,14 +265,25 @@ def minio_key_capabilities(
         if any(a.lower().startswith("s3:") or a == "*" for a in _strings(s.get("Action")))
         or "NotAction" in s
     )
+    mine = [bucket_arn, *objects]
+    beyond_reads = [
+        pattern
+        for s in allow
+        if _on_any(s, mine)
+        for pattern in _strings(s.get("Action"))
+        if _s3_action(pattern) and not _only_reads(pattern)
+    ]
     return KeyCapabilities(
         checked=True,
         can_read=granted("s3:GetObject", objects),
         can_list=granted("s3:ListBucket", [bucket_arn]),
-        can_write=admin or granted("s3:PutObject", objects),
+        can_write=admin
+        or granted("s3:PutObject", objects)
+        or any(not _only_deletes(p) for p in beyond_reads),
         can_delete=admin
         or granted("s3:DeleteObject", objects)
-        or granted("s3:DeleteObjectVersion", objects),
+        or granted("s3:DeleteObjectVersion", objects)
+        or any(_deletes(p) for p in beyond_reads),
         bucket_scoped=scoped and bool(allow),
         prefix=None,
         source="minio_account_info",

@@ -80,6 +80,32 @@ def test_minio_policy_refusals(statement: dict[str, Any], expected: str) -> None
 
 @pytest.mark.req("FR-15.11")
 @pytest.mark.wp("P3-13")
+@pytest.mark.parametrize(
+    ("actions", "expected"),
+    [
+        # Bucket-level writes change or empty the bucket without touching an object
+        # (#158 review): a lifecycle rule can expire every object.
+        (["s3:PutLifecycleConfiguration"], (False, "key_can_write")),
+        (["s3:PutBucketPolicy"], (False, "key_can_write")),
+        (["s3:PutBucketVersioning"], (False, "key_can_write")),
+        (["s3:DeleteBucket"], (False, "key_can_delete")),
+        (["s3:Delete*"], (False, "key_can_delete")),
+        (["s3:*"], (False, "key_can_write")),
+        (["*"], (False, "key_can_write")),
+        (["s3:?ut*"], (False, "key_can_write")),
+        # Reads on the bucket stay acceptable.
+        (["s3:Get*", "s3:List*"], (True, None)),
+        (["s3:GetBucketLocation", "s3:ListBucketVersions"], (True, None)),
+    ],
+)
+def test_minio_bucket_level_actions(actions: list[str], expected: tuple[bool, str | None]) -> None:
+    bucket_wide = _statement(actions, [f"arn:aws:s3:::{BUCKET}"])
+    policy = {"Statement": [*READ_ONLY["Statement"], bucket_wide]}
+    assert capabilities_acceptable(minio_key_capabilities(policy, BUCKET, ["acme/"])) == expected
+
+
+@pytest.mark.req("FR-15.11")
+@pytest.mark.wp("P3-13")
 def test_minio_put_on_another_prefix_does_not_count() -> None:
     other = _statement(["s3:PutObject"], [f"arn:aws:s3:::{BUCKET}/uploads/*"])
     policy = {"Statement": [*READ_ONLY["Statement"], other]}
