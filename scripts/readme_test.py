@@ -39,9 +39,11 @@ library only: the README job runs it on a fresh VM before installing anything.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
+import signal
 import ssl
 import subprocess
 import sys
@@ -55,6 +57,7 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_TIMEOUT_S = 300  # plan default
+KILL_GRACE_S = 10  # after a timeout's SIGKILL, how long to wait for the pipe to close
 HEALTH_TIMEOUT_S = 600  # A4.4: /health/ready within 10 minutes
 SHELL_LANGS = frozenset({"bash", "sh", "shell", "console", "zsh"})
 ENV_SUITE = "env"
@@ -123,6 +126,13 @@ class Report:
 # --- Parsing --------------------------------------------------------------------------------
 
 
+def _closes(line: str, fence: str) -> bool:
+    """CommonMark: a closing fence is the opener's character, at least as many of them,
+    and nothing else on the line but whitespace."""
+    stripped = line.strip()
+    return stripped.startswith(fence[0] * len(fence)) and set(stripped) == {fence[0]}
+
+
 def _fences(markdown: str) -> Iterable[tuple[int, str, str, int]]:
     """(opening line, info string, code, closing line) for every fenced block."""
     lines = markdown.splitlines(keepends=True)
@@ -137,8 +147,7 @@ def _fences(markdown: str) -> Iterable[tuple[int, str, str, int]]:
         body: list[str] = []
         i += 1
         while i < len(lines):
-            stripped = lines[i].strip()
-            if stripped.startswith(fence[0] * len(fence)) and set(stripped) == {fence[0]}:
+            if _closes(lines[i], fence):
                 break
             body.append(lines[i])
             i += 1
@@ -223,12 +232,13 @@ def section_lines(markdown: str, section: str) -> range:
     in_fence: str | None = None
     start = level = None
     for number, text in enumerate(lines, start=1):
-        fence = _FENCE.match(text)
-        if fence is not None:
-            mark = fence.group("fence")[0]
-            in_fence = None if in_fence == mark else (in_fence or mark)
-            continue
         if in_fence is not None:
+            if _closes(text, in_fence):
+                in_fence = None
+            continue
+        opening = _FENCE.match(text)
+        if opening is not None:
+            in_fence = opening.group("fence")
             continue
         heading = _HEADING.match(text)
         if heading is None:
@@ -304,20 +314,22 @@ def run(blocks: Sequence[Block], env: Mapping[str, str], workdir: Path) -> Repor
 def _run_block(block: Block, env: Mapping[str, str], workdir: Path) -> BlockResult:
     _say(f"::group::readme:{block.suite}:{block.order} (line {block.line})")
     began = time.monotonic()
+    # Its own session: on a timeout the whole process group goes (curl, sleep, python3
+    # started by the block), not only bash, so nothing keeps running or holds the pipe.
+    proc = subprocess.Popen(  # noqa: S603  # the README's own commands, by design
+        ["bash", "-euo", "pipefail", "-c", block.code],  # noqa: S607  # bash from PATH, as a reader would
+        cwd=workdir,
+        env=dict(env),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
     try:
-        done = subprocess.run(  # noqa: S603  # the README's own commands, by design
-            ["bash", "-euo", "pipefail", "-c", block.code],  # noqa: S607  # bash from PATH, as a reader would
-            cwd=workdir,
-            env=dict(env),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=block.timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        output = _text(exc.output)
+        stdout, _ = proc.communicate(timeout=block.timeout)
+    except subprocess.TimeoutExpired:
+        output = _kill_group(proc)
         _say(output + "::endgroup::")
         return BlockResult(
             block.line,
@@ -328,6 +340,7 @@ def _run_block(block: Block, env: Mapping[str, str], workdir: Path) -> BlockResu
             output,
             f"timed out after {block.timeout} s",
         )
+    done = subprocess.CompletedProcess(proc.args, proc.returncode, stdout)
     output = done.stdout
     _say(output + "::endgroup::")
     error = None
@@ -344,6 +357,20 @@ def _run_block(block: Block, env: Mapping[str, str], workdir: Path) -> BlockResu
         output,
         error,
     )
+
+
+def _kill_group(proc: subprocess.Popen[str]) -> str:
+    """SIGKILL the block's process group, reap bash and return the output so far. A
+    process that left the group and still holds the pipe is not waited for long."""
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(proc.pid, signal.SIGKILL)
+    try:
+        output, _ = proc.communicate(timeout=KILL_GRACE_S)
+    except subprocess.TimeoutExpired as exc:
+        proc.kill()
+        proc.wait()
+        return _text(exc.output)
+    return _text(output)
 
 
 def _text(raw: bytes | str | None) -> str:

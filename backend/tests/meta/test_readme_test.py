@@ -14,6 +14,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 
@@ -206,3 +207,55 @@ def test_env_blocks_are_the_only_substitution(tmp_path: Path) -> None:
             _base_env(),
             tmp_path,
         )
+
+
+def _alive(pid: int) -> bool:
+    """Running (or stopped), not gone and not a zombie waiting to be reaped."""
+    try:
+        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except (FileNotFoundError, ProcessLookupError):
+        return False
+    return state != "Z"
+
+
+@pytest.mark.req("A4.4", "REL-4")
+@pytest.mark.wp("P4-06")
+@pytest.mark.skipif(not Path("/proc").is_dir(), reason="reads /proc to see the child")
+def test_a_timed_out_block_takes_its_children_with_it(tmp_path: Path) -> None:
+    """A block that times out is killed with its whole process group: a child it started
+    (here a background sleep) does not outlive the run (CodeRabbit, PR #159)."""
+    readme = _harness()
+    markdown = (
+        "```bash readme:install:10 timeout=1\nsleep 60 &\necho $! > child.pid\nsleep 60\n```\n"
+    )
+    report = readme.run(readme.extract(markdown), _base_env(), tmp_path)
+    assert not report.ok
+    assert "timed out after 1 s" in (report.failure or "")
+    child = int((tmp_path / "child.pid").read_text())
+    deadline = time.monotonic() + 5
+    while _alive(child) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not _alive(child)
+
+
+@pytest.mark.req("A4.4", "REL-4")
+@pytest.mark.wp("P4-06")
+def test_section_ends_only_at_a_real_closing_fence() -> None:
+    """Inside a four-backtick block, a three-backtick line or one with an info string
+    does not close it, so a `# Heading` line inside the block is not a heading and the
+    section runs on to the next real heading (CodeRabbit, PR #159)."""
+    readme = _harness()
+    markdown = (
+        "## Install\n"  # 1
+        "````markdown\n"  # 2
+        "```bash\n"  # 3
+        "# Upgrade\n"  # 4
+        "```\n"  # 5
+        "````\n"  # 6
+        "```bash\n"  # 7
+        "echo untagged\n"  # 8
+        "```\n"  # 9
+        "## Upgrade\n"  # 10
+    )
+    assert readme.section_lines(markdown, "Install") == range(1, 10)
+    assert readme.check_section_coverage(markdown) == [7]

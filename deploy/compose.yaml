@@ -166,16 +166,19 @@ services:
     image: tumnis-postgres:18
     user: postgres
     # With TUMNIS_BACKUPS=off it idles (stanza-create would fail without the repository
-    # keys and restart forever) until the backups are set up.
+    # keys and restart forever) until the backups are set up. Every spelling Postgres reads
+    # as archive_mode off (any case: off, false, no, 0) idles here too.
     entrypoint:
       - /bin/sh
       - -c
       - |
-        if [ "${TUMNIS_BACKUPS:-on}" = off ]; then
-          echo "backup: off (TUMNIS_BACKUPS=off); see docs/OPERATIONS.md, Backups"
-          trap 'exit 0' TERM INT
-          while :; do sleep 3600 & wait $$!; done
-        fi
+        case "$$(printf '%s' '${TUMNIS_BACKUPS:-on}' | tr '[:upper:]' '[:lower:]')" in
+          off | false | no | 0)
+            echo "backup: off (TUMNIS_BACKUPS=${TUMNIS_BACKUPS:-on}); see docs/OPERATIONS.md, Backups"
+            trap 'exit 0' TERM INT
+            while :; do sleep 3600 & wait $$!; done
+            ;;
+        esac
         init-stanza.sh && exec supercronic /etc/pgbackrest/crontab
     volumes:
       - pgdata:/var/lib/postgresql

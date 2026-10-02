@@ -79,7 +79,7 @@ DRILL_SOURCE_PG=tumnis-postgres-1 DRILL_SOURCE_APP=tumnis-worker-1 \
 
 The scheduled workflow `.github/workflows/restore-drill.yml` runs it on the self-hosted `homelab` runner on the 3rd of January, April, July and October (set the repository variables `DRILL_SOURCE_PG` and `DRILL_SOURCE_APP` and the secret `DRILL_SOURCE_DATABASE_URL` first). `--mode rehearsal` runs the same drill against the test stack with MinIO as repo2; the nightly workflow does that every night.
 
-To restore for real, follow the drill's steps (`restore_drill.sh`, steps 6 to 8) into the production volume with the stack stopped, then start it; never restore over a running database.
+The drill only ever restores into its own scratch volume (`tumnis-drill-pgdata`) and a throwaway Postgres; it never restores or starts the production database. Restoring the production database is not scripted or rehearsed in this release. In outline, it is pgBackRest's own restore ([pgbackrest.org, Restore](https://pgbackrest.org/user-guide.html#restore)) into the `pgdata` volume, with every container of the stack stopped (`docker compose down`, never `down -v`): run the image's `pgbackrest --stanza=tumnis --delta restore` as the `postgres` user with that volume and the pgBackRest configuration mounted, adding `--type=time "--target=<UTC time>" --target-action=promote` for a point in time, then `docker compose up -d --wait`. Never restore over a running database. Take a fresh full backup afterwards, and rehearse the steps on a copy before you need them.
 
 ## Upgrade
 
