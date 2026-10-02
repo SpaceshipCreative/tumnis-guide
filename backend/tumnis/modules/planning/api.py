@@ -2008,16 +2008,17 @@ async def put_unattended_window(
 ) -> UnattendedWindowOut:
     """Saves (or, with `window` null, removes) the workspace's window or a project's
     override at the stored row's `version` (stale: 409 `stale_version` with the current
-    window). Refuses a repeated weekday or a start equal to the end (422
-    `validation_error`). Audited `settings.changed`."""
+    window). A project another workspace owns answers 404 before anything else, so the
+    body never tells a caller more than "not found". Refuses a repeated weekday or a
+    start equal to the end (422 `validation_error`). Audited `settings.changed`."""
     spec = body.window
-    if spec is not None and len(set(spec.weekdays)) != len(spec.weekdays):
-        raise ProblemError(422, "validation_error", "each weekday appears once")
-    if spec is not None and spec.start_local == spec.end_local:
-        raise ProblemError(422, "validation_error", "the window starts and ends at one time")
     async with session_for(ctx, session) as s:
         if body.project_id is not None:
             await projects.get_project(s, body.project_id)
+        if spec is not None and len(set(spec.weekdays)) != len(spec.weekdays):
+            raise ProblemError(422, "validation_error", "each weekday appears once")
+        if spec is not None and spec.start_local == spec.end_local:
+            raise ProblemError(422, "validation_error", "the window starts and ends at one time")
         await s.execute(_WEEK_LOCK, {"key": f"unattended_window:{ctx.workspace_id}"})
         rows = await _window_rows(s)
         own = rows.get(body.project_id)

@@ -10,12 +10,13 @@ Night: Monday 2026-03-09 22:00 to Tuesday 06:00 in New York (the `workspace` fix
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import time, timedelta
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 import pytest
 
-from tumnis.modules.planning.tests.integration._plan import new_project
+from tumnis.modules.planning.tests.integration._plan import new_project, user_ctx
 from tumnis.modules.planning.tests.integration._unattended import (
     MONDAY_NIGHT,
     TUESDAY_NIGHT,
@@ -171,3 +172,27 @@ async def test_no_start_near_window_end(
 
     assert spy.tasks() == [task]
     assert queued_at(db, task) is None
+
+
+@pytest.mark.req("FR-4.5")
+@pytest.mark.wp("P4-04")
+async def test_window_put_for_unseen_project_is_404_first(
+    workspace: WorkspaceHandle, clock: FixedClock
+) -> None:
+    """A window PUT naming a project the caller cannot see (another workspace's, which RLS
+    hides exactly like one that does not exist) answers 404 even when the window itself
+    would be refused (a repeated weekday), so the answer says no more than "not found"
+    (A0.3's sweep sends such bodies)."""
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.core.versioning import NotFound  # noqa: PLC0415
+    from tumnis.modules.planning import api as planning  # noqa: PLC0415
+
+    ctx = user_ctx(workspace)
+    body = planning.UnattendedWindowIn(
+        project_id=uuid4(),
+        window=planning.WindowSpec(weekdays=[1, 1], start_local=time(22), end_local=time(6)),
+        version=None,
+    )
+    async with tenant_session(ctx) as s:
+        with pytest.raises(NotFound):
+            await planning.put_unattended_window(ctx, body, now=clock.now(), session=s)
