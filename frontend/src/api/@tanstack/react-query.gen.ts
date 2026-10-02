@@ -61,6 +61,16 @@ import {
   calendarOauthStart,
   calendarSelectCalendars,
   calendarSyncNow,
+  connectionsCreateConnection,
+  connectionsDisconnect,
+  connectionsGetConnection,
+  connectionsListConnections,
+  connectionsListProviders,
+  connectionsOauthCallback,
+  connectionsOauthUrl,
+  connectionsStartOauth,
+  connectionsSyncNow,
+  connectionsUpdateConnection,
   coolifyListDeployStatus,
   deadLettersGetDeadLetters,
   deadLettersPostDiscard,
@@ -321,6 +331,35 @@ import type {
   CalendarSyncNowData,
   CalendarSyncNowError,
   CalendarSyncNowResponse,
+  ConnectionsCreateConnectionData,
+  ConnectionsCreateConnectionError,
+  ConnectionsCreateConnectionResponse,
+  ConnectionsDisconnectData,
+  ConnectionsDisconnectError,
+  ConnectionsDisconnectResponse,
+  ConnectionsGetConnectionData,
+  ConnectionsGetConnectionError,
+  ConnectionsGetConnectionResponse,
+  ConnectionsListConnectionsData,
+  ConnectionsListConnectionsError,
+  ConnectionsListConnectionsResponse,
+  ConnectionsListProvidersData,
+  ConnectionsListProvidersError,
+  ConnectionsListProvidersResponse,
+  ConnectionsOauthCallbackData,
+  ConnectionsOauthCallbackError,
+  ConnectionsOauthUrlData,
+  ConnectionsOauthUrlError,
+  ConnectionsOauthUrlResponse,
+  ConnectionsStartOauthData,
+  ConnectionsStartOauthError,
+  ConnectionsStartOauthResponse,
+  ConnectionsSyncNowData,
+  ConnectionsSyncNowError,
+  ConnectionsSyncNowResponse,
+  ConnectionsUpdateConnectionData,
+  ConnectionsUpdateConnectionError,
+  ConnectionsUpdateConnectionResponse,
   CoolifyListDeployStatusData,
   CoolifyListDeployStatusError,
   CoolifyListDeployStatusResponse,
@@ -1661,6 +1700,283 @@ export const calendarOauthStartOptions = (
     },
     queryKey: calendarOauthStartQueryKey(options),
   });
+
+export const connectionsListConnectionsQueryKey = (
+  options?: Options<ConnectionsListConnectionsData>,
+) => createQueryKey("connectionsListConnections", options);
+
+/**
+ * List Connections
+ */
+export const connectionsListConnectionsOptions = (
+  options?: Options<ConnectionsListConnectionsData>,
+) =>
+  queryOptions<
+    ConnectionsListConnectionsResponse,
+    ConnectionsListConnectionsError,
+    ConnectionsListConnectionsResponse,
+    ReturnType<typeof connectionsListConnectionsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await connectionsListConnections({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: connectionsListConnectionsQueryKey(options),
+  });
+
+/**
+ * Create Connection
+ */
+export const connectionsCreateConnectionMutation = (
+  options?: Partial<Options<ConnectionsCreateConnectionData>>,
+): UseMutationOptions<
+  ConnectionsCreateConnectionResponse,
+  ConnectionsCreateConnectionError,
+  Options<ConnectionsCreateConnectionData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ConnectionsCreateConnectionResponse,
+    ConnectionsCreateConnectionError,
+    Options<ConnectionsCreateConnectionData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await connectionsCreateConnection({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const connectionsOauthCallbackQueryKey = (
+  options: Options<ConnectionsOauthCallbackData>,
+) => createQueryKey("connectionsOauthCallback", options);
+
+/**
+ * Oauth Callback
+ */
+export const connectionsOauthCallbackOptions = (
+  options: Options<ConnectionsOauthCallbackData>,
+) =>
+  queryOptions<
+    unknown,
+    ConnectionsOauthCallbackError,
+    unknown,
+    ReturnType<typeof connectionsOauthCallbackQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await connectionsOauthCallback({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: connectionsOauthCallbackQueryKey(options),
+  });
+
+export const connectionsListProvidersQueryKey = (
+  options?: Options<ConnectionsListProvidersData>,
+) => createQueryKey("connectionsListProviders", options);
+
+/**
+ * List Providers
+ */
+export const connectionsListProvidersOptions = (
+  options?: Options<ConnectionsListProvidersData>,
+) =>
+  queryOptions<
+    ConnectionsListProvidersResponse,
+    ConnectionsListProvidersError,
+    ConnectionsListProvidersResponse,
+    ReturnType<typeof connectionsListProvidersQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await connectionsListProviders({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: connectionsListProvidersQueryKey(options),
+  });
+
+/**
+ * Disconnect
+ *
+ * Disconnects with a reason (audited); what it synced stays until purged (P3-09).
+ */
+export const connectionsDisconnectMutation = (
+  options?: Partial<Options<ConnectionsDisconnectData>>,
+): UseMutationOptions<
+  ConnectionsDisconnectResponse,
+  ConnectionsDisconnectError,
+  Options<ConnectionsDisconnectData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ConnectionsDisconnectResponse,
+    ConnectionsDisconnectError,
+    Options<ConnectionsDisconnectData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await connectionsDisconnect({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const connectionsGetConnectionQueryKey = (
+  options: Options<ConnectionsGetConnectionData>,
+) => createQueryKey("connectionsGetConnection", options);
+
+/**
+ * Get Connection
+ */
+export const connectionsGetConnectionOptions = (
+  options: Options<ConnectionsGetConnectionData>,
+) =>
+  queryOptions<
+    ConnectionsGetConnectionResponse,
+    ConnectionsGetConnectionError,
+    ConnectionsGetConnectionResponse,
+    ReturnType<typeof connectionsGetConnectionQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await connectionsGetConnection({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: connectionsGetConnectionQueryKey(options),
+  });
+
+/**
+ * Update Connection
+ */
+export const connectionsUpdateConnectionMutation = (
+  options?: Partial<Options<ConnectionsUpdateConnectionData>>,
+): UseMutationOptions<
+  ConnectionsUpdateConnectionResponse,
+  ConnectionsUpdateConnectionError,
+  Options<ConnectionsUpdateConnectionData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ConnectionsUpdateConnectionResponse,
+    ConnectionsUpdateConnectionError,
+    Options<ConnectionsUpdateConnectionData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await connectionsUpdateConnection({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Start Oauth
+ */
+export const connectionsStartOauthMutation = (
+  options?: Partial<Options<ConnectionsStartOauthData>>,
+): UseMutationOptions<
+  ConnectionsStartOauthResponse,
+  ConnectionsStartOauthError,
+  Options<ConnectionsStartOauthData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ConnectionsStartOauthResponse,
+    ConnectionsStartOauthError,
+    Options<ConnectionsStartOauthData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await connectionsStartOauth({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const connectionsOauthUrlQueryKey = (
+  options: Options<ConnectionsOauthUrlData>,
+) => createQueryKey("connectionsOauthUrl", options);
+
+/**
+ * Oauth Url
+ */
+export const connectionsOauthUrlOptions = (
+  options: Options<ConnectionsOauthUrlData>,
+) =>
+  queryOptions<
+    ConnectionsOauthUrlResponse,
+    ConnectionsOauthUrlError,
+    ConnectionsOauthUrlResponse,
+    ReturnType<typeof connectionsOauthUrlQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await connectionsOauthUrl({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: connectionsOauthUrlQueryKey(options),
+  });
+
+/**
+ * Sync Now
+ */
+export const connectionsSyncNowMutation = (
+  options?: Partial<Options<ConnectionsSyncNowData>>,
+): UseMutationOptions<
+  ConnectionsSyncNowResponse,
+  ConnectionsSyncNowError,
+  Options<ConnectionsSyncNowData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ConnectionsSyncNowResponse,
+    ConnectionsSyncNowError,
+    Options<ConnectionsSyncNowData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await connectionsSyncNow({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const coolifyListDeployStatusQueryKey = (
   options?: Options<CoolifyListDeployStatusData>,

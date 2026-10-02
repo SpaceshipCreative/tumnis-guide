@@ -179,6 +179,13 @@ def configure_agents(settings: Settings) -> None:
     agents.configure_stuck(deadline_seconds=settings.agents.stuck_deadline_seconds)
 
 
+def configure_connectors(settings: Settings) -> None:
+    """The connectors' OAuth client (P3-02) follows the worker's SSRF policy."""
+    importlib.import_module("tumnis.modules.integrations.workflows").configure_net_policy(
+        settings.net_policy()
+    )
+
+
 def configure_folder_sync(settings: Settings) -> None:
     """The folder sync's SSRF policy (P1-15): every location is opened with the worker's."""
     importlib.import_module("tumnis.modules.knowledge.sync").configure(settings.net_policy())
@@ -275,6 +282,7 @@ def main(
     configure_generation(settings)
     configure_agents(settings)
     configure_folder_sync(settings)
+    configure_connectors(settings)
     configure_extraction(settings)
     cache.configure_backend(
         cache.InProcessCache(SystemClock(), publish=cache.pg_publisher(db.direct_engine))

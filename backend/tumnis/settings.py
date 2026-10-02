@@ -4,8 +4,9 @@ Everything per workspace lives encrypted in `workspace_settings` (P0-08); this i
 a deployment needs to start. Secrets stay out of the environment (AGENTS.md, Never): the
 secret-related variables are file paths, except the deployment's own service credentials,
 the Jev key (`TYPESAFE_API_KEY`) and the hosted speech and embedding providers' keys
-(`SPEECH__HOSTED_API_KEY`, `EMBEDDINGS__HOSTED_API_KEY`; Scott decision 75), which live in
-the server's .env, held as `SecretStr` and never written to the database.
+(`SPEECH__HOSTED_API_KEY`, `EMBEDDINGS__HOSTED_API_KEY`; Scott decisions 75 and 90), which
+live on the server (the hosted ones in deploy/hosted-keys.env, read by the worker only),
+held as `SecretStr` and never written to the database.
 """
 
 import asyncio
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Literal, Self
+from urllib.parse import urlsplit
 
 from psycopg import errors as pg_errors
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
@@ -93,9 +95,10 @@ class EmbeddingsSettings(BaseModel):
     The optional hosted embedder (an OpenAI-compatible `/v1/embeddings` API, Data flow rule
     6) is on only when `hosted_base_url`, `hosted_model` and `hosted_api_key` are all set:
     `EMBEDDINGS__HOSTED_BASE_URL`, `EMBEDDINGS__HOSTED_MODEL`, `EMBEDDINGS__HOSTED_DIMS` and
-    `EMBEDDINGS__HOSTED_API_KEY`. The key lives in the server's .env only (Scott decision
-    75), never in the database. With a local embedder too, the local one stays preferred.
-    With neither, chunks are not embedded and hybrid search answers with full text."""
+    `EMBEDDINGS__HOSTED_API_KEY`. The key lives in the server's deploy/hosted-keys.env only
+    (Scott decisions 75 and 90), never in the database. With a local embedder too, the
+    local one stays preferred. With neither, chunks are not embedded and hybrid search
+    answers with full text."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -129,8 +132,8 @@ class SpeechSettings(BaseModel):
     when a workspace allows it, Data flow rule 6) is on only when `hosted_base_url`,
     `hosted_model` and `hosted_api_key` are all set: `SPEECH__HOSTED_BASE_URL`,
     `SPEECH__HOSTED_MODEL`, `SPEECH__HOSTED_VOICE` (unset: the adapter's default) and
-    `SPEECH__HOSTED_API_KEY`. The key lives in the server's .env only (Scott decision 75),
-    never in the database."""
+    `SPEECH__HOSTED_API_KEY`. The key lives in the server's deploy/hosted-keys.env only
+    (Scott decisions 75 and 90), never in the database."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -240,6 +243,20 @@ class Settings(BaseSettings):
             if hosted:
                 raise SettingsError(
                     "preview_has_production_secret", f"{', '.join(hosted)} set in preview"
+                )
+        # A hosted key goes out as a bearer token: never over cleartext (CWE-319).
+        slots: tuple[tuple[str, SpeechSettings | EmbeddingsSettings], ...] = (
+            ("SPEECH", self.speech),
+            ("EMBEDDINGS", self.embeddings),
+        )
+        for prefix, slot in slots:
+            url = slot.hosted_base_url
+            keyed = slot.hosted_api_key is not None and url is not None
+            if keyed and urlsplit(url or "").scheme.lower() != "https":
+                raise SettingsError(
+                    "hosted_url_requires_https",
+                    f"{prefix}__HOSTED_BASE_URL must be https:// when "
+                    f"{prefix}__HOSTED_API_KEY is set",
                 )
         try:
             parse_allowlist(self.outbound_allowlist.split(","))

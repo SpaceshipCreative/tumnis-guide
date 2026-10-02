@@ -1,0 +1,10 @@
+# The workspace's default knowledge storage location (APP-06): A1.5 drops a PDF on Acme
+# site's composer, and an upload needs a location and a project folder (409 no_location
+# otherwise). In fakes mode (the compose.test stack) the location is a FakeStorage, online;
+# its writer gives each project of the set its folder. Only SeedSet.acceptance reads this
+# file: the backend acceptance `seed` (ACCEPTANCE_WORLD) leaves storage to each test.
+schema_version: 1
+locations:
+  - key: l_knowledge
+    name: Knowledge files
+    root: /var/lib/tumnis/knowledge

@@ -1,5 +1,6 @@
 // A Context rail section (P0-24, FR-2.7): a button showing the section's name and a
-// one-line summary; it opens the section in place.
+// one-line summary; it opens the section in place. The section is a region named by its
+// title, so its contents can be found by name ("Knowledge").
 import { useId, type ReactNode } from "react";
 
 import { BUTTON_DANGER, BUTTON_SECONDARY, FIELD } from "../../common/ui";
@@ -18,8 +19,12 @@ export function RailSection({
   children: ReactNode;
 }) {
   const panelId = useId();
+  const titleId = useId();
   return (
-    <div className="border-b border-border last:border-b-0">
+    <section
+      aria-labelledby={titleId}
+      className="border-b border-border last:border-b-0"
+    >
       <button
         type="button"
         aria-expanded={open}
@@ -27,7 +32,9 @@ export function RailSection({
         onClick={onToggle}
         className="flex min-h-11 w-full flex-col items-start gap-0.5 py-2 text-left"
       >
-        <span className="text-sm font-semibold">{title}</span>
+        <span id={titleId} className="text-sm font-semibold">
+          {title}
+        </span>
         <span className="line-clamp-1 text-sm text-muted">{summary}</span>
       </button>
       {open && (
@@ -35,7 +42,7 @@ export function RailSection({
           {children}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 

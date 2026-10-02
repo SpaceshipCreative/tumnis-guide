@@ -171,3 +171,20 @@ tests:
         exp_alerts:
           - exp_labels: { severity: warning, check: audit_chain }
             exp_annotations: { summary: "Audit chain has not been verified in 26 hours" }
+
+  # --- TumnisConnectorSyncStale: a provider's oldest connection over 2 hours, held 10 minutes (P3-02)
+  - interval: 1m
+    input_series:
+      - series: 'tumnis_connector_sync_age_seconds{provider="fake"}'
+        values: '7000+60x30' # passes 7200 s after about 3 minutes
+      - series: 'tumnis_connector_sync_age_seconds{provider="granola"}'
+        values: '600+0x30' # syncing well
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: TumnisConnectorSyncStale
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: TumnisConnectorSyncStale
+        exp_alerts:
+          - exp_labels: { severity: warning, provider: fake }
+            exp_annotations: { summary: "A fake connection has not synced for over 2 hours" }
