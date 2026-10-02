@@ -5,6 +5,7 @@ The one agent interface (`AgentAdapter`, FR-14.6) and the run vocabulary (R-22),
 Hermes profiles Tumnis may run: one master, one per project).
 """
 
+import contextlib
 import json
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import date, datetime
@@ -137,6 +138,7 @@ from tumnis.modules.agents.rules import (
     run_token_scopes,
     run_transition,
     runner_status,
+    stuck_step_after,
     validate_profile_name,
 )
 from tumnis.modules.agents.skill_io import (
@@ -1893,7 +1895,8 @@ RUN_PRIORITY_NORMAL: Final = 10
 STUCK_TIMER_MINUTES: Final = STUCK_MAX_MINUTES  # the fallback's timer (FR-10.5)
 STUCK_TOPIC: Final = "stuck_outcome"
 LIVE_FOCUS: Final = "focus"  # focus's live entity: the focus bar's one read refreshes
-StuckState = Literal["working", "split", "took_step", "fallback"]
+# `done` and `reopened`: the person's review of a `took_step` report (Scott decision 73).
+StuckState = Literal["working", "split", "took_step", "fallback", "done", "reopened"]
 _stuck_requests: Table = StuckRequest.__table__  # type: ignore[assignment]
 _stuck_config: dict[str, float] = {"deadline_s": STUCK_DEADLINE_S}
 _OPEN_STUCK: Final = ("working", "fallback")  # an answer still lands (a late one replaces)
@@ -1938,7 +1941,10 @@ class NextStepOut(BaseModel):
     """What the focus bar shows after "Stuck" (FR-10.5): `working` while the project agent
     works on a first step; `split` with the subtask it posted (`step`); `took_step` with
     its report (`summary`); `fallback` when no answer came within the deadline or the agent
-    is down: the task's `first_action` with a `timer_minutes` timer."""
+    is down: the task's `first_action` with a `timer_minutes` timer. Once the person
+    reviews a `took_step` report (Scott decision 73): `done` when they accepted it (the
+    step is done, the report stays in `summary`), `reopened` when they rejected it (the
+    step is theirs again: the task's `first_action`)."""
 
     focus_event_id: UUID
     task_id: UUID
@@ -2100,6 +2106,51 @@ async def _stuck_answered(
 async def stuck_reported(s: AsyncSession, run_id: UUID, summary: str, *, now: datetime) -> bool:
     """A stuck run's result: it took the step itself and reports back (`took_step`)."""
     return await _stuck_answered(s, run_id, "took_step", now, summary=summary)
+
+
+async def stuck_result_decided(
+    s: AsyncSession,
+    actor: ActorRef,
+    run_id: UUID,
+    decision: str,
+    *,
+    feedback: str | None,
+    now: datetime,
+) -> bool:
+    """A decided `result` item of run `run_id`, when that run is a stuck run (Scott
+    decision 73); False for any other run, whose result the caller applies as usual.
+
+    The step the stuck run took itself is the person's to judge, not the task: accept
+    marks it `done` and reject `reopened` (`rules.stuck_step_after`), on every request the
+    run answered, and the task's status is left alone (the person is still on it, so the
+    focus session carries on). A rejection records its reason as the person's comment on
+    the task, and no new run starts: the step is the person's now. Idempotent: a request
+    already decided is not touched again, nor is the comment added twice. In the caller's
+    transaction."""
+    row = (
+        await s.execute(select(_runs.c.kind, _runs.c.task_id).where(_runs.c.id == run_id))
+    ).first()
+    if row is None or row.kind != RunKind.STUCK.value:
+        return False
+    state = stuck_step_after(decision)
+    if state is None:
+        return True
+    decided = (
+        await s.execute(
+            update(_stuck_requests)
+            .where(_stuck_requests.c.run_id == run_id, _stuck_requests.c.state == "took_step")
+            .values(state=state, updated_at=func.now())
+            .returning(_stuck_requests.c.focus_event_id)
+        )
+    ).all()
+    if not decided:
+        return True  # decided already, or never reported (nothing to judge)
+    if state == "reopened" and feedback and row.task_id is not None:
+        with contextlib.suppress(NotFound):  # a task gone: the step is reopened all the same
+            await tasks.add_comment(s, actor, row.task_id, feedback, now=now)
+    for (focus_event_id,) in decided:
+        mark_changed(s, LIVE_FOCUS, focus_event_id)
+    return True
 
 
 async def _stuck_run(s: AsyncSession, run_id: UUID) -> tasks.StuckRun | None:
