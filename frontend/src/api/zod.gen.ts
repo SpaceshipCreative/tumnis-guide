@@ -453,23 +453,6 @@ export const zGuardrailOut = z.object({
 });
 
 /**
- * FocusCurrentOut
- *
- * What the focus bar shows: the level in force, the open session and today's
- * messages, oldest first; at Guardrail also the one-task card's tasks, and an open
- * detour's return question (P4-01).
- */
-export const zFocusCurrentOut = z.object({
-  detour: zDetourOut.nullable(),
-  guardrail: zGuardrailOut.nullable(),
-  level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
-  messages: z.array(zFocusMessageOut),
-  override_level: z.enum(["quiet", "nudge", "coach", "guardrail"]).nullable(),
-  session: zFocusSessionOut.nullable(),
-  workspace_level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
-});
-
-/**
  * Health
  */
 export const zHealth = z.enum(["blocked", "at_risk", "on_track"]);
@@ -1887,6 +1870,55 @@ export const zStatusBody = z.object({
   schema_version: z.int().nullish(),
   to: zStatus,
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * StuckStepOut
+ */
+export const zStuckStepOut = z.object({
+  estimate_minutes: z.int().nullable(),
+  label: zLabel.nullable(),
+  task_id: z.uuid(),
+  title: z.string(),
+});
+
+/**
+ * NextStepOut
+ *
+ * What the focus bar shows after "Stuck" (FR-10.5): `working` while the project agent
+ * works on a first step; `split` with the subtask it posted (`step`); `took_step` with
+ * its report (`summary`); `fallback` when no answer came within the deadline or the agent
+ * is down: the task's `first_action` with a `timer_minutes` timer.
+ */
+export const zNextStepOut = z.object({
+  fallback_at: z.iso.datetime().nullable(),
+  first_action: z.string().nullable(),
+  focus_event_id: z.uuid(),
+  requested_at: z.iso.datetime(),
+  run_id: z.uuid().nullable(),
+  state: z.enum(["working", "split", "took_step", "fallback"]),
+  step: zStuckStepOut.nullable(),
+  summary: z.string().nullable(),
+  task_id: z.uuid(),
+  timer_minutes: z.int().optional().default(10),
+});
+
+/**
+ * FocusCurrentOut
+ *
+ * What the focus bar shows: the level in force, the open session and today's
+ * messages, oldest first; at Guardrail also the one-task card's tasks, and an open
+ * detour's return question (P4-01).
+ */
+export const zFocusCurrentOut = z.object({
+  detour: zDetourOut.nullable(),
+  guardrail: zGuardrailOut.nullable(),
+  level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
+  messages: z.array(zFocusMessageOut),
+  next_step: zNextStepOut.nullable(),
+  override_level: z.enum(["quiet", "nudge", "coach", "guardrail"]).nullable(),
+  session: zFocusSessionOut.nullable(),
+  workspace_level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
 });
 
 /**

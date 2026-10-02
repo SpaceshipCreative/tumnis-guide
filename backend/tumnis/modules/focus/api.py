@@ -177,6 +177,8 @@ class FocusCurrentOut(BaseModel):
     messages: list[FocusMessageOut]
     guardrail: GuardrailOut | None = None  # set only when the level in force is Guardrail
     detour: DetourOut | None = None
+    # P4-02: after "Stuck", the project agent's first step (or the fallback), today's latest
+    next_step: agents.NextStepOut | None = None
 
 
 class LevelIn(BaseModel):
@@ -489,6 +491,7 @@ async def _current(
         session=shown,
         guardrail=await _guardrail(s, ctx, now, level),
         detour=await _open_detour(s, start, end),
+        next_step=await agents.next_step(s, start, end),
         messages=[
             FocusMessageOut(
                 id=e.id,
@@ -716,7 +719,7 @@ async def respond(
                 event.task_id,
                 now,
                 _message("stuck", title, None),
-                f"stuck:{event.id}:{now.isoformat()}",
+                f"stuck:{event.id}",  # one stuck event per check-in: a second tap is a repeat
                 session_id=None if row is None else row.id,
             )
     mark_changed(s, LIVE_ENTITY, event.id)

@@ -33,6 +33,12 @@
   (`approval.requested`, P2-05): start the wait's flow on the `human` queue (workflow id
   `<kind>:<id>:<app version>`, so a redelivery starts nothing new).
 
+- `agents.start_stuck` (`focus.event` of kind `stuck`, P4-02, FR-10.5): starts
+  `handle_stuck` for the stuck task (workflow id `stuck:<focus event id>`, so a redelivery
+  starts nothing new); direct, as the enrichment subscribers are, since every focus event
+  passes through it. `agents.deliver_stuck_outcome` (`stuck.resolved`) wakes that
+  workflow with the stuck run's answer (the event id is the send's idempotency key).
+
 - `agents.enrich_on_create` (`task.created`, P1-08): starts `enrich_task` for the new task
   (workflow id `enrich:<task id>:<event id>`) when its project has a provisioned agent;
   the workflow itself decides whether the task needs anything.
@@ -90,9 +96,12 @@ __all__ = [
     "RELEASE_HELD_SUBSCRIBER",
     "REVIEW_SUBSCRIBER",
     "SIGNAL_SUBSCRIBER",
+    "STUCK_OUTCOME_SUBSCRIBER",
+    "STUCK_SUBSCRIBER",
     "apply_review_decision",
     "cancel_paused_runs",
     "deliver_run_signal",
+    "deliver_stuck_outcome",
     "digest_subscriber_name",
     "enrich_on_create",
     "enrich_on_update",
@@ -103,6 +112,7 @@ __all__ = [
     "start_approval_flow",
     "start_dispatch",
     "start_question_flow",
+    "start_stuck",
 ]
 
 _log = logging.getLogger(__name__)
@@ -117,6 +127,8 @@ CANCEL_PAUSED_SUBSCRIBER: Final = "agents.cancel_paused_runs"
 RELEASE_HELD_SUBSCRIBER: Final = "agents.release_held_runs"
 QUESTION_SUBSCRIBER: Final = "agents.start_question_flow"
 APPROVAL_SUBSCRIBER: Final = "agents.start_approval_flow"
+STUCK_SUBSCRIBER: Final = "agents.start_stuck"
+STUCK_OUTCOME_SUBSCRIBER: Final = "agents.deliver_stuck_outcome"
 
 # How long a project seen without a provisioned agent is taken to still have none. The
 # relay runs the enrichment subscribers for every task write, one after another, so a
@@ -171,6 +183,29 @@ async def start_dispatch(envelope: EventEnvelope) -> None:
         UUID(str(payload["run_id"])),
         UUID(str(payload["project_id"])),
         None if priority is None else int(priority),
+    )
+
+
+@subscribe("focus.event", name=STUCK_SUBSCRIBER, direct=True)
+async def start_stuck(envelope: EventEnvelope) -> None:
+    payload = envelope.payload
+    if payload.get("kind") != "stuck" or payload.get("task_id") is None:
+        return
+    fired = payload.get("fired_at")
+    await workflows.start_stuck(
+        envelope.workspace_id,
+        UUID(str(payload["task_id"])),
+        UUID(str(payload["event_id"])),
+        datetime.fromisoformat(str(fired)) if fired else envelope.occurred_at,
+        str(envelope.actor),
+    )
+
+
+@subscribe("stuck.resolved", name=STUCK_OUTCOME_SUBSCRIBER)
+async def deliver_stuck_outcome(envelope: EventEnvelope) -> None:
+    payload = envelope.payload
+    await signals.deliver_stuck_outcome(
+        UUID(str(payload["focus_event_id"])), str(payload["outcome"]), key=str(envelope.event_id)
     )
 
 

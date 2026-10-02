@@ -489,6 +489,7 @@ BASES: Final[dict[str, SkillBase]] = {
     "project-digest": _case_base(
         "project-template", "project-digest", "project_digest", DIGEST_REPLY
     ),
+    "stuck": _case_base("project-template", "stuck", "stuck_invoice", TASK_REPLY),
     "orchestrate-master": _case_base(
         "master", "orchestrate-master", "master_spring_launch", TASK_REPLY
     ),
