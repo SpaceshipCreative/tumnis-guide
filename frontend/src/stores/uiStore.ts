@@ -37,6 +37,9 @@ export interface UiContext {
   sidebarCollapsed: boolean;
   /** The phone's navigation drawer is open (DS-01). */
   navOpen: boolean;
+  /** How many modal sheets are open (the phone task drawer): Quick add hides meanwhile
+   * (APP-15). */
+  modalSheets: number;
 }
 
 const viewSchema = z.enum(projectViews);
@@ -71,6 +74,7 @@ export function createUiStore() {
     theme: loadTheme(),
     sidebarCollapsed: safeGetItem(SIDEBAR_KEY) === "true",
     navOpen: false,
+    modalSheets: 0,
   };
   const store = createStore({
     context: initial,
@@ -106,6 +110,11 @@ export function createUiStore() {
         sidebarCollapsed: e.collapsed,
       }),
       setNavOpen: (c, e: { open: boolean }) => ({ ...c, navOpen: e.open }),
+      sheetOpened: (c) => ({ ...c, modalSheets: c.modalSheets + 1 }),
+      sheetClosed: (c) => ({
+        ...c,
+        modalSheets: Math.max(0, c.modalSheets - 1),
+      }),
     },
   });
   // Persist what changed on top of what storage holds now (another tab may have written
