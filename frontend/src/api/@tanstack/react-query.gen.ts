@@ -77,13 +77,16 @@ import {
   knowledgeConfirmHostKey,
   knowledgeCreateLocation,
   knowledgeCreateTextEntry,
+  knowledgeDeleteAtSource,
   knowledgeGetBrief,
   knowledgeGetDocument,
   knowledgeGetFile,
   knowledgeGetQuota,
+  knowledgeIssueDeleteConfirmation,
   knowledgeListDocuments,
   knowledgeListLocations,
   knowledgeListVersions,
+  knowledgeMoveProjectFolder,
   knowledgeRestoreDocument,
   knowledgeSearch,
   knowledgeSetDefaultLocation,
@@ -93,6 +96,7 @@ import {
   knowledgeTrashDocument,
   knowledgeUpdateDocument,
   knowledgeUploadDocument,
+  knowledgeUseExistingFolder,
   notificationsGetVapidPublicKey,
   notificationsSubscribe,
   notificationsUnsubscribe,
@@ -360,6 +364,9 @@ import type {
   KnowledgeCreateTextEntryData,
   KnowledgeCreateTextEntryError,
   KnowledgeCreateTextEntryResponse,
+  KnowledgeDeleteAtSourceData,
+  KnowledgeDeleteAtSourceError,
+  KnowledgeDeleteAtSourceResponse,
   KnowledgeGetBriefData,
   KnowledgeGetBriefError,
   KnowledgeGetBriefResponse,
@@ -372,6 +379,9 @@ import type {
   KnowledgeGetQuotaData,
   KnowledgeGetQuotaError,
   KnowledgeGetQuotaResponse,
+  KnowledgeIssueDeleteConfirmationData,
+  KnowledgeIssueDeleteConfirmationError,
+  KnowledgeIssueDeleteConfirmationResponse,
   KnowledgeListDocumentsData,
   KnowledgeListDocumentsError,
   KnowledgeListDocumentsResponse,
@@ -381,6 +391,9 @@ import type {
   KnowledgeListVersionsData,
   KnowledgeListVersionsError,
   KnowledgeListVersionsResponse,
+  KnowledgeMoveProjectFolderData,
+  KnowledgeMoveProjectFolderError,
+  KnowledgeMoveProjectFolderResponse,
   KnowledgeRestoreDocumentData,
   KnowledgeRestoreDocumentError,
   KnowledgeRestoreDocumentResponse,
@@ -408,6 +421,9 @@ import type {
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentError,
   KnowledgeUploadDocumentResponse,
+  KnowledgeUseExistingFolderData,
+  KnowledgeUseExistingFolderError,
+  KnowledgeUseExistingFolderResponse,
   NotificationsGetVapidPublicKeyData,
   NotificationsGetVapidPublicKeyError,
   NotificationsGetVapidPublicKeyResponse,
@@ -2593,6 +2609,65 @@ export const knowledgeUpdateDocumentMutation = (
 };
 
 /**
+ * Delete At Source
+ *
+ * Delete an outside file at its source, with the dialog's token and a reason; the
+ * next folder sync deletes it.
+ */
+export const knowledgeDeleteAtSourceMutation = (
+  options?: Partial<Options<KnowledgeDeleteAtSourceData>>,
+): UseMutationOptions<
+  KnowledgeDeleteAtSourceResponse,
+  KnowledgeDeleteAtSourceError,
+  Options<KnowledgeDeleteAtSourceData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeDeleteAtSourceResponse,
+    KnowledgeDeleteAtSourceError,
+    Options<KnowledgeDeleteAtSourceData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeDeleteAtSource({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Issue Delete Confirmation
+ *
+ * A one-time token for the delete-at-source dialog.
+ */
+export const knowledgeIssueDeleteConfirmationMutation = (
+  options?: Partial<Options<KnowledgeIssueDeleteConfirmationData>>,
+): UseMutationOptions<
+  KnowledgeIssueDeleteConfirmationResponse,
+  KnowledgeIssueDeleteConfirmationError,
+  Options<KnowledgeIssueDeleteConfirmationData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeIssueDeleteConfirmationResponse,
+    KnowledgeIssueDeleteConfirmationError,
+    Options<KnowledgeIssueDeleteConfirmationData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeIssueDeleteConfirmation({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Restore Document
  *
  * Back from the trash; 404 for a document that is not in it.
@@ -2865,6 +2940,37 @@ export const knowledgeSetProjectFolderMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await knowledgeSetProjectFolder({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Move Project Folder
+ *
+ * Copy the project's folder to another location, verify every hash, switch; the old
+ * copy is kept. A target that cannot take the folder is refused here (409, or 422 for an
+ * unsafe path), not after a 202.
+ */
+export const knowledgeMoveProjectFolderMutation = (
+  options?: Partial<Options<KnowledgeMoveProjectFolderData>>,
+): UseMutationOptions<
+  KnowledgeMoveProjectFolderResponse,
+  KnowledgeMoveProjectFolderError,
+  Options<KnowledgeMoveProjectFolderData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeMoveProjectFolderResponse,
+    KnowledgeMoveProjectFolderError,
+    Options<KnowledgeMoveProjectFolderData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeMoveProjectFolder({
         ...options,
         ...fnOptions,
         throwOnError: true,

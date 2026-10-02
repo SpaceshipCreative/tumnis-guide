@@ -209,6 +209,9 @@ import type {
   KnowledgeCreateTextEntryData,
   KnowledgeCreateTextEntryErrors,
   KnowledgeCreateTextEntryResponses,
+  KnowledgeDeleteAtSourceData,
+  KnowledgeDeleteAtSourceErrors,
+  KnowledgeDeleteAtSourceResponses,
   KnowledgeGetBriefData,
   KnowledgeGetBriefErrors,
   KnowledgeGetBriefResponses,
@@ -221,6 +224,9 @@ import type {
   KnowledgeGetQuotaData,
   KnowledgeGetQuotaErrors,
   KnowledgeGetQuotaResponses,
+  KnowledgeIssueDeleteConfirmationData,
+  KnowledgeIssueDeleteConfirmationErrors,
+  KnowledgeIssueDeleteConfirmationResponses,
   KnowledgeListDocumentsData,
   KnowledgeListDocumentsErrors,
   KnowledgeListDocumentsResponses,
@@ -230,6 +236,9 @@ import type {
   KnowledgeListVersionsData,
   KnowledgeListVersionsErrors,
   KnowledgeListVersionsResponses,
+  KnowledgeMoveProjectFolderData,
+  KnowledgeMoveProjectFolderErrors,
+  KnowledgeMoveProjectFolderResponses,
   KnowledgeRestoreDocumentData,
   KnowledgeRestoreDocumentErrors,
   KnowledgeRestoreDocumentResponses,
@@ -257,6 +266,9 @@ import type {
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentErrors,
   KnowledgeUploadDocumentResponses,
+  KnowledgeUseExistingFolderData,
+  KnowledgeUseExistingFolderErrors,
+  KnowledgeUseExistingFolderResponses,
   NotificationsGetVapidPublicKeyData,
   NotificationsGetVapidPublicKeyErrors,
   NotificationsGetVapidPublicKeyResponses,
@@ -527,13 +539,16 @@ import {
   zKnowledgeConfirmHostKeyResponse,
   zKnowledgeCreateLocationResponse,
   zKnowledgeCreateTextEntryResponse,
+  zKnowledgeDeleteAtSourceResponse,
   zKnowledgeGetBriefResponse,
   zKnowledgeGetDocumentResponse,
   zKnowledgeGetFileResponse,
   zKnowledgeGetQuotaResponse,
+  zKnowledgeIssueDeleteConfirmationResponse,
   zKnowledgeListDocumentsResponse,
   zKnowledgeListLocationsResponse,
   zKnowledgeListVersionsResponse,
+  zKnowledgeMoveProjectFolderResponse,
   zKnowledgeRestoreDocumentResponse,
   zKnowledgeSearchResponse,
   zKnowledgeSetDefaultLocationResponse,
@@ -543,6 +558,7 @@ import {
   zKnowledgeTrashDocumentResponse,
   zKnowledgeUpdateDocumentResponse,
   zKnowledgeUploadDocumentResponse,
+  zKnowledgeUseExistingFolderResponse,
   zNotificationsGetVapidPublicKeyResponse,
   zNotificationsSubscribeResponse,
   zNotificationsUnsubscribeResponse,
@@ -1878,6 +1894,59 @@ export const knowledgeUpdateDocument = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Delete At Source
+ *
+ * Delete an outside file at its source, with the dialog's token and a reason; the
+ * next folder sync deletes it.
+ */
+export const knowledgeDeleteAtSource = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeDeleteAtSourceData, ThrowOnError>,
+): RequestResult<
+  KnowledgeDeleteAtSourceResponses,
+  KnowledgeDeleteAtSourceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeDeleteAtSourceResponses,
+    KnowledgeDeleteAtSourceErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeDeleteAtSourceResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}/delete-at-source",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Issue Delete Confirmation
+ *
+ * A one-time token for the delete-at-source dialog.
+ */
+export const knowledgeIssueDeleteConfirmation = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeIssueDeleteConfirmationData, ThrowOnError>,
+): RequestResult<
+  KnowledgeIssueDeleteConfirmationResponses,
+  KnowledgeIssueDeleteConfirmationErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeIssueDeleteConfirmationResponses,
+    KnowledgeIssueDeleteConfirmationErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeIssueDeleteConfirmationResponse.parseAsync(data),
+    url: "/v1/knowledge/documents/{document_id}/delete-confirmation",
+    ...options,
+  });
+
+/**
  * Restore Document
  *
  * Back from the trash; 404 for a document that is not in it.
@@ -2119,6 +2188,37 @@ export const knowledgeSetProjectFolder = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zKnowledgeSetProjectFolderResponse.parseAsync(data),
     url: "/v1/knowledge/projects/{project_id}/folder",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Move Project Folder
+ *
+ * Copy the project's folder to another location, verify every hash, switch; the old
+ * copy is kept. A target that cannot take the folder is refused here (409, or 422 for an
+ * unsafe path), not after a 202.
+ */
+export const knowledgeMoveProjectFolder = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeMoveProjectFolderData, ThrowOnError>,
+): RequestResult<
+  KnowledgeMoveProjectFolderResponses,
+  KnowledgeMoveProjectFolderErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeMoveProjectFolderResponses,
+    KnowledgeMoveProjectFolderErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeMoveProjectFolderResponse.parseAsync(data),
+    url: "/v1/knowledge/projects/{project_id}/folder/move",
     ...options,
     headers: {
       "Content-Type": "application/json",
