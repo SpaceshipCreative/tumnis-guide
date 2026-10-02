@@ -3801,7 +3801,7 @@
         "type": "object"
       },
       "NextStepOut": {
-        "description": "What the focus bar shows after \"Stuck\" (FR-10.5): `working` while the project agent\nworks on a first step; `split` with the subtask it posted (`step`); `took_step` with\nits report (`summary`); `fallback` when no answer came within the deadline or the agent\nis down: the task's `first_action` with a `timer_minutes` timer.",
+        "description": "What the focus bar shows after \"Stuck\" (FR-10.5): `working` while the project agent\nworks on a first step; `split` with the subtask it posted (`step`); `took_step` with\nits report (`summary`); `fallback` when no answer came within the deadline or the agent\nis down: the task's `first_action` with a `timer_minutes` timer. Once the person\nreviews a `took_step` report (Scott decision 73): `done` when they accepted it (the\nstep is done, the report stays in `summary`), `reopened` when they rejected it (the\nstep is theirs again: the task's `first_action`).",
         "properties": {
           "fallback_at": {
             "anyOf": [
@@ -3853,7 +3853,9 @@
               "working",
               "split",
               "took_step",
-              "fallback"
+              "fallback",
+              "done",
+              "reopened"
             ],
             "title": "State",
             "type": "string"
