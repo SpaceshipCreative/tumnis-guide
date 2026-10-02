@@ -1,5 +1,5 @@
 """knowledge SQLAlchemy tables owned by this module (mirrors of revisions knowledge_0001
-to knowledge_0010)."""
+to knowledge_0011)."""
 
 from datetime import datetime
 from typing import Any
@@ -137,7 +137,10 @@ class FolderFile(TenantBase, Base):
 
     __tablename__ = "folder_files"
 
-    location_id: Mapped[UUID] = mapped_column(ForeignKey("storage_locations.id"))
+    # knowledge_0011: a location's file, or (connection_id set instead) an object of an S3
+    # linked source (P3-13)
+    location_id: Mapped[UUID | None] = mapped_column(ForeignKey("storage_locations.id"))
+    connection_id: Mapped[UUID | None] = mapped_column(ForeignKey("connections.id"))
     path: Mapped[str]
     size: Mapped[int] = mapped_column(BigInteger)
     mtime: Mapped[datetime]
@@ -148,6 +151,26 @@ class FolderFile(TenantBase, Base):
     synced_version: Mapped[int | None]
     delete_confirmed: Mapped[bool] = mapped_column(server_default=text("false"))
     last_op: Mapped[str | None]
+
+
+class S3Source(TenantBase, Base):
+    """knowledge_0011: an S3 bucket linked as a read-only knowledge source (P3-13), one per
+    `connections` row; keys sealed in `config_enc`, the webhook token kept as its SHA-256."""
+
+    __tablename__ = "s3_sources"
+
+    connection_id: Mapped[UUID] = mapped_column(ForeignKey("connections.id"))
+    provider: Mapped[str]  # minio | b2 | other
+    endpoint: Mapped[str]
+    region: Mapped[str]
+    bucket: Mapped[str]
+    path_style: Mapped[bool] = mapped_column(server_default=text("true"))
+    config_enc: Mapped[bytes] = mapped_column(LargeBinary)
+    prefixes: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'[]'"))
+    trusted: Mapped[bool] = mapped_column(server_default=text("false"))
+    capabilities: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'"))
+    webhook_token_sha256: Mapped[bytes] = mapped_column(LargeBinary)
+    last_sync_at: Mapped[datetime | None]
 
 
 class Vector(UserDefinedType[list[float]]):
