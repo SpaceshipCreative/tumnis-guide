@@ -1,0 +1,88 @@
+# Docling: the tests that run the real Docling pipeline (Scott decision 85). Docling, torch
+# (CPU wheels) and their models are too heavy for the integration jobs and stay out of the
+# image, so they are the optional `docling` dependency group, installed here only.
+# backend/conftest.py marks the tests (REAL_DOCLING_TESTS) `docling`, and skips them where
+# Docling is not installed, so the integration jobs leave them to this job.
+#
+# Its own workflow, not a ci.yml job: it is not a required check (.github/required-checks.txt
+# lists ci.yml's jobs only), so it runs beside the required path without holding it up.
+#
+# Models come from Hugging Face (layout, TableFormer, the chunking tokenizer; HF_HOME) and
+# ModelScope (RapidOCR's weights, saved inside the rapidocr package in the venv), about
+# 570 MB, cached by the versions of the packages that fetch them.
+#
+# Actions are pinned by commit SHA, as in ci.yml; Renovate bumps the SHA and the comment.
+name: docling
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main] # caches saved on main are the ones every PR can restore
+
+concurrency:
+  group: docling-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+
+jobs:
+  docling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Its own uv cache (cache-suffix): the torch wheels would never land in the cache the
+      # ci.yml jobs share, since whichever job saves a key first wins.
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+          cache-suffix: docling
+      - name: Install the backend with the docling group
+        working-directory: backend
+        run: |
+          uv sync --group docling
+          uv run --group docling python -c "import docling, torch; print('torch', torch.__version__)"
+      - name: Model cache key (the locked versions of the packages that fetch models)
+        id: models
+        working-directory: backend
+        run: |
+          versions=$(python3 -c 'import tomllib; p = {x["name"]: x["version"] for x in tomllib.load(open("uv.lock", "rb"))["package"]}; print("-".join(n + "-" + p[n] for n in ("docling-slim", "docling-ibm-models", "rapidocr")))')
+          echo "key=docling-models-$RUNNER_OS-$versions" >> "$GITHUB_OUTPUT"
+          echo "rapidocr=$(uv run --group docling python -c 'import pathlib, rapidocr; print(pathlib.Path(rapidocr.__file__).parent / "models")')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cache
+        with:
+          path: |
+            ~/.cache/huggingface
+            ${{ steps.models.outputs.rapidocr }}
+          key: ${{ steps.models.outputs.key }}
+      # On a cache miss, one process fetches the models first (layout, TableFormer, RapidOCR
+      # on the scanned page, the tokenizer), so the two test workers never download the
+      # same file at once.
+      - name: Fetch the models (cache miss only)
+        if: steps.cache.outputs.cache-hit != 'true'
+        working-directory: backend
+        run: >-
+          uv run --group docling python -c "from pathlib import Path;
+          from tumnis.modules.knowledge.adapters.docling import DoclingExtractor;
+          from tumnis.settings import KnowledgeSettings;
+          x = DoclingExtractor(chunk_tokenizer=KnowledgeSettings().chunk_tokenizer);
+          [print(f, len(x.chunk(x.convert(Path('fixtures/extraction') / f, 'pdf').doc_json)), 'chunks')
+          for f in ('scanned-1p.pdf', 'rate-card-table.pdf')]"
+      # -n 2: each worker loads Docling's models (a few GB of memory with torch) on the
+      # runner's 4 vCPUs and 16 GB.
+      - name: Real-Docling tests (A1.5 integration, T-P1-16-06)
+        working-directory: backend
+        run: |
+          # Pull the service images while xdist starts, so no worker's first test waits on one.
+          uv run --group docling python -c "from tests._services import CLAMD_IMAGE, MINIO_IMAGE, SFTP_IMAGE; from tests.fixtures import PG_IMAGE, PGBOUNCER_IMAGE; print(PG_IMAGE, PGBOUNCER_IMAGE, MINIO_IMAGE, SFTP_IMAGE, CLAMD_IMAGE)" | xargs -n1 -P5 docker pull -q > /dev/null &
+          uv run --group docling pytest -m docling -n 2 --dist worksteal --durations=20 -rA
+      - name: Model cache size
+        if: ${{ !cancelled() }}
+        run: du -sh ~/.cache/huggingface "${{ steps.models.outputs.rapidocr }}" || true
