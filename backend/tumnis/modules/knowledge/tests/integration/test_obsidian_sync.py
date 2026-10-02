@@ -302,7 +302,7 @@ async def test_lost_attachment_extraction_is_requested_again(
 
     async def sync(extract: object) -> None:
         await vault_sync.sync_vault(
-            knowledge_ws.ctx, env.connection_id, reader, mapping, extract=extract
+            knowledge_ws.ctx, env.connection_id, reader, mapping, extract=extract, clock=clock
         )
 
     with pytest.raises(RuntimeError, match="the enqueue failed"):
