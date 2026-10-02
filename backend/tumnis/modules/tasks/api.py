@@ -569,6 +569,13 @@ async def project_of(ctx: WorkspaceContext, task_id: UUID) -> UUID | None:
 register_project_lookup("tasks", project_of)
 
 
+async def task_creator(s: AsyncSession, task_id: UUID) -> tuple[str, UUID | None]:
+    """(created_by, parent_id) of a live task, 404 when missing: P2-06 walks a task's
+    delegation chain through the run whose task token created it."""
+    row = await _row(s, task_id)
+    return str(row["created_by"]), row["parent_id"]
+
+
 # --- Reading ---------------------------------------------------------------------------------
 
 

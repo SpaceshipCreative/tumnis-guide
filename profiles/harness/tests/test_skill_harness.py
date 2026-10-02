@@ -382,7 +382,11 @@ def test_full_mock_answers_from_the_script_and_checks_arguments() -> None:
             [text] = bad.content
             assert isinstance(text, TextContent)
             out["bad"] = (bad.is_error, json.loads(text.text))
-            out["stub"] = (await client.call_tool("wait_for_task", {"x": 1})).structured_content
+            out["stub"] = (
+                await client.call_tool(
+                    "wait_for_task", {"delegation_id": "01a0f7cd-0000-7000-8000-000000000001"}
+                )
+            ).structured_content
         return out
 
     out = anyio.run(exercise)
