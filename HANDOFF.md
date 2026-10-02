@@ -1,112 +1,107 @@
-# P3-12 (Obsidian source) handoff
+# P3-12 (Obsidian source) handoff (c1)
 
-Written 2026-10-01 on the context watcher's "HANDOFF NOW". Binding prompt:
-`~/tumnis-coordinator/prompts/wave1/P3-12.txt` (read it fully again). Plan section:
-`docs/IMPLEMENTATION-PLAN-DETAILED.md` lines 16546-16676.
+Written 2026-10-02 on the context watcher's "HANDOFF NOW". Binding prompt:
+`~/tumnis-coordinator/prompts/wave1/P3-12.txt` plus the coordinator notes
+(`agent-reports/P3-12-coordinator-notes.md`). Plan section: `docs/IMPLEMENTATION-PLAN-DETAILED.md`
+lines 16546-16676.
 
 ## State
 
-- Branch `wp/P3-12`, worktree `.claude/worktrees/agent-aaed9e31b100a371c`.
-- No PR yet. No CI run yet (CI runs on PRs; push alone started nothing).
-- P3-02: `origin/wp/P3-02` now exists, but no PR and not merged. Read its interfaces
-  read-only; final wiring and the PR wait for the coordinator's "P3-02 merged".
+- PR **#157** (DRAFT): https://github.com/SpaceshipCreative/tumnis-guide/pull/157. Draft body only;
+  the full body is ready at `/tmp/claude-1002/P3-12-c1/pr-body.md` (copy it; update test results).
+  CodeRabbit not requested yet (request ONCE, when marking ready with `gh pr ready`).
+- Backend is complete and ALL 12 spec tests are green with markers removed (CI-cited):
+  T-01..06 (run 36959617596), T-09/10 (run 36961890399 unit), T-07/08/11/12 (run
+  36961890399 integration-a). `make check` passes locally on 358fda84 (exit 0).
+- Last CI run before the unmark commits (36961890399): unit and integration-a failed only on
+  the XPASS(strict) markers (now removed); `performance` failed only on Lighthouse TBT
+  (re-run that job once if it fails again: `gh run rerun <id> --failed`). Everything else green.
+- P3-02 (#156) still DRAFT, not merged. Final wiring waits for the coordinator's "P3-02 merged".
+- #154 (P3-14 impl-2, knowledge_0009) not merged yet.
 
-## Commits
+## Commits (all pushed with this handoff)
 
-| SHA | What | Pushed |
-|---|---|---|
-| 3b77b0c7 | `test(knowledge): P3-12 spec tests (red)`: T-P3-12-01..12 as strict xfail, fixture vault, links table data | yes |
-| b62952b6 | `feat(knowledge): Obsidian note parser and vault rules`: `obsidian/parse.py`, `obsidian/rules.py`, `test_obsidian_resolve.py`, `.importlinter` (rules-are-pure gains the two modules) | yes (with this handoff) |
-| this one | `chore: P3-12 handoff` | yes |
+| SHA | What |
+|---|---|
+| 3b77b0c7 | spec tests (red) (c0) |
+| b62952b6 | parser and rules (c0) |
+| c4ae8e45 | merge origin/wp/P3-12 into main-based worktree |
+| 585073a5 | T-01..06 markers off (run 36959617596) |
+| f50ee8c4 | vault readers (folder, Git, fake), contract suite, Dockerfile git + openssh-client |
+| 125b62f6 | knowledge_0010 document_links, sync_vault, vault extraction source, 409 read_only_source |
+| f2ea7747 | obsidian/setup.py host-key probe/pinning (decision 82), preview_mapping |
+| 3c96d10e | T-09/10 markers off (run 36961890399) |
+| 358fda84 | T-07/08/11/12 markers off (run 36961890399) |
+| this one | `chore: P3-12 handoff` |
 
-T-01..06 pass locally with `--runxfail`; markers stay until CI shows XPASS(strict)
-(decision 78: remove only then, cite the CI run id, never change an assertion).
+## Remaining steps
 
-## Uncommitted work in progress (NOT in git)
+1. Wait for CI on the pushed head; confirm every job green (preview stays pending; re-run
+   `performance` once if only TBT fails).
+2. When #154 merges: merge origin/main, re-chain `knowledge/migrations/0010_document_links.py`
+   `down_revision = "knowledge_0009"`, check `uv run alembic heads` (one knowledge head). Also fit
+   `_refuse_synced` into #154's DELETE outcome handler (decision 81): the 409 `read_only_source`
+   check runs before the 204/200/403 outcomes (currently in `api.trash` and `api.edit_document`).
+3. After the coordinator's "P3-02 merged": merge origin/main, then wire:
+   - register provider `obsidian` (kind `knowledge`, auth `none`) with P3-02's `register_provider`;
+     use P3-02 only for the connection record/status (`create_connection`, `put_credentials` for the
+     deploy key sealed, `set_connection_status`). Don't change P3-02's helpers.
+   - knowledge-owned vault settings (mode folder|git, folder path or remote/branch, mapping,
+     pinned known_hosts, pending key): either an `obsidian_vaults` table added to knowledge_0010
+     or stored per P3-02's settings model; pick after reading the merged P3-02.
+   - routes under `/v1/knowledge/obsidian/...`: probe host key (`setup.probe_git_host`), confirm/
+     paste known_hosts (`setup.pinned_known_hosts`), connect (GitReader.connect, writable key ->
+     422 `writable_deploy_key`), mapping preview (`sync.preview_mapping`, worker-computed per plan),
+     sync now; a 15-minute scheduled `sync_vault` (DBOS); folder path: watchfiles with 5 s debounce
+     + 15-min scan. Hosted mode (`DEPLOYMENT_MODE=hosted`): Git only (folder refused/hidden).
+   - `frontend/src/components/knowledge/ObsidianSetup.tsx` (DS-01 primitives, reuse
+     `components/settings/storage/HostKey.tsx` for fingerprint confirmation; mapping preview table;
+     hosted shows Git only), Vitest test, `make gen` for the API client. 200 KB JS budget.
+   - integration tests for the routes; Context7 for watchfiles if used.
+4. `make check`, push, update PR body (`gh pr edit 157 --body-file ...`), `gh pr ready 157`,
+   `gh pr comment 157 --body "@coderabbitai review"` once, run the review loop
+   (`~/tumnis-coordinator/pr-review-loop.md`), then SendMessage main "#157 MERGE-READY at <sha>".
+5. Delete this HANDOFF.md in a chore commit when done.
 
-Saved at `/tmp/claude-1002/P3-12-c0/wip/obsidian/` (moved out of the tree so `make check`
-passes for this commit). Move it back to
-`backend/tumnis/modules/knowledge/adapters/obsidian/` and add an empty `__init__.py`:
+## Decisions and deviations (also in /tmp/claude-1002/P3-12-c1/pr-body.md)
 
-- `port.py`: `VaultReader` Protocol (`list_files(skip=never_skip)`, `read`, `refresh`),
-  `Skip`, `FileStat` (re-exported from storage; etag = sha256 hex).
-- `folder.py`: `VaultFiles` (fd-based `os.fwalk`, prunes `.git` and `skip`, O_NOFOLLOW,
-  sha256 cache per (dev, ino, size, mtime_ns), skips files changing while hashed),
-  `run_files` (to_thread through `Adapter.call`), `FolderReader` ("knowledge.obsidian_folder").
-- `git.py`: `GitReader` ("knowledge.obsidian_git"), `parse_remote`, `SubprocessGitRunner`,
-  `GitRunner` Protocol, `InvalidRemote`, `WritableDeployKey`, `PROBE_REF`, hardened env
-  (GIT_ALLOW_PROTOCOL, GIT_TERMINAL_PROMPT=0, GIT_CONFIG_NOSYSTEM, GIT_CONFIG_GLOBAL=/dev/null,
-  `-c protocol.ext.allow=never`, `core.hooksPath=/dev/null`, GIT_SSH_COMMAND with
-  `-F /dev/null -i key IdentitiesOnly StrictHostKeyChecking=yes UserKnownHostsFile BatchMode
-  HostKeyAlias=<host> HostName=<checked ip>`), key and known_hosts written 0600 per command
-  then deleted; `resolve_and_check` before every network command (ports policy | {22, 2222}).
-- `fake.py`: `FakeVault` (in-memory, `script(path, bytes|None)`, `calls`), `FakeGitRunner`
-  (`script(verb, returncode=, stderr=)`, `calls` of `GitCall(argv, env, cwd, key_seen)`,
-  clone makes `<dest>/.git`). NOTE: T-09/T-10 expect a default push (probe) to fail;
-  check the default push result is non-zero (e.g. rc 128 "read-only") before running them.
-
-None of these has been run yet. 203.0.113.10 (T-09's resolver answer) is not in
-`core/net.py` ALWAYS_BLOCKED, so `resolve_and_check` passes it in self-hosted mode.
-
-## Remaining steps (plan TDD order)
-
-1. Restore the WIP adapters; register `knowledge.obsidian_folder` and
-   `knowledge.obsidian_git` in `knowledge/adapters/__init__.py` (`register_adapter(name,
-   port=, real=, fake=)`; fakes built by `resolve(name, "fake")` with no args).
-   Run `cd backend && rtk proxy uv run pytest -q --runxfail -p no:randomly
-   tumnis/modules/knowledge/tests/unit/test_obsidian_git.py` (T-09, T-10), then ruff/mypy.
-2. Contract suite `tests/contract/test_obsidian_vault_contract.py` (base
-   `AdapterContract[VaultReader]`; TestFakeVault "fake", TestFolderReader "real",
-   TestGitReader "real" over a local bare repo).
-3. Migration `knowledge_0008` `document_links` (check `alembic heads`; main knowledge head
-   was knowledge_0007; no core migration) + `DocumentLink` model in `knowledge/models.py`
-   (columns used by tests: from_document_id, to_document_id NULL, kind link/embed,
-   to_target, heading) + table registry meta test.
-4. `pipeline.py`: extraction Source "vault" (read from spool, no place) — minimal edit.
-5. `knowledge/obsidian/sync.py` `sync_vault(ctx, connection_id, reader, mapping, extract=)`
-   per the design in the T-07/T-08 tests: templates folder from `.obsidian/templates.json`,
-   renames by file hash keep the document, `_write_text` for new/changed notes, trash
-   missing, restore reappearing, links two-pass and re-resolved every scan, embedded
-   attachments as file documents (pending_scan, spool `<spool>/<version_id>`, extract hook),
-   idempotent second sync. Do NOT use P3-02's `upsert_synced_documents` (forces
-   untrusted+tainted; cannot carry links, versions, attachments).
-6. Read-only guard: `edit_document` raises 409 `read_only_source` when `connection_id` is
-   set (T-12).
-7. Dockerfile: add `git` and `openssh-client` (shared file; report it).
-8. `make check` (semgrep needs `SEMGREP_SETTINGS_FILE=/tmp/claude-1002/P3-12-c0/semgrep-settings.yml
-   SEMGREP_LOG_FILE=/tmp/claude-1002/P3-12-c0/semgrep.log
-   SEMGREP_VERSION_CACHE_PATH=/tmp/claude-1002/P3-12-c0/semgrep-version`), commit, push.
-9. After "P3-02 merged": merge origin/main, wire connection settings, scheduling,
-   routes, mapping preview, `ObsidianSetup.tsx` (DS-01 primitives, `make gen`, hosted mode
-   shows Git only); open the PR (body in `/tmp/claude-1002/P3-12-c0/`, docs cited);
-   `@coderabbitai review` once; get CI XPASS(strict) for all 12, then remove the markers
-   citing the run id; review loop; SendMessage "main": "#<PR> MERGE-READY at <sha>".
-
-## Decisions and deviations (for the PR body and final report)
-
-- Project slug = normalized project name (`project_slug`); projects have no slug column.
-- `file://` remotes: no write probe (no key; a local dry-run push would succeed); refused
-  in hosted mode (SsrfBlocked).
-- `list_files` takes an extra `skip` predicate so excluded folders are never opened.
-- `ParsedNote.frontmatter_error` added; `.git` always excluded.
-- Red spec tests import not-yet-existing modules through `importlib` (mypy), as P4-03 did.
-- Ambiguous bare link names stay unresolved; relative resolution only for targets with "/".
-- T-01 dropped the indented-code and `(#paren)`/heading-tag ambiguous cases before the red
-  commit.
+- knowledge_0010 chained on knowledge_0008 for now (main's head) so CI migrates; re-chain after #154.
+- `VaultReader.list_files(skip)` predicate: excluded folders never opened. `.git/` always excluded.
+- `ParsedNote.frontmatter_error`; ambiguous bare link names unresolved; relative resolution only
+  for targets with "/". Project slug = `project_slug(name)`; ambiguous slugs map to nothing.
+- File hash in `documents.source_revision`; vault path in `path` and `external_id`; source
+  `knowledge:obsidian`. Notes re-read every scan, only differences written.
+- Trust set at creation, only ever lowered (moved into Clippings); taint never cleared.
+- Attachments: file Documents with no storage location, spooled to `<spool>/<version_id>`,
+  pipeline source `vault` (no place step); `download_info` can't serve them as files yet.
+- DELETE and PATCH on synced Documents: 409 `read_only_source` (any `connection_id`).
+- GitReader `HostKeyAlias` is `[host]:port` off port 22 (OpenSSH uses the alias as-is, no port:
+  sshconnect.c `get_hostfile_hostname_ipaddr`). Failed host key check -> `host_key_changed`.
+- A symlink read in FolderReader is PathRejected (was an outage before the contract test).
+- Contract suite has its own `git` helper (import-linter forbids contract -> integration).
+- `file://` remotes: no write probe, refused in hosted mode.
+- Local integration runs needed `dangerouslyDisableSandbox` (sandbox blocks the Docker socket);
+  CI is the authority.
 
 ## Scott items
 
-- Known-hosts pinning: first-connect confirmation of the host key vs pasted known_hosts.
-- Hosted mode offers Git only (no mounted folder).
+- Git host key: confirm on first connect, then strict pin; pasted known_hosts line accepted
+  (coordinator default, decision 82).
+- Hosted mode offers the Git source only.
+- DELETE on a synced Document answers 409 `read_only_source`.
 
-## Coordination
+## Shared-file edits
 
-- P3-13 (`wp/P3-13`) and P3-14 (`wp/P3-14-clean`) also edit knowledge rules/router/models;
-  keep P3-12 edits additive; whoever merges later re-chains the knowledge migration.
+`deploy/Dockerfile`, `backend/tumnis/core/tests/integration/row_factory.py`, knowledge
+`api.py`/`router.py`/`pipeline.py`/`workflows.py`/`models.py`/`adapters/__init__.py`, generated
+`schemas/openapi.json` and `frontend/src/api/*` (route docstrings).
 
 ## Verify
 
 ```
 cd backend
-rtk proxy uv run pytest -q -n 3 --runxfail -p no:randomly tumnis/modules/knowledge/tests/unit/test_obsidian_parse.py tumnis/modules/knowledge/tests/unit/test_obsidian_rules.py tumnis/modules/knowledge/tests/unit/test_obsidian_resolve.py
+uv run pytest -q -p no:randomly tumnis/modules/knowledge/tests/unit -k obsidian
+uv run pytest -q -p no:randomly tumnis/modules/knowledge/tests/contract/test_obsidian_vault_contract.py
+# Docker-backed (CI integration-a is the authority):
+uv run pytest -q -n 3 tumnis/modules/knowledge/tests/integration/test_obsidian_sync.py tumnis/modules/knowledge/tests/integration/test_obsidian_git.py
 ```
