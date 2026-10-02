@@ -596,7 +596,9 @@ async def _focus_request(s: AsyncSession, row: Any) -> NotifyFacts:
         return_to=back,
         answers=_answers(kind, back),
     )
-    return NotifyFacts(request=request, tainted=bool(task is not None and task.tainted))
+    # the packet carries both tasks' text, so either one's taint taints the run (P2-08)
+    tainted = any(t is not None and t.tainted for t in (task, left))
+    return NotifyFacts(request=request, tainted=tainted)
 
 
 async def _item_request(s: AsyncSession, row: Any) -> NotifyFacts | None:
