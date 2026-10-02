@@ -23,7 +23,7 @@ from uuid import UUID
 
 from fastapi import Depends, Query, Request
 from fastapi.responses import Response, StreamingResponse
-from pydantic import AnyHttpUrl, BaseModel, Field
+from pydantic import AnyHttpUrl, BaseModel, Field, StringConstraints
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from tumnis.core import agent_surface

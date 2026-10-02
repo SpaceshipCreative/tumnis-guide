@@ -466,6 +466,14 @@ export const zHealthCheckAccepted = z.object({
 });
 
 /**
+ * HostKeyIn
+ */
+export const zHostKeyIn = z.object({
+  reason: z.string().max(500).nullish(),
+  sha256: z.string().min(1).max(200),
+});
+
+/**
  * HumanWaitOut
  */
 export const zHumanWaitOut = z.object({

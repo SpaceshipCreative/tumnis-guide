@@ -2630,6 +2630,33 @@
         "title": "HealthCheckAccepted",
         "type": "object"
       },
+      "HostKeyIn": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "sha256": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sha256"
+        ],
+        "title": "HostKeyIn",
+        "type": "object"
+      },
       "HumanWaitOut": {
         "properties": {
           "answer": {

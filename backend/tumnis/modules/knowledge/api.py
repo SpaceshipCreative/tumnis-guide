@@ -109,7 +109,6 @@ from tumnis.modules.knowledge.storage import (
     FileStat,
     Health,
     LocationOffline,
-    Page,
     PathRejected,
     PreconditionFailed,
     StorageBackend,
@@ -119,6 +118,7 @@ from tumnis.modules.knowledge.storage import (
     spool,
 )
 from tumnis.modules.knowledge.storage import NotFound as FileMissing
+from tumnis.modules.knowledge.storage import Page as StoragePage
 from tumnis.modules.knowledge.sync_rules import dedupe_name, render_note
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
@@ -640,7 +640,7 @@ class _Unopened:
     async def stat(self, path: str) -> FileStat | None:
         raise self._offline()
 
-    async def list(self, prefix: str, cursor: str | None) -> Page[FileStat]:
+    async def list(self, prefix: str, cursor: str | None) -> StoragePage[FileStat]:
         raise self._offline()
 
     async def read(self, path: str) -> AsyncIterator[bytes]:

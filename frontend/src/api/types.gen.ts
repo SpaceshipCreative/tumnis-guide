@@ -1432,6 +1432,20 @@ export type HealthCheckAccepted = {
 };
 
 /**
+ * HostKeyIn
+ */
+export type HostKeyIn = {
+  /**
+   * Reason
+   */
+  reason?: string | null;
+  /**
+   * Sha256
+   */
+  sha256: string;
+};
+
+/**
  * HumanWaitOut
  */
 export type HumanWaitOut = {
