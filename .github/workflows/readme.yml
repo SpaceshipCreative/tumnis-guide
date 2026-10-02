@@ -99,6 +99,7 @@ jobs:
         if: steps.previous.outputs.skip != 'true'
         env:
           TUMNIS_RELEASE: ${{ github.sha }}
+          TUMNIS_PREVIOUS: ${{ steps.previous.outputs.tag }}
         run: |
           git checkout --detach "$GITHUB_SHA"
           python3 scripts/readme_test.py --readme docs/OPERATIONS.md --section Upgrade \

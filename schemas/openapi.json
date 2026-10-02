@@ -470,7 +470,7 @@
           },
           "previews": {
             "items": {
-              "$ref": "#/components/schemas/tumnis__modules__coolify__api__PreviewOut"
+              "$ref": "#/components/schemas/PreviewOut"
             },
             "title": "Previews",
             "type": "array"
@@ -5750,6 +5750,52 @@
         ],
         "title": "Preset",
         "type": "string"
+      },
+      "PreviewOut": {
+        "properties": {
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "pull_request_id": {
+            "title": "Pull Request Id",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pull_request_id",
+          "url",
+          "status"
+        ],
+        "title": "PreviewOut",
+        "type": "object"
       },
       "PreviewRowOut": {
         "properties": {
@@ -12154,6 +12200,44 @@
         "title": "VaultOut",
         "type": "object"
       },
+      "VaultPreviewOut": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "done",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "rows",
+          "error"
+        ],
+        "title": "VaultPreviewOut",
+        "type": "object"
+      },
       "VaultSettingsIn": {
         "description": "Where the vault is read from and how its notes map (ObsidianSetup's form). For Git,\n`known_hosts` is the host key line the person confirmed or pasted.",
         "properties": {
@@ -12714,90 +12798,6 @@
           "version"
         ],
         "title": "VersionIn",
-        "type": "object"
-      },
-      "tumnis__modules__coolify__api__PreviewOut": {
-        "properties": {
-          "commit": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Commit"
-          },
-          "finished_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finished At"
-          },
-          "pull_request_id": {
-            "title": "Pull Request Id",
-            "type": "integer"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "url": {
-            "title": "Url",
-            "type": "string"
-          }
-        },
-        "required": [
-          "pull_request_id",
-          "url",
-          "status"
-        ],
-        "title": "PreviewOut",
-        "type": "object"
-      },
-      "tumnis__modules__knowledge__obsidian__vaults__PreviewOut": {
-        "properties": {
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "rows": {
-            "items": {
-              "$ref": "#/components/schemas/PreviewRowOut"
-            },
-            "title": "Rows",
-            "type": "array"
-          },
-          "status": {
-            "enum": [
-              "running",
-              "done",
-              "failed"
-            ],
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "rows",
-          "error"
-        ],
-        "title": "PreviewOut",
         "type": "object"
       },
       "tumnis__modules__projects__router__VersionIn": {
@@ -22649,7 +22649,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/tumnis__modules__knowledge__obsidian__vaults__PreviewOut"
+                  "$ref": "#/components/schemas/VaultPreviewOut"
                 }
               }
             },

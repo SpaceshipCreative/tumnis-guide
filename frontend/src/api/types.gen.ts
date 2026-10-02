@@ -225,7 +225,7 @@ export type AppDeployStatus = {
   /**
    * Previews
    */
-  previews: Array<TumnisModulesCoolifyApiPreviewOut>;
+  previews: Array<PreviewOut>;
 };
 
 /**
@@ -3137,6 +3137,32 @@ export type PostResultBody = {
  * Preset
  */
 export type Preset = "daily" | "weekdays" | "weekly" | "monthly";
+
+/**
+ * PreviewOut
+ */
+export type PreviewOut = {
+  /**
+   * Commit
+   */
+  commit?: string | null;
+  /**
+   * Finished At
+   */
+  finished_at?: string | null;
+  /**
+   * Pull Request Id
+   */
+  pull_request_id: number;
+  /**
+   * Status
+   */
+  status: string;
+  /**
+   * Url
+   */
+  url: string;
+};
 
 /**
  * PreviewRowOut
@@ -6399,6 +6425,24 @@ export type VaultOut = {
 };
 
 /**
+ * VaultPreviewOut
+ */
+export type VaultPreviewOut = {
+  /**
+   * Error
+   */
+  error: string | null;
+  /**
+   * Rows
+   */
+  rows: Array<PreviewRowOut>;
+  /**
+   * Status
+   */
+  status: "running" | "done" | "failed";
+};
+
+/**
  * VaultSettingsIn
  *
  * Where the vault is read from and how its notes map (ObsidianSetup's form). For Git,
@@ -6714,50 +6758,6 @@ export type TumnisCoreDeadletterVersionIn = {
    * Version
    */
   version: number;
-};
-
-/**
- * PreviewOut
- */
-export type TumnisModulesCoolifyApiPreviewOut = {
-  /**
-   * Commit
-   */
-  commit?: string | null;
-  /**
-   * Finished At
-   */
-  finished_at?: string | null;
-  /**
-   * Pull Request Id
-   */
-  pull_request_id: number;
-  /**
-   * Status
-   */
-  status: string;
-  /**
-   * Url
-   */
-  url: string;
-};
-
-/**
- * PreviewOut
- */
-export type TumnisModulesKnowledgeObsidianVaultsPreviewOut = {
-  /**
-   * Error
-   */
-  error: string | null;
-  /**
-   * Rows
-   */
-  rows: Array<PreviewRowOut>;
-  /**
-   * Status
-   */
-  status: "running" | "done" | "failed";
 };
 
 /**
@@ -11726,7 +11726,7 @@ export type KnowledgeGetObsidianPreviewResponses = {
   /**
    * Successful Response
    */
-  200: TumnisModulesKnowledgeObsidianVaultsPreviewOut;
+  200: VaultPreviewOut;
 };
 
 export type KnowledgeGetObsidianPreviewResponse =
