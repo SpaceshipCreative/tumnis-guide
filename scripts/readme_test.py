@@ -57,6 +57,7 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_TIMEOUT_S = 300  # plan default
+MAX_FENCE_INDENT = 3  # CommonMark: a fence may be indented by up to three spaces
 KILL_GRACE_S = 10  # after a timeout's SIGKILL, how long to wait for the pipe to close
 HEALTH_TIMEOUT_S = 600  # A4.4: /health/ready within 10 minutes
 SHELL_LANGS = frozenset({"bash", "sh", "shell", "console", "zsh"})
@@ -128,8 +129,11 @@ class Report:
 
 def _closes(line: str, fence: str) -> bool:
     """CommonMark: a closing fence is the opener's character, at least as many of them,
-    and nothing else on the line but whitespace."""
-    stripped = line.strip()
+    and nothing else on the line but whitespace, indented by at most three spaces."""
+    body = line.rstrip()
+    stripped = body.lstrip(" ")
+    if len(body) - len(stripped) > MAX_FENCE_INDENT:  # four: indented code, not a fence
+        return False
     return stripped.startswith(fence[0] * len(fence)) and set(stripped) == {fence[0]}
 
 

@@ -259,3 +259,15 @@ def test_section_ends_only_at_a_real_closing_fence() -> None:
     )
     assert readme.section_lines(markdown, "Install") == range(1, 10)
     assert readme.check_section_coverage(markdown) == [7]
+
+
+@pytest.mark.req("A4.4", "REL-4")
+@pytest.mark.wp("P4-06")
+def test_a_four_space_indented_fence_line_does_not_close_the_block() -> None:
+    """A closing fence may be indented by at most three spaces (CommonMark): a fence
+    line indented by four inside a block is code, and the block runs on (CodeRabbit,
+    PR #159)."""
+    readme = _harness()
+    markdown = "## Install\n```text\n    ```\n# not a heading\n```\n## Next\n"
+    assert readme.section_lines(markdown, "Install") == range(1, 6)
+    assert [code for _, _, code, _ in readme._fences(markdown)] == ["    ```\n# not a heading\n"]
