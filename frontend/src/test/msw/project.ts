@@ -321,6 +321,7 @@ export class ProjectFake {
           actual_minutes: null,
           tainted: false,
           source: "user",
+          unattended_queued_at: null,
           version: 1,
           created_at: now,
           updated_at: now,

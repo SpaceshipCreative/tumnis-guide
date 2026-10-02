@@ -49,6 +49,7 @@ export const FULL_DAY: DaySummaryOut = {
   agents_finished: [taskRef(2, "Summarise the brief", "ai")],
   prepared_by_agents: 1,
   queued_overnight: [],
+  queued_unattended: [],
   rolls_over: [
     rolloverRef(3, "Book the venue", 0),
     rolloverRef(4, "Call the printer", 3),
@@ -63,6 +64,7 @@ export const EMPTY_DAY: DaySummaryOut = {
   agents_finished: [],
   prepared_by_agents: 0,
   queued_overnight: [],
+  queued_unattended: [],
   rolls_over: [],
 };
 
