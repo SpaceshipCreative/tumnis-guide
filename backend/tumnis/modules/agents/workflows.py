@@ -1374,7 +1374,9 @@ async def choose_name_step(
     `provisioning` (a `ready` one is left alone and ends the provision); otherwise a new
     row, `provisioning`: named after the project (create) or the linked name. A link to a
     name that cannot be linked gets a generated name and `invalid_name`, so the project
-    still has its agent row to retry."""
+    still has its agent row to retry. The row is locked as it is read, so a seed adopting
+    it at the same moment (`_seed_adopt_provisioned` locks it too) either commits first,
+    and the step sees it `ready`, or waits until this step has committed."""
     pid = UUID(project_id)
     async with tenant_session(_ctx(workspace_id)) as s:
         found = (
@@ -1384,11 +1386,13 @@ async def choose_name_step(
                     _profiles.c.name,
                     _profiles.c.status,
                     _profiles.c.provision_mode,
-                ).where(
+                )
+                .where(
                     _profiles.c.role == "project",
                     _profiles.c.project_id == pid,
                     _profiles.c.deleted_at.is_(None),
                 )
+                .with_for_update()
             )
         ).first()
         if found is not None and found.status == "ready":  # nothing left to provision

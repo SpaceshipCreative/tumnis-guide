@@ -137,11 +137,14 @@ test("[P0-24][FR-3.5] a list read started before a save does not hide the saved 
   // The next list read is an old snapshot (no repeat yet) that answers after the save;
   // later reads answer as the server holds it.
   let stale = true;
+  let answeredAfterSave: boolean | undefined;
   server.use(
     http.get("/v1/recurrence", async () => {
       if (!stale) return;
       stale = false;
       await delay(400);
+      answeredAfterSave =
+        fake.sent("PUT", `/v1/tasks/${task.id}/recurrence`).length > 0;
       return HttpResponse.json({ items: [], next_cursor: null });
     }),
   );
@@ -159,8 +162,11 @@ test("[P0-24][FR-3.5] a list read started before a save does not hide the saved 
     await within(drawer).findByText("Repeats daily at 09:00"),
   ).toBeVisible();
 
-  // Past the old snapshot's answer: the saved repeat still shows.
+  // Past the old snapshot's answer, which came after the save: the save's refresh of the
+  // task views replaced that read (TanStack Query's cancelRefetch), so the saved repeat
+  // still shows.
   await new Promise((resolve) => setTimeout(resolve, 600));
+  expect(answeredAfterSave).toBe(true);
   expect(within(drawer).getByText("Repeats daily at 09:00")).toBeVisible();
   expect(within(drawer).getByRole("combobox", { name: "Repeats" })).toHaveValue(
     "daily",

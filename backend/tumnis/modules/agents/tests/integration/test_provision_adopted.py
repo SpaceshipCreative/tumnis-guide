@@ -8,6 +8,7 @@ the provision's old name."""
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -180,3 +181,40 @@ async def test_sending_a_provision_leaves_an_adopted_profile_alone(
         (seed_runner,)
     ]
     assert _owner(db, "SELECT count(*) FROM runner_messages WHERE type = 'provision'", ()) == [(0,)]
+
+
+async def test_choosing_the_profile_waits_for_an_adoption_in_progress(
+    dbos: type[DBOS], workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls
+) -> None:
+    """A provision's first step reads the project's `provisioning` profile while the seed
+    is adopting it (renamed, `ready`, not yet committed). The step waits for that
+    transaction and then sees the profile `ready`: nothing is left to provision, and the
+    adopted profile is not put back to `provisioning`."""
+    from tumnis.modules.agents import workflows  # noqa: PLC0415
+
+    project_id = await _project(workspace, clock, "Acme site")
+    [(profile_id,)] = _owner(
+        db,
+        "INSERT INTO agent_profiles (workspace_id, name, role, project_id, transport, status,"
+        " provision_mode) SELECT workspace_id, 'acme-site', 'project', id, 'daemon',"
+        " 'provisioning', 'create' FROM projects WHERE id = %s RETURNING id",
+        (project_id,),
+    )
+
+    conn = await psycopg.AsyncConnection.connect(db.libpq(OWNER))
+    async with conn, conn.transaction():  # the seed's adoption, not yet committed
+        await conn.execute(
+            b"UPDATE agent_profiles SET name = 'acme-seed', status = 'ready' WHERE id = %s",
+            (profile_id,),
+        )
+        chosen = asyncio.create_task(
+            workflows.choose_name_step(str(workspace.id), str(project_id), "create", None)
+        )
+        await asyncio.sleep(0.5)  # the step reaches the profile row and waits on it
+        assert not chosen.done()
+    result = await asyncio.wait_for(chosen, 10)
+
+    assert result["error_code"] == "ready"
+    assert _owner(db, "SELECT name, status FROM agent_profiles WHERE id = %s", (profile_id,)) == [
+        ("acme-seed", "ready")
+    ]
