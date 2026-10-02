@@ -2510,10 +2510,10 @@ async def retention_setting(ctx: WorkspaceContext) -> RetentionSetting:
 async def start_retention_purge(
     ctx: WorkspaceContext, *, scheduled_at: datetime, now: datetime
 ) -> UUID | None:
-    """This scheduled run's retention purge, recorded and audited once (as the system), or
-    None: the setting keeps everything, nothing is past the cutoff, the run's purge is
-    done, or an earlier retention purge is unfinished (its own workflow carries it on). A
-    retried start returns the unfinished purge it recorded."""
+    """This scheduled run's retention purge, recorded and audited once (as the system); an
+    earlier retention purge that is still unfinished (the caller carries it on, or resumes
+    its workflow if that failed; a retried start returns the purge it recorded); or None:
+    the setting keeps everything, nothing is past the cutoff, or the run's purge is done."""
     setting = await retention_setting(ctx)
     cutoff = rules.purge_cutoff(now, setting)
     if cutoff is None:
@@ -2528,7 +2528,7 @@ async def start_retention_purge(
             select(_purges.c.id).where(_purges.c.scope == "retention", _purges.c.status != "done")
         )
         if unfinished is not None:
-            return purge_id if unfinished == purge_id else None
+            return unfinished
         if await s.scalar(select(_purges.c.id).where(_purges.c.id == purge_id)) is not None:
             return None
         open_task, archived = await retention.holds(s)

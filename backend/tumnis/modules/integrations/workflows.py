@@ -80,6 +80,8 @@ RETENTION_SCHEDULE: Final = "17 * * * *"  # plan default: hourly, off the hour
 RETENTION_WORKFLOW: Final = "integrations_retention_purge"  # testing.RETENTION_WORKFLOW
 PURGE_WORKFLOW: Final = "integrations_purge_scope"
 PURGE_BATCH = 500  # plan default; read per run (the kill test's probe sets it)
+# A purge workflow in one of these DBOS states carries itself on (retention_purge).
+LIVE_WORKFLOW: Final = frozenset({"PENDING", "ENQUEUED", "DELAYED"})
 PURGE_PAUSE_S = 0.2  # between batches, so a big purge never hogs the database
 MAX_PURGE_BATCHES: Final = 1_000_000  # a bound, never reached
 
@@ -373,12 +375,33 @@ async def retention_start(scheduled_at: str) -> list[tuple[str, str]]:
 async def retention_purge(scheduled_at: datetime, context: Any) -> int:
     """Hourly on the maintenance queue: each workspace's retention purge, run here as a
     child workflow `purge:<id>` (not enqueued: the maintenance queue runs one workflow at
-    a time, and this one holds it). How many purges ran."""
+    a time, and this one holds it). An unfinished purge with a live workflow is left to
+    it. One whose workflows all ended without finishing it (a batch out of retries, a
+    cancel) runs again as a fork of `purge:<id>` (`purge:<id>:retry:<scheduled time>`) on
+    the maintenance queue, so after this run; a resume would replay the recorded step
+    error, and the batches already done answer -1. How many purges ran or were retried."""
     started = await retention_start(scheduled_at.isoformat())
+    ran = 0
     for workspace_id, purge_id in started:
-        with SetWorkflowID(f"purge:{purge_id}"):
-            await purge_scope(workspace_id, purge_id)
-    return len(started)
+        workflow_id = f"purge:{purge_id}"
+        runs = await DBOS.list_workflows_async(
+            workflow_id_prefix=workflow_id, load_input=False, load_output=False
+        )
+        if any(run.status in LIVE_WORKFLOW for run in runs):
+            continue
+        ran += 1
+        if not runs:
+            with SetWorkflowID(workflow_id):
+                await purge_scope(workspace_id, purge_id)
+            continue
+        with SetWorkflowID(f"{workflow_id}:retry:{scheduled_at.isoformat()}"):
+            await DBOS.fork_workflow_async(
+                workflow_id,
+                1,
+                application_version=DBOS.application_version,
+                queue_name=MAINTENANCE_QUEUE,
+            )
+    return ran
 
 
 async def start_purge(workspace_id: str, purge_id: str) -> None:
