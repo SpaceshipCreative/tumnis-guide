@@ -367,3 +367,53 @@ async def test_move_switch_out_of_retries_fails_the_move(  # noqa: PLR0917  # fi
             str(ws.id), str(project_id), str(target), "acme-moved-again"
         )
     assert again["status"] == "switched", again
+
+
+@pytest.mark.req("FR-15.12", "REL-3")
+@pytest.mark.wp("P3-14")
+async def test_move_switch_committed_on_last_attempt_stays_switched(  # noqa: PLR0917  # fixtures
+    db: DbUrls,
+    dbos: type[DBOS],
+    knowledge_ws: WorkspaceHandle,
+    clock: FixedClock,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Decision 91: the switch step's last attempt commits and then raises (its retries run
+    out). The move stays `switched` (failing a move only moves it out of `copying`), the
+    project's folder points at the target, and the workflow returns the switched result."""
+    from dbos import SetWorkflowID  # noqa: PLC0415
+
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
+    from tumnis.modules.knowledge import move, workflows  # noqa: PLC0415
+
+    ws = knowledge_ws
+    root = make_root(tmp_path / "share")
+    _source, project_id, _folder = await _project_with_files(ws, clock, root)
+    target = await _server_path_location(
+        ws, make_root(tmp_path / "target"), "target", default=False
+    )
+    real_switch = move.switch
+    last = workflows.STEP_RETRY["max_attempts"]
+    attempts: list[int] = []
+
+    async def commit_then_raise(*args: Any) -> str | None:
+        attempts.append(len(attempts) + 1)
+        if len(attempts) == last:
+            assert await real_switch(*args) is None
+        raise RuntimeError("the commit's acknowledgement was lost")
+
+    with monkeypatch.context() as patched, SetWorkflowID(f"move-{uuid.uuid4()}"):
+        patched.setattr(move, "switch", commit_then_raise)
+        result = await workflows.move_project_folder(
+            str(ws.id), str(project_id), str(target), "acme-moved"
+        )
+    assert len(attempts) == last
+    assert result["status"] == "switched", result
+    assert _rows(
+        db, "SELECT status, reason FROM folder_moves WHERE project_id = %s", project_id
+    ) == [("switched", None)]
+    async with tenant_session(ws.ctx) as s:
+        now = await knowledge.get_project_folder(s, project_id)
+    assert (now.location_id, now.root_path) == (target, "acme-moved")
