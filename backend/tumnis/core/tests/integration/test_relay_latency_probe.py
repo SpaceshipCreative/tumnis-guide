@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import gc
 import statistics
 import time
 from datetime import UTC, datetime
@@ -86,6 +87,33 @@ async def test_relay_latency_probe(  # noqa: PLR0915
 
         monkeypatch.setitem(events._subscribers, name, dataclasses.replace(sub, handler=handler))
 
+    from dbos._dbos import _get_dbos_instance  # noqa: PLC0415
+
+    sys_db = _get_dbos_instance()._sys_db
+    real_start_queued = sys_db.start_queued_workflows
+
+    def start_queued(queue: Any, *a: Any, **k: Any) -> Any:
+        if queue.name != "events":
+            return real_start_queued(queue, *a, **k)
+        t = time.monotonic()
+        out = real_start_queued(queue, *a, **k)
+        if out:
+            marks.append((f"dequeue.start n={len(out)}", t))
+            mark("dequeue.end")
+        return out
+
+    monkeypatch.setattr(sys_db, "start_queued_workflows", start_queued)
+    gc_t: list[float] = []
+
+    def on_gc(phase: str, info: dict[str, Any]) -> None:
+        if phase == "start":
+            gc_t.append(time.monotonic())
+        elif gc_t:
+            took = time.monotonic() - gc_t.pop()
+            if took > 0.02:
+                mark(f"gc gen{info.get('generation')} {took:.3f}s")
+
+    gc.callbacks.append(on_gc)
     _deliveries.create_table(db.libpq(OWNER))
     start = time.monotonic()
     stop = asyncio.Event()
@@ -96,7 +124,7 @@ async def test_relay_latency_probe(  # noqa: PLR0915
     runs: list[list[tuple[str, float]]] = []
     totals: list[float] = []
     try:
-        for i in range(15):
+        for i in range(200):
             marks.clear()
             t0 = time.monotonic()
             async with tenant_session(workspace.ctx) as s:
@@ -110,13 +138,17 @@ async def test_relay_latency_probe(  # noqa: PLR0915
             t2 = time.monotonic()
             totals.append(round(t2 - t1, 3))
             runs.append([("emit", round(t1 - t0, 3))] + [(n, round(t - t1, 3)) for n, t in marks])
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.1)
     finally:
         stop.set()
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
         await asyncio.to_thread(conn.close)
-    report = [f"startup={startup}", f"totals={totals}", f"median={statistics.median(totals)}"]
-    report += [f"run{i}: {r}" for i, r in enumerate(runs)]
+        gc.callbacks.remove(on_gc)
+    ordered = sorted(totals)
+    pct = {q: ordered[int(q * (len(ordered) - 1))] for q in (0.5, 0.9, 0.99, 1.0)}
+    slow = sorted(range(len(totals)), key=lambda i: totals[i])[-8:]
+    report = [f"startup={startup}", f"pct={pct}", f"median={statistics.median(totals)}"]
+    report += [f"run{i} total={totals[i]}: {runs[i]}" for i in slow]
     pytest.fail("RELAY PROBE\n" + "\n".join(report))
