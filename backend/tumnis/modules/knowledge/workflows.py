@@ -433,6 +433,11 @@ async def move_begin_step(
 
 
 @DBOS.step(**STEP_RETRY)
+async def move_size_step(workspace_id: str, record: dict[str, Any]) -> str | None:
+    return await move.oversize(workspace_id, record)
+
+
+@DBOS.step(**STEP_RETRY)
 async def move_list_step(workspace_id: str, record: dict[str, Any]) -> list[list[str]]:
     return await move.list_source(workspace_id, record)
 
@@ -473,6 +478,8 @@ async def _copy_and_verify(
 ) -> tuple[list[list[str]], dict[str, list[Any]]] | str:
     """(the listed files, the copies' stats), or why the move fails."""
     try:
+        if await move_size_step(workspace_id, record) is not None:
+            return "too_large"  # SEC-10: checked before anything is copied
         files = await move_list_step(workspace_id, record)
         for n, start in enumerate(range(0, len(files), move.BATCH), start=1):
             conflict = await move_copy_step(workspace_id, record, files[start : start + move.BATCH])
@@ -495,7 +502,8 @@ async def move_project_folder(
     """Copy the project's folder to `to_location`/`to_path` in batches (kill point
     `knowledge.move_project_folder.batch_<n>` after batch n), verify every hash, switch.
     A resumed move copies only the batches left. The source is never changed. Once begun,
-    a move never stays `copying`: a copy that cannot be made (`target_conflict`, or
+    a move never stays `copying`: a source file over the size limit (`too_large`, found
+    before anything is copied), a copy that cannot be made (`target_conflict`, or
     `copy_failed` once a step's retries run out), a hash mismatch, a source changed
     while copying (`changed_during_move`) or a switch whose retries run out
     (`switch_failed`) ends it `failed` with nothing switched."""
