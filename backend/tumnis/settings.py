@@ -4,8 +4,9 @@ Everything per workspace lives encrypted in `workspace_settings` (P0-08); this i
 a deployment needs to start. Secrets stay out of the environment (AGENTS.md, Never): the
 secret-related variables are file paths, except the deployment's own service credentials,
 the Jev key (`TYPESAFE_API_KEY`) and the hosted speech and embedding providers' keys
-(`SPEECH__HOSTED_API_KEY`, `EMBEDDINGS__HOSTED_API_KEY`; Scott decision 75), which live in
-the server's .env, held as `SecretStr` and never written to the database.
+(`SPEECH__HOSTED_API_KEY`, `EMBEDDINGS__HOSTED_API_KEY`; Scott decisions 75 and 90), which
+live on the server (the hosted ones in deploy/hosted-keys.env, read by the worker only),
+held as `SecretStr` and never written to the database.
 """
 
 import asyncio
@@ -93,9 +94,10 @@ class EmbeddingsSettings(BaseModel):
     The optional hosted embedder (an OpenAI-compatible `/v1/embeddings` API, Data flow rule
     6) is on only when `hosted_base_url`, `hosted_model` and `hosted_api_key` are all set:
     `EMBEDDINGS__HOSTED_BASE_URL`, `EMBEDDINGS__HOSTED_MODEL`, `EMBEDDINGS__HOSTED_DIMS` and
-    `EMBEDDINGS__HOSTED_API_KEY`. The key lives in the server's .env only (Scott decision
-    75), never in the database. With a local embedder too, the local one stays preferred.
-    With neither, chunks are not embedded and hybrid search answers with full text."""
+    `EMBEDDINGS__HOSTED_API_KEY`. The key lives in the server's deploy/hosted-keys.env only
+    (Scott decisions 75 and 90), never in the database. With a local embedder too, the
+    local one stays preferred. With neither, chunks are not embedded and hybrid search
+    answers with full text."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -129,8 +131,8 @@ class SpeechSettings(BaseModel):
     when a workspace allows it, Data flow rule 6) is on only when `hosted_base_url`,
     `hosted_model` and `hosted_api_key` are all set: `SPEECH__HOSTED_BASE_URL`,
     `SPEECH__HOSTED_MODEL`, `SPEECH__HOSTED_VOICE` (unset: the adapter's default) and
-    `SPEECH__HOSTED_API_KEY`. The key lives in the server's .env only (Scott decision 75),
-    never in the database."""
+    `SPEECH__HOSTED_API_KEY`. The key lives in the server's deploy/hosted-keys.env only
+    (Scott decisions 75 and 90), never in the database."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
