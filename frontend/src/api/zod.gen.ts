@@ -1180,6 +1180,29 @@ export const zPolicySummary = z.object({
 export const zPreset = z.enum(["daily", "weekdays", "weekly", "monthly"]);
 
 /**
+ * PreviewOut
+ */
+export const zPreviewOut = z.object({
+  commit: z.string().nullish(),
+  finished_at: z.iso.datetime().nullish(),
+  pull_request_id: z.int(),
+  status: z.string(),
+  url: z.string(),
+});
+
+/**
+ * AppDeployStatus
+ */
+export const zAppDeployStatus = z.object({
+  app_uuid: z.string(),
+  checked_at: z.iso.datetime().nullable(),
+  error: z.enum(["unavailable", "rejected"]).nullable(),
+  last: zLastDeployOut.nullable(),
+  name: z.string().nullable(),
+  previews: z.array(zPreviewOut),
+});
+
+/**
  * PreviewRowOut
  */
 export const zPreviewRowOut = z.object({
@@ -1251,6 +1274,14 @@ export const zProjectContextOut = z.object({
   repo_url: z.string().nullable(),
   status: z.enum(["active", "on_hold", "completed"]),
   subtask_threshold_min: z.int(),
+});
+
+/**
+ * ProjectDeployStatus
+ */
+export const zProjectDeployStatus = z.object({
+  apps: z.array(zAppDeployStatus),
+  project_id: z.uuid(),
 });
 
 /**
@@ -2952,6 +2983,15 @@ export const zVaultOut = z.object({
 });
 
 /**
+ * VaultPreviewOut
+ */
+export const zVaultPreviewOut = z.object({
+  error: z.string().nullable(),
+  rows: z.array(zPreviewRowOut),
+  status: z.enum(["running", "done", "failed"]),
+});
+
+/**
  * VaultSettingsIn
  *
  * Where the vault is read from and how its notes map (ObsidianSetup's form). For Git,
@@ -3189,46 +3229,6 @@ export const zWorkspaceSettingsOut = z.object({
  */
 export const zTumnisCoreDeadletterVersionIn = z.object({
   version: z.int().gte(0).lte(2147483647),
-});
-
-/**
- * PreviewOut
- */
-export const zTumnisModulesCoolifyApiPreviewOut = z.object({
-  commit: z.string().nullish(),
-  finished_at: z.iso.datetime().nullish(),
-  pull_request_id: z.int(),
-  status: z.string(),
-  url: z.string(),
-});
-
-/**
- * AppDeployStatus
- */
-export const zAppDeployStatus = z.object({
-  app_uuid: z.string(),
-  checked_at: z.iso.datetime().nullable(),
-  error: z.enum(["unavailable", "rejected"]).nullable(),
-  last: zLastDeployOut.nullable(),
-  name: z.string().nullable(),
-  previews: z.array(zTumnisModulesCoolifyApiPreviewOut),
-});
-
-/**
- * ProjectDeployStatus
- */
-export const zProjectDeployStatus = z.object({
-  apps: z.array(zAppDeployStatus),
-  project_id: z.uuid(),
-});
-
-/**
- * PreviewOut
- */
-export const zTumnisModulesKnowledgeObsidianVaultsPreviewOut = z.object({
-  error: z.string().nullable(),
-  rows: z.array(zPreviewRowOut),
-  status: z.enum(["running", "done", "failed"]),
 });
 
 /**
@@ -3973,8 +3973,7 @@ export const zKnowledgeGetObsidianPreviewPath = z.object({
 /**
  * Successful Response
  */
-export const zKnowledgeGetObsidianPreviewResponse =
-  zTumnisModulesKnowledgeObsidianVaultsPreviewOut;
+export const zKnowledgeGetObsidianPreviewResponse = zVaultPreviewOut;
 
 export const zKnowledgeUseExistingFolderBody = zExistingFolderIn;
 
