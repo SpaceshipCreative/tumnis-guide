@@ -342,13 +342,22 @@ async def verify(
     return stats
 
 
-async def fail(workspace_id: str, move_id: str, reason: str) -> None:
+async def fail(workspace_id: str, move_id: str, reason: str) -> dict[str, str | None]:
+    """Mark the move `failed` if it is still `copying` (decision 91: a switched move, or one
+    already failed with its own reason, is left as it is); the move's status and reason
+    afterwards."""
     async with tenant_session(_ctx(workspace_id)) as s:
         await s.execute(
             update(_moves)
-            .where(_moves.c.id == UUID(move_id))
+            .where(_moves.c.id == UUID(move_id), _moves.c.status == "copying")
             .values(status="failed", reason=reason, updated_at=func.now())
         )
+        status, now_reason = (
+            await s.execute(
+                select(_moves.c.status, _moves.c.reason).where(_moves.c.id == UUID(move_id))
+            )
+        ).one()
+    return {"status": status, "reason": now_reason}
 
 
 CHANGED: Final = "changed_during_move"

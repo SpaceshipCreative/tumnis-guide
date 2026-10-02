@@ -1,8 +1,20 @@
 // Schedule (P0-24, FR-2.7, FR-3.5): the project's recurring tasks (`GET
-// /v1/recurrence?project_id=`, P0-19); each opens its current task in the drawer.
+// /v1/recurrence?project_id=`, P0-19); each opens its current task in the drawer. P4-04
+// (FR-4.5): the unattended window in force for the project and where it comes from (its
+// own, the workspace's, or none); the project can set its own or go back to the
+// workspace's. It is read only when the section is open.
+import { useId } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import type { RecurrenceOut } from "../../../api/types.gen";
+import type {
+  RecurrenceOut,
+  UnattendedWindowOut,
+} from "../../../api/types.gen";
+import { unattendedWindowQuery } from "../../settings/queries";
+import {
+  UnattendedWindowForm,
+  windowWords,
+} from "../../settings/UnattendedWindowForm";
 import { projectRecurrenceQuery } from "../queries";
 import { RailSection } from "./RailSection";
 
@@ -15,6 +27,49 @@ const PRESET_WORDS = {
 
 export function cadenceWords(rule: Pick<RecurrenceOut, "preset">): string {
   return rule.preset ? PRESET_WORDS[rule.preset] : "Custom schedule";
+}
+
+function sourceWords(loaded: UnattendedWindowOut): string {
+  if (loaded.window === null) {
+    return "No window: this project's AI tasks do not run unattended.";
+  }
+  const words = windowWords(loaded.window);
+  return loaded.source === "project"
+    ? `This project's own window: ${words}.`
+    : `Uses the workspace window: ${words}.`;
+}
+
+function UnattendedWindow({ projectId }: { projectId: string }) {
+  const loaded = useQuery(unattendedWindowQuery(projectId));
+  const headingId = useId();
+  const data = loaded.data;
+  return (
+    <section
+      aria-labelledby={headingId}
+      className="flex min-w-0 flex-col gap-2 border-t border-border pt-3"
+    >
+      <h3 id={headingId} className="text-sm font-medium">
+        Unattended runs
+      </h3>
+      {data ? (
+        <>
+          <p className="text-sm text-muted">{sourceWords(data)}</p>
+          <UnattendedWindowForm
+            key={projectId}
+            loaded={data}
+            projectId={projectId}
+            offText="Use the workspace window"
+          />
+        </>
+      ) : (
+        <p className="text-sm text-muted">
+          {loaded.isError
+            ? "The unattended window could not be loaded."
+            : "Loading…"}
+        </p>
+      )}
+    </section>
+  );
 }
 
 export function ScheduleSection({
@@ -69,6 +124,7 @@ export function ScheduleSection({
           ))}
         </ul>
       )}
+      <UnattendedWindow projectId={projectId} />
     </RailSection>
   );
 }

@@ -264,6 +264,30 @@ async def undo_task(
     )
 
 
+@router.get("/tasks/{task_id}/unattended")
+@route_policy(SESSION_READ)
+async def get_unattended(task_id: UUID, session: SessionDep) -> api.UnattendedOut:
+    """Whether the task is queued for the unattended window (P4-04)."""
+    return await api.get_unattended(session, task_id)
+
+
+@router.put("/tasks/{task_id}/unattended")
+@route_policy(DECIDE)
+async def put_unattended(
+    task_id: UUID, body: api.UnattendedIn, request: Request, session: SessionDep
+) -> api.UnattendedOut:
+    """Queue the task for the unattended window or take it off (P4-04, FR-4.5): the
+    person's choice, so a key or token gets 403 `session_required`; 422 `not_ai` for a
+    task that is not labelled AI, 422 `task_done` for a done task."""
+    return await api.queue_unattended(
+        session,
+        principal_of(request).actor,
+        task_id,
+        queued=body.queued,
+        now=_clock(request).now(),
+    )
+
+
 @router.get("/tasks/{task_id}/comments")
 @route_policy(LIST_OF_TASK)
 async def list_comments(
@@ -273,6 +297,29 @@ async def list_comments(
 ) -> Page[api.CommentOut]:
     """The task's comments, oldest first."""
     return await api.list_comments(session, task_id, cursor=page.cursor, limit=page.limit)
+
+
+@router.get("/tasks/{task_id}/history")
+@route_policy(LIST_OF_TASK)
+async def list_task_history(
+    task_id: UUID,
+    request: Request,
+    session: SessionDep,
+    page: Annotated[PageParams, Depends(page_params)],
+) -> Page[api.TaskChangeOut]:
+    """The task's writes, newest first: the fields each changed, by whom, and whether that
+    was the caller (A1.1's drawer History)."""
+    return await api.task_history(
+        session, principal_of(request).actor, task_id, cursor=page.cursor, limit=page.limit
+    )
+
+
+@router.get("/just-added")
+@route_policy(SESSION_READ)
+async def list_just_added(request: Request, session: SessionDep) -> api.JustAddedOut:
+    """The dashboard's Just added list (A1.1, decision 83): the signed-in person's tasks
+    added today and still in Backlog, newest first, at most three."""
+    return await api.just_added(session, principal_of(request).actor)
 
 
 @router.post("/tasks/{task_id}/comments", status_code=201)

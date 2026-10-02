@@ -26,6 +26,7 @@ import {
   runnersQuery,
   sessionsQuery,
   storageQuery,
+  unattendedWindowQuery,
   workingHoursQuery,
   workspaceQuery,
 } from "../components/settings/queries";
@@ -37,6 +38,7 @@ import {
 import { SessionsSection } from "../components/settings/SessionsSection";
 import { SettingsLayout } from "../components/settings/SettingsLayout";
 import { StorageSection } from "../components/settings/StorageSection";
+import { UnattendedSection } from "../components/settings/UnattendedSection";
 import { VoiceSection } from "../components/settings/voice/VoiceSection";
 import { WorkingHoursSection } from "../components/settings/WorkingHoursSection";
 import { WorkspaceSection } from "../components/settings/WorkspaceSection";
@@ -53,6 +55,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   agents: AgentsSection,
   workspace: WorkspaceSection,
   "working-hours": WorkingHoursSection,
+  unattended: UnattendedSection,
   calendar: () => <CalendarSection />,
   connections: () => <Connections />,
   storage: StorageSection,
@@ -98,6 +101,9 @@ export const Route = createFileRoute("/settings/$section")({
         break;
       case "working-hours":
         started(queryClient.query(workingHoursQuery()));
+        break;
+      case "unattended":
+        started(queryClient.query(unattendedWindowQuery()));
         break;
       case "calendar":
         started(queryClient.query(calendarAccountsQuery()));

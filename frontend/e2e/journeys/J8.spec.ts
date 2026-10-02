@@ -1,5 +1,6 @@
 // A2.6 · Nudge and Coach on a fixed clock (journey J8). Phase 2 acceptance, committed
-// red on the phase's first day. Turns green with P2-15. Both clocks move together: the
+// red on the phase's first day. Turns green with P2-15; the `test.fail()` came off once
+// CI run 36973900377 showed it passing (decision 78). Both clocks move together: the
 // server's through `POST /v1/test/clock` and the `focus-wake` tick, the page's through
 // `page.clock` (https://playwright.dev/docs/clock); the `page` fixture keeps the server
 // clock with `page.clock.install`.
@@ -25,7 +26,6 @@ test(
   "A2.6 Nudge and Coach fire the right focus events on a fixed clock",
   { tag: ["@A2.6", "@J8", "@FR-10.2", "@FR-10.4", "@P2-15"] },
   async ({ signedInPage: page, fakes }) => {
-    test.fail();
     // The plan for Tuesday with `Write proposal` blocked 10:00 to 10:50 local, then
     // both clocks at 09:50 local (13:50Z).
     await setServerClock(page.request, localTime(DAY_ONE, "08:30"));

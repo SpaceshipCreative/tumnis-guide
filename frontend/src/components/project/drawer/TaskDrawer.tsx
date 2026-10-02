@@ -1,7 +1,8 @@
 // The task drawer (P0-24, FR-3.5, UX 9): `?task=<id>` opens it; the title, the status
 // action, the repeat rule, comments, and Move to trash (undoable). A side panel on a
 // laptop, a full sheet on the phone; Escape or Close shuts it. P2-04: an AI or Hybrid
-// task has Run; `?run=<id>` shows that run (RunView) in the drawer, Back returns.
+// task has Run; `?run=<id>` shows that run (RunView) in the drawer, Back returns. P4-04:
+// an AI task has the Run unattended switch (read from the task, no extra request).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 
@@ -18,16 +19,20 @@ import { invalidateTaskViews } from "../../../lib/task-cache";
 import { undo } from "../../../lib/undo";
 import { uiStore } from "../../../stores/uiStore";
 import { FirstActionLine } from "../../common/FirstAction";
+import { TaskLabel } from "../../common/LabelChip";
 import { TaintBadge } from "../../common/TaintBadge";
 import { formatDay, formatMinutes } from "../../dashboard/format";
 import { STATUS_WORDS, useChangeStatus, useTrashTask } from "../mutations";
+import { workspaceQuery } from "../../settings/queries";
 import { deleteClass, fieldClass, saveClass } from "../rail/RailSection";
 import { statusAction } from "../TaskRow";
 import type { Task } from "../types";
 import { PacketPreview } from "../PacketPreview";
+import { RunUnattendedToggle } from "../../task/RunUnattendedToggle";
 import { CommentList } from "./CommentList";
 import { PullRequests } from "./PullRequests";
 import { RecurrencePicker } from "./RecurrencePicker";
+import { TaskHistory } from "./TaskHistory";
 
 function TitleForm({ task }: { task: Task }) {
   const [title, setTitle] = useState(task.title);
@@ -268,6 +273,10 @@ function TaskDetails({
   const change = useChangeStatus();
   const trash = useTrashTask();
   const action = statusAction(task);
+  const workspace = useQuery(workspaceQuery());
+  const timeZone =
+    workspace.data?.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
   return (
     <div className="flex flex-col gap-5">
       {task.tainted && (
@@ -276,6 +285,10 @@ function TaskDetails({
         </div>
       )}
       <TitleForm key={task.version} task={task} />
+      <div className="flex min-w-0 items-center gap-2 text-sm">
+        <span className="text-muted">Label</span>
+        <TaskLabel task={task} />
+      </div>
       <dl className="grid grid-cols-2 gap-2 text-sm">
         <dt className="text-muted">Status</dt>
         <dd>{STATUS_WORDS[task.status]}</dd>
@@ -317,10 +330,12 @@ function TaskDetails({
           Move to trash
         </button>
       </div>
+      <RunUnattendedToggle key={task.id} task={task} />
       <RecurrencePicker task={task} />
       <PullRequests taskId={task.id} />
       <PacketToggle key={task.id} taskId={task.id} />
       <CommentList taskId={task.id} />
+      <TaskHistory taskId={task.id} timeZone={timeZone} />
     </div>
   );
 }

@@ -3,13 +3,18 @@
 // empty. Rollover counts are plain numbers in the body colour (UX 8: no warning colour,
 // no shame). Nothing here asks for input: Done or Escape closes the panel and writes
 // nothing, so skipping the day close costs nothing. Closing it gives focus back to what
-// opened it. On a phone the panel is a full-height
+// opened it. Queued overnight lists the tasks queued to run unattended (P4-04), each that
+// will not run with its reason. On a phone the panel is a full-height
 // sheet; on a laptop a centred dialog.
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
 import { planningGetDaySummaryOptions } from "../../api/@tanstack/react-query.gen";
-import type { RolloverRef, TaskRef } from "../../api/types.gen";
+import type {
+  QueuedUnattendedOut,
+  RolloverRef,
+  TaskRef,
+} from "../../api/types.gen";
 import { dialogKeyDown } from "../../lib/focusTrap";
 import { Card } from "../common/Card";
 import { BUTTON_PRIMARY, DIALOG_TITLE, HINT } from "../common/ui";
@@ -38,6 +43,31 @@ function TaskList({
       {tasks.map((task) => (
         <li key={task.task_id} className={ROW}>
           <span className="break-words">{task.title}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The tasks queued to run tonight, in queued order (P4-04, J7): each says when it will
+ * not run, and why, in plain words. */
+function QueuedList({
+  tasks,
+}: {
+  tasks: readonly (QueuedUnattendedOut | TaskRef)[];
+}) {
+  if (tasks.length === 0) return <p className={HINT}>Nothing queued</p>;
+  return (
+    <ul className={LIST}>
+      {tasks.map((task) => (
+        <li key={task.task_id} className={ROW}>
+          <span className="break-words">{task.title}</span>
+          {"will_run" in task && !task.will_run && (
+            <span className="text-sm text-muted">
+              Will not run
+              {task.reason === null ? "" : `: ${task.reason}`}
+            </span>
+          )}
         </li>
       ))}
     </ul>
@@ -145,7 +175,9 @@ export function CloseDayPanel({
               )}
             </Section>
             <Section title="Queued overnight">
-              <TaskList tasks={data.queued_overnight} empty="Nothing queued" />
+              <QueuedList
+                tasks={data.queued_unattended ?? data.queued_overnight}
+              />
             </Section>
             <Section title="Rolls over">
               <RolloverList tasks={data.rolls_over} />

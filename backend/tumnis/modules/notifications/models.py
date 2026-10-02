@@ -1,5 +1,5 @@
-"""notifications SQLAlchemy tables owned by this module (mirrors of notifications_0001 and
-notifications_0002)."""
+"""notifications SQLAlchemy tables owned by this module (mirrors of notifications_0001 to
+notifications_0003)."""
 
 from datetime import datetime
 from typing import Any
@@ -20,8 +20,9 @@ class Notification(TenantBase, Base):
     target_id: Mapped[UUID | None]  # no foreign key: another module's row
     project_id: Mapped[UUID | None]
     level: Mapped[str]
-    decision: Mapped[str]  # "now" or "batch" (rules.delivery_decision)
+    decision: Mapped[str]  # "now", "batch" (rules.delivery_decision) or "overnight" (P4-04)
     released_at: Mapped[datetime | None]  # a batched row: when its batch went
+    release_at: Mapped[datetime | None]  # an overnight row: when the morning release takes it
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
     dedupe_key: Mapped[str]
     details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # the notify packet's facts

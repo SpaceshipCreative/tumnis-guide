@@ -121,7 +121,9 @@ import {
   planningGetMetricsSummary,
   planningGetPlan,
   planningGetProjectWeek,
+  planningGetUnattendedWindow,
   planningMoveIssue,
+  planningPutUnattendedWindow,
   planningRecordAppOpen,
   planningRemoveItem,
   planningReplan,
@@ -161,18 +163,22 @@ import {
   tasksGetRecurrence,
   tasksGetReviewCount,
   tasksGetTask,
+  tasksGetUnattended,
   tasksLinkContextItem,
   tasksLinkPullRequest,
   tasksListComments,
   tasksListInbox,
+  tasksListJustAdded,
   tasksListPullRequests,
   tasksListRecurrence,
   tasksListReview,
   tasksListReviewKinds,
+  tasksListTaskHistory,
   tasksListTasks,
   tasksMoveTask,
   tasksPutColumns,
   tasksPutRecurrence,
+  tasksPutUnattended,
   tasksTrashTask,
   tasksUndoTask,
   tasksUpdateEstimate,
@@ -504,9 +510,15 @@ import type {
   PlanningGetProjectWeekData,
   PlanningGetProjectWeekError,
   PlanningGetProjectWeekResponse,
+  PlanningGetUnattendedWindowData,
+  PlanningGetUnattendedWindowError,
+  PlanningGetUnattendedWindowResponse,
   PlanningMoveIssueData,
   PlanningMoveIssueError,
   PlanningMoveIssueResponse,
+  PlanningPutUnattendedWindowData,
+  PlanningPutUnattendedWindowError,
+  PlanningPutUnattendedWindowResponse,
   PlanningRecordAppOpenData,
   PlanningRecordAppOpenError,
   PlanningRecordAppOpenResponse,
@@ -624,6 +636,9 @@ import type {
   TasksGetTaskData,
   TasksGetTaskError,
   TasksGetTaskResponse,
+  TasksGetUnattendedData,
+  TasksGetUnattendedError,
+  TasksGetUnattendedResponse,
   TasksLinkContextItemData,
   TasksLinkContextItemError,
   TasksLinkContextItemResponse,
@@ -636,6 +651,9 @@ import type {
   TasksListInboxData,
   TasksListInboxError,
   TasksListInboxResponse,
+  TasksListJustAddedData,
+  TasksListJustAddedError,
+  TasksListJustAddedResponse,
   TasksListPullRequestsData,
   TasksListPullRequestsError,
   TasksListPullRequestsResponse,
@@ -648,6 +666,9 @@ import type {
   TasksListReviewKindsError,
   TasksListReviewKindsResponse,
   TasksListReviewResponse,
+  TasksListTaskHistoryData,
+  TasksListTaskHistoryError,
+  TasksListTaskHistoryResponse,
   TasksListTasksData,
   TasksListTasksError,
   TasksListTasksResponse,
@@ -660,6 +681,9 @@ import type {
   TasksPutRecurrenceData,
   TasksPutRecurrenceError,
   TasksPutRecurrenceResponse,
+  TasksPutUnattendedData,
+  TasksPutUnattendedError,
+  TasksPutUnattendedResponse,
   TasksTrashTaskData,
   TasksTrashTaskError,
   TasksTrashTaskResponse,
@@ -2554,6 +2578,37 @@ export const githubWebhookMutation = (
   };
   return mutationOptions;
 };
+
+export const tasksListJustAddedQueryKey = (
+  options?: Options<TasksListJustAddedData>,
+) => createQueryKey("tasksListJustAdded", options);
+
+/**
+ * List Just Added
+ *
+ * The dashboard's Just added list (A1.1, decision 83): the signed-in person's tasks
+ * added today and still in Backlog, newest first, at most three.
+ */
+export const tasksListJustAddedOptions = (
+  options?: Options<TasksListJustAddedData>,
+) =>
+  queryOptions<
+    TasksListJustAddedResponse,
+    TasksListJustAddedError,
+    TasksListJustAddedResponse,
+    ReturnType<typeof tasksListJustAddedQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListJustAdded({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListJustAddedQueryKey(options),
+  });
 
 export const authListKeysQueryKey = (options?: Options<AuthListKeysData>) =>
   createQueryKey("authListKeys", options);
@@ -6097,6 +6152,93 @@ export const tasksUpdateEstimateMutation = (
   return mutationOptions;
 };
 
+export const tasksListTaskHistoryQueryKey = (
+  options: Options<TasksListTaskHistoryData>,
+) => createQueryKey("tasksListTaskHistory", options);
+
+/**
+ * List Task History
+ *
+ * The task's writes, newest first: the fields each changed, by whom, and whether that
+ * was the caller (A1.1's drawer History).
+ */
+export const tasksListTaskHistoryOptions = (
+  options: Options<TasksListTaskHistoryData>,
+) =>
+  queryOptions<
+    TasksListTaskHistoryResponse,
+    TasksListTaskHistoryError,
+    TasksListTaskHistoryResponse,
+    ReturnType<typeof tasksListTaskHistoryQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksListTaskHistory({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksListTaskHistoryQueryKey(options),
+  });
+
+export const tasksListTaskHistoryInfiniteQueryKey = (
+  options: Options<TasksListTaskHistoryData>,
+): QueryKey<Options<TasksListTaskHistoryData>> =>
+  createQueryKey("tasksListTaskHistory", options, true);
+
+/**
+ * List Task History
+ *
+ * The task's writes, newest first: the fields each changed, by whom, and whether that
+ * was the caller (A1.1's drawer History).
+ */
+export const tasksListTaskHistoryInfiniteOptions = (
+  options: Options<TasksListTaskHistoryData>,
+) => {
+  const opts = infiniteQueryOptions<
+    TasksListTaskHistoryResponse,
+    TasksListTaskHistoryError,
+    InfiniteData<TasksListTaskHistoryResponse>,
+    QueryKey<Options<TasksListTaskHistoryData>>,
+    | string
+    | null
+    | Pick<
+        QueryKey<Options<TasksListTaskHistoryData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<TasksListTaskHistoryData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await tasksListTaskHistory({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: tasksListTaskHistoryInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
 /**
  * Move Task
  *
@@ -6369,6 +6511,67 @@ export const tasksChangeStatusMutation = (
   return mutationOptions;
 };
 
+export const tasksGetUnattendedQueryKey = (
+  options: Options<TasksGetUnattendedData>,
+) => createQueryKey("tasksGetUnattended", options);
+
+/**
+ * Get Unattended
+ *
+ * Whether the task is queued for the unattended window (P4-04).
+ */
+export const tasksGetUnattendedOptions = (
+  options: Options<TasksGetUnattendedData>,
+) =>
+  queryOptions<
+    TasksGetUnattendedResponse,
+    TasksGetUnattendedError,
+    TasksGetUnattendedResponse,
+    ReturnType<typeof tasksGetUnattendedQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tasksGetUnattended({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tasksGetUnattendedQueryKey(options),
+  });
+
+/**
+ * Put Unattended
+ *
+ * Queue the task for the unattended window or take it off (P4-04, FR-4.5): the
+ * person's choice, so a key or token gets 403 `session_required`; 422 `not_ai` for a
+ * task that is not labelled AI, 422 `task_done` for a done task.
+ */
+export const tasksPutUnattendedMutation = (
+  options?: Partial<Options<TasksPutUnattendedData>>,
+): UseMutationOptions<
+  TasksPutUnattendedResponse,
+  TasksPutUnattendedError,
+  Options<TasksPutUnattendedData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TasksPutUnattendedResponse,
+    TasksPutUnattendedError,
+    Options<TasksPutUnattendedData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tasksPutUnattended({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 /**
  * Undo Task
  *
@@ -6458,6 +6661,61 @@ export const searchTypeaheadTasksOptions = (
     },
     queryKey: searchTypeaheadTasksQueryKey(options),
   });
+
+export const planningGetUnattendedWindowQueryKey = (
+  options?: Options<PlanningGetUnattendedWindowData>,
+) => createQueryKey("planningGetUnattendedWindow", options);
+
+/**
+ * Get Unattended Window
+ */
+export const planningGetUnattendedWindowOptions = (
+  options?: Options<PlanningGetUnattendedWindowData>,
+) =>
+  queryOptions<
+    PlanningGetUnattendedWindowResponse,
+    PlanningGetUnattendedWindowError,
+    PlanningGetUnattendedWindowResponse,
+    ReturnType<typeof planningGetUnattendedWindowQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await planningGetUnattendedWindow({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: planningGetUnattendedWindowQueryKey(options),
+  });
+
+/**
+ * Put Unattended Window
+ */
+export const planningPutUnattendedWindowMutation = (
+  options?: Partial<Options<PlanningPutUnattendedWindowData>>,
+): UseMutationOptions<
+  PlanningPutUnattendedWindowResponse,
+  PlanningPutUnattendedWindowError,
+  Options<PlanningPutUnattendedWindowData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    PlanningPutUnattendedWindowResponse,
+    PlanningPutUnattendedWindowError,
+    Options<PlanningPutUnattendedWindowData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await planningPutUnattendedWindow({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const usageGetUsageQueryKey = (options: Options<UsageGetUsageData>) =>
   createQueryKey("usageGetUsage", options);

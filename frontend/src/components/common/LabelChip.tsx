@@ -236,6 +236,38 @@ export function useLabelOverride(
   };
 }
 
+/** A task's label fields, as a task read or a list row carries them. */
+export interface LabelledTask {
+  id: string;
+  version: number;
+  label: Label | null;
+  label_source: LabelSource | null;
+  label_reason: string | null;
+  label_suggestion: Label | null;
+}
+
+/** The chip of a task already in hand (A1.1's Just added row, the drawer): its reason
+ * beside it, and a pick shown at once until the write settles. */
+export function TaskLabel({
+  task,
+  showReason = true,
+}: {
+  task: LabelledTask;
+  showReason?: boolean;
+}) {
+  const { picked, pick } = useLabelOverride(task);
+  return (
+    <LabelChip
+      label={picked ?? task.label}
+      source={picked ? "user" : task.label_source}
+      reason={picked ? null : task.label_reason}
+      suggestion={picked ? null : task.label_suggestion}
+      onOverride={pick}
+      showReason={showReason}
+    />
+  );
+}
+
 /** The chip of one task, read from `GET /v1/tasks/{id}` and refreshed by /ws (R-05). */
 export function TaskLabelChip({
   taskId,

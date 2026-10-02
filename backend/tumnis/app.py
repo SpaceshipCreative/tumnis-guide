@@ -45,6 +45,7 @@ from tumnis.core.principal import AuthenticationMiddleware
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.request_meta import RequestMetaMiddleware
 from tumnis.core.routing import new_request_log
+from tumnis.core.testing_writes import WritesInFlight, WritesInFlightMiddleware
 from tumnis.migrate import release_revisions
 from tumnis.modules.auth import router as auth_router
 from tumnis.settings import Settings, install_master_keys, install_peppers, require_hosted_tls
@@ -254,6 +255,11 @@ def create_app(
     app.add_middleware(RequestMetaMiddleware)
     app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(metrics.RequestMetricsMiddleware)
+    if settings.tumnis_adapters == "fake":
+        # The test clock waits for the writes in flight (A2.6, J8); only beside the test
+        # routes, never in a real deployment.
+        app.state.writes_in_flight = WritesInFlight()
+        app.add_middleware(WritesInFlightMiddleware, writes=app.state.writes_in_flight)
     app.state.settings = settings
     app.state.master_keys = master_keys
     app.state.metrics_token = metrics_token

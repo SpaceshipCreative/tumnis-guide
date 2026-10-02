@@ -337,9 +337,15 @@ import type {
   PlanningGetProjectWeekData,
   PlanningGetProjectWeekErrors,
   PlanningGetProjectWeekResponses,
+  PlanningGetUnattendedWindowData,
+  PlanningGetUnattendedWindowErrors,
+  PlanningGetUnattendedWindowResponses,
   PlanningMoveIssueData,
   PlanningMoveIssueErrors,
   PlanningMoveIssueResponses,
+  PlanningPutUnattendedWindowData,
+  PlanningPutUnattendedWindowErrors,
+  PlanningPutUnattendedWindowResponses,
   PlanningRecordAppOpenData,
   PlanningRecordAppOpenErrors,
   PlanningRecordAppOpenResponses,
@@ -457,6 +463,9 @@ import type {
   TasksGetTaskData,
   TasksGetTaskErrors,
   TasksGetTaskResponses,
+  TasksGetUnattendedData,
+  TasksGetUnattendedErrors,
+  TasksGetUnattendedResponses,
   TasksLinkContextItemData,
   TasksLinkContextItemErrors,
   TasksLinkContextItemResponses,
@@ -469,6 +478,9 @@ import type {
   TasksListInboxData,
   TasksListInboxErrors,
   TasksListInboxResponses,
+  TasksListJustAddedData,
+  TasksListJustAddedErrors,
+  TasksListJustAddedResponses,
   TasksListPullRequestsData,
   TasksListPullRequestsErrors,
   TasksListPullRequestsResponses,
@@ -481,6 +493,9 @@ import type {
   TasksListReviewKindsErrors,
   TasksListReviewKindsResponses,
   TasksListReviewResponses,
+  TasksListTaskHistoryData,
+  TasksListTaskHistoryErrors,
+  TasksListTaskHistoryResponses,
   TasksListTasksData,
   TasksListTasksErrors,
   TasksListTasksResponses,
@@ -493,6 +508,9 @@ import type {
   TasksPutRecurrenceData,
   TasksPutRecurrenceErrors,
   TasksPutRecurrenceResponses,
+  TasksPutUnattendedData,
+  TasksPutUnattendedErrors,
+  TasksPutUnattendedResponses,
   TasksTrashTaskData,
   TasksTrashTaskErrors,
   TasksTrashTaskResponses,
@@ -616,7 +634,9 @@ import {
   zPlanningGetMetricsSummaryResponse,
   zPlanningGetPlanResponse,
   zPlanningGetProjectWeekResponse,
+  zPlanningGetUnattendedWindowResponse,
   zPlanningMoveIssueResponse,
+  zPlanningPutUnattendedWindowResponse,
   zPlanningRecordAppOpenResponse,
   zPlanningRemoveItemResponse,
   zPlanningReplanResponse,
@@ -656,18 +676,22 @@ import {
   zTasksGetRecurrenceResponse,
   zTasksGetReviewCountResponse,
   zTasksGetTaskResponse,
+  zTasksGetUnattendedResponse,
   zTasksLinkContextItemResponse,
   zTasksLinkPullRequestResponse,
   zTasksListCommentsResponse,
   zTasksListInboxResponse,
+  zTasksListJustAddedResponse,
   zTasksListPullRequestsResponse,
   zTasksListRecurrenceResponse,
   zTasksListReviewKindsResponse,
   zTasksListReviewResponse,
+  zTasksListTaskHistoryResponse,
   zTasksListTasksResponse,
   zTasksMoveTaskResponse,
   zTasksPutColumnsResponse,
   zTasksPutRecurrenceResponse,
+  zTasksPutUnattendedResponse,
   zTasksTrashTaskResponse,
   zTasksUndoTaskResponse,
   zTasksUpdateEstimateResponse,
@@ -1939,6 +1963,30 @@ export const githubWebhook = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zGithubWebhookResponse.parseAsync(data),
     url: "/v1/github/webhook/{workspace_id}",
+    ...options,
+  });
+
+/**
+ * List Just Added
+ *
+ * The dashboard's Just added list (A1.1, decision 83): the signed-in person's tasks
+ * added today and still in Backlog, newest first, at most three.
+ */
+export const tasksListJustAdded = <ThrowOnError extends boolean = false>(
+  options?: Options<TasksListJustAddedData, ThrowOnError>,
+): RequestResult<
+  TasksListJustAddedResponses,
+  TasksListJustAddedErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    TasksListJustAddedResponses,
+    TasksListJustAddedErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListJustAddedResponse.parseAsync(data),
+    url: "/v1/just-added",
     ...options,
   });
 
@@ -4340,6 +4388,30 @@ export const tasksUpdateEstimate = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List Task History
+ *
+ * The task's writes, newest first: the fields each changed, by whom, and whether that
+ * was the caller (A1.1's drawer History).
+ */
+export const tasksListTaskHistory = <ThrowOnError extends boolean = false>(
+  options: Options<TasksListTaskHistoryData, ThrowOnError>,
+): RequestResult<
+  TasksListTaskHistoryResponses,
+  TasksListTaskHistoryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TasksListTaskHistoryResponses,
+    TasksListTaskHistoryErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListTaskHistoryResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/history",
+    ...options,
+  });
+
+/**
  * Move Task
  *
  * One board drag: column, rank and version in one request (R-20).
@@ -4571,6 +4643,58 @@ export const tasksChangeStatus = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Get Unattended
+ *
+ * Whether the task is queued for the unattended window (P4-04).
+ */
+export const tasksGetUnattended = <ThrowOnError extends boolean = false>(
+  options: Options<TasksGetUnattendedData, ThrowOnError>,
+): RequestResult<
+  TasksGetUnattendedResponses,
+  TasksGetUnattendedErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TasksGetUnattendedResponses,
+    TasksGetUnattendedErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksGetUnattendedResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/unattended",
+    ...options,
+  });
+
+/**
+ * Put Unattended
+ *
+ * Queue the task for the unattended window or take it off (P4-04, FR-4.5): the
+ * person's choice, so a key or token gets 403 `session_required`; 422 `not_ai` for a
+ * task that is not labelled AI, 422 `task_done` for a done task.
+ */
+export const tasksPutUnattended = <ThrowOnError extends boolean = false>(
+  options: Options<TasksPutUnattendedData, ThrowOnError>,
+): RequestResult<
+  TasksPutUnattendedResponses,
+  TasksPutUnattendedErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    TasksPutUnattendedResponses,
+    TasksPutUnattendedErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksPutUnattendedResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/unattended",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Undo Task
  *
  * Puts back what one change did (R-09, UX 9): 409 `already_undone`, or
@@ -4638,6 +4762,56 @@ export const searchTypeaheadTasks = <ThrowOnError extends boolean = false>(
       await zSearchTypeaheadTasksResponse.parseAsync(data),
     url: "/v1/typeahead/tasks",
     ...options,
+  });
+
+/**
+ * Get Unattended Window
+ */
+export const planningGetUnattendedWindow = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<PlanningGetUnattendedWindowData, ThrowOnError>,
+): RequestResult<
+  PlanningGetUnattendedWindowResponses,
+  PlanningGetUnattendedWindowErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    PlanningGetUnattendedWindowResponses,
+    PlanningGetUnattendedWindowErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningGetUnattendedWindowResponse.parseAsync(data),
+    url: "/v1/unattended/window",
+    ...options,
+  });
+
+/**
+ * Put Unattended Window
+ */
+export const planningPutUnattendedWindow = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<PlanningPutUnattendedWindowData, ThrowOnError>,
+): RequestResult<
+  PlanningPutUnattendedWindowResponses,
+  PlanningPutUnattendedWindowErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    PlanningPutUnattendedWindowResponses,
+    PlanningPutUnattendedWindowErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zPlanningPutUnattendedWindowResponse.parseAsync(data),
+    url: "/v1/unattended/window",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**

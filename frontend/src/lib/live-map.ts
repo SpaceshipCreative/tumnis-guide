@@ -33,9 +33,12 @@ export const LIVE_MAP: Record<
       "tasksGetRecurrence",
       "tasksListPullRequests",
       "agentsGetTaskPacket", // the task's packet (P2-02) changes with its task
+      "tasksListTaskHistory", // the drawer's History (A1.1): each write adds an entry
+      "tasksGetUnattended", // its unattended queue flag (P4-04), consumed when it runs
     ],
     lists: [
       "tasksListTasks",
+      "tasksListJustAdded", // the dashboard's Just added list (A1.1, decision 83)
       "tasksGetBoard",
       "tasksListRecurrence",
       "searchSearch",
@@ -200,4 +203,7 @@ export const NOT_LIVE = [
   "connectionsListProviders",
   "connectionsOauthUrl",
   "connectionsOauthCallback",
+  // The unattended window (P4-04) changes only from Settings or a project's Schedule rail,
+  // and each writes the saved answer into its own cache.
+  "planningGetUnattendedWindow",
 ] as const;

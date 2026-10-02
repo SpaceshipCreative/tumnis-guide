@@ -279,6 +279,8 @@ class TaskOut(BaseModel):
     actual_minutes: int | None
     tainted: bool
     source: str
+    # P4-04: when the task was queued for the unattended window; null when it is not.
+    unattended_queued_at: datetime | None = None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -1851,6 +1853,118 @@ async def post_result(  # the result, plus who and when
     return ResultOut.model_validate(dict(created)), True
 
 
+JUST_ADDED_LIMIT: Final = 3
+
+
+class JustAddedOut(BaseModel):
+    """The dashboard's Just added list (A1.1, coordinator decision 83)."""
+
+    items: list[TaskOut]
+
+
+async def just_added(s: AsyncSession, actor: ActorRef) -> JustAddedOut:
+    """`actor`'s own tasks added today (the workspace's day) and still in Backlog, newest
+    first, at most JUST_ADDED_LIMIT: a capture stays on the dashboard, after a reload too,
+    until it is planned, started, done or trashed (decision 83). "Today" is the database
+    clock's, the one that stamps `created_at`."""
+    tz = (await _zone(s)).key
+    rows = await s.execute(
+        select(_tasks)
+        .where(
+            _live(_tasks),
+            _tasks.c.created_by == str(actor),
+            _tasks.c.status == Status.BACKLOG,
+            func.date(func.timezone(tz, _tasks.c.created_at))
+            == func.date(func.timezone(tz, func.now())),
+        )
+        .order_by(_tasks.c.created_at.desc(), _tasks.c.id.desc())
+        .limit(JUST_ADDED_LIMIT)
+    )
+    return JustAddedOut(items=[_out(row) for row in rows.mappings()])
+
+
+# The history names a change of the task itself by what it did (the undo log stores it as
+# `deleted` flipping; a create leaves version 1).
+CREATED: Final = "created"
+TRASHED: Final = "trashed"
+RESTORED: Final = "restored"
+
+
+class TaskChangeOut(BaseModel):
+    """One write in a task's history (`task_changes`): when, by whom (`by_you`: the
+    caller), the undoable fields it changed (`created`, `trashed` or `restored` for the
+    task itself) and whether it was undone."""
+
+    change_id: UUID
+    at: datetime
+    actor: str
+    by_you: bool
+    fields: list[str]
+    undone: bool
+
+
+class _ChangeRow(BaseModel):
+    change_id: UUID
+    created_at: datetime
+    actor: str
+    after: dict[str, Any]
+    task_version: int
+    undone_at: datetime | None
+
+
+def _change_fields(row: _ChangeRow) -> list[str]:
+    if "deleted" in row.after:
+        if row.after["deleted"]:
+            return [TRASHED]
+        return [CREATED if row.task_version == 1 else RESTORED]
+    return sorted(f for f in row.after if f in rules.UNDO_FIELDS)
+
+
+async def task_history(
+    s: AsyncSession,
+    actor: ActorRef,
+    task_id: UUID,
+    *,
+    cursor: str | None = None,
+    limit: int = 50,
+) -> Page[TaskChangeOut]:
+    """The task's writes, newest first (404 for a task the caller cannot see); A1.1's drawer
+    says who set each field ("you" for the caller's own)."""
+    await _row(s, task_id)
+    stmt = select(
+        _changes.c.change_id,
+        _changes.c.created_at,
+        _changes.c.actor,
+        _changes.c.after,
+        _changes.c.task_version,
+        _changes.c.undone_at,
+    ).where(_changes.c.task_id == task_id)
+    page = await paginate(
+        s,
+        stmt,
+        keys=[],
+        id_col=_changes.c.id,
+        cursor=cursor,
+        limit=limit,
+        model=_ChangeRow,
+        descending=True,
+    )
+    return Page[TaskChangeOut](
+        items=[
+            TaskChangeOut(
+                change_id=row.change_id,
+                at=row.created_at,
+                actor=row.actor,
+                by_you=row.actor == str(actor),
+                fields=_change_fields(row),
+                undone=row.undone_at is not None,
+            )
+            for row in page.items
+        ],
+        next_cursor=page.next_cursor,
+    )
+
+
 async def list_comments(
     s: AsyncSession, task_id: UUID, *, cursor: str | None = None, limit: int = 50
 ) -> Page[CommentOut]:
@@ -2763,3 +2877,148 @@ async def day_task_facts(s: AsyncSession, start: datetime, end: datetime) -> lis
         )
         for row in rows
     ]
+
+
+# --- The unattended queue (P4-04, FR-4.5, SAF-1) -------------------------------------------------
+
+
+class UnattendedIn(BaseModel):
+    """Queue the task for the unattended window (`queued` true) or take it off."""
+
+    model_config = ConfigDict(extra="forbid")
+    queued: bool
+
+
+class UnattendedOut(BaseModel):
+    """The task's place in the unattended queue: when and by whom it was queued, and whether
+    P2-08's rule lets it run unattended at all (false for a tainted task, SAF-1)."""
+
+    schema_version: Literal[1] = 1
+    task_id: UUID
+    queued: bool
+    queued_at: datetime | None
+    queued_by: str | None
+    may_run_unattended: bool
+
+
+class QueuedTask(BaseModel):
+    """A live task queued for the unattended window, as the tick and the day close read it."""
+
+    task_id: UUID
+    project_id: UUID
+    title: str
+    label: Label | None
+    status: Status
+    tainted: bool
+    has_acceptance_criteria: bool
+    queued_at: datetime
+    may_run_unattended: bool
+
+
+def _view(row: Mapping[Any, Any]) -> rules.TaskView:
+    return rules.TaskView(
+        tainted=bool(row["tainted"]), label=_label(row["label"]), status=Status(row["status"])
+    )
+
+
+def _unattended_out(row: Mapping[Any, Any]) -> UnattendedOut:
+    return UnattendedOut(
+        task_id=row["id"],
+        queued=row["unattended_queued_at"] is not None,
+        queued_at=row["unattended_queued_at"],
+        queued_by=row["unattended_queued_by"],
+        may_run_unattended=rules.may_run_unattended(_view(row)),
+    )
+
+
+async def get_unattended(s: AsyncSession, task_id: UUID) -> UnattendedOut:
+    """The task's unattended queue flag (404 when missing)."""
+    return _unattended_out(await _row(s, task_id))
+
+
+async def queue_unattended(
+    s: AsyncSession, actor: ActorRef, task_id: UUID, *, queued: bool, now: datetime | None = None
+) -> UnattendedOut:
+    """Queues the task for the unattended window, or takes it off, in the caller's
+    transaction. Only AI tasks can be queued (Human, Hybrid or a pending label: 422
+    `not_ai`), and not a done one (422 `task_done`: every window would refuse it again);
+    taking a task off works for any task. Queueing a queued task keeps its
+    first time, and taking off one that is not queued changes nothing. The live views
+    refresh; no event (the flag is not part of the task's document)."""
+    row = await _row(s, task_id, lock=True)
+    if queued and row["label"] != Label.AI:
+        raise ProblemError(422, "not_ai", "Only AI tasks can run unattended")
+    if queued and row["status"] == Status.DONE:
+        raise ProblemError(422, "task_done", "A done task cannot run unattended")
+    if queued == (row["unattended_queued_at"] is not None):
+        return _unattended_out(row)
+    values: dict[str, Any] = (
+        {"unattended_queued_at": _now(now), "unattended_queued_by": str(actor)}
+        if queued
+        else {"unattended_queued_at": None, "unattended_queued_by": None}
+    )
+    updated = (
+        (
+            await s.execute(
+                update(_tasks).where(_tasks.c.id == task_id).values(**values).returning(*_tasks.c)
+            )
+        )
+        .mappings()
+        .one()
+    )
+    mark_changed(s, LIVE_ENTITY, task_id)
+    return _unattended_out(updated)
+
+
+async def may_run_unattended_for(s: AsyncSession, task_id: UUID) -> bool:
+    """P2-08's rule (`rules.may_run_unattended`) for one task: false for a tainted task."""
+    return rules.may_run_unattended(_view(await _row(s, task_id)))
+
+
+async def unattended_queue(s: AsyncSession) -> list[QueuedTask]:
+    """The live tasks of the workspace in context queued for the unattended window, in
+    queued order (then id)."""
+    rows = (
+        (
+            await s.execute(
+                select(_tasks)
+                .where(_live(_tasks), _tasks.c.unattended_queued_at.is_not(None))
+                .order_by(_tasks.c.unattended_queued_at, _tasks.c.id)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    return [
+        QueuedTask(
+            task_id=row["id"],
+            project_id=row["project_id"],
+            title=row["title"],
+            label=_label(row["label"]),
+            status=Status(row["status"]),
+            tainted=bool(row["tainted"]),
+            has_acceptance_criteria=not _blank(row["acceptance_criteria"]),
+            queued_at=row["unattended_queued_at"],
+            may_run_unattended=rules.may_run_unattended(_view(row)),
+        )
+        for row in rows
+    ]
+
+
+async def consume_unattended(s: AsyncSession, task_id: UUID) -> bool:
+    """Clears the task's queue flag in the caller's transaction (the tick, as it requests
+    the run): True when it was queued, False when another tick took it first."""
+    taken = await s.scalar(
+        update(_tasks)
+        .where(
+            _tasks.c.id == task_id,
+            _live(_tasks),
+            _tasks.c.unattended_queued_at.is_not(None),
+        )
+        .values(unattended_queued_at=None, unattended_queued_by=None)
+        .returning(_tasks.c.id)
+    )
+    if taken is None:
+        return False
+    mark_changed(s, LIVE_ENTITY, task_id)
+    return True
