@@ -13,9 +13,14 @@ pinned by digest.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from dataclasses import dataclass
+import asyncio
+import base64
+import shlex
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -29,6 +34,9 @@ CLAMD_IMAGE = (
     "clamav/clamav-debian@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578"
 )
 SFTP_USER = "tumnis"
+SFTP_HOME = f"/home/{SFTP_USER}"  # the user's chroot
+SFTP_UID = 1001
+HOST_KEY = "/etc/ssh/ssh_host_ed25519_key"
 
 
 @dataclass(frozen=True)
@@ -41,11 +49,79 @@ class S3Endpoint:
 
 @dataclass(frozen=True)
 class SftpEndpoint:
+    """The SFTP container. The user is chrooted to its home, so a path the user calls
+    `upload/x` is `SFTP_HOME/upload/x` on the server. P3-14 adds `rotate_host_key` and
+    `plant_symlink`, which act inside the container as root."""
+
     host: str
     port: int
     user: str
     private_key_path: Path
     host_key: str  # "ssh-ed25519 AAAA..." as it goes in known_hosts
+    container: Any = field(default=None, compare=False, repr=False)
+
+    def exec(self, command: str) -> str:
+        """`command` run by `sh -c` in the container as root; its output (it must succeed)."""
+        result = self.container.exec(["sh", "-c", command])
+        if result.exit_code != 0:
+            raise RuntimeError(f"{command!r} failed: {result.output!r}")
+        return str(result.output.decode())
+
+    def server_path(self, path: str) -> str:
+        """Where a path the user sees (relative to its chroot) lies on the server."""
+        return f"{SFTP_HOME}/{path.lstrip('/')}"
+
+    def plant_symlink(self, path: str, target: str) -> None:
+        """A symlink at the user's `path` pointing at `target` (as the server sees it),
+        planted behind Tumnis's back and owned by the user."""
+        link = shlex.quote(self.server_path(path))
+        self.exec(
+            f'mkdir -p "$(dirname {link})" && ln -s {shlex.quote(target)} {link}'
+            f" && chown -h {SFTP_UID} {link}"
+        )
+
+    @asynccontextmanager
+    async def rotate_host_key(self) -> AsyncIterator[str]:
+        """Give the server a new ed25519 host key (sshd reloads its keys on SIGHUP); yields
+        the new key as known_hosts has it. The original key comes back on exit, so the
+        session's other tests keep their pinned key. Both keys are made inside the
+        container at test time."""
+        original = base64.b64encode(self.exec(f"cat {HOST_KEY}").encode()).decode()
+        self.exec(
+            f"rm -f {HOST_KEY} {HOST_KEY}.pub && ssh-keygen -q -t ed25519 -N '' -f {HOST_KEY}"
+            " && kill -HUP 1"
+        )
+        try:
+            yield await self._served_key(lambda served: served != self.host_key)
+        finally:
+            self.exec(
+                f"echo {original} | base64 -d > {HOST_KEY} && chmod 600 {HOST_KEY}"
+                f" && ssh-keygen -y -f {HOST_KEY} > {HOST_KEY}.pub && kill -HUP 1"
+            )
+            await self._served_key(lambda served: served == self.host_key)
+
+    async def _served_key(self, wanted: Any) -> str:
+        """The ed25519 key sshd presents, once `wanted(key)` holds (sshd restarts on
+        SIGHUP, so it may not answer for a moment)."""
+        import asyncssh  # noqa: PLC0415
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + 30
+        while True:
+            try:
+                key = await asyncssh.get_server_host_key(
+                    self.host, self.port, server_host_key_algs=["ssh-ed25519"], config=None
+                )
+            except (OSError, asyncssh.Error):
+                key = None
+            if key is not None:
+                key_type, key_data, *_ = key.export_public_key().decode().split()
+                served = f"{key_type} {key_data}"
+                if wanted(served):
+                    return served
+            if loop.time() > deadline:
+                raise RuntimeError("sshd did not reload its host key")
+            await asyncio.sleep(0.2)
 
 
 @dataclass(frozen=True)
@@ -129,6 +205,7 @@ def sftp_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[SftpEndpoi
             SFTP_USER,
             key.private_path,
             read_host_key(c),
+            container=c,
         )
 
 
