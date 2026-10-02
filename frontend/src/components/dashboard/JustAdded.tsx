@@ -3,12 +3,14 @@
 // capture made on the dashboard shows there, after a reload too, with its label chip (the
 // one-line reason beside it, overridden with one click), its first action and its
 // estimate. A capture still on the offline queue shows at once with its pending mark. The
-// section is hidden when there is nothing, keeping the dashboard on one screen (A0.1).
+// section is hidden when there is nothing, keeping the dashboard on one screen (A0.1); on a
+// laptop its rows scroll inside the card, so Today keeps its room (APP-F02).
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import type { TaskOut } from "../../api/types.gen";
 import { Card } from "../common/Card";
+import { CARD_BODY } from "../common/ui";
 import { firstActionState } from "../common/FirstAction";
 import { TaskLabel } from "../common/LabelChip";
 import { PendingMark } from "../quickadd/PendingMark";
@@ -118,7 +120,11 @@ export function JustAdded({
   );
   if (pending.length === 0 && shown.length === 0) return null;
   return (
-    <Card title="Just added" className={className}>
+    <Card
+      title="Just added"
+      className={className}
+      bodyClassName={`${CARD_BODY} md:min-h-0 md:overflow-y-auto`}
+    >
       <ul className="flex flex-col divide-y divide-border">
         {pending.slice(0, JUST_ADDED_LIMIT).map((row) => (
           <PendingItem key={row.id} id={row.id} title={row.title} />
