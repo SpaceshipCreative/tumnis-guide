@@ -42,7 +42,6 @@ def _asset(name: str, size: int = 1024) -> dict[str, Any]:
 
 @pytest.mark.req("SEC-7", "SAAS-1")
 @pytest.mark.wp("P4-06")
-@pytest.mark.xfail(strict=True, reason="spec:P4-06")
 def test_release_fails_without_sbom_openapi_or_schemas() -> None:
     """T-P4-06-07
     release.yml packs schemas/ into schemas-<tag>.tar.gz and attaches it with the SBOM and
