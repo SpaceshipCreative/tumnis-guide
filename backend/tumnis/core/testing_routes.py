@@ -39,26 +39,32 @@ router = v1_router("core", prefix="/test", tags=["test"])
 
 # Deployment-level tables a reset keeps: the marker says which deployment this database is.
 KEEP_TABLES = frozenset({"deployment_marker"})
-# The relay's claim table, locked before every other table (issue #51).
+# The table every writer locks last: a module writes its rows, then emits into `outbox` in
+# the same transaction. The TRUNCATE locks it last too (APP-F03).
 OUTBOX = "outbox"
-_LOCK_OUTBOX = text("LOCK TABLE outbox IN ACCESS EXCLUSIVE MODE")
 # SQLSTATE deadlock_detected, and how many times a reset runs its TRUNCATE before giving up.
-# Three was too few under the e2e suite's load: the reset lost to in-flight writers on all
-# three and answered 500 (APP-04). Between attempts it pauses a full-jitter moment (base
-# DEADLOCK_PAUSE_BASE_S, at most DEADLOCK_PAUSE_CAP_S), so the writer it collided with
-# commits before the next TRUNCATE queues behind it again.
+# Between attempts it pauses a full-jitter moment (base DEADLOCK_PAUSE_BASE_S, at most
+# DEADLOCK_PAUSE_CAP_S), so the transaction it collided with commits before the next
+# TRUNCATE queues behind it again. Since the reset gives way before Postgres looks for a
+# deadlock (RESET_LOCK_TIMEOUT_S), this is a backstop (APP-04, APP-F03).
 DEADLOCK_DETECTED = "40P01"
 DEADLOCK_ATTEMPTS = 10
 DEADLOCK_PAUSE_BASE_S: Final = 0.05
 DEADLOCK_PAUSE_CAP_S: Final = 1.0
-# A reset whose TRUNCATE waits this long for one lock may be in a cycle Postgres cannot
-# see: a request holds a later table in its transaction and waits, in Python, on its own
-# second connection, which queues behind the TRUNCATE's lock on an earlier table (J1's swap
-# reads the day calendar that way). The TRUNCATE gives way (SQLSTATE lock_not_available),
-# which lets the request finish, logs who held what (`blocked_report`), and tries again,
-# up to LOCK_WAIT_ATTEMPTS times; then the reset answers 503 with the report (SEED).
-RESET_LOCK_TIMEOUT_S: float = 5.0  # read per attempt (a test shortens it)
-LOCK_WAIT_ATTEMPTS: Final = 4
+# The TRUNCATE never waits long for a lock while it holds others (APP-F03). Two kinds of
+# transaction take their locks in another order than the TRUNCATE's: one that holds a
+# later table and then reads an earlier one (a cycle Postgres sees), and one that holds a
+# table while it waits, in Python, on its own second connection that queues behind the
+# TRUNCATE (a cycle Postgres cannot see: the relay holds its `outbox` claim while it reads
+# `module_flags` (issue #51), J1's swap reads the day calendar). Each lock the TRUNCATE
+# waits for is bounded by RESET_LOCK_TIMEOUT_S, below the server's `deadlock_timeout`
+# (1 s by default), so the TRUNCATE gives way first (SQLSTATE lock_not_available) and
+# Postgres never picks it, or a request it blocked, as a deadlock victim. The reset logs
+# who held what (`blocked_report`), pauses, and tries again until LOCK_WAIT_BUDGET_S have
+# gone by since it began (by the event loop's monotonic clock, pauses included; no pause
+# runs past that deadline); then it answers 503 with the report (SEED).
+RESET_LOCK_TIMEOUT_S: float = 0.25  # read per attempt (a test changes it)
+LOCK_WAIT_BUDGET_S: Final = 20.0
 LOCK_NOT_AVAILABLE: Final = "55P03"
 _SET_LOCK_TIMEOUT = text("SELECT set_config('lock_timeout', :timeout, true)")
 # The open transactions in this database. As the app role it sees the api's and the
@@ -84,15 +90,16 @@ _TRUNCATE_GUARDS = text(
 async def truncate_tables(owner_url: str) -> list[str]:
     """TRUNCATE every table in `public` but the kept ones and Alembic's, as the owner.
 
-    The TRUNCATE locks the tables in name order, so a reader that holds a later table and
-    then reads an earlier one closes a lock cycle; Postgres aborts the TRUNCATE (P0-29: a
-    load-set reset in CI). The reader finishes once the TRUNCATE gives way, so the reset
-    tries again after a short jittered pause, up to `DEADLOCK_ATTEMPTS` times (APP-04). A
-    cycle Postgres cannot see ends at the lock timeout instead (see RESET_LOCK_TIMEOUT_S):
-    the reset logs the open transactions and tries again, up to LOCK_WAIT_ATTEMPTS times,
-    then raises ResetBlockedError."""
+    The TRUNCATE locks the tables in name order and `outbox` last, the order of every
+    writer that emits (APP-F03). A transaction that takes its locks in another order and
+    holds one the TRUNCATE waits for makes it give way at RESET_LOCK_TIMEOUT_S: the reset
+    logs the open transactions, pauses a jittered moment and tries again, until
+    LOCK_WAIT_BUDGET_S have gone by since it began, then raises ResetBlockedError. A
+    deadlock Postgres reports anyway (P0-29, APP-04) is tried again too, up to
+    `DEADLOCK_ATTEMPTS` times."""
     engine = create_async_engine(owner_url, poolclass=NullPool)
     attempt = lock_waits = 1
+    deadline = _monotonic() + LOCK_WAIT_BUDGET_S
     try:
         while True:
             try:
@@ -101,35 +108,47 @@ async def truncate_tables(owner_url: str) -> list[str]:
                 code = getattr(error.orig, "sqlstate", None)
                 if code == LOCK_NOT_AVAILABLE:
                     report = blocked_report(await _open_transactions(engine), _parked_chains())
+                    left = deadline - _monotonic()
                     _log.warning(
-                        "reset blocked on a lock for %ss (attempt %d of %d):\n%s",
+                        "reset blocked on a lock for %ss (give-way %d, %.1fs of %.0fs left):\n%s",
                         RESET_LOCK_TIMEOUT_S,
                         lock_waits,
-                        LOCK_WAIT_ATTEMPTS,
+                        max(left, 0.0),
+                        LOCK_WAIT_BUDGET_S,
                         report,
                     )
-                    if lock_waits == LOCK_WAIT_ATTEMPTS:
+                    if left <= 0:
                         raise ResetBlockedError(report) from error
+                    await _deadlock_pause(min(_jitter(lock_waits), left))
                     lock_waits += 1
                     continue
                 if code != DEADLOCK_DETECTED or attempt == DEADLOCK_ATTEMPTS:
                     raise
                 _log.info("reset lost a deadlock (attempt %d of %d)", attempt, DEADLOCK_ATTEMPTS)
-                await _deadlock_pause(
-                    full_jitter(
-                        attempt,
-                        base=DEADLOCK_PAUSE_BASE_S,
-                        cap=DEADLOCK_PAUSE_CAP_S,
-                        rand=random.random,  # jitter, not a secret
-                    )
-                )
+                await _deadlock_pause(_jitter(attempt))
                 attempt += 1
     finally:
         await engine.dispose()
 
 
+def _jitter(attempt: int) -> float:
+    return full_jitter(
+        attempt,
+        base=DEADLOCK_PAUSE_BASE_S,
+        cap=DEADLOCK_PAUSE_CAP_S,
+        rand=random.random,  # jitter, not a secret
+    )
+
+
+def _monotonic() -> float:
+    """Seconds on the event loop's monotonic clock, for the reset's own deadline (a test
+    replaces it)."""
+    return asyncio.get_running_loop().time()
+
+
 async def _deadlock_pause(seconds: float) -> None:
-    """The pause before a reset retries a lost deadlock (a test replaces it)."""
+    """The pause before a reset tries again after a deadlock or a give-way (a test
+    replaces it)."""
     await asyncio.sleep(seconds)
 
 
@@ -145,18 +164,24 @@ async def _truncate_once(engine: AsyncEngine) -> list[str]:
         ]
         if names:
             quote = conn.dialect.identifier_preparer.quote
-            listed = ", ".join(quote(name) for name in sorted(names))
-            # Issue #51: `outbox` first, before any other lock. A relay pass holds its
-            # claim on `outbox` while it reads `module_flags` on another connection;
-            # a TRUNCATE that took `module_flags` first and then waited for the claim
-            # deadlocked with it, unseen by Postgres. Waiting here holds nothing the
-            # relay needs, and a claim that starts later waits for the reset.
-            if OUTBOX in names:
-                await conn.execute(_LOCK_OUTBOX)
+            # APP-F03: the TRUNCATE locks its tables in the order it lists them, and a
+            # writer locks its own rows' table before `outbox` (it emits last). `outbox`
+            # first (issue #51) was the opposite order: a writer holding `tasks` waited for
+            # `outbox` while the reset held it and waited for `tasks`, 125 deadlocks in
+            # one e2e run. Listed last, `outbox` is free until the reset holds everything
+            # else, so such a writer commits, and later writers queue behind the reset.
+            # The relay, which holds its `outbox` claim while it reads other tables
+            # (issue #51), is the one left in another order; the short lock wait settles
+            # it (RESET_LOCK_TIMEOUT_S).
+            ordered = sorted(name for name in names if name != OUTBOX)
+            ordered += [OUTBOX] if OUTBOX in names else []
+            listed = ", ".join(quote(name) for name in ordered)
             # The append-only tables (P0-15) refuse TRUNCATE by trigger, the owner's
             # included; a reset empties their chains with everything else, the guards
-            # off only inside this transaction.
-            guards = (await conn.execute(_TRUNCATE_GUARDS)).all()
+            # off only inside this transaction. ALTER TABLE locks them (SHARE ROW
+            # EXCLUSIVE) before the TRUNCATE does, in a fixed order; the short lock wait
+            # bounds a collision there too.
+            guards = sorted((await conn.execute(_TRUNCATE_GUARDS)).all())
             for table, trigger in guards:
                 await conn.execute(
                     # nosemgrep: tumnis-sql-fstring  # identifiers, quoted by the dialect
@@ -173,7 +198,7 @@ async def _truncate_once(engine: AsyncEngine) -> list[str]:
 
 
 class ResetBlockedError(Exception):
-    """The reset's TRUNCATE hit its lock timeout LOCK_WAIT_ATTEMPTS times in a row;
+    """The reset's TRUNCATE kept giving way at its lock timeout for LOCK_WAIT_BUDGET_S;
     `report` says who held what the last time (`blocked_report`)."""
 
     def __init__(self, report: str) -> None:

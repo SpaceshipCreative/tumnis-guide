@@ -29,7 +29,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core.events import EventEnvelope
 from tumnis.core.pagination import Cursor, Page
-from tumnis.modules.search.rules import PROJECT_BOOST, RECENCY_DAYS, parse_query, tsquery_parts
+from tumnis.modules.search.rules import (
+    PROJECT_BOOST,
+    RECENCY_DAYS,
+    mark_cuts,
+    parse_query,
+    tsquery_parts,
+)
 
 Scope = Literal["all", "tasks", "projects"]
 EntityType = Literal["task", "project"]
@@ -46,9 +52,12 @@ _PART_SQL: Final = {
     "plainto_tsquery": "plainto_tsquery('english'::regconfig, CAST(:{name} AS text))",
     "to_tsquery": "to_tsquery('simple'::regconfig, CAST(:{name} AS text))",
 }
+# The text a snippet is cut from, and the snippet: one ts_headline fragment of it, which
+# `rules.mark_cuts` marks with an ellipsis where text was left out (APP-F07).
+_SOURCE: Final = "CASE WHEN r.body = '' THEN r.title ELSE r.body END"
 _SNIPPET: Final = (
-    "ts_headline('english'::regconfig, CASE WHEN r.body = '' THEN r.title ELSE r.body END,"
-    " q.query, 'MaxFragments=1,MaxWords=12,MinWords=4')"
+    f"ts_headline('english'::regconfig, {_SOURCE}, q.query,"
+    " 'MaxFragments=1,MaxWords=12,MinWords=4')"
 )
 
 
@@ -66,7 +75,8 @@ ranked AS (
   WHERE si.tsv @@ q.query AND si.deleted_at IS NULL
     AND si.entity_type = ANY(CAST(:entity_types AS text[])) {limited}
 )
-SELECT r.entity_type, r.entity_id, r.project_id, r.title, r.score, {snippet} AS snippet
+SELECT r.entity_type, r.entity_id, r.project_id, r.title, r.score, {snippet} AS snippet,
+       {source} AS source
 FROM ranked r, q
 {keyset}
 ORDER BY r.score DESC, r.entity_id
@@ -108,6 +118,7 @@ def _statement(
         query=" && ".join(calls),
         limited=limited,
         snippet=_SNIPPET if snippets else "''",
+        source=_SOURCE if snippets else "''",
         keyset=keyset,
     )
     return sql, params
@@ -144,7 +155,12 @@ async def _ranked(
     if after is not None:
         params |= {"after_score": after.keys[0], "after_id": after.id}
     rows = (await s.execute(text(sql), params)).mappings().all()
-    return [SearchHit.model_validate(dict(row)) for row in rows]
+    return [
+        SearchHit.model_validate(
+            {**row, "snippet": mark_cuts(row["snippet"], row["source"])} if snippets else dict(row)
+        )
+        for row in rows
+    ]
 
 
 async def search(

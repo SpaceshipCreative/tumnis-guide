@@ -8,6 +8,9 @@ of three fixed functions (`tsquery_parts`), never as tsquery syntax.
 Ranking constants: `score = ts_rank_cd * (PROJECT_BOOST on a project match)
 / (1 + age_days / RECENCY_DAYS)`. Changing one is a spec-change PR that updates
 backend/fixtures/search/corpus.yaml.
+
+Snippets: `mark_cuts` puts an ellipsis where a ts_headline fragment leaves text out
+(APP-F07).
 """
 
 import re
@@ -65,3 +68,33 @@ def tsquery_parts(p: ParsedQuery) -> list[tuple[str, str]]:
     if p.prefix is not None:
         parts.append(("to_tsquery", f"{p.prefix}:*"))
     return parts
+
+
+# ts_headline's default StartSel and StopSel around each match (the plan keeps them), and
+# the mark for text a snippet leaves out (APP-F07).
+START_SEL: Final = "<b>"
+STOP_SEL: Final = "</b>"
+ELLIPSIS: Final = "…"
+_MARK: Final = re.compile(f"({re.escape(START_SEL)}|{re.escape(STOP_SEL)})")
+
+
+def mark_cuts(headline: str, source: str) -> str:
+    """`headline` (one ts_headline fragment of `source`) with ELLIPSIS before it when it
+    starts after the start of `source`, and after it when it stops before the end.
+    ts_headline returns the document's own text with the marks added, so the headline is a
+    piece of `source` in which each mark may or may not be the document's own (a document
+    can hold `<b>` itself; ts_headline does not escape it). When it is not a piece of
+    `source`, the headline is returned as it came. With one fragment, ts_headline's
+    FragmentDelimiter never shows, so this is the only sign of a cut (APP-F07)."""
+    pieces = _MARK.split(headline)
+    if not "".join(p for p in pieces if p not in (START_SEL, STOP_SEL)).strip():
+        return headline
+    pattern = "".join(
+        f"(?:{re.escape(p)})?" if p in (START_SEL, STOP_SEL) else re.escape(p) for p in pieces
+    )
+    found = re.search(pattern, source)
+    if found is None:
+        return headline
+    before = ELLIPSIS if source[: found.start()].strip() else ""
+    after = ELLIPSIS if source[found.end() :].strip() else ""
+    return f"{before}{headline}{after}"
