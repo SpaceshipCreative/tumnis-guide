@@ -167,7 +167,6 @@ async def test_hosted_keys_never_reach_db_responses_or_logs(  # noqa: PLR0917  #
 
 @pytest.mark.req("FR-11.7", "SEC-6")
 @pytest.mark.wp("P4-03")
-@pytest.mark.xfail(strict=True, reason="spec:P4-03")
 async def test_hosted_speech_without_key_speaks_nothing(
     core_db: None,
     master_key_file: Any,  # the voice setting is sealed with the workspace data key
