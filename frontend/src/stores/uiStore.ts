@@ -21,10 +21,17 @@ export const SIDEBAR_KEY = "tumnis.sidebarCollapsed";
 export type RailSection =
   "dashboard" | "tasks" | "review" | "search" | "settings";
 
+/** The project Context rail's sections (P0-24; RailSections opens one at a time). */
+export type ContextSection =
+  "brief" | "knowledge" | "connections" | "schedule" | "agent" | "settings";
+
 export interface UiContext {
   quickAddOpen: boolean;
   searchOpen: boolean;
   contextSheetOpen: boolean;
+  /** A Context section to open next, e.g. Knowledge after a file is dropped on the
+   * composer; the Context sections take it when they show and clear it. */
+  contextRequest: ContextSection | null;
   railSection: RailSection | null;
   dragging: string | null;
   lastView: Record<string, ProjectView>;
@@ -63,6 +70,7 @@ export function createUiStore() {
     quickAddOpen: false,
     searchOpen: false,
     contextSheetOpen: false,
+    contextRequest: null,
     railSection: null,
     dragging: null,
     lastView: loadLastViews(),
@@ -98,6 +106,11 @@ export function createUiStore() {
         ...c,
         contextSheetOpen: e.open,
       }),
+      requestContextSection: (c, e: { section: ContextSection }) => ({
+        ...c,
+        contextRequest: e.section,
+      }),
+      clearContextRequest: (c) => ({ ...c, contextRequest: null }),
       showNotice: (c, e: { text: string }) => ({ ...c, notice: e.text }),
       clearNotice: (c) => ({ ...c, notice: null }),
       setTheme: (c, e: { theme: ThemeChoice }) => ({ ...c, theme: e.theme }),
