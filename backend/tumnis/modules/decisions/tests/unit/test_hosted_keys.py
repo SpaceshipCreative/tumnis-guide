@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 DSN = "postgresql+psycopg://tumnis_app:pw@127.0.0.1:5432/tumnis"
 SPEECH_KEY = "hosted-speech-test-not-a-key"
 EMBED_KEY = "hosted-embed-test-not-a-key"
-HOSTED_URL = "http://10.20.0.7:8080"  # an OpenAI-compatible server in the test (no socket)
+HOSTED_URL = "https://10.20.0.7:8080"  # an OpenAI-compatible server in the test (no socket)
 LOCAL_URL = "http://10.20.0.6:8000"
 TEXT = "Time for Write proposal. First step: open the proposal outline."
 # Every variable these tests set or that would change what Settings builds.
@@ -190,6 +190,36 @@ def test_preview_refuses_hosted_keys(monkeypatch: pytest.MonkeyPatch, variable: 
         )
     assert raised.value.code == "preview_has_production_secret"
     assert "preview-test-not-a-key" not in str(raised.value)
+
+
+@pytest.mark.req("SEC-6")
+@pytest.mark.parametrize(
+    ("url_variable", "key_variable"),
+    [
+        ("SPEECH__HOSTED_BASE_URL", "SPEECH__HOSTED_API_KEY"),
+        ("EMBEDDINGS__HOSTED_BASE_URL", "EMBEDDINGS__HOSTED_API_KEY"),
+    ],
+)
+@pytest.mark.parametrize("url", ["http://10.20.0.7:8080", "HTTP://api.example.com", "ftp://x"])
+def test_hosted_key_needs_an_https_base_url(
+    monkeypatch: pytest.MonkeyPatch, url_variable: str, key_variable: str, url: str
+) -> None:
+    """The hosted key goes out as a bearer token, so a hosted base URL that is not https://
+    is refused when its key is set (CWE-319; CodeRabbit follow-up from #163): startup fails
+    with `hosted_url_requires_https`, naming the variable but never the key. Without a key
+    nothing is sent, so the same URL is accepted."""
+    from tumnis.settings import SettingsError  # noqa: PLC0415
+
+    key = "cleartext-test-not-a-key"
+    with pytest.raises(SettingsError) as raised:
+        _settings(monkeypatch, **{url_variable: url, key_variable: key})
+    assert raised.value.code == "hosted_url_requires_https"
+    assert url_variable in str(raised.value)
+    assert key not in str(raised.value)
+    assert key not in repr(raised.value)
+
+    accepted = _settings(monkeypatch, **{url_variable: url})
+    assert accepted is not None
 
 
 # --- Speech slot ------------------------------------------------------------------------
