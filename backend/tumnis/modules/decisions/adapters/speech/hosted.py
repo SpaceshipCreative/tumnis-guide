@@ -7,9 +7,11 @@ the audio bytes ([OpenAI API reference, createSpeech]
 `response_format` takes `wav`). `hosted = True`, so `decisions.api.speak` uses it only when
 the workspace allowed hosted speech and never for a local-only project.
 
-Off by default and not configured from the environment: its key storage is a Scott item, as
-for P3-10's hosted embedder. Built lazily by the registry; never imported by the api process
-(import-linter `api-never-calls-out`). The log line never carries the text.
+Off by default. The Speech slot builds it from the server's .env (`SPEECH__HOSTED_BASE_URL`,
+`SPEECH__HOSTED_MODEL`, `SPEECH__HOSTED_VOICE`, `SPEECH__HOSTED_API_KEY`; Scott decision 75):
+the key comes from Settings, never from the database. Built lazily by the registry; never
+imported by the api process (import-linter `api-never-calls-out`). The log line never
+carries the text or the key.
 """
 
 from __future__ import annotations
