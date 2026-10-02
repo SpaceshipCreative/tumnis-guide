@@ -11,6 +11,7 @@ import {
   planningGetPlanOptions,
   projectsListProjectsOptions,
   tasksGetReviewCountOptions,
+  tasksListJustAddedOptions,
   tasksListTasksOptions,
 } from "../../api/@tanstack/react-query.gen";
 import { workspaceQuery } from "../settings/queries";
@@ -41,6 +42,14 @@ function retryOnce(failureCount: number, error: unknown): boolean {
 export function todayQuery() {
   return queryOptions({
     ...tasksListTasksOptions({ query: TODAY_QUERY }),
+    retry: retryOnce,
+  });
+}
+
+/** Today's captures still in Backlog, newest first, at most three (A1.1, decision 83). */
+export function justAddedQuery() {
+  return queryOptions({
+    ...tasksListJustAddedOptions(),
     retry: retryOnce,
   });
 }
