@@ -41,9 +41,11 @@ lines 16546-16676.
   `hosted`, `projects`). Wire it to generated hooks after the routes exist. CI run
   36965673503 all green (preview pending as expected). PR body updated; scratch copy at
   `/tmp/claude-1002/P3-12-c2/pr-body.md`.
-- #154's DELETE handler (origin/wp/P3-14-clean-impl-2) calls `api.delete_document(s, id,
-  actor=...)`: on merge, put `await _refuse_synced(s, document_id)` first in
-  `api.delete_document`, and drop the guard from `api.trash` if `trash` goes away.
+- DONE (f0c92b4c): #154 merged in; `_refuse_synced` runs first in `api.delete_document`
+  and `api._outside_file_target` (before 204/200/403, `not_an_outside_file`,
+  `several_files`); integration test `test_synced_notes_cannot_be_deleted_in_tumnis`.
+- PR #157 is READY (coordinator allowed it; wiring follows on the same PR); CodeRabbit
+  reviewed f0c92b4c once. Write probe now fails closed (`_probe_refusal`).
 - P3-02 adds `connections.settings` JSONB (integrations_0003): non-secret vault settings go
   there, the deploy key (and pinned known_hosts) in sealed credentials. The vault watcher
   mirrors `workflows.local_watch` (awatch, debounce 5000 ms) with roots from those settings.
@@ -52,10 +54,8 @@ lines 16546-16676.
 
 1. Wait for CI on the pushed head; confirm every job green (preview stays pending; re-run
    `performance` once if only TBT fails).
-2. When #154 merges: merge origin/main, re-chain `knowledge/migrations/0010_document_links.py`
-   `down_revision = "knowledge_0009"`, check `uv run alembic heads` (one knowledge head). Also fit
-   `_refuse_synced` into #154's DELETE outcome handler (decision 81): the 409 `read_only_source`
-   check runs before the 204/200/403 outcomes (currently in `api.trash` and `api.edit_document`).
+2. DONE: #154 merged in, knowledge_0010 re-chained on knowledge_0009 (one knowledge head),
+   and the DELETE outcome handler checked: `delete_document` refuses synced Documents first.
 3. After the coordinator's "P3-02 merged": merge origin/main, then wire:
    - register provider `obsidian` (kind `knowledge`, auth `none`) with P3-02's `register_provider`;
      use P3-02 only for the connection record/status (`create_connection`, `put_credentials` for the
