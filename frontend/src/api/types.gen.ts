@@ -336,6 +336,19 @@ export type AuditEntry = {
 };
 
 /**
+ * AuthorizeUrlOut
+ *
+ * `GET /v1/connections/{id}/oauth/url`: the provider's sign-in page once the
+ * workflow has prepared it, else null (poll again).
+ */
+export type AuthorizeUrlOut = {
+  /**
+   * Authorize Url
+   */
+  authorize_url: string | null;
+};
+
+/**
  * BlockOut
  */
 export type BlockOut = {
@@ -646,6 +659,127 @@ export type CommentOut = {
    * Version
    */
   version: number;
+};
+
+/**
+ * ConnectionCreate
+ */
+export type ConnectionCreate = {
+  /**
+   * Account Label
+   */
+  account_label: string;
+  /**
+   * Consent Acknowledged
+   */
+  consent_acknowledged?: boolean;
+  /**
+   * Provider
+   */
+  provider: string;
+  settings?: ConnectionSettings;
+};
+
+/**
+ * ConnectionOut
+ *
+ * A connection as the api answers it: never its credentials (Data flow rule 5).
+ */
+export type ConnectionOut = {
+  /**
+   * Account Label
+   */
+  account_label: string;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Kind
+   */
+  kind:
+    "email" | "notes" | "chat" | "calendar" | "code" | "deploy" | "knowledge";
+  /**
+   * Last Success At
+   */
+  last_success_at: string | null;
+  /**
+   * Next Sync At
+   */
+  next_sync_at: string | null;
+  /**
+   * Provider
+   */
+  provider: string;
+  settings: ConnectionSettings;
+  status: ConnectionStatus;
+  /**
+   * Status Detail
+   */
+  status_detail: string | null;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * ConnectionPatch
+ */
+export type ConnectionPatch = {
+  /**
+   * Account Label
+   */
+  account_label?: string | null;
+  settings?: ConnectionSettings | null;
+  /**
+   * Version
+   */
+  version: number;
+};
+
+/**
+ * ConnectionSettings
+ *
+ * What the user sets per connection; never credentials.
+ */
+export type ConnectionSettings = {
+  /**
+   * Allowlist
+   */
+  allowlist?: Array<string>;
+  /**
+   * Backfill Days
+   */
+  backfill_days?: number;
+  /**
+   * Extra
+   */
+  extra?: {
+    [key: string]: unknown;
+  };
+  /**
+   * Sync Every Min
+   */
+  sync_every_min?: number | null;
+};
+
+/**
+ * ConnectionStatus
+ */
+export type ConnectionStatus =
+  "pending_auth" | "ok" | "syncing" | "degraded" | "auth_required" | "disabled";
+
+/**
+ * ConnectionsOAuthStart
+ *
+ * `POST /v1/connections/{id}/oauth/start`: the `connect_oauth` workflow to poll.
+ */
+export type ConnectionsOAuthStart = {
+  /**
+   * Workflow Id
+   */
+  workflow_id: string;
 };
 
 /**
@@ -1019,6 +1153,16 @@ export type DigestOut = {
    * Scope
    */
   scope: "project" | "workspace";
+};
+
+/**
+ * DisconnectIn
+ */
+export type DisconnectIn = {
+  /**
+   * Reason
+   */
+  reason: string;
 };
 
 /**
@@ -3387,6 +3531,41 @@ export type ProjectResumeIn = {
    * Reason
    */
   reason?: string | null;
+};
+
+/**
+ * ProviderOut
+ */
+export type ProviderOut = {
+  /**
+   * Auth
+   */
+  auth: "oauth" | "none";
+  /**
+   * Backfill Cap Days
+   */
+  backfill_cap_days: number | null;
+  /**
+   * Consent Notice
+   */
+  consent_notice: string | null;
+  /**
+   * Kind
+   */
+  kind:
+    "email" | "notes" | "chat" | "calendar" | "code" | "deploy" | "knowledge";
+  /**
+   * Label
+   */
+  label: string;
+  /**
+   * Provider
+   */
+  provider: string;
+  /**
+   * Sync Every Min
+   */
+  sync_every_min: number;
 };
 
 /**
@@ -7297,6 +7476,596 @@ export type CalendarOauthStartResponses = {
 
 export type CalendarOauthStartResponse =
   CalendarOauthStartResponses[keyof CalendarOauthStartResponses];
+
+export type PurgesListConnectionsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/connections";
+};
+
+export type PurgesListConnectionsErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesListConnectionsError =
+  PurgesListConnectionsErrors[keyof PurgesListConnectionsErrors];
+
+export type PurgesListConnectionsResponses = {
+  /**
+   * Response Purges List Connections
+   *
+   * Successful Response
+   */
+  200: Array<ConnectionOut>;
+};
+
+export type PurgesListConnectionsResponse =
+  PurgesListConnectionsResponses[keyof PurgesListConnectionsResponses];
+
+export type PurgesCreateConnectionData = {
+  body: ConnectionCreate;
+  path?: never;
+  query?: never;
+  url: "/v1/connections";
+};
+
+export type PurgesCreateConnectionErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesCreateConnectionError =
+  PurgesCreateConnectionErrors[keyof PurgesCreateConnectionErrors];
+
+export type PurgesCreateConnectionResponses = {
+  /**
+   * Successful Response
+   */
+  201: ConnectionOut;
+};
+
+export type PurgesCreateConnectionResponse =
+  PurgesCreateConnectionResponses[keyof PurgesCreateConnectionResponses];
+
+export type PurgesOauthCallbackData = {
+  body?: never;
+  path?: never;
+  query: {
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Code
+     */
+    code?: string | null;
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Iss
+     */
+    iss?: string | null;
+  };
+  url: "/v1/connections/oauth/callback";
+};
+
+export type PurgesOauthCallbackErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesOauthCallbackError =
+  PurgesOauthCallbackErrors[keyof PurgesOauthCallbackErrors];
+
+export type PurgesListProvidersData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/connections/providers";
+};
+
+export type PurgesListProvidersErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesListProvidersError =
+  PurgesListProvidersErrors[keyof PurgesListProvidersErrors];
+
+export type PurgesListProvidersResponses = {
+  /**
+   * Response Purges List Providers
+   *
+   * Successful Response
+   */
+  200: Array<ProviderOut>;
+};
+
+export type PurgesListProvidersResponse =
+  PurgesListProvidersResponses[keyof PurgesListProvidersResponses];
+
+export type PurgesDisconnectData = {
+  body: DisconnectIn;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}";
+};
+
+export type PurgesDisconnectErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesDisconnectError =
+  PurgesDisconnectErrors[keyof PurgesDisconnectErrors];
+
+export type PurgesDisconnectResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type PurgesDisconnectResponse =
+  PurgesDisconnectResponses[keyof PurgesDisconnectResponses];
+
+export type PurgesGetConnectionData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}";
+};
+
+export type PurgesGetConnectionErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesGetConnectionError =
+  PurgesGetConnectionErrors[keyof PurgesGetConnectionErrors];
+
+export type PurgesGetConnectionResponses = {
+  /**
+   * Successful Response
+   */
+  200: ConnectionOut;
+};
+
+export type PurgesGetConnectionResponse =
+  PurgesGetConnectionResponses[keyof PurgesGetConnectionResponses];
+
+export type PurgesUpdateConnectionData = {
+  body: ConnectionPatch;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}";
+};
+
+export type PurgesUpdateConnectionErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesUpdateConnectionError =
+  PurgesUpdateConnectionErrors[keyof PurgesUpdateConnectionErrors];
+
+export type PurgesUpdateConnectionResponses = {
+  /**
+   * Successful Response
+   */
+  200: ConnectionOut;
+};
+
+export type PurgesUpdateConnectionResponse =
+  PurgesUpdateConnectionResponses[keyof PurgesUpdateConnectionResponses];
+
+export type PurgesStartOauthData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}/oauth/start";
+};
+
+export type PurgesStartOauthErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesStartOauthError =
+  PurgesStartOauthErrors[keyof PurgesStartOauthErrors];
+
+export type PurgesStartOauthResponses = {
+  /**
+   * Successful Response
+   */
+  202: ConnectionsOAuthStart;
+};
+
+export type PurgesStartOauthResponse =
+  PurgesStartOauthResponses[keyof PurgesStartOauthResponses];
+
+export type PurgesOauthUrlData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}/oauth/url";
+};
+
+export type PurgesOauthUrlErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesOauthUrlError =
+  PurgesOauthUrlErrors[keyof PurgesOauthUrlErrors];
+
+export type PurgesOauthUrlResponses = {
+  /**
+   * Successful Response
+   */
+  200: AuthorizeUrlOut;
+};
+
+export type PurgesOauthUrlResponse =
+  PurgesOauthUrlResponses[keyof PurgesOauthUrlResponses];
+
+export type PurgesSyncNowData = {
+  body?: never;
+  path: {
+    /**
+     * Connection Id
+     */
+    connection_id: string;
+  };
+  query?: never;
+  url: "/v1/connections/{connection_id}/sync";
+};
+
+export type PurgesSyncNowErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesSyncNowError = PurgesSyncNowErrors[keyof PurgesSyncNowErrors];
+
+export type PurgesSyncNowResponses = {
+  /**
+   * Successful Response
+   */
+  202: ConnectionOut;
+};
+
+export type PurgesSyncNowResponse =
+  PurgesSyncNowResponses[keyof PurgesSyncNowResponses];
 
 export type CoolifyListDeployStatusData = {
   body?: never;

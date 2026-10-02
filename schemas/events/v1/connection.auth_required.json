@@ -1,0 +1,34 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/connection.auth_required.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "account_label": {
+      "title": "Account Label",
+      "type": "string"
+    },
+    "connection_id": {
+      "format": "uuid",
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "provider": {
+      "title": "Provider",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "connection_id",
+    "provider",
+    "account_label"
+  ],
+  "title": "ConnectionAuthRequiredV1",
+  "type": "object"
+}
