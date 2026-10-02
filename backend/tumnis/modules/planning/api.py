@@ -111,6 +111,16 @@ def free_blocks_tag(workspace_id: UUID) -> str:
     return f"ws:{workspace_id}:{FREE_BLOCKS_CACHE}"
 
 
+async def _timezone(ctx: WorkspaceContext, session: AsyncSession | None) -> str:
+    """The workspace's IANA zone: through the settings cache when the caller has no
+    transaction, else read in the caller's. A write never waits on a second connection
+    inside its own transaction: one queued behind a lock request (a TRUNCATE, a migration)
+    that waits on the first would hang where Postgres cannot see the deadlock."""
+    if session is None:
+        return (await auth.get_workspace_settings(ctx)).timezone
+    return (await auth.workspace_timezone(session, ctx.workspace_id)).timezone
+
+
 # --- Working hours ---------------------------------------------------------------------------
 
 # A local wall time, "HH:MM" (24-hour).
@@ -269,29 +279,35 @@ class DayCalendarOut(BaseModel):
     free_blocks: list[FreeBlockOut]
 
 
-async def day_calendar(ctx: WorkspaceContext, day: date) -> DayCalendarOut:
+async def day_calendar(
+    ctx: WorkspaceContext, day: date, *, session: AsyncSession | None = None
+) -> DayCalendarOut:
     """The day's working window, events and free blocks in the workspace timezone (a
     weekend day has no window; Re-plan is P1-11's). From the cache when it holds the day;
-    otherwise computed in one transaction and cached."""
+    otherwise computed in one transaction (the caller's `session` when it passes one) and
+    cached."""
     key = day_calendar_key(ctx.workspace_id, day)
     cached = await _CACHE.get(key)
     if cached is not None:
         return DayCalendarOut.model_validate_json(cached)
     token = _CACHE.token()
-    out = await _compute_day(ctx, day, replan=False)
+    out = await _compute_day(ctx, day, replan=False, session=session)
     tags = (free_blocks_tag(ctx.workspace_id), auth.workspace_settings_tag(ctx.workspace_id))
     await _CACHE.fill(key, out.model_dump_json().encode(), since=token, tags=tags)
     return out
 
 
-async def _compute_day(ctx: WorkspaceContext, day: date, *, replan: bool) -> DayCalendarOut:
-    """The day calendar, computed: `replan` gives a weekend day the working window a
-    Re-plan has (never cached: the dashboard's strip shows the plain day)."""
-    zone = (await auth.get_workspace_settings(ctx)).timezone
+async def _compute_day(
+    ctx: WorkspaceContext, day: date, *, replan: bool, session: AsyncSession | None = None
+) -> DayCalendarOut:
+    """The day calendar, computed (in the caller's `session` when it passes one): `replan`
+    gives a weekend day the working window a Re-plan has (never cached: the dashboard's
+    strip shows the plain day)."""
+    zone = await _timezone(ctx, session)
     tz = ZoneInfo(zone)
     day_start = local_to_utc(day, time(0), tz)
     day_end = local_to_utc(day + timedelta(days=1), time(0), tz)
-    async with tenant_session(ctx) as s:
+    async with session_for(ctx, session) as s:
         hours = hours_by_weekday(await _rows(s))
         events = await calendar.events_between(ctx, day_start, day_end, session=s)
         accounts = await integrations.connection_accounts(s, {e.connection_id for e in events})
@@ -580,9 +596,9 @@ async def schedule_block(
     code, with `current = {free_blocks, violations}`, and writes nothing. A `version`
     that is not the item's raises StaleVersion (409). An unknown task is NotFound (404), a
     Done one 409 `ineligible_task`, a block that ends before it starts 422."""
-    calendar_day = await day_calendar(ctx, day)
-    free = [Interval(b.start, b.end) for b in calendar_day.free_blocks]
     async with session_for(ctx, session) as s:
+        calendar_day = await day_calendar(ctx, day, session=s)
+        free = [Interval(b.start, b.end) for b in calendar_day.free_blocks]
         await s.execute(_WEEK_LOCK, {"key": f"plan:{ctx.workspace_id}:{day.isoformat()}"})
         # The task first: another workspace's task is 404 whatever the body says.
         task = await tasks.get_task(s, task_id)
@@ -799,14 +815,16 @@ async def plan_candidates(ctx: WorkspaceContext, day: date) -> list[UUID]:
         return (await _pool(s, day)).candidates
 
 
-async def _ahead(ctx: WorkspaceContext, day: date) -> dict[date, list[Interval]]:
+async def _ahead(
+    ctx: WorkspaceContext, day: date, *, session: AsyncSession | None = None
+) -> dict[date, list[Interval]]:
     """The free blocks of the next MOVE_LOOKAHEAD_WORKING_DAYS working days (for move
     offers); a day without a working window is not a working day."""
     ahead: dict[date, list[Interval]] = {}
     for n in range(1, 3 * MOVE_LOOKAHEAD_WORKING_DAYS):
         if len(ahead) >= MOVE_LOOKAHEAD_WORKING_DAYS:
             break
-        cal = await day_calendar(ctx, day + timedelta(days=n))
+        cal = await day_calendar(ctx, day + timedelta(days=n), session=session)
         if cal.window is not None:
             ahead[day + timedelta(days=n)] = [Interval(b.start, b.end) for b in cal.free_blocks]
     return ahead
@@ -1159,7 +1177,7 @@ async def get_plan(
 ) -> PlanOut:
     """The day's published plan with each item's live task status; NotFound (404) when the
     day has none."""
-    zone = (await auth.get_workspace_settings(ctx)).timezone
+    zone = await _timezone(ctx, session)
     async with session_for(ctx, session) as s:
         return await _plan_out(s, await _published(s, day), zone)
 
@@ -1276,9 +1294,13 @@ class SwapIn(BaseModel):
     with_task_id: UUID
 
 
-async def _day_free(ctx: WorkspaceContext, day: date, plan: Any) -> list[Interval]:
+async def _day_free(
+    ctx: WorkspaceContext, day: date, plan: Any, session: AsyncSession
+) -> list[Interval]:
     cal = await (
-        _compute_day(ctx, day, replan=True) if plan.trigger == "replan" else day_calendar(ctx, day)
+        _compute_day(ctx, day, replan=True, session=session)
+        if plan.trigger == "replan"
+        else day_calendar(ctx, day, session=session)
     )
     return [Interval(b.start, b.end) for b in cal.free_blocks]
 
@@ -1296,7 +1318,7 @@ async def swap_item(  # path, body, clock and the request's transaction
     with `assign_blocks` in the free time the plan's other blocks leave, no earlier than
     `now`. 409 `ineligible_task` for a task that cannot be planned or is already in the
     plan; 409 `no_gap` (with the offer in `current`) when it does not fit."""
-    free = await _day_free(ctx, day, await _published(session, day))
+    free = await _day_free(ctx, day, await _published(session, day), session)
     plan = await _lock_day(session, ctx, day)
     row = await _live_item(session, plan.id, task_id)
     others = (
@@ -1321,12 +1343,12 @@ async def swap_item(  # path, body, clock and the request's transaction
     taken = [Interval(o.block_start, o.block_end) for o in others if o.block_start is not None]
     context = PlanContext(
         day=day,
-        tz=(await auth.get_workspace_settings(ctx)).timezone,
+        tz=await _timezone(ctx, session),
         now=now,
         free_blocks=free_left(free, taken),
         tasks={new.task_id: new},
         replan=True,
-        ahead=await _ahead(ctx, day),
+        ahead=await _ahead(ctx, day, session=session),
     )
     placed, unfit = assign_blocks([PlanPick(task_id=new.task_id, reason=SWAP_REASON)], context)
     if unfit:
@@ -1581,8 +1603,8 @@ class DaySummaryOut(DaySummary, frozen=True):
     timezone: str
 
 
-async def _zone(ctx: WorkspaceContext) -> ZoneInfo:
-    return ZoneInfo((await auth.get_workspace_settings(ctx)).timezone)
+async def _zone(ctx: WorkspaceContext, session: AsyncSession | None = None) -> ZoneInfo:
+    return ZoneInfo(await _timezone(ctx, session))
 
 
 def _local_bounds(start: date, end: date, tz: ZoneInfo) -> tuple[datetime, datetime]:
@@ -1682,7 +1704,7 @@ _LATER: Final[dict[MetricKey, Literal["phase 2", "phase 4"]]] = {
 async def record_app_open(ctx: WorkspaceContext, *, now: datetime, session: AsyncSession) -> None:
     """The PWA's app-start ping (P1-18): one more `app_open` on the workspace's local day,
     in the request's transaction. Nothing leaves the server."""
-    tz = await _zone(ctx)
+    tz = await _zone(ctx, session)
     await usage.record_open(session, ctx.workspace_id, now.astimezone(tz).date())
 
 
