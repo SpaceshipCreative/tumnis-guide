@@ -17,7 +17,8 @@ P2-05, agents_0007, P2-03, agents_0008, P2-09, and agents_0009, P4-02).
 - digest_entries and digest_cursors: what the project and workspace digests carry, and
   where each consumer is in each digest (P2-03).
 - stuck_requests (P4-02, FR-10.5): one per stuck focus event, with the stuck run it asked
-  for and what the focus bar shows (working, split, took_step or fallback).
+  for and what the focus bar shows (working, split, took_step or fallback; done or
+  reopened once the person reviews a took_step report, agents_0010).
 """
 
 from datetime import datetime

@@ -288,15 +288,25 @@ async def start_approval_flow(envelope: EventEnvelope) -> None:
 async def _apply_result_decision(envelope: EventEnvelope) -> None:
     """Accept: In review -> Done. Reject: the feedback as a comment, In review -> In
     progress, and a new run of the task (`rerun_of` the result's run), whose packet carries
-    the comment. Both are human edges, taken as the person who decided."""
+    the comment. Both are human edges, taken as the person who decided.
+
+    A stuck run's result is the report of one step, not of the task (Scott decision 73):
+    `api.stuck_result_decided` marks that step done or reopens it, and the task's status
+    stays as it is."""
     payload = envelope.payload
     decision = payload.get("decision")
     if decision not in ("accept", "reject"):
         return
     actor = ActorRef(envelope.actor)
     ctx = WorkspaceContext(envelope.workspace_id, actor)
+    feedback = str((payload.get("payload") or {}).get("feedback") or "")
     async with tenant_session(ctx) as s:
         item = await tasks.get_review_item(s, UUID(str(payload["item_id"])))
+        run_id = item.payload.get("run_id")
+        if run_id is not None and await api.stuck_result_decided(
+            s, actor, UUID(str(run_id)), str(decision), feedback=feedback, now=envelope.occurred_at
+        ):
+            return
         try:
             task = await tasks.get_task(s, item.target_id)
         except NotFound:
@@ -308,7 +318,6 @@ async def _apply_result_decision(envelope: EventEnvelope) -> None:
                 s, actor, task.id, tasks.Status.DONE, task.version, now=envelope.occurred_at
             )
             return
-        feedback = str((payload.get("payload") or {}).get("feedback") or "")
         await tasks.add_comment(s, actor, task.id, feedback, now=envelope.occurred_at)
         task = await tasks.get_task(s, task.id)
         await tasks.change_status(

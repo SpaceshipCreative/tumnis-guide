@@ -24,14 +24,14 @@ function step(state: string): NextStepOut {
   } as unknown as NextStepOut;
 }
 
-test.fails("[P4-02][FR-10.5] an accepted report shows the step done", () => {
+test("[P4-02][FR-10.5] an accepted report shows the step done", () => {
   render(<StuckPanel step={step("done")} />);
   const panel = screen.getByRole("status", { name: "Next step" });
   expect(panel).toHaveTextContent("Step done");
   expect(panel).toHaveTextContent(REPORT);
 });
 
-test.fails("[P4-02][FR-10.5] a rejected report hands the step back", () => {
+test("[P4-02][FR-10.5] a rejected report hands the step back", () => {
   render(<StuckPanel step={step("reopened")} />);
   const panel = screen.getByRole("status", { name: "Next step" });
   expect(panel).toHaveTextContent("Back to you");
