@@ -4,7 +4,7 @@
 // page, a project result the project, as in the Mod+K palette (SearchPalette).
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { searchSearchInfiniteOptions } from "../../api/@tanstack/react-query.gen";
 import type { SearchHit } from "../../api/types.gen";
@@ -146,13 +146,30 @@ export function SearchPage({
   onSearch: (next: { q: string; scope: SearchScope }) => void;
 }) {
   const boxId = useId();
-  // The box's own text belongs to the `q` it was typed against: when the URL's `q` changes
-  // from outside (back, forward, a link), the box shows the new `q` instead.
-  const [draft, setDraft] = useState({ for: q, text: q });
-  const text = draft.for === q ? draft.text : q;
+  // The box's own text belongs to the `q` it was typed against (`for`): when the URL's `q`
+  // changes from outside (back, forward, a link), the box shows the new `q` instead. A
+  // search the box asks for itself rebinds the text to the `q` it asks for at once, and
+  // `from` keeps the `q` the URL still holds until that navigation lands, so the box's own
+  // URL write never takes back what is being typed (a trailing space, or keys pressed
+  // before the URL changed).
+  const [draft, setDraft] = useState({ for: q, from: q, text: q });
+  const own = draft.for === q || draft.from === q;
+  if (draft.for === q && draft.from !== q) setDraft({ ...draft, from: q }); // it landed
+  const text = own ? draft.text : q;
   const setText = (next: string) => {
-    setDraft({ for: q, text: next });
+    setDraft(own ? { ...draft, text: next } : { for: q, from: q, text: next });
   };
+  const search = useCallback(
+    (next: string, nextScope: SearchScope) => {
+      setDraft((d) => ({
+        for: next,
+        from: q,
+        text: d.for === q || d.from === q ? d.text : q,
+      }));
+      onSearch({ q: next, scope: nextScope });
+    },
+    [q, onSearch],
+  );
   const settled = useDebounced(text.trim());
   // Only a change of the settled text searches, so text left over from before an outside
   // change never puts the old search back in the URL.
@@ -160,8 +177,8 @@ export function SearchPage({
   useEffect(() => {
     if (settled === lastSettled.current) return;
     lastSettled.current = settled;
-    if (settled !== q) onSearch({ q: settled, scope });
-  }, [settled, q, scope, onSearch]);
+    if (settled !== q) search(settled, scope);
+  }, [settled, q, scope, search]);
 
   return (
     <section className="flex flex-col gap-4">
@@ -171,7 +188,7 @@ export function SearchPage({
         className="flex flex-col gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          if (text.trim() !== q) onSearch({ q: text.trim(), scope });
+          if (text.trim() !== q) search(text.trim(), scope);
         }}
       >
         <label htmlFor={boxId} className="sr-only">
@@ -201,7 +218,7 @@ export function SearchPage({
                 value={option.value}
                 checked={scope === option.value}
                 onChange={() => {
-                  onSearch({ q: text.trim(), scope: option.value });
+                  search(text.trim(), option.value);
                 }}
               />
               {option.text}

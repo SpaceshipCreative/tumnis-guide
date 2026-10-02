@@ -228,10 +228,17 @@ export function RecurrencePicker({
       ? recurring.data.some((r) => r.latest_task_id === task.id)
       : recurring.isError;
   const rule = useQuery({ ...taskRecurrenceQuery(task.id), enabled: repeats });
+  // A disabled query keeps its cached rule, so a rule read before another client stopped
+  // the repeat would stay. A loaded list newer than that rule, without the task, has the
+  // last word; a rule saved here (newer than the list) shows until the list catches up.
+  const dropped =
+    recurring.data !== undefined &&
+    !repeats &&
+    recurring.dataUpdatedAt > rule.dataUpdatedAt;
   // The form shows while the list loads, as it did while the rule loaded (T-P0-24-16): a
   // save in that moment is still safe, because the server applies a PUT to the task's
   // existing rule (P0-19), so it changes that rule rather than adding a second one.
-  const current = rule.data ?? null;
+  const current = dropped ? null : (rule.data ?? null);
   return (
     <section aria-label="Repeat" className="flex flex-col gap-2">
       <h3 className="text-sm font-semibold">Repeat</h3>

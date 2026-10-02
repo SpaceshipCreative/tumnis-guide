@@ -7,8 +7,10 @@ What `knowledge_move_project_folder` (workflows.py) runs, one call per DBOS step
    project's overlaps, no other move of the project still `copying`) and record the move
    (`folder_moves`, `copying`) under the id the workflow gives it, so a re-run step
    returns the same move.
-2. `list_source`: every file in the project's folder with its sha256 and etag (Tumnis's
-   own `.tumnis/` or `Tumnis/` included; temp files left out), recorded by DBOS.
+2. `oversize`, then `list_source`: a file over the 50 MiB limit fails the move
+   (`too_large`) before anything is copied; else every file in the project's folder with
+   its sha256 and etag (Tumnis's own `.tumnis/` or `Tumnis/` included; temp files left
+   out), recorded by DBOS.
 3. `copy_batch`: batches of `BATCH` files (plan default 100), create-only on the target. A
    file already there with the same bytes (a batch re-run after a kill) is left as it is;
    one with other bytes fails the move (`target_conflict`).
@@ -53,6 +55,7 @@ from tumnis.modules.knowledge.models import (
 )
 from tumnis.modules.knowledge.rules import PathRejected, safe_rel_path
 from tumnis.modules.knowledge.storage import (
+    MAX_FILE_BYTES,
     FileStat,
     PreconditionFailed,
     StorageBackend,
@@ -276,6 +279,21 @@ async def _source_files(backend: StorageBackend, root: str) -> AsyncIterator[Fil
         cursor = page.next_cursor
         if cursor is None:
             return
+
+
+async def oversize(workspace_id: str, move: Mapping[str, Any]) -> str | None:
+    """The path inside the source folder of its first file over MAX_FILE_BYTES, else None.
+    The target refuses such a file (SEC-10), so the move fails `too_large` before it copies
+    anything (a listing only: nothing is read)."""
+    root = move["from_path"]
+    async with (
+        tenant_session(_ctx(workspace_id)) as s,
+        api.open_backend(s, UUID(move["from_location"]), net=_net_policy()) as backend,
+    ):
+        async for stat in _source_files(backend, root):
+            if stat.size > MAX_FILE_BYTES:
+                return stat.path[len(root) + 1 :]
+    return None
 
 
 async def list_source(workspace_id: str, move: Mapping[str, Any]) -> list[list[str]]:
