@@ -1,7 +1,10 @@
 // The Context sheet (P0-24, FR-2.8): on the phone, a "Context" button opens one bottom
-// sheet holding the rail's sections. Escape or Close shuts it and gives focus back.
+// sheet holding the rail's sections. Escape or Close shuts it and gives focus back; Tab and
+// Shift+Tab wrap inside it (APP-14).
 import { useSelector } from "@xstate/store-react";
 import { useEffect, useId, useRef } from "react";
+
+import { dialogKeyDown } from "../../../lib/focusTrap";
 
 import { uiStore } from "../../../stores/uiStore";
 import type { Project } from "../types";
@@ -57,7 +60,7 @@ export function ContextSheet({
             aria-labelledby={titleId}
             tabIndex={-1}
             onKeyDown={(event) => {
-              if (event.key === "Escape") close();
+              dialogKeyDown(event, close);
             }}
             className="flex max-h-[85dvh] flex-col gap-2 overflow-y-auto rounded-t-xl border-t border-border bg-surface px-4 pt-3 pb-6 outline-none"
           >
