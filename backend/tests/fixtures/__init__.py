@@ -787,7 +787,7 @@ class WorkerKiller:
         args = [sys.executable, "-m", "tumnis.testing.run_worker"]
         for name in self.imports:
             args += ["--import", name]
-        args += ["--app-version", app_version]
+        args += ["--app-version", app_version, "--log-level", "DEBUG"]  # dequeues show
         if self.queues:
             args += ["--queues", ",".join(self.queues)]
         label = "-".join(self.queues) or "main"  # two killers may share the logs folder
@@ -943,11 +943,42 @@ class WorkerKiller:
                 if loop.time() > deadline:
                     pytest.fail(
                         f"not drained in {timeout_s} s: {unsent} unsent, {len(done)} "
-                        f"workflows succeeded, {running} not\n{self.log_tail()}"
+                        f"workflows succeeded, {running} not\n"
+                        f"{await self._stall_report(proc)}"
                     )
                 await asyncio.sleep(0.1)
         finally:
             await self._stop(proc)
+
+    async def _stall_report(self, proc: asyncio.subprocess.Process) -> str:
+        """Why a drain stalled: each delivery workflow's status row and recorded steps, then
+        the live worker's thread and asyncio task stacks (run_worker answers SIGUSR1 and
+        SIGUSR2 in its log) and the workers' logs."""
+        import signal  # noqa: PLC0415
+
+        def rows() -> list[str]:
+            client = self.dbos_client()
+            out = []
+            for w in client.list_workflows(name="deliver_event"):
+                attrs = getattr(w, "__dict__", None)
+                fields = (
+                    {k: v for k, v in attrs.items() if k not in {"input", "output"}}
+                    if attrs
+                    else repr(w)
+                )
+                out.append(f"workflow {fields}")
+                out += [f"  step {s}" for s in client.list_workflow_steps(w.workflow_id)]
+            return out
+
+        try:
+            report = await asyncio.to_thread(rows)
+        except Exception as exc:  # the report must not hide the stall
+            report = [f"workflow rows unavailable: {exc!r}"]
+        if proc.returncode is None:
+            for signum in (signal.SIGUSR1, signal.SIGUSR2):
+                proc.send_signal(signum)
+                await asyncio.sleep(1)
+        return "\n".join([*report, self.log_tail(lines=400)])
 
     async def start(
         self, killpoint: str | None = None, *, app_version: str = KILLER_APP_VERSION
