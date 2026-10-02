@@ -3,7 +3,8 @@
 `TumnisRoute` checks the route's bucket (`RoutePolicy.rate_limit`) before the handler runs:
 a signed-in principal draws from its own bucket, an anonymous caller from its address's
 (`anonymous` in place of `default`). A limited request is 429 `rate_limited` with
-`Retry-After: <ceil(seconds)>`. Time comes from the app's `Clock`, so tests move it.
+`Retry-After: <ceil(seconds)>`. Time comes from the app's `Clock`, so tests move it (a fakes
+stack's test clock aside: the buckets read its base, real time).
 
 State is per process; hosted mode with more than one api replica moves the buckets to the
 Redis cache backend (config only).
@@ -19,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final
 
-from tumnis.core.clock import Clock
+from tumnis.core.clock import Clock, OverridableClock
 
 
 @dataclass(frozen=True)
@@ -38,7 +39,10 @@ MAX_SUBJECTS: Final = 10_000  # buckets kept before full ones are forgotten
 
 class RateLimiter:
     def __init__(self, clock: Clock, buckets: Mapping[str, Bucket] = BUCKETS) -> None:
-        self._clock = clock
+        # Request rates are wall-clock. A fakes stack's test clock (`POST /v1/test/clock`)
+        # may be pinned or moved in steps; the buckets read its base, so a pinned instant
+        # never stops the refill and moving it mints no tokens.
+        self._clock = clock.base if isinstance(clock, OverridableClock) else clock
         self._buckets = buckets
         self._state: dict[tuple[str, str], tuple[float, datetime]] = {}
 

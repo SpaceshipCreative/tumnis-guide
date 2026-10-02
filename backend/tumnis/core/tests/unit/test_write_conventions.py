@@ -4,7 +4,7 @@ the principal's identity."""
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -25,6 +25,29 @@ def test_token_bucket_allows_the_burst_then_refills() -> None:
     assert limiter.check("b", "y") is None  # another subject has its own bucket
     clock.advance(seconds=0.5)
     assert limiter.check("b", "x") is None
+    assert limiter.check("b", "x") is not None
+
+
+@pytest.mark.req("SEC-5")
+@pytest.mark.wp("P0-10")
+def test_main_red_rate_limit_refills_on_real_time_while_the_test_clock_is_fixed() -> None:
+    """main red after #156 and #167 (CI run 36976166987, e2e A0.1 laptop): a fakes stack's
+    test clock (`POST /v1/test/clock`) moved only in one-second steps, so the per-principal
+    bucket refilled late and a page load drew 429s. Request rates are wall-clock: the
+    limiter reads the overridable clock's base, which a pinned or moved test clock leaves
+    alone."""
+    from tumnis.core.clock import OverridableClock  # noqa: PLC0415
+    from tumnis.core.ratelimit import Bucket, RateLimiter  # noqa: PLC0415
+
+    base = FixedClock(AT)
+    clock = OverridableClock(base)
+    clock.set(datetime(2026, 1, 5, 9, 0, tzinfo=UTC))
+    limiter = RateLimiter(clock, {"b": Bucket(rate_per_s=2, burst=3)})
+    assert [limiter.check("b", "x") for _ in range(3)] == [None, None, None]
+    assert limiter.check("b", "x") is not None
+    base.advance(seconds=0.5)  # real time passes; the pinned test clock stands still
+    assert limiter.check("b", "x") is None
+    clock.advance(timedelta(hours=1))  # moving the test clock mints no tokens
     assert limiter.check("b", "x") is not None
 
 
