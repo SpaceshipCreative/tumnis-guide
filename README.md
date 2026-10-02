@@ -150,7 +150,7 @@ echo "Tumnis answers at https://$TUMNIS_HOST"
 
 ### With Coolify instead
 
-On a server managed by [Coolify](https://coolify.io/), Tumnis deploys from `main` after CI is green (`.github/workflows/deploy.yml` on a self-hosted runner). Create the three secret files as in step 4, create a Docker Compose resource from this repository with `deploy/compose.yaml`, and set its environment in Coolify:
+On a server managed by [Coolify](https://coolify.io/), Tumnis deploys from `main` after CI is green (`.github/workflows/deploy.yml` on a self-hosted runner). Create the three secret files as in step 4, create a Docker Compose resource from this repository with `deploy/compose.yaml`, and set its environment in Coolify ([deploy/.env.example](deploy/.env.example) lists every variable, including the optional hosted providers):
 
 ```bash readme:manual
 APP_DB_PASSWORD=<openssl rand -hex 24>
@@ -223,7 +223,7 @@ Then, in the app:
 
 - **Daily plan.** At 08:30 on weekdays Tumnis proposes the day's plan from your tasks; accept it, swap a task or remove one. From 16:00, **Close the day** wraps it up.
 - **Focus.** The focus bar shows the one next step. Pick how hard Tumnis keeps you on it: quiet, nudge, coach or guardrail (guardrail notices detours and offers the way back). Press **Stuck** and the project's agent works on a first step: it splits off a small subtask or takes the step itself, and if nothing comes back in time you get the task's first action with a 10-minute timer.
-- **Review.** `/review` is the queue of what waits for you, such as agent results to accept.
+- **Review.** `/review` is the queue of what waits for you, such as agent results to accept. Accepting the result of a run started from **Stuck** marks that step done and keeps the task in progress; rejecting it reopens the step with your reason.
 - **Inbox and Activity.** Per project, the Inbox shows what arrived and Activity what happened; **Ask the agent** sends a question to the project's agent.
 
 ## Connect sources
@@ -271,7 +271,7 @@ claude mcp add --env TUMNIS_API_KEY=<your key> --env TUMNIS_URL=https://tumnis.e
 
 **Optional local models.** A vLLM server on your network can write placeholder first actions and spoken focus messages (`GENERATION__BASE_URL`, `GENERATION__MODEL`), embed knowledge for hybrid search (`EMBEDDINGS__BASE_URL`, `EMBEDDINGS__MODEL`, `EMBEDDINGS__DIMS`) and read hard scanned pages (`KNOWLEDGE__VISION_BASE_URL`, `KNOWLEDGE__VISION_MODEL`). Without them Tumnis works the same, with full-text search. Set them on the api and worker services through a compose override file of your own, `deploy/compose.local.yaml`, and `COMPOSE_FILE=deploy/compose.yaml:deploy/compose.local.yaml` in `.env`.
 
-<!-- TODO(coordinator): FIX-hosted-keys (fix/hosted-keys): list the hosted speech and embedder key variables here and in .env.example once it merges (Scott decision 75). -->
+**Optional hosted providers.** Instead of your own servers, an OpenAI-compatible hosted API can speak focus messages (`SPEECH__HOSTED_BASE_URL`, `SPEECH__HOSTED_MODEL`, optionally `SPEECH__HOSTED_VOICE`, and `SPEECH__HOSTED_API_KEY`) or embed knowledge (`EMBEDDINGS__HOSTED_BASE_URL`, `EMBEDDINGS__HOSTED_MODEL`, `EMBEDDINGS__HOSTED_DIMS` (1024 when blank, at most 2000) and `EMBEDDINGS__HOSTED_API_KEY`). Set them in `.env`; each provider is off until its URL, model and key are all set, only the worker receives them, and the keys never go into the database. A local-only project's text is never sent to a hosted provider, and a local embedder stays preferred when both are set.
 
 ## On the phone
 
@@ -293,7 +293,6 @@ Tumnis is a PWA: open `https://<TUMNIS_HOST>` on your phone over Tailscale and a
 These are planned but not in this release:
 
 - **Inbox Zero, Granola and chat connectors**, matching what they bring in to your tasks, and proposal runs on it; **Google Docs** as a source. They wait for recorded tests against the real services. Discord is the chosen first chat provider (an ADR, 0014, will record it); today Discord already reaches the master agent through its Hermes profile ([Agents](#agents)).
-- **Hosted speech and embedding providers.** Speech uses the device's voice or your own Piper server, and embeddings your own vLLM server.
 - **Hosted mode** (Tumnis run for several customers) is v2.
 
 <!-- TODO(coordinator): P4-04 (#155) unattended run windows and P3-09 retention: describe each under "Your day" or "Agents" once it merges. -->
