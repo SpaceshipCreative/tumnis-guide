@@ -228,12 +228,26 @@ def _deletes(pattern: str) -> bool:
     )
 
 
-def _on_any(statement: Mapping[str, object], resources: Sequence[str]) -> bool:
+def _overlaps(pattern: str, bucket_arn: str, bases: Sequence[str]) -> bool:
+    """Whether a Resource pattern can name the bucket itself or any object under one of
+    `bases` (`<bucket arn>/<prefix>`): a narrower grant (`.../acme/sub/*`) counts, and so
+    does a wider one a wildcard cuts short (`.../ac*`). Compared without case, so it only
+    ever errs towards overlapping."""
+    if _wildcard(pattern).match(bucket_arn):
+        return True
+    p = pattern.lower()
+    if "*" not in p and "?" not in p:
+        return any(p.startswith(b.lower()) for b in bases)
+    fixed = re.split(r"[*?]", p, maxsplit=1)[0]
+    return any(fixed.startswith(b.lower()) or b.lower().startswith(fixed) for b in bases)
+
+
+def _on_any(statement: Mapping[str, object], bucket_arn: str, bases: Sequence[str]) -> bool:
+    """Whether a statement's resources can reach the bucket or the mapped prefixes;
+    `NotResource` always can (the cautious reading)."""
     if "NotResource" in statement:
-        listed = _strings(statement["NotResource"])
-        return any(not any(_wildcard(p).match(r) for p in listed) for r in resources)
-    patterns = _strings(statement.get("Resource"))
-    return any(_wildcard(p).match(r) for p in patterns for r in resources)
+        return True
+    return any(_overlaps(p, bucket_arn, bases) for p in _strings(statement.get("Resource")))
 
 
 def minio_key_capabilities(
@@ -241,11 +255,11 @@ def minio_key_capabilities(
 ) -> KeyCapabilities:
     """The key's own policy, as MinIO's account info reports it, for objects under each of
     `prefixes` in `bucket`. Conditions are ignored and Deny statements are not relied on,
-    so the answer only ever errs towards refusing: a write or delete granted anywhere on
-    those prefixes counts, and so does any `admin:` action (it can change policies). On the
-    bucket itself, or those prefixes, any S3 action that is not a Get or List counts too:
-    a delete as `can_delete`, anything else (a lifecycle rule, a bucket policy,
-    versioning) as `can_write`."""
+    so the answer only ever errs towards refusing: any `admin:` action counts (it can
+    change policies), and so does any S3 action that is not a Get or List on a resource
+    that can reach the bucket itself or anything under those prefixes (a narrower
+    sub-prefix too): a delete as `can_delete`, anything else (an object write, a lifecycle
+    rule, a bucket policy, versioning) as `can_write`."""
     raw = (policy or {}).get("Statement")
     statements = [s for s in (raw if isinstance(raw, list) else []) if isinstance(s, Mapping)]
     allow = [s for s in statements if str(s.get("Effect", "")).lower() == "allow"]
@@ -265,11 +279,11 @@ def minio_key_capabilities(
         if any(a.lower().startswith("s3:") or a == "*" for a in _strings(s.get("Action")))
         or "NotAction" in s
     )
-    mine = [bucket_arn, *objects]
+    bases = [f"{bucket_arn}/{p}" for p in (prefixes or [""])]
     beyond_reads = [
         pattern
         for s in allow
-        if _on_any(s, mine)
+        if _on_any(s, bucket_arn, bases)
         for pattern in _strings(s.get("Action"))
         if _s3_action(pattern) and not _only_reads(pattern)
     ]
@@ -277,13 +291,8 @@ def minio_key_capabilities(
         checked=True,
         can_read=granted("s3:GetObject", objects),
         can_list=granted("s3:ListBucket", [bucket_arn]),
-        can_write=admin
-        or granted("s3:PutObject", objects)
-        or any(not _only_deletes(p) for p in beyond_reads),
-        can_delete=admin
-        or granted("s3:DeleteObject", objects)
-        or granted("s3:DeleteObjectVersion", objects)
-        or any(_deletes(p) for p in beyond_reads),
+        can_write=admin or any(not _only_deletes(p) for p in beyond_reads),
+        can_delete=admin or any(_deletes(p) for p in beyond_reads),
         bucket_scoped=scoped and bool(allow),
         prefix=None,
         source="minio_account_info",

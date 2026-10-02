@@ -120,6 +120,30 @@ def test_minio_put_on_another_prefix_does_not_count() -> None:
 
 @pytest.mark.req("FR-15.11")
 @pytest.mark.wp("P3-13")
+@pytest.mark.parametrize(
+    ("actions", "resource", "expected"),
+    [
+        # A grant narrower than a mapped prefix still reaches synced objects (#158 review).
+        (["s3:DeleteObject"], f"arn:aws:s3:::{BUCKET}/acme/sub/*", (False, "key_can_delete")),
+        (["s3:PutObject"], f"arn:aws:s3:::{BUCKET}/acme/sub/*", (False, "key_can_write")),
+        (["s3:PutObject"], f"arn:aws:s3:::{BUCKET}/acme/report.md", (False, "key_can_write")),
+        (["s3:DeleteObjectVersion"], f"arn:aws:s3:::{BUCKET}/acme/a?/*", (False, "key_can_delete")),
+        # ... and so does one wider than it that a wildcard cuts short.
+        (["s3:PutObject"], f"arn:aws:s3:::{BUCKET}/ac*", (False, "key_can_write")),
+        # A sibling prefix that only shares a start with the mapped one does not.
+        (["s3:PutObject"], f"arn:aws:s3:::{BUCKET}/acme-old/*", (True, None)),
+        (["s3:DeleteObject"], f"arn:aws:s3:::{BUCKET}/uploads/acme/*", (True, None)),
+    ],
+)
+def test_minio_grants_overlapping_a_mapped_prefix_count(
+    actions: list[str], resource: str, expected: tuple[bool, str | None]
+) -> None:
+    policy = {"Statement": [*READ_ONLY["Statement"], _statement(actions, [resource])]}
+    assert capabilities_acceptable(minio_key_capabilities(policy, BUCKET, ["acme/"])) == expected
+
+
+@pytest.mark.req("FR-15.11")
+@pytest.mark.wp("P3-13")
 def test_minio_empty_or_odd_policy_is_not_scoped() -> None:
     for policy in (None, {}, {"Statement": "nope"}, {"Statement": [{"Effect": "Deny"}]}):
         caps = minio_key_capabilities(policy, BUCKET, [])
