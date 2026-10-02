@@ -12,6 +12,7 @@ reset answers 204 and no writer is a deadlock victim."""
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -100,3 +101,68 @@ async def test_app_f03_reset_answers_204_while_writers_emit(
     assert [r for r in results if isinstance(r, BaseException)] == []
     assert tally["deadlocks"] == 0
     assert tally["commits"] > started  # the writers kept writing through the resets
+
+
+async def _truncate_waits(db: DbUrls) -> bool:
+    async with await psycopg.AsyncConnection.connect(db.libpq(OWNER), autocommit=True) as conn:
+        row = await (
+            await conn.execute(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()"
+                " AND wait_event_type = 'Lock' AND query LIKE 'TRUNCATE%'"
+            )
+        ).fetchone()
+    return row is not None and row[0] > 0
+
+
+@pytest.mark.req("REL-7")
+@pytest.mark.wp("P0-04")
+async def test_app_f03_a_reset_waiting_on_a_writer_lets_it_emit(
+    db: DbUrls, client: httpx.AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The interleaving itself, step by step (CodeRabbit on #183): a writer holds its new
+    `workspaces` row, the reset's TRUNCATE queues behind it, then the writer emits. The
+    writer's outbox row goes in and commits, the reset answers 204, and no deadlock
+    happens on either side (before, the reset held `outbox` here, and Postgres cancelled
+    one of the two)."""
+    from tumnis.core import testing_routes  # noqa: PLC0415
+
+    holding, release = asyncio.Event(), asyncio.Event()
+
+    async def writer() -> None:
+        async with (
+            await psycopg.AsyncConnection.connect(db.libpq(OWNER)) as conn,
+            conn.transaction(),
+        ):
+            row = await (
+                await conn.execute(
+                    "INSERT INTO workspaces (name, timezone)"
+                    " VALUES ('held writer', 'America/New_York') RETURNING id"
+                )
+            ).fetchone()
+            assert row is not None
+            holding.set()
+            await release.wait()
+            await conn.execute(
+                "INSERT INTO outbox (workspace_id, name, schema_version, actor,"
+                " occurred_at, payload) VALUES (%s, 'test.ping', 1, 'system', %s, %s)",
+                (row[0], AT, Jsonb({"schema_version": 1, "note": "APP-F03 held"})),
+            )
+
+    with caplog.at_level(logging.INFO, logger=testing_routes.__name__):
+        held = asyncio.create_task(writer())
+        await asyncio.wait_for(holding.wait(), timeout=30)
+        reset = asyncio.create_task(client.post("/v1/test/reset"))
+        try:
+            for _ in range(500):
+                if await _truncate_waits(db):
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                pytest.fail("the reset's TRUNCATE never queued behind the writer")
+        finally:
+            release.set()
+        await asyncio.wait_for(held, timeout=30)  # DeadlockDetected would raise here
+        response = await asyncio.wait_for(reset, timeout=90)
+
+    assert response.status_code == 204, response.text
+    assert not [r for r in caplog.records if "deadlock" in r.getMessage()]

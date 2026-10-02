@@ -68,8 +68,21 @@ BODY = (
         pytest.param(
             "the <b>tag</b> <b> stays",
             "Write about the tag <b> stays put",
-            "the <b>tag</b> <b> stays",
-            id="source-with-literal-markup-is-left-alone",
+            "…the <b>tag</b> <b> stays…",
+            id="source-with-literal-markup-still-shows-its-cuts",
+            marks=pytest.mark.xfail(strict=True, reason="spec:FIX-app-final-minor"),
+        ),
+        pytest.param(
+            "Write about the <b>tag</b>",
+            "Write about the <b>tag</b>",
+            "Write about the <b>tag</b>",
+            id="a-literal-tag-mistaken-for-a-mark-still-is-found",
+        ),
+        pytest.param(
+            "a <b>headline</b> from elsewhere",
+            "a document that holds none of it",
+            "a <b>headline</b> from elsewhere",
+            id="not-in-the-document-is-left-as-it-came",
         ),
         pytest.param("", "", "", id="empty"),
     ],
@@ -77,9 +90,10 @@ BODY = (
 def test_app_f07_snippet_marks_where_the_text_was_cut(
     headline: str, source: str, expected: str
 ) -> None:
-    """A snippet starts with "…" when the fragment begins after the document's start,
-    ends with "…" when it stops before the document's end, and is left as it came when
-    the fragment cannot be found in the document."""
+    """A snippet starts with "…" when the fragment begins after the document's start and
+    ends with "…" when it stops before the document's end, also when the document holds
+    tags like the match marks (CodeRabbit on #183); it is left as it came when the
+    fragment cannot be found in the document."""
     mark_cuts = importlib.import_module("tumnis.modules.search.rules").mark_cuts
 
     assert mark_cuts(headline, source) == expected
