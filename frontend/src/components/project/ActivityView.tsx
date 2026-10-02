@@ -39,7 +39,10 @@ export function ActivityView({ projectId }: { projectId: string }) {
       path: { project_id: projectId },
       query: { limit: PAGE_SIZE },
     }),
-    initialPageParam: null,
+    // An object, not null: the generated queryFn merges an object page param into the
+    // request and reads anything else as a cursor (`typeof null` is "object" too, so null
+    // threw before the first request; APP-01). Later pages pass the string cursor.
+    initialPageParam: { path: { project_id: projectId } },
     getNextPageParam: (last) => last.next_cursor ?? undefined,
   });
   if (activity.isPending) {
