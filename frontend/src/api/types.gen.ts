@@ -3787,7 +3787,7 @@ export type PurgeIn = {
   /**
    * Scope
    */
-  scope: "project";
+  scope: "project" | "connection";
 };
 
 /**
@@ -3799,13 +3799,59 @@ export type PurgeOut = {
    */
   id: string;
   /**
+   * Purge Id
+   */
+  purge_id?: string | null;
+  /**
    * Scope
    */
-  scope: "project";
+  scope: "project" | "connection";
   /**
    * Status
    */
   status?: "accepted";
+};
+
+/**
+ * PurgeStatusOut
+ *
+ * `GET /v1/purges/{purge_id}`: where a purge stands, and what it removed so far.
+ */
+export type PurgeStatusOut = {
+  /**
+   * Counts
+   */
+  counts: {
+    [key: string]: number;
+  };
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Finished At
+   */
+  finished_at: string | null;
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Reason
+   */
+  reason: string;
+  /**
+   * Scope
+   */
+  scope: "retention" | "project" | "connection";
+  /**
+   * Status
+   */
+  status: "queued" | "running" | "done";
+  /**
+   * Target Id
+   */
+  target_id: string | null;
 };
 
 /**
@@ -13853,6 +13899,66 @@ export type PurgesPurgeResponses = {
 
 export type PurgesPurgeResponse =
   PurgesPurgeResponses[keyof PurgesPurgeResponses];
+
+export type PurgesGetPurgeData = {
+  body?: never;
+  path: {
+    /**
+     * Purge Id
+     */
+    purge_id: string;
+  };
+  query?: never;
+  url: "/v1/purges/{purge_id}";
+};
+
+export type PurgesGetPurgeErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PurgesGetPurgeError =
+  PurgesGetPurgeErrors[keyof PurgesGetPurgeErrors];
+
+export type PurgesGetPurgeResponses = {
+  /**
+   * Successful Response
+   */
+  200: PurgeStatusOut;
+};
+
+export type PurgesGetPurgeResponse =
+  PurgesGetPurgeResponses[keyof PurgesGetPurgeResponses];
 
 export type NotificationsSubscribeData = {
   body: PushSubscriptionIn;

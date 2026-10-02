@@ -87,6 +87,8 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("notifications", "decision"): "now",  # ck_notifications_decision
     ("delivery_attempts", "channel"): "push",  # ck_delivery_attempts_channel
     ("delivery_attempts", "status"): "sent",  # ck_delivery_attempts_status
+    ("purges", "scope"): "retention",  # ck_purges_scope; ck_purges_target: no target_id
+    ("purges", "cutoff"): datetime(2026, 3, 9, tzinfo=UTC),  # ck_purges_cutoff (P3-09)
     ("unattended_windows", "weekdays"): [0],  # ck_unattended_windows_weekdays (P4-04)
     ("unattended_windows", "start_local"): time(22, 0),  # ck_unattended_windows_span
     ("unattended_windows", "end_local"): time(6, 0),

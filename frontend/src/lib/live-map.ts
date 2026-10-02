@@ -208,6 +208,9 @@ export const NOT_LIVE = [
   "connectionsListProviders",
   "connectionsOauthUrl",
   "connectionsOauthCallback",
+  // A purge's status (P3-09) is read on demand after a purge is asked for; a purge sends
+  // no live message.
+  "purgesGetPurge",
   // The unattended window (P4-04) changes only from Settings or a project's Schedule rail,
   // and each writes the saved answer into its own cache.
   "planningGetUnattendedWindow",
