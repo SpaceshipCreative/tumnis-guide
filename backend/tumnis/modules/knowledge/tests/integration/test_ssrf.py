@@ -25,7 +25,6 @@ BLOCKED = ("169.254.169.254", "169.254.10.1", "fd00:ec2::254", "100.100.100.200"
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_sftp_host_through_ssrf_guard(
     db: DbUrls, knowledge_ws: WorkspaceHandle, sftp_server: SftpEndpoint
 ) -> None:

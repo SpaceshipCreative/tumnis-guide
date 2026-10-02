@@ -28,7 +28,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 @pytest.mark.contract
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 class TestSftpStorage(StorageContract):
     """T-P3-14-01
     The shared storage suite (stat, list, read, write, move, delete, a stale if_match
@@ -64,7 +63,6 @@ _HOSTILE = st.one_of(
 @pytest.mark.contract
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_hostile_paths_refused(sftp_server: SftpEndpoint) -> None:  # noqa: PLR0915
     """T-P3-14-03
     P1-14's hostile paths (and Hypothesis's mixes of their pieces) are refused before
