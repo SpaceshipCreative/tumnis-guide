@@ -28,6 +28,7 @@ to the next listing.
 import asyncio
 import contextlib
 import hashlib
+import hmac
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -439,7 +440,7 @@ async def read_linked(ctx: WorkspaceContext, version_id: UUID) -> AsyncGenerator
                 raise changed
             digest.update(chunk)
             yield chunk
-    if digest.digest() != bytes(found.content_hash):
+    if not hmac.compare_digest(digest.digest(), bytes(found.content_hash)):
         raise changed
 
 

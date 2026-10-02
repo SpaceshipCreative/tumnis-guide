@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from tests._services import S3Endpoint
     from tests.fixtures import WorkspaceHandle
     from tumnis.core.clock import FixedClock
-    from tumnis.modules.knowledge.tests.integration.conftest import ExtractEnv
+    from tumnis.modules.knowledge.tests.integration.conftest import ExtractDirs, ExtractEnv
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
@@ -339,7 +339,11 @@ async def test_recheck_of_a_key_tumnis_cannot_address_takes_nothing(
 @pytest.mark.req("FR-15.11")
 @pytest.mark.wp("P3-13")
 async def test_linked_reread_of_a_changed_object_keeps_the_version_hash(
-    db: DbUrls, knowledge_ws: WorkspaceHandle, minio: S3Endpoint, clock: FixedClock
+    db: DbUrls,
+    knowledge_ws: WorkspaceHandle,
+    minio: S3Endpoint,
+    clock: FixedClock,
+    extract_dirs: ExtractDirs,
 ) -> None:
     """#158 review: when a linked version's spool copy is gone and its object has changed
     since, reading it again from the bucket fails rather than hand step 1 the new bytes,
@@ -372,6 +376,10 @@ async def test_linked_reread_of_a_changed_object_keeps_the_version_hash(
         await put(minio, bucket, "acme/brief.md", b"# Brief\n\nSomething else entirely.\n")
         with pytest.raises(pipeline.LinkedObjectChangedError):
             _ = [c async for c in s3_sync.read_linked(ws.ctx, version_id)]
+        # Step 1 itself fails before it stores a hash, and leaves no scratch copy behind.
+        with pytest.raises(pipeline.LinkedObjectChangedError):
+            await pipeline.read(str(ws.ctx.workspace_id), str(version_id), "linked")
     finally:
         s3_sync.configure(None)
     assert stored_hash() == before
+    assert [p for p in extract_dirs.scratch.rglob("*") if p.is_file()] == []

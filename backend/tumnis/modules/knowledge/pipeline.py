@@ -222,22 +222,31 @@ async def _file_chunks(path: Path) -> AsyncGenerator[bytes]:
 
 async def _copy(chunks: AsyncGenerator[bytes], dest: Path) -> tuple[str, int]:
     """Write `chunks` to `dest` (its folder made), hashing them; stops one byte past the
-    upload limit so an oversize file is measured, not copied whole."""
+    upload limit so an oversize file is measured, not copied whole. The bytes go to a
+    `.part` file beside `dest` that replaces it only once the copy is whole, so a failed
+    read (a linked object that changed, a dropped stream) never leaves a partial `dest`
+    for a later step to take as the scratch copy."""
     await asyncio.to_thread(dest.parent.mkdir, parents=True, exist_ok=True)
+    part = dest.with_name(f".{dest.name}.part")
     digest = hashlib.sha256()
     size = 0
-    handle = await asyncio.to_thread(dest.open, "wb")
+    handle = await asyncio.to_thread(part.open, "wb")
     try:
-        async with contextlib.aclosing(chunks):
-            async for received in chunks:
-                chunk = received[: MAX_UPLOAD_BYTES + 1 - size]
-                size += len(chunk)
-                digest.update(chunk)
-                await asyncio.to_thread(handle.write, chunk)
-                if size > MAX_UPLOAD_BYTES:
-                    break
-    finally:
-        await asyncio.to_thread(handle.close)
+        try:
+            async with contextlib.aclosing(chunks):
+                async for received in chunks:
+                    chunk = received[: MAX_UPLOAD_BYTES + 1 - size]
+                    size += len(chunk)
+                    digest.update(chunk)
+                    await asyncio.to_thread(handle.write, chunk)
+                    if size > MAX_UPLOAD_BYTES:
+                        break
+        finally:
+            await asyncio.to_thread(handle.close)
+        await asyncio.to_thread(part.replace, dest)
+    except BaseException:
+        await asyncio.to_thread(part.unlink, missing_ok=True)
+        raise
     return digest.hexdigest(), size
 
 
