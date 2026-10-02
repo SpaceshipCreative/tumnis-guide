@@ -187,3 +187,39 @@ def test_preview_overrides_keep_the_runtime_volumes() -> None:
             if got != ("volume", volume, False):
                 wrong.append(f"{service}: {defaults[name]} is {got!r}")
     assert not wrong, wrong
+
+
+# GitReader._ssh_files writes a command's deploy key and known_hosts here, under obsidian_dir.
+KEYS_SUBDIR = ".keys"
+
+
+def _tmpfs(service: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """path -> mount options of a service's short-syntax `tmpfs` entries."""
+    raw = service.get("tmpfs") or []
+    entries = [raw] if isinstance(raw, str) else list(raw)
+    found: dict[str, dict[str, str]] = {}
+    for entry in entries:
+        path, _, options = str(entry).partition(":")
+        found[path] = {}
+        for option in filter(None, options.split(",")):
+            key, _, value = option.partition("=")
+            found[path][key] = value
+    return found
+
+
+@pytest.mark.req("FR-15.10", "SEC-10")
+@pytest.mark.wp("P3-12")
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-data-dirs")
+def test_worker_keeps_deploy_key_files_off_the_obsidian_volume() -> None:
+    """The deploy key and known_hosts files of a running git command sit on a small tmpfs
+    over `<obsidian_dir>/.keys`, private to tumnis, not on the durable `obsidian` volume: a
+    worker killed mid-command (SIGKILL, OOM) leaves no private key behind once its
+    container restarts."""
+    worker = load_compose("compose.yaml")["services"]["worker"]
+    keys = f"{_defaults()['obsidian_dir']}/{KEYS_SUBDIR}"
+    options = _tmpfs(worker).get(keys)
+    assert options is not None, f"no tmpfs at {keys}: {worker.get('tmpfs')!r}"
+    assert options.get("uid") == RUNTIME_UID, options
+    assert int(options.get("mode", "1777"), 8) == 0o700, options
+    assert "size" in options, options
+    assert {"noexec", "nosuid", "nodev"} <= options.keys(), options
