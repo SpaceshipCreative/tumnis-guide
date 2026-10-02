@@ -264,6 +264,30 @@ async def undo_task(
     )
 
 
+@router.get("/tasks/{task_id}/unattended")
+@route_policy(SESSION_READ)
+async def get_unattended(task_id: UUID, session: SessionDep) -> api.UnattendedOut:
+    """Whether the task is queued for the unattended window (P4-04)."""
+    return await api.get_unattended(session, task_id)
+
+
+@router.put("/tasks/{task_id}/unattended")
+@route_policy(DECIDE)
+async def put_unattended(
+    task_id: UUID, body: api.UnattendedIn, request: Request, session: SessionDep
+) -> api.UnattendedOut:
+    """Queue the task for the unattended window or take it off (P4-04, FR-4.5): the
+    person's choice, so a key or token gets 403 `session_required`; 422 `not_ai` for a
+    task that is not labelled AI."""
+    return await api.queue_unattended(
+        session,
+        principal_of(request).actor,
+        task_id,
+        queued=body.queued,
+        now=_clock(request).now(),
+    )
+
+
 @router.get("/tasks/{task_id}/comments")
 @route_policy(LIST_OF_TASK)
 async def list_comments(

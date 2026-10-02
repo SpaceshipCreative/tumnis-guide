@@ -75,6 +75,9 @@ class Task(TenantBase, Base):
     # tasks, board columns and context items. Rules are only soft-deleted.
     recurrence_rule_id: Mapped[UUID | None]
     occurrence_on: Mapped[date | None]  # the local date this instance of its rule stands for
+    # P4-04: queued for the unattended window (when and by whom); NULL when not queued.
+    unattended_queued_at: Mapped[datetime | None]
+    unattended_queued_by: Mapped[str | None]
 
 
 class TaskComment(TenantBase, Base):
