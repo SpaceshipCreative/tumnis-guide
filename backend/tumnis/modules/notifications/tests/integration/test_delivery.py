@@ -25,7 +25,6 @@ ATTEMPTS = 3
 
 @pytest.mark.req("FR-8.4")
 @pytest.mark.wp("P2-16")
-@pytest.mark.xfail(strict=True, reason="spec:P2-16")
 async def test_quiet_in_progress_nothing_dispatched_then_flush(delivery: DeliveryWorld) -> None:
     """T-P2-16-04
     At Quiet with a task In progress a new review item dispatches no notify run. When the
@@ -55,7 +54,6 @@ async def test_quiet_in_progress_nothing_dispatched_then_flush(delivery: Deliver
 
 @pytest.mark.req("FR-8.2")
 @pytest.mark.wp("P2-16")
-@pytest.mark.xfail(strict=True, reason="spec:P2-16")
 async def test_only_master_receives_notify_runs(delivery: DeliveryWorld) -> None:
     """T-P2-16-05
     With a project agent on the task's project, a focus event and a review item at Nudge
@@ -118,7 +116,6 @@ async def test_failed_delivery_retries_then_dead_letters(delivery: DeliveryWorld
 
 @pytest.mark.req("FR-8.1")
 @pytest.mark.wp("P2-16")
-@pytest.mark.xfail(strict=True, reason="spec:P2-16")
 async def test_review_badge_counts_every_item(delivery: DeliveryWorld) -> None:
     """T-P2-16-11
     At Quiet with a task In progress two review items are held from Discord and push, yet
