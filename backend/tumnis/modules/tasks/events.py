@@ -16,6 +16,10 @@ Subscribers (never rename one: the name is part of every delivery's workflow ID)
   `result` review items that link it get the `checks_red` flag while its checks are red
   and lose it when they are not. Idempotent: a flag already in the wanted state is left
   alone.
+- `tasks.connection_auth_review` (P3-02): on `connection.auth_required`, one
+  `connection_auth` review item for the connection (workspace scope). Idempotent: the
+  dedupe key `conn_auth:<connection id>` keeps one open item however often it is
+  delivered.
 """
 
 from typing import Any, Final
@@ -38,7 +42,14 @@ from tumnis.modules.tasks.payloads import (
     TaskStatusChangedV1,
     TaskUpdatedV1,
 )
-from tumnis.modules.tasks.review import ESTIMATE_KIND, LABEL_KIND
+from tumnis.modules.tasks.review import (
+    CONNECTION_AUTH_KIND,
+    ESTIMATE_KIND,
+    LABEL_KIND,
+    ConnectionAuthPayload,
+    TargetRef,
+    add_review_item,
+)
 
 __all__ = [
     "DOC_BODY_MAX_BYTES",
@@ -51,6 +62,7 @@ __all__ = [
     "TaskStatusChangedV1",
     "TaskUpdatedV1",
     "apply_review_decision",
+    "connection_auth_review",
     "create_default_columns",
     "flag_red_checks",
     "refresh_review_impact",
@@ -151,3 +163,21 @@ async def flag_red_checks(envelope: EventEnvelope) -> None:
     red = isinstance(status, dict) and status.get("checks") == "red"
     async with tenant_session(WorkspaceContext(envelope.workspace_id, SYSTEM_ACTOR)) as s:
         await api.flag_red_checks(s, key, red=red)
+
+
+@subscribe("connection.auth_required", name="tasks.connection_auth_review")
+async def connection_auth_review(envelope: EventEnvelope) -> None:
+    connection_id = UUID(str(envelope.payload["connection_id"]))
+    payload = ConnectionAuthPayload(
+        provider=str(envelope.payload["provider"]),
+        account_label=str(envelope.payload["account_label"]),
+    )
+    async with tenant_session(_system(envelope)) as s:
+        await add_review_item(
+            CONNECTION_AUTH_KIND,
+            target=TargetRef(type="connection", id=connection_id),
+            project_id=None,
+            payload=payload.model_dump(mode="json"),
+            dedupe_key=f"conn_auth:{connection_id}",
+            session=s,
+        )

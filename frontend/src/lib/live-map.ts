@@ -191,4 +191,13 @@ export const NOT_LIVE = [
   // The master's long poll on a delegation (P2-06): an agent's call that waits up to ten
   // minutes, never a cached query of the app.
   "agentsWaitForTask",
+  // Connections (P3-02) send no live message: Settings > Connections refetches its list
+  // every minute while open and after each write. The providers are registered at
+  // startup; the sign-in URL is polled once per connect; the callback is a browser
+  // redirect.
+  "connectionsListConnections",
+  "connectionsGetConnection",
+  "connectionsListProviders",
+  "connectionsOauthUrl",
+  "connectionsOauthCallback",
 ] as const;
