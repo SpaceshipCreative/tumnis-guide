@@ -35,7 +35,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("REL-3", "FR-14.5")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 async def test_cursor_saved_per_page_and_resumes_after_kill(  # noqa: PLR0917
     app_db: DbUrls,
     workspace: WorkspaceHandle,
@@ -99,7 +98,6 @@ async def test_cursor_saved_per_page_and_resumes_after_kill(  # noqa: PLR0917
 
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 async def test_provider_rate_limit_holds(
     app_db: DbUrls,
     workspace: WorkspaceHandle,
@@ -140,7 +138,6 @@ async def test_provider_rate_limit_holds(
 
 @pytest.mark.req("REL-3")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 async def test_failing_sync_shows_status_and_metric(  # noqa: PLR0917
     app_db: DbUrls,
     workspace: WorkspaceHandle,
@@ -224,7 +221,6 @@ async def test_failing_sync_shows_status_and_metric(  # noqa: PLR0917
 
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 async def test_tick_enqueues_each_due_connection_once(  # noqa: PLR0917
     app_db: DbUrls,
     workspace: WorkspaceHandle,

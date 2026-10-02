@@ -21,7 +21,6 @@ RECORDINGS = Path(__file__).resolve().parents[1] / "recordings" / "fake"
 @pytest.mark.contract
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 class TestFakeSourceConnector(ConnectorContract):
     """T-P3-02-11
     The fake source (`integrations.connector.fake`, the framework's scriptable connector)
@@ -41,7 +40,6 @@ class TestFakeSourceConnector(ConnectorContract):
 @pytest.mark.contract
 @pytest.mark.req("FR-14.5")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 class TestFakeSourceRecorded(ConnectorContract):
     """The registered real side of the fake source (it has no outside dependency, so it is
     the same class) on the same recordings."""

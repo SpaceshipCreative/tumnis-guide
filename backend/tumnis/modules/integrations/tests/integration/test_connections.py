@@ -61,7 +61,6 @@ def _keys(value: Any) -> set[str]:
 
 @pytest.mark.req("Data flow rule 1", "Data flow rule 5")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 async def test_grant_stored_encrypted_per_account(
     app_db: DbUrls,
     workspace: WorkspaceHandle,
@@ -106,7 +105,6 @@ async def test_grant_stored_encrypted_per_account(
 
 @pytest.mark.req("Data flow rule 5")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 async def test_connection_api_never_returns_credentials(  # noqa: PLR0917
     app: FastAPI,
     session_client: SessionClient,
@@ -158,7 +156,6 @@ async def test_connection_api_never_returns_credentials(  # noqa: PLR0917
 
 @pytest.mark.req("SEC-3")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 async def test_connect_and_disconnect_are_audited(  # noqa: PLR0917
     session_client: SessionClient,
     dbos_client: DBOSClient,

@@ -8,7 +8,6 @@ import pytest
 
 @pytest.mark.req("FR-14.9")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 async def test_tool_allowlist_blocks_unlisted_tools() -> None:
     """T-P3-02-13
     `McpSource.call("send_email")` on a source whose allow-list holds only read tools

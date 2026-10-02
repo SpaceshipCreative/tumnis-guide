@@ -48,7 +48,6 @@ def test_record_owner_names_each_types_module() -> None:
 
 @pytest.mark.req("Data flow rule 3")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 def test_backfill_defaults_to_30_days_and_respects_provider_cap() -> None:
     """T-P3-02-06
     The first sync reaches back 30 days by default; a connection set to 90 reaches back
@@ -95,7 +94,6 @@ STATUS_TABLE: dict[tuple[str, str], str] = {
 
 @pytest.mark.req("REL-3")
 @pytest.mark.wp("P3-02")
-@pytest.mark.xfail(strict=True, reason="spec:P3-02")
 def test_status_transitions_table() -> None:
     """T-P3-02-08
     Every (status, outcome) pair maps as the table says: success brings a connection back
