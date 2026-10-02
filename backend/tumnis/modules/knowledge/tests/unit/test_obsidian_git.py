@@ -59,7 +59,6 @@ def _reader(tmp_path: Path, runner: Any, clock: FixedClock) -> Any:
 
 @pytest.mark.req("FR-15.10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 async def test_git_reader_only_fetches_and_resets(tmp_path: Path, clock: FixedClock) -> None:
     """T-P3-12-09
     Connecting clones the branch shallowly into `<data_dir>/<connection_id>/` and probes
@@ -118,7 +117,6 @@ async def test_git_reader_only_fetches_and_resets(tmp_path: Path, clock: FixedCl
 
 @pytest.mark.req("Data flow 1")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 async def test_writable_key_refused(tmp_path: Path, clock: FixedClock) -> None:
     """T-P3-12-10
     When the dry-run push succeeds, the deploy key can write: connecting raises
