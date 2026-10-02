@@ -3279,7 +3279,8 @@ async def _seed_adopt_provisioned(
 ) -> UUID | None:
     """The id of the project's own live profile, made the seed's (its name, runner and
     transport), when `exc` is the seed losing the race to the project's provision; None
-    otherwise (the name is another project's, say), and the caller re-raises."""
+    otherwise (the name is another project's, or the project's agent is not one a
+    provision is still making: `registered` or `ready`, say), and the caller re-raises."""
     if exc.problem.code not in _SEED_PROVISION_RACE:
         return None
     found = await s.scalar(
@@ -3287,6 +3288,7 @@ async def _seed_adopt_provisioned(
         .where(
             _profiles.c.role == "project",
             _profiles.c.project_id == project_id,
+            _profiles.c.status == "provisioning",
             _live_profiles(),
         )
         .with_for_update()
