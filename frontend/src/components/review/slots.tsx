@@ -11,7 +11,8 @@ import { formatMinutes } from "../dashboard/format";
 export type Editor =
   | { type: "label" } // 1/2/3 picks Human, AI or Hybrid: {label}
   | { type: "number"; field: string; label: string } // {field: n}
-  | { type: "text"; field: string; label: string }; // {field: "..."}
+  | { type: "text"; field: string; label: string } // {field: "..."}
+  | { type: "none" }; // no form: the action is decided at once, with no payload
 
 export interface KindSlot {
   /** A short name for the kind, shown above the title. */
@@ -22,6 +23,9 @@ export interface KindSlot {
   actionWords?: Partial<Record<string, string>>;
   /** A badge beside the kind's name, such as "Overnight". */
   tag?: string;
+  /** The kind's actions this item has nothing to offer for, each with the reason (the
+   * owning module would refuse them). They are not shown, and no key decides them. */
+  unavailable?: (item: ReviewItemOut) => Partial<Record<string, string>>;
 }
 
 export const LABELS = [
@@ -55,6 +59,13 @@ function shortDay(day: string): string {
       date,
     );
   return `${format({ weekday: "short" })} ${format({ day: "numeric", month: "short" })}`;
+}
+
+/** A plan issue's offered split, in minutes (none when it has no split). */
+function splitOf(payload: Record<string, unknown>): number[] {
+  return Array.isArray(payload.split)
+    ? payload.split.filter((n): n is number => typeof n === "number")
+    : [];
 }
 
 function minutes(value: unknown): string | undefined {
@@ -115,14 +126,13 @@ const SLOTS: Record<string, KindSlot> = {
   },
   plan_issue: {
     // P1-11's PlanIssuePayload: accept takes the split, edit the move, reject keeps the
-    // task off the day (APP-12: a sentence, not the payload's fields).
+    // task off the day (APP-12: a sentence, not the payload's fields). Edit takes no
+    // payload (the kind defines none), and an offer the item lacks is not an action.
     name: "Plan",
     summary: ({ payload }) => {
       const day = text(payload.day);
       const reason = text(payload.reason);
-      const split = Array.isArray(payload.split)
-        ? payload.split.filter((n): n is number => typeof n === "number")
-        : [];
+      const split = splitOf(payload);
       const moveTo = text(payload.move_to);
       const offers = [
         ...(split.length > 0
@@ -139,7 +149,15 @@ const SLOTS: Record<string, KindSlot> = {
           : ` (${reason.charAt(0).toLowerCase()}${reason.slice(1)})`;
       return `Doesn't fit ${day === undefined ? "the day" : shortDay(day)}${why}. ${offers.join("; ")}.`;
     },
-    edit: { type: "text", field: "value", label: "Value" },
+    edit: { type: "none" },
+    unavailable: ({ payload }) => ({
+      ...(splitOf(payload).length === 0
+        ? { accept: "Accept is not offered: this task has no split." }
+        : {}),
+      ...(text(payload.move_to) === undefined
+        ? { edit: "Edit is not offered: no later day has room for this task." }
+        : {}),
+    }),
   },
   decision_unavailable: {
     name: "Decision",
@@ -171,4 +189,17 @@ export const ANSWER: Editor = { type: "text", field: "text", label: "Answer" };
 
 export function slotFor(kind: string): KindSlot {
   return SLOTS[kind] ?? genericSlot(kind);
+}
+
+/** Why each of the item's actions it has no offer for is not available. */
+export function unavailableActions(
+  item: ReviewItemOut,
+): Partial<Record<string, string>> {
+  return slotFor(item.kind).unavailable?.(item) ?? {};
+}
+
+/** The item's actions it can be decided with: the kind's, less any it has no offer for. */
+export function offeredActions(item: ReviewItemOut): string[] {
+  const unavailable = unavailableActions(item);
+  return item.actions.filter((action) => unavailable[action] === undefined);
 }
