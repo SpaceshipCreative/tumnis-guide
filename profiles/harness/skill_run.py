@@ -84,7 +84,13 @@ def write_script(case: Case, path: Path) -> None:
     path.write_text(json.dumps(script, indent=2) + "\n", encoding="utf-8")
 
 
+# Variables that point git at another repository ahead of `cwd` (a git hook or a
+# worktree-scoped shell exports them); the case's own repository must not inherit them.
+_GIT_REPOSITORY_VARIABLES: Final = frozenset({"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"})
+
+
 def _git(cwd: Path, *args: str) -> None:
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_REPOSITORY_VARIABLES}
     subprocess.run(  # noqa: S603  # fixed argv, no shell
         [  # noqa: S607  # git from PATH, as in CI
             "git",
@@ -95,6 +101,7 @@ def _git(cwd: Path, *args: str) -> None:
             *args,
         ],
         cwd=cwd,
+        env=env,
         check=True,
         capture_output=True,
     )
