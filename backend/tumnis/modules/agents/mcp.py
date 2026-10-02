@@ -7,6 +7,8 @@
 | `ask_human` | tasks:write | `POST /v1/runs/{run_id}/questions` |
 | `request_approval` | tasks:write | `POST /v1/runs/{run_id}/approvals` |
 | `pause_agents` | delegate, master only | `POST /v1/agents/pause` |
+| `delegate_task` | delegate, master only | `POST /v1/delegations` |
+| `wait_for_task` | delegate, master only | `GET /v1/delegations/{delegation_id}/wait` |
 | `record_human_reply` | delegate, master only | `POST /v1/relay/replies` |
 | `get_project_digest` | tasks:read | `GET /v1/digests/project/{project_id}` |
 | `get_workspace_digest` | tasks:read | `GET /v1/digests/workspace` |
@@ -18,6 +20,9 @@ token (`callback.task_token: null`): the token exists only in the packet a dispa
 `pause_agents` (P2-09, SAF-4, a plan addition) is the kill switch for the master: it pauses
 every agent, or one project's, and can never resume them (a person resumes in the app).
 Its twin also takes a session (the app's kill switch), which the router serves directly.
+`delegate_task` and `wait_for_task` (P2-06, FR-5.2) are the master's: it hands a task to
+the project's agent, then waits for it without ever being parked on a human
+(`agents.delegation`).
 
 The digests' consumer, whose cursor moves, is the caller's profile, or the API key when
 the key belongs to no profile. Reading acknowledges the page named by `since` (P2-03).
@@ -39,7 +44,7 @@ from tumnis.core.errors import ProblemError
 from tumnis.core.principal import Principal
 from tumnis.core.tenancy import WorkspaceContext, act_as, tenant_session
 from tumnis.core.types import ActorRef
-from tumnis.modules.agents import api
+from tumnis.modules.agents import api, delegation
 from tumnis.modules.agents.models import AgentProfile, RunRow
 from tumnis.modules.agents.packet_builder import (
     PacketTooLargeError,
@@ -332,6 +337,70 @@ PAUSE_AGENTS = surface.register_op(
         project_resolver=None,
         handler=_pause,
         master_only=True,
+    )
+)
+
+
+# --- Delegation (P2-06, FR-5.2, SAF-5) ---------------------------------------------------------
+
+
+async def _project_of_delegation(ctx: WorkspaceContext, raw: Any) -> UUID | None:
+    try:
+        delegation_id = UUID(str(raw.get("delegation_id")))
+    except ValueError:
+        return None
+    return await delegation.delegation_project(ctx, delegation_id)
+
+
+async def _wait_for_task(caller: surface.Caller, answer: Any) -> delegation.WaitOut:
+    return await delegation.wait_for_task(caller, answer)
+
+
+DELEGATE_TASK = surface.register_op(
+    surface.SurfaceOp(
+        name="delegate_task",
+        description=(
+            "Hand a task to its project's agent: a run of the task starts on that project's"
+            " agent, and `delegation_id` (also the run's id) is what wait_for_task follows."
+            " `note` is added to the task as a comment the agent reads. Refused when the"
+            " project has no provisioned agent, when agents are paused, when the task is"
+            " already two delegations deep, or when the task was delegated again and again"
+            " without an accepted result (a loop: it goes to the human's review queue)."
+        ),
+        scope="delegate",
+        input_model=delegation.DelegateIn,
+        output_model=delegation.DelegateOut,
+        rest_method="POST",
+        rest_path="/v1/delegations",
+        write=True,
+        updates_existing=False,
+        project_arg=None,
+        project_resolver=_project_of_task,
+        handler=delegation.delegate_task,
+        master_only=True,
+    )
+)
+WAIT_FOR_TASK = surface.register_op(
+    surface.SurfaceOp(
+        name="wait_for_task",
+        description=(
+            "Wait for a delegated task, up to `timeout_seconds` (default 600): `done` when its"
+            " run ended (with the result's summary when it succeeded), `waiting_on_human`"
+            " with the question as soon as it waits on the human, else `still_running` at"
+            " the timeout. Never waits on the human's answer: call again later."
+        ),
+        scope="delegate",
+        input_model=delegation.WaitIn,
+        output_model=delegation.WaitOut,
+        rest_method="GET",
+        rest_path="/v1/delegations/{delegation_id}/wait",
+        write=False,
+        updates_existing=False,
+        project_arg=None,
+        project_resolver=_project_of_delegation,
+        handler=delegation.wait_snapshot,
+        master_only=True,
+        after_commit=_wait_for_task,
     )
 )
 
