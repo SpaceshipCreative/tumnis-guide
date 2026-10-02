@@ -47,6 +47,10 @@ Local evidence (c2): all 9 P3-02 integration tests XPASS locally (Docker, -n 3);
 cases pass in `tumnis/core/tests/integration/test_audit_actions.py -k connector`; promtool tests pass.
 A 20x loop of T-P3-02-05 (kill/resume) was running at handoff
 (`/tmp/claude-1002/P3-02-c2/kill20.sh`, output `/tmp/claude-1002/P3-02-c2/kill20.out`; run 1 passed).
+Result of that loop: 18 of 20 passed; runs 7 and 11 errored. Both errors happened in fixture setup,
+before the test body ran. Docker returned 500 "RootlessKit PortManager.AddPort(): listen tcp4 0.0.0.0:<port>:
+bind: address already in use" while starting the ryuk/pg testcontainers. That is a host port clash
+with other agents' Docker use. No test assertion failed. Runs 12-20 passed in a row.
 The plan's done checklist wants 20 in a row: re-run it (`timeout 3000 bash kill20.sh`, Docker, outside
 the sandbox) and quote the result in the PR body.
 
