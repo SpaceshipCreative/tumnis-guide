@@ -98,3 +98,87 @@ test("[P0-24][UX-7] T-P0-24-05 flake: a Space after an arrow waits for over to r
   frames(5);
   expect(onEnd).toHaveBeenCalledTimes(1);
 });
+
+/** The phone board of the test above: a card in Backlog, Today one column right. */
+function phoneBoard() {
+  const card = document.createElement("li");
+  document.body.append(card);
+  const containers = [
+    { id: "backlog-card", disabled: false },
+    { id: "today-card", disabled: false },
+  ];
+  const context = {
+    current: {
+      active: { id: "backlog-card" },
+      collisionRect: rect(16),
+      droppableRects: new Map([
+        ["backlog-card", rect(16)],
+        ["today-card", rect(316)],
+      ]),
+      droppableContainers: { getEnabled: () => containers },
+      over: { id: "backlog-card" } as { id: string } | null,
+      scrollableAncestors: [] as Element[],
+    },
+  };
+  const scrollOneColumn: KeyboardCoordinateGetter = () => {
+    context.current.droppableRects = new Map([
+      ["backlog-card", rect(-284)],
+      ["today-card", rect(16)],
+    ]);
+    return undefined;
+  };
+  const onEnd = vi.fn();
+  const onCancel = vi.fn();
+  const pickUp = new KeyboardEvent("keydown", { code: "Space" });
+  Object.defineProperty(pickUp, "target", { value: card });
+  new SettledKeyboardSensor({
+    active: "backlog-card",
+    activeNode: { id: "backlog-card", key: "k", node: { current: card } },
+    event: pickUp,
+    context: context as unknown as KeyboardSensorProps["context"],
+    options: { coordinateGetter: scrollOneColumn, scrollBehavior: "auto" },
+    onStart: vi.fn(),
+    onMove: vi.fn(),
+    onEnd,
+    onCancel,
+    onAbort: vi.fn(),
+    onPending: vi.fn(),
+  } as unknown as KeyboardSensorProps);
+  frames(5);
+  return { context, onEnd, onCancel };
+}
+
+test("[P0-24][UX-7] a drop never replays with a stale over, however long over lags", () => {
+  const { context, onEnd } = phoneBoard();
+  press("ArrowRight");
+  press("Space");
+  frames(120);
+  expect(onEnd).not.toHaveBeenCalled();
+
+  context.current.over = { id: "today-card" };
+  frames(5);
+  expect(onEnd).toHaveBeenCalledTimes(1);
+});
+
+test("[P0-24][UX-7] a Space pressed after a long lag still waits for over", () => {
+  const { context, onEnd } = phoneBoard();
+  press("ArrowRight");
+  frames(60);
+  press("Space");
+  frames(10);
+  expect(onEnd).not.toHaveBeenCalled();
+
+  context.current.over = { id: "today-card" };
+  frames(5);
+  expect(onEnd).toHaveBeenCalledTimes(1);
+});
+
+test("[P0-24][UX-7] Escape cancels a drag whose over lags, without dropping", () => {
+  const { onEnd, onCancel } = phoneBoard();
+  press("ArrowRight");
+  press("Space");
+  press("Escape");
+  frames(60);
+  expect(onEnd).not.toHaveBeenCalled();
+  expect(onCancel).toHaveBeenCalledTimes(1);
+});
