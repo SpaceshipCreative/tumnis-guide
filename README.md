@@ -121,7 +121,7 @@ openssl x509 -in /etc/tumnis/https/tumnis.crt -noout -subject -enddate
 
 ### 7. Build and start
 
-Build the Tumnis image from this checkout (the first build takes a while), then start the stack. Database migrations run first; `--wait` returns once every service is healthy.
+Build the Tumnis image from this checkout (the first build takes a while), then start the stack. Database migrations run first. `--wait` returns once the services with a health check are healthy (the api's is its own `/health/ready`) and the others are running; step 8 then checks readiness through the proxy.
 
 ```bash readme:install:50 timeout=2400
 docker build -f deploy/Dockerfile --build-arg VERSION=local \
