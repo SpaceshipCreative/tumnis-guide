@@ -239,7 +239,6 @@ async def test_enrichment_plays_the_project_agents_recording(
 NO_SCRIPT_S = 5.0  # "at once": far under the 90 s run timeout a silent fake would hold
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 @pytest.mark.req("A1.2")
 async def test_unscripted_fake_dispatch_fails_at_once(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
@@ -276,7 +275,6 @@ async def test_unscripted_fake_dispatch_fails_at_once(
 SLOW_SCRIPT_MS = 60_000  # far past SILENT_END_S: the fake is still waiting when the reset comes
 
 
-@pytest.mark.xfail(strict=True, reason="spec:SEED")
 @pytest.mark.req("A1.2", "A2.6")
 async def test_a_silent_fake_run_ends_when_a_reset_removes_it(
     client: httpx.AsyncClient, db: DbUrls, dbos: type[DBOS], script_store: None
