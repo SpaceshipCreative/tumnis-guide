@@ -209,7 +209,6 @@ def _tmpfs(service: dict[str, Any]) -> dict[str, dict[str, str]]:
 
 @pytest.mark.req("FR-15.10", "SEC-10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-data-dirs")
 def test_worker_keeps_deploy_key_files_off_the_obsidian_volume() -> None:
     """The deploy key and known_hosts files of a running git command sit on a small tmpfs
     over `<obsidian_dir>/.keys`, private to tumnis, not on the durable `obsidian` volume: a
