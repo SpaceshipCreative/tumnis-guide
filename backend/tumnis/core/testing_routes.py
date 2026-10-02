@@ -18,7 +18,7 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Any, Final, Self
 from uuid import UUID
 
-from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Response
 from pydantic import AwareDatetime, BaseModel, model_validator
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -30,6 +30,7 @@ from tumnis.core.clock import OverridableClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.ratelimit import RateLimiter
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
+from tumnis.core.testing_writes import WritesInFlight
 from tumnis.seed import SEED_PATHS, DatabaseSink, SeedSet, load_seed, writers_registered
 
 router = v1_router("core", prefix="/test", tags=["test"])
@@ -389,7 +390,15 @@ class ClockOut(BaseModel):
     now: datetime
 
 
-@router.post("/clock")
+async def writes_settled(request: Request) -> None:
+    """A clock change first lets the writes already being served finish (A2.6, J8): one
+    that arrived before it, but had not read the clock yet, keeps the time it came at."""
+    writes = getattr(request.app.state, "writes_in_flight", None)
+    if isinstance(writes, WritesInFlight):
+        await writes.settle()
+
+
+@router.post("/clock", dependencies=[Depends(writes_settled)])
 @route_policy(
     RoutePolicy(
         auth="none", idempotent=False, not_idempotent_reason="test-only control of the clock"
