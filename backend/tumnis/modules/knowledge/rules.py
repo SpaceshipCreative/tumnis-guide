@@ -551,6 +551,17 @@ class WritePolicy:
     mode: Literal["tumnis_made", "existing"]
     tumnis_subdir: str = "Tumnis/"  # FR-15.12
 
+    def __post_init__(self) -> None:
+        """`may_write` uses `tumnis_subdir` as a path prefix, so it must be a safe relative
+        folder that ends in '/' (else `TumnisX/a.md` would pass for `Tumnis`)."""
+        sub = self.tumnis_subdir
+        try:
+            safe = sub.endswith("/") and safe_rel_path(sub[:-1]) == sub[:-1]
+        except PathRejected:
+            safe = False
+        if not safe:
+            raise ValueError(f"tumnis_subdir must be a safe folder ending in '/': {sub!r}")
+
 
 def may_write(p: WritePolicy, path: str, origin: Literal["tumnis", "external"] | None) -> bool:
     """existing mode: only paths under Tumnis/, and never over a file whose origin is
