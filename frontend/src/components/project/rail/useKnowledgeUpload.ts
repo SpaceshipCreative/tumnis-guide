@@ -78,17 +78,24 @@ async function showAccepted(
   // The list may not be loaded yet (the phone's Context sheet is closed): load it first,
   // so the new row joins the whole list rather than standing in for it. The server has
   // already accepted the file, so a failing list GET must not report the upload as
-  // failed (a retry would store it twice): the list then simply refetches when shown.
+  // failed (a retry would store it twice). The new row then stands alone in the cache,
+  // marked stale (after the write, which clears that mark) so the whole list refetches
+  // when shown.
+  let loaded = true;
   try {
     await client.query({ ...options, staleTime: "static" });
   } catch {
+    loaded = false;
+  }
+  client.setQueryData(options.queryKey, (old) => {
+    if (old === undefined) return { items: [doc], next_cursor: null };
+    return old.items.some((d) => d.id === doc.id)
+      ? old
+      : { ...old, items: [doc, ...old.items] };
+  });
+  if (!loaded) {
     await client.invalidateQueries({ queryKey: options.queryKey });
   }
-  client.setQueryData(options.queryKey, (old) =>
-    old === undefined || old.items.some((d) => d.id === doc.id)
-      ? old
-      : { ...old, items: [doc, ...old.items] },
-  );
   await client.invalidateQueries({
     queryKey: knowledgeGetQuotaQueryKey(knowledgeQuotaArgs(projectId)),
   });
