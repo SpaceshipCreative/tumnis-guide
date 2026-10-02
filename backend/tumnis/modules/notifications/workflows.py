@@ -30,6 +30,7 @@ The api never calls out: subscribers record and decide (api), the worker sends (
 import asyncio
 import contextvars
 import functools
+import logging
 import random
 from collections.abc import Callable, Coroutine
 from datetime import datetime
@@ -50,6 +51,8 @@ from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.agents import api as agents
 from tumnis.modules.notifications import api, rules
 from tumnis.modules.notifications.adapters.port import PushSubscription, VapidKey, WebPushAdapter
+
+_log = logging.getLogger(__name__)
 
 PUSH_QUEUE: Final = "notifications"
 ADAPTER: Final = "notifications.webpush"
@@ -384,11 +387,15 @@ async def release_overnight_step(workspace_id: str, now: str) -> str | None:
 async def release_overnight(scheduled_time: datetime, context: Any) -> int:
     """Scheduled every 5 minutes: in each workspace, the overnight rows whose release time
     has come go out as one summary (Discord, and one browser push); returns how many
-    summaries it released."""
+    summaries it released. One workspace's failure never holds up the others."""
     del context
     released = 0
     for workspace_id in await overnight_workspaces_step():
-        made = await release_overnight_step(workspace_id, scheduled_time.isoformat())
+        try:
+            made = await release_overnight_step(workspace_id, scheduled_time.isoformat())
+        except Exception:  # logged; the next release retries the workspace's held rows
+            _log.exception("overnight release: workspace %s", workspace_id)
+            continue
         if made is not None:
             await start_push(UUID(workspace_id), UUID(made))
             released += 1

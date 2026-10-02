@@ -16,6 +16,7 @@ Working hours and the day calendar (P1-10, FR-4.7, FR-1.3, REL-6):
   in events.py) and `auth.workspace_settings_tag` (a timezone change).
 """
 
+import logging
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta
 from typing import Annotated, Any, Final, Literal
@@ -96,6 +97,7 @@ from tumnis.modules.usage import api as usage
 FREE_BLOCKS_CACHE: Final = "free_blocks"  # the day calendar's cache namespace
 DAY_CALENDAR_TTL_S: Final = 300.0  # bounds what no invalidation reaches (event writes
 # outside a sync, such as a deselected calendar, emit no calendar.synced)
+_log = logging.getLogger(__name__)
 _CACHE = register_cache(
     CacheSpec(
         FREE_BLOCKS_CACHE,
@@ -2185,7 +2187,8 @@ async def _start_or_refuse(  # one queued task in an open window
 async def unattended_tick_for(ctx: WorkspaceContext, now: datetime) -> UnattendedTickOut:
     """One tick in one workspace: each queued task whose window (its project's override,
     else the workspace's) is open at `now`, in queued order, is started or refused (see
-    above). Each task is its own transaction."""
+    above). Each task is its own transaction, and one task's failure never holds up the
+    others."""
     tz = await _zone(ctx)
     async with tenant_session(ctx) as s:
         rows = await _window_rows(s)
@@ -2196,7 +2199,11 @@ async def unattended_tick_for(ctx: WorkspaceContext, now: datetime) -> Unattende
         bounds = None if row is None else window_bounds(_window(_spec(row)), now, tz)
         if bounds is None:
             continue
-        done = await _start_or_refuse(ctx, task, bounds, tz, now)
+        try:
+            done = await _start_or_refuse(ctx, task, bounds, tz, now)
+        except Exception:  # logged; the task stays queued and the next tick tries it again
+            _log.exception("unattended tick: task %s", task.task_id)
+            continue
         if done == "started":
             out.started += 1
         elif done == "refused":
