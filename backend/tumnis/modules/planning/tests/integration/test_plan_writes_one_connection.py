@@ -324,7 +324,6 @@ class _RollbackError(Exception):
 
 @pytest.mark.req("FR-2.6")
 @pytest.mark.wp("P1-12")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-followups-2")
 async def test_day_calendar_in_a_transaction_sees_its_hours(
     workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
@@ -349,7 +348,6 @@ async def test_day_calendar_in_a_transaction_sees_its_hours(
 
 @pytest.mark.req("FR-2.6")
 @pytest.mark.wp("P1-12")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-followups-2")
 async def test_rolled_back_day_calendar_is_not_cached(
     workspace: WorkspaceHandle, clock: FixedClock
 ) -> None:
