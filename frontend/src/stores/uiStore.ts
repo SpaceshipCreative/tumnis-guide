@@ -23,7 +23,13 @@ export type RailSection =
 
 /** The project Context rail's sections (P0-24; RailSections opens one at a time). */
 export type ContextSection =
-  "brief" | "knowledge" | "connections" | "schedule" | "agent" | "settings";
+  | "brief"
+  | "knowledge"
+  | "connections"
+  | "schedule"
+  | "agent"
+  | "settings"
+  | "folder";
 
 export interface UiContext {
   quickAddOpen: boolean;
