@@ -19,7 +19,14 @@ import {
   FIELD_LABEL,
 } from "../common/ui";
 import { TaintBadge } from "../common/TaintBadge";
-import { ANSWER, LABELS, slotFor, type Editor } from "./slots";
+import {
+  ANSWER,
+  LABELS,
+  offeredActions,
+  slotFor,
+  unavailableActions,
+  type Editor,
+} from "./slots";
 
 export type Mode = "idle" | "edit" | "answer" | "snooze";
 export type Action = DecideAction["action"];
@@ -54,6 +61,11 @@ export function editorFor(item: ReviewItemOut, mode: Mode): Editor | undefined {
   if (mode === "answer") return ANSWER;
   if (mode === "edit") return slotFor(item.kind).edit;
   return undefined;
+}
+
+/** Whether the item's `edit` is decided at once, with no payload (no form opens). */
+export function editsAtOnce(item: ReviewItemOut): boolean {
+  return slotFor(item.kind).edit?.type === "none";
 }
 
 function ValueForm({
@@ -173,8 +185,14 @@ export function ReviewItemCard({
   const titleId = useId();
   const slot = slotFor(item.kind);
   const editor = editorFor(item, mode);
+  const offered = offeredActions(item);
+  const notOffered = Object.values(unavailableActions(item));
 
   const press = (action: Action) => {
+    if (action === "edit" && editsAtOnce(item)) {
+      onDecide({ action });
+      return;
+    }
     if (action === "edit" || action === "answer" || action === "snooze") {
       onMode(action);
       return;
@@ -214,9 +232,13 @@ export function ReviewItemCard({
           </div>
         )}
 
+        {mode === "idle" && notOffered.length > 0 && (
+          <p className="sr-only">{notOffered.join(" ")}</p>
+        )}
+
         {mode === "idle" && (
           <div className="flex flex-wrap gap-2">
-            {item.actions.map((action) => (
+            {offered.map((action) => (
               <button
                 key={action}
                 type="button"
@@ -284,7 +306,7 @@ export function ReviewItemCard({
           </div>
         )}
 
-        {editor !== undefined && editor.type !== "label" && (
+        {(editor?.type === "number" || editor?.type === "text") && (
           <ValueForm
             editor={editor}
             busy={busy}

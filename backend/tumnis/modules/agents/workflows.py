@@ -1374,7 +1374,9 @@ async def choose_name_step(
     `provisioning` (a `ready` one is left alone and ends the provision); otherwise a new
     row, `provisioning`: named after the project (create) or the linked name. A link to a
     name that cannot be linked gets a generated name and `invalid_name`, so the project
-    still has its agent row to retry."""
+    still has its agent row to retry. The row is locked as it is read, so a seed adopting
+    it at the same moment (`_seed_adopt_provisioned` locks it too) either commits first,
+    and the step sees it `ready`, or waits until this step has committed."""
     pid = UUID(project_id)
     async with tenant_session(_ctx(workspace_id)) as s:
         found = (
@@ -1384,11 +1386,13 @@ async def choose_name_step(
                     _profiles.c.name,
                     _profiles.c.status,
                     _profiles.c.provision_mode,
-                ).where(
+                )
+                .where(
                     _profiles.c.role == "project",
                     _profiles.c.project_id == pid,
                     _profiles.c.deleted_at.is_(None),
                 )
+                .with_for_update()
             )
         ).first()
         if found is not None and found.status == "ready":  # nothing left to provision
@@ -1475,10 +1479,12 @@ async def pick_runner_step(workspace_id: str, link_name: str | None = None) -> s
 @DBOS.step()
 async def send_provision_step(  # noqa: PLR0917  # the message's fields, spelled out
     workspace_id: str, workflow_id: str, profile_id: str, runner_id: str, name: str, mode: str
-) -> None:
+) -> bool:
     """The profile on its runner and the `provision` mailbox row (message id
     uuid5(request id, "provision"), request id uuid5 of the workflow id, so a replayed step
-    queues nothing new), then the NOTIFY that wakes the runner's socket."""
+    queues nothing new), then the NOTIFY that wakes the runner's socket. Only while the
+    profile is still `provisioning`: one taken over meanwhile (the seed adopts it; DBOS
+    cannot stop a step already running) keeps its runner and gets no message (False)."""
     request_id = api.provision_request_id(workflow_id)
     message = Provision(
         message_id=api.provision_message_id(request_id),
@@ -1491,11 +1497,14 @@ async def send_provision_step(  # noqa: PLR0917  # the message's fields, spelled
         template_version=api.TEMPLATE_VERSION,
     )
     async with tenant_session(_ctx(workspace_id)) as s:
-        await s.execute(
+        placed = await s.scalar(
             update(_profiles)
-            .where(_profiles.c.id == UUID(profile_id))
+            .where(_profiles.c.id == UUID(profile_id), _profiles.c.status == "provisioning")
             .values(runner_id=UUID(runner_id))
+            .returning(_profiles.c.id)
         )
+        if placed is None:
+            return False
         await s.execute(
             insert(_messages)
             .values(
@@ -1509,6 +1518,7 @@ async def send_provision_step(  # noqa: PLR0917  # the message's fields, spelled
         )
         await api.notify_runner(s, UUID(runner_id))
     faults.killpoint("agents.send_provision_step")  # the mailbox row has committed
+    return True
 
 
 def _failure(reply: ProvisionResult | None) -> tuple[str, str | None]:
@@ -1531,7 +1541,13 @@ async def finish_provision_step(  # noqa: PLR0917  # the provision's facts, spel
 ) -> str:
     """`ready` (the profile's version recorded and its name added to its runner's
     inventory, so runs dispatch to it at once) or `not_provisioned` with a
-    `provisioning_failed` review item on the project (one open item per project)."""
+    `provisioning_failed` review item on the project (one open item per project).
+
+    Only while the profile is still in the state `choose_name_step` left it in
+    (`provisioning`, or `not_provisioned` for a provision that ended before it started):
+    a profile taken over meanwhile (the seed adopts it and cancels the provision, but DBOS
+    cannot stop a step already running) is left alone, with no review item and no
+    inventory entry, and the step answers `superseded`."""
     pick = _Chosen.model_validate(chosen)
     answer = None if reply is None else ProvisionResult.model_validate(reply)
     outcome = (
@@ -1539,24 +1555,35 @@ async def finish_provision_step(  # noqa: PLR0917  # the provision's facts, spel
     )
     pid = UUID(project_id)
     assert pick.profile_id is not None  # noqa: S101  # choose_name_step wrote the row
+    still_ours = (
+        _profiles.c.id == pick.profile_id,
+        _profiles.c.status == ("not_provisioned" if pick.error_code else "provisioning"),
+    )
     async with tenant_session(_ctx(workspace_id)) as s:
         if outcome == "ready" and answer is not None:
-            runner_id = await s.scalar(
-                update(_profiles)
-                .where(_profiles.c.id == pick.profile_id)
-                .values(status="ready", profile_version=answer.distribution_version)
-                .returning(_profiles.c.runner_id)
-            )
-            if runner_id is not None:
-                await _list_on_runner(s, runner_id, pick.name, answer.distribution_version)
-                mark_changed(s, api.LIVE_RUNNER, runner_id)
+            row = (
+                await s.execute(
+                    update(_profiles)
+                    .where(*still_ours)
+                    .values(status="ready", profile_version=answer.distribution_version)
+                    .returning(_profiles.c.runner_id)
+                )
+            ).first()
+            if row is None:
+                return "superseded"
+            if row.runner_id is not None:
+                await _list_on_runner(s, row.runner_id, pick.name, answer.distribution_version)
+                mark_changed(s, api.LIVE_RUNNER, row.runner_id)
         else:
             code, detail = (error_code, None) if error_code is not None else _failure(answer)
-            await s.execute(
+            changed = await s.scalar(
                 update(_profiles)
-                .where(_profiles.c.id == pick.profile_id)
+                .where(*still_ours)
                 .values(status="not_provisioned")
+                .returning(_profiles.c.id)
             )
+            if changed is None:
+                return "superseded"
             await tasks.add_review_item(
                 api.PROVISIONING_FAILED,
                 target=tasks.TargetRef(type="project", id=pid),
@@ -1611,9 +1638,11 @@ async def provision_profile(
             workspace_id, project_id, chosen, attempt, None, "no_runner"
         )
     workflow_id = api.provision_workflow_id(UUID(project_id), attempt)
-    await send_provision_step(
+    sent = await send_provision_step(
         workspace_id, workflow_id, chosen["profile_id"], runner, chosen["name"], chosen["mode"]
     )
+    if not sent:  # the profile was taken over meanwhile: nothing to wait for
+        return "superseded"
     reply = await DBOS.recv_async(
         topic=api.provision_topic(UUID(project_id)), timeout_seconds=api.provision_timeout_s()
     )
