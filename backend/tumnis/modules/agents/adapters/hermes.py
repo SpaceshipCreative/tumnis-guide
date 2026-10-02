@@ -306,7 +306,8 @@ class DaemonTransport:
                     pass
 
     async def cancel(self, run: RunHandle) -> None:
-        """Stop a run. A finished run is left as it is. A runner on protocol 2 gets a
+        """Stop a run. A finished run, or one no runner was ever sent, is left as it is
+        (its workflow ends it with its own reason). A runner on protocol 2 gets a
         `cancel` (mailbox row uuid5(run_id, "cancel")) and answers with a `cancelled`
         result. An older runner would not understand one: the run is marked cancelled
         here, with a `failed` run event, its workflow is told, and the result the runner
@@ -336,7 +337,9 @@ class DaemonTransport:
                     .where(_messages.c.message_id == uuid5(run.run_id, "run"))
                 )
             ).first()
-            if mailbox is not None and (mailbox.protocol_version or 1) >= PROTOCOL_2:
+            if mailbox is None:  # never sent to a runner: nothing to stop, the caller ends it
+                return
+            if (mailbox.protocol_version or 1) >= PROTOCOL_2:
                 cancel = Cancel(
                     message_id=uuid5(run.run_id, "cancel"),
                     correlation_id=run.correlation_id,
