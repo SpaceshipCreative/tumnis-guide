@@ -245,7 +245,6 @@ def _with_sender(raw: RawItem) -> Sequence[CanonicalRecord]:
 
 @pytest.mark.req("Data flow rule 3")
 @pytest.mark.wp("P3-09")
-@pytest.mark.xfail(strict=True, reason="spec:P3-09")
 async def test_connection_purge_scoped_to_source(world: PurgeWorld) -> None:
     """T-P3-09-04
     Purging one connection removes its messages, threads and notes and their raw payloads,
