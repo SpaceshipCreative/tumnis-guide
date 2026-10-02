@@ -91,6 +91,13 @@ services:
     env_file:
       - path: hosted-keys.env
         required: false
+    volumes:
+      - /etc/tumnis/secrets:/run/secrets:ro
+      - db_tls_ca:/etc/tumnis/tls:ro
+      # S3 linked-source objects (P3-13) and vault attachments (P3-12) wait here for
+      # worker-extract, as the api's uploads do.
+      - spool:/var/lib/tumnis/spool
+      - obsidian:/var/lib/tumnis/obsidian # Git vault clones (P3-12)
     depends_on:
       migrate: { condition: service_completed_successfully }
 
@@ -261,6 +268,9 @@ volumes:
   pgdata: {}
   spool: {} # uploads between the api and worker-extract (P1-16)
   scratch: {} # worker-extract's working space
+  # The worker's Git vault clones (P3-12): a cache, cloned again from the remote when lost.
+  # The deploy keys live sealed in Postgres; a key file exists here only while git runs.
+  obsidian: {}
   clamd_db: {}
   pgsocket: {}
   # Repository 1 (local). On the homelab, point it at a second disk (driver_opts bind).
