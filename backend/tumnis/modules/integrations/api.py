@@ -2538,7 +2538,7 @@ async def start_retention_purge(
             text("SELECT pg_advisory_xact_lock(hashtextextended('purge:retention:' || :ws, 0))"),
             {"ws": str(ctx.workspace_id)},
         )
-        unfinished = await s.scalar(
+        unfinished: UUID | None = await s.scalar(
             select(_purges.c.id).where(_purges.c.scope == "retention", _purges.c.status != "done")
         )
         if unfinished is not None:
