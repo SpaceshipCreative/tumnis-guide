@@ -33,6 +33,7 @@ Lose the master key file and every sealed secret (OAuth clients, storage keys, W
 | `TumnisCertificateExpiring` | the HTTPS certificate expires within 14 days |
 | `TumnisAuditChainBroken` | the audit log's hash chain failed verification (critical) |
 | `TumnisAuditChainNotVerified` | the audit chain has not been verified in 26 hours |
+| `TumnisConnectorSyncStale` | for 10 minutes, a provider's oldest connection has not synced for over 2 hours. A connection whose sign-in was never finished (`pending_auth`) does not count; one that needs signing in again (`auth_required`) does. With no provider to connect yet (Settings > Connections), it stays quiet |
 
 The audit chain can be checked by hand at any time: `docker compose exec worker tumnis audit verify`.
 
@@ -125,7 +126,18 @@ Per-workspace settings and secrets are sealed with each workspace's data key, wh
 
 ## Certificates
 
-- **Tailscale certificate.** Let's Encrypt certificates last 90 days, and a certificate written to files is not renewed by Tailscale. Renew it monthly from root's crontab, then restart the proxy so Caddy loads it: `tailscale cert --cert-file /etc/tumnis/https/tumnis.crt --key-file /etc/tumnis/https/tumnis.key "$TUMNIS_HOST" && docker compose -f /path/to/tumnis-guide/deploy/compose.yaml --profile standalone restart proxy`. `TumnisCertificateExpiring` warns 14 days ahead when the blackbox probe is set up.
+- **Tailscale certificate.** Let's Encrypt certificates last 90 days, and a certificate written to files is not renewed by Tailscale. Renew it monthly from root's crontab, then restart the proxy so Caddy loads it. Cron does not read `.env`, so put the renewal in a script that runs from the repository and loads it, for example `/usr/local/sbin/tumnis-renew-cert` (mode 0755), with `0 4 1 * * /usr/local/sbin/tumnis-renew-cert` in root's crontab. `TumnisCertificateExpiring` warns 14 days ahead when the blackbox probe is set up.
+
+  ```bash
+  #!/bin/sh
+  set -e
+  cd /path/to/tumnis-guide   # the repository, where .env lives
+  set -a; . ./.env; set +a   # TUMNIS_HOST, COMPOSE_FILE, COMPOSE_PROFILES
+  tailscale cert --cert-file /etc/tumnis/https/tumnis.crt \
+    --key-file /etc/tumnis/https/tumnis.key "$TUMNIS_HOST"
+  docker compose restart proxy
+  ```
+
 - **Self-signed certificate.** Valid 825 days; browsers and phones do not trust it. Use it to try Tumnis on the server itself, and switch to the Tailscale certificate for the phone.
 - **Database TLS.** The database CA and the Postgres and PgBouncer certificates last `DB_TLS_DAYS` (3650 by default). To rotate, stop the stack, remove the `db_tls_ca`, `db_tls_postgres` and `db_tls_pgbouncer` volumes and start it again ([deploy/README.md](../deploy/README.md)).
 
