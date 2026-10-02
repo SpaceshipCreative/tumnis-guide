@@ -12,10 +12,10 @@ Under the hood it is a modular Python monolith (FastAPI, DBOS, Postgres 18) with
 
 ## Requirements
 
-- A Linux server (or VM) with 4 CPU cores, 8 GB of memory and 40 GB of free disk. The first build takes 10 to 20 minutes.
-- Docker Engine with the Compose plugin (v2.24 or later), `git`, `openssl`, `curl` and `python3`, and `sudo` rights.
+- A Linux server or VM (the README job uses Ubuntu 24.04) with `sudo` rights.
+- Docker Engine with a current Docker Compose v2 plugin, `git`, `openssl`, `curl` and `python3`.
 - [Tailscale](https://tailscale.com/) (or another VPN) to reach it from your phone. Tumnis never needs a port open to the internet, and you should not open one.
-- For agents: a second machine (or the same one) with [Hermes](https://github.com/NousResearch/hermes-agent) and the runner daemon ([Agents](#agents)).
+- For agents: a second machine (or the same one) with [Hermes](https://hermes-agent.nousresearch.com/docs/) and the runner daemon ([Agents](#agents)).
 
 ## Install
 
@@ -121,7 +121,7 @@ openssl x509 -in /etc/tumnis/https/tumnis.crt -noout -subject -enddate
 
 ### 7. Build and start
 
-Build the Tumnis image from this checkout (10 to 20 minutes the first time), then start the stack. Database migrations run first; `--wait` returns once every service is healthy.
+Build the Tumnis image from this checkout (the first build takes a while), then start the stack. Database migrations run first; `--wait` returns once every service is healthy.
 
 ```bash readme:install:50 timeout=2400
 docker build -f deploy/Dockerfile --build-arg VERSION=local \
@@ -242,7 +242,7 @@ Everything a project knows lives in its knowledge base: documents, notes and lin
 
 ## Agents
 
-Agents run on a machine of your own (the "agent server"), in [Hermes](https://github.com/NousResearch/hermes-agent) profiles: one master profile for your whole workspace and one profile per client project, so each project's agent sees only that project's repositories, credentials and knowledge. The runner daemon connects out to Tumnis, so the agent server needs no open port.
+Agents run on a machine of your own (the "agent server"), in [Hermes](https://hermes-agent.nousresearch.com/docs/) profiles: one master profile for your whole workspace and one profile per client project, so each project's agent sees only that project's repositories, credentials and knowledge. The runner daemon connects out to Tumnis, so the agent server needs no open port.
 
 1. **Create the runner** in Settings > Agents. Its device token is shown once.
 2. **Install the daemon** on the agent server and write the token to its token file: [daemon/README.md](daemon/README.md) (`/etc/tumnis/daemon.toml`, the `tumnis-daemon` systemd unit, run as the `tumnis-agent` user).
