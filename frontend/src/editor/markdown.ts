@@ -41,6 +41,7 @@ function bodyRoundTrip(body: string): string {
     extensions: buildExtensions({ headless: true }),
     content: body,
     contentType: "markdown",
+    injectCSS: false, // never a <style> tag under the CSP (APP-08)
   });
   try {
     return canonicalBody(editor.getMarkdown());
