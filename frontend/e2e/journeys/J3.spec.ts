@@ -50,8 +50,9 @@ test(
     );
     const firstRun = new URL(page.url()).searchParams.get("run") ?? "";
 
-    // The runner received exactly one `run`: a valid packet with a task token and the
-    // email inside one untrusted block.
+    // The runner received exactly one `run`: a valid packet with a task token, the
+    // email inside one untrusted block and the task's own text inside a second (the
+    // email's taint reaches the task through P2-08; Scott decision 66).
     await expect
       .poll(async () => (await fakes.runner.lastPacket()).runMessages)
       .toBe(1);
@@ -60,7 +61,7 @@ test(
     expect(packet.run_id).toBe(firstRun);
     const callback = packet.callback as { task_token?: string } | null;
     expect(callback?.task_token).toMatch(/^tmt_/);
-    expect(untrustedBlocks(String(packet.prompt_text))).toBe(1);
+    expect(untrustedBlocks(String(packet.prompt_text))).toBe(2);
 
     // The run view: the three lines in order, elapsed time ticking, the touched file,
     // a Stop button.
