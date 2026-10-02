@@ -185,7 +185,6 @@ def _case(write: Write, req: str, wp: str) -> Any:
         marks=[
             pytest.mark.req(req),
             pytest.mark.wp(wp),
-            pytest.mark.xfail(strict=True, raises=AssertionError, reason="spec:FIX-followups-2"),
         ],
     )
 
@@ -274,7 +273,6 @@ def _lock_waiting(db: DbUrls) -> bool:
 
 @pytest.mark.req("J1")
 @pytest.mark.wp("P1-11")
-@pytest.mark.xfail(strict=True, raises=TimeoutError, reason="spec:FIX-followups-2")
 async def test_swap_completes_while_a_lock_request_waits(
     workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls
 ) -> None:
