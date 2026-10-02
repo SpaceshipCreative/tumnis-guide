@@ -1544,7 +1544,7 @@
         "type": "object"
       },
       "DaySummaryOut": {
-        "description": "`GET /v1/day/{day}/summary`: the close-the-day panel's four sections for one local\nday of the workspace.",
+        "description": "`GET /v1/day/{day}/summary`: the close-the-day panel's four sections for one local\nday of the workspace. `queued_unattended` (P4-04) lists every task queued for tonight in\nqueued order, with whether it will run; `queued_overnight` names the same tasks.",
         "properties": {
           "agents_finished": {
             "items": {
@@ -1567,6 +1567,13 @@
               "$ref": "#/components/schemas/TaskRef"
             },
             "title": "Queued Overnight",
+            "type": "array"
+          },
+          "queued_unattended": {
+            "items": {
+              "$ref": "#/components/schemas/QueuedUnattendedOut"
+            },
+            "title": "Queued Unattended",
             "type": "array"
           },
           "rolls_over": {
@@ -7251,6 +7258,83 @@
         "title": "PushSubscriptionOut",
         "type": "object"
       },
+      "QueuedUnattendedOut": {
+        "description": "A task queued for tonight, as the day close lists it: whether it will run and, when\nit will not, the refusal it would get now and its plain words.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "enum": [
+                  "human",
+                  "ai",
+                  "hybrid"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "queued_at": {
+            "format": "date-time",
+            "title": "Queued At",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Refusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "will_run": {
+            "title": "Will Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "task_id",
+          "project_id",
+          "title",
+          "label",
+          "queued_at",
+          "will_run",
+          "refusal",
+          "reason"
+        ],
+        "title": "QueuedUnattendedOut",
+        "type": "object"
+      },
       "Quota": {
         "description": "Bytes the workspace's knowledge uses (current file versions plus text entries,\ntrash included until it is purged) against its quota; `count` and `project_bytes` are\nthe asked scope's (a project, or the workspace knowledge base).",
         "properties": {
@@ -7477,6 +7561,21 @@
         ],
         "title": "RecurrenceOut",
         "type": "object"
+      },
+      "Refusal": {
+        "description": "Why a queued task may not run unattended now (`green_light`'s answer).",
+        "enum": [
+          "tainted",
+          "not_ai",
+          "paused",
+          "kill_switch",
+          "no_acceptance_criteria",
+          "not_queued",
+          "done",
+          "waiting_on_human"
+        ],
+        "title": "Refusal",
+        "type": "string"
       },
       "RelayReplyBody": {
         "description": "The REST twin's body: the item answered, the person's answer and the chat message\nit was typed in.",
@@ -9736,6 +9835,18 @@
             "title": "Title",
             "type": "string"
           },
+          "unattended_queued_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unattended Queued At"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -9773,6 +9884,7 @@
           "actual_minutes",
           "tainted",
           "source",
+          "unattended_queued_at",
           "version",
           "created_at",
           "updated_at",
@@ -10526,6 +10638,18 @@
             "title": "Title",
             "type": "string"
           },
+          "unattended_queued_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unattended Queued At"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -10563,6 +10687,7 @@
           "actual_minutes",
           "tainted",
           "source",
+          "unattended_queued_at",
           "version",
           "created_at",
           "updated_at",
@@ -11056,6 +11181,176 @@
         "title": "TrustIn",
         "type": "object"
       },
+      "UnattendedIn": {
+        "additionalProperties": false,
+        "description": "Queue the task for the unattended window (`queued` true) or take it off.",
+        "properties": {
+          "queued": {
+            "title": "Queued",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued"
+        ],
+        "title": "UnattendedIn",
+        "type": "object"
+      },
+      "UnattendedOut": {
+        "description": "The task's place in the unattended queue: when and by whom it was queued, and whether\nP2-08's rule lets it run unattended at all (false for a tainted task, SAF-1).",
+        "properties": {
+          "may_run_unattended": {
+            "title": "May Run Unattended",
+            "type": "boolean"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "boolean"
+          },
+          "queued_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queued At"
+          },
+          "queued_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queued By"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "queued",
+          "queued_at",
+          "queued_by",
+          "may_run_unattended"
+        ],
+        "title": "UnattendedOut",
+        "type": "object"
+      },
+      "UnattendedWindowIn": {
+        "additionalProperties": false,
+        "description": "The workspace's window (`project_id` null) or one project's override; `window` null\nturns it off (an override then falls back to the workspace's). `version` is the stored\nrow's (null when there is none yet).",
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WindowSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "window"
+        ],
+        "title": "UnattendedWindowIn",
+        "type": "object"
+      },
+      "UnattendedWindowOut": {
+        "description": "The window in force for the workspace or a project, where it comes from, and the\nversion of the row this scope stores (null when it stores none).",
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "source": {
+            "enum": [
+              "project",
+              "workspace",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WindowSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "project_id",
+          "window",
+          "source",
+          "version"
+        ],
+        "title": "UnattendedWindowOut",
+        "type": "object"
+      },
       "UndoIn": {
         "description": "The change a write answered (`change_id`) and the version it left (R-09).",
         "properties": {
@@ -11399,6 +11694,40 @@
           "end"
         ],
         "title": "WindowOut",
+        "type": "object"
+      },
+      "WindowSpec": {
+        "additionalProperties": false,
+        "description": "Weekdays (0 = Monday) and local wall times in the workspace timezone; an end before\nthe start crosses midnight and belongs to the weekday it starts on.",
+        "properties": {
+          "end_local": {
+            "format": "time",
+            "title": "End Local",
+            "type": "string"
+          },
+          "start_local": {
+            "format": "time",
+            "title": "Start Local",
+            "type": "string"
+          },
+          "weekdays": {
+            "items": {
+              "maximum": 6.0,
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 7,
+            "minItems": 1,
+            "title": "Weekdays",
+            "type": "array"
+          }
+        },
+        "required": [
+          "weekdays",
+          "start_local",
+          "end_local"
+        ],
+        "title": "WindowSpec",
         "type": "object"
       },
       "WorkingDay": {
@@ -31265,6 +31594,242 @@
         ]
       }
     },
+    "/v1/tasks/{task_id}/unattended": {
+      "get": {
+        "description": "Whether the task is queued for the unattended window (P4-04).",
+        "operationId": "tasks_get_unattended",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnattendedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Unattended",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "put": {
+        "description": "Queue the task for the unattended window or take it off (P4-04, FR-4.5): the\nperson's choice, so a key or token gets 403 `session_required`; 422 `not_ai` for a\ntask that is not labelled AI, 422 `task_done` for a done task.",
+        "operationId": "tasks_put_unattended",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnattendedIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnattendedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Put Unattended",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/v1/tasks/{task_id}/undo": {
       "post": {
         "description": "Puts back what one change did (R-09, UX 9): 409 `already_undone`, or\n`stale_version` when the task changed since.",
@@ -31671,6 +32236,235 @@
         "summary": "Typeahead Tasks",
         "tags": [
           "search"
+        ]
+      }
+    },
+    "/v1/unattended/window": {
+      "get": {
+        "operationId": "planning_get_unattended_window",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnattendedWindowOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Get Unattended Window",
+        "tags": [
+          "planning"
+        ]
+      },
+      "put": {
+        "operationId": "planning_put_unattended_window",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnattendedWindowIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnattendedWindowOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad request (`idempotency_key_required`, `invalid_cursor`, ...)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthenticated (`unauthenticated`, `session_expired`)"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict (`stale_version` with `current`)"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation error or `idempotency_mismatch`"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limited (`Retry-After`)"
+          }
+        },
+        "summary": "Put Unattended Window",
+        "tags": [
+          "planning"
         ]
       }
     },

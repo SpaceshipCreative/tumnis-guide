@@ -1,7 +1,8 @@
 // The task drawer (P0-24, FR-3.5, UX 9): `?task=<id>` opens it; the title, the status
 // action, the repeat rule, comments, and Move to trash (undoable). A side panel on a
 // laptop, a full sheet on the phone; Escape or Close shuts it. P2-04: an AI or Hybrid
-// task has Run; `?run=<id>` shows that run (RunView) in the drawer, Back returns.
+// task has Run; `?run=<id>` shows that run (RunView) in the drawer, Back returns. P4-04:
+// an AI task has the Run unattended switch (read from the task, no extra request).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 
@@ -25,6 +26,7 @@ import { deleteClass, fieldClass, saveClass } from "../rail/RailSection";
 import { statusAction } from "../TaskRow";
 import type { Task } from "../types";
 import { PacketPreview } from "../PacketPreview";
+import { RunUnattendedToggle } from "../../task/RunUnattendedToggle";
 import { CommentList } from "./CommentList";
 import { PullRequests } from "./PullRequests";
 import { RecurrencePicker } from "./RecurrencePicker";
@@ -317,6 +319,7 @@ function TaskDetails({
           Move to trash
         </button>
       </div>
+      <RunUnattendedToggle key={task.id} task={task} />
       <RecurrencePicker task={task} />
       <PullRequests taskId={task.id} />
       <PacketToggle key={task.id} taskId={task.id} />

@@ -177,7 +177,15 @@ export function ResultItem({
         <h2 id={titleId} className={CARD_TITLE}>
           {item.target_title ?? "Result"}
         </h2>
-        <span className={badge("accent")}>{outcome}</span>
+        {payload.batch === "overnight" ? (
+          // An unattended run's result (P4-04, J7): it waited for the morning review.
+          <span className="flex shrink-0 flex-wrap justify-end gap-1">
+            <span className={badge("info")}>Overnight</span>
+            <span className={badge("accent")}>{outcome}</span>
+          </span>
+        ) : (
+          <span className={badge("accent")}>{outcome}</span>
+        )}
       </header>
       <div className={CARD_BODY}>
         <p className="text-sm break-words whitespace-pre-line">{summary}</p>

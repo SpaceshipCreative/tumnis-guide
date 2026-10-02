@@ -12,6 +12,7 @@ import {
   decisionsGetCalibrationOptions,
   knowledgeListLocationsOptions,
   planningGetMetricsSummaryOptions,
+  planningGetUnattendedWindowOptions,
   settingsGetSectionOptions,
   settingsGetWorkingHoursOptions,
   settingsGetWorkspaceSettingsOptions,
@@ -58,3 +59,9 @@ export const metricsSummaryQuery = (range: { from: string; to: string }) =>
 // Settings > Retention (P3-09, SAAS-2): the workspace's retention setting.
 export const retentionQuery = () =>
   settingsGetSectionOptions({ path: { section: "integrations.retention" } });
+// Unattended runs (P4-04, FR-4.5): the window in force for the workspace, or for one
+// project (its own window, else the workspace's), and where it comes from.
+export const unattendedWindowQuery = (projectId: string | null = null) =>
+  planningGetUnattendedWindowOptions(
+    projectId === null ? undefined : { query: { project_id: projectId } },
+  );
