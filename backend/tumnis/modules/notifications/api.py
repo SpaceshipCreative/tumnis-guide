@@ -615,7 +615,9 @@ async def _item_request(s: AsyncSession, row: Any) -> NotifyFacts | None:
         title=None if item.target_title is None else item.target_title[:500],
         link=rules.deep_link_for(rules.ReviewItemLite(id=item.id, kind=item.kind)),
         prompt=str(payload.get("prompt"))[:8000] if question and payload.get("prompt") else None,
-        choices=[str(c)[:200] for c in payload.get("choices") or []][:20] if question else [],
+        choices=[str(c)[:200] for c in payload.get("choices") or [] if str(c)][:20]
+        if question
+        else [],  # an empty choice would make the packet invalid
     )
     request = agents.NotifyRequest(
         item=notify,
