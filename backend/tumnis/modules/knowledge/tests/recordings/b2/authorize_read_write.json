@@ -1,0 +1,35 @@
+{
+  "notes": "Written from Backblaze's public b2_authorize_account (API v4) response example (https://www.backblaze.com/apidocs/b2-authorize-account), not captured from a live account. Every id, token and URL is invented: account test-account, token test-auth-token, bucket tumnis-docs (id test-bucket-id), hosts on example.com. A read-write application key limited to one bucket, with no name prefix.",
+  "raw": {
+    "request": {"key_id": "test-key-id", "application_key": "test-application-key", "bucket": "tumnis-docs"},
+    "response": {
+      "accountId": "test-account",
+      "authorizationToken": "test-auth-token",
+      "applicationKeyExpirationTimestamp": null,
+      "apiInfo": {
+        "storageApi": {
+          "apiUrl": "https://api.example.com",
+          "downloadUrl": "https://f.example.com",
+          "s3ApiUrl": "https://s3.example.com",
+          "absoluteMinimumPartSize": 5000000,
+          "recommendedPartSize": 100000000,
+          "allowed": {
+            "buckets": [{"id": "test-bucket-id", "name": "tumnis-docs"}],
+            "capabilities": ["listBuckets", "listFiles", "readFiles", "shareFiles", "writeFiles", "deleteFiles"],
+            "namePrefix": null
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "checked": true,
+    "can_read": true,
+    "can_list": true,
+    "can_write": true,
+    "can_delete": true,
+    "bucket_scoped": true,
+    "prefix": null,
+    "source": "b2_authorize_account"
+  }
+}
