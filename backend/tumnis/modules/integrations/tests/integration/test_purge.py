@@ -222,6 +222,36 @@ async def test_project_purge_removes_content_and_is_audited(world: PurgeWorld) -
     assert len(world.audit_rows()) == 1
 
 
+@pytest.mark.req("FR-5.10")
+@pytest.mark.wp("P3-09")
+async def test_project_purge_keeps_records_another_archived_project_links(
+    world: PurgeWorld,
+) -> None:
+    """A record that two archived projects both link (their links now live in the archive
+    blobs, not in `context_items`) stays when one of them is purged, so the other
+    project's archived link keeps its content; what only the purged project links goes
+    (PR #169 review)."""
+    conn = world.connection("inbox-two")
+    await world.ingest(conn, world.message("m-both", RECENT), world.message("m-mine", RECENT))
+    acme = await world.archive.project("Acme two")
+    other = await world.archive.project("Other two")
+    both = world.record_id("messages", conn, "m-both")
+    await world.link("project", acme, "message", both)
+    await world.link("project", acme, "message", world.record_id("messages", conn, "m-mine"))
+    await world.link("project", other, "message", both)
+    await world.archive.archive(other)
+    await world.archive.archive(acme)
+
+    accepted = await world.purge("project", acme, "Client asked")
+    assert accepted.status_code == 202, accepted.text
+    done = await world.finish(accepted.json()["purge_id"])
+
+    assert done["status"] == "done"
+    assert done["counts"]["messages"] == 1
+    assert world.external_ids("messages", conn) == {"m-both"}
+    assert world.raw_ids(conn) == {"message:m-both"}
+
+
 def _with_sender(raw: RawItem) -> Sequence[CanonicalRecord]:
     """The scripted mapping, plus the sender as a person made from the same raw item."""
     from tumnis.modules.integrations.adapters.fake import ScriptedConnector  # noqa: PLC0415
