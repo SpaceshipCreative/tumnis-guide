@@ -48,7 +48,7 @@ from tumnis.core.routing import new_request_log
 from tumnis.core.testing_writes import WritesInFlight, WritesInFlightMiddleware
 from tumnis.migrate import release_revisions
 from tumnis.modules.auth import router as auth_router
-from tumnis.settings import Settings, install_master_keys, install_peppers, require_hosted_tls
+from tumnis.settings import Settings, require_hosted_tls
 
 # The built frontend (P0-22 replaces the placeholder shell); present in the image.
 SHELL_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -201,16 +201,12 @@ def create_app(
     settings = settings or Settings()  # values come from the environment
     metrics_token = settings.metrics_token()  # SettingsError: prod needs METRICS_TOKEN_FILE
     settings.check_database_tls()  # SettingsError: prod needs sslmode=verify-full (P0-16)
-    master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
     require_hosted_tls(settings)  # SettingsError: hosted mode without an https base URL
-    install_peppers(settings)  # session, CSRF and pre-auth tokens (P0-13)
-    db.configure(settings.database_url, settings.database_direct_url)
-    modules.configure(settings)  # the deployment's module kill list
     clock = clock or SystemClock()
     if settings.tumnis_adapters == "fake":
         clock = OverridableClock(clock)  # POST /v1/test/clock can fix it (issue #6)
-    cache.configure_backend(cache.InProcessCache(clock, publish=cache.pg_publisher(db.app_engine)))
-    deadletter.configure(settings.dbos_system_url)  # the api enqueues through a DBOSClient
+    # Keys, peppers, engines, kill list, cache and the DBOSClient the api enqueues through.
+    master_keys = wiring.configure_process(settings, app_url=settings.database_url, clock=clock)
     metrics.configure(settings.dbos_system_url)  # queue depth and workflows at scrape time
     wiring.register_module_metrics()
 
