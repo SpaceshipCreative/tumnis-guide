@@ -15,6 +15,7 @@ import {
   agentsCancelRun,
   agentsCheckProfileHealth,
   agentsCreateRunner,
+  agentsDelegateTask,
   agentsGetAgentFeed,
   agentsGetPauses,
   agentsGetProfileTools,
@@ -37,6 +38,7 @@ import {
   agentsResumeProject,
   agentsRotateRunnerToken,
   agentsUpdateProfile,
+  agentsWaitForTask,
   auditExportAuditCsv,
   auditListAudit,
   authConfirmTotpEnrolment,
@@ -183,6 +185,9 @@ import type {
   AgentsCreateRunnerData,
   AgentsCreateRunnerError,
   AgentsCreateRunnerResponse,
+  AgentsDelegateTaskData,
+  AgentsDelegateTaskError,
+  AgentsDelegateTaskResponse,
   AgentsGetAgentFeedData,
   AgentsGetAgentFeedError,
   AgentsGetAgentFeedResponse,
@@ -249,6 +254,9 @@ import type {
   AgentsUpdateProfileData,
   AgentsUpdateProfileError,
   AgentsUpdateProfileResponse,
+  AgentsWaitForTaskData,
+  AgentsWaitForTaskError,
+  AgentsWaitForTaskResponse,
   AuditExportAuditCsvData,
   AuditExportAuditCsvError,
   AuditListAuditData,
@@ -1906,6 +1914,70 @@ export const decisionsEditThresholdMutation = (
   };
   return mutationOptions;
 };
+
+/**
+ * Delegate Task
+ *
+ * Hand a task to its project's agent (the master key only; 403 `master_only` for any
+ * other caller): a run of the task starts, and the delegation id is its run's id. 409
+ * `agent_not_provisioned`, `agents_paused`, `delegation_depth_exceeded`,
+ * `delegation_loop`.
+ */
+export const agentsDelegateTaskMutation = (
+  options?: Partial<Options<AgentsDelegateTaskData>>,
+): UseMutationOptions<
+  AgentsDelegateTaskResponse,
+  AgentsDelegateTaskError,
+  Options<AgentsDelegateTaskData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsDelegateTaskResponse,
+    AgentsDelegateTaskError,
+    Options<AgentsDelegateTaskData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsDelegateTask({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const agentsWaitForTaskQueryKey = (
+  options: Options<AgentsWaitForTaskData>,
+) => createQueryKey("agentsWaitForTask", options);
+
+/**
+ * Wait For Task
+ *
+ * Wait for a delegated task up to `timeout_seconds` (the master key only): `done`,
+ * `waiting_on_human` with the question, or `still_running` at the timeout. The wait
+ * runs after the read's transaction, so it holds none.
+ */
+export const agentsWaitForTaskOptions = (
+  options: Options<AgentsWaitForTaskData>,
+) =>
+  queryOptions<
+    AgentsWaitForTaskResponse,
+    AgentsWaitForTaskError,
+    AgentsWaitForTaskResponse,
+    ReturnType<typeof agentsWaitForTaskQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await agentsWaitForTask({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: agentsWaitForTaskQueryKey(options),
+  });
 
 export const agentsGetProjectDigestQueryKey = (
   options: Options<AgentsGetProjectDigestData>,

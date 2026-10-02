@@ -17,7 +17,8 @@ registry, the routes and the auth api.
 - `Callers`: API keys (cached by scopes and projects), a task token bound to a run in
   project A, and the master key (marked through the caller-facts seam). The key with
   every scope and no project limit IS the master key (the same cache entry): the sweeps'
-  writer must reach every write op, master-only ones too (`pause_agents`, P2-09).
+  writer must reach every write op, master-only ones too (`pause_agents`, P2-09;
+  `delegate_task` and `wait_for_task`, P2-06).
 """
 
 from __future__ import annotations
@@ -487,6 +488,78 @@ async def _request_approval(world: World, project: str) -> dict[str, Any]:
     }
 
 
+async def _ready_profile(s: Any, world: World, project_id: uuid.UUID) -> uuid.UUID:
+    """The project's agent profile, made `ready` when there is none (owner session)."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    found: uuid.UUID | None = await s.scalar(
+        text(
+            "SELECT id FROM agent_profiles WHERE project_id = :p AND role = 'project'"
+            " AND deleted_at IS NULL"
+        ),
+        {"p": project_id},
+    )
+    if found is not None:
+        return found
+    made: uuid.UUID = await s.scalar(
+        text(
+            "INSERT INTO agent_profiles"
+            " (workspace_id, name, role, project_id, transport, status, created_by)"
+            " VALUES (:ws, :name, 'project', :p, 'daemon', 'ready', 'system') RETURNING id"
+        ),
+        {"ws": world.workspace.id, "name": f"surface-{project_id.hex[:12]}", "p": project_id},
+    )
+    return made
+
+
+async def _delegate_task(world: World, project: str) -> dict[str, Any]:
+    """P2-06: a fresh AI task in a project with an agent (the master's tool)."""
+    from tumnis.core import db  # noqa: PLC0415
+
+    task = await world.task(project, label="ai", estimate_minutes=None)
+    async with db.owner_sessionmaker()() as s, s.begin():
+        await _ready_profile(s, world, world.projects[project])
+    return {"task_id": str(task.id), "idempotency_key": idem()}
+
+
+async def _wait_for_task(world: World, project: str) -> dict[str, Any]:
+    """P2-06: a delegation whose run has ended (succeeded), so the wait answers at once
+    and both doors give the same answer."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    from tumnis.core import db  # noqa: PLC0415
+
+    project_id = world.projects[project]
+    task = await world.task(project, label="ai", estimate_minutes=None)
+    delegation_id = uuid.uuid4()
+    async with db.owner_sessionmaker()() as s, s.begin():
+        profile_id = await _ready_profile(s, world, project_id)
+        await s.execute(
+            text(
+                "INSERT INTO runs (id, workspace_id, task_id, profile_id, kind, status,"
+                " started_at, finished_at, workflow_id, correlation_id, delegation_id,"
+                " created_by) VALUES (:id, :ws, :t, :profile, 'task', 'succeeded', now(),"
+                " now(), :wf, :corr, :id, 'system')"
+            ),
+            {
+                "id": delegation_id,
+                "ws": world.workspace.id,
+                "t": task.id,
+                "profile": profile_id,
+                "wf": str(delegation_id),
+                "corr": f"run:{delegation_id}",
+            },
+        )
+        await s.execute(
+            text(
+                "INSERT INTO delegations (id, workspace_id, child_task_id, project_id, depth,"
+                " delegated_at, created_by) VALUES (:id, :ws, :t, :p, 1, now(), 'system')"
+            ),
+            {"id": delegation_id, "ws": world.workspace.id, "t": task.id, "p": project_id},
+        )
+    return {"delegation_id": str(delegation_id), "timeout_seconds": 1}
+
+
 async def _search_knowledge(world: World, project: str) -> dict[str, Any]:
     """P2-17: a search of the project's documents and the workspace knowledge base."""
     return {"q": "surface", "project_id": str(world.projects[project]), "limit": 20}
@@ -544,6 +617,8 @@ SAMPLES: Final[dict[str, Sample]] = {
     "add_document": _add_document,
     "get_project_digest": _get_project_digest,
     "get_workspace_digest": _get_workspace_digest,
+    "delegate_task": _delegate_task,
+    "wait_for_task": _wait_for_task,
 }
 
 
