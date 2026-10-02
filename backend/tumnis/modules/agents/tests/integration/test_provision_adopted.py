@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from dbos import DBOS
 
     from tests._pg import DbUrls
-    from tests.fixtures import WorkspaceHandle
+    from tests.fixtures import PepperFile, WorkspaceHandle
     from tumnis.core.clock import FixedClock
 
 pytestmark = [
@@ -110,7 +110,11 @@ async def test_a_failed_provision_leaves_an_adopted_profile_alone(
 
 
 async def test_a_ready_provision_leaves_an_adopted_profile_alone(
-    dbos: type[DBOS], workspace: WorkspaceHandle, clock: FixedClock, db: DbUrls
+    dbos: type[DBOS],
+    workspace: WorkspaceHandle,
+    clock: FixedClock,
+    db: DbUrls,
+    pepper_file: PepperFile,  # the runner's device token is an HMAC with the pepper
 ) -> None:
     """The runner answers `created` after the seed adopted the profile: the profile keeps
     the seed's state (no profile version written) and its runner's inventory gets no entry
