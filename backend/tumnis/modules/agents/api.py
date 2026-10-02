@@ -3274,6 +3274,11 @@ async def _seed_adopt_provisioned(
     if found is None:
         return None
     profile_id: UUID = found
+    holder = await s.scalar(
+        select(_profiles.c.id).where(_profiles.c.name == body.name, _live_profiles())
+    )
+    if holder is not None and holder != profile_id:
+        return None  # another project's profile holds the name: still `profile_exists`
     await s.execute(
         update(_profiles)
         .where(_profiles.c.id == profile_id)
