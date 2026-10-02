@@ -73,7 +73,15 @@ from tumnis.modules.knowledge.obsidian.rules import (
 from tumnis.modules.knowledge.storage import NotFound, StorageError
 from tumnis.modules.projects import api as projects
 
-__all__ = ["SOURCE", "ExtractHook", "VaultSyncReport", "register_extraction", "sync_vault"]
+__all__ = [
+    "SOURCE",
+    "ExtractHook",
+    "PreviewRow",
+    "VaultSyncReport",
+    "preview_mapping",
+    "register_extraction",
+    "sync_vault",
+]
 
 SOURCE: Final = "knowledge:obsidian"  # `documents.source`, as `connection_source` spells it
 MAX_TAGS: Final = api.MAX_TAGS
@@ -154,6 +162,41 @@ async def sync_vault(  # the connection, its reader and mapping, and the hooks
     for version_id, path in scan.extractions:
         await request(ctx.workspace_id, version_id, path)
     return scan.report
+
+
+@dataclass(frozen=True)
+class PreviewRow:
+    """One note as the mapping would sync it: its project (None: the workspace knowledge
+    base), skipped (`unmapped = "ignore"`), and untrusted (under the clippings folder)."""
+
+    path: str
+    project_id: UUID | None
+    ignored: bool
+    untrusted: bool
+
+
+async def preview_mapping(
+    ctx: WorkspaceContext, reader: VaultReader, mapping: VaultMapping
+) -> list[PreviewRow]:
+    """A dry run of the mapping over the vault's notes (ObsidianSetup's preview, computed
+    by the worker): nothing is written."""
+    await reader.refresh()
+    templates = templates_folder(await _config_text(reader))
+    listed = await reader.list_files(lambda path: is_excluded(path, mapping, templates))
+    async with tenant_session(ctx) as s:
+        known = await _known_projects(s)
+    scan = _Scan(listing={item.path: item for item in listed}, docs={})
+    await _read_notes(reader, scan, mapping, known)
+    return [
+        PreviewRow(
+            path=path,
+            project_id=scan.notes[path].project_id if path in scan.notes else None,
+            ignored=path not in scan.notes,
+            untrusted=note_trust(path, mapping) == "untrusted",
+        )
+        for path in sorted(scan.listing)
+        if is_note_path(path) and path not in scan.kept
+    ]
 
 
 # --- Reading ------------------------------------------------------------------------------
