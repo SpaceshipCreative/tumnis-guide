@@ -259,7 +259,6 @@ async def test_depth_three_refused_end_to_end(
 
 @pytest.mark.req("SAF-5")
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 async def test_loop_stops_run_with_review_item(
     dbos: type[DBOS],
     fake_runner: FakeRunnerFactory,
