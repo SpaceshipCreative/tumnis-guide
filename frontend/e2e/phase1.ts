@@ -105,15 +105,24 @@ export async function postJson(
   path: string,
   data: Json = {},
 ): Promise<Json> {
+  return sendJson(request, "POST", path, data);
+}
+
+async function sendJson(
+  request: APIRequestContext,
+  method: "POST" | "PUT",
+  path: string,
+  data: Json,
+): Promise<Json> {
   const { cookies } = await request.storageState();
   const csrf = cookies.find((c) => c.name === "__Host-tumnis_csrf")?.value;
   const headers: Record<string, string> = {
     "Idempotency-Key": `e2e-${crypto.randomUUID()}`,
   };
   if (csrf !== undefined) headers["X-CSRF-Token"] = csrf;
-  const response = await request.post(path, { data, headers });
+  const response = await request.fetch(path, { method, data, headers });
   if (!response.ok()) {
-    throw new Error(`POST ${path} -> ${String(response.status())}`);
+    throw new Error(`${method} ${path} -> ${String(response.status())}`);
   }
   const text = await response.text();
   return text ? (JSON.parse(text) as Json) : {};
@@ -210,12 +219,59 @@ export async function publishMondayPlan(
 /**
  * A1.3's calendar: extra busy events on the fake Google accounts so the
  * largest free block on MONDAY is 60 minutes and Tuesday 10 March has a free
- * block of 120 minutes, then one calendar sync (P1-09 names the scenario and
- * the schedule; adjust here).
+ * block of 120 minutes, then one calendar sync. The scenario
+ * (backend calendar recordings, `scenarios/no_ninety_minute_gap.json`) is
+ * stored first, the two fake accounts are connected the way a person connects
+ * them (P1-09: OAuth client in Settings, consent, callback), then the
+ * `calendar-sync` test tick syncs them and answers when the syncs end.
  */
 export async function squeezeMondayCalendar(fakes: TestFakes): Promise<void> {
   await fakes.script("calendar.google", { scenario: "no_ninety_minute_gap" });
+  await connectFakeGoogleAccounts(fakes.request);
   await fakes.tick("calendar-sync");
+}
+
+const CONNECT_WAIT_MS = 20_000;
+const CONNECT_POLL_MS = 500;
+
+/**
+ * Connects the fake Google accounts `a` and `b` (codes `code-a`, `code-b`)
+ * through the real OAuth routes, and waits until the worker's exchange has
+ * left both connected.
+ */
+async function connectFakeGoogleAccounts(
+  request: APIRequestContext,
+): Promise<void> {
+  await sendJson(request, "PUT", "/v1/settings/calendar.google", {
+    values: { client_id: "e2e-client.example.test", client_secret: "e2e" },
+    version: null,
+  });
+  for (const code of ["code-a", "code-b"]) {
+    const { url } = await getJson<{ url: string }>(
+      request,
+      "/v1/calendar/oauth/start",
+    );
+    const state = new URL(url).searchParams.get("state") ?? "";
+    const query = new URLSearchParams({ state, code }).toString();
+    const callback = await request.get(`/v1/calendar/oauth/callback?${query}`, {
+      maxRedirects: 0,
+    });
+    if (callback.status() !== 302) {
+      throw new Error(`OAuth callback ${code} -> ${String(callback.status())}`);
+    }
+  }
+  const deadline = Date.now() + CONNECT_WAIT_MS;
+  for (;;) {
+    const accounts = await getJson<{ status: string }[]>(
+      request,
+      "/v1/calendar/accounts",
+    );
+    if (accounts.filter((a) => a.status === "connected").length === 2) return;
+    if (Date.now() > deadline) {
+      throw new Error("the fake Google accounts did not connect");
+    }
+    await new Promise((resolve) => setTimeout(resolve, CONNECT_POLL_MS));
+  }
 }
 
 async function walk(
@@ -262,14 +318,29 @@ async function agentPostsResult(
     ],
   ]);
   await postJson(request, `/v1/tasks/${task.id}/run`);
+  await waitForTask(
+    request,
+    task.id,
+    (t) => t.status === "in_review",
+    `${task.title} did not reach In review`,
+  );
+}
+
+/**
+ * Polls `GET /v1/tasks/{id}` until `done(task)`, at most RESULT_WAIT_MS. The
+ * server clock stands still at the plan time; moving it on with the wait
+ * refills the per-principal rate limit (P0-10) the polling spends.
+ */
+async function waitForTask(
+  request: APIRequestContext,
+  taskId: string,
+  done: (task: TaskDetail & { enrichment_status?: string }) => boolean,
+  failure: string,
+): Promise<void> {
   const deadline = Date.now() + RESULT_WAIT_MS;
-  while ((await getTask(request, task.id)).status !== "in_review") {
-    if (Date.now() > deadline) {
-      throw new Error(`${task.title} did not reach In review`);
-    }
+  while (!done(await getTask(request, taskId))) {
+    if (Date.now() > deadline) throw new Error(failure);
     await new Promise((resolve) => setTimeout(resolve, RESULT_POLL_MS));
-    // The server clock stands still at the plan time; moving it on with the wait
-    // refills the per-principal rate limit (P0-10) the polling spends.
     await request.post("/v1/test/clock", {
       data: { advance_seconds: RESULT_POLL_MS / 1_000 },
     });
@@ -299,10 +370,28 @@ export async function arrangeCloseTheDay(
   await walk(request, ai.id, ["done"]);
   await walk(request, human.id, ["in_progress", "done"]);
 
+  // The enrichment recording answers for a Hybrid task (estimate and split),
+  // so Jev labels the new task Hybrid first, as in A1.1; the run then finishes
+  // within the day.
+  await fakes.script("decisions.jev", {
+    question: "quick_add_label",
+    answer: "hybrid",
+    confidence: 0.93,
+  });
   await fakes.runner.script(
     runnerScript(ACME_AGENT, "enrich", "enrich__hybrid_invoice"),
   );
-  await createTask(request, ACME, "Send Acme the March invoice");
+  const invoice = await createTask(
+    request,
+    ACME,
+    "Send Acme the March invoice",
+  );
+  await waitForTask(
+    request,
+    invoice.id,
+    (t) => t.enrichment_status === "done",
+    `${invoice.title} was not enriched`,
+  );
   const rolling = tasks.filter((t) => t.id !== ai.id && t.id !== human.id);
   return { shipped: [human, ai], rolling };
 }
