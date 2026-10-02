@@ -8,8 +8,7 @@
   Deleting the linking Document deletes its links; deleting the target leaves the link
   unresolved (purge_trash hard-deletes Documents).
 
-Chained after knowledge_0008 (main's head when written). The coordinator's order names it
-knowledge_0010 after P3-14's knowledge_0009 (#154); whichever merges later re-chains.
+Chained after P3-14's knowledge_0009 (folder_moves).
 """
 
 import sqlalchemy as sa
@@ -18,7 +17,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from tumnis.core.migration_helpers import create_tenant_table, drop_tenant_table
 
 revision = "knowledge_0010"
-down_revision = "knowledge_0008"
+down_revision = "knowledge_0009"
 branch_labels = None
 depends_on = None
 phase = "expand"

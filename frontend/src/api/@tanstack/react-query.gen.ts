@@ -79,22 +79,26 @@ import {
   knowledgeConfirmHostKey,
   knowledgeCreateLocation,
   knowledgeCreateTextEntry,
+  knowledgeDeleteAtSource,
+  knowledgeDeleteDocument,
   knowledgeGetBrief,
   knowledgeGetDocument,
   knowledgeGetFile,
   knowledgeGetQuota,
+  knowledgeIssueDeleteConfirmation,
   knowledgeListDocuments,
   knowledgeListLocations,
   knowledgeListVersions,
+  knowledgeMoveProjectFolder,
   knowledgeRestoreDocument,
   knowledgeSearch,
   knowledgeSetDefaultLocation,
   knowledgeSetProjectFolder,
   knowledgeSetTrust,
   knowledgeTestLocation,
-  knowledgeTrashDocument,
   knowledgeUpdateDocument,
   knowledgeUploadDocument,
+  knowledgeUseExistingFolder,
   notificationsGetVapidPublicKey,
   notificationsSubscribe,
   notificationsUnsubscribe,
@@ -368,6 +372,12 @@ import type {
   KnowledgeCreateTextEntryData,
   KnowledgeCreateTextEntryError,
   KnowledgeCreateTextEntryResponse,
+  KnowledgeDeleteAtSourceData,
+  KnowledgeDeleteAtSourceError,
+  KnowledgeDeleteAtSourceResponse,
+  KnowledgeDeleteDocumentData,
+  KnowledgeDeleteDocumentError,
+  KnowledgeDeleteDocumentResponse,
   KnowledgeGetBriefData,
   KnowledgeGetBriefError,
   KnowledgeGetBriefResponse,
@@ -380,6 +390,9 @@ import type {
   KnowledgeGetQuotaData,
   KnowledgeGetQuotaError,
   KnowledgeGetQuotaResponse,
+  KnowledgeIssueDeleteConfirmationData,
+  KnowledgeIssueDeleteConfirmationError,
+  KnowledgeIssueDeleteConfirmationResponse,
   KnowledgeListDocumentsData,
   KnowledgeListDocumentsError,
   KnowledgeListDocumentsResponse,
@@ -389,6 +402,9 @@ import type {
   KnowledgeListVersionsData,
   KnowledgeListVersionsError,
   KnowledgeListVersionsResponse,
+  KnowledgeMoveProjectFolderData,
+  KnowledgeMoveProjectFolderError,
+  KnowledgeMoveProjectFolderResponse,
   KnowledgeRestoreDocumentData,
   KnowledgeRestoreDocumentError,
   KnowledgeRestoreDocumentResponse,
@@ -407,15 +423,15 @@ import type {
   KnowledgeTestLocationData,
   KnowledgeTestLocationError,
   KnowledgeTestLocationResponse,
-  KnowledgeTrashDocumentData,
-  KnowledgeTrashDocumentError,
-  KnowledgeTrashDocumentResponse,
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentError,
   KnowledgeUpdateDocumentResponse,
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentError,
   KnowledgeUploadDocumentResponse,
+  KnowledgeUseExistingFolderData,
+  KnowledgeUseExistingFolderError,
+  KnowledgeUseExistingFolderResponse,
   NotificationsGetVapidPublicKeyData,
   NotificationsGetVapidPublicKeyError,
   NotificationsGetVapidPublicKeyResponse,
@@ -2573,25 +2589,29 @@ export const knowledgeCreateTextEntryMutation = (
 };
 
 /**
- * Trash Document
+ * Delete Document
  *
- * To the trash: hidden from lists, reads and search until restored; 409
- * `read_only_source` for a synced Document (delete it at its source).
+ * Delete a document. To the trash (FR-15.6, P1-17): 204, hidden from lists, reads and
+ * search until restored; this is every text entry, link and upload, and Tumnis's own
+ * folder file. An outside file in an existing folder (FR-15.12, P3-14) is only unindexed
+ * and stays where it is: 200 `{"outcome": "index_only"}`. An agent may not delete an
+ * outside file (403, audited). A Document a connection syncs (an Obsidian note, P3-12)
+ * is 409 `read_only_source`: delete it at its source.
  */
-export const knowledgeTrashDocumentMutation = (
-  options?: Partial<Options<KnowledgeTrashDocumentData>>,
+export const knowledgeDeleteDocumentMutation = (
+  options?: Partial<Options<KnowledgeDeleteDocumentData>>,
 ): UseMutationOptions<
-  KnowledgeTrashDocumentResponse,
-  KnowledgeTrashDocumentError,
-  Options<KnowledgeTrashDocumentData>
+  KnowledgeDeleteDocumentResponse,
+  KnowledgeDeleteDocumentError,
+  Options<KnowledgeDeleteDocumentData>
 > => {
   const mutationOptions: UseMutationOptions<
-    KnowledgeTrashDocumentResponse,
-    KnowledgeTrashDocumentError,
-    Options<KnowledgeTrashDocumentData>
+    KnowledgeDeleteDocumentResponse,
+    KnowledgeDeleteDocumentError,
+    Options<KnowledgeDeleteDocumentData>
   > = {
     mutationFn: async (fnOptions) => {
-      const { data } = await knowledgeTrashDocument({
+      const { data } = await knowledgeDeleteDocument({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -2656,6 +2676,65 @@ export const knowledgeUpdateDocumentMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await knowledgeUpdateDocument({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Delete At Source
+ *
+ * Delete an outside file at its source, with the dialog's token and a reason; the
+ * next folder sync deletes it.
+ */
+export const knowledgeDeleteAtSourceMutation = (
+  options?: Partial<Options<KnowledgeDeleteAtSourceData>>,
+): UseMutationOptions<
+  KnowledgeDeleteAtSourceResponse,
+  KnowledgeDeleteAtSourceError,
+  Options<KnowledgeDeleteAtSourceData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeDeleteAtSourceResponse,
+    KnowledgeDeleteAtSourceError,
+    Options<KnowledgeDeleteAtSourceData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeDeleteAtSource({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Issue Delete Confirmation
+ *
+ * A one-time token for the delete-at-source dialog.
+ */
+export const knowledgeIssueDeleteConfirmationMutation = (
+  options?: Partial<Options<KnowledgeIssueDeleteConfirmationData>>,
+): UseMutationOptions<
+  KnowledgeIssueDeleteConfirmationResponse,
+  KnowledgeIssueDeleteConfirmationError,
+  Options<KnowledgeIssueDeleteConfirmationData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeIssueDeleteConfirmationResponse,
+    KnowledgeIssueDeleteConfirmationError,
+    Options<KnowledgeIssueDeleteConfirmationData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeIssueDeleteConfirmation({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -2893,6 +2972,36 @@ export const knowledgeTestLocationMutation = (
 };
 
 /**
+ * Use Existing Folder
+ *
+ * Make a folder the user already keeps the project's folder (Tumnis writes only in
+ * its `Tumnis/` subfolder).
+ */
+export const knowledgeUseExistingFolderMutation = (
+  options?: Partial<Options<KnowledgeUseExistingFolderData>>,
+): UseMutationOptions<
+  KnowledgeUseExistingFolderResponse,
+  KnowledgeUseExistingFolderError,
+  Options<KnowledgeUseExistingFolderData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeUseExistingFolderResponse,
+    KnowledgeUseExistingFolderError,
+    Options<KnowledgeUseExistingFolderData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeUseExistingFolder({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Set Project Folder
  */
 export const knowledgeSetProjectFolderMutation = (
@@ -2909,6 +3018,37 @@ export const knowledgeSetProjectFolderMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await knowledgeSetProjectFolder({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Move Project Folder
+ *
+ * Copy the project's folder to another location, verify every hash, switch; the old
+ * copy is kept. A target that cannot take the folder is refused here (409, or 422 for an
+ * unsafe path), not after a 202.
+ */
+export const knowledgeMoveProjectFolderMutation = (
+  options?: Partial<Options<KnowledgeMoveProjectFolderData>>,
+): UseMutationOptions<
+  KnowledgeMoveProjectFolderResponse,
+  KnowledgeMoveProjectFolderError,
+  Options<KnowledgeMoveProjectFolderData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeMoveProjectFolderResponse,
+    KnowledgeMoveProjectFolderError,
+    Options<KnowledgeMoveProjectFolderData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeMoveProjectFolder({
         ...options,
         ...fnOptions,
         throwOnError: true,

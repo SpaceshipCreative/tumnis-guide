@@ -1,5 +1,5 @@
 """knowledge SQLAlchemy tables owned by this module (mirrors of revisions knowledge_0001
-to knowledge_0008, and knowledge_0010)."""
+to knowledge_0010)."""
 
 from datetime import datetime
 from typing import Any
@@ -204,6 +204,35 @@ class Embedding(TenantBase, Base):
     project_id: Mapped[UUID | None]
     model: Mapped[str]
     embedding: Mapped[list[float]] = mapped_column(Vector())
+
+
+class FolderMove(TenantBase, Base):
+    """knowledge_0009: one move of a project's folder to another location (P3-14)."""
+
+    __tablename__ = "folder_moves"
+
+    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"))
+    from_location: Mapped[UUID] = mapped_column(ForeignKey("storage_locations.id"))
+    from_path: Mapped[str]
+    to_location: Mapped[UUID] = mapped_column(ForeignKey("storage_locations.id"))
+    to_path: Mapped[str]
+    status: Mapped[str] = mapped_column(server_default=text("'copying'"))
+    reason: Mapped[str | None]
+    verified_count: Mapped[int] = mapped_column(server_default=text("0"))
+    old_kept: Mapped[bool] = mapped_column(server_default=text("true"))
+
+
+class DeleteConfirmation(TenantBase, Base):
+    """knowledge_0009: a one-time token the delete-confirmation dialog is issued for
+    deleting an outside file at its source (P3-14); only its sha256 is kept."""
+
+    __tablename__ = "delete_confirmations"
+
+    document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id"))
+    token_sha256: Mapped[bytes] = mapped_column(LargeBinary)
+    issued_to: Mapped[UUID]
+    expires_at: Mapped[datetime]
+    used_at: Mapped[datetime | None]
 
 
 class DocumentLink(TenantBase, Base):

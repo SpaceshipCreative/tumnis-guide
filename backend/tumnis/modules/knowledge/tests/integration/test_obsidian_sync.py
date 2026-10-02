@@ -228,3 +228,44 @@ async def test_synced_notes_read_only(
     unchanged = (await vault_documents(env))["Clients/Acme/Kickoff.md"]
     assert unchanged["version"] == kickoff["version"]
     assert unchanged["body_md"] == kickoff["body_md"]
+
+
+@pytest.mark.req("FR-15.8")
+@pytest.mark.wp("P3-12")
+async def test_synced_notes_cannot_be_deleted_in_tumnis(
+    db: DbUrls,
+    knowledge_ws: WorkspaceHandle,
+    clock: FixedClock,
+    tmp_path: Path,
+    session_client: SessionClient,
+) -> None:
+    """A vault Document is not deleted in Tumnis either: DELETE on it, and the
+    delete-at-source dialog's confirmation, answer 409 `read_only_source` before P3-14's
+    outcomes (decision 81), and the Document stays live. The note is deleted in the vault;
+    the next sync trashes it."""
+    _folder = importlib.import_module("tumnis.modules.knowledge.adapters.obsidian.folder")
+    FolderReader = _folder.FolderReader  # noqa: N806
+    vault_sync = importlib.import_module("tumnis.modules.knowledge.obsidian.sync")
+    _rules = importlib.import_module("tumnis.modules.knowledge.obsidian.rules")
+    VaultMapping = _rules.VaultMapping  # noqa: N806
+
+    vault = copy_vault(tmp_path / "vault")
+    env = await vault_env(knowledge_ws, clock)
+    await vault_sync.sync_vault(
+        knowledge_ws.ctx,
+        env.connection_id,
+        FolderReader(vault, clock=clock),
+        VaultMapping(folders={"Clients/Acme": "acme"}),
+        extract=env.extract,
+    )
+    kickoff = (await vault_documents(env))["Clients/Acme/Kickoff.md"]
+    url = f"/v1/knowledge/documents/{kickoff['id']}"
+
+    for answer in (
+        await session_client.delete(url),
+        await session_client.post(f"{url}/delete-confirmation"),
+    ):
+        assert answer.status_code == 409, answer.text
+        assert answer.json()["code"] == "read_only_source"
+
+    assert "Clients/Acme/Kickoff.md" in await vault_documents(env)
