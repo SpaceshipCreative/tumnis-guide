@@ -63,11 +63,13 @@ __all__ = [
     "VapidSettings",
     "flush",
     "notify_request",
+    "overnight_workspaces",
     "push_targets",
     "record_attempt",
     "record_discord_attempt",
     "record_focus_event",
     "record_review_item",
+    "release_overnight",
     "subscribe",
     "subscription",
     "unsubscribe",
@@ -311,8 +313,12 @@ async def _record(  # one notification's facts
     state: _State,
     details: Mapping[str, Any] | None,
     now: datetime,
+    overnight: tuple[bool, datetime | None] = (False, None),
 ) -> Recorded:
-    decision = rules.delivery_decision(state.level, state.in_progress, kind)
+    held, release_at = overnight
+    decision: rules.Decision = (
+        rules.OVERNIGHT if held else rules.delivery_decision(state.level, state.in_progress, kind)
+    )
     row = (
         await s.execute(
             pg_insert(_notifications)
@@ -323,6 +329,7 @@ async def _record(  # one notification's facts
                 project_id=project_id,
                 level=state.level,
                 decision=decision,
+                release_at=release_at,
                 payload=payload.model_dump(mode="json"),
                 dedupe_key=dedupe_key,
                 details=None if details is None else dict(details),
@@ -362,8 +369,11 @@ async def record_review_item(  # the event's facts
     dedupe_key: str,
     now: datetime,
 ) -> Recorded:
-    """A new review item (`review_item.added`): its notification and P2-16's decision."""
+    """A new review item (`review_item.added`): its notification and P2-16's decision. An
+    item an unattended night left (`payload.batch` "overnight", P4-04) is held for the
+    morning release instead (decision `overnight`, with its release time)."""
     async with tenant_session(ctx) as s:
+        overnight = await _overnight(s, item_id)
         names = await projects.project_names(s, [project_id] if project_id else [])
         source = rules.ReviewItemLite(
             id=item_id, kind=kind, project_name=names.get(project_id) if project_id else None
@@ -379,7 +389,20 @@ async def record_review_item(  # the event's facts
             state=await _state(s, ctx, now),
             details=None,
             now=now,
+            overnight=overnight,
         )
+
+
+async def _overnight(s: AsyncSession, item_id: UUID) -> tuple[bool, datetime | None]:
+    """(held overnight, its release time) for a review item: its payload says so."""
+    try:
+        item = await tasks.get_review_item(s, item_id)
+    except NotFound:
+        return False, None
+    if item.payload.get("batch") != rules.OVERNIGHT:
+        return False, None
+    raw = item.payload.get("release_at")
+    return True, None if raw is None else datetime.fromisoformat(str(raw))
 
 
 async def record_focus_event(  # the event's facts
@@ -466,6 +489,88 @@ async def flush(
         ).one()
         await _ready(s, row.id, payload.kind, "now", now)
         return UUID(str(row.id))
+
+
+async def release_overnight(ctx: WorkspaceContext, *, now: datetime) -> UUID | None:
+    """The morning release (P4-04, J7): every overnight row whose release time has come is
+    released as one summary notification ("1 result from overnight", kind `batch`, decided
+    `now`, so it reaches Discord through the master and browser push); its id, or None when
+    nothing is due. A re-run at the same `now` answers the summary it made."""
+    dedupe_key = f"overnight:{now.isoformat()}"
+    async with tenant_session(ctx) as s:
+        made = (
+            await s.execute(
+                select(_notifications.c.id).where(_notifications.c.dedupe_key == dedupe_key)
+            )
+        ).scalar_one_or_none()
+        if made is not None:
+            return UUID(str(made))
+        held = [
+            r
+            for r in (
+                await s.execute(
+                    select(_notifications.c.id, _notifications.c.kind, _notifications.c.release_at)
+                    .where(
+                        _notifications.c.decision == rules.OVERNIGHT,
+                        _notifications.c.released_at.is_(None),
+                        _notifications.c.deleted_at.is_(None),
+                    )
+                    .order_by(_notifications.c.created_at, _notifications.c.id)
+                    .with_for_update(skip_locked=True)
+                )
+            ).all()
+            if rules.overnight_due(r.release_at, now)
+        ]
+        if not held:
+            return None
+        await s.execute(
+            update(_notifications)
+            .where(_notifications.c.id.in_([r.id for r in held]))
+            .values(released_at=now)
+        )
+        results = sum(1 for r in held if r.kind == rules.RESULT_KIND)
+        payload = rules.overnight_payload(results, len(held) - results)
+        level = (await focus.current(ctx, now, session=s)).level
+        row = (
+            await s.execute(
+                pg_insert(_notifications)
+                .values(
+                    kind=payload.kind,
+                    level=level,
+                    decision="now",
+                    payload=payload.model_dump(mode="json"),
+                    dedupe_key=dedupe_key,
+                    details={"count": len(held), "batch": rules.OVERNIGHT},
+                )
+                .returning(_notifications.c.id)
+            )
+        ).one()
+        await _ready(s, row.id, payload.kind, "now", now)
+        return UUID(str(row.id))
+
+
+async def overnight_workspaces() -> list[UUID]:
+    """Every workspace holding an overnight notification (the release tick's first step)."""
+    from tumnis.core import audit, db  # noqa: PLC0415  # the release reads across workspaces
+    from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
+
+    async with db.app_sessionmaker()() as s, s.begin():
+        workspace_ids = list(await audit.workspace_ids(s))
+    found: list[UUID] = []
+    for workspace_id in workspace_ids:
+        async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
+            held = await s.scalar(
+                select(_notifications.c.id)
+                .where(
+                    _notifications.c.decision == rules.OVERNIGHT,
+                    _notifications.c.released_at.is_(None),
+                    _notifications.c.deleted_at.is_(None),
+                )
+                .limit(1)
+            )
+        if held is not None:
+            found.append(workspace_id)
+    return found
 
 
 # --- Delivering (the worker's steps) -------------------------------------------------------

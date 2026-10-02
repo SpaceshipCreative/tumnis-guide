@@ -32,6 +32,7 @@ import contextvars
 import functools
 import random
 from collections.abc import Callable, Coroutine
+from datetime import datetime
 from typing import Any, Final
 from uuid import UUID, uuid5
 
@@ -344,3 +345,63 @@ async def start_discord(envelope: EventEnvelope) -> None:
             )
 
     await _fresh(run)
+
+
+# --- The morning release of an unattended night (P4-04, J7, FR-8.4) ------------------------
+
+OVERNIGHT_RELEASE_NAME: Final = "overnight-release"
+OVERNIGHT_RELEASE_SCHEDULE: Final = "*/5 * * * *"  # a release goes out at most 5 minutes late
+
+
+def push_options(notification_id: UUID) -> dict[str, Any]:
+    """How a process without DBOS launched (the api's test tick) enqueues the push of a
+    released summary through a DBOSClient: the same workflow, queue and id as `start_push`."""
+    return {
+        "queue_name": PUSH_QUEUE,
+        "workflow_name": "notifications.deliver_push",
+        "workflow_id": push_workflow_id(notification_id),
+    }
+
+
+def push_delays() -> list[float]:
+    return list(_delays[0])
+
+
+@DBOS.step(name="notifications.overnight_workspaces")
+async def overnight_workspaces_step() -> list[str]:
+    return [str(w) for w in await api.overnight_workspaces()]
+
+
+@DBOS.step(name="notifications.release_overnight_step")
+async def release_overnight_step(workspace_id: str, now: str) -> str | None:
+    """One workspace's release: one summary, its `notification.ready` in the same
+    transaction (Discord through the master); a replay answers the summary it made."""
+    made = await api.release_overnight(_ctx(workspace_id), now=datetime.fromisoformat(now))
+    return None if made is None else str(made)
+
+
+@DBOS.workflow(name="notifications.release_overnight")
+async def release_overnight(scheduled_time: datetime, context: Any) -> int:
+    """Scheduled every 5 minutes: in each workspace, the overnight rows whose release time
+    has come go out as one summary (Discord, and one browser push); returns how many
+    summaries it released."""
+    del context
+    released = 0
+    for workspace_id in await overnight_workspaces_step():
+        made = await release_overnight_step(workspace_id, scheduled_time.isoformat())
+        if made is not None:
+            await start_push(UUID(workspace_id), UUID(made))
+            released += 1
+    return released
+
+
+def schedules() -> list[Any]:
+    """This module's DBOS schedules, applied by the worker after launch."""
+    return [
+        {
+            "schedule_name": OVERNIGHT_RELEASE_NAME,
+            "workflow_fn": release_overnight,
+            "schedule": OVERNIGHT_RELEASE_SCHEDULE,
+            "queue_name": PUSH_QUEUE,
+        }
+    ]
