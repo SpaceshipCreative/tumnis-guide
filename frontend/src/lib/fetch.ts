@@ -5,6 +5,7 @@
 // without one. `src/lib/write-imports.test.ts` keeps generated write functions out of
 // everything but this file and tests.
 import {
+  type MutateOptions,
   useMutation,
   type UseMutationOptions,
   type UseMutationResult,
@@ -207,16 +208,20 @@ export function useWrite<
 ): Omit<UseMutationResult<TOut, Error, Keyed<TVars>, TSnap>, "mutate"> & {
   mutate: (
     v: Omit<TVars, "idempotencyKey"> & { idempotencyKey?: string },
+    callbacks?: MutateOptions<TOut, Error, Keyed<TVars>, TSnap>,
   ) => void;
 } {
   const mutation = useMutation(opts);
   return {
     ...mutation,
-    mutate: (v) => {
-      mutation.mutate({
+    // `callbacks` (per call) fire after the hook's own, for the latest call only.
+    mutate: (v, callbacks) => {
+      const keyed = {
         ...v,
         idempotencyKey: v.idempotencyKey ?? crypto.randomUUID(),
-      } as Keyed<TVars>);
+      } as Keyed<TVars>;
+      if (callbacks) mutation.mutate(keyed, callbacks);
+      else mutation.mutate(keyed);
     },
   };
 }

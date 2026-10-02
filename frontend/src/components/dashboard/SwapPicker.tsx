@@ -1,6 +1,7 @@
 // Swap one plan item for another task (P1-11, J1): a dialog listing what the day can
 // bring in instead (`GET /v1/plan/{day}/alternates`, read when it opens). Picking one
-// swaps it in at the same place; Escape or Cancel closes it with nothing changed. Tab
+// swaps it in at the same place (the dialog stays open, its options disabled, while the
+// swap is `saving`); Escape or Cancel closes it with nothing changed. Tab
 // stays inside the dialog, and focus goes back to what opened it when it closes.
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef } from "react";
@@ -33,12 +34,15 @@ function details(alternate: AlternateOut): string {
 export function SwapPicker({
   day,
   title,
+  saving = false,
   onPick,
   onClose,
 }: {
   day: string;
   /** The title of the item being swapped out. */
   title: string;
+  /** A pick is being saved: the options take no other pick until it answers. */
+  saving?: boolean;
   onPick: (alternate: AlternateOut) => void;
   onClose: () => void;
 }) {
@@ -88,14 +92,15 @@ export function SwapPicker({
                 key={alternate.id}
                 role="option"
                 aria-selected="false"
+                aria-disabled={saving}
                 tabIndex={0}
                 onClick={() => {
-                  onPick(alternate);
+                  if (!saving) onPick(alternate);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    onPick(alternate);
+                    if (!saving) onPick(alternate);
                   }
                 }}
                 className="flex min-h-11 cursor-pointer flex-col justify-center rounded-lg border border-border px-3 py-2 hover:border-border-strong focus-visible:outline-2 focus-visible:outline-accent"
