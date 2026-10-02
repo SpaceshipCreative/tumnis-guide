@@ -2069,8 +2069,10 @@ _SYNC_AGES_SQL = text("SELECT provider, age_seconds, items FROM app.connector_sy
 async def export_metrics(conn: AsyncConnection) -> None:
     """`tumnis_connector_sync_age_seconds{provider}` (the oldest live connection's time
     since its last good sync, or since it was made) and
-    `tumnis_connector_items_total{provider}` (items its syncs have read)."""
-    rows = (await conn.execute(_SYNC_AGES_SQL)).all()
+    `tumnis_connector_items_total{provider}` (items its syncs have read). Only the
+    framework's providers: calendar's and the seed's connections sync in their own modules
+    and never set `last_success_at`."""
+    rows = [row for row in (await conn.execute(_SYNC_AGES_SQL)).all() if row.provider in _PROVIDERS]
     CONNECTOR_SYNC_AGE.set_all({row.provider: float(row.age_seconds) for row in rows})
     CONNECTOR_ITEMS.set_all({row.provider: float(row.items) for row in rows})
 

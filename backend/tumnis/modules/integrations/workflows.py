@@ -40,6 +40,7 @@ from tumnis.core import audit, db, faults
 from tumnis.core.adapters.errors import AdapterUnavailable
 from tumnis.core.adapters.registry import current_mode, resolve
 from tumnis.core.clock import Clock, SystemClock
+from tumnis.core.net import NetPolicy
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.integrations import api
@@ -67,6 +68,7 @@ _sources: Mapping[str, Any] | None = None  # provider -> connector instance (tes
 _clock: Clock | None = None
 _sleep: Sleep | None = None
 _resolved_oauth: OAuthPort | None = None
+_net_policy: NetPolicy | None = None  # None: the real OAuth client's default (hosted)
 
 
 def use(
@@ -84,13 +86,23 @@ def use(
     return previous
 
 
+def configure_net_policy(policy: NetPolicy | None) -> None:
+    """The worker sets its deployment's SSRF policy, so the real OAuth client reaches a
+    self-hosted MCP server on the LAN when the deployment allows it; None restores the
+    default."""
+    global _net_policy, _resolved_oauth  # set once at worker start
+    _net_policy, _resolved_oauth = policy, None
+
+
 def _oauth_port() -> OAuthPort:
     global _resolved_oauth  # noqa: PLW0603  # built once per process
     if _oauth is not None:
         port: OAuthPort = _oauth
         return port
     if _resolved_oauth is None:
-        _resolved_oauth = resolve(OAUTH_ADAPTER, current_mode())
+        mode = current_mode()
+        deps = {"policy": _net_policy} if mode == "real" and _net_policy is not None else {}
+        _resolved_oauth = resolve(OAUTH_ADAPTER, mode, **deps)
     return _resolved_oauth
 
 

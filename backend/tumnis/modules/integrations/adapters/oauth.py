@@ -10,7 +10,8 @@ Discovery order and parsing are the MCP SDK's helpers (`mcp.client.auth.utils`, 
 1.30.0), so they follow the SDK's reading of the spec; the HTTP goes through
 `core.net.guarded_client` (SSRF checks on every request, no redirects, no proxy
 variables). A refused grant (HTTP 400/401 with an OAuth `error`) raises `OAuthRefused`;
-an unreachable server or a 5xx raises `AdapterUnavailable`.
+an unreachable server, a 5xx, a 408 or a 429 raises `AdapterUnavailable`; any other
+non-200 answer raises `AdapterRejected`.
 """
 
 import re
@@ -43,6 +44,10 @@ from tumnis.modules.integrations.oauth_port import ADAPTER, OAuthRefused, OAuthS
 
 TIMEOUT_S: Final = 15.0  # plan default for one authorization server call
 _ERROR_CODE: Final = re.compile(r"[a-z_]{1,64}")  # RFC 6749 error codes
+# A token endpoint refuses a grant with 400 or 401 (RFC 6749 section 5.2): only that means
+# signing in again. A timeout or rate limit is transient and is retried with the grant kept.
+_REFUSED: Final = frozenset({400, 401})
+_TRANSIENT: Final = frozenset({408, 429})
 
 
 class McpOAuthClient:
@@ -73,7 +78,7 @@ class McpOAuthClient:
             response = await http.send(request)
         except httpx.HTTPError as exc:
             raise AdapterUnavailable(ADAPTER, op, type(exc).__name__) from None
-        if response.status_code >= 500:  # noqa: PLR2004
+        if response.status_code >= 500 or response.status_code in _TRANSIENT:  # noqa: PLR2004
             raise AdapterUnavailable(ADAPTER, op, f"HTTP {response.status_code}")
         return response
 
@@ -171,8 +176,10 @@ class McpOAuthClient:
         async with self._http() as http:
             response = await self._send(http, op, request)
             body = await response.aread()
-        if response.status_code != 200:  # noqa: PLR2004
+        if response.status_code in _REFUSED:  # RFC 6749 section 5.2
             raise OAuthRefused(op, _oauth_error(body, response.status_code))
+        if response.status_code != 200:  # noqa: PLR2004
+            raise AdapterRejected(ADAPTER, op, f"HTTP {response.status_code}")
         try:
             return OAuthToken.model_validate_json(body)
         except ValidationError:
