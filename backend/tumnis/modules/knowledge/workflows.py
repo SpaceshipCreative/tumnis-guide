@@ -527,8 +527,9 @@ async def move_project_folder(
 # `knowledge-s3-source-tick` (until P3-02's connector tick takes linked sources over).
 # `knowledge_s3_source_recheck(workspace_id, connection_id, key)`: what a MinIO
 # notification queues, a HEAD of one key in the source's own bucket (`s3_sync.recheck_key`).
-# Both run on the `sync` queue as one step each: a retried step compares again, and a
-# version taken in is recorded with the step, so a replay takes nothing in twice.
+# Both run on the `sync` queue as one step each: a retried step compares again, so a
+# version already taken in is not taken in twice, and each version's extraction is
+# requested as soon as it is taken in (idempotent per version), so a retry loses none.
 
 
 @DBOS.step(name="knowledge_s3_source_sync_step", **STEP_RETRY)

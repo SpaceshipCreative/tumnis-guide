@@ -51,6 +51,7 @@ from tumnis.modules.knowledge.models import Document, DocumentVersion, FolderFil
 from tumnis.modules.knowledge.rules import (
     MAX_UPLOAD_BYTES,
     FolderFileLite,
+    PathRejected,
     S3ObjectLite,
     prefix_for,
     s3_change,
@@ -359,6 +360,9 @@ async def sync_source(
             if s3_change(_lite(record), _obj(stat)) in ("new", "changed"):
                 version_id = await _take_in(ctx, source, reader, stat, record)
                 if version_id is not None:
+                    # Requested at once (idempotent per version): a later failure retries
+                    # the step, which then finds this key unchanged and would not ask again.
+                    await _extract_all(ctx, [version_id], extract)
                     taken.append(version_id)
         for key, record in records.items():
             if key not in listed:
@@ -370,7 +374,6 @@ async def sync_source(
             .where(_sources.c.connection_id == connection_id)
             .values(last_sync_at=(_Config.clock or SystemClock()).now())
         )
-    await _extract_all(ctx, taken, extract)
     return {"taken": len(taken), "trashed": trashed}
 
 
@@ -389,7 +392,7 @@ async def recheck_key(
             return False
         try:
             stat = await reader.stat(key)
-        except (ValueError, NotFound):
+        except (ValueError, PathRejected, NotFound):
             return False  # a key Tumnis cannot address, or gone
         if stat is None:
             return False
@@ -398,9 +401,9 @@ async def recheck_key(
         if s3_change(_lite(record), _obj(stat)) not in ("new", "changed"):
             return False
         version_id = await _take_in(ctx, source, reader, stat, record)
-    if version_id is None:
-        return False
-    await _extract_all(ctx, [version_id], extract)
+        if version_id is None:
+            return False
+        await _extract_all(ctx, [version_id], extract)
     return True
 
 

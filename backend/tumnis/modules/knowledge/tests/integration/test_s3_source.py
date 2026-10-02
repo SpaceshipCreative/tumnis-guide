@@ -271,3 +271,66 @@ async def test_linked_document_is_never_deleted_at_source(
     assert _count(db, marked, doc) == 0
     assert _count(db, live, doc) == 1
     assert _count(db, audited) == 0
+
+
+@pytest.mark.req("FR-15.11")
+@pytest.mark.wp("P3-13")
+async def test_failed_sync_keeps_extraction_requests_for_versions_taken_in(
+    knowledge_ws: WorkspaceHandle,
+    minio: S3Endpoint,
+    clock: FixedClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#158 review: a sync that fails after taking some objects in has already asked for
+    their extraction, because the retried step finds them unchanged and would not ask
+    again; the retry takes in only what is left."""
+    s3_sync = importlib.import_module("tumnis.modules.knowledge.s3_sync")
+    ws = knowledge_ws
+    project_id = await _project(ws, clock, "Acme")
+    bucket = await new_bucket(minio)
+    await put(minio, bucket, "acme/a.md", b"# A\n")
+    await put(minio, bucket, "acme/b.md", b"# B\n")
+    created = await create_source(ws, source_in(minio, bucket, {"acme/": project_id}))
+    log = ExtractLog([])
+    real_take_in = s3_sync._take_in
+    calls = 0
+
+    async def failing_second(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("the S3 read failed")
+        return await real_take_in(*args, **kwargs)
+
+    monkeypatch.setattr(s3_sync, "_take_in", failing_second)
+    with pytest.raises(RuntimeError):
+        await _sync(ws, created.id, log)
+    docs = await source_documents(ws, created.id)
+    assert set(docs) == {"acme/a.md"}
+    assert len(log.requests) == 1
+
+    monkeypatch.setattr(s3_sync, "_take_in", real_take_in)
+    await _sync(ws, created.id, log)
+    assert set(await source_documents(ws, created.id)) == {"acme/a.md", "acme/b.md"}
+    assert len(log.requests) == 2
+
+
+@pytest.mark.req("FR-15.11")
+@pytest.mark.wp("P3-13")
+async def test_recheck_of_a_key_tumnis_cannot_address_takes_nothing(
+    knowledge_ws: WorkspaceHandle, minio: S3Endpoint, clock: FixedClock
+) -> None:
+    """#158 review: a notification naming a key under a mapped prefix that the path rules
+    refuse (`..`) is answered by a recheck that takes nothing in, not by an error."""
+    s3_sync = importlib.import_module("tumnis.modules.knowledge.s3_sync")
+    ws = knowledge_ws
+    project_id = await _project(ws, clock, "Acme")
+    bucket = await new_bucket(minio)
+    created = await create_source(ws, source_in(minio, bucket, {"acme/": project_id}))
+    log = ExtractLog([])
+    taken = await s3_sync.recheck_key(
+        ws.ctx, created.id, "acme/../secrets.md", net=SELF_HOSTED, extract=log
+    )
+    assert taken is False
+    assert log.requests == []
+    assert await source_documents(ws, created.id) == {}
