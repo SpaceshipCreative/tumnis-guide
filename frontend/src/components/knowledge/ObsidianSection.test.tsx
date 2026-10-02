@@ -190,4 +190,31 @@ describe("ObsidianSection", () => {
     if (!item) throw new Error("the vault is listed");
     expect(within(item).getByText("connecting")).toBeInTheDocument();
   });
+
+  test("[P3-12][FR-15.10] a draft left from an earlier setup is shown and can be discarded", async () => {
+    // CodeRabbit on #174: a pending vault this page doesn't hold (the setup was left
+    // or the page reloaded) may hold a deploy key, so it must be visible and removable.
+    const recorder = new Recorder();
+    server.use(...handlers(recorder, [BROKEN, DRAFT]));
+    const { user } = renderWithProviders(<ObsidianSection />);
+
+    const left = within(
+      await screen.findByRole("region", { name: "Unfinished setups" }),
+    );
+    // Still not a connected vault.
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+
+    await user.click(left.getByRole("button", { name: "Discard" }));
+    await waitFor(() => {
+      expect(recorder.writes()).toEqual([
+        `DELETE /v1/knowledge/obsidian/vaults/${DRAFT.id}`,
+      ]);
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("region", { name: "Unfinished setups" }),
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(BROKEN.remote ?? "")).toBeInTheDocument();
+  });
 });
