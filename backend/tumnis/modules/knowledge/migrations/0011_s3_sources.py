@@ -15,7 +15,7 @@
   token's hash for one live source, nothing else.
 
 Numbered knowledge_0011 (the coordinator reserved 0008 to 0010 for P3-14 and P3-12) and
-chained after knowledge_0008, main's head now; whichever PR merges later
+chained after knowledge_0009, main's head now; whichever PR merges later
 re-chains to main's head.
 """
 
@@ -26,7 +26,7 @@ from sqlalchemy.dialects.postgresql import BYTEA, JSONB, UUID
 from tumnis.core.migration_helpers import create_tenant_table, drop_tenant_table
 
 revision = "knowledge_0011"
-down_revision = "knowledge_0008"
+down_revision = "knowledge_0009"
 branch_labels = None
 depends_on = None
 phase = "expand"

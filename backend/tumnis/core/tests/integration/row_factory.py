@@ -85,6 +85,7 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("notifications", "decision"): "now",  # ck_notifications_decision
     ("delivery_attempts", "channel"): "push",  # ck_delivery_attempts_channel
     ("delivery_attempts", "status"): "sent",  # ck_delivery_attempts_status
+    ("s3_sources", "provider"): "minio",  # ck_s3_sources_provider (P3-13)
 }
 
 # Nullable columns a check constraint still needs set (one of a pair), filled as NOT NULL.

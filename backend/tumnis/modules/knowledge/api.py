@@ -14,11 +14,12 @@ import hmac
 import json
 import os
 import re
+import secrets
 import stat
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Final, Literal
 from uuid import UUID
@@ -84,6 +85,7 @@ from tumnis.modules.knowledge.adapters.sftp import (
 )
 from tumnis.modules.knowledge.models import (
     Chunk,
+    DeleteConfirmation,
     Document,
     DocumentVersion,
     ExtractionArtifact,
@@ -98,9 +100,11 @@ from tumnis.modules.knowledge.rules import (
     PASSAGE_CAP_CHARS,
     ActorKind,
     Passage,
+    WritePolicy,
     default_trust,
     is_network_fs,
     markdown_sections,
+    may_delete,
     passage_query,
     safe_rel_path,
     sanitize_filename,
@@ -467,6 +471,7 @@ _locations: Table = StorageLocation.__table__  # type: ignore[assignment]
 _folders: Table = ProjectFolder.__table__  # type: ignore[assignment]
 _versions: Table = DocumentVersion.__table__  # type: ignore[assignment]
 _pending: Table = PendingWrite.__table__  # type: ignore[assignment]
+_confirmations: Table = DeleteConfirmation.__table__  # type: ignore[assignment]
 
 _BUCKET: Final = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 _MOUNTINFO: Final = Path("/proc/self/mountinfo")
@@ -742,15 +747,65 @@ def use_backend_hook(fn: BackendHook | None) -> None:
     _backend_hook[0] = fn
 
 
+class _ExistingFolderGuard:
+    """The write rule of an existing folder (FR-15.12), under every writer (the user's
+    edits, agents, the sync engine): inside a folder the user already keeps, Tumnis writes,
+    moves and deletes only under its `Tumnis/` subfolder. A delete the user confirmed in
+    the app is let through once (`allow_delete`, the sync engine's delete at the source)."""
+
+    def __init__(self, inner: StorageBackend, roots: Sequence[str]) -> None:
+        self._inner = inner
+        self._roots = tuple(roots)
+        self._allowed: set[str] = set()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def _check(self, path: str) -> None:
+        for root in self._roots:
+            inside = path == root or path.startswith(root + "/")
+            if inside and not path.startswith(f"{root}/{EXISTING_DIR}/"):
+                raise PathRejected(f"{path!r}: outside {EXISTING_DIR}/ in an existing folder")
+
+    def allow_delete(self, path: str) -> None:
+        self._allowed.add(path)
+
+    async def write(self, path: str, data: AsyncIterator[bytes], if_match: str | None) -> FileStat:
+        self._check(path)
+        return await self._inner.write(path, data, if_match)
+
+    async def move(self, src: str, dst: str) -> None:
+        self._check(src)
+        self._check(dst)
+        await self._inner.move(src, dst)
+
+    async def delete(self, path: str) -> None:
+        if path in self._allowed:
+            self._allowed.discard(path)
+        else:
+            self._check(path)
+        await self._inner.delete(path)
+
+
 @asynccontextmanager
 async def _opened(
     s: AsyncSession, row: RowMapping, *, net: NetPolicy, resolver: Resolver
 ) -> AsyncIterator[StorageBackend]:
     config = await _open_config(s, row) if row["config_enc"] is not None else None
     built = _backend(row, config, net=net, resolver=resolver)
+    existing: list[str] = list(
+        await s.scalars(
+            select(_folders.c.root_path).where(
+                _folders.c.location_id == row["id"],
+                _folders.c.mode == "existing",
+                _folders.c.deleted_at.is_(None),
+            )
+        )
+    )
+    guarded: StorageBackend = _ExistingFolderGuard(built, existing) if existing else built
     hook = _backend_hook[0]
     try:
-        yield hook(row, built) if hook is not None else built
+        yield hook(row, guarded) if hook is not None else guarded
     finally:
         await _close(built)
 
@@ -1346,21 +1401,29 @@ async def _folder_name(s: AsyncSession, project_id: UUID, location_id: UUID) -> 
     return dedupe_name(sanitize_filename(name), frozenset(p.casefold() for p in taken))
 
 
-async def _folder_row(s: AsyncSession, project_id: UUID) -> RowMapping:
-    row = (
-        (
-            await s.execute(
-                select(_folders).where(
-                    _folders.c.project_id == project_id, _folders.c.deleted_at.is_(None)
-                )
-            )
-        )
-        .mappings()
-        .first()
+async def _folder_row(s: AsyncSession, project_id: UUID, *, write: bool = False) -> RowMapping:
+    """The project's folder row. A file write takes it with a share lock (`write`) to the
+    end of its transaction: writes run side by side, but the move job's switch, which
+    locks the row for update, waits for them and sees their files, and a write that waits
+    for a switch reads the folder's new place (P3-14)."""
+    query = select(_folders).where(
+        _folders.c.project_id == project_id, _folders.c.deleted_at.is_(None)
     )
+    if write:
+        query = query.with_for_update(read=True)
+    row = (await s.execute(query)).mappings().first()
     if row is None:
         raise NotFound("project_folders", project_id)
     return row
+
+
+async def hold_folder_for_write(s: AsyncSession, project_id: UUID) -> None:
+    """Share-lock the project's folder row (if it has one) to the end of the transaction,
+    for a file write that resolves the folder's place itself (`_folder_row`'s `write`)."""
+    try:
+        await _folder_row(s, project_id, write=True)
+    except NotFound:
+        return
 
 
 async def get_project_folder(s: AsyncSession, project_id: UUID) -> ProjectFolderOut:
@@ -1427,7 +1490,7 @@ async def write_project_file(
 ) -> FileStat:
     """Write a file into the project's folder; 409 `location_offline` while the location
     is offline, whether marked so or found so now, and nothing reaches it."""
-    folder = await _folder_row(s, project_id)
+    folder = await _folder_row(s, project_id, write=True)
     location = await _location_row(s, folder["location_id"])
     _require_online(location)
     try:
@@ -1478,7 +1541,7 @@ async def save_note(  # noqa: PLR0912  # queue, write and record, one branch eac
     )
     if doc is None or doc["project_id"] is None:
         raise NotFound("documents", document_id)
-    folder = await _folder_row(s, doc["project_id"])
+    folder = await _folder_row(s, doc["project_id"], write=True)
     location = await _location_row(s, folder["location_id"])
     text_body = doc["body_md"] or ""
     body = render_note(document_id, text_body).encode()
@@ -1513,7 +1576,7 @@ async def save_note(  # noqa: PLR0912  # queue, write and record, one branch eac
             path = await note_path(
                 s,
                 location["id"],
-                folder["root_path"],
+                work_root(folder),
                 doc["title"],
                 document_id=document_id,
                 backend=backend if online else None,
@@ -1632,6 +1695,29 @@ FOLDER_LAYOUT: Final = ("uploads", "notes", "agent-outputs", ".tumnis")
 TUMNIS_DIR: Final = ".tumnis"
 EXISTING_DIR: Final = "Tumnis"  # an existing folder: Tumnis writes only in here (P3-14)
 EXISTING_LAYOUT: Final = ("uploads", "notes", "agent-outputs", ".trash")
+
+
+def work_root(folder: Mapping[Any, Any]) -> str:
+    """Where Tumnis writes in a project's folder: the folder itself, or its `Tumnis/`
+    subfolder in a folder the user already keeps (FR-15.12)."""
+    root: str = folder["root_path"]
+    return f"{root}/{EXISTING_DIR}" if folder["mode"] == "existing" else root
+
+
+async def upload_dir(s: AsyncSession, project_id: UUID | None) -> str:
+    """Where uploads go, relative to the project's folder: `uploads`, or
+    `Tumnis/uploads` in an existing folder."""
+    if project_id is not None:
+        mode = await s.scalar(
+            select(_folders.c.mode).where(
+                _folders.c.project_id == project_id, _folders.c.deleted_at.is_(None)
+            )
+        )
+        if mode == "existing":
+            return f"{EXISTING_DIR}/uploads"
+    return "uploads"
+
+
 FOLDER_SOURCE: Final = "folder"  # documents.source of a Document made from a folder file
 UPLOAD_SOURCE: Final = "upload"  # ... of an upload Tumnis placed in the folder
 SYNC_REVIEW_KINDS: Final = (
@@ -1977,14 +2063,14 @@ async def place_upload(  # the upload and where it goes
     `enqueue_extract(ctx, placed.version_id, "storage")` (scanned where it lies, never
     placed again). The file is written before the scan, unlike the upload route's
     spool-first path, so an infected file stays in the folder, quarantined."""
-    folder = await _folder_row(s, project_id)
+    folder = await _folder_row(s, project_id, write=True)
     location = await _location_row(s, folder["location_id"])
     _require_online(location)
     try:
         body = await spool(data)
     except TooLarge as exc:
         raise _storage_problem(exc) from exc
-    wanted = f"{folder['root_path']}/uploads/{sanitize_filename(name)}"
+    wanted = f"{work_root(folder)}/uploads/{sanitize_filename(name)}"
     taken = await taken_paths(s, location["id"])
     placed: FileStat | None = None
     async with _opened(s, location, net=net, resolver=resolver) as backend:
@@ -2283,6 +2369,34 @@ async def enqueue_extract(ctx: WorkspaceContext, version_id: UUID, source: str) 
         str(version_id),
         source,
     )
+
+
+MOVE_QUEUE: Final = "sync"
+MOVE_WORKFLOW: Final = "knowledge_move_project_folder"
+
+
+class MoveStarted(BaseModel):
+    workflow_id: str
+
+
+async def enqueue_move(
+    ctx: WorkspaceContext, project_id: UUID, location_id: UUID, path: str
+) -> MoveStarted:
+    """Start moving the project's folder to `location_id`/`path` (P3-14, the
+    `knowledge_move_project_folder` workflow on the `sync` queue); its record in
+    `folder_moves` and the review item tell how it went."""
+    async with tenant_session(ctx) as s:
+        await _folder_row(s, project_id)
+        await _location_row(s, location_id)
+    workflow_id = f"move:{project_id}:{uuid7()}"
+    await deadletter.dbos_client().enqueue_async(
+        {"queue_name": MOVE_QUEUE, "workflow_name": MOVE_WORKFLOW, "workflow_id": workflow_id},
+        str(ctx.workspace_id),
+        str(project_id),
+        str(location_id),
+        path,
+    )
+    return MoveStarted(workflow_id=workflow_id)
 
 
 async def ingest_folder_file(
@@ -3256,14 +3370,14 @@ async def use_existing_folder(
     that already holds this project's files is not re-pointed (409 `folder_not_empty`,
     moving files is the move job), and a folder that is, holds or sits inside another
     project's folder on the location is refused (409 `folder_taken`)."""
-    try:
+    location = await _location_row(s, location_id)
+    if not await projects.project_exists(s, project_id):
+        raise NotFound("projects", project_id)
+    try:  # the rows are found (404) before any rule about the body
         root = safe_rel_path(path.strip("/"))
     except PathRejected as exc:
         raise _storage_problem(exc) from exc
-    location = await _location_row(s, location_id)
     _require_online(location)
-    if not await projects.project_exists(s, project_id):
-        raise NotFound("projects", project_id)
     current = (
         (await s.execute(select(_folders).where(_folders.c.project_id == project_id)))
         .mappings()
@@ -3322,10 +3436,191 @@ async def use_existing_folder(
 
 
 async def rename_document(s: AsyncSession, document_id: UUID, *, title: str) -> DocumentDTO:
-    """Rename a document; an outside file keeps its name on disk (the title only)."""
-    raise NotImplementedError("P3-14")
+    """Rename a document: its title only. No file is renamed (`may_rename`: never an
+    outside file; a note Tumnis wrote keeps its path, its `tumnis_id` identifies it)."""
+    row = (
+        (
+            await s.execute(
+                update(_documents)
+                .where(_documents.c.id == document_id, _documents.c.deleted_at.is_(None))
+                .values(title=title, version=_documents.c.version + 1)
+                .returning(*_documents.c)
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise NotFound("documents", document_id)
+    if row["project_id"] is not None:
+        mark_changed(s, "project", row["project_id"])
+    return DocumentDTO.model_validate(dict(row))
+
+
+EXTERNAL_DELETE_FORBIDDEN: Final = "external_delete_forbidden"
+CONFIRM_TTL: Final = timedelta(minutes=10)  # how long a delete confirmation is good for
+
+
+async def _delete_target(s: AsyncSession, document_id: UUID) -> tuple[WritePolicy, str]:
+    """The document's folder policy and its file's origin (`tumnis` without a file). Should
+    the document ever have more than one live file record, any outside one makes it
+    `external`: the stricter delete rules win."""
+    project_id = (
+        await s.execute(
+            select(_documents.c.project_id).where(
+                _documents.c.id == document_id, _documents.c.deleted_at.is_(None)
+            )
+        )
+    ).first()
+    if project_id is None:
+        raise NotFound("documents", document_id)
+    mode = await s.scalar(
+        select(_folders.c.mode).where(
+            _folders.c.project_id == project_id[0], _folders.c.deleted_at.is_(None)
+        )
+    )
+    origins: set[str] = set(
+        await s.scalars(
+            select(_files.c.origin).where(
+                _files.c.document_id == document_id, _files.c.deleted_at.is_(None)
+            )
+        )
+    )
+    policy = WritePolicy(mode="existing" if mode == "existing" else "tumnis_made")
+    return policy, "external" if "external" in origins else "tumnis"
 
 
 async def delete_document(s: AsyncSession, document_id: UUID, *, actor: ActorKind) -> str:
-    """Delete a document as `actor`; the outcome `may_delete` gives."""
-    raise NotImplementedError("P3-14")
+    """Delete a document as `actor` (FR-15.12): the outcome `may_delete` gives without a
+    confirmation. `trash`: Tumnis's own file goes to its trash on the next sync;
+    `index_only`: an outside file is only unindexed, it stays where it is. An agent is
+    refused an outside file whatever its scopes (403 `external_delete_forbidden`)."""
+    policy, origin = await _delete_target(s, document_id)
+    outcome = may_delete(policy, origin, actor, confirmed_by_user=False)
+    if outcome == "refuse":
+        raise ProblemError(403, EXTERNAL_DELETE_FORBIDDEN, "Only you can delete this file.")
+    await trash_document(s, document_id)
+    return outcome
+
+
+async def record_delete_refused(ctx: WorkspaceContext, document_id: UUID) -> None:
+    """Audit an agent's refused delete of an outside file, in its own transaction (the
+    refused request's rolls back)."""
+    async with tenant_session(ctx) as s:
+        await audit.record(
+            s,
+            "knowledge.external_delete_refused",
+            target=("documents", document_id),
+            occurred_at=SystemClock().now(),
+        )
+
+
+NOT_AN_OUTSIDE_FILE: Final = "not_an_outside_file"
+SEVERAL_FILES: Final = "several_files"
+
+
+async def _outside_file_target(s: AsyncSession, document_id: UUID) -> None:
+    """The delete-at-source flow serves outside files only: a document whose file Tumnis
+    made goes to its trash instead (409 `not_an_outside_file`). A confirmation deletes one
+    file: a document with more than one live file record is refused (409
+    `several_files`)."""
+    policy, origin = await _delete_target(s, document_id)
+    if may_delete(policy, origin, ActorKind.user, confirmed_by_user=True) != "delete_at_source":
+        raise ProblemError(
+            409, NOT_AN_OUTSIDE_FILE, "Only a file Tumnis did not make is deleted at its source."
+        )
+    live = await s.scalar(
+        select(func.count())
+        .select_from(_files)
+        .where(_files.c.document_id == document_id, _files.c.deleted_at.is_(None))
+    )
+    if live != 1:
+        raise ProblemError(
+            409, SEVERAL_FILES, "This document has more than one file; delete them one by one."
+        )
+
+
+class DeleteConfirmationOut(BaseModel):
+    confirm_token: str
+    expires_at: datetime
+
+
+def _token_hash(token: str) -> bytes:
+    return hashlib.sha256(token.encode()).digest()
+
+
+async def issue_delete_confirmation(
+    s: AsyncSession, document_id: UUID, *, user_id: UUID
+) -> DeleteConfirmationOut:
+    """A one-time token for the delete-confirmation dialog: deleting this document's file
+    at its source, by this user, within `CONFIRM_TTL`. Only its hash is stored. A document
+    without an outside file is refused (409 `not_an_outside_file`)."""
+    await _outside_file_target(s, document_id)
+    token = secrets.token_urlsafe(32)
+    expires_at = SystemClock().now() + CONFIRM_TTL
+    await s.execute(
+        insert(_confirmations).values(
+            document_id=document_id,
+            token_sha256=_token_hash(token),
+            issued_to=user_id,
+            expires_at=expires_at,
+        )
+    )
+    return DeleteConfirmationOut(confirm_token=token, expires_at=expires_at)
+
+
+async def delete_at_source(
+    s: AsyncSession, document_id: UUID, *, confirm_token: str, reason: str, user_id: UUID
+) -> str:
+    """Delete an outside file at its source, as the user confirmed it in the app (SEC-3):
+    the token must be one issued to this user for this document, unused and unexpired
+    (422 `confirmation_invalid`). The Document is trashed and its file record marked
+    confirmed; the next folder sync deletes the file (only if it is still what was
+    synced). Audited as `knowledge.deleted_at_source` with the reason. A document without
+    an outside file is refused (409 `not_an_outside_file`) before the token is looked at."""
+    await _outside_file_target(s, document_id)
+    now = SystemClock().now()
+    offered = _token_hash(confirm_token)
+    issued = await s.execute(
+        select(_confirmations.c.id, _confirmations.c.token_sha256)
+        .where(
+            _confirmations.c.document_id == document_id,
+            _confirmations.c.issued_to == user_id,
+            _confirmations.c.used_at.is_(None),
+            _confirmations.c.expires_at > now,
+            _confirmations.c.deleted_at.is_(None),
+        )
+        .with_for_update()
+    )
+    match = next(
+        (row.id for row in issued if hmac.compare_digest(bytes(row.token_sha256), offered)),
+        None,
+    )
+    used = None
+    if match is not None:
+        used = await s.scalar(
+            update(_confirmations)
+            .where(_confirmations.c.id == match, _confirmations.c.used_at.is_(None))
+            .values(used_at=now)
+            .returning(_confirmations.c.id)
+        )
+    if used is None:
+        raise ProblemError(422, "confirmation_invalid", "Confirm the delete again.")
+    await s.execute(
+        update(_files)
+        .where(
+            _files.c.document_id == document_id,
+            _files.c.origin == "external",
+            _files.c.deleted_at.is_(None),
+        )
+        .values(delete_confirmed=True)
+    )
+    await trash_document(s, document_id)
+    await audit.record(
+        s,
+        "knowledge.deleted_at_source",
+        target=("documents", document_id),
+        reason=reason,
+        occurred_at=now,
+    )
+    return "delete_at_source"
