@@ -11,6 +11,11 @@
 # /metrics (P0-27) needs /etc/tumnis/secrets/tumnis_metrics_token: the api refuses to start
 # in prod without it.
 # Overrides: compose.preview.yaml (PR previews), compose.test.yaml (CI e2e stack).
+#
+# Without Coolify (README, Install): the repository's .env sets COMPOSE_FILE and
+# COMPOSE_PROFILES=standalone, which adds the HTTPS proxy below; TUMNIS_BACKUPS=off keeps
+# WAL archiving and the backup service idle until the off-site repository is set up
+# (docs/OPERATIONS.md, Backups). Unset, both keep the Coolify behaviour.
 name: tumnis
 
 x-env: &env
@@ -27,6 +32,9 @@ x-env: &env
   # Observability (P0-27): unset keeps GlitchTip off and exports no traces.
   SENTRY_DSN: ${SENTRY_DSN:-}
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  # The URL people open (https://<host>): the only Origin the sign-in routes accept behind
+  # a proxy (P0-13). Empty: the request's own origin.
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
 
 x-app: &app
   image: ghcr.io/spaceshipcreative/tumnis:${TUMNIS_VERSION:-latest}
@@ -129,6 +137,14 @@ services:
       additional_contexts:
         pgbackrest: ./pgbackrest
     image: tumnis-postgres:18
+    # conf.d/archive.conf turns archiving on; TUMNIS_BACKUPS=off (a standalone install
+    # before its off-site repository exists) turns it off here, as previews do (issue #21).
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - archive_mode=${TUMNIS_BACKUPS:-on}
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD}
@@ -164,7 +180,21 @@ services:
     build: *postgres-build
     image: tumnis-postgres:18
     user: postgres
-    entrypoint: ["/bin/sh", "-c", "init-stanza.sh && exec supercronic /etc/pgbackrest/crontab"]
+    # With TUMNIS_BACKUPS=off it idles (stanza-create would fail without the repository
+    # keys and restart forever) until the backups are set up. Every spelling Postgres reads
+    # as archive_mode off (any case: off, false, no, 0) idles here too.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        case "$$(printf '%s' '${TUMNIS_BACKUPS:-on}' | tr '[:upper:]' '[:lower:]')" in
+          off | false | no | 0)
+            echo "backup: off (TUMNIS_BACKUPS=${TUMNIS_BACKUPS:-on}); see docs/OPERATIONS.md, Backups"
+            trap 'exit 0' TERM INT
+            while :; do sleep 3600 & wait $$!; done
+            ;;
+        esac
+        init-stanza.sh && exec supercronic /etc/pgbackrest/crontab
     volumes:
       - pgdata:/var/lib/postgresql
       - pgsocket:/var/run/postgresql
@@ -194,6 +224,27 @@ services:
       postgres: { condition: service_healthy }
     restart: unless-stopped
 
+  # HTTPS for an install without Coolify (README, Install), only with the `standalone`
+  # profile: Coolify, previews and the test stacks never start it. Caddy terminates TLS
+  # with the certificate the README puts in /etc/tumnis/https (Tailscale's, or a
+  # self-signed one) and proxies to the api. It listens on TUMNIS_BIND_ADDRESS only:
+  # loopback by default, the machine's Tailscale address for the phone, never every
+  # interface (FR-9.1).
+  proxy:
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    profiles: [standalone]
+    environment:
+      TUMNIS_HOST: ${TUMNIS_HOST:-localhost}
+    ports:
+      - "${TUMNIS_BIND_ADDRESS:-127.0.0.1}:443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /etc/tumnis/https:/etc/tumnis/https:ro
+      - caddy_data:/data
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
   # The database CA and the Postgres and PgBouncer certificates, issued once on first start
   # (P0-16, SEC-9; deploy/postgres/tumnis-db-tls.sh). The CA key is never stored; to
   # rotate, remove the db_tls_* volumes and start the stack again.
@@ -220,3 +271,4 @@ volumes:
   db_tls_ca: {}
   db_tls_postgres: {}
   db_tls_pgbouncer: {}
+  caddy_data: {} # the proxy's own state (no certificates are issued: they come from the host)
