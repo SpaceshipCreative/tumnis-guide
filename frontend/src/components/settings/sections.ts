@@ -16,6 +16,7 @@ export const SETTINGS_SECTIONS = [
   "calibration",
   "metrics",
   "voice",
+  "obsidian",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
@@ -36,6 +37,7 @@ export const SECTION_LABELS: Record<SettingsSection, string> = {
   calibration: "Calibration",
   metrics: "Metrics",
   voice: "Voice",
+  obsidian: "Obsidian",
 };
 
 export function isSettingsSection(value: string): value is SettingsSection {

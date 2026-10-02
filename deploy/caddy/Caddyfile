@@ -1,0 +1,17 @@
+# The HTTPS proxy of a standalone install (compose service `proxy`, profile `standalone`;
+# README, Install). The certificate and key come from the host's /etc/tumnis/https:
+# Tailscale's (`tailscale cert`) for real use, or the README's self-signed one. Caddy
+# issues nothing itself. https://caddyserver.com/docs/caddyfile
+{
+	# No admin endpoint: the configuration changes only with the file (restart to reload).
+	admin off
+	# Only port 443 is published; nothing listens for plain HTTP from outside.
+	auto_https disable_redirects
+}
+
+{$TUMNIS_HOST:localhost} {
+	tls /etc/tumnis/https/tumnis.crt /etc/tumnis/https/tumnis.key
+	# Caddy sets X-Forwarded-For, -Proto and -Host; the api checks Origin against
+	# PUBLIC_BASE_URL.
+	reverse_proxy api:8080
+}

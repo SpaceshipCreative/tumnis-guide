@@ -568,6 +568,16 @@ export const zFolderIn = z.object({
 });
 
 /**
+ * FolderRule
+ *
+ * A vault folder and the project its notes go to (the longest matching folder wins).
+ */
+export const zFolderRule = z.object({
+  folder: z.string().min(1).max(500),
+  project_id: z.uuid(),
+});
+
+/**
  * ForeignReach
  *
  * A token reaching another project's repo (`github`) or app (`coolify`).
@@ -619,6 +629,21 @@ export const zHealthCheckAccepted = z.object({
 export const zHostKeyIn = z.object({
   reason: z.string().max(500).nullish(),
   sha256: z.string().min(1).max(200),
+});
+
+/**
+ * HostKeyOut
+ */
+export const zHostKeyOut = z.object({
+  known_hosts: z.string(),
+  sha256: z.string(),
+});
+
+/**
+ * HostKeyProbeIn
+ */
+export const zHostKeyProbeIn = z.object({
+  remote: z.string().min(1).max(500),
 });
 
 /**
@@ -1127,26 +1152,20 @@ export const zPolicySummary = z.object({
 export const zPreset = z.enum(["daily", "weekdays", "weekly", "monthly"]);
 
 /**
- * PreviewOut
+ * PreviewRowOut
  */
-export const zPreviewOut = z.object({
-  commit: z.string().nullish(),
-  finished_at: z.iso.datetime().nullish(),
-  pull_request_id: z.int(),
-  status: z.string(),
-  url: z.string(),
+export const zPreviewRowOut = z.object({
+  ignored: z.boolean(),
+  path: z.string(),
+  project_id: z.uuid().nullable(),
+  untrusted: z.boolean(),
 });
 
 /**
- * AppDeployStatus
+ * PreviewStarted
  */
-export const zAppDeployStatus = z.object({
-  app_uuid: z.string(),
-  checked_at: z.iso.datetime().nullable(),
-  error: z.enum(["unavailable", "rejected"]).nullable(),
-  last: zLastDeployOut.nullable(),
-  name: z.string().nullable(),
-  previews: z.array(zPreviewOut),
+export const zPreviewStarted = z.object({
+  preview_id: z.string(),
 });
 
 /**
@@ -1204,14 +1223,6 @@ export const zProjectContextOut = z.object({
   repo_url: z.string().nullable(),
   status: z.enum(["active", "on_hold", "completed"]),
   subtask_threshold_min: z.int(),
-});
-
-/**
- * ProjectDeployStatus
- */
-export const zProjectDeployStatus = z.object({
-  apps: z.array(zAppDeployStatus),
-  project_id: z.uuid(),
 });
 
 /**
@@ -2818,6 +2829,60 @@ export const zVapidPublicKeyOut = z.object({
 });
 
 /**
+ * VaultCreateIn
+ */
+export const zVaultCreateIn = z.object({
+  mode: z.enum(["folder", "git"]),
+});
+
+/**
+ * VaultOut
+ */
+export const zVaultOut = z.object({
+  branch: z.string(),
+  clippings_folder: z.string(),
+  deploy_public_key: z.string().nullable(),
+  extra_excludes: z.array(z.string()),
+  folder_path: z.string().nullable(),
+  folders: z.array(zFolderRule),
+  host_key_sha256: z.string().nullable(),
+  id: z.uuid(),
+  last_error: z.string().nullable(),
+  last_sync_at: z.iso.datetime().nullable(),
+  mode: z.enum(["folder", "git"]),
+  remote: z.string().nullable(),
+  status: z.enum(["pending", "connecting", "ok", "error"]),
+  unmapped: z.enum(["workspace", "ignore"]),
+  version: z.int(),
+});
+
+/**
+ * VaultSettingsIn
+ *
+ * Where the vault is read from and how its notes map (ObsidianSetup's form). For Git,
+ * `known_hosts` is the host key line the person confirmed or pasted.
+ */
+export const zVaultSettingsIn = z.object({
+  branch: z.string().min(1).max(200).optional().default("main"),
+  clippings_folder: z.string().min(1).max(500).optional().default("Clippings"),
+  extra_excludes: z.array(z.string()).max(50).optional(),
+  folder_path: z.string().max(1024).nullish(),
+  folders: z.array(zFolderRule).max(200).optional(),
+  known_hosts: z.string().max(4000).nullish(),
+  mode: z.enum(["folder", "git"]),
+  remote: z.string().max(500).nullish(),
+  unmapped: z.enum(["workspace", "ignore"]).optional().default("workspace"),
+});
+
+/**
+ * VaultsOut
+ */
+export const zVaultsOut = z.object({
+  folder_allowed: z.boolean(),
+  vaults: z.array(zVaultOut),
+});
+
+/**
  * WaitOut
  */
 export const zWaitOut = z.object({
@@ -3029,6 +3094,46 @@ export const zWorkspaceSettingsOut = z.object({
  */
 export const zTumnisCoreDeadletterVersionIn = z.object({
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * PreviewOut
+ */
+export const zTumnisModulesCoolifyApiPreviewOut = z.object({
+  commit: z.string().nullish(),
+  finished_at: z.iso.datetime().nullish(),
+  pull_request_id: z.int(),
+  status: z.string(),
+  url: z.string(),
+});
+
+/**
+ * AppDeployStatus
+ */
+export const zAppDeployStatus = z.object({
+  app_uuid: z.string(),
+  checked_at: z.iso.datetime().nullable(),
+  error: z.enum(["unavailable", "rejected"]).nullable(),
+  last: zLastDeployOut.nullable(),
+  name: z.string().nullable(),
+  previews: z.array(zTumnisModulesCoolifyApiPreviewOut),
+});
+
+/**
+ * ProjectDeployStatus
+ */
+export const zProjectDeployStatus = z.object({
+  apps: z.array(zAppDeployStatus),
+  project_id: z.uuid(),
+});
+
+/**
+ * PreviewOut
+ */
+export const zTumnisModulesKnowledgeObsidianVaultsPreviewOut = z.object({
+  error: z.string().nullable(),
+  rows: z.array(zPreviewRowOut),
+  status: z.enum(["running", "done", "failed"]),
 });
 
 /**
@@ -3705,6 +3810,76 @@ export const zKnowledgeTestLocationPath = z.object({
  * Successful Response
  */
 export const zKnowledgeTestLocationResponse = zLocationOut;
+
+export const zKnowledgeProbeObsidianHostKeyBody = zHostKeyProbeIn;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeProbeObsidianHostKeyResponse = zHostKeyOut;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeListObsidianVaultsResponse = zVaultsOut;
+
+export const zKnowledgeCreateObsidianVaultBody = zVaultCreateIn;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeCreateObsidianVaultResponse = zVaultOut;
+
+export const zKnowledgeDeleteObsidianVaultPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeDeleteObsidianVaultResponse = z.void();
+
+export const zKnowledgeGetObsidianVaultPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeGetObsidianVaultResponse = zVaultOut;
+
+export const zKnowledgeConnectObsidianVaultBody = zVaultSettingsIn;
+
+export const zKnowledgeConnectObsidianVaultPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeConnectObsidianVaultResponse = zVaultOut;
+
+export const zKnowledgePreviewObsidianVaultBody = zVaultSettingsIn;
+
+export const zKnowledgePreviewObsidianVaultPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgePreviewObsidianVaultResponse = zPreviewStarted;
+
+export const zKnowledgeGetObsidianPreviewPath = z.object({
+  connection_id: z.uuid(),
+  preview_id: z.string().max(200),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeGetObsidianPreviewResponse =
+  zTumnisModulesKnowledgeObsidianVaultsPreviewOut;
 
 export const zKnowledgeUseExistingFolderBody = zExistingFolderIn;
 
