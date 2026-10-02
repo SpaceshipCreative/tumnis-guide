@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [base, ncc, safe, vw2, noiso]
+        variant: [ncc, pn2, vw4, pn2vw4]
         rep: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,9 +41,8 @@ jobs:
         run: |
           lscpu | grep -m1 "Model name"
           args=""
-          if [ "$VARIANT" = ncc ] || [ "$VARIANT" = safe ]; then export NODE_COMPILE_CACHE="$RUNNER_TEMP/ncc"; fi
-          if [ "$VARIANT" = vw2 ]; then args="--maxWorkers=2"; fi
-          if [ "$VARIANT" = noiso ]; then args="--no-isolate"; fi
+          export NODE_COMPILE_CACHE="$RUNNER_TEMP/ncc"
+          case "$VARIANT" in *vw4*) args="--maxWorkers=4" ;; esac
           nohup sh -c "date -u +'Vitest started %T'; npm run test -- --run $args; code=\$?; date -u +'Vitest finished %T'; echo \"\$code\" > \"\$RUNNER_TEMP/vitest.exit.tmp\" && mv \"\$RUNNER_TEMP/vitest.exit.tmp\" \"\$RUNNER_TEMP/vitest.exit\"" > "$RUNNER_TEMP/vitest.log" 2>&1 < /dev/null &
           echo "$!" > "$RUNNER_TEMP/vitest.pid"
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -66,9 +65,10 @@ jobs:
           VARIANT: ${{ matrix.variant }}
         run: |
           lscpu | grep -m1 "Model name"
-          if [ "$VARIANT" = safe ]; then export UV_COMPILE_BYTECODE=1; fi
+          n=3
+          case "$VARIANT" in pn2*) n=2 ;; esac
           uv sync
-          uv run pytest -m "not integration and not contract" -n 3 --dist worksteal --durations=15 --cov --cov-report=json
+          uv run pytest -m "not integration and not contract" -n "$n" --dist worksteal --durations=15 --cov --cov-report=json
       - name: Frontend unit tests
         if: ${{ !cancelled() && steps.vitest.outcome == 'success' }}
         run: |
