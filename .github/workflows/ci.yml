@@ -100,9 +100,17 @@ jobs:
       # read half written. No pytest test writes under frontend/: spec-guard and
       # traceability only read *.test.ts files and node_modules/typescript. The CPU model
       # is logged because runner hardware varies, and so do the timings.
+      # Node's compile cache keeps V8 code cache on disk. Every test file runs in a fresh
+      # worker thread, which compiles jsdom, React and the rest again, so a cache a finished
+      # worker wrote spares the next one that work. It cut the job by about 8% on the
+      # slowest runners (EPYC 7763) in #184's bench (Node docs, module.html, "Module
+      # compile cache"). Vitest here runs without coverage, which the cache can make less
+      # precise.
       - name: Start frontend unit tests
         id: vitest
         working-directory: frontend
+        env:
+          NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
         run: |
           lscpu | grep -m1 "Model name"
           nohup sh -c 'date -u +"Vitest started %T"; npm run test -- --run; code=$?; date -u +"Vitest finished %T"; echo "$code" > "$RUNNER_TEMP/vitest.exit.tmp" && mv "$RUNNER_TEMP/vitest.exit.tmp" "$RUNNER_TEMP/vitest.exit"' > "$RUNNER_TEMP/vitest.log" 2>&1 < /dev/null &
