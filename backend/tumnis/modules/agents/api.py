@@ -749,6 +749,43 @@ async def profile_health(ctx: WorkspaceContext, profile_id: UUID) -> ProfileHeal
 # --- The agent for a profile or a project --------------------------------------------------
 
 
+def fake_runner_serves(transport: str, last_heartbeat_at: datetime | None) -> bool:
+    """Whether the in-process FakeAgent stands in for a profile's runner: the compose.test
+    stack (fake adapters, the fake-script store on: R-37) has no runner daemon, so a daemon
+    profile whose runner never connected is the fake's (SEED). Its agent reads as ready
+    (`master_agent`, `agent_for_project`) and its `run_skill` dispatches play the stored
+    scripts. Once a runner has connected, its own status decides; with real adapters, or
+    with the store off (unit and integration runs that only select fakes), never."""
+    from tumnis.core.adapters.registry import current_mode  # noqa: PLC0415
+
+    return (
+        transport == "daemon"
+        and last_heartbeat_at is None
+        and fake_scripts.enabled()
+        and current_mode() == "fake"
+    )
+
+
+async def fake_served(profile_id: UUID, *, ctx: WorkspaceContext) -> bool:
+    """`fake_runner_serves` for a stored profile (False for an unknown one, or one without
+    a runner)."""
+    if not fake_scripts.enabled():
+        return False
+    async with tenant_session(ctx) as s:
+        found = (
+            await s.execute(
+                select(_profiles.c.transport, _runners.c.last_heartbeat_at)
+                .join(_runners, _runners.c.id == _profiles.c.runner_id)
+                .where(
+                    _profiles.c.id == profile_id,
+                    _profiles.c.deleted_at.is_(None),
+                    _runners.c.deleted_at.is_(None),
+                )
+            )
+        ).first()
+    return found is not None and fake_runner_serves(found.transport, found.last_heartbeat_at)
+
+
 async def adapter_for(profile_id: UUID, *, ctx: WorkspaceContext | None = None) -> AgentAdapter:
     """The AgentAdapter of the profile: HermesAgent over its transport, or the FakeAgent
     in fakes mode while no runner has ever connected."""
@@ -785,7 +822,9 @@ async def adapter_for(profile_id: UUID, *, ctx: WorkspaceContext | None = None) 
 async def agent_for_project(
     project_id: UUID, *, now: datetime, ctx: WorkspaceContext | None = None
 ) -> AgentAvailability:
-    """ready | offline | not_provisioned for the project's agent profile."""
+    """ready | offline | not_provisioned for the project's agent profile; ready too while
+    the fake runner serves it (`fake_runner_serves`: compose.test, its runner never
+    connected), unless it is paused."""
     from tumnis.core import tenancy  # noqa: PLC0415
 
     ctx = ctx or tenancy.current()
@@ -819,7 +858,8 @@ async def agent_for_project(
         runner = await _runner_row(s, row.runner_id)
     online = runner_status(runner.last_heartbeat_at, now) == "online"
     listed = row.name in {str(p.get("name")) for p in runner.inventory}
-    return "ready" if online and listed else "offline"
+    fake = fake_runner_serves(row.transport, runner.last_heartbeat_at)
+    return "ready" if fake or (online and listed) else "offline"
 
 
 # --- Project provisioning (P1-06) ------------------------------------------------------------
@@ -2576,7 +2616,8 @@ async def master_agent(*, ctx: WorkspaceContext) -> MasterAgentOut:
     """ready | offline | not_provisioned for the workspace's master profile (the oldest
     live one): not provisioned without one (or while it is provisioning), offline while
     paused, its runner is not online or the runner does not list it; an MCP endpoint
-    profile is ready (an unreachable endpoint fails its run instead)."""
+    profile is ready (an unreachable endpoint fails its run instead), and so is one the
+    fake runner serves (`fake_runner_serves`: compose.test, its runner never connected)."""
     async with tenant_session(ctx) as s:
         found = (
             (
@@ -2595,7 +2636,7 @@ async def master_agent(*, ctx: WorkspaceContext) -> MasterAgentOut:
         row = _ProfileRow.model_validate(dict(found))
         runner = (
             await s.execute(
-                select(_runners.c.status, _runners.c.inventory).where(
+                select(_runners.c.status, _runners.c.inventory, _runners.c.last_heartbeat_at).where(
                     _runners.c.id == row.runner_id, _runners.c.deleted_at.is_(None)
                 )
             )
@@ -2612,9 +2653,10 @@ async def master_agent(*, ctx: WorkspaceContext) -> MasterAgentOut:
     if runner is None:
         return out.model_copy(update={"availability": "not_provisioned"})
     listed = row.name in {str(p.get("name")) for p in runner.inventory}
+    fake = fake_runner_serves(row.transport, runner.last_heartbeat_at)
     return (
         out
-        if runner.status == "online" and listed
+        if fake or (runner.status == "online" and listed)
         else out.model_copy(update={"availability": "offline"})
     )
 
