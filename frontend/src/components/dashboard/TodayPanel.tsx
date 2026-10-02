@@ -40,6 +40,8 @@ function shownItems(plan: PlanOut): PlanItemViewOut[] {
 function PlanList({ plan }: { plan: PlanOut }) {
   const action = usePlanAction(plan.day);
   const [swapping, setSwapping] = useState<PlanItemViewOut | null>(null);
+  // The picker stays open, its options disabled, until the swap is saved (J1 step 4).
+  const [swapSaving, setSwapSaving] = useState(false);
   const items = shownItems(plan);
   const base = `/plan/${plan.day}/items`;
   const notice = plan.notice === null ? null : NOTICE_TEXT[plan.notice];
@@ -78,15 +80,25 @@ function PlanList({ plan }: { plan: PlanOut }) {
         <SwapPicker
           day={plan.day}
           title={swapping.title}
+          saving={swapSaving}
           onClose={() => {
             setSwapping(null);
           }}
           onPick={(alternate) => {
-            action.mutate({
-              path: `${base}/${swapping.task_id}/swap`,
-              body: { with_task_id: alternate.id },
-            });
-            setSwapping(null);
+            if (swapSaving) return;
+            setSwapSaving(true);
+            action.mutate(
+              {
+                path: `${base}/${swapping.task_id}/swap`,
+                body: { with_task_id: alternate.id },
+              },
+              {
+                onSettled: () => {
+                  setSwapSaving(false);
+                  setSwapping(null);
+                },
+              },
+            );
           }}
         />
       )}
