@@ -21,7 +21,6 @@ test(
   "A2.2 a question mid-run shows on the review badge and the answer resumes the run",
   { tag: ["@A2.2", "@FR-5.7", "@P2-05"] },
   async ({ signedInPage: page, fakes }) => {
-    test.fail();
     await fakes.runner.script(FIX_FOOTER, QUESTION_RUNS);
     const task = await taskByTitle(page.request, ACME, FIX_FOOTER);
     await runTask(page.request, task.id);

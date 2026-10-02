@@ -39,7 +39,6 @@ test(
   "T-P4-05-10 opening a push's review url lands on the item with focus",
   { tag: ["@P4-05", "@FR-8.3"] },
   async ({ signedInPage: page, seededApp, fakes }) => {
-    test.fail();
     await seededApp.reset("acceptance");
     await fakes.runner.script(FIX_FOOTER, QUESTION_RUNS);
     const task = await taskByTitle(page.request, ACME, FIX_FOOTER);

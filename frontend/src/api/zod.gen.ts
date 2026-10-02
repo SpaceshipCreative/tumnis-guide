@@ -488,6 +488,14 @@ export const zHealthCheckAccepted = z.object({
 });
 
 /**
+ * HostKeyIn
+ */
+export const zHostKeyIn = z.object({
+  reason: z.string().max(500).nullish(),
+  sha256: z.string().min(1).max(200),
+});
+
+/**
  * HumanWaitOut
  */
 export const zHumanWaitOut = z.object({
@@ -606,12 +614,14 @@ export const zLinkIn = z.object({
 export const zLocationOut = z.object({
   capabilities: z.record(z.string(), z.boolean()),
   endpoint: z.string().nullable(),
+  host_key_sha256: z.string().nullish(),
   id: z.uuid(),
   is_default: z.boolean(),
   kind: z.string(),
   name: z.string(),
+  pending_host_key_sha256: z.string().nullish(),
   root: z.string(),
-  status: z.enum(["online", "offline"]),
+  status: z.enum(["online", "offline", "pending_host_key", "host_key_changed"]),
   status_reason: z.string().nullable(),
   version: z.int(),
 });
@@ -1723,17 +1733,6 @@ export const zS3ConfigIn = z.object({
 });
 
 /**
- * LocationIn
- */
-export const zLocationIn = z.object({
-  is_default: z.boolean().optional().default(false),
-  kind: z.enum(["server_path", "s3"]),
-  name: z.string().min(1).max(100),
-  root: z.string().min(1).max(1024),
-  s3: zS3ConfigIn.nullish(),
-});
-
-/**
  * SchemaRef
  *
  * Names a @versioned model, e.g. ("enrichment", "result", 1).
@@ -1828,6 +1827,28 @@ export const zSetupOut = z.object({
 export const zSetupTotpIn = z.object({
   code: z.string().max(16),
   setup_token: z.string().max(2048),
+});
+
+/**
+ * SftpConfigIn
+ */
+export const zSftpConfigIn = z.object({
+  host: z.string().min(1).max(253),
+  port: z.int().gte(1).lte(65535).optional().default(22),
+  private_key: z.string().min(1).max(16384),
+  username: z.string().min(1).max(64),
+});
+
+/**
+ * LocationIn
+ */
+export const zLocationIn = z.object({
+  is_default: z.boolean().optional().default(false),
+  kind: z.enum(["server_path", "s3", "share", "sftp"]),
+  name: z.string().min(1).max(100),
+  root: z.string().min(1).max(1024),
+  s3: zS3ConfigIn.nullish(),
+  sftp: zSftpConfigIn.nullish(),
 });
 
 /**
@@ -3253,6 +3274,17 @@ export const zKnowledgeSetDefaultLocationPath = z.object({
  * Successful Response
  */
 export const zKnowledgeSetDefaultLocationResponse = zLocationOut;
+
+export const zKnowledgeConfirmHostKeyBody = zHostKeyIn;
+
+export const zKnowledgeConfirmHostKeyPath = z.object({
+  storage_location_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeConfirmHostKeyResponse = zLocationOut;
 
 export const zKnowledgeTestLocationPath = z.object({
   storage_location_id: z.uuid(),
