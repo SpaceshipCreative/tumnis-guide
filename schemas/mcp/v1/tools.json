@@ -865,6 +865,19 @@
           "title": "Title",
           "type": "string"
         },
+        "unattended_queued_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unattended Queued At"
+        },
         "updated_at": {
           "format": "date-time",
           "title": "Updated At",
@@ -902,6 +915,7 @@
         "actual_minutes",
         "tainted",
         "source",
+        "unattended_queued_at",
         "version",
         "created_at",
         "updated_at",
@@ -2542,6 +2556,19 @@
               "title": "Title",
               "type": "string"
             },
+            "unattended_queued_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Unattended Queued At"
+            },
             "updated_at": {
               "format": "date-time",
               "title": "Updated At",
@@ -2579,6 +2606,7 @@
             "actual_minutes",
             "tainted",
             "source",
+            "unattended_queued_at",
             "version",
             "created_at",
             "updated_at",
@@ -4152,6 +4180,19 @@
           "title": "Title",
           "type": "string"
         },
+        "unattended_queued_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unattended Queued At"
+        },
         "updated_at": {
           "format": "date-time",
           "title": "Updated At",
@@ -4189,6 +4230,7 @@
         "actual_minutes",
         "tainted",
         "source",
+        "unattended_queued_at",
         "version",
         "created_at",
         "updated_at",
@@ -4568,6 +4610,19 @@
           "title": "Title",
           "type": "string"
         },
+        "unattended_queued_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unattended Queued At"
+        },
         "updated_at": {
           "format": "date-time",
           "title": "Updated At",
@@ -4605,6 +4660,7 @@
         "actual_minutes",
         "tainted",
         "source",
+        "unattended_queued_at",
         "version",
         "created_at",
         "updated_at",

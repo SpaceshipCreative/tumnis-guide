@@ -16,6 +16,7 @@ Working hours and the day calendar (P1-10, FR-4.7, FR-1.3, REL-6):
   in events.py) and `auth.workspace_settings_tag` (a timezone change).
 """
 
+import logging
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta
 from typing import Annotated, Any, Final, Literal
@@ -34,13 +35,21 @@ from tumnis.core.errors import ProblemError
 from tumnis.core.outbox import emit
 from tumnis.core.settings_store import SettingSection, get_setting, register_section
 from tumnis.core.tenancy import WorkspaceContext, session_for, tenant_session
-from tumnis.core.types import Interval
+from tumnis.core.types import SYSTEM_ACTOR, Interval
 from tumnis.core.versioning import NotFound, StaleVersion, Version
 from tumnis.modules.agents import api as agents
 from tumnis.modules.auth import api as auth
 from tumnis.modules.calendar import api as calendar
 from tumnis.modules.integrations import api as integrations
-from tumnis.modules.planning.models import DailyPlan, PlanIssue, PlanItem, PlanPin, WorkingHours
+from tumnis.modules.planning.models import (
+    DailyPlan,
+    PlanIssue,
+    PlanItem,
+    PlanPin,
+    UnattendedRun,
+    UnattendedWindow,
+    WorkingHours,
+)
 from tumnis.modules.planning.payloads import PlanPublishedV1
 from tumnis.modules.planning.rules import (
     DEFAULT_HOURS,
@@ -49,24 +58,35 @@ from tumnis.modules.planning.rules import (
     ELIGIBLE_STATUSES,
     MOVE_LOOKAHEAD_WORKING_DAYS,
     PRIORITY_RANK,
+    REFUSAL_WORDS,
     DaySummary,
     EventDTO,
     FitOffer,
+    Label,
     PlanContext,
     PlannedItem,
     PlanPick,
     PlanTask,
     ProjectLink,
+    Refusal,
     RunFacts,
     TaskFacts,
+    TaskLite,
+    TaskRef,
     Unplaceable,
     Violation,
+    Window,
     assign_blocks,
+    batch_release_at,
     event_matches_project,
     fallback_key,
     free_left,
+    green_light,
     is_plan_due,
+    next_working_start,
+    too_late_to_start,
     validate_manual_block,
+    window_bounds,
     working_window,
 )
 from tumnis.modules.planning.rules import day_summary as summarise_day
@@ -77,6 +97,7 @@ from tumnis.modules.usage import api as usage
 FREE_BLOCKS_CACHE: Final = "free_blocks"  # the day calendar's cache namespace
 DAY_CALENDAR_TTL_S: Final = 300.0  # bounds what no invalidation reaches (event writes
 # outside a sync, such as a deselected calendar, emit no calendar.synced)
+_log = logging.getLogger(__name__)
 _CACHE = register_cache(
     CacheSpec(
         FREE_BLOCKS_CACHE,
@@ -1600,10 +1621,12 @@ async def request_replan(ctx: WorkspaceContext, body: ReplanIn, *, now: datetime
 
 class DaySummaryOut(DaySummary, frozen=True):
     """`GET /v1/day/{day}/summary`: the close-the-day panel's four sections for one local
-    day of the workspace."""
+    day of the workspace. `queued_unattended` (P4-04) lists every task queued for tonight in
+    queued order, with whether it will run; `queued_overnight` names the same tasks."""
 
     day: date
     timezone: str
+    queued_unattended: list["QueuedUnattendedOut"] = Field(default_factory=list)
 
 
 async def _zone(ctx: WorkspaceContext, session: AsyncSession | None = None) -> ZoneInfo:
@@ -1635,6 +1658,7 @@ async def day_summary(ctx: WorkspaceContext, day: date) -> DaySummaryOut:
     async with tenant_session(ctx) as s:
         facts = await tasks.day_task_facts(s, start, end)
         runs = await agents.finished_runs(s, start, end)
+        queued = await queued_unattended(s)
     summary = summarise_day(
         [_task_facts(f) for f in facts],
         [
@@ -1650,7 +1674,17 @@ async def day_summary(ctx: WorkspaceContext, day: date) -> DaySummaryOut:
         day,
         tz,
     )
-    return DaySummaryOut(**summary.model_dump(), day=day, timezone=tz.key)
+    overnight = [
+        TaskRef(task_id=q.task_id, project_id=q.project_id, title=q.title, label=q.label)
+        for q in queued
+    ]
+    return DaySummaryOut(
+        **summary.model_dump(exclude={"queued_overnight"}),
+        queued_overnight=overnight,
+        day=day,
+        timezone=tz.key,
+        queued_unattended=queued,
+    )
 
 
 MetricKey = Literal[
@@ -1700,7 +1734,6 @@ _TARGETS: Final[dict[MetricKey, str]] = {  # PRD, Success metrics
 _LATER: Final[dict[MetricKey, Literal["phase 2", "phase 4"]]] = {
     "agent_share": "phase 2",
     "agent_acceptance_rate": "phase 2",
-    "unattended_runs_per_week": "phase 4",
 }
 
 
@@ -1765,6 +1798,7 @@ async def metrics_summary(
         facts = await tasks.day_task_facts(s, lo, hi)
         days = await _plan_days(s, today)
         planned = await tasks.tasks_by_ids(s, await _planned_task_ids(s, start, end))
+        unattended = await unattended_runs_finished(s, lo, hi)
     done = [
         f
         for f in facts
@@ -1792,6 +1826,9 @@ async def metrics_summary(
             [usage.PlannedOutcome(task_id=t.id, rollover_count=t.rollover_count) for t in planned]
         ),
         "estimate_error": usage.estimate_error(pairs),
+        "unattended_runs_per_week": None
+        if unattended is None
+        else round(unattended * 7 / ((end - start).days + 1), 2),
     }
     return MetricsSummaryOut(
         start=start,
@@ -1808,3 +1845,401 @@ async def metrics_summary(
             for key, target in _TARGETS.items()
         ],
     )
+
+
+# --- Unattended run windows (P4-04, FR-4.5, SAF-1, J7) ------------------------------------
+#
+# The window is a setting of the workspace (`project_id` null) with a per-project override,
+# kept in `unattended_windows`. Every 5 minutes `unattended_tick` (workflows) asks, per
+# workspace and in its own timezone, which queued tasks sit in an open window: a task with
+# a green light (`rules.green_light`) gets one run through `agents.request_run(...,
+# unattended=True)` in the transaction that consumes its queue flag, so no later tick
+# starts it again; any other gets one `unattended_refused` review item per night saying
+# why. A task is not started when less than half the project's maximum run time is left.
+# Results and refusals wait for the morning review: they carry `batch` "overnight" and the
+# release time (the first working hour after the window, minus 15 minutes).
+
+UNATTENDED_REFUSED: Final = "unattended_refused"
+UNATTENDED_SECTION: Final = "unattended-window"  # the audit details' section
+OVERNIGHT: Final = "overnight"
+WindowSource = Literal["project", "workspace", "none"]
+_WINDOWS: Table = UnattendedWindow.__table__  # type: ignore[assignment]
+_UNATTENDED_RUNS: Table = UnattendedRun.__table__  # type: ignore[assignment]
+# request_run's refusals (409/422) in plain words, for the refusal's review item.
+_REQUEST_WORDS: Final[dict[str, str]] = {
+    "agents_paused": REFUSAL_WORDS[Refusal.paused],
+    "run_already_active": "Already running",
+    "status_not_runnable": "Its status cannot run",
+    "label_not_runnable": REFUSAL_WORDS[Refusal.not_ai],
+    "no_ready_profile": "No agent ready for this project",
+}
+
+
+class WindowSpec(BaseModel):
+    """Weekdays (0 = Monday) and local wall times in the workspace timezone; an end before
+    the start crosses midnight and belongs to the weekday it starts on."""
+
+    model_config = ConfigDict(extra="forbid")
+    weekdays: Annotated[list[Weekday], Field(min_length=1, max_length=7)]
+    start_local: time
+    end_local: time
+
+
+class UnattendedWindowIn(BaseModel):
+    """The workspace's window (`project_id` null) or one project's override; `window` null
+    turns it off (an override then falls back to the workspace's). `version` is the stored
+    row's (null when there is none yet)."""
+
+    model_config = ConfigDict(extra="forbid")
+    project_id: UUID | None = None
+    window: WindowSpec | None
+    version: int | None = None
+
+
+class UnattendedWindowOut(BaseModel):
+    """The window in force for the workspace or a project, where it comes from, and the
+    version of the row this scope stores (null when it stores none)."""
+
+    project_id: UUID | None
+    window: WindowSpec | None
+    source: WindowSource
+    version: int | None
+
+
+class UnattendedRefusedPayload(BaseModel):
+    """An `unattended_refused` review item: why a queued task did not run in the night's
+    window (`refusal`, a `rules.Refusal` or request_run's refusal code, and its plain
+    words), batched into the morning review. Accept takes the task off the queue."""
+
+    refusal: str = Field(max_length=60)
+    reason: str = Field(max_length=200)
+    window_start: datetime
+    batch: Literal["overnight"] | None = None
+    release_at: datetime | None = None
+
+
+async def _unattended_decided(s: AsyncSession, deciding: tasks.Deciding) -> str | None:
+    """Accepting a refusal takes the task off the unattended queue."""
+    if deciding.action == "accept" and deciding.target_type == "task":
+        await tasks.queue_unattended(
+            s, deciding.actor, deciding.target_id, queued=False, now=deciding.now
+        )
+    return None
+
+
+tasks.register_review_kind(
+    tasks.ReviewKindSpec(
+        kind=UNATTENDED_REFUSED,
+        owner_module="planning",
+        payload_schema=UnattendedRefusedPayload,
+        actions=("accept", "snooze"),
+        impact_scope="task",
+        on_decide=_unattended_decided,
+    )
+)
+
+
+class QueuedUnattendedOut(BaseModel):
+    """A task queued for tonight, as the day close lists it: whether it will run and, when
+    it will not, the refusal it would get now and its plain words."""
+
+    task_id: UUID
+    project_id: UUID
+    title: str
+    label: Label | None
+    queued_at: datetime
+    will_run: bool
+    refusal: Refusal | None
+    reason: str | None
+
+
+def _spec(row: Any) -> WindowSpec:
+    return WindowSpec(
+        weekdays=sorted(row.weekdays), start_local=row.start_local, end_local=row.end_local
+    )
+
+
+def _window(spec: WindowSpec) -> Window:
+    return Window(frozenset(spec.weekdays), spec.start_local, spec.end_local)
+
+
+async def _window_rows(s: AsyncSession) -> dict[UUID | None, Any]:
+    rows = (await s.execute(select(_WINDOWS).where(_WINDOWS.c.deleted_at.is_(None)))).all()
+    return {row.project_id: row for row in rows}
+
+
+def _effective(rows: dict[UUID | None, Any], project_id: UUID | None) -> Any:
+    if project_id is not None and project_id in rows:
+        return rows[project_id]
+    return rows.get(None)
+
+
+def _window_out(rows: dict[UUID | None, Any], project_id: UUID | None) -> UnattendedWindowOut:
+    own = rows.get(project_id)
+    found = _effective(rows, project_id)
+    source: WindowSource = "none"
+    if found is not None:
+        source = "project" if found.project_id is not None else "workspace"
+    return UnattendedWindowOut(
+        project_id=project_id,
+        window=None if found is None else _spec(found),
+        source=source,
+        version=None if own is None else own.version,
+    )
+
+
+async def get_unattended_window(
+    ctx: WorkspaceContext, project_id: UUID | None = None, *, session: AsyncSession | None = None
+) -> UnattendedWindowOut:
+    """The window in force for the workspace, or for a project (its override, else the
+    workspace's)."""
+    async with session_for(ctx, session) as s:
+        if project_id is not None:
+            await projects.get_project(s, project_id)  # 404 for a project the caller cannot see
+        return _window_out(await _window_rows(s), project_id)
+
+
+async def put_unattended_window(
+    ctx: WorkspaceContext,
+    body: UnattendedWindowIn,
+    *,
+    now: datetime,
+    session: AsyncSession | None = None,
+) -> UnattendedWindowOut:
+    """Saves (or, with `window` null, removes) the workspace's window or a project's
+    override at the stored row's `version` (stale: 409 `stale_version` with the current
+    window). Refuses a repeated weekday or a start equal to the end (422
+    `validation_error`). Audited `settings.changed`."""
+    spec = body.window
+    if spec is not None and len(set(spec.weekdays)) != len(spec.weekdays):
+        raise ProblemError(422, "validation_error", "each weekday appears once")
+    if spec is not None and spec.start_local == spec.end_local:
+        raise ProblemError(422, "validation_error", "the window starts and ends at one time")
+    async with session_for(ctx, session) as s:
+        if body.project_id is not None:
+            await projects.get_project(s, body.project_id)
+        await s.execute(_WEEK_LOCK, {"key": f"unattended_window:{ctx.workspace_id}"})
+        rows = await _window_rows(s)
+        own = rows.get(body.project_id)
+        if (None if own is None else own.version) != body.version:
+            raise StaleVersion(current=_window_out(rows, body.project_id).model_dump(mode="json"))
+        values = (
+            {}
+            if spec is None
+            else {
+                "weekdays": sorted(spec.weekdays),
+                "start_local": spec.start_local,
+                "end_local": spec.end_local,
+            }
+        )
+        if own is not None and spec is None:
+            await s.execute(update(_WINDOWS).where(_WINDOWS.c.id == own.id).values(deleted_at=now))
+        elif own is not None:
+            await s.execute(update(_WINDOWS).where(_WINDOWS.c.id == own.id).values(**values))
+        elif spec is not None:
+            await s.execute(_WINDOWS.insert().values(project_id=body.project_id, **values))
+        if own is not None or spec is not None:
+            await audit.record(
+                s,
+                "settings.changed",
+                target=("workspace", ctx.workspace_id),
+                details={"section": UNATTENDED_SECTION, "fields": ["window"]},
+                occurred_at=now,
+                project_id=body.project_id,
+            )
+            live.mark_changed(s, "settings", ctx.workspace_id)
+        return _window_out(await _window_rows(s), body.project_id)
+
+
+def _lite(task: tasks.QueuedTask) -> TaskLite:
+    return TaskLite(
+        label=task.label.value if task.label is not None else None,
+        status=task.status.value,
+        queued=True,
+        has_acceptance_criteria=task.has_acceptance_criteria,
+    )
+
+
+async def _refusal_now(s: AsyncSession, task: tasks.QueuedTask) -> Refusal | None:
+    pause = await agents.pause_state_for(s, task.project_id)
+    return green_light(
+        _lite(task),
+        may_run_unattended=task.may_run_unattended,
+        project_paused=pause == "paused_project",
+        kill_switch=pause == "paused_workspace",
+    )
+
+
+async def queued_unattended(s: AsyncSession) -> list[QueuedUnattendedOut]:
+    """Every task queued for tonight, in queued order, with the refusal it would get now
+    (the window aside: the day close shows the queue before the window opens)."""
+    listed: list[QueuedUnattendedOut] = []
+    for task in await tasks.unattended_queue(s):
+        refusal = await _refusal_now(s, task)
+        listed.append(
+            QueuedUnattendedOut(
+                task_id=task.task_id,
+                project_id=task.project_id,
+                title=task.title,
+                label=task.label.value if task.label is not None else None,
+                queued_at=task.queued_at,
+                will_run=refusal is None,
+                refusal=refusal,
+                reason=None if refusal is None else REFUSAL_WORDS[refusal],
+            )
+        )
+    return listed
+
+
+DaySummaryOut.model_rebuild()
+
+
+async def _result_batch(s: AsyncSession, run_id: UUID) -> tuple[str, datetime] | None:
+    """agents' result hook: an unattended run's result waits for the morning review."""
+    release = await s.scalar(
+        select(_UNATTENDED_RUNS.c.release_at).where(
+            _UNATTENDED_RUNS.c.run_id == run_id, _UNATTENDED_RUNS.c.deleted_at.is_(None)
+        )
+    )
+    return None if release is None else (OVERNIGHT, release)
+
+
+agents.register_result_batch(_result_batch)
+
+
+class UnattendedTickOut(BaseModel):
+    """What one tick did in one workspace."""
+
+    started: int = 0
+    refused: int = 0
+
+
+async def _release_at(s: AsyncSession, window_end: datetime, tz: ZoneInfo) -> datetime:
+    hours = hours_by_weekday(await _rows(s))
+    return batch_release_at(window_end, next_working_start(window_end, tz, hours))
+
+
+async def _refuse(  # noqa: PLR0917  # the refused task and the night's facts
+    s: AsyncSession,
+    task: tasks.QueuedTask,
+    refusal: str,
+    reason: str,
+    bounds: tuple[datetime, datetime],
+    release_at: datetime,
+) -> None:
+    """One `unattended_refused` item per task and night (its dedupe key names the window)."""
+    await tasks.add_review_item(
+        UNATTENDED_REFUSED,
+        target=tasks.TargetRef(type="task", id=task.task_id),
+        project_id=task.project_id,
+        payload=UnattendedRefusedPayload(
+            refusal=refusal,
+            reason=reason,
+            window_start=bounds[0],
+            batch=OVERNIGHT,
+            release_at=release_at,
+        ).model_dump(mode="json"),
+        dedupe_key=f"unattended:{task.task_id}:{bounds[0].isoformat()}",
+        session=s,
+    )
+
+
+async def _start_or_refuse(  # one queued task in an open window
+    ctx: WorkspaceContext,
+    task: tasks.QueuedTask,
+    bounds: tuple[datetime, datetime],
+    tz: ZoneInfo,
+    now: datetime,
+) -> Literal["started", "refused", "skipped"]:
+    async with tenant_session(ctx) as s:
+        release_at = await _release_at(s, bounds[1], tz)
+        refusal = await _refusal_now(s, task)
+        if refusal is not None:
+            await _refuse(s, task, refusal.value, REFUSAL_WORDS[refusal], bounds, release_at)
+            return "refused"
+        policy = await projects.get_policy(s, task.project_id)
+        if too_late_to_start(now, bounds[1], policy.max_run_minutes):
+            return "skipped"  # stays queued for the next window
+        try:
+            async with s.begin_nested():
+                if not await tasks.consume_unattended(s, task.task_id):
+                    return "skipped"  # another tick took it
+                run_id = await agents.request_run(
+                    task.task_id, agents.RunKind.TASK, unattended=True, ctx=ctx, session=s, now=now
+                )
+                await s.execute(
+                    _UNATTENDED_RUNS.insert().values(
+                        run_id=run_id,
+                        task_id=task.task_id,
+                        project_id=task.project_id,
+                        window_start=bounds[0],
+                        window_end=bounds[1],
+                        release_at=release_at,
+                    )
+                )
+        except ProblemError as refused:  # the flag stays: the task is still queued
+            words = _REQUEST_WORDS.get(refused.code, refused.code.replace("_", " ").capitalize())
+            await _refuse(s, task, refused.code, words, bounds, release_at)
+            return "refused"
+        return "started"
+
+
+async def unattended_tick_for(ctx: WorkspaceContext, now: datetime) -> UnattendedTickOut:
+    """One tick in one workspace: each queued task whose window (its project's override,
+    else the workspace's) is open at `now`, in queued order, is started or refused (see
+    above). Each task is its own transaction, and one task's failure never holds up the
+    others."""
+    tz = await _zone(ctx)
+    async with tenant_session(ctx) as s:
+        rows = await _window_rows(s)
+        queue = await tasks.unattended_queue(s) if rows else []
+    out = UnattendedTickOut()
+    for task in queue:
+        row = _effective(rows, task.project_id)
+        bounds = None if row is None else window_bounds(_window(_spec(row)), now, tz)
+        if bounds is None:
+            continue
+        try:
+            done = await _start_or_refuse(ctx, task, bounds, tz, now)
+        except Exception:  # logged; the task stays queued and the next tick tries it again
+            _log.exception("unattended tick: task %s", task.task_id)
+            continue
+        if done == "started":
+            out.started += 1
+        elif done == "refused":
+            out.refused += 1
+    return out
+
+
+async def unattended_workspaces() -> list[UUID]:
+    """Every workspace with an unattended window (the tick's first step)."""
+    from tumnis.core import db  # noqa: PLC0415  # the tick reads across workspaces
+
+    async with db.app_sessionmaker()() as s, s.begin():
+        workspace_ids = list(await audit.workspace_ids(s))
+    found: list[UUID] = []
+    for workspace_id in workspace_ids:
+        async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
+            if await s.scalar(select(_WINDOWS.c.id).where(_WINDOWS.c.deleted_at.is_(None))):
+                found.append(workspace_id)
+    return found
+
+
+async def run_unattended_tick(now: datetime) -> int:
+    """One unattended tick across every workspace, in this process (the test route's tick
+    and the scheduled workflow's steps do the same work); how many runs it started."""
+    started = 0
+    for workspace_id in await unattended_workspaces():
+        ctx = WorkspaceContext(workspace_id, SYSTEM_ACTOR)
+        started += (await unattended_tick_for(ctx, now)).started
+    return started
+
+
+async def unattended_runs_finished(s: AsyncSession, start: datetime, end: datetime) -> int | None:
+    """Unattended runs that finished successfully within [start, end); None when no run was
+    ever started unattended (the metric has no data yet)."""
+    if await s.scalar(select(_UNATTENDED_RUNS.c.id).limit(1)) is None:
+        return None
+    ours: set[UUID] = set(await s.scalars(select(_UNATTENDED_RUNS.c.run_id)))
+    finished = await agents.finished_runs(s, start, end)
+    return sum(1 for r in finished if r.run_id in ours and r.status.value == "succeeded")
