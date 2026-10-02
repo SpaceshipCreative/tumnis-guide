@@ -841,7 +841,8 @@ export type DayEventOut = {
  * DaySummaryOut
  *
  * `GET /v1/day/{day}/summary`: the close-the-day panel's four sections for one local
- * day of the workspace.
+ * day of the workspace. `queued_unattended` (P4-04) lists every task queued for tonight in
+ * queued order, with whether it will run; `queued_overnight` names the same tasks.
  */
 export type DaySummaryOut = {
   /**
@@ -860,6 +861,10 @@ export type DaySummaryOut = {
    * Queued Overnight
    */
   queued_overnight: Array<TaskRef>;
+  /**
+   * Queued Unattended
+   */
+  queued_unattended?: Array<QueuedUnattendedOut>;
   /**
    * Rolls Over
    */
@@ -3777,6 +3782,44 @@ export type PushSubscriptionOut = {
 };
 
 /**
+ * QueuedUnattendedOut
+ *
+ * A task queued for tonight, as the day close lists it: whether it will run and, when
+ * it will not, the refusal it would get now and its plain words.
+ */
+export type QueuedUnattendedOut = {
+  /**
+   * Label
+   */
+  label: "human" | "ai" | "hybrid" | null;
+  /**
+   * Project Id
+   */
+  project_id: string;
+  /**
+   * Queued At
+   */
+  queued_at: string;
+  /**
+   * Reason
+   */
+  reason: string | null;
+  refusal: Refusal | null;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Title
+   */
+  title: string;
+  /**
+   * Will Run
+   */
+  will_run: boolean;
+};
+
+/**
  * Quota
  *
  * Bytes the workspace's knowledge uses (current file versions plus text entries,
@@ -3886,6 +3929,21 @@ export type RecurrenceOut = {
    */
   weekday: number | null;
 };
+
+/**
+ * Refusal
+ *
+ * Why a queued task may not run unattended now (`green_light`'s answer).
+ */
+export type Refusal =
+  | "tainted"
+  | "not_ai"
+  | "paused"
+  | "kill_switch"
+  | "no_acceptance_criteria"
+  | "not_queued"
+  | "done"
+  | "waiting_on_human";
 
 /**
  * RelayReplyBody
@@ -5109,6 +5167,10 @@ export type TaskOut = {
    */
   title: string;
   /**
+   * Unattended Queued At
+   */
+  unattended_queued_at: string | null;
+  /**
    * Updated At
    */
   updated_at: string;
@@ -5456,6 +5518,10 @@ export type TaskWithLayoutOut = {
    */
   title: string;
   /**
+   * Unattended Queued At
+   */
+  unattended_queued_at: string | null;
+  /**
    * Updated At
    */
   updated_at: string;
@@ -5727,6 +5793,92 @@ export type TrustIn = {
 };
 
 /**
+ * UnattendedIn
+ *
+ * Queue the task for the unattended window (`queued` true) or take it off.
+ */
+export type UnattendedIn = {
+  /**
+   * Queued
+   */
+  queued: boolean;
+};
+
+/**
+ * UnattendedOut
+ *
+ * The task's place in the unattended queue: when and by whom it was queued, and whether
+ * P2-08's rule lets it run unattended at all (false for a tainted task, SAF-1).
+ */
+export type UnattendedOut = {
+  /**
+   * May Run Unattended
+   */
+  may_run_unattended: boolean;
+  /**
+   * Queued
+   */
+  queued: boolean;
+  /**
+   * Queued At
+   */
+  queued_at: string | null;
+  /**
+   * Queued By
+   */
+  queued_by: string | null;
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Task Id
+   */
+  task_id: string;
+};
+
+/**
+ * UnattendedWindowIn
+ *
+ * The workspace's window (`project_id` null) or one project's override; `window` null
+ * turns it off (an override then falls back to the workspace's). `version` is the stored
+ * row's (null when there is none yet).
+ */
+export type UnattendedWindowIn = {
+  /**
+   * Project Id
+   */
+  project_id?: string | null;
+  /**
+   * Version
+   */
+  version?: number | null;
+  window: WindowSpec | null;
+};
+
+/**
+ * UnattendedWindowOut
+ *
+ * The window in force for the workspace or a project, where it comes from, and the
+ * version of the row this scope stores (null when it stores none).
+ */
+export type UnattendedWindowOut = {
+  /**
+   * Project Id
+   */
+  project_id: string | null;
+  /**
+   * Source
+   */
+  source: "project" | "workspace" | "none";
+  /**
+   * Version
+   */
+  version: number | null;
+  window: WindowSpec | null;
+};
+
+/**
  * UndoIn
  *
  * The change a write answered (`change_id`) and the version it left (R-09).
@@ -5932,6 +6084,27 @@ export type WindowOut = {
    * Start
    */
   start: string;
+};
+
+/**
+ * WindowSpec
+ *
+ * Weekdays (0 = Monday) and local wall times in the workspace timezone; an end before
+ * the start crosses midnight and belongs to the weekday it starts on.
+ */
+export type WindowSpec = {
+  /**
+   * End Local
+   */
+  end_local: string;
+  /**
+   * Start Local
+   */
+  start_local: string;
+  /**
+   * Weekdays
+   */
+  weekdays: Array<number>;
 };
 
 /**
@@ -15775,6 +15948,126 @@ export type TasksChangeStatusResponses = {
 export type TasksChangeStatusResponse =
   TasksChangeStatusResponses[keyof TasksChangeStatusResponses];
 
+export type TasksGetUnattendedData = {
+  body?: never;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/unattended";
+};
+
+export type TasksGetUnattendedErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksGetUnattendedError =
+  TasksGetUnattendedErrors[keyof TasksGetUnattendedErrors];
+
+export type TasksGetUnattendedResponses = {
+  /**
+   * Successful Response
+   */
+  200: UnattendedOut;
+};
+
+export type TasksGetUnattendedResponse =
+  TasksGetUnattendedResponses[keyof TasksGetUnattendedResponses];
+
+export type TasksPutUnattendedData = {
+  body: UnattendedIn;
+  path: {
+    /**
+     * Task Id
+     */
+    task_id: string;
+  };
+  query?: never;
+  url: "/v1/tasks/{task_id}/unattended";
+};
+
+export type TasksPutUnattendedErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type TasksPutUnattendedError =
+  TasksPutUnattendedErrors[keyof TasksPutUnattendedErrors];
+
+export type TasksPutUnattendedResponses = {
+  /**
+   * Successful Response
+   */
+  200: UnattendedOut;
+};
+
+export type TasksPutUnattendedResponse =
+  TasksPutUnattendedResponses[keyof TasksPutUnattendedResponses];
+
 export type TasksUndoTaskData = {
   body: UndoIn;
   path: {
@@ -15975,6 +16268,121 @@ export type SearchTypeaheadTasksResponses = {
 
 export type SearchTypeaheadTasksResponse =
   SearchTypeaheadTasksResponses[keyof SearchTypeaheadTasksResponses];
+
+export type PlanningGetUnattendedWindowData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+  };
+  url: "/v1/unattended/window";
+};
+
+export type PlanningGetUnattendedWindowErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningGetUnattendedWindowError =
+  PlanningGetUnattendedWindowErrors[keyof PlanningGetUnattendedWindowErrors];
+
+export type PlanningGetUnattendedWindowResponses = {
+  /**
+   * Successful Response
+   */
+  200: UnattendedWindowOut;
+};
+
+export type PlanningGetUnattendedWindowResponse =
+  PlanningGetUnattendedWindowResponses[keyof PlanningGetUnattendedWindowResponses];
+
+export type PlanningPutUnattendedWindowData = {
+  body: UnattendedWindowIn;
+  path?: never;
+  query?: never;
+  url: "/v1/unattended/window";
+};
+
+export type PlanningPutUnattendedWindowErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type PlanningPutUnattendedWindowError =
+  PlanningPutUnattendedWindowErrors[keyof PlanningPutUnattendedWindowErrors];
+
+export type PlanningPutUnattendedWindowResponses = {
+  /**
+   * Successful Response
+   */
+  200: UnattendedWindowOut;
+};
+
+export type PlanningPutUnattendedWindowResponse =
+  PlanningPutUnattendedWindowResponses[keyof PlanningPutUnattendedWindowResponses];
 
 export type UsageGetUsageData = {
   body?: never;

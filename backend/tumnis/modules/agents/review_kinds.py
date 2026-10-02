@@ -23,6 +23,7 @@
   (acknowledge) and `snooze`.
 """
 
+from datetime import datetime
 from typing import Final, Literal
 from uuid import UUID
 
@@ -87,9 +88,13 @@ RUN_LIMIT: Final = "run_limit"
 
 class ResultPayload(tasks.ResultFields):
     """An agent's result waiting for the human: accept finishes the task, reject sends it
-    back to the agent with the feedback (a comment on the task and a new run)."""
+    back to the agent with the feedback (a comment on the task and a new run). An
+    unattended run's result (P4-04) waits for the morning review: `batch` "overnight" and
+    the time its notification is released."""
 
     run_id: UUID
+    batch: Literal["overnight"] | None = None
+    release_at: datetime | None = None
 
 
 class RejectFeedback(BaseModel):
