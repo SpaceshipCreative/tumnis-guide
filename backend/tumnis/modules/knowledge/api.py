@@ -61,6 +61,7 @@ from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.core.versioning import NotFound, StaleVersion, update_versioned
 from tumnis.modules.integrations import api as integrations
 from tumnis.modules.knowledge import embeddings as _embeddings
+from tumnis.modules.knowledge import s3_sources as _s3_sources
 from tumnis.modules.knowledge import search, store
 from tumnis.modules.knowledge.adapters.fake import FakeStorage
 from tumnis.modules.knowledge.adapters.port import ChunkRow
@@ -125,6 +126,19 @@ from tumnis.modules.tasks import api as tasks
 from tumnis.seed import DocumentSeed, register_seed_writer
 
 _documents: Table = Document.__table__  # type: ignore[assignment]
+
+# S3 buckets as linked sources (P3-13, FR-15.11): the router and the tests reach them here.
+S3PrefixMap = _s3_sources.S3PrefixMap
+S3SourceIn = _s3_sources.S3SourceIn
+S3SourceOut = _s3_sources.S3SourceOut
+S3SourceCreated = _s3_sources.S3SourceCreated
+NotificationAccepted = _s3_sources.NotificationAccepted
+create_s3_source = _s3_sources.create_s3_source
+list_s3_sources = _s3_sources.list_s3_sources
+get_s3_source = _s3_sources.get_s3_source
+delete_s3_source = _s3_sources.delete_s3_source
+accept_minio_notification = _s3_sources.accept_minio_notification
+use_s3_adapters = _s3_sources.use_s3_adapters
 
 # Chunk embeddings (P3-10, R-37): other modules, the CLI and the tests reach them here.
 EmbeddingModelOut = _embeddings.EmbeddingModelOut

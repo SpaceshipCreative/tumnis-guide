@@ -10,7 +10,9 @@ Files: an upload waits in `<spool>/<version_id>` (the api wrote it); step 1 copi
 `<scratch>/<version_id>/<name>` (a file found in a project folder is read from its location
 instead), and every later step works on that copy. The copy keeps the file's name, since
 Docling reads the format from the extension; a step that finds it gone brings it back from
-the spool or from where the file was placed.
+the spool or from where the file was placed. An object of an S3 linked source (P3-13,
+`source = "linked"`) waits in the spool too, but is never placed: it lives in its bucket,
+and a lost spool copy is read again from there (`register_linked_reader`).
 
 The scanner, the extractor and the vision model come from `use()` (tests) or, in a real
 deployment, the settings given to `configure()`: clamd's address, Docling with the chunk
@@ -28,7 +30,7 @@ import json
 import logging
 import shutil
 import zipfile
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from itertools import count
 from pathlib import Path, PurePosixPath
 from typing import Any, Final, Literal, TypedDict, cast
@@ -73,7 +75,8 @@ STEPS: Final = (
     "emit",
     "fail",
 )
-Source = Literal["spool", "storage"]
+Source = Literal["spool", "storage", "linked"]
+LinkedReader = Callable[[WorkspaceContext, UUID], AsyncGenerator[bytes]]
 
 SNIFF_BYTES: Final = 8 * 1024
 READ_BYTES: Final = 1024 * 1024
@@ -178,6 +181,20 @@ def _spool_file(version_id: str) -> Path:
     return Path(_settings.spool_dir) / version_id
 
 
+def spool_path(version_id: UUID) -> Path:
+    """Where a version's file waits for step 1 (`<spool>/<version_id>`)."""
+    return _spool_file(str(version_id))
+
+
+_linked: list[LinkedReader | None] = [None]
+
+
+def register_linked_reader(fn: LinkedReader) -> None:
+    """How a linked source's version is read again when its spool copy is gone (P3-13:
+    `s3_sync` reads the object from its bucket)."""
+    _linked[0] = fn
+
+
 def _scratch_dir(version_id: str) -> Path:
     return Path(_settings.scratch_dir) / version_id
 
@@ -223,8 +240,13 @@ async def _fetch(
     """Copy the version's file to `dest`: the spool file when there is one, else the file
     on its location (a folder file, or an upload that was already placed)."""
     spool = _spool_file(version_id)
-    if source == "spool" and spool.is_file():
+    if source in ("spool", "linked") and spool.is_file():
         return await _copy(_file_chunks(spool), dest)
+    if source == "linked":
+        reader = _linked[0]
+        if reader is None:
+            raise FileNotFoundError(f"no spool copy of {version_id} and no linked reader")
+        return await _copy(reader(ctx, UUID(version_id)), dest)
     async with tenant_session(ctx) as s:
         info = await records.version_info(s, UUID(version_id))
         if info.path is None or info.location_id is None:

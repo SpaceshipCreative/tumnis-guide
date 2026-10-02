@@ -510,6 +510,26 @@ export const zHumanWaitOut = z.object({
 });
 
 /**
+ * KeyCapabilities
+ *
+ * What a linked source's key may do, as far as its provider lets Tumnis check
+ * (`checked` False, every field None, when it does not).
+ */
+export const zKeyCapabilities = z.object({
+  bucket_scoped: z.boolean().nullish(),
+  can_delete: z.boolean().nullish(),
+  can_list: z.boolean().nullish(),
+  can_read: z.boolean().nullish(),
+  can_write: z.boolean().nullish(),
+  checked: z.boolean(),
+  prefix: z.string().nullish(),
+  source: z
+    .enum(["b2_authorize_account", "minio_account_info", "none"])
+    .optional()
+    .default("none"),
+});
+
+/**
  * KeyCreated
  */
 export const zKeyCreated = z.object({
@@ -747,6 +767,14 @@ export const zMoveIn = z.object({
   board_rank: z.string().min(1).max(48),
   column_id: z.uuid(),
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * NotificationAccepted
+ */
+export const zNotificationAccepted = z.object({
+  queued: z.int(),
+  status: z.literal("accepted").optional().default("accepted"),
 });
 
 /**
@@ -1730,6 +1758,73 @@ export const zS3ConfigIn = z.object({
   region: z.string().optional().default("us-east-1"),
   secret_key: z.string(),
   sse: z.literal("AES256").nullish(),
+});
+
+/**
+ * S3PrefixMap
+ *
+ * A bucket prefix and the project its files go to (None: the workspace knowledge
+ * base).
+ */
+export const zS3PrefixMap = z.object({
+  prefix: z.string().max(500),
+  project_id: z.uuid().nullish(),
+});
+
+/**
+ * S3SourceCreated
+ *
+ * The source as created, with its MinIO webhook token: shown once, never stored.
+ */
+export const zS3SourceCreated = z.object({
+  bucket: z.string(),
+  capabilities: zKeyCapabilities,
+  endpoint: z.string(),
+  id: z.uuid(),
+  last_sync_at: z.iso.datetime().nullable(),
+  minio_commands: z.array(z.string()),
+  path_style: z.boolean(),
+  prefixes: z.array(zS3PrefixMap),
+  provider: z.enum(["minio", "b2", "other"]),
+  region: z.string(),
+  trusted: z.boolean(),
+  version: z.int(),
+  warning: z.string().nullable(),
+  webhook_path: z.string(),
+  webhook_token: z.string(),
+});
+
+/**
+ * S3SourceIn
+ */
+export const zS3SourceIn = z.object({
+  access_key: z.string().min(1).max(256),
+  bucket: z.string().max(63),
+  endpoint: z.string().max(500),
+  path_style: z.boolean().optional().default(true),
+  prefixes: z.array(zS3PrefixMap).min(1).max(50),
+  provider: z.enum(["minio", "b2", "other"]),
+  region: z.string().max(64).optional().default("us-east-1"),
+  secret_key: z.string().min(1).max(256),
+  trusted: z.boolean().optional().default(false),
+});
+
+/**
+ * S3SourceOut
+ */
+export const zS3SourceOut = z.object({
+  bucket: z.string(),
+  capabilities: zKeyCapabilities,
+  endpoint: z.string(),
+  id: z.uuid(),
+  last_sync_at: z.iso.datetime().nullable(),
+  path_style: z.boolean(),
+  prefixes: z.array(zS3PrefixMap),
+  provider: z.enum(["minio", "b2", "other"]),
+  region: z.string(),
+  trusted: z.boolean(),
+  version: z.int(),
+  warning: z.string().nullable(),
 });
 
 /**
@@ -3305,6 +3400,38 @@ export const zKnowledgeGetQuotaQuery = z.object({
  */
 export const zKnowledgeGetQuotaResponse = zQuota;
 
+/**
+ * Response Knowledge List S3 Sources
+ *
+ * Successful Response
+ */
+export const zKnowledgeListS3SourcesResponse = z.array(zS3SourceOut);
+
+export const zKnowledgeCreateS3SourceBody = zS3SourceIn;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeCreateS3SourceResponse = zS3SourceCreated;
+
+export const zKnowledgeDeleteS3SourcePath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeDeleteS3SourceResponse = z.void();
+
+export const zKnowledgeGetS3SourcePath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeGetS3SourceResponse = zS3SourceOut;
+
 export const zKnowledgeSearchQuery = z.object({
   q: z.string().min(1).max(500),
   project_id: z.uuid().nullish(),
@@ -4175,3 +4302,12 @@ export const zUsageGetUsageQuery = z.object({
  * Successful Response
  */
 export const zUsageGetUsageResponse = z.array(zUsageRow);
+
+export const zKnowledgeMinioNotificationPath = z.object({
+  connection_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeMinioNotificationResponse = zNotificationAccepted;
