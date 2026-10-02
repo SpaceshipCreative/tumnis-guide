@@ -230,7 +230,7 @@ Then, in the app:
 
 Everything a project knows lives in its knowledge base: documents, notes and links, searched by you and quoted to agents. Files go through a virus scan (ClamAV) and text extraction (Docling) before anyone reads them.
 
-- **Upload** files to a project's Knowledge section, up to 50 MiB each: PDF, Word, Excel, PowerPoint, text, Markdown, CSV, HTML and images (PNG, JPEG, TIFF, WebP).
+- **Upload** files in a project's Knowledge section (or drop one on the project's composer), up to 50 MiB each: PDF, Word, Excel, PowerPoint, text, Markdown, CSV, HTML and images (PNG, JPEG, TIFF, WebP).
 - **Notes and links** written in the editor, or saved from a URL.
 - **Where files live** (Settings > Storage): a folder on the server, a mounted share (SMB or NFS), an S3 bucket or an SFTP server. An SFTP server's host key is trusted only after you compare its fingerprint. Each project gets a folder on the default location, synced both ways: a file you drop in the folder appears in the knowledge base, and an upload appears in the folder.
 - **Calendar** (Settings > Calendar): connect a Google account with your own OAuth client (read-only); busy time shapes the daily plan.
