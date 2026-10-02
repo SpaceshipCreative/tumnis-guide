@@ -31,7 +31,6 @@ pytestmark = [
 
 @pytest.mark.req("J7", "FR-8.4")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 async def test_results_batch_into_morning_review(delivery: DeliveryWorld) -> None:
     """T-P4-04-09
     At Nudge (which sends everything at once), an overnight result and an overnight refusal

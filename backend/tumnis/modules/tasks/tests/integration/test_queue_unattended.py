@@ -23,7 +23,6 @@ def _path(task_id: object) -> str:
 
 @pytest.mark.req("FR-4.5")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 async def test_only_ai_tasks_can_be_queued(
     make_task: MakeTask, session_client: SessionClient, workspace: WorkspaceHandle
 ) -> None:

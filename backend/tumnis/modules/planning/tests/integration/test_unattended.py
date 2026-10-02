@@ -44,7 +44,6 @@ REFUSED = "unattended_refused"
 
 @pytest.mark.req("FR-4.5")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 async def test_only_green_light_ai_tasks_run(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -79,7 +78,6 @@ async def test_only_green_light_ai_tasks_run(
 
 @pytest.mark.req("SAF-1")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 async def test_tainted_refused_with_review_item(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -114,7 +112,6 @@ async def test_tainted_refused_with_review_item(
 
 @pytest.mark.req("REL-3")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 async def test_tick_dispatches_once_per_window(
     db: DbUrls,
     dbos: Any,
@@ -149,7 +146,6 @@ async def test_tick_dispatches_once_per_window(
 
 @pytest.mark.req("FR-4.5")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 async def test_no_start_near_window_end(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock, monkeypatch: pytest.MonkeyPatch
 ) -> None:

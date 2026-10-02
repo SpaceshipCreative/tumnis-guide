@@ -31,7 +31,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("J7")
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 async def test_day_close_lists_queued_with_reasons(
     db: DbUrls, workspace: WorkspaceHandle, clock: FixedClock, session_client: SessionClient
 ) -> None:

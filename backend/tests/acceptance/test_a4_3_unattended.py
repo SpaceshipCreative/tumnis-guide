@@ -144,7 +144,6 @@ async def _requested(db: DbUrls) -> list[dict[str, Any]]:
 
 
 @pytest.mark.wp("P4-04")
-@pytest.mark.xfail(strict=True, reason="spec:P4-04")
 async def test_day_close_lists_queued_unattended(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,
