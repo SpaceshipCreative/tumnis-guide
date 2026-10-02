@@ -9,6 +9,7 @@ import { DashboardPage } from "../components/dashboard/DashboardPage";
 import { localDay } from "../components/dashboard/format";
 import {
   deployStatusQuery,
+  justAddedQuery,
   pausesQuery,
   planQuery,
   projectsQuery,
@@ -25,6 +26,9 @@ export const dashboardSearch = z.object({
     .catch(undefined),
   // Close the day (P1-18, J7): the panel over the dashboard, not a route of its own.
   panel: z.enum(["close"]).optional().catch(undefined),
+  // The task drawer over the dashboard (A1.1, decision 83), and the run it shows (P2-04).
+  task: z.uuid().optional().catch(undefined),
+  run: z.uuid().optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/")({
@@ -35,6 +39,7 @@ export const Route = createFileRoute("/")({
     await Promise.all([
       loaderRead(queryClient, projectsQuery()),
       loaderRead(queryClient, todayQuery()),
+      loaderRead(queryClient, justAddedQuery()),
       loaderRead(queryClient, reviewCountQuery()),
       // The day's plan (P1-11) is read for the workspace's own day, once its zone is in.
       loaderRead(queryClient, workspaceQuery()).then(() => {
