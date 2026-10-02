@@ -392,6 +392,22 @@ def wait_status(run_status: RunStatus) -> WaitStatus:
     return "done" if run_status in TERMINAL_STATUSES else "still_running"
 
 
+# --- a stuck run's report, reviewed (P4-02, FR-10.5, Scott decision 73) ---------------------
+
+StuckStepDecided = Literal["done", "reopened"]
+_STUCK_STEP_AFTER: Final[Mapping[str, StuckStepDecided]] = {
+    "accept": "done",
+    "reject": "reopened",
+}
+
+
+def stuck_step_after(decision: str) -> StuckStepDecided | None:
+    """Where the step a stuck run took itself stands once its `result` item is decided:
+    accepted, it is `done` (the person carries on with the task); rejected, it is
+    `reopened` for the person. Any other decision (a snooze) leaves it as it is."""
+    return _STUCK_STEP_AFTER.get(decision)
+
+
 # --- artifacts (P2-07) --------------------------------------------------------------------
 
 ARTIFACT_MAX_BYTES: Final = 256 * 1024  # plan default
