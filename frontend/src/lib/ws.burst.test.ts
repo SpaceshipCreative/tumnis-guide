@@ -21,6 +21,11 @@ const REVIEW_COUNT = [
   { _id: "tasksGetReviewCount", baseUrl: "http://localhost:3000" },
 ];
 
+const message = (n: number) => ({
+  entity: "review_item",
+  id: `0193e5a0-0000-7000-8000-0000000000${String(n).padStart(2, "0")}`,
+});
+
 test("[P0-22][ADR-0004] a burst of live messages refetches a shown query once", async () => {
   vi.useFakeTimers();
   const queryClient = new QueryClient();
@@ -35,28 +40,28 @@ test("[P0-22][ADR-0004] a burst of live messages refetches a shown query once", 
 
   const stop = connectLive(queryClient, "ws://localhost:3000/ws");
   FakeSocket.latest().open();
-  for (let i = 0; i < 5; i += 1) {
-    FakeSocket.latest().receive({
-      entity: "review_item",
-      id: `0193e5a0-0000-7000-8000-00000000000${String(i)}`,
-    });
-  }
-  // Marked stale at once, as before (T-P0-22-09)...
+  // The first message in a quiet moment is read at once...
+  FakeSocket.latest().receive(message(0));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetches).toHaveBeenCalledTimes(2);
+
+  // ...and the rest of the burst marks the query stale (T-P0-22-09) but waits.
+  for (let i = 1; i < 10; i += 1) FakeSocket.latest().receive(message(i));
   expect(
     queryClient.getQueryCache().find({ queryKey: REVIEW_COUNT })?.state
       .isInvalidated,
   ).toBe(true);
-  await vi.runAllTimersAsync();
-  // ...and read again once for the whole burst.
+  await vi.advanceTimersByTimeAsync(0);
   expect(fetches).toHaveBeenCalledTimes(2);
 
-  // A message after the burst's refetch reads it again.
-  FakeSocket.latest().receive({
-    entity: "review_item",
-    id: "0193e5a0-0000-7000-8000-000000000009",
-  });
+  // One read for the rest of the burst, and none once it is quiet.
   await vi.runAllTimersAsync();
   expect(fetches).toHaveBeenCalledTimes(3);
+
+  // A message after a quiet moment is read at once again.
+  FakeSocket.latest().receive(message(20));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetches).toHaveBeenCalledTimes(4);
 
   stop();
   unsubscribe();

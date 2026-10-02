@@ -57,9 +57,9 @@ export function liveUrl(): string {
 
 const MAX_DELAY_MS = 30_000;
 const BASE_DELAY_MS = 500;
-/** How long a burst of live messages gathers before its queries are read again: the
- * most a live change waits, and at most four reads a second per shown query. */
-const LIVE_BURST_MS = 250;
+/** The live reads' window: a message in a quiet moment is read again at once, and the
+ * messages that follow within this long are read together when it ends. */
+const LIVE_WINDOW_MS = 200;
 
 export function connectLive(
   qc: QueryClient,
@@ -71,23 +71,37 @@ export function connectLive(
   let timer: ReturnType<typeof setTimeout> | undefined;
   // One change often sends a run of messages within a second (one per row it touched: a
   // quick-add recomputes the blocking impact of the open review items in its project).
-  // Each message used to start its own refetch, cancelling the one before,
-  // so a shown query was read once per message: ten review counts in the second after
-  // one quick-add in an e2e run, 22 in 5 s, against a session burst of 50 requests.
-  // The messages of a burst now mark their queries stale as they come and the shown ones
-  // are read once, LIVE_BURST_MS after the first; a refetch still running from an
-  // earlier burst is restarted, so it cannot miss what this burst announced.
-  let burst: LiveMessage[] = [];
-  let burstTimer: ReturnType<typeof setTimeout> | undefined;
-  const refetchBurst = () => {
-    const messages = burst;
-    burst = [];
-    burstTimer = undefined;
+  // Each message used to start its own refetch, cancelling the one before, so a shown
+  // query was read once per message: ten review counts in the second after one quick-add
+  // in an e2e run, 22 in 5 s, against a session burst of 50 requests. Now every message
+  // marks its queries stale as it comes; the first after a quiet moment is read at once
+  // (a label still shows within a second of Enter, A1.1), and the rest of its window are
+  // read together when the window ends. That later read restarts one still running, so
+  // it cannot miss what the window's messages announced.
+  let pending: LiveMessage[] = [];
+  let windowTimer: ReturnType<typeof setTimeout> | undefined;
+  const refetch = (messages: LiveMessage[]) => {
     void qc.refetchQueries({
       type: "active",
       predicate: (query) =>
         messages.some((msg) => matchesLive(query.queryKey, msg)),
     });
+  };
+  const endWindow = () => {
+    windowTimer = undefined;
+    if (pending.length === 0) return; // quiet: the next message reads at once
+    const messages = pending;
+    pending = [];
+    refetch(messages);
+    windowTimer = setTimeout(endWindow, LIVE_WINDOW_MS);
+  };
+  const read = (msg: LiveMessage) => {
+    if (windowTimer === undefined) {
+      refetch([msg]);
+      windowTimer = setTimeout(endWindow, LIVE_WINDOW_MS);
+    } else {
+      pending.push(msg);
+    }
   };
 
   const open = () => {
@@ -99,13 +113,11 @@ export function connectLive(
     ws.onmessage = (event: MessageEvent) => {
       const msg = parseLiveMessage(event.data);
       if (msg) {
-        // Stale at once; read again with the rest of the burst (refetchBurst).
         void qc.invalidateQueries({
           predicate: (query) => matchesLive(query.queryKey, msg),
-          refetchType: "none",
+          refetchType: "none", // read below, at most twice per window
         });
-        burst.push(msg);
-        burstTimer ??= setTimeout(refetchBurst, LIVE_BURST_MS);
+        read(msg);
       }
     };
     ws.onclose = () => {
@@ -121,7 +133,7 @@ export function connectLive(
   return () => {
     stopped = true;
     clearTimeout(timer);
-    clearTimeout(burstTimer);
+    clearTimeout(windowTimer);
     ws?.close();
   };
 }
