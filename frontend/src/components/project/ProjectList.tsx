@@ -1,7 +1,8 @@
 // The project list (P0-17, FR-2.1): every project in board order with its health, and
 // "New project" (name, client, goal and its agent, CreateProjectDialog). Saving opens the
 // new project's page. The list is the generated `projectsListProjects`, so a live
-// `project` message refreshes it.
+// `project` message refreshes it. Below it, the archived projects, with Unarchive (P2-18,
+// APP-13).
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -9,6 +10,7 @@ import { useState } from "react";
 import { projectsListProjectsOptions } from "../../api/@tanstack/react-query.gen";
 import type { ProjectOut } from "../../api/types.gen";
 import { BUTTON, ERROR, TITLE } from "../auth/styles";
+import { ArchivedProjects } from "./ArchiveProject";
 import { CreateProjectDialog, PROJECT_LIST } from "./CreateProjectDialog";
 
 const LIST = PROJECT_LIST;
@@ -74,6 +76,7 @@ export function ProjectList() {
           </li>
         ))}
       </ul>
+      <ArchivedProjects />
     </section>
   );
 }

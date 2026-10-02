@@ -1,9 +1,11 @@
 // The project header (P0-24, FR-2.4): name, goal, health, the next milestone, today's
 // tasks with their estimates and the sum, and the agent's status (P1-06: its profile's
-// provisioning, "No agent yet" before the project has a profile).
+// provisioning, "No agent yet" before the project has a profile). P2-18 (APP-13): an
+// archived project says so beside its health.
 import type { AgentProfileOut } from "../../api/types.gen";
 import { formatDay, formatMinutes } from "../dashboard/format";
 import { HealthBadge } from "../dashboard/HealthBadge";
+import { ArchiveBadge } from "./ArchiveProject";
 import type { TaskLite } from "./grouping";
 import type { Project } from "./types";
 
@@ -37,6 +39,7 @@ export function ProjectHeader({
           {project.name}
         </h1>
         <HealthBadge health={project.health} />
+        <ArchiveBadge project={project} />
       </div>
       {project.goal && <p className="text-muted">{project.goal}</p>}
       <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
