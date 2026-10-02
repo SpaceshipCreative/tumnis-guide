@@ -10,36 +10,62 @@ notification pushed to every live subscription of the workspace, through the
 `rejected` is not retried. Workflow id `notifications.push:<notification id>`, so a
 re-run subscriber never pushes twice.
 
+`notifications.deliver_notification(workspace_id, notification_id, envelope,
+max_attempts, base_delay_s)` (P2-16, FR-8.2, REL-3): one notification to Discord through
+the master profile. Each attempt is one `notify` run of the master's `focus` skill (a
+child `run_skill`, run id derived from this workflow's id and the attempt, so a replay
+dispatches nothing twice), which posts the message to the one channel itself, and one
+`delivery_attempts` row. A failed attempt (the run failed, timed out or was refused, the
+gateway is down) is tried again after a full-jitter backoff, at most `max_attempts` times;
+then the `notification.ready` delivery is dead-lettered (`core.deadletter`), so Settings
+lists it with retry and discard. A retry from there is a new `deliver_event` round, hence a
+new workflow id (`start_discord`) and fresh attempts. Without a master profile (none
+provisioned) there is nothing to send: in-app only. `deliver_event` marks the dead letter
+resolved as soon as the retry round starts this workflow; a round that fails again
+re-opens it, one that succeeds resolves it for good.
+
 The api never calls out: subscribers record and decide (api), the worker sends (here).
 """
 
 import asyncio
 import contextvars
 import functools
+import random
 from collections.abc import Callable, Coroutine
 from typing import Any, Final
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from dbos import DBOS, SetWorkflowID
 
+from tumnis.core import deadletter
 from tumnis.core.adapters.errors import AdapterError
 from tumnis.core.adapters.registry import current_mode, resolve
+from tumnis.core.backoff import full_jitter
 from tumnis.core.clock import SystemClock
+from tumnis.core.events import EventEnvelope
 from tumnis.core.net import NetPolicy
-from tumnis.core.tenancy import WorkspaceContext
+from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.modules.agents import api as agents
 from tumnis.modules.notifications import api, rules
 from tumnis.modules.notifications.adapters.port import PushSubscription, VapidKey, WebPushAdapter
 
 PUSH_QUEUE: Final = "notifications"
 ADAPTER: Final = "notifications.webpush"
 DEFAULT_RETRY_DELAYS_S: Final = (30.0, 120.0)  # three attempts in all
+DISCORD_SUBSCRIBER: Final = "notifications.deliver_notification"
+DISCORD_EVENT: Final = "notification.ready"
+DEFAULT_DISCORD_ATTEMPTS: Final = 3  # plan default (REL-3's per-job limit)
+DEFAULT_DISCORD_BASE_S: Final = 30.0  # full jitter: up to 30 s, then up to 60 s
+DISCORD_CAP_S: Final = 300.0
+_RUNS: Final = UUID("6f1c8f0e-3b52-5d47-9a8e-2c4b7d1e5a90")  # uuid5 namespace of notify runs
 
 PushFactory = Callable[[str, Any], Any]
 
 _factory: list[PushFactory | None] = [None]
 _delays: list[tuple[float, ...]] = [DEFAULT_RETRY_DELAYS_S]
 _instances: dict[tuple[str, str, str], WebPushAdapter] = {}
+_discord: list[tuple[int, float]] = [(DEFAULT_DISCORD_ATTEMPTS, DEFAULT_DISCORD_BASE_S)]
 
 
 def use(
@@ -51,6 +77,16 @@ def use(
     _factory[0] = factory
     _delays[0] = DEFAULT_RETRY_DELAYS_S if retry_delays_s is None else retry_delays_s
     _instances.clear()
+    use_discord()
+
+
+def use_discord(*, max_attempts: int | None = None, base_delay_s: float | None = None) -> None:
+    """Test seam: how many Discord attempts a delivery makes and the full-jitter base wait
+    between them (P2-16). No arguments: production (3 attempts, 30 s base)."""
+    _discord[0] = (
+        DEFAULT_DISCORD_ATTEMPTS if max_attempts is None else max_attempts,
+        DEFAULT_DISCORD_BASE_S if base_delay_s is None else base_delay_s,
+    )
 
 
 @functools.cache
@@ -170,6 +206,141 @@ async def start_push(workspace_id: UUID, notification_id: UUID) -> None:
                 str(workspace_id),
                 str(notification_id),
                 list(_delays[0]),
+            )
+
+    await _fresh(run)
+
+
+# --- Discord through the master (P2-16) ----------------------------------------------------
+
+
+@DBOS.step(name="notifications.notify_target")
+async def notify_target(workspace_id: str, notification_id: str) -> dict[str, Any]:
+    """The master profile and the notify packet body; {} when there is nothing to send (no
+    master provisioned, or `api.notify_request` found nothing waiting)."""
+    ctx = _ctx(workspace_id)
+    master = await agents.master_agent(ctx=ctx)
+    if master.profile_id is None or master.availability == "not_provisioned":
+        return {}
+    facts = await api.notify_request(ctx, UUID(notification_id))
+    if facts is None:
+        return {}
+    return {
+        "profile_id": str(master.profile_id),
+        "request": facts.request.model_dump(mode="json"),
+        "tainted": facts.tainted,
+    }
+
+
+@DBOS.step(name="notifications.record_discord_attempt")
+async def record_discord_attempt(
+    workspace_id: str, notification_id: str, run_id: str, status: str, error: str | None
+) -> None:
+    await api.record_discord_attempt(
+        _ctx(workspace_id),
+        notification_id=UUID(notification_id),
+        run_id=UUID(run_id),
+        status="sent" if status == "sent" else "failed",
+        error=error,
+        now=SystemClock().now(),
+    )
+
+
+@DBOS.step(name="notifications.discord_delay")
+async def discord_delay(attempt: int, base_delay_s: float) -> float:
+    """The wait before the next attempt; the random draw is recorded by the step."""
+    return full_jitter(attempt, base=base_delay_s, cap=DISCORD_CAP_S, rand=random.random)
+
+
+@DBOS.step(name="notifications.discord_dead_letter")
+async def discord_dead_letter(
+    workspace_id: str, envelope: dict[str, Any], error: str | None, attempts: int
+) -> None:
+    """Open (or re-open) the dead letter of this `notification.ready` delivery (REL-3)."""
+    env = EventEnvelope.model_validate(envelope)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        await deadletter.DeadLetterRepo(s).record(
+            event_id=env.event_id,
+            subscriber=DISCORD_SUBSCRIBER,
+            event_name=env.name,
+            envelope=envelope,
+            error=error or "failed",
+            attempts=attempts,
+        )
+
+
+@DBOS.step(name="notifications.discord_resolved")
+async def discord_resolved(workspace_id: str, envelope: dict[str, Any]) -> None:
+    """A retry round delivered it: its dead letter, if any, is resolved."""
+    env = EventEnvelope.model_validate(envelope)
+    async with tenant_session(_ctx(workspace_id)) as s:
+        await deadletter.DeadLetterRepo(s).resolve(env.event_id, DISCORD_SUBSCRIBER)
+
+
+@DBOS.workflow(name="notifications.deliver_notification")
+async def deliver_notification(  # the delivery's facts, spelled out
+    workspace_id: str,
+    notification_id: str,
+    envelope: dict[str, Any],
+    max_attempts: int,
+    base_delay_s: float,
+) -> str:
+    """One notification to Discord through the master: "sent", "skipped" (nothing to send)
+    or "dead_lettered" (see the module docstring)."""
+    target = await notify_target(workspace_id, notification_id)
+    if not target:
+        return "skipped"
+    request = agents.NotifyRequest.model_validate(target["request"])
+    round_id = DBOS.workflow_id or notification_id
+    error: str | None = None
+    for attempt in range(1, max_attempts + 1):
+        run_id = uuid5(_RUNS, f"{round_id}:{attempt}")
+        packet = agents.notify_packet(
+            run_id=run_id,
+            profile_id=UUID(target["profile_id"]),
+            request=request,
+            correlation_id=f"notify:{notification_id}",
+            tainted=bool(target["tainted"]),
+        )
+        outcome = await agents.run_notify(UUID(workspace_id), packet)
+        sent = outcome.status == "succeeded"
+        error = None if sent else (outcome.error or outcome.status)
+        await record_discord_attempt(
+            workspace_id, notification_id, str(run_id), "sent" if sent else "failed", error
+        )
+        if sent:
+            await discord_resolved(workspace_id, envelope)
+            return "sent"
+        if attempt < max_attempts:
+            await DBOS.sleep_async(await discord_delay(attempt, base_delay_s))
+    await discord_dead_letter(workspace_id, envelope, error, max_attempts)
+    return "dead_lettered"
+
+
+def discord_workflow_id(round_id: str) -> str:
+    return f"notifications.discord:{round_id}"
+
+
+async def start_discord(envelope: EventEnvelope) -> None:
+    """Queue the Discord delivery of a `notification.ready` event, from its subscriber.
+    The workflow id is the subscriber's own delivery round (`<event id>:<subscriber>`, or
+    `...:retry:<n>` when Settings retries its dead letter), so a re-run subscriber queues
+    it once and a retry queues a fresh delivery."""
+    round_id = DBOS.workflow_id or f"{envelope.event_id}:{DISCORD_SUBSCRIBER}"
+    notification_id = str(envelope.payload["notification_id"])
+    attempts, base = _discord[0]
+    data = envelope.model_dump(mode="json")
+
+    async def run() -> None:
+        with SetWorkflowID(discord_workflow_id(round_id)):
+            await DBOS.enqueue_workflow_async(
+                PUSH_QUEUE,
+                deliver_notification,
+                str(envelope.workspace_id),
+                notification_id,
+                data,
+                attempts,
+                base,
             )
 
     await _fresh(run)

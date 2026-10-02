@@ -12,11 +12,18 @@ Browser push (P4-05, FR-8.3) on P2-16's delivery seam (FR-8.4):
 - `flush` releases what Quiet held once `rules.flush_due` says the break came (or the level
   stopped batching), as one batch notification;
 - `push_targets`, `subscription`, `record_attempt` and `vapid_key` serve the worker's steps.
+
+Discord through the master (P2-16, FR-8.2): a row that goes out now
+(`rules.channels_now` names Discord) emits `notification.ready` in the transaction that
+writes it, so it is delivered exactly once; `notify_request` builds the master's notify
+packet body from the row and the rows it names (read at delivery, so a task renamed
+meanwhile shows its new title), and `record_discord_attempt` records each attempt.
 Nothing here reads a clock: `now` is passed in.
 """
 
 import base64
 import binascii
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final, Literal
@@ -30,18 +37,23 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tumnis.core.errors import ProblemError
+from tumnis.core.outbox import emit
 from tumnis.core.settings_store import get_setting, put_setting
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.versioning import NotFound, StaleVersion
+from tumnis.modules.agents import api as agents
 from tumnis.modules.focus import api as focus
 from tumnis.modules.notifications import rules
 from tumnis.modules.notifications.models import DeliveryAttempt, Notification, PushSubscription
+from tumnis.modules.notifications.payloads import NotificationReadyV1
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
 
 __all__ = [
     "VAPID_SETTING",
     "AttemptStatus",
+    "DiscordStatus",
+    "NotifyFacts",
     "PushKeysIn",
     "PushSubscriptionIn",
     "PushSubscriptionOut",
@@ -50,8 +62,10 @@ __all__ = [
     "VapidPublicKeyOut",
     "VapidSettings",
     "flush",
+    "notify_request",
     "push_targets",
     "record_attempt",
+    "record_discord_attempt",
     "record_focus_event",
     "record_review_item",
     "subscribe",
@@ -63,11 +77,19 @@ __all__ = [
 
 VAPID_SETTING: Final = "notifications.vapid"
 CHANNEL_PUSH: Final = "push"
+CHANNEL_DISCORD: Final = "discord"
+BATCH: Final = "batch"
+FOCUS_EVENT: Final = "focus_event"
+REVIEW_ITEM: Final = "review_item"
+QUESTION: Final = "question"
+CHECK_IN_DUE: Final = "check_in_due"
+SWITCHED: Final = "switched"
 P256_POINT_BYTES: Final = 65  # an uncompressed P-256 public key (W3C Push API `p256dh`)
 AUTH_SECRET_BYTES: Final = 16  # the subscription's `auth` secret (RFC 8291)
 FAR_FUTURE: Final = datetime.max.replace(tzinfo=UTC)
 
 AttemptStatus = Literal["sent", "gone", "failed", "rejected"]
+DiscordStatus = Literal["sent", "failed"]
 
 _notifications: Table = Notification.__table__  # type: ignore[assignment]
 _subscriptions: Table = PushSubscription.__table__  # type: ignore[assignment]
@@ -118,6 +140,15 @@ class Recorded:
 
     id: UUID
     decision: rules.Decision
+
+
+@dataclass(frozen=True)
+class NotifyFacts:
+    """The master's notify packet body for one notification, and whether a text in it came
+    from outside (a tainted task or review target, P2-08)."""
+
+    request: agents.NotifyRequest
+    tainted: bool
 
 
 @dataclass(frozen=True)
@@ -278,6 +309,8 @@ async def _record(  # one notification's facts
     payload: rules.PushPayload,
     dedupe_key: str,
     state: _State,
+    details: Mapping[str, Any] | None,
+    now: datetime,
 ) -> Recorded:
     decision = rules.delivery_decision(state.level, state.in_progress, kind)
     row = (
@@ -292,12 +325,15 @@ async def _record(  # one notification's facts
                 decision=decision,
                 payload=payload.model_dump(mode="json"),
                 dedupe_key=dedupe_key,
+                details=None if details is None else dict(details),
             )
             .on_conflict_do_nothing(index_elements=["workspace_id", "dedupe_key"])
             .returning(_notifications.c.id, _notifications.c.decision)
         )
     ).first()
-    if row is None:  # an earlier run of this subscriber wrote it
+    if row is not None:
+        await _ready(s, row.id, kind, decision, now)
+    else:  # an earlier run of this subscriber wrote it (and emitted its event)
         row = (
             await s.execute(
                 select(_notifications.c.id, _notifications.c.decision).where(
@@ -306,6 +342,15 @@ async def _record(  # one notification's facts
             )
         ).one()
     return Recorded(id=row.id, decision=row.decision)
+
+
+async def _ready(
+    s: AsyncSession, notification_id: UUID, kind: str, decision: rules.Decision, now: datetime
+) -> None:
+    """`notification.ready` for a row that reaches Discord now, in the row's transaction."""
+    if CHANNEL_DISCORD in rules.channels_now(decision):
+        ready = NotificationReadyV1(notification_id=notification_id, kind=kind)
+        await emit(s, ready, occurred_at=now)
 
 
 async def record_review_item(  # the event's facts
@@ -332,13 +377,23 @@ async def record_review_item(  # the event's facts
             payload=rules.push_payload(source),
             dedupe_key=dedupe_key,
             state=await _state(s, ctx, now),
+            details=None,
+            now=now,
         )
 
 
-async def record_focus_event(
-    ctx: WorkspaceContext, *, event_id: UUID, kind: str, dedupe_key: str, now: datetime
+async def record_focus_event(  # the event's facts
+    ctx: WorkspaceContext,
+    *,
+    event_id: UUID,
+    kind: str,
+    dedupe_key: str,
+    now: datetime,
+    details: Mapping[str, Any] | None = None,
 ) -> Recorded:
-    """A focus event (`focus.event`): its notification and P2-16's decision."""
+    """A focus event (`focus.event`): its notification and P2-16's decision. `details`
+    keeps what the master's message names (the event's task, level, rule, when it fired and
+    a detour's return-to task)."""
     payload = rules.push_payload(rules.FocusEventLite(id=event_id, kind=kind))
     async with tenant_session(ctx) as s:
         return await _record(
@@ -350,6 +405,8 @@ async def record_focus_event(
             payload=payload,
             dedupe_key=dedupe_key,
             state=await _state(s, ctx, now),
+            details=details,
+            now=now,
         )
 
 
@@ -402,10 +459,12 @@ async def flush(
                     decision="now",
                     payload=payload.model_dump(mode="json"),
                     dedupe_key=dedupe_key,
+                    details={"count": len(held)},
                 )
                 .returning(_notifications.c.id)
             )
         ).one()
+        await _ready(s, row.id, payload.kind, "now", now)
         return UUID(str(row.id))
 
 
@@ -480,3 +539,142 @@ async def record_attempt(  # one attempt's facts
         else:
             change = {"failures": _subscriptions.c.failures + 1}
         await s.execute(update(_subscriptions).where(*live).values(**change))
+
+
+# --- Discord through the master (P2-16) ----------------------------------------------------
+
+
+async def _task(s: AsyncSession, task_id: Any) -> tasks.TaskOut | None:
+    if task_id is None:
+        return None
+    try:
+        return await tasks.get_task(s, UUID(str(task_id)))
+    except NotFound:
+        return None
+
+
+def _notify_task(task: tasks.TaskOut | None) -> agents.NotifyTask | None:
+    if task is None:
+        return None
+    return agents.NotifyTask(id=task.id, title=task.title, first_action=task.first_action)
+
+
+async def _project(s: AsyncSession, project_id: UUID | None) -> agents.NotifyProject | None:
+    if project_id is None:
+        return None
+    name = (await projects.project_names(s, [project_id])).get(project_id)
+    return None if name is None else agents.NotifyProject(id=project_id, name=name)
+
+
+def _answers(kind: str, return_to: agents.NotifyReturnTo | None) -> list[str]:
+    """The one-tap answers a focus message offers: the check-in's four (FR-10.4), and a
+    detour's return question's two (P4-01)."""
+    if kind == CHECK_IN_DUE:
+        return list(focus.RELAY_ANSWERS)
+    if kind == SWITCHED and return_to is not None:
+        return list(focus.RETURN_ANSWERS)
+    return []
+
+
+async def _focus_request(s: AsyncSession, row: Any) -> NotifyFacts:
+    details: Mapping[str, Any] = row.details or {}
+    kind = str(row.kind).removeprefix(rules.FOCUS_PREFIX)
+    task = await _task(s, details.get("task_id"))
+    left = await _task(s, details.get("return_to_task_id"))
+    back = None if left is None else agents.NotifyReturnTo(id=left.id, title=left.title)
+    event = agents.NotifyEvent(
+        id=row.target_id,
+        kind=kind,
+        level=details.get("level") or row.level,
+        rule=details.get("rule") or kind,
+        fired_at=details.get("fired_at") or row.created_at,
+    )
+    request = agents.NotifyRequest(
+        event=event,
+        task=_notify_task(task),
+        project=await _project(s, None if task is None else task.project_id),
+        return_to=back,
+        answers=_answers(kind, back),
+    )
+    # the packet carries both tasks' text, so either one's taint taints the run (P2-08)
+    tainted = any(t is not None and t.tainted for t in (task, left))
+    return NotifyFacts(request=request, tainted=tainted)
+
+
+async def _item_request(s: AsyncSession, row: Any) -> NotifyFacts | None:
+    try:
+        item = await tasks.get_review_item(s, row.target_id)
+    except NotFound:
+        return None
+    if item.decided_at is not None:
+        return None  # decided before it went out: nothing waits on the person
+    task = await _task(s, item.target_id) if item.target_type == "task" else None
+    question = item.kind == QUESTION
+    payload = item.payload
+    notify = agents.NotifyItem(
+        id=item.id,
+        kind=item.kind,
+        title=None if item.target_title is None else item.target_title[:500],
+        link=rules.deep_link_for(rules.ReviewItemLite(id=item.id, kind=item.kind)),
+        prompt=str(payload.get("prompt"))[:8000] if question and payload.get("prompt") else None,
+        choices=[str(c)[:200] for c in payload.get("choices") or [] if str(c)][:20]
+        if question
+        else [],  # an empty choice would make the packet invalid
+    )
+    request = agents.NotifyRequest(
+        item=notify,
+        task=_notify_task(task),
+        project=await _project(s, item.project_id),
+    )
+    tainted = item.target_tainted or bool(task is not None and task.tainted)
+    return NotifyFacts(request=request, tainted=tainted)
+
+
+async def notify_request(ctx: WorkspaceContext, notification_id: UUID) -> NotifyFacts | None:
+    """The master's notify packet body for this notification (`agents.NotifyRequest`):
+    a focus event with its task, project and one-tap answers; a review item with what it
+    is about, where the app shows it and, for a question, its prompt and choices; or the
+    batch Quiet held. None when there is nothing to send: the row is gone, or its review
+    item was decided or deleted before delivery."""
+    async with tenant_session(ctx) as s:
+        row = (
+            await s.execute(
+                select(_notifications).where(
+                    _notifications.c.id == notification_id, _notifications.c.deleted_at.is_(None)
+                )
+            )
+        ).first()
+        if row is None:
+            return None
+        if row.kind == BATCH:
+            count = int((row.details or {}).get("count") or 1)
+            batch = agents.NotifyBatch(count=count, link="/review")
+            return NotifyFacts(request=agents.NotifyRequest(batch=batch), tainted=False)
+        if row.target_type == FOCUS_EVENT:
+            return await _focus_request(s, row)
+        if row.target_type == REVIEW_ITEM:
+            return await _item_request(s, row)
+        return None
+
+
+async def record_discord_attempt(  # one attempt's facts
+    ctx: WorkspaceContext,
+    *,
+    notification_id: UUID,
+    run_id: UUID,
+    status: DiscordStatus,
+    error: str | None,
+    now: datetime,
+) -> None:
+    """One Discord attempt (its own row): the master's notify run and how it ended."""
+    async with tenant_session(ctx) as s:
+        await s.execute(
+            pg_insert(_attempts).values(
+                notification_id=notification_id,
+                channel=CHANNEL_DISCORD,
+                run_id=run_id,
+                status=status,
+                error=None if error is None else error[:500],
+                attempted_at=now,
+            )
+        )

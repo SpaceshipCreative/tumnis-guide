@@ -24,7 +24,15 @@ from typing import Any, Final
 from uuid import NAMESPACE_URL, uuid5
 
 from harness import REPO
+from tumnis.modules.agents.skill_io import (
+    NotifyBatch,
+    NotifyItem,
+    NotifyProject,
+    NotifyRequest,
+    NotifyTask,
+)
 from tumnis.modules.focus.rules import EventKind, Level, attribution
+from tumnis.modules.notifications.rules import ReviewItemLite, deep_link_for
 from tumnis.modules.projects.rules import ALLOWED_DEFAULT, GATED_DEFAULT
 
 GOLDEN: Final = REPO / "backend" / "tumnis" / "modules" / "agents" / "tests" / "contract" / "golden"
@@ -90,6 +98,28 @@ class NotifySpec:
 
 
 @dataclass(frozen=True)
+class NotifyItemSpec:
+    """One notify packet for a review item that waits on the person (P2-16), its body built
+    with agents' `NotifyRequest`, as `deliver_notification` builds it: the item's kind,
+    the task it is about and, for a question, its prompt and choices."""
+
+    kind: str
+    title: str
+    prompt: str | None = None
+    choices: tuple[str, ...] = ()
+    project: str = "Acme site"
+    skill: str = "focus"
+
+
+@dataclass(frozen=True)
+class NotifyBatchSpec:
+    """One notify packet for what Quiet held while a task was In progress (P2-16)."""
+
+    count: int
+    skill: str = "focus"
+
+
+@dataclass(frozen=True)
 class RelaySpec:
     """One message from the person in the chat channel for the master's relay skill
     (P2-16), and the earlier channel message it replies to, if any."""
@@ -99,7 +129,7 @@ class RelaySpec:
     skill: str = "relay"
 
 
-Spec = TaskSpec | DigestSpec | NotifySpec | RelaySpec
+Spec = TaskSpec | DigestSpec | NotifySpec | NotifyItemSpec | NotifyBatchSpec | RelaySpec
 
 
 def _gated(skill: str, title: str, acceptance: str) -> TaskSpec:
@@ -219,6 +249,13 @@ SPECS: Final[Mapping[str, Spec]] = {
         answers=("return", "stay"),
         return_to=PROPOSAL,
     ),
+    "focus_question_item": NotifyItemSpec(  # an agent's question, answerable in the chat
+        kind="question",
+        title=PROPOSAL,
+        prompt="Which client name goes on the cover page?",
+        choices=("Acme Ltd", "Acme Group"),
+    ),
+    "focus_batch": NotifyBatchSpec(count=3),  # released at the next break, at Quiet
     "relay_kill_command": RelaySpec(content="stop all agents"),
     "relay_question_answer": RelaySpec(
         content="Spring",
@@ -341,7 +378,11 @@ def _channel_id(name: str, what: str) -> str:
 
 
 def _master_packet(
-    name: str, spec: NotifySpec | RelaySpec, head: str, body: dict[str, Any], schema: Any
+    name: str,
+    spec: NotifySpec | NotifyItemSpec | NotifyBatchSpec | RelaySpec,
+    head: str,
+    body: dict[str, Any],
+    schema: Any,
 ) -> dict[str, Any]:
     run_id = _id(name, "run")
     head += f"{INSTRUCTION} {spec.skill}. Reply with one JSON object matching "
@@ -385,6 +426,28 @@ def notify_packet(name: str, spec: NotifySpec) -> dict[str, Any]:
     return _master_packet(name, spec, head, body, NOTIFY_SCHEMA)
 
 
+def notify_item_packet(name: str, spec: NotifyItemSpec | NotifyBatchSpec) -> dict[str, Any]:
+    """A notify run's packet for a review item or a batch (P2-16), its body exactly as
+    agents' `NotifyRequest` writes it."""
+    if isinstance(spec, NotifyBatchSpec):
+        request = NotifyRequest(batch=NotifyBatch(count=spec.count))
+    else:
+        item_id = _id(name, "item")
+        task = NotifyTask(id=_id(name, "task"), title=spec.title)
+        item = NotifyItem(
+            id=item_id,
+            kind=spec.kind,
+            title=spec.title,
+            link=deep_link_for(ReviewItemLite(id=item_id, kind=spec.kind)),
+            prompt=spec.prompt,
+            choices=list(spec.choices),
+        )
+        project = NotifyProject(id=_id(spec.project, "project"), name=spec.project)
+        request = NotifyRequest(item=item, task=task, project=project)
+    head = "Tumnis has a focus message for the person.\n\n"
+    return _master_packet(name, spec, head, request.model_dump(mode="json"), NOTIFY_SCHEMA)
+
+
 def relay_packet(name: str, spec: RelaySpec) -> dict[str, Any]:
     """A message from the person in the chat channel (P2-16), as the harness hands it to
     the relay skill; in production it arrives as chat in the Discord gateway session."""
@@ -411,6 +474,8 @@ def build(name: str) -> dict[str, Any]:
         return task_packet(name, spec)
     if isinstance(spec, NotifySpec):
         return notify_packet(name, spec)
+    if isinstance(spec, NotifyItemSpec | NotifyBatchSpec):
+        return notify_item_packet(name, spec)
     if isinstance(spec, RelaySpec):
         return relay_packet(name, spec)
     return digest_packet(name, spec)
