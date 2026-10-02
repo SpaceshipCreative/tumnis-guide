@@ -115,6 +115,12 @@ CASES = [
     ),
     (
         "events",
+        "notification.ready",
+        1,
+        "backend/tests/contract/fixtures/events/notification.ready/v1.json",
+    ),
+    (
+        "events",
         "plan.published",
         1,
         "backend/tests/contract/fixtures/events/plan.published/v1.json",
@@ -190,6 +196,12 @@ CASES = [
         "run.started",
         1,
         "backend/tests/contract/fixtures/events/run.started/v1.json",
+    ),
+    (
+        "events",
+        "stuck.resolved",
+        1,
+        "backend/tests/contract/fixtures/events/stuck.resolved/v1.json",
     ),
     (
         "events",

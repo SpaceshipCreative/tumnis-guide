@@ -1,14 +1,15 @@
-// One task in the Tasks view (P0-24, FR-2.6, UX 7): its title opens the drawer; one status
-// action (Start, or Done for a Human task in progress); subtasks indented underneath. A
-// capture still on the offline queue shows with its pending mark and no actions (P0-25).
-import { BUTTON_SECONDARY } from "../common/ui";
+// One task in the Tasks view (P0-24, FR-2.6, UX 7): its title opens the drawer; its status
+// in words on a DS-01 badge (Scott decision 67); one status action (Start, or Done for a
+// Human task in progress); subtasks indented underneath. A capture still on the offline
+// queue shows with its pending mark and no actions (P0-25).
+import { badge, BUTTON_SECONDARY, type BadgeTone } from "../common/ui";
 // The label chip (P1-07): pending, suggested or confirmed, overridden with one click.
 import { LabelChip, useLabelOverride } from "../common/LabelChip";
 import { formatDay, formatMinutes } from "../dashboard/format";
 import { PendingMark } from "../quickadd/PendingMark";
 import { isPendingId, pendingKey } from "../quickadd/queue";
 import type { TaskLite } from "./grouping";
-import { useChangeStatus, type Status } from "./mutations";
+import { STATUS_WORDS, useChangeStatus, type Status } from "./mutations";
 import type { Task } from "./types";
 
 /** A row's task: list rows carry the label's source, reason and suggestion too. */
@@ -28,6 +29,17 @@ function RowLabel({ task }: { task: RowTask }) {
     />
   );
 }
+
+/** Each status's badge tone, as the run view and the plan use them; the words carry the
+ * meaning, so colour is never the only signal. */
+const STATUS_TONE: Record<Status, BadgeTone> = {
+  backlog: "neutral",
+  today: "accent",
+  in_progress: "info",
+  waiting_on_human: "warning",
+  in_review: "accent",
+  done: "success",
+};
 
 /** The row's one status action (P0-18's human edges). */
 export function statusAction(
@@ -77,6 +89,12 @@ export function TaskRow({
             {task.title}
           </button>
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
+            <span
+              data-task-status={task.status}
+              className={badge(STATUS_TONE[task.status])}
+            >
+              {STATUS_WORDS[task.status]}
+            </span>
             {pending && <PendingMark idempotencyKey={pendingKey(task.id)} />}
             {pending ? <span>No label yet</span> : <RowLabel task={task} />}
             {estimate && <span>{estimate}</span>}

@@ -1,6 +1,8 @@
 """What the phase 1 skills read and reply (P1-05, R-02, R-24): the bodies of the one
 `TaskPacket` for `enrich` (project template) and `plan` (master), and the JSON each skill
-replies with.
+replies with. P2-16 adds the master's `notify` run: `NotifyRequest`
+(`packet/notify_request/1`, read by the master's `focus` skill) and `FocusMessage`
+(`result/focus_message/1`, the message it posted to the Discord channel).
 
 Every model is a `@versioned` payload with an integer `schema_version`; `make gen` writes
 `schemas/enrichment/v1/{request,result}.json` and `schemas/planning/v1/{request,result}.json`,
@@ -13,10 +15,10 @@ requests; P1-17 fills `passages`.
 """
 
 from datetime import date
-from typing import Annotated, Final, Literal
+from typing import Annotated, Final, Literal, Self
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from tumnis.core.limits import MAX_ESTIMATE_MINUTES
 from tumnis.core.schemas import VersionedPayload, versioned
@@ -24,16 +26,25 @@ from tumnis.modules.agents.rules import Label
 
 __all__ = [
     "ESTIMATE_RANGE",
+    "NOTIFY_MESSAGE_MAX",
     "EnrichProject",
     "EnrichTask",
     "EnrichmentRequest",
     "EnrichmentResult",
     "EstimateHistoryItem",
     "EventSummary",
+    "FocusMessage",
     "HybridSplit",
     "Interval",
     "Label",
     "LabelRevision",
+    "NotifyBatch",
+    "NotifyEvent",
+    "NotifyItem",
+    "NotifyProject",
+    "NotifyRequest",
+    "NotifyReturnTo",
+    "NotifyTask",
     "Passage",
     "PlanCandidate",
     "PlanPick",
@@ -223,3 +234,105 @@ class PlanningResult(VersionedPayload):
     picks: list[PlanPick] = Field(max_length=MAX_PICKS)
     alternates: list[UUID] = Field(default=[], max_length=MAX_PICKS)
     notes: str | None = Field(default=None, max_length=300)
+
+
+# --- notify (master, P2-16) -------------------------------------------------------------
+#
+# One notification for the person, worded by the master's `focus` skill and posted by it to
+# the one Discord channel. Exactly one of `event` (a focus event), `item` (a review item)
+# or `batch` (what Quiet held, released at the next break) says what it is; `task`,
+# `project`, `return_to` and `answers` are the facts the message names. Everything in it is
+# data for the skill, never instructions.
+
+NOTIFY_MESSAGE_MAX: Final = 2000  # a Discord message's length limit
+NOTIFY_SUBJECTS: Final = ("event", "item", "batch")  # exactly one says what it is about
+NotifyLevel = Literal["quiet", "nudge", "coach", "guardrail"]  # as focus' Level
+FocusEventKind = Literal[
+    "block_start", "not_started", "check_in_due", "switched", "stuck", "block_end", "day_end"
+]
+Slug = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,40}$")]
+
+
+class NotifyEvent(_Part):
+    """The focus event: its kind, the level it fired at and its rule attribution."""
+
+    id: UUID
+    kind: FocusEventKind
+    level: NotifyLevel
+    rule: Line
+    fired_at: AwareDatetime
+
+
+class NotifyItem(_Part):
+    """A review item that waits on the person: its kind, what it is about, where the app
+    shows it and, for a question, what it asks and the choices it offers."""
+
+    id: UUID
+    kind: Slug
+    title: Title | None = None
+    link: str = Field(min_length=1, max_length=300)  # an app path: `/review?...`
+    prompt: LongText | None = None
+    choices: list[Line] = Field(default=[], max_length=20)
+
+
+class NotifyBatch(_Part):
+    """What Quiet held while a task was In progress, released at the next break."""
+
+    count: int = Field(ge=1)
+    link: str = Field(default="/review", min_length=1, max_length=300)
+
+
+class NotifyTask(_Part):
+    id: UUID
+    title: Title
+    first_action: LongText | None = None
+
+
+class NotifyReturnTo(_Part):
+    """A detour's return question: the task the person left."""
+
+    id: UUID
+    title: Title
+
+
+class NotifyProject(_Part):
+    id: UUID
+    name: Title
+
+
+@versioned("packet", "notify_request", 1)
+class NotifyRequest(VersionedPayload):
+    """The `notify` packet's body (P2-16): one notification for the person."""
+
+    model_config = ConfigDict(
+        json_schema_extra={  # the generated schema states the one-subject rule too
+            "oneOf": [
+                {"required": [key], "properties": {key: {"type": "object"}}}
+                for key in NOTIFY_SUBJECTS
+            ]
+        }
+    )
+
+    schema_version: Literal[1] = 1
+    kind: Literal["notify"] = "notify"
+    event: NotifyEvent | None = None
+    item: NotifyItem | None = None
+    batch: NotifyBatch | None = None
+    task: NotifyTask | None = None
+    project: NotifyProject | None = None
+    return_to: NotifyReturnTo | None = None
+    answers: list[Slug] = Field(default=[], max_length=8)  # the one-tap answers offered
+
+    @model_validator(mode="after")
+    def _one_subject(self) -> Self:
+        if sum(getattr(self, key) is not None for key in NOTIFY_SUBJECTS) != 1:
+            raise ValueError("exactly one of event, item, batch must be set")
+        return self
+
+
+@versioned("result", "focus_message", 1)
+class FocusMessage(VersionedPayload):
+    """The `focus` skill's reply: the message it posted to the channel, word for word."""
+
+    schema_version: Literal[1] = 1
+    message: str = Field(min_length=1, max_length=NOTIFY_MESSAGE_MAX)

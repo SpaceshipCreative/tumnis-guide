@@ -25,6 +25,7 @@ import type {
 import { zFocusCurrentOut } from "../../api/zod.gen";
 import { apiWrite, ConflictError, useWrite } from "../../lib/fetch";
 import { LEVEL_TEXT } from "../../lib/levelRules";
+import { useVoiceMode } from "../../lib/speech/useVoiceMode";
 import { taskQueryOptions } from "../../lib/optimistic";
 import { invalidateTaskViews } from "../../lib/task-cache";
 import {
@@ -34,6 +35,7 @@ import {
 import { uiStore } from "../../stores/uiStore";
 import { BUTTON_QUIET, BUTTON_SECONDARY } from "../common/ui";
 import { ReturnPrompt } from "./ReturnPrompt";
+import { StuckPanel } from "./StuckPanel";
 import { SwitchPicker } from "./SwitchPicker";
 
 type Response = "still_on_it" | "switched" | "stuck" | "snooze";
@@ -125,6 +127,7 @@ export function FocusBar() {
   const data = current.data;
   const session = data?.session ?? null;
   const messages = data?.messages ?? [];
+  useVoiceMode(data?.messages); // P4-03: speaks new messages when voice is on
   const latest = messages.at(-1);
   const pending = latest?.response === null ? latest : undefined;
   const minutes = useMinutesSince(session?.started_at);
@@ -371,6 +374,7 @@ export function FocusBar() {
           <Message message={latest} />
         </ul>
       )}
+      {data.next_step && <StuckPanel step={data.next_step} />}
       {notice !== null && (
         <p role="alert" className="text-sm text-danger">
           {notice}

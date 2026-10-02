@@ -142,6 +142,11 @@ PG_TEST_SETTINGS = (
     "synchronous_commit=off",
     "full_page_writes=off",
     "scram_iterations=1",
+    # A login its client abandoned mid-handshake (a test's event loop closed under it) waits
+    # for the client until authentication_timeout. DROP DATABASE waits for every backend
+    # to absorb its smgr-release barrier (PostgreSQL 18 dbcommands.c), so such a login held
+    # a test's `db` teardown for the default minute (59.5 s, seen on agents tests).
+    "authentication_timeout=10s",
 )
 
 
@@ -270,17 +275,27 @@ def workspace(db: DbUrls) -> Iterator[WorkspaceHandle]:
             entered.__exit__(None, None, None)
 
 
+# db_template name -> row_factory's catalog lookups on it (see two_workspaces).
+_TEMPLATE_CATALOGS: dict[str, dict[tuple[str, str], list[Any]]] = {}
+
+
 @pytest.fixture
-def two_workspaces(db: DbUrls) -> tuple[WorkspaceHandle, WorkspaceHandle]:
+def two_workspaces(db: DbUrls, db_template: str) -> tuple[WorkspaceHandle, WorkspaceHandle]:
     """Workspaces A and B, each with at least one row in every fenced table: the seed set
     once its writers exist (P0-17, P0-18), and `minimal_row` for any table it leaves empty.
-    Enters no context: isolation tests choose theirs."""
+    Enters no context: isolation tests choose theirs. `db` is a fresh clone of the worker's
+    template, so the catalog lookups behind `minimal_row` are cached per template: about
+    half of this fixture's time was reading the same catalog again for every test."""
     import psycopg  # noqa: PLC0415
 
     from tests._pg import OWNER  # noqa: PLC0415
     from tests.meta._catalog import fenced_tables, tenant_key  # noqa: PLC0415
     from tumnis.core.tenancy import WorkspaceContext  # noqa: PLC0415
-    from tumnis.core.tests.integration.row_factory import insert_row, minimal_row  # noqa: PLC0415
+    from tumnis.core.tests.integration.row_factory import (  # noqa: PLC0415
+        cached_catalog,
+        insert_row,
+        minimal_row,
+    )
     from tumnis.core.types import SYSTEM_ACTOR  # noqa: PLC0415
 
     pair = tuple(
@@ -288,7 +303,11 @@ def two_workspaces(db: DbUrls) -> tuple[WorkspaceHandle, WorkspaceHandle]:
         for name in ("A", "B")
         for ws in [make_workspace(db, name)]
     )
-    with psycopg.connect(db.libpq(OWNER), autocommit=True) as conn:
+    catalog = _TEMPLATE_CATALOGS.setdefault(db_template, {})
+    with (
+        psycopg.connect(db.libpq(OWNER), autocommit=True) as conn,
+        cached_catalog(catalog),
+    ):
         for table in fenced_tables(conn):
             if tenant_key(conn, table) != "workspace_id":
                 continue  # the root: each workspace is its own row
@@ -481,6 +500,7 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
     DBOS(config=config)
     DBOS.reset_system_database(truncate=True)
     _restore_queue_rows(dbos_sys_db)
+    _private_dbos_random()
     earlier = set(threading.enumerate())  # a destroyed instance's threads may linger
     DBOS.launch()
     # DBOS 3.1 persists queues in the system database, so they register after launch, and
@@ -498,6 +518,27 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
         _stop_queue_workers(earlier)
         closing.set()
         DBOS.destroy(destroy_registry=False)
+
+
+# DBOS modules whose background threads draw from the `random` module (dbos 3.1.0: the
+# queue workers' polling jitter and partition shuffle, the scheduler's jitter, the system
+# database's retry backoff).
+_DBOS_RANDOM_MODULES = ("dbos._queue", "dbos._scheduler", "dbos._sys_db")
+
+
+def _private_dbos_random() -> None:
+    """Give DBOS's background threads a generator of their own instead of the global one.
+    Hypothesis checks that the global generator's state is unchanged across each draw of a
+    strategy and warns (an error here) when it is not; a queue worker drawing its jitter
+    during a draw made property tests that run beside the `dbos` fixture fail now and
+    then (FlakyFailure, coordinator decision 69). Their draws stay just as random."""
+    import importlib  # noqa: PLC0415
+    import random  # noqa: PLC0415
+
+    for name in _DBOS_RANDOM_MODULES:
+        names = vars(importlib.import_module(name))
+        if names.get("random") is random:  # once per process
+            names["random"] = random.Random()  # noqa: S311  # jitter, not secrets
 
 
 # System database name -> its `dbos.queues` rows (JSON) as register_queues left them.
@@ -572,8 +613,32 @@ def _stop_queue_workers(earlier: set[threading.Thread], timeout_s: float = 10) -
         if thread not in earlier and thread.name.startswith("queue-worker-"):
             thread.join(timeout=timeout_s)
     deadline = time.monotonic() + timeout_s
-    while instance._active_workflows_set.activeList() and time.monotonic() < deadline:
+    while time.monotonic() < deadline:
+        active = set(instance._active_workflows_set.activeList())
+        if active <= _parked_in_recv(instance):
+            break
         time.sleep(0.01)
+
+
+def _parked_in_recv(instance: Any) -> set[str]:
+    """IDs of the workflows awaiting a message in `DBOS.recv_async` right now. Such a
+    workflow (a focus session, a run waiting on its runner) waits for a message no one will
+    send once the test is over, so waiting for it only ran out the timeout (10 s per test).
+
+    Parked means a coroutine is suspended in the recv event's `wait_async` (dbos 3.1.0
+    `SystemDatabase.recv_async` and `LoopAwareEvent`): its waiter future is registered and
+    not yet resolved, and no database work is in flight. The recv entry also stays
+    registered while recv runs its fallback re-check (`recv_check`) or consumes after a
+    timeout (`recv_consume`), each in a worker thread on a pooled connection; the waiter is
+    gone then, or its future is done, so those workflows are still waited for, as is a
+    workflow running a step or blocked in the sync `DBOS.recv`."""
+    parked = set()
+    for _, (workflow_id, _), event in instance._sys_db.notifications_map.snapshot():
+        with event._waiters_lock:
+            waiting = any(not future.done() for _, future in event._waiters)
+        if waiting and not event.is_set():
+            parked.add(workflow_id)
+    return parked
 
 
 def _close_late_checkins() -> threading.Event:

@@ -87,6 +87,20 @@ class EmbeddingsSettings(BaseModel):
     query_timeout_ms: int = Field(default=2000, gt=0)  # a search waits this long, then FTS
 
 
+class SpeechSettings(BaseModel):
+    """The Speech slot (P4-03, FR-11.7): the local Piper HTTP server on the agent server
+    (`python3 -m piper.http_server -m <voice>`, port 5000 by default) and the voice to ask
+    for (unset: the one Piper started with). Unset `piper_url` leaves the server engine
+    off: the PWA speaks with the browser's own voice. Env: `SPEECH__PIPER_URL`,
+    `SPEECH__PIPER_VOICE`. A hosted provider is not configured here (Scott item: its key
+    storage)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    piper_url: str | None = None  # e.g. http://agents.lan:5000
+    piper_voice: str | None = None  # e.g. en_US-lessac-medium
+
+
 class KnowledgeSettings(BaseModel):
     """Upload safety and extraction (P1-16, SEC-10, ADR-0007). Env: `KNOWLEDGE__SPOOL_DIR`
     and so on.
@@ -117,13 +131,17 @@ class AgentsSettings(BaseModel):
     P2-04 (SAF-5, R-29, R-30): a run's active-time cap and wall-clock ceiling, shortened
     on the real clock for tests and the compose.test stack only (fakes mode; `Settings`
     refuses them otherwise). Unset, the project's max_run_minutes and 24 hours apply. Env:
-    `AGENTS__RUN_ACTIVE_CAP_SECONDS`, `AGENTS__RUN_WALL_CLOCK_CEILING_SECONDS`."""
+    `AGENTS__RUN_ACTIVE_CAP_SECONDS`, `AGENTS__RUN_WALL_CLOCK_CEILING_SECONDS`. P4-02: the
+    stuck deadline (FR-10.5, 60 s), `AGENTS__STUCK_DEADLINE_SECONDS`."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     provision_timeout_s: int = Field(default=300, gt=0)  # plan default
     run_active_cap_seconds: float | None = Field(default=None, gt=0)
     run_wall_clock_ceiling_seconds: float | None = Field(default=None, gt=0)
+    # P4-02 (FR-10.5, R-30): how long "Stuck" waits for the project agent's first step
+    # before the focus bar falls back to the task's first action.
+    stuck_deadline_seconds: float = Field(default=60, gt=0)
 
 
 class Settings(BaseSettings):
@@ -152,6 +170,7 @@ class Settings(BaseSettings):
     outbound_allowlist: str = ""
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
     embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings)
+    speech: SpeechSettings = Field(default_factory=SpeechSettings)
     knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
     agents: AgentsSettings = Field(default_factory=AgentsSettings)
 

@@ -16,7 +16,8 @@ export type LiveEntity =
   | "plan"
   | "focus"
   | "knowledge"
-  | "agent_pause";
+  | "agent_pause"
+  | "speech_clip";
 
 export const LIVE_MAP: Record<
   LiveEntity,
@@ -147,6 +148,9 @@ export const LIVE_MAP: Record<
     details: [],
     lists: ["focusGetCurrent"],
   },
+  // A spoken focus message's clip made by the server engine (P4-03): its message carries
+  // the focus event's id, and the focus bar's read gains the clip id.
+  speech_clip: { details: [], lists: ["focusGetCurrent"] },
 };
 
 export const NOT_LIVE = [
@@ -179,6 +183,11 @@ export const NOT_LIVE = [
   // cursor, so the UI never caches or refetches them.
   "agentsGetProjectDigest",
   "agentsGetWorkspaceDigest",
+  // The VAPID public key is read once, when "Enable push" is pressed (P4-05); it never
+  // changes for a workspace.
+  "notificationsGetVapidPublicKey",
+  // A clip is audio the voice engine plays from its URL (P4-03), never a cached query.
+  "speechGetClip",
   // The master's long poll on a delegation (P2-06): an agent's call that waits up to ten
   // minutes, never a cached query of the app.
   "agentsWaitForTask",

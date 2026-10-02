@@ -1,6 +1,6 @@
 """agents SQLAlchemy tables owned by this module (mirrors of revisions agents_0001, P1-04,
 agents_0002, P2-07, agents_0003, P1-06, agents_0004, P2-02, agents_0005, P2-04, agents_0006,
-P2-05, agents_0007, P2-03, agents_0008, P2-09, and agents_0009, P2-06).
+P2-05, agents_0007, P2-03, agents_0008, P2-09, agents_0009, P4-02, and agents_0010, P2-06).
 
 - runners: one per runner daemon; its device token lives in auth's `device_tokens`.
 - agent_profiles: the Hermes profiles Tumnis may run (one master, one per project);
@@ -18,6 +18,8 @@ P2-05, agents_0007, P2-03, agents_0008, P2-09, and agents_0009, P2-06).
   `message_id` is unique, so a replayed step or frame is written once.
 - digest_entries and digest_cursors: what the project and workspace digests carry, and
   where each consumer is in each digest (P2-03).
+- stuck_requests (P4-02, FR-10.5): one per stuck focus event, with the stuck run it asked
+  for and what the focus bar shows (working, split, took_step or fallback).
 """
 
 from datetime import datetime
@@ -200,7 +202,21 @@ class AgentPause(TenantBase, Base):
     tainted: Mapped[bool] = mapped_column(server_default=text("false"))  # a key's pause (R-31)
 
 
-class Delegation(TenantBase, Base):  # P2-06 (agents_0009)
+class StuckRequest(TenantBase, Base):  # P4-02 (agents_0009)
+    __tablename__ = "stuck_requests"
+
+    focus_event_id: Mapped[UUID]  # focus's row (no cross-module foreign key)
+    task_id: Mapped[UUID]  # tasks' row
+    run_id: Mapped[UUID | None] = mapped_column(ForeignKey("runs.id"))
+    state: Mapped[str] = mapped_column(server_default=text("'working'"))
+    step_task_id: Mapped[UUID | None]  # the first step the agent posted (`split`)
+    summary: Mapped[str | None]  # the agent's report (`took_step`)
+    requested_at: Mapped[datetime]
+    resolved_at: Mapped[datetime | None]
+    fallback_at: Mapped[datetime | None]
+
+
+class Delegation(TenantBase, Base):  # P2-06 (agents_0010)
     __tablename__ = "delegations"
 
     child_task_id: Mapped[UUID]  # the delegated task (no cross-module foreign key)

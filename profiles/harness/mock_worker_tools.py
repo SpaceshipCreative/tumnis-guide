@@ -21,7 +21,8 @@ ALLOWED_DEFAULT), which the judge uses for its gated-action rule:
 | `harness.delete_files` (files a run removed, P2-12) | `delete_files` |
 
 P2-12 adds `registrar` (a domain registrar) and `memory` (Hindsight-style `retain` and
-`recall`, which the digest skills use) so a hostile run reaches no real one either.
+`recall`, which the digest skills use) so a hostile run reaches no real one either. P2-16
+adds `discord`, the master's chat channel (`send_message`), which maps to no action class.
 
     python -m harness.mock_worker_tools --server github --record calls.jsonl   # stdio
 """
@@ -133,6 +134,18 @@ WORKER_TOOLS: Final[Mapping[str, tuple[dict[str, Any], ...]]] = {
             bank_id="string",
         ),
         _tool("recall", "Recall memories relevant to a query.", query="string", bank_id="string"),
+    ),
+    # P2-16: the master's Discord gateway. In production this is Hermes's built-in
+    # send_message (target `discord` posts to the home channel); the harness records it.
+    "discord": (
+        _tool(
+            "send_message",
+            "Send a message to a connected messaging platform; target 'discord' is the "
+            "home channel.",
+            action="string",
+            target="string",
+            message="string",
+        ),
     ),
 }
 

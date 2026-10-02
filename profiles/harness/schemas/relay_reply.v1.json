@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RelayReply",
+  "description": "The reply of the master's relay skill to one chat message (P2-16), as the harness reads it: what the skill did (paused every agent, recorded an answer, sent the person to the app, or took no action) and the words it answers the person with in the channel.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action", "reply"],
+  "properties": {
+    "action": {"enum": ["paused", "recorded", "needs_app", "none"]},
+    "reply": {"type": "string", "minLength": 1, "maxLength": 2000}
+  }
+}

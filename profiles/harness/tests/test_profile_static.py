@@ -260,3 +260,63 @@ def test_version_bumped_on_change(tmp_path: Path) -> None:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "bump")
     assert check.problems(repo, base, "HEAD") == []
+
+
+# The Hermes Discord gateway's settings (hermes-agent docs, user-guide/messaging/discord):
+# the bot token, the people it answers, and the channel ids, all from the profile's .env.
+DISCORD_ENV = {
+    "DISCORD_BOT_TOKEN",
+    "DISCORD_ALLOWED_USERS",
+    "DISCORD_ALLOWED_CHANNELS",
+    "DISCORD_HOME_CHANNEL",
+}
+# Settings that name channels: the profile names its one channel in .env only.
+CHANNEL_LISTS = {"allowed_channels", "free_response_channels", "ignored_channels"}
+
+
+def _env_example(profile: Path) -> dict[str, str]:
+    lines = [
+        line.strip()
+        for line in (profile / ".env.example").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    names = [line.split("=", 1)[0] for line in lines]
+    assert len(names) == len(set(names)), names
+    return dict(line.split("=", 1) for line in lines)
+
+
+@pytest.mark.req("FR-8.2")
+@pytest.mark.wp("P2-16")
+def test_only_master_has_discord_gateway() -> None:
+    """T-P2-16-06
+    Only the master talks to Discord (FR-8.2): the template's config has no messaging
+    platform and no `discord` section, and its .env.example and manifest name no Discord
+    variable. The master enables exactly one platform, Discord, answering every message in
+    its channel inline (no mention, no threads), and names no channel in config.yaml: its
+    .env.example has the bot token, the allowed users and the one channel, which is both
+    the only channel it listens in and its home channel, each once and empty; the manifest
+    requires each of them.
+    """
+    template = yaml.safe_load((TEMPLATE / "config.yaml").read_text(encoding="utf-8"))
+    assert "platforms" not in template
+    assert "discord" not in template
+    assert not [n for n in _env_example(TEMPLATE) if n.startswith("DISCORD_")]
+    manifest = yaml.safe_load((TEMPLATE / "distribution.yaml").read_text(encoding="utf-8"))
+    assert not [e for e in manifest["env_requires"] if str(e["name"]).startswith("DISCORD_")]
+
+    master = yaml.safe_load((MASTER / "config.yaml").read_text(encoding="utf-8"))
+    assert master["platforms"] == {"discord": {"enabled": True}}
+    discord = master["discord"]
+    assert discord["require_mention"] is False
+    assert discord["auto_thread"] is False
+    assert not CHANNEL_LISTS & set(discord), discord
+
+    env = _env_example(MASTER)
+    found = {name for name in env if name.startswith("DISCORD_")}
+    assert found == DISCORD_ENV
+    assert all(env[name] == "" for name in DISCORD_ENV)
+    channels = {n for n in found if "CHANNEL" in n}
+    assert channels == {"DISCORD_ALLOWED_CHANNELS", "DISCORD_HOME_CHANNEL"}
+    manifest = yaml.safe_load((MASTER / "distribution.yaml").read_text(encoding="utf-8"))
+    required = {str(e["name"]) for e in manifest["env_requires"] if e.get("required")}
+    assert required >= DISCORD_ENV

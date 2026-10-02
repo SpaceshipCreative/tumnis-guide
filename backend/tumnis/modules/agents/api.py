@@ -83,8 +83,13 @@ from tumnis.modules.agents.models import (
     Runner,
     RunnerMessage,
     RunRow,
+    StuckRequest,
 )
-from tumnis.modules.agents.packet_builder import ENRICH_TIMEOUT_S_DEFAULT, TaskPacket
+from tumnis.modules.agents.packet_builder import (
+    ENRICH_TIMEOUT_S_DEFAULT,
+    STUCK_MAX_MINUTES,
+    TaskPacket,
+)
 from tumnis.modules.agents.payloads import (
     AgentsPausedV1,
     AgentsResumedV1,
@@ -92,8 +97,16 @@ from tumnis.modules.agents.payloads import (
     RunRequestedV1,
     RunSignalV1,
     SignalKind,
+    StuckOutcome,
+    StuckResolvedV1,
 )
 from tumnis.modules.agents.protocol import McpServerInfo, SchemaRef
+from tumnis.modules.agents.relay import (
+    NEEDS_APP,
+    ReplyHandler,
+    register_reply_handler,
+    reply_handler,
+)
 from tumnis.modules.agents.review_kinds import (
     RESULT,
     RUN_LIMIT,
@@ -129,6 +142,14 @@ from tumnis.modules.agents.rules import (
 from tumnis.modules.agents.skill_io import (
     EnrichmentRequest,
     EnrichmentResult,
+    FocusMessage,
+    NotifyBatch,
+    NotifyEvent,
+    NotifyItem,
+    NotifyProject,
+    NotifyRequest,
+    NotifyReturnTo,
+    NotifyTask,
     PlanningRequest,
     PlanningResult,
     ProjectAgentEntry,
@@ -145,6 +166,7 @@ if TYPE_CHECKING:
 __all__ = [
     "HUMAN_QUEUE",
     "HUMAN_TOPIC",
+    "NEEDS_APP",
     "AgentAdapter",
     "AgentAvailability",
     "AgentCapabilities",
@@ -159,6 +181,7 @@ __all__ = [
     "DigestOut",
     "EnrichmentRequest",
     "EnrichmentResult",
+    "FocusMessage",
     "ForeignReach",
     "HealthCheckAccepted",
     "HumanApproval",
@@ -166,6 +189,13 @@ __all__ = [
     "HumanWaitOut",
     "MasterAgentOut",
     "McpServerInfo",
+    "NotifyBatch",
+    "NotifyEvent",
+    "NotifyItem",
+    "NotifyProject",
+    "NotifyRequest",
+    "NotifyReturnTo",
+    "NotifyTask",
     "PauseScope",
     "PlanningRequest",
     "PlanningResult",
@@ -173,6 +203,7 @@ __all__ = [
     "ProfilePatch",
     "ProfileToolsOut",
     "ProjectAgentEntry",
+    "ReplyHandler",
     "RequestApprovalIn",
     "RunEvent",
     "RunHandle",
@@ -195,16 +226,20 @@ __all__ = [
     "issue_run_token",
     "long_poll_decision",
     "master_agent",
+    "notify_packet",
     "plan_packet",
     "planning_request",
     "read_digest",
     "record_event",
     "register_enrichment_starter",
+    "register_reply_handler",
     "register_skill_runner",
+    "reply_handler",
     "request_approval",
     "retry_provision",
     "run_ended",
     "run_log",
+    "run_notify",
     "run_plan",
     "run_token_scopes",
     "set_profile_key",
@@ -790,7 +825,7 @@ async def agent_for_project(
 # --- Project provisioning (P1-06) ------------------------------------------------------------
 
 TEMPLATE_NAME: Final = "project-template"  # profiles/project-template, shipped by the daemon
-TEMPLATE_VERSION: Final = "1.1.0"  # profiles/project-template/VERSION (a unit test holds them)
+TEMPLATE_VERSION: Final = "1.2.0"  # profiles/project-template/VERSION (a unit test holds them)
 PROVISION_TIMEOUT_S_DEFAULT: Final = 300  # plan default; settings.agents.provision_timeout_s
 PROVISIONING_FAILED: Final = "provisioning_failed"
 ProvisionMode = Literal["create", "link"]
@@ -1733,7 +1768,7 @@ async def accept_result(
         raise ProblemError(403, "run_mismatch", "This token belongs to another run")
     run = (
         await s.execute(
-            select(_runs.c.status, _runs.c.task_id, _runs.c.tainted)
+            select(_runs.c.status, _runs.c.task_id, _runs.c.tainted, _runs.c.kind)
             .where(_runs.c.id == inp.run_id, _runs.c.deleted_at.is_(None))
             .with_for_update()
         )
@@ -1749,10 +1784,23 @@ async def accept_result(
         raise ProblemError(422, "run_has_no_task", "Only a task's run posts a result")
     fields = tasks.ResultFields.model_validate(inp.model_dump(exclude={"run_id"}))
     fields = await _cite(s, run.task_id, fields)
+    stuck = run.kind == RunKind.STUCK.value
     result, created = await tasks.post_result(
-        s, actor, run.task_id, inp.run_id, fields, tainted=tainted or run.tainted, now=now
+        s,
+        actor,
+        run.task_id,
+        inp.run_id,
+        fields,
+        tainted=tainted or run.tainted,
+        now=now,
+        keep_status=stuck,  # one step's report: the person is still on the task (P4-02)
     )
+    # A stuck run that posted a first step has said everything already: its result only
+    # ends the run. One that took the step itself reports back for the person to review.
+    review = not stuck or await stuck_reported(s, inp.run_id, fields.summary, now=now)
     if created:
+        await emit(s, RunSignalV1(run_id=inp.run_id, kind="result"), occurred_at=now)
+    if created and review:
         await tasks.add_review_item(
             RESULT,
             target=tasks.TargetRef(type="task", id=run.task_id),
@@ -1761,8 +1809,307 @@ async def accept_result(
             dedupe_key=f"result:{inp.run_id}",
             session=s,
         )
-        await emit(s, RunSignalV1(run_id=inp.run_id, kind="result"), occurred_at=now)
     return result
+
+
+# --- Stuck handling (P4-02, FR-10.5) ----------------------------------------------------------
+#
+# "Stuck" on a check-in fires a `focus.event` of kind `stuck`; agents' subscriber starts
+# `handle_stuck` (workflows), whose step asks for a stuck run here (`request_stuck_run`) and
+# records the request (`stuck_requests`). The run's own calls answer it: the first step it
+# posts (`create_task`, through the hooks tasks calls) or its report (`accept_result`). Each
+# answer updates the request and emits `stuck.resolved`, whose subscriber wakes the
+# workflow (the api never calls DBOS itself). When nothing comes within the deadline, the
+# workflow marks the fallback; a late answer still lands and replaces it. The focus bar
+# reads the latest request of the day (`next_step`), refreshed over `/ws` (entity `focus`).
+
+STUCK_DEADLINE_S: Final = 60.0  # FR-10.5 "within a minute"; short in tests (R-30)
+# DBOS 3.1 dequeues a partition by priority, lowest first, and a workflow enqueued without
+# one gets 0, ahead of every prioritised one (Context7 /dbos-inc/dbos-docs, queue tutorial:
+# "Workflows without assigned priorities have the highest priority"). So every enqueue in a
+# project's partition names one: the stuck run 1, everything else RUN_PRIORITY_NORMAL.
+STUCK_PRIORITY: Final = 1
+RUN_PRIORITY_NORMAL: Final = 10
+STUCK_TIMER_MINUTES: Final = STUCK_MAX_MINUTES  # the fallback's timer (FR-10.5)
+STUCK_TOPIC: Final = "stuck_outcome"
+LIVE_FOCUS: Final = "focus"  # focus's live entity: the focus bar's one read refreshes
+StuckState = Literal["working", "split", "took_step", "fallback"]
+_stuck_requests: Table = StuckRequest.__table__  # type: ignore[assignment]
+_stuck_config: dict[str, float] = {"deadline_s": STUCK_DEADLINE_S}
+_OPEN_STUCK: Final = ("working", "fallback")  # an answer still lands (a late one replaces)
+
+
+def configure_stuck(deadline_seconds: float | None = None) -> None:
+    """How long `handle_stuck` waits for the agent's answer (R-30): tests shorten it; no
+    argument puts the default back (60 s, `settings.stuck_deadline_seconds`)."""
+    if deadline_seconds is not None and deadline_seconds <= 0:
+        raise ValueError("the stuck deadline must be positive")
+    _stuck_config["deadline_s"] = (
+        STUCK_DEADLINE_S if deadline_seconds is None else float(deadline_seconds)
+    )
+
+
+def stuck_deadline_s() -> float:
+    return _stuck_config["deadline_s"]
+
+
+def stuck_workflow_id(focus_event_id: UUID) -> str:
+    """`handle_stuck`'s workflow id: one per stuck focus event, so a redelivery or a second
+    tap on the same check-in starts nothing new (REL-2)."""
+    return f"stuck:{focus_event_id}"
+
+
+class StuckStart(BaseModel):
+    """What `request_stuck_run` did: the run asked for or joined (None when none could
+    start), and the request's state."""
+
+    run_id: UUID | None
+    state: StuckState
+
+
+class StuckStepOut(BaseModel):
+    task_id: UUID
+    title: str
+    label: tasks.Label | None
+    estimate_minutes: int | None
+
+
+class NextStepOut(BaseModel):
+    """What the focus bar shows after "Stuck" (FR-10.5): `working` while the project agent
+    works on a first step; `split` with the subtask it posted (`step`); `took_step` with
+    its report (`summary`); `fallback` when no answer came within the deadline or the agent
+    is down: the task's `first_action` with a `timer_minutes` timer."""
+
+    focus_event_id: UUID
+    task_id: UUID
+    run_id: UUID | None
+    state: StuckState
+    requested_at: datetime
+    first_action: str | None
+    timer_minutes: int = STUCK_TIMER_MINUTES
+    fallback_at: datetime | None
+    step: StuckStepOut | None
+    summary: str | None
+
+
+async def _profile_down(s: AsyncSession, run_id: UUID) -> bool:
+    """The run's profile's last health check found its agent unreachable (FR-4.6)."""
+    health = await s.scalar(
+        select(_profiles.c.health)
+        .select_from(_runs.join(_profiles, _profiles.c.id == _runs.c.profile_id))
+        .where(_runs.c.id == run_id)
+    )
+    return isinstance(health, dict) and health.get("reachable") is False
+
+
+async def _active_stuck_run(s: AsyncSession, task_id: UUID) -> UUID | None:
+    """The task's stuck run still queued or running, if any."""
+    return await s.scalar(
+        select(_runs.c.id)
+        .where(
+            _runs.c.task_id == task_id,
+            _runs.c.kind == RunKind.STUCK.value,
+            _runs.c.status.in_(ACTIVE_RUN),
+        )
+        .order_by(_runs.c.created_at.desc())
+        .limit(1)
+    )
+
+
+async def request_stuck_run(
+    ctx: WorkspaceContext, task_id: UUID, focus_event_id: UUID, *, requested_at: datetime
+) -> StuckStart:
+    """The stuck run for a stuck focus event (`request_run(task_id, "stuck",
+    priority=STUCK_PRIORITY)`, R-23, any label) and its request row, in one transaction.
+    Idempotent per focus event: a replay answers the row already there. When a stuck run
+    of the task is still active (an earlier check-in's), this request waits on that run's
+    answer as well (both requests take it). A run that cannot start (paused, no ready
+    agent, a finished task), or an agent whose last health check failed, falls back at
+    once (FR-4.6's degraded mode)."""
+    async with tenant_session(ctx) as s:
+        held = (
+            await s.execute(
+                select(_stuck_requests.c.run_id, _stuck_requests.c.state).where(
+                    _stuck_requests.c.focus_event_id == focus_event_id
+                )
+            )
+        ).first()
+        if held is not None:
+            return StuckStart(run_id=held.run_id, state=held.state)
+        run_id: UUID | None = None
+        state: StuckState = "working"
+        try:
+            async with s.begin_nested():
+                run_id = await request_run(
+                    task_id,
+                    RunKind.STUCK,
+                    priority=STUCK_PRIORITY,
+                    ctx=ctx,
+                    session=s,
+                    now=requested_at,
+                )
+        except NotFound:
+            state = "fallback"
+        except ProblemError as exc:
+            # A stuck run of the task already works on it (an earlier check-in's): this
+            # request waits on that run's answer too, or falls back when it has just ended.
+            run_id = (
+                await _active_stuck_run(s, task_id) if exc.code == "run_already_active" else None
+            )
+            if run_id is None:
+                state = "fallback"
+        if run_id is not None and await _profile_down(s, run_id):
+            state = "fallback"
+        await s.execute(
+            pg_insert(_stuck_requests)
+            .values(
+                focus_event_id=focus_event_id,
+                task_id=task_id,
+                run_id=run_id,
+                state=state,
+                requested_at=requested_at,
+                fallback_at=requested_at if state == "fallback" else None,
+            )
+            .on_conflict_do_nothing(index_elements=["workspace_id", "focus_event_id"])
+        )
+        mark_changed(s, LIVE_FOCUS, focus_event_id)
+    return StuckStart(run_id=run_id, state=state)
+
+
+async def mark_stuck_fallback(
+    ctx: WorkspaceContext, focus_event_id: UUID, *, now: datetime
+) -> bool:
+    """No answer within the deadline: the request still `working` shows the fallback (the
+    task's first action with a 10-minute timer); True when it changed."""
+    async with tenant_session(ctx) as s:
+        changed = await s.scalar(
+            update(_stuck_requests)
+            .where(
+                _stuck_requests.c.focus_event_id == focus_event_id,
+                _stuck_requests.c.state == "working",
+            )
+            .values(state="fallback", fallback_at=now, updated_at=func.now())
+            .returning(_stuck_requests.c.id)
+        )
+        if changed is not None:
+            mark_changed(s, LIVE_FOCUS, focus_event_id)
+    return changed is not None
+
+
+async def _stuck_answered(
+    s: AsyncSession,
+    run_id: UUID,
+    outcome: StuckOutcome,
+    now: datetime,
+    *,
+    step_task_id: UUID | None = None,
+    summary: str | None = None,
+) -> bool:
+    """The run's open request (working, or fallen back) takes the answer, in the caller's
+    transaction, and `stuck.resolved` wakes its workflow; False when none was open."""
+    rows = (
+        await s.execute(
+            update(_stuck_requests)
+            .where(_stuck_requests.c.run_id == run_id, _stuck_requests.c.state.in_(_OPEN_STUCK))
+            .values(
+                state=outcome,
+                step_task_id=step_task_id,
+                summary=summary,
+                resolved_at=now,
+                updated_at=func.now(),
+            )
+            .returning(_stuck_requests.c.focus_event_id, _stuck_requests.c.task_id)
+        )
+    ).all()
+    for row in rows:
+        await emit(
+            s,
+            StuckResolvedV1(
+                focus_event_id=row.focus_event_id,
+                task_id=row.task_id,
+                run_id=run_id,
+                outcome=outcome,
+                step_task_id=step_task_id,
+            ),
+            occurred_at=now,
+        )
+        mark_changed(s, LIVE_FOCUS, row.focus_event_id)
+    return bool(rows)
+
+
+async def stuck_reported(s: AsyncSession, run_id: UUID, summary: str, *, now: datetime) -> bool:
+    """A stuck run's result: it took the step itself and reports back (`took_step`)."""
+    return await _stuck_answered(s, run_id, "took_step", now, summary=summary)
+
+
+async def _stuck_run(s: AsyncSession, run_id: UUID) -> tasks.StuckRun | None:
+    """The stuck run behind a task token (`tasks.create_task`'s step rule), else None."""
+    row = (
+        await s.execute(
+            select(_runs.c.kind, _runs.c.task_id, _runs.c.tasks_created).where(_runs.c.id == run_id)
+        )
+    ).first()
+    if row is None or row.kind != RunKind.STUCK.value or row.task_id is None:
+        return None
+    return tasks.StuckRun(task_id=row.task_id, tasks_created=row.tasks_created)
+
+
+async def _stuck_step_made(
+    s: AsyncSession, run_id: UUID, task: tasks.TaskOut, now: datetime
+) -> None:
+    """A stuck run posted its first step (`split`)."""
+    await _stuck_answered(s, run_id, "split", now, step_task_id=task.id)
+
+
+tasks.register_stuck_run_hooks(_stuck_run, _stuck_step_made)
+
+
+async def _task_or_none(s: AsyncSession, task_id: UUID | None) -> tasks.TaskOut | None:
+    if task_id is None:
+        return None
+    try:
+        return await tasks.get_task(s, task_id)
+    except NotFound:
+        return None
+
+
+async def next_step(s: AsyncSession, start: datetime, end: datetime) -> NextStepOut | None:
+    """The latest stuck request made in [start, end) (the focus bar's day), as the bar
+    shows it; None when there is none."""
+    row = (
+        await s.execute(
+            select(_stuck_requests)
+            .where(
+                _stuck_requests.c.requested_at >= start,
+                _stuck_requests.c.requested_at < end,
+                _stuck_requests.c.deleted_at.is_(None),
+            )
+            .order_by(_stuck_requests.c.requested_at.desc(), _stuck_requests.c.created_at.desc())
+            .limit(1)
+        )
+    ).first()
+    if row is None:
+        return None
+    stuck_task = await _task_or_none(s, row.task_id)
+    step = await _task_or_none(s, row.step_task_id)
+    return NextStepOut(
+        focus_event_id=row.focus_event_id,
+        task_id=row.task_id,
+        run_id=row.run_id,
+        state=row.state,
+        requested_at=row.requested_at,
+        first_action=None if stuck_task is None else stuck_task.first_action,
+        fallback_at=row.fallback_at,
+        step=None
+        if step is None
+        else StuckStepOut(
+            task_id=step.id,
+            title=step.title,
+            label=step.label,
+            estimate_minutes=step.estimate_minutes,
+        ),
+        summary=row.summary,
+    )
 
 
 LABEL_MAX: Final = 200  # ResultLink.label's bound
@@ -2377,6 +2724,54 @@ async def run_plan(workspace_id: UUID, packet: TaskPacket) -> RunOutcome:
     if not _skill_runner:
         raise RuntimeError("agents.workflows is not loaded: nothing can run a skill")
     return RunOutcome.model_validate(await _skill_runner[0](workspace_id, packet))
+
+
+# --- The master's notify runs (P2-16, FR-8.2) ---------------------------------------------
+#
+# notifications decides what reaches the person and when; agents owns the master profile,
+# the notify packet and the run. The master's `focus` skill words the message and posts it
+# to the one Discord channel itself (its gateway; the credentials live only in Hermes,
+# design decision 7), then replies with the message. The run's task token is workspace
+# scoped with `tasks:read` only (Scott decision 30, `RUN_TOKEN_SCOPES`).
+
+NOTIFY_SKILL: Final = "focus"
+NOTIFY_RESULT: Final = SchemaRef(family="result", name="focus_message", version=1)
+NOTIFY_TIMEOUT_S: Final = 60  # the plan's notify run cap
+
+
+def notify_packet(
+    *,
+    run_id: UUID,
+    profile_id: UUID,
+    request: NotifyRequest,
+    correlation_id: str,
+    tainted: bool = False,
+    timeout_s: int = NOTIFY_TIMEOUT_S,
+) -> TaskPacket:
+    """The master's `notify` packet for `request` (R-24): skill `focus`, reply validated
+    against result/focus_message v1. `tainted` when a text it carries came from outside
+    (P2-08), so the run is tainted and every gated action refused (SAF-1)."""
+    from tumnis.modules.agents.packet_builder import render_prompt  # noqa: PLC0415
+
+    body = request.model_dump(mode="json")
+    return TaskPacket(
+        kind=RunKind.NOTIFY,
+        run_id=run_id,
+        profile_id=profile_id,
+        skill=NOTIFY_SKILL,
+        output_schema=NOTIFY_RESULT,
+        correlation_id=correlation_id,
+        timeout_s=timeout_s,
+        prompt_text=render_prompt(NOTIFY_SKILL, NOTIFY_RESULT, body),
+        body=body,
+        tainted=tainted,
+    )
+
+
+async def run_notify(workspace_id: UUID, packet: TaskPacket) -> RunOutcome:
+    """Run the notify packet from inside the caller's DBOS workflow, as `run_plan` does: a
+    child `run_skill` with workflow id `run_skill:<run id>`."""
+    return await run_plan(workspace_id, packet)
 
 
 # --- Focus activity (P2-15) ---------------------------------------------------------------

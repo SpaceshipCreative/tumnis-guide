@@ -1,0 +1,359 @@
+{
+  "$defs": {
+    "NotifyBatch": {
+      "additionalProperties": false,
+      "description": "What Quiet held while a task was In progress, released at the next break.",
+      "properties": {
+        "count": {
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "link": {
+          "default": "/review",
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Link",
+          "type": "string"
+        }
+      },
+      "required": [
+        "count"
+      ],
+      "title": "NotifyBatch",
+      "type": "object"
+    },
+    "NotifyEvent": {
+      "additionalProperties": false,
+      "description": "The focus event: its kind, the level it fired at and its rule attribution.",
+      "properties": {
+        "fired_at": {
+          "format": "date-time",
+          "title": "Fired At",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "block_start",
+            "not_started",
+            "check_in_due",
+            "switched",
+            "stuck",
+            "block_end",
+            "day_end"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "quiet",
+            "nudge",
+            "coach",
+            "guardrail"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "rule": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "level",
+        "rule",
+        "fired_at"
+      ],
+      "title": "NotifyEvent",
+      "type": "object"
+    },
+    "NotifyItem": {
+      "additionalProperties": false,
+      "description": "A review item that waits on the person: its kind, what it is about, where the app\nshows it and, for a question, what it asks and the choices it offers.",
+      "properties": {
+        "choices": {
+          "default": [],
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Choices",
+          "type": "array"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "pattern": "^[a-z][a-z0-9_]{0,40}$",
+          "title": "Kind",
+          "type": "string"
+        },
+        "link": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Link",
+          "type": "string"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "link"
+      ],
+      "title": "NotifyItem",
+      "type": "object"
+    },
+    "NotifyProject": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "NotifyProject",
+      "type": "object"
+    },
+    "NotifyReturnTo": {
+      "additionalProperties": false,
+      "description": "A detour's return question: the task the person left.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "NotifyReturnTo",
+      "type": "object"
+    },
+    "NotifyTask": {
+      "additionalProperties": false,
+      "properties": {
+        "first_action": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Action"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "NotifyTask",
+      "type": "object"
+    }
+  },
+  "$id": "https://tumnis.dev/schemas/packet/v1/notify_request.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The `notify` packet's body (P2-16): one notification for the person.",
+  "oneOf": [
+    {
+      "properties": {
+        "event": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "event"
+      ]
+    },
+    {
+      "properties": {
+        "item": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "item"
+      ]
+    },
+    {
+      "properties": {
+        "batch": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "batch"
+      ]
+    }
+  ],
+  "properties": {
+    "answers": {
+      "default": [],
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{0,40}$",
+        "type": "string"
+      },
+      "maxItems": 8,
+      "title": "Answers",
+      "type": "array"
+    },
+    "batch": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NotifyBatch"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "event": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NotifyEvent"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "item": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NotifyItem"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "kind": {
+      "const": "notify",
+      "default": "notify",
+      "title": "Kind",
+      "type": "string"
+    },
+    "project": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NotifyProject"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "return_to": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NotifyReturnTo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NotifyTask"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "schema_version"
+  ],
+  "title": "NotifyRequest",
+  "type": "object"
+}

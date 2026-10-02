@@ -3145,6 +3145,122 @@
     "write": true
   },
   {
+    "description": "Record the person's answer typed in the chat channel, exactly as if they had answered in the app. item_kind question: item_id is the question's review item and the answer one of its choices when it has any. item_kind focus: item_id is the focus message and the answer still_on_it, switched, stuck or snooze (return or stay to a return question). Give the chat message's id. Approvals and results are decided in the app only (403 needs_app): link the person to the item instead.",
+    "input_schema": {
+      "properties": {
+        "answer": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Answer",
+          "type": "string"
+        },
+        "channel_message_id": {
+          "description": "For the audit",
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "title": "Channel Message Id",
+          "type": "string"
+        },
+        "idempotency_key": {
+          "maxLength": 255,
+          "minLength": 8,
+          "pattern": "^[A-Za-z0-9_\\-:.]+$",
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "item_id": {
+          "description": "The question's review item id, or the focus message id",
+          "format": "uuid",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "item_kind": {
+          "description": "question or focus; approval and result are answered 403 needs_app",
+          "enum": [
+            "question",
+            "focus",
+            "approval",
+            "result"
+          ],
+          "title": "Item Kind",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        }
+      },
+      "required": [
+        "item_kind",
+        "item_id",
+        "answer",
+        "channel_message_id",
+        "idempotency_key"
+      ],
+      "title": "RecordHumanReplyIn",
+      "type": "object"
+    },
+    "master_only": true,
+    "name": "record_human_reply",
+    "output_schema": {
+      "properties": {
+        "answer": {
+          "title": "Answer",
+          "type": "string"
+        },
+        "item_id": {
+          "format": "uuid",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "item_kind": {
+          "enum": [
+            "question",
+            "focus"
+          ],
+          "title": "Item Kind",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "tainted": {
+          "default": false,
+          "title": "Tainted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "item_kind",
+        "item_id",
+        "answer"
+      ],
+      "title": "RelayReplyOut",
+      "type": "object"
+    },
+    "rest": {
+      "method": "POST",
+      "path": "/v1/relay/replies"
+    },
+    "schema_version": 1,
+    "scope": "delegate",
+    "updates_existing": false,
+    "write": true
+  },
+  {
     "description": "Ask before taking an action (action_class: a known class such as merge_main, push_main, deploy_production, send_email, delete_files, or a short name of your own), with your run's task token. The server decides: `approved` (go ahead), `denied` (do not), or `pending` (the human decides; call again with `approval_id`, after `retry_after_seconds` when set). Never proceed on `pending`.",
     "input_schema": {
       "properties": {

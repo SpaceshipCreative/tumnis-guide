@@ -53,6 +53,8 @@ from tumnis.modules.tasks import api as tasks
 __all__ = [
     "FOCUS_SECTION",
     "LIVE_ENTITY",
+    "RELAY_ANSWERS",
+    "RETURN_ANSWERS",
     "DetourIn",
     "DetourOut",
     "FocusCurrentOut",
@@ -75,6 +77,7 @@ __all__ = [
     "planned_events",
     "prepare_next",
     "record_activity",
+    "relay_reply",
     "respond",
     "return_detour",
     "session_due",
@@ -133,6 +136,9 @@ class FocusMessageOut(BaseModel):
     message: str
     fired_at: datetime
     response: Response | None  # the latest answer, if any
+    # P4-03 (FR-10.8): voice is on for the message's level, and its server clip if made.
+    speak: bool
+    clip_id: UUID | None
 
 
 class GuardrailOut(BaseModel):
@@ -171,6 +177,8 @@ class FocusCurrentOut(BaseModel):
     messages: list[FocusMessageOut]
     guardrail: GuardrailOut | None = None  # set only when the level in force is Guardrail
     detour: DetourOut | None = None
+    # P4-02: after "Stuck", the project agent's first step (or the fallback), today's latest
+    next_step: agents.NextStepOut | None = None
 
 
 class LevelIn(BaseModel):
@@ -470,6 +478,12 @@ async def _current(
             .order_by(_events.c.fired_at, _events.c.created_at)
         )
     ).all()
+    voice = await decisions.voice_settings(ctx)
+    clips = (
+        await decisions.clip_ids(ctx, [e.id for e in events], now, session=s)
+        if voice.enabled_levels
+        else {}
+    )
     return FocusCurrentOut(
         level=level.effective,
         workspace_level=level.workspace,
@@ -477,6 +491,7 @@ async def _current(
         session=shown,
         guardrail=await _guardrail(s, ctx, now, level),
         detour=await _open_detour(s, start, end),
+        next_step=await agents.next_step(s, start, end),
         messages=[
             FocusMessageOut(
                 id=e.id,
@@ -487,6 +502,8 @@ async def _current(
                 message=e.message,
                 fired_at=e.fired_at,
                 response=e.response,
+                speak=e.level in voice.enabled_levels,
+                clip_id=clips.get(e.id),
             )
             for e in events
         ],
@@ -702,7 +719,7 @@ async def respond(
                 event.task_id,
                 now,
                 _message("stuck", title, None),
-                f"stuck:{event.id}:{now.isoformat()}",
+                f"stuck:{event.id}",  # one stuck event per check-in: a second tap is a repeat
                 session_id=None if row is None else row.id,
             )
     mark_changed(s, LIVE_ENTITY, event.id)
@@ -830,6 +847,44 @@ async def less_of_this(
         await _record(s, event, "less_of_this", now, None if row is None else row.id)
     mark_changed(s, LIVE_ENTITY, ctx.workspace_id)
     return await _current(s, ctx, now)
+
+
+# --- Replies the master relays from its chat channel (P2-16, FR-8.2) ------------------------
+
+# The one-tap answers a focus message offers (FR-10.4), and a detour's return question's two.
+RELAY_ANSWERS: Final[tuple[str, ...]] = ("still_on_it", "switched", "stuck", "snooze")
+RETURN_ANSWERS: Final[tuple[str, ...]] = ("return", "stay")
+
+
+async def relay_reply(
+    ctx: WorkspaceContext, event_id: UUID, answer: str, *, now: datetime, session: AsyncSession
+) -> None:
+    """A reply to focus event `event_id` typed in the master's chat channel, recorded exactly
+    as the person's tap in the app (`ctx` is the person): one of the four one-tap answers
+    through `respond`, or `return` / `stay` to a detour's return question through
+    `return_detour` at the detour task's current version. 422 `invalid_answer` for anything
+    else (free text, "less of this"); 404 for an unknown event."""
+    if answer in RELAY_ANSWERS:
+        body = RespondIn(event_id=event_id, response=answer)
+        await respond(ctx, body, now=now, session=session)
+        return
+    if answer not in RETURN_ANSWERS:
+        raise ProblemError(
+            422,
+            "invalid_answer",
+            "Answer with still_on_it, switched, stuck or snooze (return or stay to a detour)",
+        )
+    event = await _event(session, event_id)
+    if event.detour_task_id is None:
+        raise ProblemError(409, "no_open_detour", "This message asked no return question.")
+    detour = await tasks.get_task(session, event.detour_task_id)
+    decision: Literal["return", "stay"] = "return" if answer == "return" else "stay"
+    await return_detour(
+        ctx,
+        ReturnIn(decision=decision, version=detour.version, event_id=event_id),
+        now=now,
+        session=session,
+    )
 
 
 # --- The worker: sessions ------------------------------------------------------------------

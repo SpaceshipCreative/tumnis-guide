@@ -70,6 +70,9 @@ import type {
   AgentsPostResultData,
   AgentsPostResultErrors,
   AgentsPostResultResponses,
+  AgentsRecordHumanReplyData,
+  AgentsRecordHumanReplyErrors,
+  AgentsRecordHumanReplyResponses,
   AgentsRegisterProfileData,
   AgentsRegisterProfileErrors,
   AgentsRegisterProfileResponses,
@@ -257,6 +260,15 @@ import type {
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentErrors,
   KnowledgeUploadDocumentResponses,
+  NotificationsGetVapidPublicKeyData,
+  NotificationsGetVapidPublicKeyErrors,
+  NotificationsGetVapidPublicKeyResponses,
+  NotificationsSubscribeData,
+  NotificationsSubscribeErrors,
+  NotificationsSubscribeResponses,
+  NotificationsUnsubscribeData,
+  NotificationsUnsubscribeErrors,
+  NotificationsUnsubscribeResponses,
   PlanningAcceptAllData,
   PlanningAcceptAllErrors,
   PlanningAcceptAllResponses,
@@ -368,6 +380,9 @@ import type {
   SettingsSetModuleData,
   SettingsSetModuleErrors,
   SettingsSetModuleResponses,
+  SpeechGetClipData,
+  SpeechGetClipErrors,
+  SpeechGetClipResponses,
   TasksAddCommentData,
   TasksAddCommentErrors,
   TasksAddCommentResponses,
@@ -471,6 +486,7 @@ import {
   zAgentsPauseAgentsResponse,
   zAgentsPauseProjectResponse,
   zAgentsPostResultResponse,
+  zAgentsRecordHumanReplyResponse,
   zAgentsRegisterProfileResponse,
   zAgentsRequestApprovalResponse,
   zAgentsRequestRunResponse,
@@ -531,6 +547,9 @@ import {
   zKnowledgeTrashDocumentResponse,
   zKnowledgeUpdateDocumentResponse,
   zKnowledgeUploadDocumentResponse,
+  zNotificationsGetVapidPublicKeyResponse,
+  zNotificationsSubscribeResponse,
+  zNotificationsUnsubscribeResponse,
   zPlanningAcceptAllResponse,
   zPlanningAcceptItemResponse,
   zPlanningGetAlternatesResponse,
@@ -568,6 +587,7 @@ import {
   zSettingsPutWorkingHoursResponse,
   zSettingsPutWorkspaceSettingsResponse,
   zSettingsSetModuleResponse,
+  zSpeechGetClipResponse,
   zTasksAddCommentResponse,
   zTasksChangeStatusResponse,
   zTasksCreateTaskResponse,
@@ -2950,6 +2970,75 @@ export const purgesPurge = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Subscribe
+ */
+export const notificationsSubscribe = <ThrowOnError extends boolean = false>(
+  options: Options<NotificationsSubscribeData, ThrowOnError>,
+): RequestResult<
+  NotificationsSubscribeResponses,
+  NotificationsSubscribeErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    NotificationsSubscribeResponses,
+    NotificationsSubscribeErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zNotificationsSubscribeResponse.parseAsync(data),
+    url: "/v1/push/subscriptions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Unsubscribe
+ */
+export const notificationsUnsubscribe = <ThrowOnError extends boolean = false>(
+  options: Options<NotificationsUnsubscribeData, ThrowOnError>,
+): RequestResult<
+  NotificationsUnsubscribeResponses,
+  NotificationsUnsubscribeErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    NotificationsUnsubscribeResponses,
+    NotificationsUnsubscribeErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zNotificationsUnsubscribeResponse.parseAsync(data),
+    url: "/v1/push/subscriptions/{push_subscription_id}",
+    ...options,
+  });
+
+/**
+ * Get Vapid Public Key
+ */
+export const notificationsGetVapidPublicKey = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<NotificationsGetVapidPublicKeyData, ThrowOnError>,
+): RequestResult<
+  NotificationsGetVapidPublicKeyResponses,
+  NotificationsGetVapidPublicKeyErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    NotificationsGetVapidPublicKeyResponses,
+    NotificationsGetVapidPublicKeyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zNotificationsGetVapidPublicKeyResponse.parseAsync(data),
+    url: "/v1/push/vapid-public-key",
+    ...options,
+  });
+
+/**
  * List Recurrence
  *
  * Recurrence rules, optionally of one project (the Schedule rail).
@@ -2970,6 +3059,36 @@ export const tasksListRecurrence = <ThrowOnError extends boolean = false>(
       await zTasksListRecurrenceResponse.parseAsync(data),
     url: "/v1/recurrence",
     ...options,
+  });
+
+/**
+ * Record Human Reply
+ *
+ * A person's answer typed in the master's chat channel, recorded exactly as the same
+ * answer in the app (FR-8.2): a question (its review item) or a focus message. The
+ * `record_human_reply` tool's twin, for the master key only (403 `master_only`); the
+ * person answers in the app itself. Approvals and results: 403 `needs_app`.
+ */
+export const agentsRecordHumanReply = <ThrowOnError extends boolean = false>(
+  options: Options<AgentsRecordHumanReplyData, ThrowOnError>,
+): RequestResult<
+  AgentsRecordHumanReplyResponses,
+  AgentsRecordHumanReplyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AgentsRecordHumanReplyResponses,
+    AgentsRecordHumanReplyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zAgentsRecordHumanReplyResponse.parseAsync(data),
+    url: "/v1/relay/replies",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
@@ -3558,6 +3677,26 @@ export const authSetupTotp = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Get Clip
+ *
+ * A spoken focus message's clip (P4-03): `audio/wav` with `nosniff`, while it lives
+ * (`CLIP_TTL_MIN`); 404 once expired or in another workspace.
+ */
+export const speechGetClip = <ThrowOnError extends boolean = false>(
+  options: Options<SpeechGetClipData, ThrowOnError>,
+): RequestResult<SpeechGetClipResponses, SpeechGetClipErrors, ThrowOnError> =>
+  (options.client ?? client).get<
+    SpeechGetClipResponses,
+    SpeechGetClipErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zSpeechGetClipResponse.parseAsync(data),
+    url: "/v1/speech/clips/{speech_clip_id}",
+    ...options,
   });
 
 /**

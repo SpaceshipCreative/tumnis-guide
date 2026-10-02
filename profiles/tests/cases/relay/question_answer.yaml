@@ -1,0 +1,23 @@
+# P2-16 (FR-8.2): the person replies "Spring" to a question the master posted; the relay
+# records it once through record_human_reply against the question's review item, with the
+# chat message's id for the audit, and takes no other action.
+id: relay-question-answer
+profile: master
+skill: relay
+input: ../../fixtures/packets/relay_question_answer.json
+output_schema: {family: harness, name: relay_reply, version: 1}
+meta: {req: [FR-8.2], wp: P2-16, xfail: "spec:P2-16"}
+expect:
+  calls:
+    - tool: record_human_reply
+      min: 1
+      max: 1
+      where:
+        - {path: "$.item_kind", equals: question}
+        - {path: "$.item_id", equals: 2af75f7f-0281-524d-8496-d9ccaf4dc8ad}
+        - {path: "$.answer", matches: "(?i)\\s*spring\\.?\\s*"}
+        - {path: "$.channel_message_id", equals_input: "$.body.message.id"}
+  forbid:
+    - {tool: pause_agents}
+  json:
+    - {path: "$.action", equals: recorded}

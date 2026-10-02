@@ -999,6 +999,40 @@ def register_run_task_counter(counter: RunTaskCounter) -> None:
     _run_task_counter[:] = [counter]
 
 
+# The stuck run's step (P4-02, FR-10.5): agents says whether a run is a stuck run (and of
+# which task, with how many tasks it made so far), and hears of the step it made, in the
+# caller's transaction. Registered by agents at import, as the counter is.
+class StuckRun(BaseModel):
+    task_id: UUID  # the stuck task
+    tasks_created: int  # the tasks the run made before this one
+
+
+StuckRunLookup = Callable[[AsyncSession, UUID], Awaitable[StuckRun | None]]
+StuckStepMade = Callable[[AsyncSession, UUID, TaskOut, datetime], Awaitable[None]]
+_stuck_hooks: list[tuple[StuckRunLookup, StuckStepMade]] = []
+
+
+def register_stuck_run_hooks(lookup: StuckRunLookup, made: StuckStepMade) -> None:
+    """Set how `create_task` finds a stuck run (`lookup(session, run_id)`) and tells it
+    of the step it made (`made(session, run_id, task, now)`)."""
+    _stuck_hooks[:] = [(lookup, made)]
+
+
+async def _stuck_scope(s: AsyncSession, run_id: UUID, data: TaskCreate) -> StuckRun | None:
+    """The stuck run behind `run_id`, after the step rule passed (422 or 409 otherwise)."""
+    for lookup, _ in _stuck_hooks:
+        scope = await lookup(s, run_id)
+        if scope is None:
+            return None
+        refusal = rules.stuck_step_refusal(
+            scope.task_id, data.parent_id, data.label, data.estimate_minutes, scope.tasks_created
+        )
+        if refusal is not None:
+            raise ProblemError(refusal.status, refusal.code, refusal.detail)
+        return scope
+    return None
+
+
 async def create_task(  # the task, plus where it came from
     s: AsyncSession,
     actor: ActorRef,
@@ -1023,8 +1057,12 @@ async def create_task(  # the task, plus where it came from
     R-31).
 
     `run_id` (a run's task token, P2-09) counts the task against the run's tasks-per-run
-    limit (SAF-5); past it the call is 409 `run_limit_exceeded` and nothing is created."""
+    limit (SAF-5); past it the call is 409 `run_limit_exceeded` and nothing is created. A
+    stuck run's token (P4-02) makes one first step under the stuck task, of 10 minutes or
+    less for the person (`rules.stuck_step_refusal`: 422 `stuck_step_too_long` or
+    `stuck_step_parent`, 409 `stuck_step_taken`)."""
     await _require_project(s, data.project_id)
+    stuck = None if run_id is None else await _stuck_scope(s, run_id, data)
     if run_id is not None:
         for counter in _run_task_counter:
             await counter(s, run_id, now=_now(now))
@@ -1044,6 +1082,9 @@ async def create_task(  # the task, plus where it came from
     created = await _insert(s, actor, values, now=now, source=source or _SOURCE[kind])
     for item in items:
         await _link(s, actor, created.id, data.project_id, item, now=now)
+    if stuck is not None and run_id is not None:
+        for _, made in _stuck_hooks:
+            await made(s, run_id, created, _now(now))
     return created
 
 
@@ -1756,11 +1797,14 @@ async def post_result(  # the result, plus who and when
     *,
     tainted: bool = False,
     now: datetime | None = None,
+    keep_status: bool = False,
 ) -> tuple[ResultOut, bool]:
     """Stores the run's result (P2-04, FR-5.8) in the caller's transaction: the `results`
     row, the task In progress -> In review as `actor` (an agent), and `result.posted`.
     Once per run: a second call answers the first result and `False` (nothing changes).
-    A task no longer In progress (a human moved it) keeps its status."""
+    A task no longer In progress (a human moved it) keeps its status, as does every task
+    with `keep_status` (a stuck run's report of one step, P4-02: the person is still on
+    the task)."""
     existing = await result_of_run(s, run_id)
     if existing is not None:
         return existing, False
@@ -1787,7 +1831,7 @@ async def post_result(  # the result, plus who and when
         assert again is not None  # noqa: S101  # the conflict names a live row
         return again, False
     at = _now(now)
-    if Status(row["status"]) is Status.IN_PROGRESS:
+    if not keep_status and Status(row["status"]) is Status.IN_PROGRESS:
         await _transition(s, actor, row, Status.IN_REVIEW, row["version"], now=at)
     await emit(
         s,

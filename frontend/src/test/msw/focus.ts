@@ -18,6 +18,7 @@ export function quietFocus(): FocusCurrentOut {
     messages: [],
     guardrail: null,
     detour: null,
+    next_step: null,
   };
 }
 
@@ -52,6 +53,8 @@ export function focusMessage(
     message: "Still on it?",
     fired_at: new Date().toISOString(),
     response: null,
+    speak: false,
+    clip_id: null,
     ...overrides,
   };
 }
