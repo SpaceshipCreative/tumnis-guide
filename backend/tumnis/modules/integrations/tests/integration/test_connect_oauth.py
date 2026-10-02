@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 from tumnis.modules.integrations.tests.integration._connections import (
+    connect_through_routes,
     connected,
     poll_authorize_url,
     rows,
@@ -140,3 +141,24 @@ async def test_rotated_refresh_token_persisted_before_next_call(
     again = await access_token(workspace.ctx, connection_id, oauth=oauth_server, clock=clock)
     assert again == after.access_token
     assert oauth_server.refreshes == 1
+
+
+@pytest.mark.req("FR-14.4")
+@pytest.mark.wp("P3-02")
+async def test_main_red_finished_connect_keeps_no_oauth_pending_row(
+    session_client: SessionClient,
+    dbos_client: DBOSClient,
+    oauth_server: FakeOAuthServer,
+    db: DbUrls,
+) -> None:
+    """main red after #156 (CI run 36977048918, T-P3-02-03): a finished connect kept its
+    soft-deleted `oauth_pending` row, whose random ids could hold the two characters of the
+    test's code. Once the tokens are stored the consent has no further use, so the row
+    goes."""
+    connection_id, callback = await connect_through_routes(
+        session_client, dbos_client, oauth_server, code="code-main-red"
+    )
+    assert callback.status_code == 302, callback.text
+    after = await session_client.get(f"/v1/connections/{connection_id}")
+    assert after.json()["status"] == "ok"
+    assert rows(db, "SELECT id FROM oauth_pending WHERE connection_id = %s", connection_id) == []

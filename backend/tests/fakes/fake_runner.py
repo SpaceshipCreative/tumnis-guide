@@ -391,10 +391,17 @@ class FakeRunner:
                 if self._note_ack(message):
                     self._record(message)
                     continue
+                # A run answers with the script in place when it arrived: a test that sees
+                # it in runs() may script the next run's answer while this one is acked.
+                scripted = (
+                    self._scripts.get((message.profile, message.skill))
+                    if isinstance(message, Run)
+                    else None
+                )
                 self._record(message)
                 self.ack(message)
                 if isinstance(message, Run):
-                    self._answer_run(message)
+                    self._answer_run(message, scripted)
                 elif isinstance(message, HealthCheck):
                     self._answer_health(message)
                 elif isinstance(message, Provision):
@@ -408,10 +415,9 @@ class FakeRunner:
             except Exception as exc:  # kept for the test to inspect
                 self.errors.append(exc)
 
-    def _answer_run(self, run: Run) -> None:
+    def _answer_run(self, run: Run, scripted: Scripted | None) -> None:
         from tumnis.modules.agents.protocol import Result  # noqa: PLC0415
 
-        scripted = self._scripts.get((run.profile, run.skill))
         if scripted is None or run.profile in self._offline:
             return
         if self.strict:
