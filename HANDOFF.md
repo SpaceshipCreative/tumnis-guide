@@ -1,114 +1,97 @@
-# HANDOFF: JOURNEYS-A (J1, J6, J7 planning journeys)
+# HANDOFF: JOURNEYS-A (J1, J6, J7 planning journeys), after continuation c1
 
 Instructions: ~/tumnis-coordinator/prompts/wave1/JOURNEYS-A.txt (binding). Branch
-`fix/journeys-planning` (pushed from this worktree with
-`/usr/bin/git push origin HEAD:fix/journeys-planning`). The draft PR is NOT opened yet. Open it
-next (title `fix(acceptance): planning journeys J1, J6, J7 pass`). Cite APP-05 in the body.
+`fix/journeys-planning`. Push with `/usr/bin/git push origin HEAD:fix/journeys-planning` from
+a throwaway worktree branch that has merged origin/fix/journeys-planning. Never switch
+branches. **PR #164 (draft)**: https://github.com/SpaceshipCreative/tumnis-guide/pull/164.
+The body is in /tmp/claude-1002/JOURNEYS-A-c1/pr-body.md (cites APP-05 and the Context7 docs).
+**Add decision 86 and the clock fix to it**, then `gh pr edit 164 --body-file ...`.
 
-## Commits on the branch (on top of main 67a43da6)
-- 494b1547 `test(acceptance): J7 helper drives the AI task through a run` (frontend/e2e/phase1.ts,
-  helper only, no test body touched).
-- 155a58ee `chore: JOURNEYS-A handoff` (this file), then a follow-up adding these SHAs.
-- `make check` passed before these commits (backend 1865 passed; daemon, profiles and frontend
-  lint, typecheck, Vitest and bundle tests all green).
-- No PR yet, so no CI run and no CodeRabbit threads. No test.fail() markers removed.
-- The tumnis-ja stack (port 18931) is STILL RUNNING. Reuse it or tear it down.
+## Status per journey
+- **J1 (A1.2): GREEN and UNMARKED.** Fix: `TodayPanel.tsx` + `SwapPicker.tsx` keep the Swap
+  dialog open (options aria-disabled) until the swap settles. `lib/fetch.ts` `useWrite().mutate`
+  takes per-call callbacks. Vitest: `TodayPanel.swap.test.tsx`. Marker removed in 1b708773,
+  citing CI run 36966799150. Step 3 still has an inherent small race (optimistic accept vs
+  J1's immediate status GET; TodayPanel.test.tsx locks the optimistic state). Main said:
+  raise it again only if CI flakes.
+- **J6 (A1.3): GREEN and UNMARKED (APP-05).** Fix: calendar fake scenarios
+  (`calendar/adapters/fake.py` `parse_calendar_script`, registered for `calendar.google`;
+  scenario `tests/recordings/google_calendar/scenarios/no_ninety_minute_gap.json`), the
+  `calendar-sync` test tick (`calendar/testing.py`, imported by `calendar/router.py`), and the
+  J6 helper in `frontend/e2e/phase1.ts`, which connects the two fake Google accounts through
+  the real OAuth routes (`TestFakes.request` added in `e2e/testHooks.ts`). Marker removed in
+  973a5d16, citing CI run 36966799150.
+- **J7 (A1.6): IN PROGRESS. The clock fix is COMMITTED (929a6833, `make check` passed); J7 is still marked.** See the next steps.
+  - Done, in the helper: the AI task gets its result through a real scripted run, Jev labels
+    the invoice task Hybrid, and the helper waits until `enrichment_status` is `done`.
+  - Clock fix (Scott/coordinator **decision 86**: in fakes mode the worker follows the test
+    clock), commit 929a6833:
+    - `core/fake_scripts.py`: `store_fixed_clock`, `fixed_clock_instant`, `worker_now` (row
+      `core.fixed_clock` in fake_scripts; no migration; reset empties it).
+    - `core/testing_routes.py` `set_clock`: stores the instant after set or advance.
+    - `agents/workflows.py`: `finished_at` stamps use `await fake_scripts.worker_now()` in
+      `_record_outcome` (skill and enrichment runs), `finish_run` and `fail_orphan_step`.
+      Deliberately NOT changed: `started_at` (prepare_run), `now_s` (time-limit ceilings: a
+      frozen clock would break timeouts), token issue and revocation, and the runner_lost
+      sweep.
+    - Tests (red first, now green locally): `backend/tests/integration/test_worker_test_clock.py`
+      and `agents/tests/integration/test_run_end_test_clock.py`.
+  - J7 steps after "prepared by agents" (Queued overnight, Rolls over +1 tonight and
+    rollover-count, the phone sheet height, the Done/Escape no-writes check) have not been
+    reached yet. Find out with the local diag run or CI.
 
-## Local stack and diagnostics
-- My stack: `docker compose -p tumnis-ja --env-file /tmp/claude-1002/JOURNEYS-A/compose.env -f <worktree>/deploy/compose.test.yaml up -d --wait --build`.
-  The api is on http://localhost:18931 (use `localhost`, not 127.0.0.1: Playwright's request
-  context does not send the `__Host-` Secure cookies to 127.0.0.1, and every API call 401s).
-  Tear down with `docker compose -p tumnis-ja -f <worktree>/deploy/compose.test.yaml down -v`.
-- Throwaway diag copies (Scott decision 76; never commit) are in /tmp/claude-1002/JOURNEYS-A/diag/:
-  `playwright.diag.config.ts` goes in `frontend/`, and `*.diag.spec.ts` in `frontend/e2e/_diag/`.
-  Run: `frontend/node_modules/.bin/playwright test -c frontend/playwright.diag.config.ts J7`
-  with the sandbox off (the sandbox's network namespace refuses loopback). Move them out of the
-  tree again before `make check` and before staging. Stage by explicit path only.
-- `make check` locally needs SEMGREP_SETTINGS_FILE / SEMGREP_LOG_FILE /
-  SEMGREP_VERSION_CACHE_PATH under $TMPDIR (~/.semgrep is read-only).
+## Commits on the branch (oldest first, after 484c71cf)
+- 2193b782 fix(planning): the swap picker closes only once the swap is saved
+- 73d6b54a feat(calendar): scriptable Google fake scenarios and the calendar-sync test tick
+- 6bc1beae test(acceptance): J6 and J7 arrange helpers connect accounts and wait for enrichment
+- 1b708773 test(acceptance): J1 (A1.2) passes; remove its test.fail() marker
+- 973a5d16 test(acceptance): J6 (A1.3) passes; remove its test.fail() marker
+- d1632e8f Merge origin/main (brings #152 agents_0011, #160 hosted keys)
+- 929a6833 fix(agents): in fakes mode a run ends at the test clock's time (decision 86)
+- (this handoff commit)
 
-## Findings per journey
+## CI
+- Run 36966799150 (at 6bc1beae): every job green except e2e. e2e "failed" only because J1
+  and J6 reported "Expected to fail, but passed" (phone), and max-failures stopped the run
+  before J7. A1.5, A1.1 and J3 failed as expected (they are other groups' journeys).
+- d1632e8f is pushed and CI is running on it. Expect e2e to reach J7 (still marked).
+- No CodeRabbit review yet (the PR is a draft). Request one only when the PR is marked ready.
 
-### J7 (A1.6), partly fixed
-1. FIXED (helper): `arrangeCloseTheDay` walked the AI task Today -> In review as the human. That
-   is 409 `transition_not_allowed` by design (FR-5.8: only an agent posts a result; tasks/rules.py
-   TRANSITIONS). The helper now scripts the fake runner for the AI task's title (a `result` step
-   with an agent result link), POSTs `/v1/tasks/{id}/run` (the run moves Today -> In progress),
-   polls until In review (1 s polls, advancing the frozen server clock 1 s per poll so the
-   per-principal rate limit refills; at 250 ms it hit 429), then the human moves it to Done.
-   Verified locally: Shipped (2 items) and the Agents finished title now pass.
-2. OPEN: "1 task prepared by agents" fails. Two causes found:
-   a. The enrichment run of "Send Acme the March invoice" ends `failed` (enrichment_status
-      pending -> running -> failed, about 15 s after create). Not yet diagnosed: check the worker
-      log for that run (script `runnerScript(ACME_AGENT, "enrich", "enrich__hybrid_invoice")`,
-      recording backend/tests/fakes/recordings/runner/enrich__hybrid_invoice.result.json; the
-      label is null with label_reason "Needs a signature", so check the label wait and the
-      enrich result schema). Also, the helper returns before the enrichment finishes: it should
-      wait until the task's enrichment_status is `done`.
-   b. Clock trap: `day_summary` counts enrichment runs with `finished_at` inside the local day
-      (planning/rules.py day_summary, `prepared`). The worker stamps run ends with SystemClock
-      (agents/workflows.py `api.run_ended(..., now=SystemClock().now())`), i.e. the real date,
-      while J7's day is 2026-03-09 (the api's test clock only). So even a succeeded enrichment run
-      is not counted. Fixing this needs either the worker to follow `/v1/test/clock` in fakes mode
-      (a cross-cutting core change that also affects groups B and C) or a different product rule.
-      This probably needs a decision: message main with options before building it.
-3. Not yet reached: Queued overnight, Rolls over (+1 tonight, rollover-count), the phone sheet
-   height, and the Done/Escape no-writes check.
+## Next steps
+1. Read CI on the pushed head (`gh pr checks 164`; `gh run view <id> --log-failed`). Run
+   `make check` with `SEMGREP_SETTINGS_FILE/SEMGREP_LOG_FILE/SEMGREP_VERSION_CACHE_PATH`
+   set to files under $TMPDIR.
+2. Rebuild the local stack, then run the J7 diag copy (decision 76) to find the next failing
+   step:
+   `docker compose --progress quiet -p tumnis-ja --env-file /tmp/claude-1002/JOURNEYS-A-c1/compose.env -f <worktree>/deploy/compose.test.yaml up -d --wait --build`,
+   copy `/tmp/claude-1002/JOURNEYS-A-c1/diag/J7.diag.spec.ts` to `frontend/e2e/_diag/` and
+   `playwright.diag.config.ts` to `frontend/`, then run
+   `frontend/node_modules/.bin/playwright test -c playwright.diag.config.ts J7` with the
+   sandbox off. The api is at http://localhost:18931 (use `localhost`). Remove the diag files
+   before `make check` and before staging.
+3. When CI shows J7 "Expected to fail, but passed", remove its marker in its own commit,
+   citing the run id, and update the header comment (decision 78). Retry once if denied,
+   then report READY EXCEPT MARKERS.
+4. Update the PR body (decision 86, the clock fix, J7), `gh pr ready 164`,
+   `gh pr comment 164 --body "@coderabbitai review"` once, then run the review loop. When CI
+   is green and there are no open threads, send main "#164 MERGE-READY at <sha>".
+5. Tear down the stack: `docker compose -p tumnis-ja -f <worktree>/deploy/compose.test.yaml down -v`.
+   Note: `tumnis:test` is a shared image tag; this agent rebuilt it (other stacks keep their
+   running containers).
+6. Delete HANDOFF.md in a chore commit when done.
 
-### J1 (A1.2), needs a decision (not yet sent to main)
-- Step 3 races: J1.spec.ts lines 88-97 read `getTask(...).status` as soon as the row shows
-  `data-state="accepted"`. The row shows accepted optimistically (planWrites.ts `accepted()`),
-  which the locked Vitest test TodayPanel.test.tsx (lines ~343-361, "Optimistic: accepted before
-  the server answers", gated MSW handler) requires. Observed: POST accept for the 2nd item
-  completed at 07.841, and J1's GET of that task ran at 07.815 and read `backlog`. No product
-  change closes this deterministically. Options for main/Scott: (a) a settle wait in J1 before
-  the status reads (like decision 44); (b) drop the optimistic assertion in TodayPanel.test.tsx;
-  (c) leave it (flaky by design). SEND THIS TO MAIN.
-- In the diag copy, add `expect.poll` on the two statuses to get past step 3 and find the later
-  J1 defects (Swap picker, Remove, reload), and report them all in one message.
-- Steps 1-2 passed locally (4 items, free blocks, chips, reasons, blocks inside free blocks).
+## Notes from c0 (still valid)
+- Playwright's request context sends the `__Host-` cookies only to `localhost`, not to
+  127.0.0.1.
+- The diag config (in /tmp/claude-1002/JOURNEYS-A-c1/diag/) has outputDir
+  /tmp/claude-1002/JOURNEYS-A-c1/test-results.
 
-### J6 (A1.3), to build (coordinator: APP-05 is ours; cite APP-05 in the PR body)
-- Fails at `POST /v1/test/fakes/calendar.google/script` -> 404 (no scriptable calendar fake).
-- Planned design (advisor-reviewed):
-  - `register_fake_script("calendar.google", parse)` in calendar/adapters/__init__.py. The
-    parser takes `{"scenario": "<name>"}` and stores that scenario's events.list pages per
-    calendar id (a scenario file next to the recordings, e.g.
-    calendar/tests/recordings/google_calendar/scenarios/no_ninety_minute_gap.json; check that
-    path ships in the image).
-  - `FakeGoogleCalendar.list_events` consults `fake_scripts.lookup("calendar.google")` (enabled
-    in the worker in fakes mode) before its recordings.
-  - calendar/testing.py registers the test tick `calendar-sync`: enqueue `api.SYNC_WORKFLOW` on
-    `api.SYNC_QUEUE` by name for every connected account (DBOSClient, like planning/testing.py),
-    wait for them; the router imports it (`# noqa: F401`). Never import calendar.workflows from
-    the api.
-  - Accounts: connect the two fake Google accounts in the J6 helper `squeezeMondayCalendar`
-    through the real OAuth path (PUT the `calendar.google` settings section with a client_id,
-    `GET /v1/calendar/oauth/start`, `GET /v1/calendar/oauth/callback?state=..&code=code-a|code-b`,
-    poll `/v1/calendar/accounts` until both are connected), then script and tick. Do not seed
-    accounts (the worker's real */10 calendar-sync-tick would then pull recordings into groups
-    B and C).
-  - Verified: the connector does not drop items outside the sync window (the worker computes the
-    window from the real clock; the fake ignores it).
-  - Scenario: Monday (2026-03-09, America/New_York, default hours 09:00-18:00, seed busy 9-10,
-    12-13, 15-15:30) must leave exactly ONE 60-minute free block and everything else under 60
-    (J6 uses `free_blocks.find(b => b.minutes === 60)`), e.g. extra busy 10:00-11:00,
-    13:00-14:30, 15:30-17:30. Tuesday must keep a >= 90 block (move_to 2026-03-10).
-- After that: Split UI ("No 90-minute gap today", "Split 60 + 30", "Move to Tue 10 Mar",
-  "Accept split"), then Re-plan placing the 60-minute subtask in the 60 block. Untested.
-
-## Next steps, in order
-1. Open the draft PR. Push often.
-2. Message main about J1 step 3 (options above) and the J7 clock trap (2b) with options.
-3. Diagnose J7 2a (failed enrichment) and make the helper wait for it.
-4. Build J6 (APP-05) test-first: a unit test for the parser, an integration test for the tick
-   and the fake reading the stored scenario; Context7 for DBOS DBOSClient.enqueue_async and the
-   SQLAlchemy calls.
-5. Markers come off only after CI shows "Expected to fail, but passed" (decision 78), citing the
-   run id. Then `gh pr ready`, one `@coderabbitai review`, and the review loop.
-6. Tear down the tumnis-ja stack when done.
+## Shared-file edits
+`frontend/src/lib/fetch.ts` (additive `mutate` callbacks), `frontend/e2e/testHooks.ts`
+(additive `request`), `frontend/e2e/phase1.ts` (helpers), `core/fake_scripts.py`,
+`core/testing_routes.py` and `agents/workflows.py` (the clock fix, 929a6833).
 
 ## Scott items
-- J1 step 3 conflict between two locked tests (J1 vs TodayPanel.test.tsx optimistic accept).
-- J7: the worker does not follow the test clock, so "prepared by agents" (runs finished today)
-  cannot count on the test day.
+- Decision 86 (coordinator default; Scott may override): the worker follows the test clock
+  in fakes mode.
+- J1 step 3 race: TodayPanel.test.tsx locks the optimistic accept. Raise it only if CI flakes.
