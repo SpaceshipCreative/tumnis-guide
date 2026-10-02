@@ -1403,6 +1403,15 @@ async def _folder_row(s: AsyncSession, project_id: UUID, *, write: bool = False)
     return row
 
 
+async def hold_folder_for_write(s: AsyncSession, project_id: UUID) -> None:
+    """Share-lock the project's folder row (if it has one) to the end of the transaction,
+    for a file write that resolves the folder's place itself (`_folder_row`'s `write`)."""
+    try:
+        await _folder_row(s, project_id, write=True)
+    except NotFound:
+        return
+
+
 async def get_project_folder(s: AsyncSession, project_id: UUID) -> ProjectFolderOut:
     return _folder_out(await _folder_row(s, project_id))
 
