@@ -17362,8 +17362,8 @@
     },
     "/v1/knowledge/documents/{document_id}": {
       "delete": {
-        "description": "To the trash: hidden from lists, reads and search until restored.",
-        "operationId": "knowledge_trash_document",
+        "description": "Delete a document. To the trash (FR-15.6, P1-17): 204, hidden from lists, reads and\nsearch until restored; this is every text entry, link and upload, and Tumnis's own\nfolder file. An outside file in an existing folder (FR-15.12, P3-14) is only unindexed\nand stays where it is: 200 `{\"outcome\": \"index_only\"}`. An agent may not delete an\noutside file (403, audited).",
+        "operationId": "knowledge_delete_document",
         "parameters": [
           {
             "in": "path",
@@ -17377,8 +17377,18 @@
           }
         ],
         "responses": {
-          "204": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteOut"
+                }
+              }
+            },
             "description": "Successful Response"
+          },
+          "204": {
+            "description": "Trashed: hidden until restored (P1-17)"
           },
           "400": {
             "content": {
@@ -17461,7 +17471,7 @@
             "description": "Rate limited (`Retry-After`)"
           }
         },
-        "summary": "Trash Document",
+        "summary": "Delete Document",
         "tags": [
           "knowledge"
         ]

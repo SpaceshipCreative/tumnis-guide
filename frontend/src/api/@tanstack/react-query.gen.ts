@@ -80,6 +80,7 @@ import {
   knowledgeCreateLocation,
   knowledgeCreateTextEntry,
   knowledgeDeleteAtSource,
+  knowledgeDeleteDocument,
   knowledgeGetBrief,
   knowledgeGetDocument,
   knowledgeGetFile,
@@ -95,7 +96,6 @@ import {
   knowledgeSetProjectFolder,
   knowledgeSetTrust,
   knowledgeTestLocation,
-  knowledgeTrashDocument,
   knowledgeUpdateDocument,
   knowledgeUploadDocument,
   knowledgeUseExistingFolder,
@@ -375,6 +375,9 @@ import type {
   KnowledgeDeleteAtSourceData,
   KnowledgeDeleteAtSourceError,
   KnowledgeDeleteAtSourceResponse,
+  KnowledgeDeleteDocumentData,
+  KnowledgeDeleteDocumentError,
+  KnowledgeDeleteDocumentResponse,
   KnowledgeGetBriefData,
   KnowledgeGetBriefError,
   KnowledgeGetBriefResponse,
@@ -420,9 +423,6 @@ import type {
   KnowledgeTestLocationData,
   KnowledgeTestLocationError,
   KnowledgeTestLocationResponse,
-  KnowledgeTrashDocumentData,
-  KnowledgeTrashDocumentError,
-  KnowledgeTrashDocumentResponse,
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentError,
   KnowledgeUpdateDocumentResponse,
@@ -2589,24 +2589,28 @@ export const knowledgeCreateTextEntryMutation = (
 };
 
 /**
- * Trash Document
+ * Delete Document
  *
- * To the trash: hidden from lists, reads and search until restored.
+ * Delete a document. To the trash (FR-15.6, P1-17): 204, hidden from lists, reads and
+ * search until restored; this is every text entry, link and upload, and Tumnis's own
+ * folder file. An outside file in an existing folder (FR-15.12, P3-14) is only unindexed
+ * and stays where it is: 200 `{"outcome": "index_only"}`. An agent may not delete an
+ * outside file (403, audited).
  */
-export const knowledgeTrashDocumentMutation = (
-  options?: Partial<Options<KnowledgeTrashDocumentData>>,
+export const knowledgeDeleteDocumentMutation = (
+  options?: Partial<Options<KnowledgeDeleteDocumentData>>,
 ): UseMutationOptions<
-  KnowledgeTrashDocumentResponse,
-  KnowledgeTrashDocumentError,
-  Options<KnowledgeTrashDocumentData>
+  KnowledgeDeleteDocumentResponse,
+  KnowledgeDeleteDocumentError,
+  Options<KnowledgeDeleteDocumentData>
 > => {
   const mutationOptions: UseMutationOptions<
-    KnowledgeTrashDocumentResponse,
-    KnowledgeTrashDocumentError,
-    Options<KnowledgeTrashDocumentData>
+    KnowledgeDeleteDocumentResponse,
+    KnowledgeDeleteDocumentError,
+    Options<KnowledgeDeleteDocumentData>
   > = {
     mutationFn: async (fnOptions) => {
-      const { data } = await knowledgeTrashDocument({
+      const { data } = await knowledgeDeleteDocument({
         ...options,
         ...fnOptions,
         throwOnError: true,

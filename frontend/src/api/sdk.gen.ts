@@ -218,6 +218,9 @@ import type {
   KnowledgeDeleteAtSourceData,
   KnowledgeDeleteAtSourceErrors,
   KnowledgeDeleteAtSourceResponses,
+  KnowledgeDeleteDocumentData,
+  KnowledgeDeleteDocumentErrors,
+  KnowledgeDeleteDocumentResponses,
   KnowledgeGetBriefData,
   KnowledgeGetBriefErrors,
   KnowledgeGetBriefResponses,
@@ -263,9 +266,6 @@ import type {
   KnowledgeTestLocationData,
   KnowledgeTestLocationErrors,
   KnowledgeTestLocationResponses,
-  KnowledgeTrashDocumentData,
-  KnowledgeTrashDocumentErrors,
-  KnowledgeTrashDocumentResponses,
   KnowledgeUpdateDocumentData,
   KnowledgeUpdateDocumentErrors,
   KnowledgeUpdateDocumentResponses,
@@ -548,6 +548,7 @@ import {
   zKnowledgeCreateLocationResponse,
   zKnowledgeCreateTextEntryResponse,
   zKnowledgeDeleteAtSourceResponse,
+  zKnowledgeDeleteDocumentResponse,
   zKnowledgeGetBriefResponse,
   zKnowledgeGetDocumentResponse,
   zKnowledgeGetFileResponse,
@@ -563,7 +564,6 @@ import {
   zKnowledgeSetProjectFolderResponse,
   zKnowledgeSetTrustResponse,
   zKnowledgeTestLocationResponse,
-  zKnowledgeTrashDocumentResponse,
   zKnowledgeUpdateDocumentResponse,
   zKnowledgeUploadDocumentResponse,
   zKnowledgeUseExistingFolderResponse,
@@ -1880,24 +1880,28 @@ export const knowledgeCreateTextEntry = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Trash Document
+ * Delete Document
  *
- * To the trash: hidden from lists, reads and search until restored.
+ * Delete a document. To the trash (FR-15.6, P1-17): 204, hidden from lists, reads and
+ * search until restored; this is every text entry, link and upload, and Tumnis's own
+ * folder file. An outside file in an existing folder (FR-15.12, P3-14) is only unindexed
+ * and stays where it is: 200 `{"outcome": "index_only"}`. An agent may not delete an
+ * outside file (403, audited).
  */
-export const knowledgeTrashDocument = <ThrowOnError extends boolean = false>(
-  options: Options<KnowledgeTrashDocumentData, ThrowOnError>,
+export const knowledgeDeleteDocument = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeDeleteDocumentData, ThrowOnError>,
 ): RequestResult<
-  KnowledgeTrashDocumentResponses,
-  KnowledgeTrashDocumentErrors,
+  KnowledgeDeleteDocumentResponses,
+  KnowledgeDeleteDocumentErrors,
   ThrowOnError
 > =>
   (options.client ?? client).delete<
-    KnowledgeTrashDocumentResponses,
-    KnowledgeTrashDocumentErrors,
+    KnowledgeDeleteDocumentResponses,
+    KnowledgeDeleteDocumentErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zKnowledgeTrashDocumentResponse.parseAsync(data),
+      await zKnowledgeDeleteDocumentResponse.parseAsync(data),
     url: "/v1/knowledge/documents/{document_id}",
     ...options,
   });

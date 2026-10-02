@@ -239,7 +239,11 @@ async def move_project_folder(
     return await api.enqueue_move(ctx, project_id, body.location_id, body.path)
 
 
-@router.delete("/knowledge/documents/{document_id}")
+@router.delete(
+    "/knowledge/documents/{document_id}",
+    response_model=DeleteOut,
+    responses={204: {"description": "Trashed: hidden until restored (P1-17)"}},
+)
 @route_policy(
     RoutePolicy(
         auth="session_or_key",
@@ -249,15 +253,21 @@ async def move_project_folder(
         project_param="lookup:knowledge",
     )
 )
-async def delete_document(document_id: UUID, request: Request) -> DeleteOut:
-    """Delete a document: Tumnis's own file goes to its trash, an outside file is only
-    unindexed; an agent may not delete an outside file (403, audited)."""
+async def delete_document(document_id: UUID, request: Request) -> DeleteOut | Response:
+    """Delete a document. To the trash (FR-15.6, P1-17): 204, hidden from lists, reads and
+    search until restored; this is every text entry, link and upload, and Tumnis's own
+    folder file. An outside file in an existing folder (FR-15.12, P3-14) is only unindexed
+    and stays where it is: 200 `{"outcome": "index_only"}`. An agent may not delete an
+    outside file (403, audited)."""
     principal = principal_of(request)
     ctx = principal.workspace_context()
     actor = ActorKind.user if principal.kind == "session" else ActorKind.agent
     try:
         async with tenant_session(ctx) as s:
-            return DeleteOut(outcome=await api.delete_document(s, document_id, actor=actor))
+            outcome = await api.delete_document(s, document_id, actor=actor)
+        if outcome == "trash":
+            return Response(status_code=204)
+        return DeleteOut(outcome=outcome)
     except ProblemError as exc:
         if exc.code == api.EXTERNAL_DELETE_FORBIDDEN:
             await api.record_delete_refused(ctx, document_id)
@@ -458,11 +468,8 @@ async def add_link(body: LinkIn, request: Request, session: SessionDep) -> api.D
     return await api.add_link(session, body.project_id, str(body.url), body.title)
 
 
-@router.delete("/knowledge/documents/{document_id}", status_code=204)
-@route_policy(_WRITE)
-async def trash_document(document_id: UUID, session: SessionDep) -> None:
-    """To the trash: hidden from lists, reads and search until restored."""
-    await api.trash(session, document_id)
+# DELETE /knowledge/documents/{document_id} (to the trash) is `delete_document` above: one
+# route for P1-17's trash and P3-14's existing-folder rules.
 
 
 @router.post("/knowledge/documents/{document_id}/restore")

@@ -3214,14 +3214,11 @@ export const zKnowledgeCreateTextEntryBody = zTextEntryIn;
  */
 export const zKnowledgeCreateTextEntryResponse = zDocumentDto;
 
-export const zKnowledgeTrashDocumentPath = z.object({
+export const zKnowledgeDeleteDocumentPath = z.object({
   document_id: z.uuid(),
 });
 
-/**
- * Successful Response
- */
-export const zKnowledgeTrashDocumentResponse = z.void();
+export const zKnowledgeDeleteDocumentResponse = z.union([zDeleteOut, z.void()]);
 
 export const zKnowledgeGetDocumentPath = z.object({
   document_id: z.uuid(),

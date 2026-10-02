@@ -8918,7 +8918,7 @@ export type KnowledgeCreateTextEntryResponses = {
 export type KnowledgeCreateTextEntryResponse =
   KnowledgeCreateTextEntryResponses[keyof KnowledgeCreateTextEntryResponses];
 
-export type KnowledgeTrashDocumentData = {
+export type KnowledgeDeleteDocumentData = {
   body?: never;
   path: {
     /**
@@ -8930,7 +8930,7 @@ export type KnowledgeTrashDocumentData = {
   url: "/v1/knowledge/documents/{document_id}";
 };
 
-export type KnowledgeTrashDocumentErrors = {
+export type KnowledgeDeleteDocumentErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -8965,18 +8965,22 @@ export type KnowledgeTrashDocumentErrors = {
   429: Problem;
 };
 
-export type KnowledgeTrashDocumentError =
-  KnowledgeTrashDocumentErrors[keyof KnowledgeTrashDocumentErrors];
+export type KnowledgeDeleteDocumentError =
+  KnowledgeDeleteDocumentErrors[keyof KnowledgeDeleteDocumentErrors];
 
-export type KnowledgeTrashDocumentResponses = {
+export type KnowledgeDeleteDocumentResponses = {
   /**
    * Successful Response
+   */
+  200: DeleteOut;
+  /**
+   * Trashed: hidden until restored (P1-17)
    */
   204: void;
 };
 
-export type KnowledgeTrashDocumentResponse =
-  KnowledgeTrashDocumentResponses[keyof KnowledgeTrashDocumentResponses];
+export type KnowledgeDeleteDocumentResponse =
+  KnowledgeDeleteDocumentResponses[keyof KnowledgeDeleteDocumentResponses];
 
 export type KnowledgeGetDocumentData = {
   body?: never;
