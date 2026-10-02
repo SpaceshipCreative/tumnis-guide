@@ -87,13 +87,13 @@ test("[P0-24][FR-3.5] a repeat saved here shows before the list catches up", asy
     name: "Send the weekly report",
   });
   await within(drawer).findByText("Does not repeat");
-  // From now on the list answers late, so the save lands before it.
-  let listAnswered = false;
+  // From now on the list answers late (then as the server holds it), so the save lands
+  // before it.
+  let listAnswered = 0;
   server.use(
     http.get("/v1/recurrence", async () => {
       await delay(400);
-      listAnswered = true;
-      return HttpResponse.json({ items: [], next_cursor: null });
+      listAnswered += 1;
     }),
   );
 
@@ -106,6 +106,64 @@ test("[P0-24][FR-3.5] a repeat saved here shows before the list catches up", asy
   expect(
     await within(drawer).findByText("Repeats daily at 09:00"),
   ).toBeVisible();
-  expect(listAnswered).toBe(false);
+  expect(listAnswered).toBe(0);
+  await waitFor(() => {
+    expect(listAnswered).toBeGreaterThan(0);
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(within(drawer).getByText("Repeats daily at 09:00")).toBeVisible();
+  unmount();
+});
+
+test("[P0-24][FR-3.5] a list read started before a save does not hide the saved repeat", async () => {
+  const project = makeProject({ name: "Acme site" });
+  const task = makeTask({
+    project_id: project.id,
+    title: "Send the weekly report",
+    status: "backlog",
+    version: 7,
+  });
+  const fake = new ProjectFake({ project, tasks: [task] });
+  server.use(...fake.handlers);
+
+  const { queryClient, user, unmount } = await renderRoute(
+    `/projects/${project.id}?task=${task.id}`,
+    { viewport: "laptop" },
+  );
+  const drawer = await screen.findByRole("dialog", {
+    name: "Send the weekly report",
+  });
+  await within(drawer).findByText("Does not repeat");
+  // The next list read is an old snapshot (no repeat yet) that answers after the save;
+  // later reads answer as the server holds it.
+  let stale = true;
+  server.use(
+    http.get("/v1/recurrence", async () => {
+      if (!stale) return;
+      stale = false;
+      await delay(400);
+      return HttpResponse.json({ items: [], next_cursor: null });
+    }),
+  );
+  void queryClient.refetchQueries({
+    predicate: (query) =>
+      JSON.stringify(query.queryKey).includes("tasksListRecurrence"),
+  });
+
+  await user.selectOptions(
+    within(drawer).getByRole("combobox", { name: "Repeats" }),
+    "daily",
+  );
+  await user.click(within(drawer).getByRole("button", { name: "Save repeat" }));
+  expect(
+    await within(drawer).findByText("Repeats daily at 09:00"),
+  ).toBeVisible();
+
+  // Past the old snapshot's answer: the saved repeat still shows.
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  expect(within(drawer).getByText("Repeats daily at 09:00")).toBeVisible();
+  expect(within(drawer).getByRole("combobox", { name: "Repeats" })).toHaveValue(
+    "daily",
+  );
   unmount();
 });
