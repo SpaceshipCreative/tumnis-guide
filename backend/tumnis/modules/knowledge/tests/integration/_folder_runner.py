@@ -119,11 +119,26 @@ class FolderRunner:
     # --- Setup ---------------------------------------------------------------------------
 
     async def start(self, project: str = "acme-site") -> None:
+        # The runner's location is always a real backend (the disk, MinIO or the SFTP
+        # container). A test that also builds the app (`session_client`, `key_client`)
+        # switches adapters to fakes (`TUMNIS_ADAPTERS=fake`), and in that mode
+        # `knowledge.api` opens every location as an in-memory `FakeStorage`, so the sync
+        # would never see the folder. Real adapters for the runner's lifetime, then back.
+        from tumnis.core.adapters.registry import ENV_VAR  # noqa: PLC0415
         from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
         from tumnis.modules.knowledge import api as knowledge  # noqa: PLC0415
         from tumnis.modules.knowledge import sync  # noqa: PLC0415
         from tumnis.modules.projects import api as projects  # noqa: PLC0415
 
+        mode = os.environ.get(ENV_VAR)
+        os.environ[ENV_VAR] = "real"
+        self._restore.append(
+            lambda: (
+                os.environ.__setitem__(ENV_VAR, mode)
+                if mode is not None
+                else os.environ.pop(ENV_VAR, None)
+            )
+        )
         sync.configure(net=SELF_HOSTED)
         self._restore.append(lambda: sync.configure(net=None))
         previous = sync.use(clock=self.clock, extraction=self._record_extraction)
