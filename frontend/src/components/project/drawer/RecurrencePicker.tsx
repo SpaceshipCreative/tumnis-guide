@@ -8,6 +8,7 @@ import { apiWrite, ConflictError, useWrite } from "../../../lib/fetch";
 import { invalidateTaskViews } from "../../../lib/task-cache";
 import { uiStore } from "../../../stores/uiStore";
 import {
+  projectRecurrenceQuery,
   taskRecurrenceQuery,
   type Preset,
   type RecurrenceRule,
@@ -213,9 +214,16 @@ function PickerForm({
 export function RecurrencePicker({
   task,
 }: {
-  task: Pick<Task, "id" | "version">;
+  task: Pick<Task, "id" | "version" | "project_id">;
 }) {
-  const rule = useQuery(taskRecurrenceQuery(task.id));
+  // `GET /v1/tasks/{id}/recurrence` answers 404 for a task that does not repeat (P0-19),
+  // a failed request on every drawer open (APP-09). The project's recurring tasks (the
+  // Schedule rail's list) say whether the task is one; only then is its rule read. A
+  // rule this drawer saved stays shown from the cache until the list catches up.
+  const recurring = useQuery(projectRecurrenceQuery(task.project_id));
+  const repeats =
+    recurring.data?.some((r) => r.latest_task_id === task.id) ?? false;
+  const rule = useQuery({ ...taskRecurrenceQuery(task.id), enabled: repeats });
   const current = rule.data ?? null;
   return (
     <section aria-label="Repeat" className="flex flex-col gap-2">
