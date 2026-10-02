@@ -174,7 +174,10 @@ export function DashboardPage() {
       ) : (
         <div className="flex flex-col gap-6 md:grid md:min-h-0 md:flex-1 md:grid-cols-12">
           <div className="flex min-h-0 flex-col gap-4 md:col-span-5">
-            <JustAdded onOpen={openTask} className="shrink-0" />
+            {/* On a laptop the column is one screen tall: Just added gives way and
+                scrolls inside itself, and Today keeps room for its first plan item
+                with Accept, Swap and Remove (APP-F02). */}
+            <JustAdded onOpen={openTask} className="md:min-h-0" />
             {planDay !== undefined && <CalendarStrip day={planDay} />}
             <TodayPanel
               items={today.data?.items ?? []}
@@ -183,7 +186,7 @@ export function DashboardPage() {
               unavailable={today.isError}
               pending={today.isPending}
               {...(planDay === undefined ? {} : { planDay })}
-              className="md:flex-1"
+              className="md:min-h-64 md:flex-1"
             />
             {plan.data && (
               <FitOfferList

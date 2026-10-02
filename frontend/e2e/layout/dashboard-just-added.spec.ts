@@ -19,7 +19,6 @@ test(
   { tag: ["@P0-23", "@P1-11", "@UX-1", "@FR-1.2"] },
   async ({ signedInPage: page, seededApp, fakes }, testInfo) => {
     test.skip(testInfo.project.name !== "laptop", "a laptop-only layout rule");
-    test.fail();
     // The acceptance set holds the planner's agent and the tasks its plan picks.
     await seededApp.reset("acceptance");
     await page.clock.install({ time: BEFORE_PLAN });
