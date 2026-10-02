@@ -19,6 +19,11 @@
       "labels": ["needs-suite"]
     },
     {
+      "description": "docling-core (the docling dependency group, Scott decision 85) needs typer<0.27; lift this once it allows 0.27.",
+      "matchPackageNames": ["typer"],
+      "allowedVersions": "<0.27.0"
+    },
+    {
       "description": "DBOS upgrades are guarded by the kill-and-resume suites (ADR-0002).",
       "matchPackageNames": ["dbos"],
       "groupName": "dbos",

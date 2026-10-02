@@ -32,7 +32,7 @@ dependencies = [
   "sentry-sdk==2.71.0",
   "sqlalchemy[asyncio]==2.1.1",
   "structlog==26.1.0",
-  "typer==0.27.2",
+  "typer==0.26.8", # docling-core needs typer<0.27 (the docling group, Scott decision 85)
   "typesafe-sdk==0.7.2",
   "tzdata==2026.4",
   "uvicorn==0.54.0",
@@ -62,6 +62,26 @@ dev = [
   "testcontainers[minio,postgres]==4.15.0",
   "types-pyyaml==6.0.12.20260906",
 ]
+# Docling and its models (P1-16, ADR-0007) for the `docling` CI job only (Scott decision 85):
+# `uv sync --group docling`. It is not a default group, so `uv sync`, make check, the other
+# CI jobs and the image (`--no-dev`) never install it. docling-slim with the extras that the
+# `docling` package's `standard` set covers, minus `service-client`, whose only effect here
+# would be websockets<17 (it would hold DBOS's websockets back). torch and torchvision are
+# listed so they resolve from the PyTorch CPU index below (no CUDA wheels).
+docling = [
+  "docling-slim[cli,extract-core,feat-chunking,feat-ocr-rapidocr,format-email,format-latex,format-markdown,format-office,format-pdf,models-local]==2.132.0",
+  "torch==2.14.1",
+  "torchvision==0.29.1",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true # only the packages tool.uv.sources pins to it come from it
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13"]
@@ -98,6 +118,7 @@ markers = [
   "slow: over 5 seconds",
   "serial: timing-sensitive; runs alone (-n 0) after the parallel integration run",
   "drill: restore drill only, never on PRs",
+  "docling: runs the real Docling pipeline; set in conftest.py, run by the docling CI job",
 ]
 
 [tool.ruff]
