@@ -3045,20 +3045,20 @@ export const zCalendarOauthCallbackQuery = z.object({
 export const zCalendarOauthStartResponse = zOAuthStartOut;
 
 /**
- * Response Purges List Connections
+ * Response Connections List Connections
  *
  * Successful Response
  */
-export const zPurgesListConnectionsResponse = z.array(zConnectionOut);
+export const zConnectionsListConnectionsResponse = z.array(zConnectionOut);
 
-export const zPurgesCreateConnectionBody = zConnectionCreate;
+export const zConnectionsCreateConnectionBody = zConnectionCreate;
 
 /**
  * Successful Response
  */
-export const zPurgesCreateConnectionResponse = zConnectionOut;
+export const zConnectionsCreateConnectionResponse = zConnectionOut;
 
-export const zPurgesOauthCallbackQuery = z.object({
+export const zConnectionsOauthCallbackQuery = z.object({
   state: z.string().max(256),
   code: z.string().max(2048).nullish(),
   error: z.string().max(256).nullish(),
@@ -3066,69 +3066,69 @@ export const zPurgesOauthCallbackQuery = z.object({
 });
 
 /**
- * Response Purges List Providers
+ * Response Connections List Providers
  *
  * Successful Response
  */
-export const zPurgesListProvidersResponse = z.array(zProviderOut);
+export const zConnectionsListProvidersResponse = z.array(zProviderOut);
 
-export const zPurgesDisconnectBody = zDisconnectIn;
+export const zConnectionsDisconnectBody = zDisconnectIn;
 
-export const zPurgesDisconnectPath = z.object({
+export const zConnectionsDisconnectPath = z.object({
   connection_id: z.uuid(),
 });
 
 /**
  * Successful Response
  */
-export const zPurgesDisconnectResponse = z.void();
+export const zConnectionsDisconnectResponse = z.void();
 
-export const zPurgesGetConnectionPath = z.object({
+export const zConnectionsGetConnectionPath = z.object({
   connection_id: z.uuid(),
 });
 
 /**
  * Successful Response
  */
-export const zPurgesGetConnectionResponse = zConnectionOut;
+export const zConnectionsGetConnectionResponse = zConnectionOut;
 
-export const zPurgesUpdateConnectionBody = zConnectionPatch;
+export const zConnectionsUpdateConnectionBody = zConnectionPatch;
 
-export const zPurgesUpdateConnectionPath = z.object({
+export const zConnectionsUpdateConnectionPath = z.object({
   connection_id: z.uuid(),
 });
 
 /**
  * Successful Response
  */
-export const zPurgesUpdateConnectionResponse = zConnectionOut;
+export const zConnectionsUpdateConnectionResponse = zConnectionOut;
 
-export const zPurgesStartOauthPath = z.object({
+export const zConnectionsStartOauthPath = z.object({
   connection_id: z.uuid(),
 });
 
 /**
  * Successful Response
  */
-export const zPurgesStartOauthResponse = zConnectionsOAuthStart;
+export const zConnectionsStartOauthResponse = zConnectionsOAuthStart;
 
-export const zPurgesOauthUrlPath = z.object({
+export const zConnectionsOauthUrlPath = z.object({
   connection_id: z.uuid(),
 });
 
 /**
  * Successful Response
  */
-export const zPurgesOauthUrlResponse = zAuthorizeUrlOut;
+export const zConnectionsOauthUrlResponse = zAuthorizeUrlOut;
 
-export const zPurgesSyncNowPath = z.object({
+export const zConnectionsSyncNowPath = z.object({
   connection_id: z.uuid(),
 });
 
 /**
  * Successful Response
  */
-export const zPurgesSyncNowResponse = zConnectionOut;
+export const zConnectionsSyncNowResponse = zConnectionOut;
 
 export const zCoolifyListDeployStatusQuery = z.object({
   project_id: z.uuid().nullish(),

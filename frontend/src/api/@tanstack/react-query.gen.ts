@@ -61,6 +61,16 @@ import {
   calendarOauthStart,
   calendarSelectCalendars,
   calendarSyncNow,
+  connectionsCreateConnection,
+  connectionsDisconnect,
+  connectionsGetConnection,
+  connectionsListConnections,
+  connectionsListProviders,
+  connectionsOauthCallback,
+  connectionsOauthUrl,
+  connectionsStartOauth,
+  connectionsSyncNow,
+  connectionsUpdateConnection,
   coolifyListDeployStatus,
   deadLettersGetDeadLetters,
   deadLettersPostDiscard,
@@ -124,17 +134,7 @@ import {
   projectsUnarchiveProject,
   projectsUpdatePolicy,
   projectsUpdateProject,
-  purgesCreateConnection,
-  purgesDisconnect,
-  purgesGetConnection,
-  purgesListConnections,
-  purgesListProviders,
-  purgesOauthCallback,
-  purgesOauthUrl,
   purgesPurge,
-  purgesStartOauth,
-  purgesSyncNow,
-  purgesUpdateConnection,
   searchSearch,
   searchTypeaheadProjects,
   searchTypeaheadTasks,
@@ -327,6 +327,35 @@ import type {
   CalendarSyncNowData,
   CalendarSyncNowError,
   CalendarSyncNowResponse,
+  ConnectionsCreateConnectionData,
+  ConnectionsCreateConnectionError,
+  ConnectionsCreateConnectionResponse,
+  ConnectionsDisconnectData,
+  ConnectionsDisconnectError,
+  ConnectionsDisconnectResponse,
+  ConnectionsGetConnectionData,
+  ConnectionsGetConnectionError,
+  ConnectionsGetConnectionResponse,
+  ConnectionsListConnectionsData,
+  ConnectionsListConnectionsError,
+  ConnectionsListConnectionsResponse,
+  ConnectionsListProvidersData,
+  ConnectionsListProvidersError,
+  ConnectionsListProvidersResponse,
+  ConnectionsOauthCallbackData,
+  ConnectionsOauthCallbackError,
+  ConnectionsOauthUrlData,
+  ConnectionsOauthUrlError,
+  ConnectionsOauthUrlResponse,
+  ConnectionsStartOauthData,
+  ConnectionsStartOauthError,
+  ConnectionsStartOauthResponse,
+  ConnectionsSyncNowData,
+  ConnectionsSyncNowError,
+  ConnectionsSyncNowResponse,
+  ConnectionsUpdateConnectionData,
+  ConnectionsUpdateConnectionError,
+  ConnectionsUpdateConnectionResponse,
   CoolifyListDeployStatusData,
   CoolifyListDeployStatusError,
   CoolifyListDeployStatusResponse,
@@ -510,38 +539,9 @@ import type {
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectError,
   ProjectsUpdateProjectResponse,
-  PurgesCreateConnectionData,
-  PurgesCreateConnectionError,
-  PurgesCreateConnectionResponse,
-  PurgesDisconnectData,
-  PurgesDisconnectError,
-  PurgesDisconnectResponse,
-  PurgesGetConnectionData,
-  PurgesGetConnectionError,
-  PurgesGetConnectionResponse,
-  PurgesListConnectionsData,
-  PurgesListConnectionsError,
-  PurgesListConnectionsResponse,
-  PurgesListProvidersData,
-  PurgesListProvidersError,
-  PurgesListProvidersResponse,
-  PurgesOauthCallbackData,
-  PurgesOauthCallbackError,
-  PurgesOauthUrlData,
-  PurgesOauthUrlError,
-  PurgesOauthUrlResponse,
   PurgesPurgeData,
   PurgesPurgeError,
   PurgesPurgeResponse,
-  PurgesStartOauthData,
-  PurgesStartOauthError,
-  PurgesStartOauthResponse,
-  PurgesSyncNowData,
-  PurgesSyncNowError,
-  PurgesSyncNowResponse,
-  PurgesUpdateConnectionData,
-  PurgesUpdateConnectionError,
-  PurgesUpdateConnectionResponse,
   SearchSearchData,
   SearchSearchError,
   SearchSearchResponse,
@@ -1685,24 +1685,24 @@ export const calendarOauthStartOptions = (
     queryKey: calendarOauthStartQueryKey(options),
   });
 
-export const purgesListConnectionsQueryKey = (
-  options?: Options<PurgesListConnectionsData>,
-) => createQueryKey("purgesListConnections", options);
+export const connectionsListConnectionsQueryKey = (
+  options?: Options<ConnectionsListConnectionsData>,
+) => createQueryKey("connectionsListConnections", options);
 
 /**
  * List Connections
  */
-export const purgesListConnectionsOptions = (
-  options?: Options<PurgesListConnectionsData>,
+export const connectionsListConnectionsOptions = (
+  options?: Options<ConnectionsListConnectionsData>,
 ) =>
   queryOptions<
-    PurgesListConnectionsResponse,
-    PurgesListConnectionsError,
-    PurgesListConnectionsResponse,
-    ReturnType<typeof purgesListConnectionsQueryKey>
+    ConnectionsListConnectionsResponse,
+    ConnectionsListConnectionsError,
+    ConnectionsListConnectionsResponse,
+    ReturnType<typeof connectionsListConnectionsQueryKey>
   >({
     queryFn: async ({ queryKey, signal }) => {
-      const { data } = await purgesListConnections({
+      const { data } = await connectionsListConnections({
         ...options,
         ...queryKey[0],
         signal,
@@ -1710,26 +1710,26 @@ export const purgesListConnectionsOptions = (
       });
       return data;
     },
-    queryKey: purgesListConnectionsQueryKey(options),
+    queryKey: connectionsListConnectionsQueryKey(options),
   });
 
 /**
  * Create Connection
  */
-export const purgesCreateConnectionMutation = (
-  options?: Partial<Options<PurgesCreateConnectionData>>,
+export const connectionsCreateConnectionMutation = (
+  options?: Partial<Options<ConnectionsCreateConnectionData>>,
 ): UseMutationOptions<
-  PurgesCreateConnectionResponse,
-  PurgesCreateConnectionError,
-  Options<PurgesCreateConnectionData>
+  ConnectionsCreateConnectionResponse,
+  ConnectionsCreateConnectionError,
+  Options<ConnectionsCreateConnectionData>
 > => {
   const mutationOptions: UseMutationOptions<
-    PurgesCreateConnectionResponse,
-    PurgesCreateConnectionError,
-    Options<PurgesCreateConnectionData>
+    ConnectionsCreateConnectionResponse,
+    ConnectionsCreateConnectionError,
+    Options<ConnectionsCreateConnectionData>
   > = {
     mutationFn: async (fnOptions) => {
-      const { data } = await purgesCreateConnection({
+      const { data } = await connectionsCreateConnection({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -1740,24 +1740,24 @@ export const purgesCreateConnectionMutation = (
   return mutationOptions;
 };
 
-export const purgesOauthCallbackQueryKey = (
-  options: Options<PurgesOauthCallbackData>,
-) => createQueryKey("purgesOauthCallback", options);
+export const connectionsOauthCallbackQueryKey = (
+  options: Options<ConnectionsOauthCallbackData>,
+) => createQueryKey("connectionsOauthCallback", options);
 
 /**
  * Oauth Callback
  */
-export const purgesOauthCallbackOptions = (
-  options: Options<PurgesOauthCallbackData>,
+export const connectionsOauthCallbackOptions = (
+  options: Options<ConnectionsOauthCallbackData>,
 ) =>
   queryOptions<
     unknown,
-    PurgesOauthCallbackError,
+    ConnectionsOauthCallbackError,
     unknown,
-    ReturnType<typeof purgesOauthCallbackQueryKey>
+    ReturnType<typeof connectionsOauthCallbackQueryKey>
   >({
     queryFn: async ({ queryKey, signal }) => {
-      const { data } = await purgesOauthCallback({
+      const { data } = await connectionsOauthCallback({
         ...options,
         ...queryKey[0],
         signal,
@@ -1765,27 +1765,27 @@ export const purgesOauthCallbackOptions = (
       });
       return data;
     },
-    queryKey: purgesOauthCallbackQueryKey(options),
+    queryKey: connectionsOauthCallbackQueryKey(options),
   });
 
-export const purgesListProvidersQueryKey = (
-  options?: Options<PurgesListProvidersData>,
-) => createQueryKey("purgesListProviders", options);
+export const connectionsListProvidersQueryKey = (
+  options?: Options<ConnectionsListProvidersData>,
+) => createQueryKey("connectionsListProviders", options);
 
 /**
  * List Providers
  */
-export const purgesListProvidersOptions = (
-  options?: Options<PurgesListProvidersData>,
+export const connectionsListProvidersOptions = (
+  options?: Options<ConnectionsListProvidersData>,
 ) =>
   queryOptions<
-    PurgesListProvidersResponse,
-    PurgesListProvidersError,
-    PurgesListProvidersResponse,
-    ReturnType<typeof purgesListProvidersQueryKey>
+    ConnectionsListProvidersResponse,
+    ConnectionsListProvidersError,
+    ConnectionsListProvidersResponse,
+    ReturnType<typeof connectionsListProvidersQueryKey>
   >({
     queryFn: async ({ queryKey, signal }) => {
-      const { data } = await purgesListProviders({
+      const { data } = await connectionsListProviders({
         ...options,
         ...queryKey[0],
         signal,
@@ -1793,7 +1793,7 @@ export const purgesListProvidersOptions = (
       });
       return data;
     },
-    queryKey: purgesListProvidersQueryKey(options),
+    queryKey: connectionsListProvidersQueryKey(options),
   });
 
 /**
@@ -1801,20 +1801,20 @@ export const purgesListProvidersOptions = (
  *
  * Disconnects with a reason (audited); what it synced stays until purged (P3-09).
  */
-export const purgesDisconnectMutation = (
-  options?: Partial<Options<PurgesDisconnectData>>,
+export const connectionsDisconnectMutation = (
+  options?: Partial<Options<ConnectionsDisconnectData>>,
 ): UseMutationOptions<
-  PurgesDisconnectResponse,
-  PurgesDisconnectError,
-  Options<PurgesDisconnectData>
+  ConnectionsDisconnectResponse,
+  ConnectionsDisconnectError,
+  Options<ConnectionsDisconnectData>
 > => {
   const mutationOptions: UseMutationOptions<
-    PurgesDisconnectResponse,
-    PurgesDisconnectError,
-    Options<PurgesDisconnectData>
+    ConnectionsDisconnectResponse,
+    ConnectionsDisconnectError,
+    Options<ConnectionsDisconnectData>
   > = {
     mutationFn: async (fnOptions) => {
-      const { data } = await purgesDisconnect({
+      const { data } = await connectionsDisconnect({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -1825,24 +1825,24 @@ export const purgesDisconnectMutation = (
   return mutationOptions;
 };
 
-export const purgesGetConnectionQueryKey = (
-  options: Options<PurgesGetConnectionData>,
-) => createQueryKey("purgesGetConnection", options);
+export const connectionsGetConnectionQueryKey = (
+  options: Options<ConnectionsGetConnectionData>,
+) => createQueryKey("connectionsGetConnection", options);
 
 /**
  * Get Connection
  */
-export const purgesGetConnectionOptions = (
-  options: Options<PurgesGetConnectionData>,
+export const connectionsGetConnectionOptions = (
+  options: Options<ConnectionsGetConnectionData>,
 ) =>
   queryOptions<
-    PurgesGetConnectionResponse,
-    PurgesGetConnectionError,
-    PurgesGetConnectionResponse,
-    ReturnType<typeof purgesGetConnectionQueryKey>
+    ConnectionsGetConnectionResponse,
+    ConnectionsGetConnectionError,
+    ConnectionsGetConnectionResponse,
+    ReturnType<typeof connectionsGetConnectionQueryKey>
   >({
     queryFn: async ({ queryKey, signal }) => {
-      const { data } = await purgesGetConnection({
+      const { data } = await connectionsGetConnection({
         ...options,
         ...queryKey[0],
         signal,
@@ -1850,26 +1850,26 @@ export const purgesGetConnectionOptions = (
       });
       return data;
     },
-    queryKey: purgesGetConnectionQueryKey(options),
+    queryKey: connectionsGetConnectionQueryKey(options),
   });
 
 /**
  * Update Connection
  */
-export const purgesUpdateConnectionMutation = (
-  options?: Partial<Options<PurgesUpdateConnectionData>>,
+export const connectionsUpdateConnectionMutation = (
+  options?: Partial<Options<ConnectionsUpdateConnectionData>>,
 ): UseMutationOptions<
-  PurgesUpdateConnectionResponse,
-  PurgesUpdateConnectionError,
-  Options<PurgesUpdateConnectionData>
+  ConnectionsUpdateConnectionResponse,
+  ConnectionsUpdateConnectionError,
+  Options<ConnectionsUpdateConnectionData>
 > => {
   const mutationOptions: UseMutationOptions<
-    PurgesUpdateConnectionResponse,
-    PurgesUpdateConnectionError,
-    Options<PurgesUpdateConnectionData>
+    ConnectionsUpdateConnectionResponse,
+    ConnectionsUpdateConnectionError,
+    Options<ConnectionsUpdateConnectionData>
   > = {
     mutationFn: async (fnOptions) => {
-      const { data } = await purgesUpdateConnection({
+      const { data } = await connectionsUpdateConnection({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -1883,20 +1883,20 @@ export const purgesUpdateConnectionMutation = (
 /**
  * Start Oauth
  */
-export const purgesStartOauthMutation = (
-  options?: Partial<Options<PurgesStartOauthData>>,
+export const connectionsStartOauthMutation = (
+  options?: Partial<Options<ConnectionsStartOauthData>>,
 ): UseMutationOptions<
-  PurgesStartOauthResponse,
-  PurgesStartOauthError,
-  Options<PurgesStartOauthData>
+  ConnectionsStartOauthResponse,
+  ConnectionsStartOauthError,
+  Options<ConnectionsStartOauthData>
 > => {
   const mutationOptions: UseMutationOptions<
-    PurgesStartOauthResponse,
-    PurgesStartOauthError,
-    Options<PurgesStartOauthData>
+    ConnectionsStartOauthResponse,
+    ConnectionsStartOauthError,
+    Options<ConnectionsStartOauthData>
   > = {
     mutationFn: async (fnOptions) => {
-      const { data } = await purgesStartOauth({
+      const { data } = await connectionsStartOauth({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -1907,21 +1907,24 @@ export const purgesStartOauthMutation = (
   return mutationOptions;
 };
 
-export const purgesOauthUrlQueryKey = (options: Options<PurgesOauthUrlData>) =>
-  createQueryKey("purgesOauthUrl", options);
+export const connectionsOauthUrlQueryKey = (
+  options: Options<ConnectionsOauthUrlData>,
+) => createQueryKey("connectionsOauthUrl", options);
 
 /**
  * Oauth Url
  */
-export const purgesOauthUrlOptions = (options: Options<PurgesOauthUrlData>) =>
+export const connectionsOauthUrlOptions = (
+  options: Options<ConnectionsOauthUrlData>,
+) =>
   queryOptions<
-    PurgesOauthUrlResponse,
-    PurgesOauthUrlError,
-    PurgesOauthUrlResponse,
-    ReturnType<typeof purgesOauthUrlQueryKey>
+    ConnectionsOauthUrlResponse,
+    ConnectionsOauthUrlError,
+    ConnectionsOauthUrlResponse,
+    ReturnType<typeof connectionsOauthUrlQueryKey>
   >({
     queryFn: async ({ queryKey, signal }) => {
-      const { data } = await purgesOauthUrl({
+      const { data } = await connectionsOauthUrl({
         ...options,
         ...queryKey[0],
         signal,
@@ -1929,26 +1932,26 @@ export const purgesOauthUrlOptions = (options: Options<PurgesOauthUrlData>) =>
       });
       return data;
     },
-    queryKey: purgesOauthUrlQueryKey(options),
+    queryKey: connectionsOauthUrlQueryKey(options),
   });
 
 /**
  * Sync Now
  */
-export const purgesSyncNowMutation = (
-  options?: Partial<Options<PurgesSyncNowData>>,
+export const connectionsSyncNowMutation = (
+  options?: Partial<Options<ConnectionsSyncNowData>>,
 ): UseMutationOptions<
-  PurgesSyncNowResponse,
-  PurgesSyncNowError,
-  Options<PurgesSyncNowData>
+  ConnectionsSyncNowResponse,
+  ConnectionsSyncNowError,
+  Options<ConnectionsSyncNowData>
 > => {
   const mutationOptions: UseMutationOptions<
-    PurgesSyncNowResponse,
-    PurgesSyncNowError,
-    Options<PurgesSyncNowData>
+    ConnectionsSyncNowResponse,
+    ConnectionsSyncNowError,
+    Options<ConnectionsSyncNowData>
   > = {
     mutationFn: async (fnOptions) => {
-      const { data } = await purgesSyncNow({
+      const { data } = await connectionsSyncNow({
         ...options,
         ...fnOptions,
         throwOnError: true,

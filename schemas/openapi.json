@@ -14416,7 +14416,7 @@
     },
     "/v1/connections": {
       "get": {
-        "operationId": "purges_list_connections",
+        "operationId": "connections_list_connections",
         "responses": {
           "200": {
             "content": {
@@ -14425,7 +14425,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ConnectionOut"
                   },
-                  "title": "Response Purges List Connections",
+                  "title": "Response Connections List Connections",
                   "type": "array"
                 }
               }
@@ -14515,12 +14515,11 @@
         },
         "summary": "List Connections",
         "tags": [
-          "purges",
           "connections"
         ]
       },
       "post": {
-        "operationId": "purges_create_connection",
+        "operationId": "connections_create_connection",
         "requestBody": {
           "content": {
             "application/json": {
@@ -14625,14 +14624,13 @@
         },
         "summary": "Create Connection",
         "tags": [
-          "purges",
           "connections"
         ]
       }
     },
     "/v1/connections/oauth/callback": {
       "get": {
-        "operationId": "purges_oauth_callback",
+        "operationId": "connections_oauth_callback",
         "parameters": [
           {
             "in": "query",
@@ -14783,14 +14781,13 @@
         },
         "summary": "Oauth Callback",
         "tags": [
-          "purges",
           "connections"
         ]
       }
     },
     "/v1/connections/providers": {
       "get": {
-        "operationId": "purges_list_providers",
+        "operationId": "connections_list_providers",
         "responses": {
           "200": {
             "content": {
@@ -14799,7 +14796,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ProviderOut"
                   },
-                  "title": "Response Purges List Providers",
+                  "title": "Response Connections List Providers",
                   "type": "array"
                 }
               }
@@ -14889,7 +14886,6 @@
         },
         "summary": "List Providers",
         "tags": [
-          "purges",
           "connections"
         ]
       }
@@ -14897,7 +14893,7 @@
     "/v1/connections/{connection_id}": {
       "delete": {
         "description": "Disconnects with a reason (audited); what it synced stays until purged (P3-09).",
-        "operationId": "purges_disconnect",
+        "operationId": "connections_disconnect",
         "parameters": [
           {
             "in": "path",
@@ -15007,12 +15003,11 @@
         },
         "summary": "Disconnect",
         "tags": [
-          "purges",
           "connections"
         ]
       },
       "get": {
-        "operationId": "purges_get_connection",
+        "operationId": "connections_get_connection",
         "parameters": [
           {
             "in": "path",
@@ -15119,12 +15114,11 @@
         },
         "summary": "Get Connection",
         "tags": [
-          "purges",
           "connections"
         ]
       },
       "patch": {
-        "operationId": "purges_update_connection",
+        "operationId": "connections_update_connection",
         "parameters": [
           {
             "in": "path",
@@ -15241,14 +15235,13 @@
         },
         "summary": "Update Connection",
         "tags": [
-          "purges",
           "connections"
         ]
       }
     },
     "/v1/connections/{connection_id}/oauth/start": {
       "post": {
-        "operationId": "purges_start_oauth",
+        "operationId": "connections_start_oauth",
         "parameters": [
           {
             "in": "path",
@@ -15355,14 +15348,13 @@
         },
         "summary": "Start Oauth",
         "tags": [
-          "purges",
           "connections"
         ]
       }
     },
     "/v1/connections/{connection_id}/oauth/url": {
       "get": {
-        "operationId": "purges_oauth_url",
+        "operationId": "connections_oauth_url",
         "parameters": [
           {
             "in": "path",
@@ -15469,14 +15461,13 @@
         },
         "summary": "Oauth Url",
         "tags": [
-          "purges",
           "connections"
         ]
       }
     },
     "/v1/connections/{connection_id}/sync": {
       "post": {
-        "operationId": "purges_sync_now",
+        "operationId": "connections_sync_now",
         "parameters": [
           {
             "in": "path",
@@ -15583,7 +15574,6 @@
         },
         "summary": "Sync Now",
         "tags": [
-          "purges",
           "connections"
         ]
       }

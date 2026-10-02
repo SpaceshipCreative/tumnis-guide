@@ -162,6 +162,35 @@ import type {
   CalendarSyncNowData,
   CalendarSyncNowErrors,
   CalendarSyncNowResponses,
+  ConnectionsCreateConnectionData,
+  ConnectionsCreateConnectionErrors,
+  ConnectionsCreateConnectionResponses,
+  ConnectionsDisconnectData,
+  ConnectionsDisconnectErrors,
+  ConnectionsDisconnectResponses,
+  ConnectionsGetConnectionData,
+  ConnectionsGetConnectionErrors,
+  ConnectionsGetConnectionResponses,
+  ConnectionsListConnectionsData,
+  ConnectionsListConnectionsErrors,
+  ConnectionsListConnectionsResponses,
+  ConnectionsListProvidersData,
+  ConnectionsListProvidersErrors,
+  ConnectionsListProvidersResponses,
+  ConnectionsOauthCallbackData,
+  ConnectionsOauthCallbackErrors,
+  ConnectionsOauthUrlData,
+  ConnectionsOauthUrlErrors,
+  ConnectionsOauthUrlResponses,
+  ConnectionsStartOauthData,
+  ConnectionsStartOauthErrors,
+  ConnectionsStartOauthResponses,
+  ConnectionsSyncNowData,
+  ConnectionsSyncNowErrors,
+  ConnectionsSyncNowResponses,
+  ConnectionsUpdateConnectionData,
+  ConnectionsUpdateConnectionErrors,
+  ConnectionsUpdateConnectionResponses,
   CoolifyListDeployStatusData,
   CoolifyListDeployStatusErrors,
   CoolifyListDeployStatusResponses,
@@ -347,38 +376,9 @@ import type {
   ProjectsUpdateProjectData,
   ProjectsUpdateProjectErrors,
   ProjectsUpdateProjectResponses,
-  PurgesCreateConnectionData,
-  PurgesCreateConnectionErrors,
-  PurgesCreateConnectionResponses,
-  PurgesDisconnectData,
-  PurgesDisconnectErrors,
-  PurgesDisconnectResponses,
-  PurgesGetConnectionData,
-  PurgesGetConnectionErrors,
-  PurgesGetConnectionResponses,
-  PurgesListConnectionsData,
-  PurgesListConnectionsErrors,
-  PurgesListConnectionsResponses,
-  PurgesListProvidersData,
-  PurgesListProvidersErrors,
-  PurgesListProvidersResponses,
-  PurgesOauthCallbackData,
-  PurgesOauthCallbackErrors,
-  PurgesOauthUrlData,
-  PurgesOauthUrlErrors,
-  PurgesOauthUrlResponses,
   PurgesPurgeData,
   PurgesPurgeErrors,
   PurgesPurgeResponses,
-  PurgesStartOauthData,
-  PurgesStartOauthErrors,
-  PurgesStartOauthResponses,
-  PurgesSyncNowData,
-  PurgesSyncNowErrors,
-  PurgesSyncNowResponses,
-  PurgesUpdateConnectionData,
-  PurgesUpdateConnectionErrors,
-  PurgesUpdateConnectionResponses,
   SearchSearchData,
   SearchSearchErrors,
   SearchSearchResponses,
@@ -547,6 +547,15 @@ import {
   zCalendarOauthStartResponse,
   zCalendarSelectCalendarsResponse,
   zCalendarSyncNowResponse,
+  zConnectionsCreateConnectionResponse,
+  zConnectionsDisconnectResponse,
+  zConnectionsGetConnectionResponse,
+  zConnectionsListConnectionsResponse,
+  zConnectionsListProvidersResponse,
+  zConnectionsOauthUrlResponse,
+  zConnectionsStartOauthResponse,
+  zConnectionsSyncNowResponse,
+  zConnectionsUpdateConnectionResponse,
   zCoolifyListDeployStatusResponse,
   zDeadLettersGetDeadLettersResponse,
   zDeadLettersPostDiscardResponse,
@@ -608,16 +617,7 @@ import {
   zProjectsUnarchiveProjectResponse,
   zProjectsUpdatePolicyResponse,
   zProjectsUpdateProjectResponse,
-  zPurgesCreateConnectionResponse,
-  zPurgesDisconnectResponse,
-  zPurgesGetConnectionResponse,
-  zPurgesListConnectionsResponse,
-  zPurgesListProvidersResponse,
-  zPurgesOauthUrlResponse,
   zPurgesPurgeResponse,
-  zPurgesStartOauthResponse,
-  zPurgesSyncNowResponse,
-  zPurgesUpdateConnectionResponse,
   zSearchSearchResponse,
   zSearchTypeaheadProjectsResponse,
   zSearchTypeaheadTasksResponse,
@@ -1285,20 +1285,22 @@ export const calendarOauthStart = <ThrowOnError extends boolean = false>(
 /**
  * List Connections
  */
-export const purgesListConnections = <ThrowOnError extends boolean = false>(
-  options?: Options<PurgesListConnectionsData, ThrowOnError>,
+export const connectionsListConnections = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<ConnectionsListConnectionsData, ThrowOnError>,
 ): RequestResult<
-  PurgesListConnectionsResponses,
-  PurgesListConnectionsErrors,
+  ConnectionsListConnectionsResponses,
+  ConnectionsListConnectionsErrors,
   ThrowOnError
 > =>
   (options?.client ?? client).get<
-    PurgesListConnectionsResponses,
-    PurgesListConnectionsErrors,
+    ConnectionsListConnectionsResponses,
+    ConnectionsListConnectionsErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zPurgesListConnectionsResponse.parseAsync(data),
+      await zConnectionsListConnectionsResponse.parseAsync(data),
     url: "/v1/connections",
     ...options,
   });
@@ -1306,20 +1308,22 @@ export const purgesListConnections = <ThrowOnError extends boolean = false>(
 /**
  * Create Connection
  */
-export const purgesCreateConnection = <ThrowOnError extends boolean = false>(
-  options: Options<PurgesCreateConnectionData, ThrowOnError>,
+export const connectionsCreateConnection = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ConnectionsCreateConnectionData, ThrowOnError>,
 ): RequestResult<
-  PurgesCreateConnectionResponses,
-  PurgesCreateConnectionErrors,
+  ConnectionsCreateConnectionResponses,
+  ConnectionsCreateConnectionErrors,
   ThrowOnError
 > =>
   (options.client ?? client).post<
-    PurgesCreateConnectionResponses,
-    PurgesCreateConnectionErrors,
+    ConnectionsCreateConnectionResponses,
+    ConnectionsCreateConnectionErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zPurgesCreateConnectionResponse.parseAsync(data),
+      await zConnectionsCreateConnectionResponse.parseAsync(data),
     url: "/v1/connections",
     ...options,
     headers: {
@@ -1331,32 +1335,32 @@ export const purgesCreateConnection = <ThrowOnError extends boolean = false>(
 /**
  * Oauth Callback
  */
-export const purgesOauthCallback = <ThrowOnError extends boolean = false>(
-  options: Options<PurgesOauthCallbackData, ThrowOnError>,
-): RequestResult<unknown, PurgesOauthCallbackErrors, ThrowOnError> =>
+export const connectionsOauthCallback = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsOauthCallbackData, ThrowOnError>,
+): RequestResult<unknown, ConnectionsOauthCallbackErrors, ThrowOnError> =>
   (options.client ?? client).get<
     unknown,
-    PurgesOauthCallbackErrors,
+    ConnectionsOauthCallbackErrors,
     ThrowOnError
   >({ url: "/v1/connections/oauth/callback", ...options });
 
 /**
  * List Providers
  */
-export const purgesListProviders = <ThrowOnError extends boolean = false>(
-  options?: Options<PurgesListProvidersData, ThrowOnError>,
+export const connectionsListProviders = <ThrowOnError extends boolean = false>(
+  options?: Options<ConnectionsListProvidersData, ThrowOnError>,
 ): RequestResult<
-  PurgesListProvidersResponses,
-  PurgesListProvidersErrors,
+  ConnectionsListProvidersResponses,
+  ConnectionsListProvidersErrors,
   ThrowOnError
 > =>
   (options?.client ?? client).get<
-    PurgesListProvidersResponses,
-    PurgesListProvidersErrors,
+    ConnectionsListProvidersResponses,
+    ConnectionsListProvidersErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zPurgesListProvidersResponse.parseAsync(data),
+      await zConnectionsListProvidersResponse.parseAsync(data),
     url: "/v1/connections/providers",
     ...options,
   });
@@ -1366,20 +1370,20 @@ export const purgesListProviders = <ThrowOnError extends boolean = false>(
  *
  * Disconnects with a reason (audited); what it synced stays until purged (P3-09).
  */
-export const purgesDisconnect = <ThrowOnError extends boolean = false>(
-  options: Options<PurgesDisconnectData, ThrowOnError>,
+export const connectionsDisconnect = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsDisconnectData, ThrowOnError>,
 ): RequestResult<
-  PurgesDisconnectResponses,
-  PurgesDisconnectErrors,
+  ConnectionsDisconnectResponses,
+  ConnectionsDisconnectErrors,
   ThrowOnError
 > =>
   (options.client ?? client).delete<
-    PurgesDisconnectResponses,
-    PurgesDisconnectErrors,
+    ConnectionsDisconnectResponses,
+    ConnectionsDisconnectErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zPurgesDisconnectResponse.parseAsync(data),
+      await zConnectionsDisconnectResponse.parseAsync(data),
     url: "/v1/connections/{connection_id}",
     ...options,
     headers: {
@@ -1391,20 +1395,20 @@ export const purgesDisconnect = <ThrowOnError extends boolean = false>(
 /**
  * Get Connection
  */
-export const purgesGetConnection = <ThrowOnError extends boolean = false>(
-  options: Options<PurgesGetConnectionData, ThrowOnError>,
+export const connectionsGetConnection = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsGetConnectionData, ThrowOnError>,
 ): RequestResult<
-  PurgesGetConnectionResponses,
-  PurgesGetConnectionErrors,
+  ConnectionsGetConnectionResponses,
+  ConnectionsGetConnectionErrors,
   ThrowOnError
 > =>
   (options.client ?? client).get<
-    PurgesGetConnectionResponses,
-    PurgesGetConnectionErrors,
+    ConnectionsGetConnectionResponses,
+    ConnectionsGetConnectionErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zPurgesGetConnectionResponse.parseAsync(data),
+      await zConnectionsGetConnectionResponse.parseAsync(data),
     url: "/v1/connections/{connection_id}",
     ...options,
   });
@@ -1412,20 +1416,22 @@ export const purgesGetConnection = <ThrowOnError extends boolean = false>(
 /**
  * Update Connection
  */
-export const purgesUpdateConnection = <ThrowOnError extends boolean = false>(
-  options: Options<PurgesUpdateConnectionData, ThrowOnError>,
+export const connectionsUpdateConnection = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ConnectionsUpdateConnectionData, ThrowOnError>,
 ): RequestResult<
-  PurgesUpdateConnectionResponses,
-  PurgesUpdateConnectionErrors,
+  ConnectionsUpdateConnectionResponses,
+  ConnectionsUpdateConnectionErrors,
   ThrowOnError
 > =>
   (options.client ?? client).patch<
-    PurgesUpdateConnectionResponses,
-    PurgesUpdateConnectionErrors,
+    ConnectionsUpdateConnectionResponses,
+    ConnectionsUpdateConnectionErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zPurgesUpdateConnectionResponse.parseAsync(data),
+      await zConnectionsUpdateConnectionResponse.parseAsync(data),
     url: "/v1/connections/{connection_id}",
     ...options,
     headers: {
@@ -1437,20 +1443,20 @@ export const purgesUpdateConnection = <ThrowOnError extends boolean = false>(
 /**
  * Start Oauth
  */
-export const purgesStartOauth = <ThrowOnError extends boolean = false>(
-  options: Options<PurgesStartOauthData, ThrowOnError>,
+export const connectionsStartOauth = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsStartOauthData, ThrowOnError>,
 ): RequestResult<
-  PurgesStartOauthResponses,
-  PurgesStartOauthErrors,
+  ConnectionsStartOauthResponses,
+  ConnectionsStartOauthErrors,
   ThrowOnError
 > =>
   (options.client ?? client).post<
-    PurgesStartOauthResponses,
-    PurgesStartOauthErrors,
+    ConnectionsStartOauthResponses,
+    ConnectionsStartOauthErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zPurgesStartOauthResponse.parseAsync(data),
+      await zConnectionsStartOauthResponse.parseAsync(data),
     url: "/v1/connections/{connection_id}/oauth/start",
     ...options,
   });
@@ -1458,16 +1464,20 @@ export const purgesStartOauth = <ThrowOnError extends boolean = false>(
 /**
  * Oauth Url
  */
-export const purgesOauthUrl = <ThrowOnError extends boolean = false>(
-  options: Options<PurgesOauthUrlData, ThrowOnError>,
-): RequestResult<PurgesOauthUrlResponses, PurgesOauthUrlErrors, ThrowOnError> =>
+export const connectionsOauthUrl = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsOauthUrlData, ThrowOnError>,
+): RequestResult<
+  ConnectionsOauthUrlResponses,
+  ConnectionsOauthUrlErrors,
+  ThrowOnError
+> =>
   (options.client ?? client).get<
-    PurgesOauthUrlResponses,
-    PurgesOauthUrlErrors,
+    ConnectionsOauthUrlResponses,
+    ConnectionsOauthUrlErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zPurgesOauthUrlResponse.parseAsync(data),
+      await zConnectionsOauthUrlResponse.parseAsync(data),
     url: "/v1/connections/{connection_id}/oauth/url",
     ...options,
   });
@@ -1475,16 +1485,20 @@ export const purgesOauthUrl = <ThrowOnError extends boolean = false>(
 /**
  * Sync Now
  */
-export const purgesSyncNow = <ThrowOnError extends boolean = false>(
-  options: Options<PurgesSyncNowData, ThrowOnError>,
-): RequestResult<PurgesSyncNowResponses, PurgesSyncNowErrors, ThrowOnError> =>
+export const connectionsSyncNow = <ThrowOnError extends boolean = false>(
+  options: Options<ConnectionsSyncNowData, ThrowOnError>,
+): RequestResult<
+  ConnectionsSyncNowResponses,
+  ConnectionsSyncNowErrors,
+  ThrowOnError
+> =>
   (options.client ?? client).post<
-    PurgesSyncNowResponses,
-    PurgesSyncNowErrors,
+    ConnectionsSyncNowResponses,
+    ConnectionsSyncNowErrors,
     ThrowOnError
   >({
     responseValidator: async (data) =>
-      await zPurgesSyncNowResponse.parseAsync(data),
+      await zConnectionsSyncNowResponse.parseAsync(data),
     url: "/v1/connections/{connection_id}/sync",
     ...options,
   });

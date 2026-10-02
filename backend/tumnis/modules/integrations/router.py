@@ -15,7 +15,8 @@ Connections (P3-02), all session only (connecting accounts is the signed-in owne
 - `GET /v1/connections/oauth/callback?code&state[&iss]`: the provider sends the browser
   back here. The code is stored sealed and the waiting workflow told; no outbound call, no
   wait (R-30); 302 to the connection in Settings. A state that matches no consent in
-  flight is 400 `oauth_state_mismatch`, audited.
+  flight is 400 `oauth_state_mismatch`, audited. A request with neither `code` nor
+  `error` is no authorization response: 404 `oauth_state_unknown`, not audited.
 - `POST /v1/connections/{connection_id}/sync` (202): Sync now.
 """
 
@@ -34,7 +35,7 @@ from tumnis.core.tenancy import WorkspaceContext
 from tumnis.modules.integrations import api
 from tumnis.modules.integrations import testing as _testing  # noqa: F401  # registers the tick
 
-router = v1_router("integrations", tags=["purges"])
+router = v1_router("integrations")
 
 PURGE = RoutePolicy(auth="session", idempotent=True)
 READ = RoutePolicy(auth="session")
@@ -54,7 +55,7 @@ def _base_url(request: Request) -> str:
     return configured or str(request.base_url)
 
 
-@router.post("/purges", status_code=202)
+@router.post("/purges", status_code=202, tags=["purges"])
 @route_policy(PURGE)
 async def purge(body: api.PurgeIn, request: Request, session: SessionDep) -> api.PurgeOut:
     clock: Clock = request.app.state.clock
@@ -113,6 +114,10 @@ async def oauth_callback(
     error: Annotated[str | None, Query(max_length=256)] = None,
     iss: Annotated[str | None, Query(max_length=2048)] = None,
 ) -> RedirectResponse:
+    if code is None and error is None:
+        # Not an authorization response (RFC 6749 section 4.1.2 carries a code or an
+        # error): nothing to match or audit. The tenant-isolation sweep (A0.3) sends this.
+        raise ProblemError(404, "oauth_state_unknown", "No sign-in is pending here")
     now = _clock(request).now()
     accepted = await api.accept_connection_callback(
         ctx, state=state, code=None if error is not None else code, iss=iss, now=now

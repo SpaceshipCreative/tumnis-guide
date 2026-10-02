@@ -7477,14 +7477,14 @@ export type CalendarOauthStartResponses = {
 export type CalendarOauthStartResponse =
   CalendarOauthStartResponses[keyof CalendarOauthStartResponses];
 
-export type PurgesListConnectionsData = {
+export type ConnectionsListConnectionsData = {
   body?: never;
   path?: never;
   query?: never;
   url: "/v1/connections";
 };
 
-export type PurgesListConnectionsErrors = {
+export type ConnectionsListConnectionsErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -7519,29 +7519,29 @@ export type PurgesListConnectionsErrors = {
   429: Problem;
 };
 
-export type PurgesListConnectionsError =
-  PurgesListConnectionsErrors[keyof PurgesListConnectionsErrors];
+export type ConnectionsListConnectionsError =
+  ConnectionsListConnectionsErrors[keyof ConnectionsListConnectionsErrors];
 
-export type PurgesListConnectionsResponses = {
+export type ConnectionsListConnectionsResponses = {
   /**
-   * Response Purges List Connections
+   * Response Connections List Connections
    *
    * Successful Response
    */
   200: Array<ConnectionOut>;
 };
 
-export type PurgesListConnectionsResponse =
-  PurgesListConnectionsResponses[keyof PurgesListConnectionsResponses];
+export type ConnectionsListConnectionsResponse =
+  ConnectionsListConnectionsResponses[keyof ConnectionsListConnectionsResponses];
 
-export type PurgesCreateConnectionData = {
+export type ConnectionsCreateConnectionData = {
   body: ConnectionCreate;
   path?: never;
   query?: never;
   url: "/v1/connections";
 };
 
-export type PurgesCreateConnectionErrors = {
+export type ConnectionsCreateConnectionErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -7576,20 +7576,20 @@ export type PurgesCreateConnectionErrors = {
   429: Problem;
 };
 
-export type PurgesCreateConnectionError =
-  PurgesCreateConnectionErrors[keyof PurgesCreateConnectionErrors];
+export type ConnectionsCreateConnectionError =
+  ConnectionsCreateConnectionErrors[keyof ConnectionsCreateConnectionErrors];
 
-export type PurgesCreateConnectionResponses = {
+export type ConnectionsCreateConnectionResponses = {
   /**
    * Successful Response
    */
   201: ConnectionOut;
 };
 
-export type PurgesCreateConnectionResponse =
-  PurgesCreateConnectionResponses[keyof PurgesCreateConnectionResponses];
+export type ConnectionsCreateConnectionResponse =
+  ConnectionsCreateConnectionResponses[keyof ConnectionsCreateConnectionResponses];
 
-export type PurgesOauthCallbackData = {
+export type ConnectionsOauthCallbackData = {
   body?: never;
   path?: never;
   query: {
@@ -7613,7 +7613,7 @@ export type PurgesOauthCallbackData = {
   url: "/v1/connections/oauth/callback";
 };
 
-export type PurgesOauthCallbackErrors = {
+export type ConnectionsOauthCallbackErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -7648,17 +7648,17 @@ export type PurgesOauthCallbackErrors = {
   429: Problem;
 };
 
-export type PurgesOauthCallbackError =
-  PurgesOauthCallbackErrors[keyof PurgesOauthCallbackErrors];
+export type ConnectionsOauthCallbackError =
+  ConnectionsOauthCallbackErrors[keyof ConnectionsOauthCallbackErrors];
 
-export type PurgesListProvidersData = {
+export type ConnectionsListProvidersData = {
   body?: never;
   path?: never;
   query?: never;
   url: "/v1/connections/providers";
 };
 
-export type PurgesListProvidersErrors = {
+export type ConnectionsListProvidersErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -7693,22 +7693,22 @@ export type PurgesListProvidersErrors = {
   429: Problem;
 };
 
-export type PurgesListProvidersError =
-  PurgesListProvidersErrors[keyof PurgesListProvidersErrors];
+export type ConnectionsListProvidersError =
+  ConnectionsListProvidersErrors[keyof ConnectionsListProvidersErrors];
 
-export type PurgesListProvidersResponses = {
+export type ConnectionsListProvidersResponses = {
   /**
-   * Response Purges List Providers
+   * Response Connections List Providers
    *
    * Successful Response
    */
   200: Array<ProviderOut>;
 };
 
-export type PurgesListProvidersResponse =
-  PurgesListProvidersResponses[keyof PurgesListProvidersResponses];
+export type ConnectionsListProvidersResponse =
+  ConnectionsListProvidersResponses[keyof ConnectionsListProvidersResponses];
 
-export type PurgesDisconnectData = {
+export type ConnectionsDisconnectData = {
   body: DisconnectIn;
   path: {
     /**
@@ -7720,7 +7720,7 @@ export type PurgesDisconnectData = {
   url: "/v1/connections/{connection_id}";
 };
 
-export type PurgesDisconnectErrors = {
+export type ConnectionsDisconnectErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -7755,20 +7755,20 @@ export type PurgesDisconnectErrors = {
   429: Problem;
 };
 
-export type PurgesDisconnectError =
-  PurgesDisconnectErrors[keyof PurgesDisconnectErrors];
+export type ConnectionsDisconnectError =
+  ConnectionsDisconnectErrors[keyof ConnectionsDisconnectErrors];
 
-export type PurgesDisconnectResponses = {
+export type ConnectionsDisconnectResponses = {
   /**
    * Successful Response
    */
   204: void;
 };
 
-export type PurgesDisconnectResponse =
-  PurgesDisconnectResponses[keyof PurgesDisconnectResponses];
+export type ConnectionsDisconnectResponse =
+  ConnectionsDisconnectResponses[keyof ConnectionsDisconnectResponses];
 
-export type PurgesGetConnectionData = {
+export type ConnectionsGetConnectionData = {
   body?: never;
   path: {
     /**
@@ -7780,7 +7780,7 @@ export type PurgesGetConnectionData = {
   url: "/v1/connections/{connection_id}";
 };
 
-export type PurgesGetConnectionErrors = {
+export type ConnectionsGetConnectionErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -7815,20 +7815,20 @@ export type PurgesGetConnectionErrors = {
   429: Problem;
 };
 
-export type PurgesGetConnectionError =
-  PurgesGetConnectionErrors[keyof PurgesGetConnectionErrors];
+export type ConnectionsGetConnectionError =
+  ConnectionsGetConnectionErrors[keyof ConnectionsGetConnectionErrors];
 
-export type PurgesGetConnectionResponses = {
+export type ConnectionsGetConnectionResponses = {
   /**
    * Successful Response
    */
   200: ConnectionOut;
 };
 
-export type PurgesGetConnectionResponse =
-  PurgesGetConnectionResponses[keyof PurgesGetConnectionResponses];
+export type ConnectionsGetConnectionResponse =
+  ConnectionsGetConnectionResponses[keyof ConnectionsGetConnectionResponses];
 
-export type PurgesUpdateConnectionData = {
+export type ConnectionsUpdateConnectionData = {
   body: ConnectionPatch;
   path: {
     /**
@@ -7840,7 +7840,7 @@ export type PurgesUpdateConnectionData = {
   url: "/v1/connections/{connection_id}";
 };
 
-export type PurgesUpdateConnectionErrors = {
+export type ConnectionsUpdateConnectionErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -7875,20 +7875,20 @@ export type PurgesUpdateConnectionErrors = {
   429: Problem;
 };
 
-export type PurgesUpdateConnectionError =
-  PurgesUpdateConnectionErrors[keyof PurgesUpdateConnectionErrors];
+export type ConnectionsUpdateConnectionError =
+  ConnectionsUpdateConnectionErrors[keyof ConnectionsUpdateConnectionErrors];
 
-export type PurgesUpdateConnectionResponses = {
+export type ConnectionsUpdateConnectionResponses = {
   /**
    * Successful Response
    */
   200: ConnectionOut;
 };
 
-export type PurgesUpdateConnectionResponse =
-  PurgesUpdateConnectionResponses[keyof PurgesUpdateConnectionResponses];
+export type ConnectionsUpdateConnectionResponse =
+  ConnectionsUpdateConnectionResponses[keyof ConnectionsUpdateConnectionResponses];
 
-export type PurgesStartOauthData = {
+export type ConnectionsStartOauthData = {
   body?: never;
   path: {
     /**
@@ -7900,7 +7900,7 @@ export type PurgesStartOauthData = {
   url: "/v1/connections/{connection_id}/oauth/start";
 };
 
-export type PurgesStartOauthErrors = {
+export type ConnectionsStartOauthErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -7935,20 +7935,20 @@ export type PurgesStartOauthErrors = {
   429: Problem;
 };
 
-export type PurgesStartOauthError =
-  PurgesStartOauthErrors[keyof PurgesStartOauthErrors];
+export type ConnectionsStartOauthError =
+  ConnectionsStartOauthErrors[keyof ConnectionsStartOauthErrors];
 
-export type PurgesStartOauthResponses = {
+export type ConnectionsStartOauthResponses = {
   /**
    * Successful Response
    */
   202: ConnectionsOAuthStart;
 };
 
-export type PurgesStartOauthResponse =
-  PurgesStartOauthResponses[keyof PurgesStartOauthResponses];
+export type ConnectionsStartOauthResponse =
+  ConnectionsStartOauthResponses[keyof ConnectionsStartOauthResponses];
 
-export type PurgesOauthUrlData = {
+export type ConnectionsOauthUrlData = {
   body?: never;
   path: {
     /**
@@ -7960,7 +7960,7 @@ export type PurgesOauthUrlData = {
   url: "/v1/connections/{connection_id}/oauth/url";
 };
 
-export type PurgesOauthUrlErrors = {
+export type ConnectionsOauthUrlErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -7995,20 +7995,20 @@ export type PurgesOauthUrlErrors = {
   429: Problem;
 };
 
-export type PurgesOauthUrlError =
-  PurgesOauthUrlErrors[keyof PurgesOauthUrlErrors];
+export type ConnectionsOauthUrlError =
+  ConnectionsOauthUrlErrors[keyof ConnectionsOauthUrlErrors];
 
-export type PurgesOauthUrlResponses = {
+export type ConnectionsOauthUrlResponses = {
   /**
    * Successful Response
    */
   200: AuthorizeUrlOut;
 };
 
-export type PurgesOauthUrlResponse =
-  PurgesOauthUrlResponses[keyof PurgesOauthUrlResponses];
+export type ConnectionsOauthUrlResponse =
+  ConnectionsOauthUrlResponses[keyof ConnectionsOauthUrlResponses];
 
-export type PurgesSyncNowData = {
+export type ConnectionsSyncNowData = {
   body?: never;
   path: {
     /**
@@ -8020,7 +8020,7 @@ export type PurgesSyncNowData = {
   url: "/v1/connections/{connection_id}/sync";
 };
 
-export type PurgesSyncNowErrors = {
+export type ConnectionsSyncNowErrors = {
   /**
    * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
    */
@@ -8055,17 +8055,18 @@ export type PurgesSyncNowErrors = {
   429: Problem;
 };
 
-export type PurgesSyncNowError = PurgesSyncNowErrors[keyof PurgesSyncNowErrors];
+export type ConnectionsSyncNowError =
+  ConnectionsSyncNowErrors[keyof ConnectionsSyncNowErrors];
 
-export type PurgesSyncNowResponses = {
+export type ConnectionsSyncNowResponses = {
   /**
    * Successful Response
    */
   202: ConnectionOut;
 };
 
-export type PurgesSyncNowResponse =
-  PurgesSyncNowResponses[keyof PurgesSyncNowResponses];
+export type ConnectionsSyncNowResponse =
+  ConnectionsSyncNowResponses[keyof ConnectionsSyncNowResponses];
 
 export type CoolifyListDeployStatusData = {
   body?: never;

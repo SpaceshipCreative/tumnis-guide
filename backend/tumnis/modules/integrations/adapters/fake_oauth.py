@@ -20,6 +20,7 @@ RFC 7591 dynamic client registration):
 
 import base64
 import hashlib
+import hmac
 import json
 from dataclasses import dataclass
 from typing import Any, Final
@@ -161,15 +162,16 @@ class FakeOAuthServer:
         approved = self._codes.pop(code, None)
         if (
             approved is None
-            or approved.client_id != client_id
+            or not hmac.compare_digest(approved.client_id.encode(), client_id.encode())
             or approved.redirect_uri != redirect_uri
-            or approved.challenge != s256(code_verifier)
+            or not hmac.compare_digest(approved.challenge.encode(), s256(code_verifier).encode())
         ):
             raise OAuthRefused("exchange", "invalid_grant")
         return self.issue(client_id, expires_in=TOKEN_TTL_S)
 
     def _refresh(self, client_id: str, refresh_token: str) -> OAuthToken:
-        if self._live_refresh.get(refresh_token) != client_id:
+        owner = self._live_refresh.get(refresh_token)
+        if owner is None or not hmac.compare_digest(owner.encode(), client_id.encode()):
             raise OAuthRefused("refresh", "invalid_grant")
         del self._live_refresh[refresh_token]
         self.refreshes += 1
