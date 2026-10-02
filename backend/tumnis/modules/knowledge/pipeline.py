@@ -10,7 +10,9 @@ Files: an upload waits in `<spool>/<version_id>` (the api wrote it); step 1 copi
 `<scratch>/<version_id>/<name>` (a file found in a project folder is read from its location
 instead), and every later step works on that copy. The copy keeps the file's name, since
 Docling reads the format from the extension; a step that finds it gone brings it back from
-the spool or from where the file was placed.
+the spool or from where the file was placed. An object of an S3 linked source (P3-13,
+`source = "linked"`) waits in the spool too, but is never placed: it lives in its bucket,
+and a lost spool copy is read again from there (`register_linked_reader`).
 
 The scanner, the extractor and the vision model come from `use()` (tests) or, in a real
 deployment, the settings given to `configure()`: clamd's address, Docling with the chunk
@@ -28,7 +30,7 @@ import json
 import logging
 import shutil
 import zipfile
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from itertools import count
 from pathlib import Path, PurePosixPath
 from typing import Any, Final, Literal, TypedDict, cast
@@ -73,7 +75,16 @@ STEPS: Final = (
     "emit",
     "fail",
 )
-Source = Literal["spool", "storage", "vault"]  # vault: an Obsidian attachment (P3-12)
+# linked: an S3 linked source's object (P3-13); vault: an Obsidian attachment (P3-12)
+Source = Literal["spool", "storage", "linked", "vault"]
+LinkedReader = Callable[[WorkspaceContext, UUID], AsyncGenerator[bytes]]
+
+
+class LinkedObjectChangedError(FileNotFoundError):
+    """A linked version's object, read again from its bucket, no longer holds that
+    version's bytes: step 1 fails rather than give the version another file's hash (the
+    next sync takes the new bytes in as a new version)."""
+
 
 SNIFF_BYTES: Final = 8 * 1024
 READ_BYTES: Final = 1024 * 1024
@@ -186,8 +197,19 @@ def _spool_file(version_id: str) -> Path:
 def spool_file(version_id: UUID) -> Path:
     """Where a version's bytes wait for the extract worker: an upload (the api writes it)
     or an Obsidian attachment (the vault sync writes it, P3-12; `source = "vault"` reads it
-    from here and never places it in a project folder)."""
+    from here and never places it in a project folder), or an S3 linked source's object (the
+    bucket sync writes it, P3-13; `source = "linked"`, read again from the bucket when the
+    spool copy is gone)."""
     return _spool_file(str(version_id))
+
+
+_linked: list[LinkedReader | None] = [None]
+
+
+def register_linked_reader(fn: LinkedReader) -> None:
+    """How a linked source's version is read again when its spool copy is gone (P3-13:
+    `s3_sync` reads the object from its bucket)."""
+    _linked[0] = fn
 
 
 def _scratch_dir(version_id: str) -> Path:
@@ -210,22 +232,31 @@ async def _file_chunks(path: Path) -> AsyncGenerator[bytes]:
 
 async def _copy(chunks: AsyncGenerator[bytes], dest: Path) -> tuple[str, int]:
     """Write `chunks` to `dest` (its folder made), hashing them; stops one byte past the
-    upload limit so an oversize file is measured, not copied whole."""
+    upload limit so an oversize file is measured, not copied whole. The bytes go to a
+    `.part` file beside `dest` that replaces it only once the copy is whole, so a failed
+    read (a linked object that changed, a dropped stream) never leaves a partial `dest`
+    for a later step to take as the scratch copy."""
     await asyncio.to_thread(dest.parent.mkdir, parents=True, exist_ok=True)
+    part = dest.with_name(f".{dest.name}.part")
     digest = hashlib.sha256()
     size = 0
-    handle = await asyncio.to_thread(dest.open, "wb")
+    handle = await asyncio.to_thread(part.open, "wb")
     try:
-        async with contextlib.aclosing(chunks):
-            async for received in chunks:
-                chunk = received[: MAX_UPLOAD_BYTES + 1 - size]
-                size += len(chunk)
-                digest.update(chunk)
-                await asyncio.to_thread(handle.write, chunk)
-                if size > MAX_UPLOAD_BYTES:
-                    break
-    finally:
-        await asyncio.to_thread(handle.close)
+        try:
+            async with contextlib.aclosing(chunks):
+                async for received in chunks:
+                    chunk = received[: MAX_UPLOAD_BYTES + 1 - size]
+                    size += len(chunk)
+                    digest.update(chunk)
+                    await asyncio.to_thread(handle.write, chunk)
+                    if size > MAX_UPLOAD_BYTES:
+                        break
+        finally:
+            await asyncio.to_thread(handle.close)
+        await asyncio.to_thread(part.replace, dest)
+    except BaseException:
+        await asyncio.to_thread(part.unlink, missing_ok=True)
+        raise
     return digest.hexdigest(), size
 
 
@@ -235,8 +266,13 @@ async def _fetch(
     """Copy the version's file to `dest`: the spool file when there is one, else the file
     on its location (a folder file, or an upload that was already placed)."""
     spool = _spool_file(version_id)
-    if source in {"spool", "vault"} and spool.is_file():
+    if source in {"spool", "linked", "vault"} and spool.is_file():
         return await _copy(_file_chunks(spool), dest)
+    if source == "linked":
+        reader = _linked[0]
+        if reader is None:
+            raise FileNotFoundError(f"no spool copy of {version_id} and no linked reader")
+        return await _copy(reader(ctx, UUID(version_id)), dest)
     async with tenant_session(ctx) as s:
         info = await records.version_info(s, UUID(version_id))
         if info.path is None or info.location_id is None:

@@ -39,6 +39,7 @@ import { SessionsSection } from "../components/settings/SessionsSection";
 import { SettingsLayout } from "../components/settings/SettingsLayout";
 import { StorageSection } from "../components/settings/StorageSection";
 import { ObsidianSection } from "../components/knowledge/ObsidianSection";
+import { S3SourceSetup } from "../components/knowledge/S3SourceSetup";
 import { UnattendedSection } from "../components/settings/UnattendedSection";
 import { VoiceSection } from "../components/settings/voice/VoiceSection";
 import { WorkingHoursSection } from "../components/settings/WorkingHoursSection";
@@ -60,6 +61,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   calendar: () => <CalendarSection />,
   connections: () => <Connections />,
   storage: StorageSection,
+  sources: S3SourceSetup,
   calibration: CalibrationSection,
   metrics: MetricsSection,
   voice: VoiceSection,
