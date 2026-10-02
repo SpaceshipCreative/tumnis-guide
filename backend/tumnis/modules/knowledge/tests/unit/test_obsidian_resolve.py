@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from tumnis.modules.knowledge.obsidian.rules import resolve_link
+from tumnis.modules.knowledge.obsidian.rules import PathIndex, resolve_link
 
 PATHS = {
     "Inbox/Rates.md",
@@ -39,3 +39,22 @@ PATHS = {
 def test_resolve_link_shortest_path(target: str, from_path: str, expected: str | None) -> None:
     """Each target resolves to the vault path Obsidian would open, or to nothing."""
     assert resolve_link(target, from_path, PATHS) == expected
+
+
+@pytest.mark.req("FR-15.10")
+@pytest.mark.wp("P3-12")
+def test_one_path_index_serves_every_link() -> None:
+    """A sync builds one `PathIndex` for all its links; it resolves as the plain paths do
+    (full path, relative, unique trailing path, unique basename, ambiguous, missing)."""
+    index = PathIndex(PATHS)
+    for target, from_path in [
+        ("Rates", "Clients/Acme/Kickoff.md"),
+        ("Ideas/Launch", "x.md"),
+        ("Notes", "x.md"),
+        ("Acme/Notes", "Inbox/x.md"),
+        ("Sub/Deep", "Clients/Acme/Kickoff.md"),
+        ("../Beta/Notes", "Clients/Acme/Kickoff.md"),
+        ("diagram.png", "x.md"),
+        ("Missing note", "x.md"),
+    ]:
+        assert resolve_link(target, from_path, index) == resolve_link(target, from_path, PATHS)

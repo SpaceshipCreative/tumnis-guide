@@ -29,7 +29,9 @@ One scan:
    first embedding note's project: untrusted, `pending_scan`, their bytes spooled to
    `<spool>/<version_id>` and their extraction requested through `extract` once the scan
    commits (P1-16's pipeline with `source = "vault"`: scanned, sniffed, converted, never
-   placed in a project folder). A changed attachment gets a new version the same way.
+   placed in a project folder). A changed attachment gets a new version the same way. An
+   unchanged one still `pending_scan` an hour after its request is requested again (a
+   request lost between the commit and the enqueue; a live one is not repeated).
 6. Documents whose file is gone, or that nothing embeds any more, go to the trash.
 7. `document_links` hold each note's links and embeds as written (`to_target`), resolved
    by Obsidian's shortest-path rule against this scan's listing every time, so a link to
@@ -45,7 +47,7 @@ import posixpath
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Final
 from uuid import UUID
 
@@ -61,6 +63,7 @@ from tumnis.modules.knowledge.models import Document, DocumentLink
 from tumnis.modules.knowledge.obsidian.parse import Link, ParsedNote, parse_note
 from tumnis.modules.knowledge.obsidian.rules import (
     TEMPLATES_CONFIG,
+    PathIndex,
     VaultMapping,
     is_excluded,
     is_note_path,
@@ -85,6 +88,9 @@ __all__ = [
 
 SOURCE: Final = "knowledge:obsidian"  # `documents.source`, as `connection_source` spells it
 MAX_TAGS: Final = api.MAX_TAGS
+# An unchanged attachment still pending this long after its extraction was requested is
+# requested again (the request may have been lost between the commit and the enqueue).
+EXTRACTION_RETRY_AFTER: Final = timedelta(hours=1)
 MAX_TAG_CHARS: Final = api.MAX_TAG_CHARS
 
 ExtractHook = Callable[[UUID, UUID, str], Awaitable[None]]  # (workspace, version, path)
@@ -130,6 +136,10 @@ class _Scan:
     kept: set[str] = field(default_factory=set)  # paths whose Document stays as it is
     report: VaultSyncReport = field(default_factory=VaultSyncReport)
     extractions: list[tuple[UUID, str]] = field(default_factory=list)
+    index: PathIndex = field(init=False)  # the listing indexed once for resolve_link
+
+    def __post_init__(self) -> None:
+        self.index = PathIndex(self.listing)
 
 
 async def sync_vault(  # the connection, its reader and mapping, and the hooks
@@ -392,11 +402,10 @@ async def _reload(s: AsyncSession, document_id: UUID) -> dict[str, Any]:
 def _embedded(scan: _Scan) -> dict[str, list[_Note]]:
     """Each listed non-note file a synced note embeds, with the notes embedding it (in
     path order)."""
-    paths = list(scan.listing)
     found: dict[str, list[_Note]] = {}
     for path, note in sorted(scan.notes.items()):
         for link in note.parsed.embeds:
-            target = resolve_link(link.target, path, paths)
+            target = resolve_link(link.target, path, scan.index)
             if target is not None and not is_note_path(target):
                 found.setdefault(target, []).append(note)
     return found
@@ -424,6 +433,8 @@ async def _apply_attachments(
                 await s.execute(
                     update(_documents).where(_documents.c.id == doc["id"]).values(**values)
                 )
+            if _extraction_lost(doc, now):
+                await _request_again(reader, scan, doc["current_version_id"], path)
             scan.kept.add(path)
             continue
         try:
@@ -500,6 +511,31 @@ async def _create_attachment(  # the file and where it goes
     return dict(row)
 
 
+def _extraction_lost(doc: Mapping[str, Any], now: datetime) -> bool:
+    """Still `pending_scan` a while after its extraction was requested (`fetched_at`)."""
+    return (
+        doc["status"] == "pending_scan"
+        and doc["current_version_id"] is not None
+        and doc["fetched_at"] is not None
+        and now - doc["fetched_at"] >= EXTRACTION_RETRY_AFTER
+    )
+
+
+async def _request_again(reader: VaultReader, scan: _Scan, version_id: UUID, path: str) -> None:
+    """An unchanged attachment still waiting for extraction (its request was lost, say to a
+    crash between the commit and the enqueue) is requested again; `extract:<version_id>`
+    makes a repeat of a live request a no-op. Its spooled bytes are written again when they
+    are gone."""
+    if not await asyncio.to_thread(pipeline.spool_file(version_id).is_file):
+        try:
+            data = await reader.read(path)
+        except StorageError:
+            scan.report.skipped.append(path)
+            return
+        await asyncio.to_thread(_spool, version_id, data)
+    scan.extractions.append((version_id, path))
+
+
 def _spool(version_id: UUID, data: bytes) -> None:
     target = pipeline.spool_file(version_id)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -528,15 +564,13 @@ _LinkRow = tuple[str, str, str | None, str | None, UUID | None]  # kind, target,
 
 
 def _wanted(scan: _Scan, note: _Note) -> list[_LinkRow]:
-    paths = list(scan.listing)
-    rows: list[_LinkRow] = []
-    for link in (*note.parsed.links, *note.parsed.embeds):
-        rows.append(_row(scan, note.parsed.path, link, paths))
-    return rows
+    return [
+        _row(scan, note.parsed.path, link) for link in (*note.parsed.links, *note.parsed.embeds)
+    ]
 
 
-def _row(scan: _Scan, from_path: str, link: Link, paths: list[str]) -> _LinkRow:
-    target = resolve_link(link.target, from_path, paths)
+def _row(scan: _Scan, from_path: str, link: Link) -> _LinkRow:
+    target = resolve_link(link.target, from_path, scan.index)
     doc = scan.docs.get(target) if target is not None else None
     live = doc is not None and doc["deleted_at"] is None
     return (

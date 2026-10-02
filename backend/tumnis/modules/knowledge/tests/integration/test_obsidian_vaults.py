@@ -234,3 +234,55 @@ async def test_connect_refuses_a_deploy_key_that_can_write(
     assert "--dry-run" in runner.calls[1].argv
     env = VaultEnv(ws=ws, connection_id=made.id, projects={})
     assert await vault_documents(env) == {}
+
+
+@pytest.mark.req("FR-15.10")
+@pytest.mark.wp("P3-12")
+async def test_sync_tick_keeps_clones_in_use_and_disconnect_wins(
+    knowledge_ws: WorkspaceHandle, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The 15-minute tick syncs only connected (`ok`) vaults. Its clone pruning removes the
+    clones of deleted and refused (`error`) Git vaults but keeps those of vaults still being
+    set up (`pending`, a preview) or connected (`connecting`), whose own workflow may be
+    reading them. A status a sync writes after the vault was disconnected changes nothing:
+    the connection stays `disabled`."""
+    from sqlalchemy import update  # noqa: PLC0415
+
+    from tumnis.core.tenancy import tenant_session  # noqa: PLC0415
+    from tumnis.modules.knowledge.models import ObsidianVault  # noqa: PLC0415
+    from tumnis.modules.knowledge.obsidian import vaults  # noqa: PLC0415
+
+    ws = knowledge_ws
+    root = tmp_path / "clones"
+    monkeypatch.setattr(vaults, "data_dir", lambda: root)
+
+    async def git_vault(status: str) -> UUID:
+        async with tenant_session(ws.ctx) as s:
+            made = await vaults.create_vault(
+                ws.ctx, s, vaults.VaultCreateIn(mode="git"), net=_net("self-hosted")
+            )
+        async with tenant_session(ws.ctx) as s:
+            await s.execute(
+                update(ObsidianVault)
+                .where(ObsidianVault.connection_id == made.id)
+                .values(status=status)
+            )
+        (root / str(made.id)).mkdir(parents=True)
+        return made.id
+
+    made = {status: await git_vault(status) for status in ("pending", "connecting", "ok", "error")}
+    gone = await git_vault("ok")
+    async with tenant_session(ws.ctx) as s:
+        await vaults.delete_vault(ws.ctx, s, gone)
+
+    synced = await vaults.vaults_to_sync()
+    mine = {str(cid) for cid in (*made.values(), gone)}
+    assert [cid for _ws, cid in synced if cid in mine] == [str(made["ok"])]
+    assert {child.name for child in root.iterdir()} == {
+        str(made[status]) for status in ("pending", "connecting", "ok")
+    }
+
+    async with tenant_session(ws.ctx) as s:
+        await vaults.delete_vault(ws.ctx, s, made["ok"])
+    await vaults._set_status(ws.ctx, made["ok"], "ok", last_error=None)
+    assert (await _connection(ws, made["ok"]))["status"] == "disabled"

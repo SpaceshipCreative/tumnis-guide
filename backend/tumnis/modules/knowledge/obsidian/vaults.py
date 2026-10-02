@@ -580,11 +580,14 @@ async def _set_status(
     else:
         connection = "ok"
     async with tenant_session(ctx) as s:
-        await s.execute(
+        changed = await s.execute(
             update(_vaults)
             .where(_vaults.c.connection_id == connection_id, _vaults.c.deleted_at.is_(None))
             .values(**values)
+            .returning(_vaults.c.connection_id)
         )
+        if changed.first() is None:
+            return  # disconnected meanwhile: the connection stays `disabled`
         await integrations.set_connection_status(
             ctx, connection_id, connection, last_error=last_error, last_sync_at=synced_at, session=s
         )
@@ -641,18 +644,21 @@ async def run_sync(
 
 
 async def vaults_to_sync() -> list[tuple[str, str]]:
-    """(workspace, connection) for every connected vault of every workspace; the clones
-    of vaults no longer connected by Git are removed on the way."""
+    """(workspace, connection) for every connected (`ok`) vault of every workspace. On the
+    way, the clones of Git vaults that are gone or refused (`error`) are removed; a vault
+    still being set up (`pending`: its preview) or connected (`connecting`) keeps its clone,
+    which its own workflow may be using right now."""
     found = await _all_vaults()
     await asyncio.to_thread(
-        _prune_clones, {cid for _ws, cid, mode, _path in found if mode == "git"}
+        _prune_clones,
+        {cid for _ws, cid, mode, _path, status in found if mode == "git" and status != "error"},
     )
-    return [(ws, cid) for ws, cid, _mode, _path in found]
+    return [(ws, cid) for ws, cid, _mode, _path, status in found if status == "ok"]
 
 
 def _prune_clones(keep: set[str]) -> None:
-    """Remove every clone under the data folder that is not a connected Git vault's (a
-    deleted vault's, or one whose connect was refused)."""
+    """Remove every clone under the data folder that is not in `keep` (a deleted vault's,
+    or one whose connect was refused)."""
     root = data_dir()
     if not root.is_dir():
         return
@@ -664,25 +670,29 @@ def _prune_clones(keep: set[str]) -> None:
 async def watched_vaults() -> list[tuple[str, str, str]]:
     """(workspace, connection, folder) for every connected folder vault."""
     return [
-        (ws, cid, path) for ws, cid, mode, path in await _all_vaults() if mode == "folder" and path
+        (ws, cid, path)
+        for ws, cid, mode, path, status in await _all_vaults()
+        if mode == "folder" and path and status == "ok"
     ]
 
 
-async def _all_vaults() -> list[tuple[str, str, str, str | None]]:
+async def _all_vaults() -> list[tuple[str, str, str, str | None, str]]:
+    """(workspace, connection, mode, folder, status) for every vault not deleted."""
     from tumnis.core import audit, db  # noqa: PLC0415
 
     async with db.app_sessionmaker()() as s, s.begin():
         workspaces = await audit.workspace_ids(s)
-    found: list[tuple[str, str, str, str | None]] = []
+    found: list[tuple[str, str, str, str | None, str]] = []
     for workspace_id in workspaces:
         async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
             rows = await s.execute(
-                select(_vaults.c.connection_id, _vaults.c.mode, _vaults.c.folder_path).where(
-                    _vaults.c.deleted_at.is_(None), _vaults.c.status == "ok"
-                )
+                select(
+                    _vaults.c.connection_id, _vaults.c.mode, _vaults.c.folder_path, _vaults.c.status
+                ).where(_vaults.c.deleted_at.is_(None))
             )
             found += [
-                (str(workspace_id), str(r.connection_id), r.mode, r.folder_path) for r in rows
+                (str(workspace_id), str(r.connection_id), r.mode, r.folder_path, r.status)
+                for r in rows
             ]
     return found
 

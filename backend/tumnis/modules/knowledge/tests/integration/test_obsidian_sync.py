@@ -269,3 +269,55 @@ async def test_synced_notes_cannot_be_deleted_in_tumnis(
         assert answer.json()["code"] == "read_only_source"
 
     assert "Clients/Acme/Kickoff.md" in await vault_documents(env)
+
+
+@pytest.mark.req("FR-15.10")
+@pytest.mark.wp("P3-12")
+async def test_lost_attachment_extraction_is_requested_again(
+    db: DbUrls,
+    knowledge_ws: WorkspaceHandle,
+    clock: FixedClock,
+    extract_dirs: ExtractDirs,
+    tmp_path: Path,
+) -> None:
+    """An embedded attachment whose extraction request was lost (the scan committed, the
+    enqueue failed) stays `pending_scan` with an unchanged file: a scan an hour later
+    requests the same version again, spooling its bytes again when they are gone. A scan
+    within the hour does not (as T-P3-12-07's second sync)."""
+    _folder = importlib.import_module("tumnis.modules.knowledge.adapters.obsidian.folder")
+    FolderReader = _folder.FolderReader  # noqa: N806
+    vault_sync = importlib.import_module("tumnis.modules.knowledge.obsidian.sync")
+    _rules = importlib.import_module("tumnis.modules.knowledge.obsidian.rules")
+    VaultMapping = _rules.VaultMapping  # noqa: N806
+
+    vault = copy_vault(tmp_path / "vault")
+    env = await vault_env(knowledge_ws, clock)
+    reader = FolderReader(vault, clock=clock)
+    mapping = VaultMapping(folders={"Clients/Acme": "acme"})
+    lost: list[object] = []
+
+    async def lose(_workspace_id: object, version_id: object, _path: object) -> None:
+        lost.append(version_id)
+        raise RuntimeError("the enqueue failed")
+
+    async def sync(extract: object) -> None:
+        await vault_sync.sync_vault(
+            knowledge_ws.ctx, env.connection_id, reader, mapping, extract=extract
+        )
+
+    with pytest.raises(RuntimeError, match="the enqueue failed"):
+        await sync(lose)
+    diagram = (await vault_documents(env))[DIAGRAM]
+    assert diagram["status"] == "pending_scan"
+    assert lost == [diagram["current_version_id"]]
+    spooled = extract_dirs.spool / str(diagram["current_version_id"])
+    spooled.unlink()
+
+    await sync(env.extract)
+    assert env.extractions == []
+
+    clock.advance(hours=1)
+    await sync(env.extract)
+    assert env.extractions == [(knowledge_ws.id, diagram["current_version_id"], DIAGRAM)]
+    assert spooled.read_bytes() == (vault / DIAGRAM).read_bytes()
+    assert await version_numbers(env, diagram["id"]) == [1]

@@ -27,6 +27,7 @@ __all__ = [
     "ALWAYS_EXCLUDED",
     "DEFAULT_TEMPLATES",
     "TEMPLATES_CONFIG",
+    "PathIndex",
     "VaultMapping",
     "is_excluded",
     "is_note_path",
@@ -134,25 +135,38 @@ def _strip_md(path: str) -> str:
     return path[:-3] if is_note_path(path) else path
 
 
-def resolve_link(target: str, from_path: str, paths: Collection[str]) -> str | None:
+class PathIndex:
+    """The vault's paths indexed once per scan for `resolve_link`: by the full path, by
+    each trailing run of whole segments, and by basename (all without `.md`, casefolded).
+    Building it is linear in the vault; each lookup is then a dictionary read."""
+
+    def __init__(self, paths: Collection[str]) -> None:
+        self.by_key: dict[str, str] = {}
+        self.by_tail: dict[str, list[str]] = {}  # "acme/notes" -> paths ending "/acme/notes"
+        for path in paths:
+            key = _strip_md(path).casefold()
+            self.by_key.setdefault(key, path)
+            parts = key.split("/")
+            for start in range(1, len(parts)):
+                self.by_tail.setdefault("/".join(parts[start:]), []).append(path)
+
+
+def resolve_link(target: str, from_path: str, paths: Collection[str] | PathIndex) -> str | None:
     """The vault path a link's target names, by Obsidian's rule: a path written in full
     (with or without `.md`), else a path relative to the linking note's folder, else the
-    unique file with that basename. None when nothing or several files match."""
+    unique file with that basename. None when nothing or several files match. A sync passes
+    one `PathIndex` for all its links."""
     target = target.strip().strip("/")
     if not target:
         return None
-    by_key: dict[str, str] = {}
-    for path in paths:
-        by_key.setdefault(_strip_md(path).casefold(), path)
+    index = paths if isinstance(paths, PathIndex) else PathIndex(paths)
     key = _strip_md(target).casefold()
-    if key in by_key:
-        return by_key[key]
+    if key in index.by_key:
+        return index.by_key[key]
     if "/" in target:
         relative = posixpath.normpath(posixpath.join(posixpath.dirname(from_path), target))
-        if not relative.startswith("../") and _strip_md(relative).casefold() in by_key:
-            return by_key[_strip_md(relative).casefold()]
-        suffix = "/" + key
-        tails = [p for p in paths if _strip_md(p).casefold().endswith(suffix)]
-        return tails[0] if len(tails) == 1 else None
-    named = [p for p in paths if posixpath.basename(_strip_md(p)).casefold() == key]
-    return named[0] if len(named) == 1 else None
+        if not relative.startswith("../") and _strip_md(relative).casefold() in index.by_key:
+            return index.by_key[_strip_md(relative).casefold()]
+    # A trailing path (a basename when the target has no "/"), unique in the vault.
+    tails = index.by_tail.get(key, [])
+    return tails[0] if len(tails) == 1 else None
