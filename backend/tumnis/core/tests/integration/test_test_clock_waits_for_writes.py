@@ -25,7 +25,7 @@ BEFORE = datetime(2026, 3, 11, 14, 0, tzinfo=UTC)
 AFTER = datetime(2026, 3, 11, 14, 25, tzinfo=UTC)
 
 
-def _slow_router() -> APIRouter:
+def _slow_router(started: asyncio.Event) -> APIRouter:
     from tumnis.core.routing import RoutePolicy, route_policy, v1_router  # noqa: PLC0415
 
     slow = v1_router("slow-write")
@@ -33,6 +33,7 @@ def _slow_router() -> APIRouter:
     @slow.post("/slow-write")
     @route_policy(RoutePolicy(auth="none", idempotent=False, not_idempotent_reason="test"))
     async def slow_write(request: Request) -> dict[str, str]:
+        started.set()
         await asyncio.sleep(0.3)  # authentication, idempotency, the session...
         return {"now": request.app.state.clock.now().isoformat()}
 
@@ -49,10 +50,11 @@ async def test_a_clock_change_waits_for_a_write_already_in_flight(
     from tumnis.app import create_app  # noqa: PLC0415
     from tumnis.core import db as core_db  # noqa: PLC0415
 
+    started = asyncio.Event()
     app = create_app(
         settings=settings_for(db, tumnis_adapters="fake"),
         clock=clock,
-        extra_routers=[_slow_router()],
+        extra_routers=[_slow_router(started)],
     )
     transport = httpx.ASGITransport(app=app)
     try:
@@ -60,7 +62,7 @@ async def test_a_clock_change_waits_for_a_write_already_in_flight(
             fixed = await client.post("/v1/test/clock", json={"time": BEFORE.isoformat()})
             assert fixed.status_code == 200, fixed.text
             write = asyncio.create_task(client.post("/v1/slow-write"))
-            await asyncio.sleep(0.05)  # the write is in its handler
+            await started.wait()  # the write is in its handler
             moved = await client.post("/v1/test/clock", json={"time": AFTER.isoformat()})
             written = await write
     finally:

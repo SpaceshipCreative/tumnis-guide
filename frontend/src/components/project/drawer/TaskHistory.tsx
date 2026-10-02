@@ -1,13 +1,14 @@
 // The drawer's History (A1.1, FR-4.2, UX 9, coordinator decision 83): the task's writes
 // from its undo log, newest first, each naming the fields it changed and who made it,
 // "you" for the person's own, so an override shows as theirs after a reload. The list
-// refreshes with the task over /ws (LIVE_MAP).
-import { useQuery } from "@tanstack/react-query";
+// refreshes with the task over /ws (LIVE_MAP); older writes come a page at a time.
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useId } from "react";
 
-import { tasksListTaskHistoryOptions } from "../../../api/@tanstack/react-query.gen";
+import { tasksListTaskHistoryInfiniteOptions } from "../../../api/@tanstack/react-query.gen";
 import type { TaskChangeOut } from "../../../api/types.gen";
 import { clockTime } from "../../../lib/time";
+import { BUTTON_SECONDARY } from "../../common/ui";
 
 const FIELD_WORDS: Readonly<Record<string, string>> = {
   created: "Created",
@@ -56,11 +57,14 @@ export function TaskHistory({
   taskId: string;
   timeZone: string;
 }) {
-  const history = useQuery(
-    tasksListTaskHistoryOptions({ path: { task_id: taskId } }),
-  );
+  const history = useInfiniteQuery({
+    ...tasksListTaskHistoryInfiniteOptions({ path: { task_id: taskId } }),
+    // The first page: the key's own params (a null page would not be read).
+    initialPageParam: { path: { task_id: taskId } },
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
+  });
   const headingId = useId();
-  const items = history.data?.items ?? [];
+  const items = history.data?.pages.flatMap((page) => page.items) ?? [];
   return (
     <section
       aria-labelledby={headingId}
@@ -87,6 +91,18 @@ export function TaskHistory({
             </li>
           ))}
         </ul>
+      )}
+      {history.hasNextPage && (
+        <button
+          type="button"
+          disabled={history.isFetchingNextPage}
+          onClick={() => {
+            void history.fetchNextPage();
+          }}
+          className={`${BUTTON_SECONDARY} self-start`}
+        >
+          {history.isFetchingNextPage ? "Loading…" : "Load more"}
+        </button>
       )}
     </section>
   );
