@@ -83,7 +83,6 @@ PURGE_BATCH = 500  # plan default; read per run (the kill test's probe sets it)
 # A purge workflow in one of these DBOS states carries itself on (retention_purge).
 LIVE_WORKFLOW: Final = frozenset({"PENDING", "ENQUEUED", "DELAYED"})
 PURGE_PAUSE_S = 0.2  # between batches, so a big purge never hogs the database
-MAX_PURGE_BATCHES: Final = 1_000_000  # a bound, never reached
 
 _log = logging.getLogger(__name__)
 
@@ -341,14 +340,14 @@ async def purge_finish(workspace_id: str, purge_id: str) -> dict[str, int]:
 async def purge_scope(workspace_id: str, purge_id: str) -> dict[str, int]:
     """One purge, `PURGE_BATCH` records a batch with `PURGE_PAUSE_S` between batches (both
     read per run, so a test can shrink them). A batch that committed before a retry
-    answers -1 and the next one follows; 0 means nothing is left."""
+    answers -1 and the next one follows; only 0 (nothing is left) ends the batches, so a
+    purge is never marked done with records left."""
     limit, pause = PURGE_BATCH, PURGE_PAUSE_S
-    for batch_no in range(1, MAX_PURGE_BATCHES + 1):
-        removed = await purge_batch(workspace_id, purge_id, batch_no, limit)
-        if removed == 0:
-            break
+    batch_no = 1
+    while await purge_batch(workspace_id, purge_id, batch_no, limit) != 0:
         if pause > 0:
             await DBOS.sleep_async(pause)
+        batch_no += 1
     return await purge_finish(workspace_id, purge_id)
 
 
