@@ -200,4 +200,7 @@ export const NOT_LIVE = [
   "connectionsListProviders",
   "connectionsOauthUrl",
   "connectionsOauthCallback",
+  // A purge's status (P3-09) is read on demand after a purge is asked for; a purge sends
+  // no live message.
+  "purgesGetPurge",
 ] as const;

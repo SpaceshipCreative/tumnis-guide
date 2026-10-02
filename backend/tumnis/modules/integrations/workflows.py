@@ -23,26 +23,40 @@ P3-02, the sync framework:
   `sync:<connection id>` (return-existing), skipping a connection whose sync is already
   queued or running.
 
+P3-09, retention and purge:
+
+- `purge_scope(workspace_id, purge_id)` (`integrations_purge_scope`, workflow
+  `purge:<id>`): batch steps of `PURGE_BATCH` records (`api.purge_batch`, one transaction
+  each, kill point `integrations.purge.batch_<n>.committing` inside it; the purge row's
+  batch number is the resume key), then a finish step. A user's purge is enqueued on the
+  maintenance queue by `purge.requested`'s subscriber.
+- `retention_purge` (`integrations_retention_purge`, hourly at :17 on the maintenance
+  queue): a start step records and audits each workspace's purge under its retention
+  setting, then runs each as a child `purge_scope`.
+
 The OAuth port, the connectors, the clock and the limiter's sleep come from `use()`
 (tests) or the adapter registry, the system clock and `asyncio.sleep`.
 """
 
 import asyncio
+import contextvars
+import logging
 import secrets
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
 from typing import Any, Final
 from uuid import UUID
 
-from dbos import DBOS, SetEnqueueOptions
+from dbos import DBOS, SetEnqueueOptions, SetWorkflowID
 
-from tumnis.core import audit, db, faults
+from tumnis.core import audit, db, fake_scripts, faults
 from tumnis.core.adapters.errors import AdapterUnavailable
 from tumnis.core.adapters.registry import current_mode, resolve
 from tumnis.core.clock import Clock, SystemClock
 from tumnis.core.net import NetPolicy
 from tumnis.core.tenancy import WorkspaceContext, tenant_session
 from tumnis.core.types import SYSTEM_ACTOR
+from tumnis.core.workflows_ops import MAINTENANCE_QUEUE
 from tumnis.modules.integrations import api
 from tumnis.modules.integrations import archive as _archive  # noqa: F401
 from tumnis.modules.integrations.oauth_port import ADAPTER as OAUTH_ADAPTER
@@ -60,6 +74,16 @@ STEP_RETRY: Final[dict[str, Any]] = {
     "max_attempts": 3,
     "interval_seconds": 0.1,
 }
+
+RETENTION_SCHEDULE_NAME: Final = "retention-purge"  # testing.RETENTION_TICK
+RETENTION_SCHEDULE: Final = "17 * * * *"  # plan default: hourly, off the hour
+RETENTION_WORKFLOW: Final = "integrations_retention_purge"  # testing.RETENTION_WORKFLOW
+PURGE_WORKFLOW: Final = "integrations_purge_scope"
+PURGE_BATCH = 500  # plan default; read per run (the kill test's probe sets it)
+PURGE_PAUSE_S = 0.2  # between batches, so a big purge never hogs the database
+MAX_PURGE_BATCHES: Final = 1_000_000  # a bound, never reached
+
+_log = logging.getLogger(__name__)
 
 Sleep = Callable[[float], Awaitable[None]]
 
@@ -115,6 +139,12 @@ def _connector(provider: str) -> api.Connector:
 
 def _now_clock() -> Clock:
     return _clock or SystemClock()
+
+
+async def _stamp() -> datetime:
+    """The time a purge stamps its rows with: the swapped clock (tests), else the api's
+    fixed test clock in fakes mode while one is set, else the system clock (decision 86)."""
+    return _clock.now() if _clock is not None else await fake_scripts.worker_now()
 
 
 def _ctx(workspace_id: str) -> WorkspaceContext:
@@ -288,6 +318,83 @@ async def connector_sync_tick(scheduled_at: datetime, context: Any) -> None:
             )
 
 
+# --- Retention and purge (P3-09) -----------------------------------------------------------------
+
+
+@DBOS.step(name="integrations_purge_batch", **STEP_RETRY)
+async def purge_batch(workspace_id: str, purge_id: str, batch_no: int, limit: int) -> int:
+    """Batch `batch_no` in one transaction; kill point
+    `integrations.purge.batch_<n>.committing` fires inside it, before its commit."""
+    return await api.purge_batch(
+        _ctx(workspace_id), UUID(purge_id), batch_no, limit=limit, now=await _stamp()
+    )
+
+
+@DBOS.step(name="integrations_purge_finish", **STEP_RETRY)
+async def purge_finish(workspace_id: str, purge_id: str) -> dict[str, int]:
+    return await api.finish_purge(_ctx(workspace_id), UUID(purge_id), now=await _stamp())
+
+
+@DBOS.workflow(name=PURGE_WORKFLOW)
+async def purge_scope(workspace_id: str, purge_id: str) -> dict[str, int]:
+    """One purge, `PURGE_BATCH` records a batch with `PURGE_PAUSE_S` between batches (both
+    read per run, so a test can shrink them). A batch that committed before a retry
+    answers -1 and the next one follows; 0 means nothing is left."""
+    limit, pause = PURGE_BATCH, PURGE_PAUSE_S
+    for batch_no in range(1, MAX_PURGE_BATCHES + 1):
+        removed = await purge_batch(workspace_id, purge_id, batch_no, limit)
+        if removed == 0:
+            break
+        if pause > 0:
+            await DBOS.sleep_async(pause)
+    return await purge_finish(workspace_id, purge_id)
+
+
+@DBOS.step(name="integrations_retention_start", **STEP_RETRY)
+async def retention_start(scheduled_at: str) -> list[tuple[str, str]]:
+    """(workspace, purge id) of each workspace whose retention setting purges now. The
+    cutoff counts back from the scheduled time (a test tick's is the test clock's)."""
+    at = datetime.fromisoformat(scheduled_at)
+    async with db.app_sessionmaker()() as s, s.begin():
+        workspaces = [str(w) for w in await audit.workspace_ids(s)]
+    started: list[tuple[str, str]] = []
+    for workspace_id in workspaces:
+        try:
+            purge_id = await api.start_retention_purge(_ctx(workspace_id), scheduled_at=at, now=at)
+        except Exception:  # one workspace's failure never holds up the others
+            _log.exception("retention purge: workspace %s", workspace_id)
+            continue
+        if purge_id is not None:
+            started.append((workspace_id, str(purge_id)))
+    return started
+
+
+@DBOS.workflow(name=RETENTION_WORKFLOW)
+async def retention_purge(scheduled_at: datetime, context: Any) -> int:
+    """Hourly on the maintenance queue: each workspace's retention purge, run here as a
+    child workflow `purge:<id>` (not enqueued: the maintenance queue runs one workflow at
+    a time, and this one holds it). How many purges ran."""
+    started = await retention_start(scheduled_at.isoformat())
+    for workspace_id, purge_id in started:
+        with SetWorkflowID(f"purge:{purge_id}"):
+            await purge_scope(workspace_id, purge_id)
+    return len(started)
+
+
+async def start_purge(workspace_id: str, purge_id: str) -> None:
+    """`purge.requested`'s subscriber: enqueue `purge:<id>` once (DBOS returns the
+    existing workflow for an id in use). Subscribers run inside a DBOS step, which may not
+    start a workflow, so the enqueue runs in a fresh context (as projects' `_enqueue`)."""
+
+    async def enqueue() -> None:
+        with SetWorkflowID(f"purge:{purge_id}"):
+            await DBOS.enqueue_workflow_async(
+                MAINTENANCE_QUEUE, purge_scope, workspace_id, purge_id
+            )
+
+    await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
+
+
 def schedules() -> list[Any]:
     """This module's DBOS schedules, applied by the worker after launch."""
     return [
@@ -296,5 +403,11 @@ def schedules() -> list[Any]:
             "workflow_fn": connector_sync_tick,
             "schedule": TICK_SCHEDULE,
             "queue_name": api.SYNC_QUEUE,
-        }
+        },
+        {
+            "schedule_name": RETENTION_SCHEDULE_NAME,
+            "workflow_fn": retention_purge,
+            "schedule": RETENTION_SCHEDULE,
+            "queue_name": MAINTENANCE_QUEUE,
+        },
     ]

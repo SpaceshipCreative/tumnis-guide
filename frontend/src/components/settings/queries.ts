@@ -55,3 +55,6 @@ export const calibrationQuery = () => decisionsGetCalibrationOptions();
 // Settings > Metrics (P1-18): the success metrics over local days `from` to `to`.
 export const metricsSummaryQuery = (range: { from: string; to: string }) =>
   planningGetMetricsSummaryOptions({ query: range });
+// Settings > Retention (P3-09, SAAS-2): the workspace's retention setting.
+export const retentionQuery = () =>
+  settingsGetSectionOptions({ path: { section: "integrations.retention" } });
