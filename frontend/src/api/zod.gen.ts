@@ -1392,7 +1392,7 @@ export const zPullRequestOut = z.object({
 export const zPurgeIn = z.object({
   id: z.uuid(),
   reason: z.string().min(1).max(500),
-  scope: z.literal("project"),
+  scope: z.enum(["project", "connection"]),
 });
 
 /**
@@ -1400,7 +1400,8 @@ export const zPurgeIn = z.object({
  */
 export const zPurgeOut = z.object({
   id: z.uuid(),
-  scope: z.literal("project"),
+  purge_id: z.uuid().nullish(),
+  scope: z.enum(["project", "connection"]),
   status: z.literal("accepted").optional().default("accepted"),
 });
 
