@@ -31,8 +31,6 @@ branch_labels = None
 depends_on = None
 phase = "expand"
 
-APP_ROLE = "tumnis_app"
-SIGNATURE = "app.s3_source_webhook(uuid)"
 FUNCTION = """
 CREATE FUNCTION app.s3_source_webhook(p_connection_id uuid)
 RETURNS TABLE (workspace_id uuid, webhook_token_sha256 bytea)
@@ -90,12 +88,12 @@ def upgrade() -> None:
         postgresql_where=sa.text("connection_id IS NOT NULL"),
     )
     op.execute(FUNCTION)
-    op.execute(f"REVOKE ALL ON FUNCTION {SIGNATURE} FROM PUBLIC")
-    op.execute(f"GRANT EXECUTE ON FUNCTION {SIGNATURE} TO {APP_ROLE}")
+    op.execute("REVOKE ALL ON FUNCTION app.s3_source_webhook(uuid) FROM PUBLIC")
+    op.execute("GRANT EXECUTE ON FUNCTION app.s3_source_webhook(uuid) TO tumnis_app")
 
 
 def downgrade() -> None:
-    op.execute(f"DROP FUNCTION {SIGNATURE}")
+    op.execute("DROP FUNCTION app.s3_source_webhook(uuid)")
     op.drop_index("ux_folder_files_ws_connection_path", table_name="folder_files")
     op.execute("DELETE FROM folder_files WHERE connection_id IS NOT NULL")
     op.drop_constraint("ck_folder_files_location_or_connection", "folder_files", type_="check")
