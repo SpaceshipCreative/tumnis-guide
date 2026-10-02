@@ -9,6 +9,8 @@
 // - Preview runs on the worker: POST starts it, then the answer is polled.
 // - Connect saves the settings and pinned host key; the worker clones, probes the key and
 //   syncs. The list shows each vault's status and last error.
+// - A draft this page no longer holds (the setup was left, or the page reloaded) shows
+//   under "Unfinished setups" with a Discard action, as it may hold a deploy key.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -86,6 +88,9 @@ export function ObsidianSection() {
   const projects = useQuery(projectsListProjectsOptions(PROJECT_LIST));
   const [draft, setDraft] = useState<VaultOut | null>(null);
   const [adding, setAdding] = useState(false);
+  // The vault whose DELETE is in flight: each click sends a new idempotency key, so a
+  // second one would answer 404 for the vault the first just removed.
+  const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = () =>
@@ -193,18 +198,22 @@ export function ObsidianSection() {
   }
 
   async function disconnect(id: string) {
+    if (removing !== null) return;
+    setRemoving(id);
     setError(null);
     try {
       await remove(id);
       await refresh();
     } catch (e) {
       setError(problem(e).message);
+    } finally {
+      setRemoving(null);
     }
   }
 
-  const connected = (vaults.data?.vaults ?? []).filter(
-    (v) => v.id !== draft?.id && v.status !== "pending",
-  );
+  const others = (vaults.data?.vaults ?? []).filter((v) => v.id !== draft?.id);
+  const connected = others.filter((v) => v.status !== "pending");
+  const unfinished = others.filter((v) => v.status === "pending");
   return (
     <section className={SECTION} aria-labelledby="obsidian-heading">
       <h2 id="obsidian-heading" className={HEADING}>
@@ -236,6 +245,7 @@ export function ObsidianSection() {
                 <button
                   type="button"
                   className={SECONDARY}
+                  disabled={removing !== null}
                   onClick={() => void disconnect(v.id)}
                 >
                   Disconnect
@@ -252,6 +262,40 @@ export function ObsidianSection() {
             </li>
           ))}
         </ul>
+      )}
+      {unfinished.length > 0 && (
+        <section
+          aria-labelledby="obsidian-unfinished-heading"
+          className="flex flex-col gap-2"
+        >
+          <h3 id="obsidian-unfinished-heading" className="font-medium">
+            Unfinished setups
+          </h3>
+          <p className={HINT}>
+            Vaults whose setup was never finished. Discard one to remove it and
+            its deploy key.
+          </p>
+          {unfinished.map((v) => (
+            <div
+              key={v.id}
+              className={`${CARD} flex flex-wrap items-center gap-2`}
+            >
+              <span>
+                {v.mode === "git"
+                  ? (v.remote ?? "A Git vault, not connected")
+                  : (v.folder_path ?? "A folder vault, not connected")}
+              </span>
+              <button
+                type="button"
+                className={SECONDARY}
+                disabled={removing !== null}
+                onClick={() => void disconnect(v.id)}
+              >
+                Discard
+              </button>
+            </div>
+          ))}
+        </section>
       )}
       {error && <p className={ERROR}>{error}</p>}
       {adding ? (

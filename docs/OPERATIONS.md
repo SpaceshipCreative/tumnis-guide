@@ -98,7 +98,7 @@ The drill only ever restores into its own scratch volume (`tumnis-drill-pgdata`)
 
 Releases are tags `vX.Y.Z` with a [CHANGELOG.md](../CHANGELOG.md) section each; read it first, including its migration notes. Migrations expand the schema first (squawk checks them in CI), and a later contract migration, such as `integrations_0004`, removes only what the previous release no longer uses. The rollback rehearsal deploys N, N+1, then N again on one database for every release, and that tested path is what the rollback below follows. Back up first if backups are not on.
 
-Set `TUMNIS_RELEASE` to the release you are moving to, for example `export TUMNIS_RELEASE=v1.1.0`. Keep the running image as `previous`, so a rollback needs no build:
+Set `TUMNIS_RELEASE` to the release you are moving to, for example `export TUMNIS_RELEASE=v1.1.0`, and `TUMNIS_PREVIOUS` to the release you are running now, for example `export TUMNIS_PREVIOUS=v1.0.0` (a rollback checks it out again). Keep the running image as `previous`, so a rollback needs no build:
 
 ```bash readme:upgrade:10
 docker image tag ghcr.io/spaceshipcreative/tumnis:local ghcr.io/spaceshipcreative/tumnis:previous
@@ -120,12 +120,15 @@ Compare `.env.example` with your `.env` after an upgrade: a new variable has a d
 
 Rollback is "redeploy the previous image" (REL-4). Never roll the database back: the previous release's `tumnis migrate` exits 0 with "database is ahead of this release (rollback)", and readiness treats a database ahead of the release as ready.
 
+Check out the previous release first, so `deploy/` (the compose file and its config) matches the previous image, then put that image back and restart:
+
 ```bash readme:upgrade:30 timeout=900
+git checkout --detach "$TUMNIS_PREVIOUS"
 docker image tag ghcr.io/spaceshipcreative/tumnis:previous ghcr.io/spaceshipcreative/tumnis:local
 docker compose up -d --wait --wait-timeout 600
 ```
 
-If the release also changed `deploy/`, check out the previous tag before that `docker compose up` so the compose file matches the image. The deploy host needs Docker Compose 2.24.0 or later: `deploy/compose.yaml` gives the worker `deploy/hosted-keys.env` through the long `env_file` form with `required: false`, which older Compose releases reject. Rolling back to a build older than the hosted provider settings (before commit 3f678e79): remove `deploy/hosted-keys.env` first, or that build's worker refuses the unknown variables and does not start. On any build that has them, a hosted key set with a base URL that is not `https://` stops the worker at startup (`hosted_url_requires_https`). DBOS resumes a workflow only on the application version that started it: with work in flight, keep one worker on the newer image running until its queues drain. On a Coolify install, point `TUMNIS_VERSION` back at the previous tag (or `sha-<commit>`) and deploy.
+The deploy host needs Docker Compose 2.24.0 or later: `deploy/compose.yaml` gives the worker `deploy/hosted-keys.env` through the long `env_file` form with `required: false`, which older Compose releases reject. Rolling back to a build older than the hosted provider settings (before commit 3f678e79): remove `deploy/hosted-keys.env` first, or that build's worker refuses the unknown variables and does not start. On any build that has them, a hosted key set with a base URL that is not `https://` stops the worker at startup (`hosted_url_requires_https`). DBOS resumes a workflow only on the application version that started it: with work in flight, keep one worker on the newer image running until its queues drain. On a Coolify install, point `TUMNIS_VERSION` back at the previous tag (or `sha-<commit>`) and deploy.
 
 ## Master key rotation
 
