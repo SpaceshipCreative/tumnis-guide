@@ -49,6 +49,12 @@ CASES = [
     ),
     (
         "events",
+        "connection.auth_required",
+        1,
+        "backend/tests/contract/fixtures/events/connection.auth_required/v1.json",
+    ),
+    (
+        "events",
         "context_item.linked",
         1,
         "backend/tests/contract/fixtures/events/context_item.linked/v1.json",
@@ -100,6 +106,12 @@ CASES = [
         "human.decided",
         1,
         "backend/tests/contract/fixtures/events/human.decided/v1.json",
+    ),
+    (
+        "events",
+        "items.ingested",
+        1,
+        "backend/tests/contract/fixtures/events/items.ingested/v1.json",
     ),
     (
         "events",

@@ -173,6 +173,17 @@ DEAD_LETTERS = SnapshotGauge(
 USAGE_TOTAL = SnapshotGauge(
     "tumnis_usage_total", "Usage counters summed over every day and workspace", "counter"
 )
+CONNECTOR_SYNC_AGE = SnapshotGauge(
+    "tumnis_connector_sync_age_seconds",
+    "Seconds since the least recently synced live connection of each provider last synced"
+    " well (or was made), P3-02",
+    "provider",
+)
+CONNECTOR_ITEMS = SnapshotGauge(
+    "tumnis_connector_items_total",
+    "Items the syncs of each provider's live connections have read, P3-02",
+    "provider",
+)
 
 _QUEUE_DEPTH_SQL = text(
     """

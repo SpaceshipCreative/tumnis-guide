@@ -3,9 +3,10 @@
 # Docker network, and Coolify itself is reachable only over the VPN or Tailscale (FR-9.1).
 #
 # Coolify (or the shell) provides APP_DB_PASSWORD, OWNER_DB_PASSWORD, POSTGRES_PASSWORD and
-# TUMNIS_VERSION. Passwords go into connection URLs, so keep them URL-safe (hex). The
-# optional hosted provider variables (SPEECH__HOSTED_*, EMBEDDINGS__HOSTED_*) come from the
-# server's .env too; deploy/.env.example lists every variable with a placeholder.
+# TUMNIS_VERSION. Passwords go into connection URLs, so keep them URL-safe (hex);
+# deploy/.env.example lists every variable with a placeholder. The optional hosted provider
+# keys (SPEECH__HOSTED_*, EMBEDDINGS__HOSTED_*) are not among them: they go in
+# deploy/hosted-keys.env, which only the worker reads (see the worker below).
 # Backups (P0-28) need /etc/pgbackrest/conf.d/secrets.conf on the host (repo2-s3-key,
 # repo2-s3-key-secret, repo2-cipher-pass; root:999, mode 0640), see deploy/README.md.
 # /metrics (P0-27) needs /etc/tumnis/secrets/tumnis_metrics_token: the api refuses to start
@@ -82,17 +83,14 @@ services:
     command: ["tumnis", "worker"]
     environment:
       <<: *env
-      # Optional hosted speech and embedding providers (Scott decision 75): only the worker
-      # calls them, so only the worker gets their keys, from the server's .env (see
-      # .env.example). Blank leaves a provider off; a preview refuses a key.
-      SPEECH__HOSTED_BASE_URL: ${SPEECH__HOSTED_BASE_URL:-}
-      SPEECH__HOSTED_MODEL: ${SPEECH__HOSTED_MODEL:-}
-      SPEECH__HOSTED_VOICE: ${SPEECH__HOSTED_VOICE:-}
-      SPEECH__HOSTED_API_KEY: ${SPEECH__HOSTED_API_KEY:-}
-      EMBEDDINGS__HOSTED_BASE_URL: ${EMBEDDINGS__HOSTED_BASE_URL:-}
-      EMBEDDINGS__HOSTED_MODEL: ${EMBEDDINGS__HOSTED_MODEL:-}
-      EMBEDDINGS__HOSTED_DIMS: ${EMBEDDINGS__HOSTED_DIMS:-}
-      EMBEDDINGS__HOSTED_API_KEY: ${EMBEDDINGS__HOSTED_API_KEY:-}
+    # Optional hosted speech and embedding providers (Scott decisions 75 and 90): only the
+    # worker calls them, so only the worker reads deploy/hosted-keys.env, which holds just
+    # their SPEECH__HOSTED_* and EMBEDDINGS__HOSTED_* variables (hosted-keys.env.example).
+    # Without the file the worker gets none of them, so an image older than these settings
+    # still starts under this file (rollback, REL-4). A preview refuses a key.
+    env_file:
+      - path: hosted-keys.env
+        required: false
     depends_on:
       migrate: { condition: service_completed_successfully }
 

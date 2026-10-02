@@ -413,6 +413,29 @@ async def resume_project(ctx: Ctx) -> None:
     response.raise_for_status()
 
 
+async def disconnect_connection(ctx: Ctx) -> None:
+    """A `fake` connection (P3-02), then DELETE /v1/connections/{id} with a reason:
+    `connector.disconnected`."""
+    made = await ctx.session_client.post(
+        "/v1/connections", json={"provider": "fake", "account_label": "Audit case"}
+    )
+    made.raise_for_status()
+    response = await ctx.session_client.request(
+        "DELETE", f"/v1/connections/{made.json()['id']}", json={"reason": "Audit case"}
+    )
+    response.raise_for_status()
+
+
+async def stray_oauth_callback(ctx: Ctx) -> None:
+    """GET /v1/connections/oauth/callback with a state no sign-in holds (P3-02): 400 and
+    `connector.oauth_state_mismatch`."""
+    response = await ctx.session_client.get(
+        "/v1/connections/oauth/callback", params={"code": "c1", "state": "no-such-state"}
+    )
+    if response.status_code != 400:
+        raise RuntimeError(f"expected 400, got {response.status_code}: {response.text}")
+
+
 AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("audit.exported", export_csv, "user"),
     AuditCase("dead_letter.retried", retry_dead_letter, "user"),
@@ -442,6 +465,8 @@ AUDIT_CASES: tuple[AuditCase, ...] = (
     AuditCase("killswitch.off", resume_all, "user"),
     AuditCase("project.paused", pause_project, "user"),
     AuditCase("project.resumed", resume_project, "user"),
+    AuditCase("connector.disconnected", disconnect_connection, "user"),
+    AuditCase("connector.oauth_state_mismatch", stray_oauth_callback, "user"),
 )
 
 # action -> the work package that builds its operation and adds its case.
