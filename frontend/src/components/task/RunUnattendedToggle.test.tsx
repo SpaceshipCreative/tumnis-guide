@@ -11,39 +11,34 @@ import { RunUnattendedToggle } from "./RunUnattendedToggle";
 
 const NEEDS_YOU = "Needs you: from outside content";
 
-test.fails(
-  "[P4-04][FR-4.5] T-P4-04-12 toggle hidden for tainted and non-AI",
-  () => {
-    renderWithProviders(
-      <RunUnattendedToggle
-        task={makeTask({ label: "ai", tainted: false, status: "today" })}
-      />,
-    );
-    expect(
-      screen.getByRole("switch", { name: "Run unattended" }),
-    ).toBeVisible();
-    expect(screen.queryByText(NEEDS_YOU)).toBeNull();
-    cleanup();
+test("[P4-04][FR-4.5] T-P4-04-12 toggle hidden for tainted and non-AI", () => {
+  renderWithProviders(
+    <RunUnattendedToggle
+      task={makeTask({ label: "ai", tainted: false, status: "today" })}
+    />,
+  );
+  expect(screen.getByRole("switch", { name: "Run unattended" })).toBeVisible();
+  expect(screen.queryByText(NEEDS_YOU)).toBeNull();
+  cleanup();
 
-    renderWithProviders(
+  renderWithProviders(
+    <RunUnattendedToggle
+      task={makeTask({ label: "ai", tainted: true, status: "today" })}
+    />,
+  );
+  expect(screen.queryByRole("switch")).toBeNull();
+  expect(screen.getByText(NEEDS_YOU)).toBeVisible();
+  cleanup();
+
+  for (const label of ["human", "hybrid", null] as const) {
+    const { container } = renderWithProviders(
       <RunUnattendedToggle
-        task={makeTask({ label: "ai", tainted: true, status: "today" })}
+        task={makeTask({ label, tainted: false, status: "today" })}
       />,
     );
     expect(screen.queryByRole("switch")).toBeNull();
-    expect(screen.getByText(NEEDS_YOU)).toBeVisible();
+    expect(screen.queryByText(NEEDS_YOU)).toBeNull();
+    expect(container).toBeEmptyDOMElement();
     cleanup();
-
-    for (const label of ["human", "hybrid", null] as const) {
-      const { container } = renderWithProviders(
-        <RunUnattendedToggle
-          task={makeTask({ label, tainted: false, status: "today" })}
-        />,
-      );
-      expect(screen.queryByRole("switch")).toBeNull();
-      expect(screen.queryByText(NEEDS_YOU)).toBeNull();
-      expect(container).toBeEmptyDOMElement();
-      cleanup();
-    }
-  },
-);
+  }
+});
