@@ -1485,6 +1485,20 @@ export type HealthCheckAccepted = {
 };
 
 /**
+ * HostKeyIn
+ */
+export type HostKeyIn = {
+  /**
+   * Reason
+   */
+  reason?: string | null;
+  /**
+   * Sha256
+   */
+  sha256: string;
+};
+
+/**
  * HumanWaitOut
  */
 export type HumanWaitOut = {
@@ -1764,7 +1778,7 @@ export type LocationIn = {
   /**
    * Kind
    */
-  kind: "server_path" | "s3";
+  kind: "server_path" | "s3" | "share" | "sftp";
   /**
    * Name
    */
@@ -1774,6 +1788,7 @@ export type LocationIn = {
    */
   root: string;
   s3?: S3ConfigIn | null;
+  sftp?: SftpConfigIn | null;
 };
 
 /**
@@ -1791,6 +1806,10 @@ export type LocationOut = {
    */
   endpoint: string | null;
   /**
+   * Host Key Sha256
+   */
+  host_key_sha256?: string | null;
+  /**
    * Id
    */
   id: string;
@@ -1807,13 +1826,17 @@ export type LocationOut = {
    */
   name: string;
   /**
+   * Pending Host Key Sha256
+   */
+  pending_host_key_sha256?: string | null;
+  /**
    * Root
    */
   root: string;
   /**
    * Status
    */
-  status: "online" | "offline";
+  status: "online" | "offline" | "pending_host_key" | "host_key_changed";
   /**
    * Status Reason
    */
@@ -4583,6 +4606,28 @@ export type SetupTotpIn = {
    * Setup Token
    */
   setup_token: string;
+};
+
+/**
+ * SftpConfigIn
+ */
+export type SftpConfigIn = {
+  /**
+   * Host
+   */
+  host: string;
+  /**
+   * Port
+   */
+  port?: number;
+  /**
+   * Private Key
+   */
+  private_key: string;
+  /**
+   * Username
+   */
+  username: string;
 };
 
 /**
@@ -9522,6 +9567,66 @@ export type KnowledgeSetDefaultLocationResponses = {
 
 export type KnowledgeSetDefaultLocationResponse =
   KnowledgeSetDefaultLocationResponses[keyof KnowledgeSetDefaultLocationResponses];
+
+export type KnowledgeConfirmHostKeyData = {
+  body: HostKeyIn;
+  path: {
+    /**
+     * Storage Location Id
+     */
+    storage_location_id: string;
+  };
+  query?: never;
+  url: "/v1/knowledge/locations/{storage_location_id}/host-key";
+};
+
+export type KnowledgeConfirmHostKeyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type KnowledgeConfirmHostKeyError =
+  KnowledgeConfirmHostKeyErrors[keyof KnowledgeConfirmHostKeyErrors];
+
+export type KnowledgeConfirmHostKeyResponses = {
+  /**
+   * Successful Response
+   */
+  200: LocationOut;
+};
+
+export type KnowledgeConfirmHostKeyResponse =
+  KnowledgeConfirmHostKeyResponses[keyof KnowledgeConfirmHostKeyResponses];
 
 export type KnowledgeTestLocationData = {
   body?: never;

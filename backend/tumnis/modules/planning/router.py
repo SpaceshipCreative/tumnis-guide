@@ -50,10 +50,10 @@ from tumnis.core.errors import ProblemError
 from tumnis.core.idempotency import SessionDep
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
-from tumnis.modules.planning import (
-    api,
-    testing,  # noqa: F401  # P4-04: registers the `unattended-tick` test tick
-)
+from tumnis.modules.planning import api
+
+# Registers the `planner-tick` and `unattended-tick` test ticks.
+from tumnis.modules.planning import testing as _testing  # noqa: F401
 
 router = v1_router("planning", prefix="/plan", tags=["planning"])
 settings_router = v1_router("planning", prefix="/settings", tags=["settings"])

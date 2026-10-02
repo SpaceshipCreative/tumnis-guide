@@ -418,5 +418,16 @@ async def enqueue_reembed(
 embeddings.register_reembed_starter(enqueue_reembed)
 
 
+# --- Moving a project folder (P3-14): red-phase seam ---------------------------------------
+
+
+@DBOS.workflow(name="knowledge_move_project_folder")
+async def move_project_folder(
+    workspace_id: str, project_id: str, to_location: str, to_path: str
+) -> dict[str, Any]:
+    """Copy the project's folder to `to_location`/`to_path`, verify every hash, switch."""
+    raise NotImplementedError("P3-14")
+
+
 # P2-18: the folder steps of the project archive workflows register with projects.
 from tumnis.modules.knowledge import archive as _archive  # noqa: E402, F401

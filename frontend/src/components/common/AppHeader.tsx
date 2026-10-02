@@ -67,6 +67,7 @@ function ReviewLink() {
       {count > 0 && (
         <span
           aria-hidden="true"
+          data-testid="review-count"
           className="absolute top-0.5 right-0.5 min-w-4 rounded-full bg-accent px-1 text-center text-[0.625rem] leading-4 font-semibold text-accent-contrast tabular-nums md:-top-0.5 md:-right-0.5"
         >
           {count > 99 ? "99+" : count}

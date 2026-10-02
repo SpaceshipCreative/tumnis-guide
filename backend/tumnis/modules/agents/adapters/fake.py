@@ -14,8 +14,10 @@ steps.
 """
 
 import asyncio
+import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated, Any, Final, Literal, Self
 from uuid import UUID, uuid5
 
@@ -127,6 +129,94 @@ def task_script_key(title: str) -> str:
     return f"task:{title}"
 
 
+# --- Phase 1 playback (SEED, R-37): a recording fitted to the packet ------------------------
+
+# The runner recordings a phase 1 script names (`result`), kept with the backend's tests
+# (and so in the image: only the build's caches are excluded).
+RECORDINGS_DIR: Final = Path(__file__).resolve().parents[4] / "tests" / "fakes" / "recordings"
+RUNNER_RECORDINGS: Final = RECORDINGS_DIR / "runner"
+# A recorded enrichment reply whose `task_id` is this answers for the packet's own task.
+TASK_ID_SENTINEL: Final = "00000000-0000-0000-0000-000000000000"
+# A recorded plan reply names a task `title:<task title>`; one no candidate has gets this id.
+TITLE_PREFIX: Final = "title:"
+UNKNOWN_TASK_ID: Final = "0199ffff-0000-7000-8000-00000000beef"
+
+
+def phase_1_key(profile: str, skill: str) -> str:
+    """The match key of a phase 1 script (`parse_runner_script`)."""
+    return f"{profile}/{skill}"
+
+
+def recorded_reply(name: str) -> dict[str, Any] | None:
+    """The JSON of the runner recording called `name`: a bare file name inside
+    RUNNER_RECORDINGS; None for a recording of JSON `null` (a reply with no JSON, such as
+    `plan__no_json`). A path, a parent reference or a missing file raises ValueError, so
+    a posted script never reads outside the folder."""
+    if not name or name in {".", ".."} or Path(name).name != name or "\\" in name:
+        raise ValueError(f"not a recording name: {name!r}")
+    path = RUNNER_RECORDINGS / name
+    if not path.is_file():
+        raise ValueError(f"no runner recording named {name!r}")
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if loaded is None:
+        return None
+    if not isinstance(loaded, dict):
+        raise ValueError(f"runner recording {name!r} is not a JSON object")
+    return loaded
+
+
+def load_recording(name: str) -> dict[str, Any]:
+    """`recorded_reply` for a recording that holds a JSON object (ValueError otherwise)."""
+    loaded = recorded_reply(name)
+    if loaded is None:
+        raise ValueError(f"runner recording {name!r} is not a JSON object")
+    return loaded
+
+
+def scripted_output(
+    output: Mapping[str, Any] | None, packet: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    """A recorded reply fitted to the packet it answers (the packet as JSON): a plan
+    reply's `title:<title>` picks and alternates become the ids of the packet's candidates
+    with those titles (UNKNOWN_TASK_ID when none has it); an enrichment reply's sentinel
+    `task_id` becomes the packet's own task (`body.task.id`). Anything else is copied as
+    it is; the recording itself is never changed."""
+    if output is None:
+        return None
+    body = packet.get("body")
+    body = body if isinstance(body, Mapping) else {}
+    if isinstance(output.get("picks"), list):
+        return _for_plan(output, body)
+    if output.get("task_id") != TASK_ID_SENTINEL:
+        return dict(output)
+    task = body.get("task")
+    own = task.get("id") if isinstance(task, Mapping) else None
+    return {**output, "task_id": own if isinstance(own, str) else TASK_ID_SENTINEL}
+
+
+def _for_plan(output: Mapping[str, Any], body: Mapping[str, Any]) -> dict[str, Any]:
+    candidates = body.get("candidates")
+    titles = {
+        str(c.get("title")): str(c.get("task_id"))
+        for c in (candidates if isinstance(candidates, list) else [])
+        if isinstance(c, Mapping)
+    }
+
+    def resolve(value: Any) -> Any:
+        if isinstance(value, str) and value.startswith(TITLE_PREFIX):
+            return titles.get(value.removeprefix(TITLE_PREFIX), UNKNOWN_TASK_ID)
+        return value
+
+    return {
+        **output,
+        "picks": [
+            {**pick, "task_id": resolve(pick.get("task_id"))} if isinstance(pick, Mapping) else pick
+            for pick in output["picks"]
+        ],
+        "alternates": [resolve(a) for a in output.get("alternates") or []],
+    }
+
+
 def parse_runner_script(body: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
     """The fake runner's stored script (R-37, `POST /v1/test/fakes/runner/script`): the
     phase 1 body is keyed `<profile>/<skill>`, the phase 2 body `task:<title>` and stored
@@ -137,7 +227,7 @@ def parse_runner_script(body: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
         stored = script.model_dump(mode="json", exclude_none=True)
         return task_script_key(script.task_title), {**stored, "played": 0}
     phase_1 = Phase1Script.model_validate(body)
-    return f"{phase_1.profile}/{phase_1.skill}", phase_1.model_dump(mode="json")
+    return phase_1_key(phase_1.profile, phase_1.skill), phase_1.model_dump(mode="json")
 
 
 @dataclass(frozen=True)

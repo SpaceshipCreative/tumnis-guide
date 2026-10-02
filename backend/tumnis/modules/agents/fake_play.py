@@ -21,16 +21,33 @@ first, so the run view shows a running run (its lines, its ticking clock, its St
 button) before the result ends it. The hold is sized for A2.1, which checks those within
 Playwright's 5 s expect window and then waits at most 5 s for In review.
 
+Phase 1 (SEED, R-37): a `run_skill` dispatch (plan, enrich) to a profile the fake serves
+(`api.fake_served`) comes to `dispatch_skill` instead of the daemon transport. It writes the
+run's `runs` row and `dispatched` event as a daemon dispatch does (`record_dispatch`, no
+mailbox row), then plays the script stored for `<profile>/<skill>`
+(`fakes.runner.script(profile, skill, result)`): after the script's delay, the named
+recording, fitted to the packet (`scripted_output`), is the run's `result` event and is
+sent to the waiting workflow, as the api hands over a daemon's result. A test reset that
+removes the run while the script's delay runs makes the fake report its runner lost, so the
+workflow ends at once instead of holding its queue slot into the next test (T-SEED-23,
+T-SEED-24). Without a script for the skill the fake answers at once with a failed result,
+error `no_script: <profile>/<skill>` (Scott decision 74, T-SEED-20), instead of staying
+silent for the run timeout.
+Phase 1 dispatches never reach the phase 2 hook (`dispatched`): they are not `run` packets.
+
 The playback is not durable: a worker that dies mid-script loses the rest (a fake).
 """
 
 import asyncio
+import contextvars
 import hashlib
 import logging
 from typing import Any, Final
 from uuid import UUID, uuid5
 
+from dbos import DBOS
 from pydantic import ValidationError
+from sqlalchemy import Table, select
 
 from tumnis.core import fake_scripts
 from tumnis.core.clock import SystemClock
@@ -39,7 +56,18 @@ from tumnis.core.tenancy import WorkspaceContext, current, tenant_session
 from tumnis.core.types import ActorRef
 from tumnis.core.versioning import NotFound
 from tumnis.modules.agents import api
-from tumnis.modules.agents.adapters.fake import TaskScript, on_dispatch, task_script_key
+from tumnis.modules.agents.adapters.fake import (
+    Phase1Script,
+    TaskScript,
+    on_dispatch,
+    phase_1_key,
+    recorded_reply,
+    scripted_output,
+    task_script_key,
+)
+from tumnis.modules.agents.adapters.hermes import record_dispatch
+from tumnis.modules.agents.adapters.port import AgentUnavailable
+from tumnis.modules.agents.models import AgentProfile, RunRow
 from tumnis.modules.agents.packet_builder import TaskPacket
 from tumnis.modules.agents.rules import artifact_refusal
 from tumnis.modules.tasks import api as tasks
@@ -49,12 +77,15 @@ _log = logging.getLogger(__name__)
 STEP_PAUSE_S: float = 0.1
 RESULT_HOLD_S: float = 4.0
 QUESTION_POLL_S: float = 0.5  # how often a question's playback re-reads the answer
+DELAY_POLL_S: float = 0.5  # how often a phase 1 run checks it still exists while it waits
 # The fake runner speaks as a device, as a real runner's handler does (`device:<runner>`);
 # it has no runner row, so the nil id.
 FAKE_RUNNER_ACTOR: Final = ActorRef(f"device:{UUID(int=0)}")
 
 _OPEN: Final = frozenset({"running", "waiting_on_human"})  # a run that may still ask
 _playing: set["asyncio.Task[None]"] = set()  # strong references until each playback ends
+_profiles: Table = AgentProfile.__table__  # type: ignore[assignment]
+_runs: Table = RunRow.__table__  # type: ignore[assignment]
 
 
 async def dispatched(packet: TaskPacket) -> None:
@@ -174,7 +205,7 @@ async def _ask(ctx: WorkspaceContext, run_id: UUID, question: dict[str, Any]) ->
     """The question through `api.ask_human`, as the run's agent asks with its task token;
     then re-sent with its id every QUESTION_POLL_S (as an agent re-sends after a `pending`
     long poll) until it is answered and the run runs again. None when the ask is refused
-    or the run ends first (a stopped run's question stays pending)."""
+    or the run ends first (a stopped run's question stays pending) or is gone (a reset)."""
     inp = api.AskHumanIn.model_validate({**question, "run_id": str(run_id)})
     try:
         async with tenant_session(ctx) as s:
@@ -188,7 +219,10 @@ async def _ask(ctx: WorkspaceContext, run_id: UUID, question: dict[str, Any]) ->
     while True:
         await asyncio.sleep(QUESTION_POLL_S)
         async with tenant_session(ctx) as s:
-            status = (await api.get_run(s, run_id)).status
+            try:
+                status = (await api.get_run(s, run_id)).status
+            except NotFound:  # a test reset removed the run (T-SEED-26)
+                return None
             if status not in _OPEN:
                 return None
             out = await api.ask_human(
@@ -219,6 +253,134 @@ async def _result(ctx: WorkspaceContext, run_id: UUID, result: dict[str, Any]) -
             await api.accept_result(s, ctx.actor, run_id, inp, now=SystemClock().now())
     except ProblemError as exc:
         _log.warning("the fake runner's result was not accepted", extra={"code": exc.code})
+
+
+# --- Phase 1: a `run_skill` dispatch (plan, enrich) played from its recording -------------
+
+
+async def dispatch_skill(ctx: WorkspaceContext, packet: TaskPacket) -> None:
+    """Take a `run_skill` dispatch for the fake (see the module): the run is written
+    `running` with its `dispatched` event, then the profile's script for the skill, if
+    any, plays in the background. AgentUnavailable for an unknown or paused profile, as
+    the daemon transport refuses it."""
+    async with tenant_session(ctx) as s:
+        profile = (
+            await s.execute(
+                select(_profiles.c.name, _profiles.c.status).where(
+                    _profiles.c.id == packet.profile_id, _profiles.c.deleted_at.is_(None)
+                )
+            )
+        ).first()
+        if profile is None:
+            raise AgentUnavailable(packet.profile_id, "unknown profile")
+        if profile.status == "paused":
+            raise AgentUnavailable(packet.profile_id, "paused or without a runner")
+        await record_dispatch(
+            s,
+            packet,
+            now=SystemClock().now(),
+            dispatched={"profile": profile.name, "skill": packet.skill, "runner_id": None},
+        )
+        workflow_id = await s.scalar(select(_runs.c.workflow_id).where(_runs.c.id == packet.run_id))
+    stored = await fake_scripts.lookup(fake_scripts.RUNNER, phase_1_key(profile.name, packet.skill))
+    try:
+        script = Phase1Script.model_validate(stored) if stored is not None else None
+    except ValidationError:  # the default ("") script, or a phase 2 one: not for this skill
+        script = None
+    if workflow_id is None:  # nothing waits on this run
+        return
+    if script is not None and (script.profile, script.skill) == (profile.name, packet.skill):
+        work = _answer(ctx, packet, script, workflow_id)
+    else:  # no script for this skill: an immediate failure (Scott decision 74, T-SEED-20)
+        work = _refuse(ctx, packet, profile.name, workflow_id)
+    # A fresh context: the playback outlives this step and must not act inside its workflow.
+    playback = asyncio.get_running_loop().create_task(work, context=contextvars.Context())
+    _playing.add(playback)
+    playback.add_done_callback(_done)
+
+
+async def _answer(
+    ctx: WorkspaceContext, packet: TaskPacket, script: Phase1Script, workflow_id: str
+) -> None:
+    """The recording as the run's result, after the script's delay. A run a test reset
+    removed during the delay, or before the answer, is told its runner is lost instead
+    (T-SEED-23, T-SEED-24)."""
+    run_id = packet.run_id
+    if not await _wait_while_present(ctx, run_id, script.delay_ms / 1000):
+        await _runner_lost(workflow_id, run_id)
+        return
+    try:
+        output = scripted_output(recorded_reply(script.result), packet.model_dump(mode="json"))
+    except ValueError:
+        _log.warning("the fake runner has no usable recording for %s", packet.skill)
+        return
+    message = {
+        "type": "result",
+        "run_id": str(run_id),
+        "status": "succeeded",
+        "exit_code": 0,
+        "output_json": output,
+        "error": None,
+    }
+    await _deliver(ctx, workflow_id, run_id, message)
+
+
+async def _refuse(
+    ctx: WorkspaceContext, packet: TaskPacket, profile: str, workflow_id: str
+) -> None:
+    """No script for this skill: a failed result at once, as a runner that cannot run the
+    skill answers (Scott decision 74), so the waiting workflow ends now instead of at its
+    run timeout."""
+    run_id = packet.run_id
+    message = {
+        "type": "result",
+        "run_id": str(run_id),
+        "status": "failed",
+        "exit_code": 1,
+        "output_json": None,
+        "error": f"no_script: {profile}/{packet.skill}",
+    }
+    await _deliver(ctx, workflow_id, run_id, message)
+
+
+async def _deliver(
+    ctx: WorkspaceContext, workflow_id: str, run_id: UUID, message: dict[str, Any]
+) -> None:
+    """The fake's result as the run's `result` event (once per run) and the message the
+    waiting `run_skill` receives (idempotent too), as the api hands over a daemon's
+    result; a run a test reset removed is told its runner is lost instead."""
+    message_id = uuid5(run_id, "fake-result")
+    async with tenant_session(ctx) as s:
+        present = await s.scalar(select(_runs.c.id).where(_runs.c.id == run_id))
+        if present is not None:
+            await api.record_run_event(s, run_id, message_id, "result", message)
+    if present is None:
+        await _runner_lost(workflow_id, run_id)
+        return
+    await DBOS.send_async(
+        workflow_id, message, api.run_topic(run_id), idempotency_key=str(message_id)
+    )
+
+
+async def _wait_while_present(ctx: WorkspaceContext, run_id: UUID, delay_s: float) -> bool:
+    """Wait `delay_s`, checking every DELAY_POLL_S that the run's row still exists. False
+    as soon as it is gone (a test reset removed it), True once the delay has passed."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + delay_s
+    while (remaining := deadline - loop.time()) > 0:
+        await asyncio.sleep(min(DELAY_POLL_S, remaining))
+        async with tenant_session(ctx) as s:
+            if await s.scalar(select(_runs.c.id).where(_runs.c.id == run_id)) is None:
+                return False
+    return True
+
+
+async def _runner_lost(workflow_id: str, run_id: UUID) -> None:
+    """Tell the waiting `run_skill` its runner is lost, as the runner sweep does; it then
+    ends at once (its run is gone, so its outcome step fails and the workflow errors)."""
+    message = {"type": "result", "run_id": str(run_id), "status": api.RUNNER_LOST}
+    lost = uuid5(run_id, "fake-runner-lost")
+    await DBOS.send_async(workflow_id, message, api.run_topic(run_id), idempotency_key=str(lost))
 
 
 on_dispatch(dispatched)
