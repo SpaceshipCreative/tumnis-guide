@@ -6,8 +6,13 @@ Instructions: ~/tumnis-coordinator/prompts/wave1/JOURNEYS-A.txt (binding). Branc
 next (title `fix(acceptance): planning journeys J1, J6, J7 pass`). Cite APP-05 in the body.
 
 ## Commits on the branch (on top of main 67a43da6)
-- `test(acceptance): J7 helper drives the AI task through a run` (frontend/e2e/phase1.ts,
-  helper only, no test body touched), plus this file.
+- 494b1547 `test(acceptance): J7 helper drives the AI task through a run` (frontend/e2e/phase1.ts,
+  helper only, no test body touched).
+- 155a58ee `chore: JOURNEYS-A handoff` (this file), then a follow-up adding these SHAs.
+- `make check` passed before these commits (backend 1865 passed; daemon, profiles and frontend
+  lint, typecheck, Vitest and bundle tests all green).
+- No PR yet, so no CI run and no CodeRabbit threads. No test.fail() markers removed.
+- The tumnis-ja stack (port 18931) is STILL RUNNING. Reuse it or tear it down.
 
 ## Local stack and diagnostics
 - My stack: `docker compose -p tumnis-ja --env-file /tmp/claude-1002/JOURNEYS-A/compose.env -f <worktree>/deploy/compose.test.yaml up -d --wait --build`.
