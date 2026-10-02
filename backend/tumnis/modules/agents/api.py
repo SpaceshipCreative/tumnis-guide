@@ -1244,6 +1244,7 @@ STOPPED_BY_USER: Final = "stopped_by_user"
 KILLSWITCH: Final = "killswitch"  # the workspace pause (P2-09)
 PROJECT_PAUSED: Final = "project_paused"  # a project pause (P2-09)
 TASKS_PER_RUN: Final = "tasks_per_run"  # the run created too many tasks (SAF-5, P2-09)
+DELEGATION_LOOP: Final = "delegation_loop"  # the master delegated a task in a loop (P2-06)
 # Limits that stop a run as `cancelled` with a `run_limit` review item (SAF-5: hitting a
 # limit stops the run and puts it in the review queue).
 CANCEL_LIMITS: Final = frozenset({TASKS_PER_RUN})
@@ -1256,6 +1257,7 @@ CLOSING_LINES: Final[dict[str, str]] = {
     KILLSWITCH: "Stopped: all agents were paused",
     PROJECT_PAUSED: "Stopped: the project's agents were paused",
     TASKS_PER_RUN: "Stopped: the run created more tasks than its limit",
+    DELEGATION_LOOP: "Stopped: it delegated the same task in a loop",
     "cancelled": "Stopped",
     "failed": "Stopped: the run failed",
     "timed_out": "Stopped at the time limit",
@@ -1385,6 +1387,7 @@ async def request_run(  # the plan's signature, plus the context and session
     unattended: bool = False,
     priority: int | None = None,
     rerun_of: UUID | None = None,
+    delegation_id: UUID | None = None,
     ctx: WorkspaceContext | None = None,
     session: AsyncSession | None = None,
     now: datetime | None = None,
@@ -1395,7 +1398,8 @@ async def request_run(  # the plan's signature, plus the context and session
     here). 409 `run_already_active` (also when a concurrent request won the partial unique
     index), `status_not_runnable` or `no_ready_profile`, 422 `label_not_runnable`, 404 for
     a task the caller cannot see; 409 `agents_paused` while the workspace or the task's
-    project is paused (P2-09)."""
+    project is paused (P2-09). A delegation (P2-06) presets the run id to its own id, so
+    the run's `dispatch_run` workflow ID is the delegation id."""
     from tumnis.core import tenancy  # noqa: PLC0415
     from tumnis.core.clock import SystemClock  # noqa: PLC0415
 
@@ -1426,12 +1430,13 @@ async def request_run(  # the plan's signature, plus the context and session
         if refusal is not None:
             raise _refusal(refusal)
         assert profile is not None  # noqa: S101  # can_dispatch refused a missing one
-        run_id = uuid7()
+        run_id = delegation_id or uuid7()
         try:
             async with s.begin_nested():
                 await s.execute(
                     insert(_runs).values(
                         id=run_id,
+                        delegation_id=delegation_id,
                         task_id=task_id,
                         profile_id=profile["id"],
                         kind=kind.value,

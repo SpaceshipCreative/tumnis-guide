@@ -55,6 +55,7 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("run_events", "kind"): "dispatched",
     ("runner_messages", "direction"): "out",
     ("agent_pauses", "scope"): "workspace",  # ck_agent_pauses_project: no project_id
+    ("delegations", "depth"): 1,  # ck_delegations_depth (P2-06)
     ("results", "outcome"): "done",  # ck_results_outcome
     ("recurrence_rules", "preset"): "daily",  # ck_recurrence_rules_preset_or_cron
     ("recurrence_rules", "task_template"): Jsonb({"title": "x"}),  # RecurrenceOut.title

@@ -56,7 +56,6 @@ ANSWERED_WITHIN_S = 5
 
 
 @pytest.mark.wp("P2-06")
-@pytest.mark.xfail(strict=True, reason="spec:P2-06")
 async def test_master_delegates_and_wait_for_task_never_parks_on_a_human(  # noqa: PLR0917
     db: DbUrls,
     dbos: Any,
