@@ -27,11 +27,22 @@ def _dump_tasks(_signum: int, _frame: object) -> None:
     import asyncio  # noqa: PLC0415
 
     # Python 3.13 keeps every loop's tasks in this WeakSet; there is no public all-loops view.
-    tasks = list(getattr(asyncio.tasks, "_scheduled_tasks", ()))
+    # DBOS's loop may change it during the copy (RuntimeError), so retry as asyncio's own
+    # all_tasks does; a diagnostic must never take the worker down.
+    tasks: list[asyncio.Task[object]] = []
+    for _ in range(1000):
+        try:
+            tasks = list(getattr(asyncio.tasks, "_scheduled_tasks", ()))
+            break
+        except RuntimeError:
+            continue
     print(f"--- {len(tasks)} asyncio tasks", file=sys.stderr, flush=True)
     for task in tasks:
-        if not task.done():
-            task.print_stack(limit=30, file=sys.stderr)
+        try:
+            if not task.done():
+                task.print_stack(limit=30, file=sys.stderr)
+        except Exception as exc:  # a task finishing meanwhile: note it, keep going
+            print(f"--- {task!r}: {exc!r}", file=sys.stderr)
     sys.stderr.flush()
 
 
