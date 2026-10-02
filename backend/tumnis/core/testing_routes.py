@@ -261,9 +261,9 @@ async def reset(
         async with _reset_lock(request.app):
             _refuse_if_superseded(state, generation)
             await truncate_tables(settings.database_owner_url)
-            # The TRUNCATE emptied the outbox, so every delivery queued now is for the
-            # world it removed; the seed's own deliveries come after (SEED, T-SEED-29).
-            await cancel_removed_deliveries()
+            # The TRUNCATE removed the world, so every workflow still outstanding now
+            # works for it; the seed's own workflows start after (SEED, T-SEED-29, APP-16).
+            await cancel_removed_workflows()
             clock = state.clock
             if isinstance(clock, OverridableClock):
                 clock.clear()  # a fresh stack reads the real time again
@@ -285,21 +285,28 @@ async def reset(
     return Response(status_code=204)
 
 
-OUTSTANDING: Final = ["ENQUEUED", "PENDING"]  # DBOS statuses of a delivery not yet done
+# DBOS statuses of a workflow not yet done (DBOS's own `workflow_is_active`).
+OUTSTANDING: Final = ["ENQUEUED", "PENDING", "DELAYED"]
 
 
-async def cancel_removed_deliveries() -> int:
-    """Cancel every event delivery (`deliver_event`) still queued or running; how many
-    (SEED, T-SEED-29).
+async def cancel_removed_workflows() -> int:
+    """Cancel every workflow still queued, delayed or running, whatever its name, except a
+    schedule's own runs; how many (SEED, T-SEED-29; APP-16).
 
-    A reset empties the tables, not the DBOS events queue. A delivery for the removed
-    world fails on its missing rows and backs off, holding one of the queue's slots, and
-    a few resets leave hundreds queued, so the next test's `run.requested` waited behind
-    them for over a minute (A2.1, A2.2). Cancelling takes a queued delivery off the queue
-    at once and stops a running one at its next step (DBOS: "interrupting it at the
-    beginning of its next step"); one sleeping in its backoff keeps its slot until the
-    sleep ends. Only deliveries: a workflow parked in `recv` keeps its slot when
-    cancelled, and a run or a build has its own way to end (T-SEED-23, T-SEED-24).
+    A reset empties the tables, not DBOS. A workflow of the removed world fails on its
+    missing rows or, worse, writes into the new one: event deliveries backed off holding the
+    events queue's slots, so the next test's `run.requested` waited behind them for over a
+    minute (A2.1, A2.2); notification deliveries, labelling and plan steps failed on foreign
+    keys into `workspaces` (APP-16); a focus workflow still waiting heard the next test's
+    `focus-wake` ticks. Cancelling takes a queued or delayed workflow off its queue at once
+    (DBOS sets it CANCELLED and clears its queue) and stops a running one at its next step
+    (DBOS: "interrupting it at the beginning of its next step"); one parked in `recv` or a
+    backoff sleep ends when it wakes. A run or a build also has its own way to end
+    (T-SEED-23, T-SEED-24).
+
+    It runs after the TRUNCATE and before the seed loads, so everything outstanding is the
+    removed world's. A schedule's runs (`schedule_name` set, DBOS `apply_schedules`) are
+    left alone: the schedule belongs to the deployment and fires again for the new world.
 
     Only in the compose.test shape, where the api serves the fake-script store: a route
     test's app runs no workflows and may have no DBOS system database to ask (or one with
@@ -308,16 +315,16 @@ async def cancel_removed_deliveries() -> int:
         return 0
     client = deadletter.dbos_client()
     try:
-        queued = await client.list_workflows_async(
-            name="deliver_event", status=OUTSTANDING, load_input=False, load_output=False
+        outstanding = await client.list_workflows_async(
+            status=OUTSTANDING, load_input=False, load_output=False
         )
     except DBAPIError as error:
         _log.info("reset: no DBOS system database to sweep (%s)", type(error.orig).__name__)
         return 0
-    ids = [workflow.workflow_id for workflow in queued]
+    ids = [w.workflow_id for w in outstanding if not w.schedule_name]
     if ids:
         await client.cancel_workflows_async(ids)
-        _log.info("reset: cancelled %d event deliveries of the removed world", len(ids))
+        _log.info("reset: cancelled %d workflows of the removed world", len(ids))
     return len(ids)
 
 

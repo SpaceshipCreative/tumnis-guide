@@ -32,7 +32,7 @@ import pytest
 
 if TYPE_CHECKING:
     import httpx
-    from dbos import DBOS
+    from dbos import DBOS, DBOSClient
 
     from tests._pg import DbUrls
 
@@ -431,6 +431,92 @@ async def test_a_reset_cancels_the_event_deliveries_of_the_world_it_removed(
     ]
     assert len(await dbos.list_workflows_async(workflow_ids=new, load_input=False)) > 0
     assert await _until_async(lambda: waiting(new, {"ENQUEUED"}), SETTLE_S, want=[]) == []
+
+
+UNSERVED_QUEUE = "app16-unserved"  # no worker dequeues it: what is put there stays queued
+OUTSTANDING = {"ENQUEUED", "PENDING", "DELAYED"}
+
+
+@pytest.mark.req("A2.1", "A2.2", "A2.6")
+async def test_a_reset_ends_every_workflow_of_the_world_it_removed(
+    client: httpx.AsyncClient,
+    db: DbUrls,
+    dbos: type[DBOS],
+    dbos_client: DBOSClient,
+    script_store: None,
+) -> None:
+    """APP-16 (application test): a reset cancelled only queued `deliver_event` workflows.
+    Notification deliveries, labelling, run and plan steps and focus workflows of the world
+    it removed kept running and wrote into the new one (foreign-key errors on
+    `delivery_attempts`, `review_items`, `daily_plans`), and pending focus workflows heard
+    later tests' ticks. A reset now ends every workflow still queued, delayed or running
+    from before it, whatever its name, and leaves a schedule's own runs alone (their
+    schedule keeps firing for the new world)."""
+    from dbos import SetWorkflowID  # noqa: PLC0415
+
+    from tumnis.modules.agents.human_flows import question_flow  # noqa: PLC0415
+
+    await _reset(client)
+    workspace = str(_ctx(db).workspace_id)
+
+    # Running: a question flow parked on its human, whose row the next reset removes.
+    parked = f"app16-question-{uuid4()}"
+    with SetWorkflowID(parked):
+        await dbos.start_workflow_async(question_flow, workspace, str(uuid4()))
+    # Queued behind a busy queue (here one no worker serves), under several names.
+    queued: list[str] = []
+    for name in (
+        "notifications.deliver_notification",
+        "decisions.label_task",
+        "focus_session",
+        "enrich_task",
+    ):
+        queued.append(f"app16-{uuid4()}")
+        await dbos_client.enqueue_async(
+            {"workflow_name": name, "queue_name": UNSERVED_QUEUE, "workflow_id": queued[-1]},
+            workspace,
+            str(uuid4()),
+        )
+    # Delayed: a notification delivery due in an hour.
+    delayed = f"app16-delayed-{uuid4()}"
+    await dbos_client.enqueue_async(
+        {
+            "workflow_name": "notifications.deliver_notification",
+            "queue_name": "notifications",
+            "workflow_id": delayed,
+            "delay_seconds": 3600,
+        },
+        workspace,
+        str(uuid4()),
+    )
+    # A schedule's own run, queued: a schedule is not the removed world's.
+    schedule = f"app16-schedule-{uuid4()}"
+    await dbos_client.create_schedule_async(
+        schedule_name=schedule,
+        workflow_name="planner_tick",
+        schedule="0 0 1 1 *",  # once a year: it never fires during the test
+        queue_name=UNSERVED_QUEUE,
+    )
+    scheduled = dbos_client.trigger_schedule(schedule).get_workflow_id()
+    removed = [parked, *queued, delayed]
+
+    async def outstanding(ids: list[str]) -> list[str]:
+        found = await dbos.list_workflows_async(workflow_ids=ids, load_input=False)
+        return sorted(w.workflow_id for w in found if w.status in OUTSTANDING)
+
+    assert await _until_async(lambda: outstanding(removed), SETTLE_S, want=sorted(removed)) == (
+        sorted(removed)
+    )
+    assert await outstanding([scheduled]) == [scheduled]
+
+    await _reset(client)
+
+    assert await _until_async(lambda: outstanding(removed), CANCEL_SEEN_S, want=[]) == []
+    # Ended by the reset, not by failing on the removed rows.
+    ended = await dbos.list_workflows_async(workflow_ids=removed, load_input=False)
+    assert {w.workflow_id: w.status for w in ended} == dict.fromkeys(removed, "CANCELLED")
+    assert await outstanding([scheduled]) == [scheduled]
+    assert await dbos_client.get_schedule_async(schedule) is not None
 
 
 async def _until_async(check: Callable[[], Awaitable[Any]], timeout_s: float, *, want: Any) -> Any:
