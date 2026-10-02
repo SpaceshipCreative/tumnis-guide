@@ -91,6 +91,7 @@ export function pausesQuery() {
 // Generated query keys start with `{ _id }`; writes that change tasks refresh these.
 const TASK_READS = new Set([
   "tasksListTasks",
+  "tasksListJustAdded",
   "tasksGetReviewCount",
   "projectsListProjects",
 ]);

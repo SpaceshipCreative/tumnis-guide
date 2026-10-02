@@ -275,6 +275,29 @@ async def list_comments(
     return await api.list_comments(session, task_id, cursor=page.cursor, limit=page.limit)
 
 
+@router.get("/tasks/{task_id}/history")
+@route_policy(LIST_OF_TASK)
+async def list_task_history(
+    task_id: UUID,
+    request: Request,
+    session: SessionDep,
+    page: Annotated[PageParams, Depends(page_params)],
+) -> Page[api.TaskChangeOut]:
+    """The task's writes, newest first: the fields each changed, by whom, and whether that
+    was the caller (A1.1's drawer History)."""
+    return await api.task_history(
+        session, principal_of(request).actor, task_id, cursor=page.cursor, limit=page.limit
+    )
+
+
+@router.get("/just-added")
+@route_policy(SESSION_READ)
+async def list_just_added(request: Request, session: SessionDep) -> api.JustAddedOut:
+    """The dashboard's Just added list (A1.1, decision 83): the signed-in person's tasks
+    added today and still in Backlog, newest first, at most three."""
+    return await api.just_added(session, principal_of(request).actor)
+
+
 @router.post("/tasks/{task_id}/comments", status_code=201)
 @route_policy(WRITE_TASK)
 async def add_comment(

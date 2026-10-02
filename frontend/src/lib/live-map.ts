@@ -33,9 +33,11 @@ export const LIVE_MAP: Record<
       "tasksGetRecurrence",
       "tasksListPullRequests",
       "agentsGetTaskPacket", // the task's packet (P2-02) changes with its task
+      "tasksListTaskHistory", // the drawer's History (A1.1): each write adds an entry
     ],
     lists: [
       "tasksListTasks",
+      "tasksListJustAdded", // the dashboard's Just added list (A1.1, decision 83)
       "tasksGetBoard",
       "tasksListRecurrence",
       "searchSearch",

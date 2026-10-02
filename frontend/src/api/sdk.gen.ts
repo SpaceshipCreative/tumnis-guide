@@ -428,6 +428,9 @@ import type {
   TasksListInboxData,
   TasksListInboxErrors,
   TasksListInboxResponses,
+  TasksListJustAddedData,
+  TasksListJustAddedErrors,
+  TasksListJustAddedResponses,
   TasksListPullRequestsData,
   TasksListPullRequestsErrors,
   TasksListPullRequestsResponses,
@@ -440,6 +443,9 @@ import type {
   TasksListReviewKindsErrors,
   TasksListReviewKindsResponses,
   TasksListReviewResponses,
+  TasksListTaskHistoryData,
+  TasksListTaskHistoryErrors,
+  TasksListTaskHistoryResponses,
   TasksListTasksData,
   TasksListTasksErrors,
   TasksListTasksResponses,
@@ -606,10 +612,12 @@ import {
   zTasksLinkPullRequestResponse,
   zTasksListCommentsResponse,
   zTasksListInboxResponse,
+  zTasksListJustAddedResponse,
   zTasksListPullRequestsResponse,
   zTasksListRecurrenceResponse,
   zTasksListReviewKindsResponse,
   zTasksListReviewResponse,
+  zTasksListTaskHistoryResponse,
   zTasksListTasksResponse,
   zTasksMoveTaskResponse,
   zTasksPutColumnsResponse,
@@ -1664,6 +1672,30 @@ export const githubWebhook = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zGithubWebhookResponse.parseAsync(data),
     url: "/v1/github/webhook/{workspace_id}",
+    ...options,
+  });
+
+/**
+ * List Just Added
+ *
+ * The dashboard's Just added list (A1.1, decision 83): the signed-in person's tasks
+ * added today and still in Backlog, newest first, at most three.
+ */
+export const tasksListJustAdded = <ThrowOnError extends boolean = false>(
+  options?: Options<TasksListJustAddedData, ThrowOnError>,
+): RequestResult<
+  TasksListJustAddedResponses,
+  TasksListJustAddedErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    TasksListJustAddedResponses,
+    TasksListJustAddedErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListJustAddedResponse.parseAsync(data),
+    url: "/v1/just-added",
     ...options,
   });
 
@@ -3944,6 +3976,30 @@ export const tasksUpdateEstimate = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * List Task History
+ *
+ * The task's writes, newest first: the fields each changed, by whom, and whether that
+ * was the caller (A1.1's drawer History).
+ */
+export const tasksListTaskHistory = <ThrowOnError extends boolean = false>(
+  options: Options<TasksListTaskHistoryData, ThrowOnError>,
+): RequestResult<
+  TasksListTaskHistoryResponses,
+  TasksListTaskHistoryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TasksListTaskHistoryResponses,
+    TasksListTaskHistoryErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zTasksListTaskHistoryResponse.parseAsync(data),
+    url: "/v1/tasks/{task_id}/history",
+    ...options,
   });
 
 /**
