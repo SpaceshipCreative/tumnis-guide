@@ -24,7 +24,10 @@ from tumnis.core.idempotency import SessionDep
 from tumnis.core.principal import Principal, require_principal
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.modules.auth import api as auth
-from tumnis.modules.notifications import api
+from tumnis.modules.notifications import (
+    api,
+    testing,  # noqa: F401  # P4-04: registers the `overnight-release` test tick
+)
 
 root_router = v1_router("notifications", tags=["notifications"])
 

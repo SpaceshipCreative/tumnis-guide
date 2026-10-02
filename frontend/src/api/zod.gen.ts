@@ -1519,6 +1519,39 @@ export const zPageRecurrenceOut = z.object({
 });
 
 /**
+ * Refusal
+ *
+ * Why a queued task may not run unattended now (`green_light`'s answer).
+ */
+export const zRefusal = z.enum([
+  "tainted",
+  "not_ai",
+  "paused",
+  "kill_switch",
+  "no_acceptance_criteria",
+  "not_queued",
+  "done",
+  "waiting_on_human",
+]);
+
+/**
+ * QueuedUnattendedOut
+ *
+ * A task queued for tonight, as the day close lists it: whether it will run and, when
+ * it will not, the refusal it would get now and its plain words.
+ */
+export const zQueuedUnattendedOut = z.object({
+  label: z.enum(["human", "ai", "hybrid"]).nullable(),
+  project_id: z.uuid(),
+  queued_at: z.iso.datetime(),
+  reason: z.string().nullable(),
+  refusal: zRefusal.nullable(),
+  task_id: z.uuid(),
+  title: z.string(),
+  will_run: z.boolean(),
+});
+
+/**
  * RelayReplyBody
  *
  * The REST twin's body: the item answered, the person's answer and the chat message
@@ -2330,6 +2363,7 @@ export const zTaskOut = z.object({
   status: zStatus,
   tainted: z.boolean(),
   title: z.string(),
+  unattended_queued_at: z.iso.datetime().nullable(),
   updated_at: z.iso.datetime(),
   version: z.int(),
 });
@@ -2460,13 +2494,15 @@ export const zTaskRef = z.object({
  * DaySummaryOut
  *
  * `GET /v1/day/{day}/summary`: the close-the-day panel's four sections for one local
- * day of the workspace.
+ * day of the workspace. `queued_unattended` (P4-04) lists every task queued for tonight in
+ * queued order, with whether it will run; `queued_overnight` names the same tasks.
  */
 export const zDaySummaryOut = z.object({
   agents_finished: z.array(zTaskRef),
   day: z.iso.date(),
   prepared_by_agents: z.int(),
   queued_overnight: z.array(zTaskRef),
+  queued_unattended: z.array(zQueuedUnattendedOut).optional(),
   rolls_over: z.array(zRolloverRef),
   shipped: z.array(zTaskRef),
   timezone: z.string(),
@@ -2521,6 +2557,7 @@ export const zTaskWithLayoutOut = z.object({
   status: zStatus,
   tainted: z.boolean(),
   title: z.string(),
+  unattended_queued_at: z.iso.datetime().nullable(),
   updated_at: z.iso.datetime(),
   version: z.int(),
 });
@@ -2767,6 +2804,30 @@ export const zTrustIn = z.object({
 });
 
 /**
+ * UnattendedIn
+ *
+ * Queue the task for the unattended window (`queued` true) or take it off.
+ */
+export const zUnattendedIn = z.object({
+  queued: z.boolean(),
+});
+
+/**
+ * UnattendedOut
+ *
+ * The task's place in the unattended queue: when and by whom it was queued, and whether
+ * P2-08's rule lets it run unattended at all (false for a tainted task, SAF-1).
+ */
+export const zUnattendedOut = z.object({
+  may_run_unattended: z.boolean(),
+  queued: z.boolean(),
+  queued_at: z.iso.datetime().nullable(),
+  queued_by: z.string().nullable(),
+  schema_version: z.literal(1).optional().default(1),
+  task_id: z.uuid(),
+});
+
+/**
  * UndoIn
  *
  * The change a write answered (`change_id`) and the version it left (R-09).
@@ -2925,6 +2986,44 @@ export const zWeekOut = z.object({
   monday: z.iso.date(),
   timezone: z.string(),
   unscheduled: z.array(zTaskRefOut),
+});
+
+/**
+ * WindowSpec
+ *
+ * Weekdays (0 = Monday) and local wall times in the workspace timezone; an end before
+ * the start crosses midnight and belongs to the weekday it starts on.
+ */
+export const zWindowSpec = z.object({
+  end_local: z.iso.time(),
+  start_local: z.iso.time(),
+  weekdays: z.array(z.int().gte(0).lte(6)).min(1).max(7),
+});
+
+/**
+ * UnattendedWindowIn
+ *
+ * The workspace's window (`project_id` null) or one project's override; `window` null
+ * turns it off (an override then falls back to the workspace's). `version` is the stored
+ * row's (null when there is none yet).
+ */
+export const zUnattendedWindowIn = z.object({
+  project_id: z.uuid().nullish(),
+  version: z.int().nullish(),
+  window: zWindowSpec.nullable(),
+});
+
+/**
+ * UnattendedWindowOut
+ *
+ * The window in force for the workspace or a project, where it comes from, and the
+ * version of the row this scope stores (null when it stores none).
+ */
+export const zUnattendedWindowOut = z.object({
+  project_id: z.uuid().nullable(),
+  source: z.enum(["project", "workspace", "none"]),
+  version: z.int().nullable(),
+  window: zWindowSpec.nullable(),
 });
 
 /**
@@ -4544,6 +4643,26 @@ export const zTasksChangeStatusPath = z.object({
  */
 export const zTasksChangeStatusResponse = zTaskWithLayoutOut;
 
+export const zTasksGetUnattendedPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksGetUnattendedResponse = zUnattendedOut;
+
+export const zTasksPutUnattendedBody = zUnattendedIn;
+
+export const zTasksPutUnattendedPath = z.object({
+  task_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zTasksPutUnattendedResponse = zUnattendedOut;
+
 export const zTasksUndoTaskBody = zUndoIn;
 
 export const zTasksUndoTaskPath = z.object({
@@ -4579,6 +4698,22 @@ export const zSearchTypeaheadTasksQuery = z.object({
  * Successful Response
  */
 export const zSearchTypeaheadTasksResponse = z.array(zSearchHit);
+
+export const zPlanningGetUnattendedWindowQuery = z.object({
+  project_id: z.uuid().nullish(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPlanningGetUnattendedWindowResponse = zUnattendedWindowOut;
+
+export const zPlanningPutUnattendedWindowBody = zUnattendedWindowIn;
+
+/**
+ * Successful Response
+ */
+export const zPlanningPutUnattendedWindowResponse = zUnattendedWindowOut;
 
 export const zUsageGetUsageQuery = z.object({
   from: z.iso.date(),
