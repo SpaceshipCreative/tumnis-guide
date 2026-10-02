@@ -96,6 +96,12 @@ export function connectLive(
     windowTimer = setTimeout(endWindow, LIVE_WINDOW_MS);
   };
   const read = (msg: LiveMessage) => {
+    // A message nothing shown reads opens no window, so it holds no later message back.
+    const shown = qc.getQueryCache().findAll({
+      type: "active",
+      predicate: (query) => matchesLive(query.queryKey, msg),
+    });
+    if (shown.length === 0) return;
     if (windowTimer === undefined) {
       refetch([msg]);
       windowTimer = setTimeout(endWindow, LIVE_WINDOW_MS);
