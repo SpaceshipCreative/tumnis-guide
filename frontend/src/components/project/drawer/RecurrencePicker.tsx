@@ -222,9 +222,11 @@ export function RecurrencePicker({
   // list fails, the drawer asks for the rule anyway (one possible 404 beats hiding a
   // rule). A rule this drawer saved stays shown from the cache until the list catches up.
   const recurring = useQuery(projectRecurrenceQuery(task.project_id));
-  const repeats = recurring.isSuccess
-    ? recurring.data.some((r) => r.latest_task_id === task.id)
-    : recurring.isError;
+  // A list once loaded answers, even when a later refresh of it fails.
+  const repeats =
+    recurring.data !== undefined
+      ? recurring.data.some((r) => r.latest_task_id === task.id)
+      : recurring.isError;
   const rule = useQuery({ ...taskRecurrenceQuery(task.id), enabled: repeats });
   // The form shows while the list loads, as it did while the rule loaded (T-P0-24-16): a
   // save in that moment is still safe, because the server applies a PUT to the task's

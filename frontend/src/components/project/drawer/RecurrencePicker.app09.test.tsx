@@ -146,3 +146,38 @@ test("[P0-24][FR-3.5] APP-09 when the project's list fails, the drawer asks for 
   ).toBeVisible();
   unmount();
 });
+
+test("[P0-24][FR-3.5] APP-09 a failed refresh of a loaded list still answers from that list", async () => {
+  const project = makeProject({ name: "Acme site" });
+  const task = makeTask({
+    project_id: project.id,
+    title: "Send the proposal",
+    status: "backlog",
+  });
+  const fake = new ProjectFake({ project, tasks: [task] });
+  server.use(...fake.handlers);
+  const reads = recurrenceReads();
+
+  const { queryClient, unmount } = await renderRoute(
+    `/projects/${project.id}?task=${task.id}`,
+    { viewport: "laptop" },
+  );
+  await screen.findByRole("dialog", { name: "Send the proposal" });
+  await waitFor(() => {
+    expect(reads.list).toBeGreaterThan(0);
+  });
+
+  server.use(
+    http.get("/v1/recurrence", () =>
+      HttpResponse.json({ title: "Unavailable" }, { status: 503 }),
+    ),
+  );
+  await queryClient.refetchQueries({
+    predicate: (query) =>
+      JSON.stringify(query.queryKey).includes("tasksListRecurrence"),
+  });
+  // Give a rule read the failed refresh set off time to start.
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(reads.taskRule).toEqual([]);
+  unmount();
+});
