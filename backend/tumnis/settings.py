@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Literal, Self
+from urllib.parse import urlsplit
 
 from psycopg import errors as pg_errors
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
@@ -242,6 +243,20 @@ class Settings(BaseSettings):
             if hosted:
                 raise SettingsError(
                     "preview_has_production_secret", f"{', '.join(hosted)} set in preview"
+                )
+        # A hosted key goes out as a bearer token: never over cleartext (CWE-319).
+        slots: tuple[tuple[str, SpeechSettings | EmbeddingsSettings], ...] = (
+            ("SPEECH", self.speech),
+            ("EMBEDDINGS", self.embeddings),
+        )
+        for prefix, slot in slots:
+            url = slot.hosted_base_url
+            keyed = slot.hosted_api_key is not None and url is not None
+            if keyed and urlsplit(url or "").scheme.lower() != "https":
+                raise SettingsError(
+                    "hosted_url_requires_https",
+                    f"{prefix}__HOSTED_BASE_URL must be https:// when "
+                    f"{prefix}__HOSTED_API_KEY is set",
                 )
         try:
             parse_allowlist(self.outbound_allowlist.split(","))
