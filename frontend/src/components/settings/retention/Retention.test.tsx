@@ -51,71 +51,68 @@ function handlers(recorder: Recorder) {
   ];
 }
 
-test.fails(
-  "[P3-09][SAAS-2] setting and purge dialog need a reason",
-  async () => {
-    const recorder = new Recorder();
-    server.use(...handlers(recorder));
-    const { user } = renderWithProviders(<RetentionSection />);
+test("[P3-09][SAAS-2] setting and purge dialog need a reason", async () => {
+  const recorder = new Recorder();
+  server.use(...handlers(recorder));
+  const { user } = renderWithProviders(<RetentionSection />);
 
-    const keep = await screen.findByRole("radio", {
-      name: "Keep until the project is purged",
-    });
-    expect(keep).toBeChecked();
-    expect(screen.getByText(/open task/i)).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("radio", { name: "Delete after a number of days" }),
-    );
-    const days = screen.getByRole("spinbutton", { name: "Days to keep" });
-    await user.clear(days);
-    await user.type(days, "30");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => {
-      expect(recorder.writes()).toEqual([
-        "PUT /v1/settings/integrations.retention",
-      ]);
-    });
-    expect(recorder.sent.at(-1)?.body).toEqual({
-      values: { mode: "days", days: 30 },
-      version: null,
-    });
+  const keep = await screen.findByRole("radio", {
+    name: "Keep until the project is purged",
+  });
+  expect(keep).toBeChecked();
+  expect(screen.getByText(/open task/i)).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("radio", { name: "Delete after a number of days" }),
+  );
+  const days = screen.getByRole("spinbutton", { name: "Days to keep" });
+  await user.clear(days);
+  await user.type(days, "30");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => {
+    expect(recorder.writes()).toEqual([
+      "PUT /v1/settings/integrations.retention",
+    ]);
+  });
+  expect(recorder.sent.at(-1)?.body).toEqual({
+    values: { mode: "days", days: 30 },
+    version: null,
+  });
 
-    const onDone = vi.fn();
-    renderWithProviders(
-      <PurgeDialog
-        scope="connection"
-        targetId={CONNECTION}
-        name="Work inbox"
-        onDone={onDone}
-        onCancel={vi.fn()}
-      />,
-    );
-    const dialog = await screen.findByRole("dialog", {
-      name: "Purge Work inbox",
-    });
-    expect(within(dialog).getByText(/backups/i)).toBeInTheDocument();
-    const confirm = within(dialog).getByRole("button", { name: "Purge" });
-    expect(confirm).toBeDisabled();
-    const reason = within(dialog).getByRole("textbox", { name: "Reason" });
-    await user.type(reason, "   ");
-    expect(confirm).toBeDisabled();
-    await user.clear(reason);
-    await user.type(reason, "Mailbox closed");
-    expect(confirm).toBeEnabled();
-    await user.click(confirm);
-    await waitFor(() => {
-      expect(recorder.writes()).toEqual([
-        "PUT /v1/settings/integrations.retention",
-        "POST /v1/purges",
-      ]);
-    });
-    expect(recorder.sent.at(-1)?.body).toEqual({
-      scope: "connection",
-      id: CONNECTION,
-      reason: "Mailbox closed",
-    });
-    await waitFor(() => {
-      expect(onDone).toHaveBeenCalledTimes(1);
-    });
-  },
-);
+  const onDone = vi.fn();
+  renderWithProviders(
+    <PurgeDialog
+      scope="connection"
+      targetId={CONNECTION}
+      name="Work inbox"
+      onDone={onDone}
+      onCancel={vi.fn()}
+    />,
+  );
+  const dialog = await screen.findByRole("dialog", {
+    name: "Purge Work inbox",
+  });
+  expect(within(dialog).getByText(/backups/i)).toBeInTheDocument();
+  const confirm = within(dialog).getByRole("button", { name: "Purge" });
+  expect(confirm).toBeDisabled();
+  const reason = within(dialog).getByRole("textbox", { name: "Reason" });
+  await user.type(reason, "   ");
+  expect(confirm).toBeDisabled();
+  await user.clear(reason);
+  await user.type(reason, "Mailbox closed");
+  expect(confirm).toBeEnabled();
+  await user.click(confirm);
+  await waitFor(() => {
+    expect(recorder.writes()).toEqual([
+      "PUT /v1/settings/integrations.retention",
+      "POST /v1/purges",
+    ]);
+  });
+  expect(recorder.sent.at(-1)?.body).toEqual({
+    scope: "connection",
+    id: CONNECTION,
+    reason: "Mailbox closed",
+  });
+  await waitFor(() => {
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
