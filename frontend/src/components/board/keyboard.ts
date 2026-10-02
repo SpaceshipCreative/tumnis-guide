@@ -17,17 +17,21 @@
 // and another render; on a busy machine several frames can pass before any of them runs,
 // and a Space then dropped the card where it was (the T-P0-24-05 flake, "dropped in
 // Backlog"). The droppables' rects follow the scroll at once, so the sensor runs the
-// collision detection itself and waits for `over` to agree.
+// collision detection itself and waits for `over` to agree. It never gives up on that
+// wait, so a drop is never replayed with a stale `over`; an Escape among the held keys
+// still cancels the drag once the usual settle cap has passed.
 import {
   closestCorners,
   getFirstCollision,
+  KeyboardCode,
   KeyboardSensor,
   type CollisionDetection,
   type KeyboardSensorOptions,
   type KeyboardSensorProps,
 } from "@dnd-kit/core";
 
-/** The longest a held key waits for a move to settle, in frames (about half a second). */
+/** The longest a held key waits for a move to hold still, in frames (about half a
+ * second). `over` must agree with the collision detection whatever the wait. */
 const MAX_SETTLE_FRAMES = 30;
 
 export interface SettledKeyboardSensorOptions extends KeyboardSensorOptions {
@@ -54,6 +58,7 @@ export class SettledKeyboardSensor extends KeyboardSensor {
       target instanceof Node ? (target.ownerDocument ?? document) : document;
     const options = props.options as SettledKeyboardSensorOptions;
     const detect = options.collisionDetection ?? closestCorners;
+    const cancelCodes = options.keyboardCodes?.cancel ?? [KeyboardCode.Esc];
     const queue: KeyboardEvent[] = [];
     let settling = false;
     let detached = false;
@@ -105,15 +110,27 @@ export class SettledKeyboardSensor extends KeyboardSensor {
         const now = snapshot();
         const stable = now === last;
         last = now;
-        if (
-          (frames >= 3 && stable && caughtUp()) ||
-          frames >= MAX_SETTLE_FRAMES
-        ) {
-          settling = false;
-          drain();
-        } else {
-          requestAnimationFrame(tick);
+        const capped = frames >= MAX_SETTLE_FRAMES;
+        if ((stable && frames >= 3) || capped) {
+          if (caughtUp()) {
+            settling = false;
+            drain();
+            return;
+          }
+          if (capped) {
+            // `over` still lags. Nothing waits: stop looking until a key comes (it is
+            // held again while `over` lags). An Escape waits no longer: the keys before
+            // it are dropped with the drag it cancels.
+            const cancel = queue.findIndex((e) => cancelCodes.includes(e.code));
+            if (queue.length === 0 || cancel >= 0) {
+              queue.splice(0, Math.max(cancel, 0));
+              settling = false;
+              drain();
+              return;
+            }
+          }
         }
+        requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     };
@@ -134,9 +151,10 @@ export class SettledKeyboardSensor extends KeyboardSensor {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event === props.event || detached) return; // the pick-up key
-      if (settling || queue.length > 0) {
+      if (settling || queue.length > 0 || !caughtUp()) {
         event.preventDefault();
         queue.push(event);
+        if (!settling) settle();
         return;
       }
       run(event);
