@@ -235,10 +235,7 @@ Everything a project knows lives in its knowledge base: documents, notes and lin
 - **Where files live** (Settings > Storage): a folder on the server, a mounted share (SMB or NFS), an S3 bucket or an SFTP server. An SFTP server's host key is trusted only after you compare its fingerprint. Each project gets a folder on the default location, synced both ways: a file you drop in the folder appears in the knowledge base, and an upload appears in the folder.
 - **Calendar** (Settings > Calendar): connect a Google account with your own OAuth client (read-only); busy time shapes the daily plan.
 - **GitHub and Coolify** for project agents: set through the API (`PUT /v1/settings/github` with a token, the allowed repositories and a webhook secret; `PUT /v1/settings/coolify` with the base URL and a token). Pull requests are tracked on their tasks.
-
-<!-- TODO(coordinator): P3-14 impl-2 (#154): pointing a project at an existing folder (mode `existing`) has no route on main yet; document it here once #154 merges. -->
-<!-- TODO(coordinator): P3-02 (#156) connections and the sync framework, P3-12 (#157) Obsidian and P3-13 (#158) S3 buckets as a source: add each here once it merges. -->
-<!-- TODO(coordinator): FIX-app-findings (fix/app-findings-1): Settings screens for GitHub, Coolify and the /search page; update the GitHub and Coolify bullet once it merges. -->
+- **A folder you already keep** (a project's **Folder** section, "Use a folder you already keep"): point the project at an existing folder on any storage location. Tumnis then writes only inside a `Tumnis/` subfolder there and never renames, moves, overwrites or deletes your own files. **Move the folder** copies every file to a new place and checks each one before the project switches; the old copy stays until you choose to remove it.
 
 ## Agents
 
@@ -293,9 +290,10 @@ Tumnis is a PWA: open `https://<TUMNIS_HOST>` on your phone over Tailscale and a
 These are planned but not in this release:
 
 - **Inbox Zero, Granola and chat connectors**, matching what they bring in to your tasks, and proposal runs on it; **Google Docs** as a source. They wait for recorded tests against the real services. Discord is the chosen first chat provider (an ADR, 0014, will record it); today Discord already reaches the master agent through its Hermes profile ([Agents](#agents)).
+- **More sources:** Obsidian vaults and S3 buckets as knowledge sources (beyond S3 as a storage location), and a shared connections screen for them. Coming in a later update.
+- **Unattended run windows** (agents working through your tasks on a schedule while you're away) and **retention rules** for old data. Coming in a later update.
+- **A search page and Settings screens for GitHub and Coolify.** Today Ctrl+K (Cmd+K on a Mac) searches tasks and projects, agents and the API search knowledge (`GET /v1/knowledge/search`), and GitHub and Coolify are set through the API ([Connect sources](#connect-sources)).
 - **Hosted mode** (Tumnis run for several customers) is v2.
-
-<!-- TODO(coordinator): P4-04 (#155) unattended run windows and P3-09 retention: describe each under "Your day" or "Agents" once it merges. -->
 
 ## Develop
 
