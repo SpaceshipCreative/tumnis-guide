@@ -26,7 +26,6 @@ async def _engines() -> tuple[AsyncEngine, AsyncEngine, AsyncEngine]:
 
 @pytest.mark.req("ADR-0002")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="bug: T-P0-07-05 drain stall, engines shared across loops")
 def test_each_event_loop_gets_its_own_engine() -> None:
     """One engine per (event loop, role): the same loop gets the same engine back; another
     loop, here on another thread as DBOS's is, gets its own."""

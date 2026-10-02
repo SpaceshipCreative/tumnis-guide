@@ -63,7 +63,6 @@ def _race_first_connect() -> list[str]:
 
 @pytest.mark.req("ADR-0002")
 @pytest.mark.wp("P0-07")
-@pytest.mark.xfail(strict=True, reason="bug: T-P0-07-05 drain stall, engines shared across loops")
 def test_two_event_loops_make_their_first_query_at_once(
     db: DbUrls, monkeypatch: pytest.MonkeyPatch
 ) -> None:
