@@ -113,6 +113,11 @@ def configure(settings: KnowledgeSettings, *, net: NetPolicy | None = None) -> K
     return previous
 
 
+def current() -> KnowledgeSettings:
+    """The settings `configure` set (P3-12: where the worker keeps Obsidian Git clones)."""
+    return _settings
+
+
 def use(**parts: Any) -> dict[str, Any]:
     """Swap the `scanner`, `extractor` and `vision` the steps use (tests; None puts the
     default back); returns the previous values of the parts given, ready for `use(**...)`."""

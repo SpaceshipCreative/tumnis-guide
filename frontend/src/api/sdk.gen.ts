@@ -238,9 +238,15 @@ import type {
   KnowledgeConfirmHostKeyData,
   KnowledgeConfirmHostKeyErrors,
   KnowledgeConfirmHostKeyResponses,
+  KnowledgeConnectObsidianVaultData,
+  KnowledgeConnectObsidianVaultErrors,
+  KnowledgeConnectObsidianVaultResponses,
   KnowledgeCreateLocationData,
   KnowledgeCreateLocationErrors,
   KnowledgeCreateLocationResponses,
+  KnowledgeCreateObsidianVaultData,
+  KnowledgeCreateObsidianVaultErrors,
+  KnowledgeCreateObsidianVaultResponses,
   KnowledgeCreateTextEntryData,
   KnowledgeCreateTextEntryErrors,
   KnowledgeCreateTextEntryResponses,
@@ -250,6 +256,9 @@ import type {
   KnowledgeDeleteDocumentData,
   KnowledgeDeleteDocumentErrors,
   KnowledgeDeleteDocumentResponses,
+  KnowledgeDeleteObsidianVaultData,
+  KnowledgeDeleteObsidianVaultErrors,
+  KnowledgeDeleteObsidianVaultResponses,
   KnowledgeGetBriefData,
   KnowledgeGetBriefErrors,
   KnowledgeGetBriefResponses,
@@ -259,6 +268,12 @@ import type {
   KnowledgeGetFileData,
   KnowledgeGetFileErrors,
   KnowledgeGetFileResponses,
+  KnowledgeGetObsidianPreviewData,
+  KnowledgeGetObsidianPreviewErrors,
+  KnowledgeGetObsidianPreviewResponses,
+  KnowledgeGetObsidianVaultData,
+  KnowledgeGetObsidianVaultErrors,
+  KnowledgeGetObsidianVaultResponses,
   KnowledgeGetQuotaData,
   KnowledgeGetQuotaErrors,
   KnowledgeGetQuotaResponses,
@@ -271,12 +286,21 @@ import type {
   KnowledgeListLocationsData,
   KnowledgeListLocationsErrors,
   KnowledgeListLocationsResponses,
+  KnowledgeListObsidianVaultsData,
+  KnowledgeListObsidianVaultsErrors,
+  KnowledgeListObsidianVaultsResponses,
   KnowledgeListVersionsData,
   KnowledgeListVersionsErrors,
   KnowledgeListVersionsResponses,
   KnowledgeMoveProjectFolderData,
   KnowledgeMoveProjectFolderErrors,
   KnowledgeMoveProjectFolderResponses,
+  KnowledgePreviewObsidianVaultData,
+  KnowledgePreviewObsidianVaultErrors,
+  KnowledgePreviewObsidianVaultResponses,
+  KnowledgeProbeObsidianHostKeyData,
+  KnowledgeProbeObsidianHostKeyErrors,
+  KnowledgeProbeObsidianHostKeyResponses,
   KnowledgeRestoreDocumentData,
   KnowledgeRestoreDocumentErrors,
   KnowledgeRestoreDocumentResponses,
@@ -583,19 +607,27 @@ import {
   zHealthLiveResponse,
   zKnowledgeAddLinkResponse,
   zKnowledgeConfirmHostKeyResponse,
+  zKnowledgeConnectObsidianVaultResponse,
   zKnowledgeCreateLocationResponse,
+  zKnowledgeCreateObsidianVaultResponse,
   zKnowledgeCreateTextEntryResponse,
   zKnowledgeDeleteAtSourceResponse,
   zKnowledgeDeleteDocumentResponse,
+  zKnowledgeDeleteObsidianVaultResponse,
   zKnowledgeGetBriefResponse,
   zKnowledgeGetDocumentResponse,
   zKnowledgeGetFileResponse,
+  zKnowledgeGetObsidianPreviewResponse,
+  zKnowledgeGetObsidianVaultResponse,
   zKnowledgeGetQuotaResponse,
   zKnowledgeIssueDeleteConfirmationResponse,
   zKnowledgeListDocumentsResponse,
   zKnowledgeListLocationsResponse,
+  zKnowledgeListObsidianVaultsResponse,
   zKnowledgeListVersionsResponse,
   zKnowledgeMoveProjectFolderResponse,
+  zKnowledgePreviewObsidianVaultResponse,
+  zKnowledgeProbeObsidianHostKeyResponse,
   zKnowledgeRestoreDocumentResponse,
   zKnowledgeSearchResponse,
   zKnowledgeSetDefaultLocationResponse,
@@ -2465,6 +2497,204 @@ export const knowledgeTestLocation = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) =>
       await zKnowledgeTestLocationResponse.parseAsync(data),
     url: "/v1/knowledge/locations/{storage_location_id}/test",
+    ...options,
+  });
+
+/**
+ * Probe Obsidian Host Key
+ */
+export const knowledgeProbeObsidianHostKey = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeProbeObsidianHostKeyData, ThrowOnError>,
+): RequestResult<
+  KnowledgeProbeObsidianHostKeyResponses,
+  KnowledgeProbeObsidianHostKeyErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeProbeObsidianHostKeyResponses,
+    KnowledgeProbeObsidianHostKeyErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeProbeObsidianHostKeyResponse.parseAsync(data),
+    url: "/v1/knowledge/obsidian/host-key/probe",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List Obsidian Vaults
+ */
+export const knowledgeListObsidianVaults = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<KnowledgeListObsidianVaultsData, ThrowOnError>,
+): RequestResult<
+  KnowledgeListObsidianVaultsResponses,
+  KnowledgeListObsidianVaultsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    KnowledgeListObsidianVaultsResponses,
+    KnowledgeListObsidianVaultsErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeListObsidianVaultsResponse.parseAsync(data),
+    url: "/v1/knowledge/obsidian/vaults",
+    ...options,
+  });
+
+/**
+ * Create Obsidian Vault
+ */
+export const knowledgeCreateObsidianVault = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeCreateObsidianVaultData, ThrowOnError>,
+): RequestResult<
+  KnowledgeCreateObsidianVaultResponses,
+  KnowledgeCreateObsidianVaultErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeCreateObsidianVaultResponses,
+    KnowledgeCreateObsidianVaultErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeCreateObsidianVaultResponse.parseAsync(data),
+    url: "/v1/knowledge/obsidian/vaults",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Delete Obsidian Vault
+ */
+export const knowledgeDeleteObsidianVault = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeDeleteObsidianVaultData, ThrowOnError>,
+): RequestResult<
+  KnowledgeDeleteObsidianVaultResponses,
+  KnowledgeDeleteObsidianVaultErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    KnowledgeDeleteObsidianVaultResponses,
+    KnowledgeDeleteObsidianVaultErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeDeleteObsidianVaultResponse.parseAsync(data),
+    url: "/v1/knowledge/obsidian/vaults/{connection_id}",
+    ...options,
+  });
+
+/**
+ * Get Obsidian Vault
+ */
+export const knowledgeGetObsidianVault = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeGetObsidianVaultData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetObsidianVaultResponses,
+  KnowledgeGetObsidianVaultErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeGetObsidianVaultResponses,
+    KnowledgeGetObsidianVaultErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeGetObsidianVaultResponse.parseAsync(data),
+    url: "/v1/knowledge/obsidian/vaults/{connection_id}",
+    ...options,
+  });
+
+/**
+ * Connect Obsidian Vault
+ */
+export const knowledgeConnectObsidianVault = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeConnectObsidianVaultData, ThrowOnError>,
+): RequestResult<
+  KnowledgeConnectObsidianVaultResponses,
+  KnowledgeConnectObsidianVaultErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeConnectObsidianVaultResponses,
+    KnowledgeConnectObsidianVaultErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeConnectObsidianVaultResponse.parseAsync(data),
+    url: "/v1/knowledge/obsidian/vaults/{connection_id}/connect",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Preview Obsidian Vault
+ */
+export const knowledgePreviewObsidianVault = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgePreviewObsidianVaultData, ThrowOnError>,
+): RequestResult<
+  KnowledgePreviewObsidianVaultResponses,
+  KnowledgePreviewObsidianVaultErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgePreviewObsidianVaultResponses,
+    KnowledgePreviewObsidianVaultErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgePreviewObsidianVaultResponse.parseAsync(data),
+    url: "/v1/knowledge/obsidian/vaults/{connection_id}/preview",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Obsidian Preview
+ */
+export const knowledgeGetObsidianPreview = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<KnowledgeGetObsidianPreviewData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetObsidianPreviewResponses,
+  KnowledgeGetObsidianPreviewErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    KnowledgeGetObsidianPreviewResponses,
+    KnowledgeGetObsidianPreviewErrors,
+    ThrowOnError
+  >({
+    responseValidator: async (data) =>
+      await zKnowledgeGetObsidianPreviewResponse.parseAsync(data),
+    url: "/v1/knowledge/obsidian/vaults/{connection_id}/preview/{preview_id}",
     ...options,
   });
 

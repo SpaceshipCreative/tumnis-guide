@@ -47,6 +47,8 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("storage_locations", "kind"): "server_path",  # ck_storage_locations_kind
     ("folder_files", "origin"): "tumnis",  # ck_folder_files_origin
     ("document_links", "kind"): "link",  # ck_document_links_kind (P3-12)
+    ("obsidian_vaults", "mode"): "folder",  # ck_obsidian_vaults_mode (P3-12)
+    ("obsidian_vaults", "status"): "pending",  # ck_obsidian_vaults_status (P3-12)
     ("runners", "name"): "row-factory",  # ck_runners_name
     ("agent_profiles", "name"): "row-factory",  # ck_agent_profiles_name
     ("agent_profiles", "role"): "project",

@@ -168,6 +168,11 @@ export const NOT_LIVE = [
   "calendarOauthCallback",
   // Storage locations change only from the Settings screen, which refetches after each write.
   "knowledgeListLocations",
+  // Obsidian vaults (P3-12) are read when Settings > Obsidian opens, which refetches after
+  // each create, connect or remove and polls a preview until the worker answers it.
+  "knowledgeListObsidianVaults",
+  "knowledgeGetObsidianVault",
+  "knowledgeGetObsidianPreview",
   // An upload's status is polled until extraction settles (P1-16; no document live message
   // yet), and a file is a download, never a cached query.
   "knowledgeGetDocument",

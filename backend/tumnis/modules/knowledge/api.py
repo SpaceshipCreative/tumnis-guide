@@ -89,6 +89,7 @@ from tumnis.modules.knowledge.models import (
     DocumentVersion,
     ExtractionArtifact,
     FolderFile,
+    ObsidianVault,
     PendingWrite,
     ProjectFolder,
     StorageLocation,
@@ -2954,10 +2955,27 @@ async def _refuse_synced(s: AsyncSession, document_id: UUID) -> None:
     connection_id = await s.scalar(
         select(_documents.c.connection_id).where(_documents.c.id == document_id)
     )
-    if connection_id is not None:
+    if connection_id is not None and not await _vault_disconnected(s, connection_id):
         raise ProblemError(
             409, "read_only_source", "This document is synced from its source; change it there"
         )
+
+
+async def _vault_disconnected(s: AsyncSession, connection_id: UUID) -> bool:
+    """Whether the connection is an Obsidian vault that was disconnected: its Documents
+    are no longer synced, so they are the person's to change (P3-12)."""
+    vaults = ObsidianVault.__table__
+    found = await s.scalar(
+        select(vaults.c.id).where(
+            vaults.c.connection_id == connection_id, vaults.c.deleted_at.is_not(None)
+        )
+    )
+    live = await s.scalar(
+        select(vaults.c.id).where(
+            vaults.c.connection_id == connection_id, vaults.c.deleted_at.is_(None)
+        )
+    )
+    return found is not None and live is None
 
 
 async def write_synced_text(

@@ -249,3 +249,21 @@ class DocumentLink(TenantBase, Base):
     kind: Mapped[str]  # link | embed
     heading: Mapped[str | None]
     block: Mapped[str | None]
+
+
+class ObsidianVault(TenantBase, Base):
+    """knowledge_0010: an Obsidian vault connection's settings and status (P3-12)."""
+
+    __tablename__ = "obsidian_vaults"
+
+    connection_id: Mapped[UUID] = mapped_column(ForeignKey("connections.id"))
+    mode: Mapped[str]  # folder | git
+    folder_path: Mapped[str | None]
+    remote: Mapped[str | None]
+    branch: Mapped[str]
+    mapping: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    known_hosts: Mapped[str | None]
+    deploy_public_key: Mapped[str | None]
+    status: Mapped[str]  # pending | connecting | ok | error
+    last_error: Mapped[str | None]
+    last_sync_at: Mapped[datetime | None]
