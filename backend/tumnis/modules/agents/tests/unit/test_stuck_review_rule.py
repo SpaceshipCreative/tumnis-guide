@@ -9,14 +9,11 @@ import pytest
 
 @pytest.mark.req("FR-10.5")
 @pytest.mark.wp("P4-02")
-@pytest.mark.xfail(strict=True, reason="spec:FIX-stuck-review")
 @pytest.mark.parametrize(
     ("decision", "state"),
     [("accept", "done"), ("reject", "reopened"), ("snooze", None), ("edit", None)],
 )
 def test_stuck_step_after_decision(decision: str, state: str | None) -> None:
-    from tumnis.modules.agents import rules  # noqa: PLC0415
-
-    stuck_step_after = rules.stuck_step_after  # type: ignore[attr-defined]
+    from tumnis.modules.agents.rules import stuck_step_after  # noqa: PLC0415
 
     assert stuck_step_after(decision) == state
