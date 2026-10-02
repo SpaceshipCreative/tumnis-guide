@@ -3,6 +3,7 @@ Git remote, the vault a watched change belongs to, and how a stored vault reads 
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from uuid import UUID
 
@@ -12,6 +13,7 @@ import pytest
 from tumnis.modules.knowledge.adapters.sftp import fingerprint
 from tumnis.modules.knowledge.obsidian import vaults
 
+REPO = Path(__file__).resolve().parents[6]
 CONNECTION = UUID("0190a7a0-0000-7000-8000-0000000000c2")
 PROJECT = UUID("0190a7a0-0000-7000-8000-0000000000a1")
 
@@ -95,3 +97,15 @@ def test_pruning_clones_keeps_the_ssh_key_folder(
 
     assert sorted(child.name for child in tmp_path.iterdir()) == [".keys", ".ssh", kept]
     assert (tmp_path / ".keys" / "live.key").read_bytes() == b"key"
+
+
+@pytest.mark.req("FR-15.10")
+@pytest.mark.wp("P3-12")
+def test_vault_preview_schema_has_its_own_name() -> None:
+    """The preview answer is `VaultPreviewOut` in the OpenAPI document, so the generated
+    client needs no module-qualified name to tell it from Coolify's `PreviewOut`
+    (CodeRabbit on #174). The committed document is the one `make gen` writes."""
+    schemas = json.loads((REPO / "schemas" / "openapi.json").read_text())["components"]["schemas"]
+    assert "VaultPreviewOut" in schemas
+    assert "PreviewOut" in schemas  # Coolify's, unqualified now that nothing clashes
+    assert not [name for name in schemas if name.endswith("__PreviewOut")]
