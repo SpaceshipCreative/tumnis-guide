@@ -1,6 +1,6 @@
 # Operations
 
-How to run a Tumnis install day to day: health, backups and the restore drill, upgrades and rollback, the master key, certificates and alerts. It assumes the install from the [README](../README.md): the repository checked out on the server, a `.env` in its root, and every command run from that root. Commands that change the stack are tested: the Upgrade and Rollback blocks are tagged `readme:upgrade`, and the README job (`.github/workflows/readme.yml`) runs them every night from the previous release to the current commit, once a release tag contains the README harness; until then that nightly job skips.
+How to run a Tumnis install day to day: health, backups, retention and purge, the restore drill, upgrades and rollback, the master key, certificates and alerts. It assumes the install from the [README](../README.md): the repository checked out on the server, a `.env` in its root, and every command run from that root. Commands that change the stack are tested: the Upgrade and Rollback blocks are tagged `readme:upgrade`, and the README job (`.github/workflows/readme.yml`) runs them every night from the previous release to the current commit, once a release tag contains the README harness; until then that nightly job skips.
 
 Where things live:
 
@@ -11,9 +11,11 @@ Where things live:
 | HTTPS certificate and key | `/etc/tumnis/https/tumnis.crt` and `tumnis.key` |
 | Backup repository keys | `/etc/pgbackrest/conf.d/secrets.conf` |
 | Database, local backups, uploads | Docker volumes of the compose project `tumnis` (`pgdata`, `pgbackrest_repo1`, `spool`, ...) |
-| Per-workspace secrets (OAuth clients, storage keys, Web Push keys) | Sealed in the database with the workspace's data key |
+| Per-workspace secrets (OAuth clients, storage keys, Web Push keys, Obsidian deploy keys, linked-bucket keys) | Sealed in the database with the workspace's data key |
+| Obsidian Git vault clones | The `obsidian` volume, mounted on the worker only at `/var/lib/tumnis/obsidian` (`KNOWLEDGE__OBSIDIAN_DIR`). It is a cache: a missing clone is cloned again from its remote, so it needs no backup |
+| Purge records | The `purges` table in the database: the scope, target, reason, cutoff, counts and status of every purge and retention run |
 
-Lose the master key file and every sealed secret (OAuth clients, storage keys, Web Push keys, TOTP secrets) is unreadable: the secrets must be entered again and each person's TOTP reset (`tumnis admin reset-totp`). Lose the pepper file and every API key, runner token and session stops working: everyone signs in again and every key and runner token is issued again. Neither loss touches what only the other file protects. Keep a copy of both off the server (a password manager is fine), next to the backup cipher passphrase (ADR-0010).
+Lose the master key file and every sealed secret (OAuth clients, storage keys, Obsidian deploy keys, linked-bucket keys, Web Push keys, TOTP secrets) is unreadable: the secrets must be entered again and each person's TOTP reset (`tumnis admin reset-totp`). Lose the pepper file and every API key, runner token and session stops working: everyone signs in again and every key and runner token is issued again. Neither loss touches what only the other file protects. Keep a copy of both off the server (a password manager is fine), next to the backup cipher passphrase (ADR-0010).
 
 ## Health and monitoring
 
@@ -68,6 +70,16 @@ A new install starts with `TUMNIS_BACKUPS=off`: archiving and the backup service
 What a backup holds: `docker compose exec backup pgbackrest --stanza=tumnis info`.
 
 Project folders are backed up separately (REL-1): `scripts/backup/folders.sh REMOTE:PATH` copies every Tumnis-made folder, and every existing folder whose project opted in, to an rclone remote (`tumnis knowledge backup-sources` lists them). It only copies, so a file removed at the source stays in the backup. Run it nightly from the host's cron, with `tumnis` on the PATH through the worker container, for example a wrapper script that calls `docker compose exec -T worker tumnis "$@"`.
+
+Knowledge sources need nothing extra. An Obsidian vault and a linked S3 bucket are the record; Tumnis only reads them. What Tumnis made from them (documents, links, each object's last seen version) and their sealed keys are in the database backup. After a restore, the next sync (every 15 minutes) compares each source with the restored records: new or changed files come in again, and files gone from the source go to the trash. A Git vault's clone is fetched again from its remote, so the `obsidian` volume needs no backup; its deploy key is sealed in the database. While a git command runs, the worker holds the key and the pinned `known_hosts` in memory, in a small tmpfs at `/var/lib/tumnis/obsidian/.keys`, so no key file reaches the disk or the `obsidian` volume. A linked object waiting for its scan is a transient copy in the `spool` volume; a missing copy is read again from the bucket. A MinIO bucket notification keeps working only while the token configured in MinIO matches the restored source; otherwise the 15-minute check still finds every change. The sealed keys need the same master key file as before the restore.
+
+## Retention and purge
+
+Retention (Settings > Retention) covers the email, chat and meeting notes that connectors bring in: messages, threads and notes, with their raw payloads. The default is **Keep until the project is purged**; **Delete after a number of days** takes 7 to 36,500 days. The worker's `retention-purge` schedule runs every hour at minute 17 on the maintenance queue and deletes, in batches of 500, what is older than the cutoff: a message by its send time, a note by its meeting's end, a thread by its last message (each falls back to when it was fetched), and a thread only once no message points at it. It keeps content an open task links, until the task is done, and an archived project's content. Rows are deleted from the database; nothing is deleted at the provider. Context items that pointed at deleted content stay, marked as removed. Retention never deletes knowledge documents, calendar events, tasks or audit log entries. The connectors are deferred in this release, so retention has nothing to delete on an install yet.
+
+A purge deletes on request: **Purge content** on a connection (Settings > Connections; the account stays connected, so a later sync can bring the content back) or **Purge project** on an archived project (the project and the ingested content only it holds). Both ask for a reason, run in the background (`POST /v1/purges`, then `GET /v1/purges/{purge_id}` for its status and counts) and cannot be undone.
+
+Every purge, and every retention run that finds something to delete, writes a `data.purged` audit row with the reason and the counts, and a row in the `purges` table, which is kept. Purged content is still in the backups until they expire. In repo1, pgBackRest keeps four weekly full backups (`repo1-retention-full=4`, about four weeks) with their WAL. pgBackRest never expires repo2, so there it stays as long as the B2 bucket's lifecycle rule ([Backups](#backups), step 1) keeps the files. A restore to a point before a purge brings the content back, so run the purge again after such a restore.
 
 ## Restore drill
 

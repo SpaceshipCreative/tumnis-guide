@@ -2,6 +2,8 @@
 
 Container and host configuration: the Dockerfile, the compose files (main, preview, test), and config for Postgres, pgBackRest, PgBouncer, clamd and Prometheus alerts.
 
+The image includes `git` and the OpenSSH client, which the worker uses to fetch an Obsidian vault from its Git remote with a read-only deploy key (P3-12). Its clones live in the `obsidian` volume, on the worker only; it is a cache that needs no backup. The deploy key and `known_hosts` are written only to a tmpfs at `/var/lib/tumnis/obsidian/.keys`, and only while a git command runs. The `spool` volume is shared by `api`, `worker` and `worker-extract`. Host-specific mounts go only in an override such as `deploy/compose.local.yaml`, never in `compose.yaml` (README, Connect sources): a server folder or share at the same absolute path on `api`, `worker` and `worker-extract`, writable by uid 10001 and holding the `.tumnis-root` marker; a folder vault read-only at `/vaults/<name>` on `worker` only.
+
 ## Backups (P0-28, REL-1)
 
 Postgres archives WAL (`postgres/conf.d/archive.conf`, `archive_timeout = 60s`) through pgBackRest to two repositories (`pgbackrest/pgbackrest.conf`): repo1 on the `pgbackrest_repo1` volume, repo2 encrypted on Backblaze B2. The `backup` service creates the stanza, takes a first full backup per repository, then runs `pgbackrest/crontab` under supercronic; every run lands in `ops_backup_runs`, and the worker's `*/15` freshness check (production only) marks readiness `backups: degraded` when WAL or a backup is late. Previews never archive and never back up.
