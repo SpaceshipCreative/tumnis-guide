@@ -88,7 +88,6 @@ async def test_only_master_receives_notify_runs(delivery: DeliveryWorld) -> None
 
 @pytest.mark.req("FR-8.1", "REL-3")
 @pytest.mark.wp("P2-16")
-@pytest.mark.xfail(strict=True, reason="spec:P2-16")
 async def test_failed_delivery_retries_then_dead_letters(delivery: DeliveryWorld) -> None:
     """T-P2-16-10
     The master's focus skill fails every time (the Discord gateway is down): the delivery
