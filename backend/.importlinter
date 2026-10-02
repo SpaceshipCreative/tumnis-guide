@@ -53,6 +53,8 @@ type = forbidden
 source_modules =
     tumnis.modules.*.rules
     tumnis.modules.knowledge.sync_rules
+    tumnis.modules.knowledge.obsidian.rules
+    tumnis.modules.knowledge.obsidian.parse
 forbidden_modules =
     tumnis.core.db
     tumnis.core.tenancy
