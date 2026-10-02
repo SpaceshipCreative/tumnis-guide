@@ -403,8 +403,8 @@ class ClockOut(BaseModel):
     )
 )
 async def set_clock(request: Request, body: ClockIn) -> ClockOut:
-    """Fixes the server clock (every route, TOTP checks and rate limits read it) until the
-    next `POST /v1/test/reset`. The Playwright fixtures call it when a test installs
+    """Fixes the server clock (every route and TOTP checks read it; rate limits keep real
+    time) until the next `POST /v1/test/reset`. The Playwright fixtures call it when a test installs
     `page.clock`, so both clocks show the same instant. The instant is also stored for the
     worker, which stamps a run's end with it (`fake_scripts.worker_now`, decision 86)."""
     clock = request.app.state.clock
