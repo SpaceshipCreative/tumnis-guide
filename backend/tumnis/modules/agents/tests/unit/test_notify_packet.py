@@ -54,3 +54,26 @@ def test_notify_packet_runs_the_focus_skill() -> None:
     api.FocusMessage.model_validate({"message": "2 items waited. Open Tumnis to review."})
     with pytest.raises(ValidationError):
         api.FocusMessage.model_validate({"message": "x", "action": "pause_agents"})
+
+
+EVENT = {
+    "id": str(RUN),
+    "kind": "block_start",
+    "level": "nudge",
+    "rule": "nudge:block_start",
+    "fired_at": "2026-10-01T09:00:00Z",
+}
+ITEM = {"id": str(RUN), "kind": "question", "link": "/review"}
+
+
+@pytest.mark.req("FR-8.2")
+@pytest.mark.wp("P2-16")
+@pytest.mark.parametrize(
+    "subjects",
+    [{}, {"batch": {"count": 1}, "item": ITEM}, {"event": EVENT, "batch": {"count": 1}}],
+    ids=["none", "item_and_batch", "event_and_batch"],
+)
+def test_notify_request_has_exactly_one_subject(subjects: dict[str, object]) -> None:
+    """A notify body is about one thing: exactly one of `event`, `item` and `batch`."""
+    with pytest.raises(ValidationError, match="exactly one of event, item, batch"):
+        api.NotifyRequest.model_validate(subjects)

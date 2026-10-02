@@ -15,10 +15,10 @@ requests; P1-17 fills `passages`.
 """
 
 from datetime import date
-from typing import Annotated, Final, Literal
+from typing import Annotated, Final, Literal, Self
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from tumnis.core.limits import MAX_ESTIMATE_MINUTES
 from tumnis.core.schemas import VersionedPayload, versioned
@@ -245,6 +245,7 @@ class PlanningResult(VersionedPayload):
 # data for the skill, never instructions.
 
 NOTIFY_MESSAGE_MAX: Final = 2000  # a Discord message's length limit
+NOTIFY_SUBJECTS: Final = ("event", "item", "batch")  # exactly one says what it is about
 NotifyLevel = Literal["quiet", "nudge", "coach", "guardrail"]  # as focus' Level
 FocusEventKind = Literal[
     "block_start", "not_started", "check_in_due", "switched", "stuck", "block_end", "day_end"
@@ -303,6 +304,15 @@ class NotifyProject(_Part):
 class NotifyRequest(VersionedPayload):
     """The `notify` packet's body (P2-16): one notification for the person."""
 
+    model_config = ConfigDict(
+        json_schema_extra={  # the generated schema states the one-subject rule too
+            "oneOf": [
+                {"required": [key], "properties": {key: {"type": "object"}}}
+                for key in NOTIFY_SUBJECTS
+            ]
+        }
+    )
+
     schema_version: Literal[1] = 1
     kind: Literal["notify"] = "notify"
     event: NotifyEvent | None = None
@@ -312,6 +322,12 @@ class NotifyRequest(VersionedPayload):
     project: NotifyProject | None = None
     return_to: NotifyReturnTo | None = None
     answers: list[Slug] = Field(default=[], max_length=8)  # the one-tap answers offered
+
+    @model_validator(mode="after")
+    def _one_subject(self) -> Self:
+        if sum(getattr(self, key) is not None for key in NOTIFY_SUBJECTS) != 1:
+            raise ValueError("exactly one of event, item, batch must be set")
+        return self
 
 
 @versioned("result", "focus_message", 1)

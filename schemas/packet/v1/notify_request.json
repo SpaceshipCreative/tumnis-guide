@@ -229,6 +229,38 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "The `notify` packet's body (P2-16): one notification for the person.",
+  "oneOf": [
+    {
+      "properties": {
+        "event": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "event"
+      ]
+    },
+    {
+      "properties": {
+        "item": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "item"
+      ]
+    },
+    {
+      "properties": {
+        "batch": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "batch"
+      ]
+    }
+  ],
   "properties": {
     "answers": {
       "default": [],
