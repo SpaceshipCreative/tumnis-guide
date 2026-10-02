@@ -512,6 +512,9 @@ async def test_a_reset_ends_every_workflow_of_the_world_it_removed(
     await _reset(client)
 
     assert await _until_async(lambda: outstanding(removed), CANCEL_SEEN_S, want=[]) == []
+    # Ended by the reset, not by failing on the removed rows.
+    ended = await dbos.list_workflows_async(workflow_ids=removed, load_input=False)
+    assert {w.workflow_id: w.status for w in ended} == dict.fromkeys(removed, "CANCELLED")
     assert await outstanding([scheduled]) == [scheduled]
     assert await dbos_client.get_schedule_async(schedule) is not None
 

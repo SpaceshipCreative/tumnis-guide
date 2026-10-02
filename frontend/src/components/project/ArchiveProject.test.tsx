@@ -190,3 +190,37 @@ test("[P2-18][FR-5.10] APP-13 (archive UI) the archived projects list unarchives
 test("[P2-18][FR-5.10] APP-13 (archive UI) the archived projects list unarchives at 1280 px", async () => {
   await unarchivesFromList("laptop");
 });
+
+test("[P2-18][FR-5.10] APP-13 (archive UI) the archived projects list reads every page", async () => {
+  // Archived projects sort with the live ones, so one can sit on a later page.
+  const first = makeProject({ name: "Live site" });
+  const later = makeProject({
+    name: "Old site",
+    archived_at: "2026-03-01T09:00:00Z",
+  });
+  const cursors: (string | null)[] = [];
+  server.use(
+    http.get("/v1/projects", ({ request }) => {
+      const url = new URL(request.url);
+      if (url.searchParams.get("include_archived") !== "true") {
+        return HttpResponse.json({ items: [first], next_cursor: null });
+      }
+      const cursor = url.searchParams.get("cursor");
+      cursors.push(cursor);
+      return cursor === "page-2"
+        ? HttpResponse.json({ items: [later], next_cursor: null })
+        : HttpResponse.json({ items: [first], next_cursor: "page-2" });
+    }),
+  );
+
+  const { user } = await renderRoute("/projects", { viewport: "phone" });
+  await screen.findByRole("link", { name: "Live site" });
+  await user.click(
+    screen.getByRole("button", { name: "Show archived projects" }),
+  );
+  const list = await screen.findByRole("list", { name: "Archived projects" });
+  expect(
+    await within(list).findByRole("link", { name: "Old site" }),
+  ).toBeVisible();
+  expect(cursors).toEqual([null, "page-2"]);
+});

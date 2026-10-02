@@ -5,11 +5,11 @@
 // Settings section archives (after asking, inline: the section may sit in the phone's
 // Context sheet, a modal of its own) and unarchives; the project list has the archived
 // projects list with Unarchive; the header shows the state as a badge.
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
-import { projectsListProjectsOptions } from "../../api/@tanstack/react-query.gen";
+import { projectsListProjectsInfiniteOptions } from "../../api/@tanstack/react-query.gen";
 import type { ProjectOut } from "../../api/types.gen";
 import { zProjectOut } from "../../api/zod.gen";
 import { apiWrite, ConflictError, useWrite } from "../../lib/fetch";
@@ -201,16 +201,27 @@ export function ArchiveControl({ project }: { project: Project }) {
 
 const ALL_PROJECTS = { query: { limit: 200, include_archived: true } };
 
-/** The project list's archived projects: shown on request, each with Unarchive. */
+/** The project list's archived projects: shown on request, each with Unarchive. The list
+ * has no archived-only filter and archived projects sort among the live ones, so it reads
+ * every page of the full list. */
 export function ArchivedProjects() {
   const [open, setOpen] = useState(false);
   const listId = useId();
-  const all = useQuery({
-    ...projectsListProjectsOptions(ALL_PROJECTS),
+  const all = useInfiniteQuery({
+    ...projectsListProjectsInfiniteOptions(ALL_PROJECTS),
+    initialPageParam: {},
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
     enabled: open,
   });
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = all;
+  useEffect(() => {
+    if (open && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [open, hasNextPage, isFetchingNextPage, fetchNextPage]);
   const write = useArchiveProject();
-  const archived = (all.data?.items ?? []).filter((p) => p.archived_at != null);
+  const archived = (all.data?.pages ?? [])
+    .flatMap((page) => page.items)
+    .filter((p) => p.archived_at != null);
+  const loaded = all.isSuccess && !hasNextPage;
   return (
     <section className="flex flex-col gap-2">
       <button
@@ -235,7 +246,7 @@ export function ArchivedProjects() {
             aria-label="Archived projects"
             className="flex flex-col divide-y divide-border rounded-md border border-border bg-surface"
           >
-            {all.isSuccess && archived.length === 0 && (
+            {loaded && archived.length === 0 && (
               <li className="px-4 py-3 text-sm text-muted">
                 No archived projects.
               </li>
