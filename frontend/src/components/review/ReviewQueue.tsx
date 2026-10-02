@@ -33,13 +33,14 @@ import { ResultItem } from "./ResultItem";
 import {
   canOpen,
   editorFor,
+  editsAtOnce,
   ReviewItemCard,
   SnoozeChoices,
   type DecideAction,
   type Mode,
   type SnoozeKey,
 } from "./ReviewItemCard";
-import { LABELS } from "./slots";
+import { LABELS, offeredActions } from "./slots";
 
 /** Marked once the queue has rendered with its data and takes input (P0-29 times it). */
 export const REVIEW_READY_MARK = "tumnis:review-ready";
@@ -305,8 +306,16 @@ export function ReviewQueue({
 
   const run = (item: ReviewItemOut, decision: DecideAction) => {
     if (decide.isPending) return; // the buttons are disabled too; keys land here
-    if (!item.actions.includes(decision.action)) return;
+    if (!offeredActions(item).includes(decision.action)) return;
     decide.mutate({ ...decision, item });
+  };
+
+  // `edit` opens the kind's form, or is decided at once when the kind's edit takes no
+  // payload (a plan issue's move); an action the item has no offer for does nothing.
+  const edit = (item: ReviewItemOut) => {
+    if (!offeredActions(item).includes("edit")) return;
+    if (editsAtOnce(item)) run(item, { action: "edit" });
+    else setMode("edit");
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
@@ -335,12 +344,13 @@ export function ReviewQueue({
       else run(item, { action: "edit", payload: { label: label.value } });
     } else if (key === "Enter") {
       const primary = item.primary_action ?? item.actions[0];
-      if (primary === "answer" || primary === "edit") setMode(primary);
+      if (primary === "edit") edit(item);
+      else if (primary === "answer") setMode(primary);
       else if (primary !== undefined) {
         run(item, { action: primary as DecideAction["action"] });
       }
     } else if (key === "e" && item.actions.includes("edit")) {
-      setMode("edit");
+      edit(item);
     } else if (key === "r") {
       const refuse = item.actions.includes("reject") ? "reject" : "deny";
       run(item, { action: refuse });
