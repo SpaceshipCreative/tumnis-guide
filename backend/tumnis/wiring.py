@@ -1,22 +1,45 @@
 """Composition root: imports every module's adapters, api, events and workflows so they
 register (adapters, seed writers, event payload types, subscribers and DBOS workflows),
 and registers each module's optional `api.health()` as a non-critical readiness check
-(later: routers). Driven by the module registry, so a new module is wired automatically."""
+(later: routers). Driven by the module registry, so a new module is wired automatically.
+`configure_process` is what the api and both workers configure at start."""
 
 import importlib
 from typing import Protocol
 
 import tumnis.core.settings_store  # noqa: F401  # registers the settings cache (P0-08)
+from tumnis.core import cache, db, deadletter, modules
 from tumnis.core.adapters.registry import health_states, registered
+from tumnis.core.clock import Clock
+from tumnis.core.crypto import MasterKeys
 from tumnis.core.health import HealthCheck, Status, register_health
 from tumnis.core.metrics import register_scrape_source
 from tumnis.core.modules import MODULES
+from tumnis.settings import Settings, install_master_keys, install_peppers
 
 
 class RegisterHealth(Protocol):
     """The shape of `tumnis.core.health.register_health` (P0-04)."""
 
     def __call__(self, name: str, check: HealthCheck, *, critical: bool) -> None: ...
+
+
+def configure_process(settings: Settings, *, app_url: str, clock: Clock) -> MasterKeys | None:
+    """The process-wide clients every long-running process needs, set in one place so the
+    api (`create_app`), the worker and `worker-extract` (`tumnis.worker.main`) cannot
+    drift apart (APP-TEST-final finding 1: only the api configured the DBOS client, so a
+    worker-side enqueue failed). The master keys and peppers; the database engines, the
+    app role on `app_url` (the api's PgBouncer URL, the workers' direct one); the module
+    kill list; the cache, publishing invalidations to the other processes; and the
+    `DBOSClient` modules enqueue through (`deadletter.dbos_client`). No I/O. Returns the
+    master keys when they were loaded."""
+    master_keys = install_master_keys(settings)  # MasterKeyError on an unsafe key file
+    install_peppers(settings)  # session, CSRF and pre-auth tokens (P0-13), task tokens (P2-02)
+    db.configure(app_url, settings.database_direct_url)
+    modules.configure(settings)  # the deployment's module kill list
+    cache.configure_backend(cache.InProcessCache(clock, publish=cache.pg_publisher(db.app_engine)))
+    deadletter.configure(settings.dbos_system_url)  # built on first use
+    return master_keys
 
 
 def load_adapters() -> None:

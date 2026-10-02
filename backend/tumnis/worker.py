@@ -11,9 +11,18 @@ import signal
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from tumnis.core import audit_workflows, cache, db, events, faults, modules, workflows_ops
+from tumnis.core import (
+    audit_workflows,
+    cache,
+    db,
+    deadletter,
+    events,
+    faults,
+    modules,
+    workflows_ops,
+)
 from tumnis.core.clock import SystemClock
-from tumnis.settings import Settings, install_master_keys, install_peppers
+from tumnis.settings import Settings
 
 if TYPE_CHECKING:
     from dbos import DBOSConfig
@@ -187,8 +196,10 @@ def configure_connectors(settings: Settings) -> None:
 
 
 def configure_folder_sync(settings: Settings) -> None:
-    """The folder sync's SSRF policy (P1-15): every location is opened with the worker's."""
+    """The folder sync's SSRF policy (P1-15): every location is opened with the worker's,
+    and so is every linked S3 source (P3-13)."""
     importlib.import_module("tumnis.modules.knowledge.sync").configure(settings.net_policy())
+    importlib.import_module("tumnis.modules.knowledge.s3_sync").configure(settings.net_policy())
 
 
 def _folder_watch(stop: asyncio.Event) -> "asyncio.Task[None]":
@@ -274,25 +285,22 @@ def main(
 
     from dbos import DBOS  # noqa: PLC0415
 
-    import tumnis.wiring  # noqa: F401, PLC0415  # registers adapters, events and workflows
+    import tumnis.wiring  # noqa: PLC0415  # registers adapters, events and workflows
     from tumnis.core import fake_scripts  # noqa: PLC0415
 
-    db.configure(settings.database_direct_url, settings.database_direct_url)
+    # What the api configures too (APP-TEST-final finding 1): keys and peppers (dispatch
+    # signs each run's task token, P2-02), the engines on the direct URL, the kill list, the
+    # cache and the DBOSClient that worker-side enqueues use (an S3 sync's extractions).
+    tumnis.wiring.configure_process(
+        settings, app_url=settings.database_direct_url, clock=SystemClock()
+    )
     if settings.tumnis_adapters == "fake":
         fake_scripts.enable()  # scripts posted to the api reach this process's fakes (R-37)
-    install_master_keys(settings)
-    # dispatch issues each run's task token (P2-02, R-27): its HMAC needs the peppers here
-    # too, not only in the api (the boot checks install them; a harness worker skips those).
-    install_peppers(settings)
-    modules.configure(settings)
     configure_generation(settings)
     configure_agents(settings)
     configure_folder_sync(settings)
     configure_connectors(settings)
     configure_extraction(settings)
-    cache.configure_backend(
-        cache.InProcessCache(SystemClock(), publish=cache.pg_publisher(db.direct_engine))
-    )
     config = dbos_config(settings)
     if app_version is not None:
         config["application_version"] = app_version
@@ -311,6 +319,7 @@ def main(
     try:
         asyncio.run(_serve(settings, relay=not queues))
     finally:
+        deadletter.close()
         DBOS.destroy()
 
 
