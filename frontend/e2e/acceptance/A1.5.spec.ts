@@ -41,19 +41,21 @@ test(
     await expect(item).toContainText("Ready", { timeout: 60_000 });
 
     // 2. The task drawer's Packet preview: the brief first, then the passage
-    // cited as `Rate card, page 2`.
+    // cited as `rate-card-table.pdf, page 2`.
     await page.goto(`/projects/${acme}?task=${taskId}`);
     const drawer = taskDrawer(page, TASK);
     await drawer.getByRole("button", { name: "Packet preview" }).click();
     const preview = drawer.getByRole("region", { name: "Packet preview" });
     const parts = preview.getByRole("article");
     await expect(parts.first()).toContainText("Brief");
-    const passage = parts.filter({ hasText: "Rate card, page 2" });
+    const passage = parts.filter({ hasText: "rate-card-table.pdf, page 2" });
     await expect(passage).toHaveCount(1);
     await expect(passage).toContainText("Senior designer");
     const order = await parts.allInnerTexts();
     const briefAt = order.findIndex((t) => t.includes("Brief"));
-    const passageAt = order.findIndex((t) => t.includes("Rate card, page 2"));
+    const passageAt = order.findIndex((t) =>
+      t.includes("rate-card-table.pdf, page 2"),
+    );
     expect(briefAt).toBe(0);
     expect(passageAt).toBeGreaterThan(briefAt);
   },
