@@ -32,6 +32,7 @@ from tumnis.core.idempotency import SessionDep
 from tumnis.core.routing import RoutePolicy, route_policy, v1_router
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.modules.integrations import api
+from tumnis.modules.integrations import testing as _testing  # noqa: F401  # registers the tick
 
 router = v1_router("integrations", tags=["purges"])
 
