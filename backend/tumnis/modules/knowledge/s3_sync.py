@@ -409,21 +409,38 @@ async def recheck_key(
 
 async def read_linked(ctx: WorkspaceContext, version_id: UUID) -> AsyncGenerator[bytes]:
     """A linked version's object, read again from its bucket (the pipeline's fallback when
-    the spool copy is gone; the object may have changed since, and step 1 hashes what it
-    reads)."""
+    the spool copy is gone). The object may have changed since: another hash at the end,
+    or more bytes than any version can hold (step 1 would stop reading before the end),
+    raises `pipeline.LinkedObjectChangedError`, so step 1 never stores the new bytes' hash on
+    the old version."""
     async with tenant_session(ctx) as s:
         found = (
             await s.execute(
-                select(_documents.c.connection_id, _documents.c.external_id)
+                select(
+                    _documents.c.connection_id,
+                    _documents.c.external_id,
+                    _versions.c.content_hash,
+                )
                 .join(_versions, _versions.c.document_id == _documents.c.id)
                 .where(_versions.c.id == version_id)
             )
         ).first()
     if found is None or found.connection_id is None or found.external_id is None:
         raise FileNotFoundError(f"version {version_id} is not from a linked source")
+    changed = pipeline.LinkedObjectChangedError(
+        f"{found.external_id} changed since version {version_id}"
+    )
+    digest = hashlib.sha256()
+    size = 0
     async with _opened(ctx, found.connection_id, net()) as (_, reader):
         async for chunk in reader.read(found.external_id):
+            size += len(chunk)
+            if size > MAX_UPLOAD_BYTES:
+                raise changed
+            digest.update(chunk)
             yield chunk
+    if digest.digest() != bytes(found.content_hash):
+        raise changed
 
 
 async def sources() -> list[tuple[str, str]]:

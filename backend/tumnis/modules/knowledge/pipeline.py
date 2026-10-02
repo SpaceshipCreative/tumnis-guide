@@ -78,6 +78,13 @@ STEPS: Final = (
 Source = Literal["spool", "storage", "linked"]
 LinkedReader = Callable[[WorkspaceContext, UUID], AsyncGenerator[bytes]]
 
+
+class LinkedObjectChangedError(FileNotFoundError):
+    """A linked version's object, read again from its bucket, no longer holds that
+    version's bytes: step 1 fails rather than give the version another file's hash (the
+    next sync takes the new bytes in as a new version)."""
+
+
 SNIFF_BYTES: Final = 8 * 1024
 READ_BYTES: Final = 1024 * 1024
 _OOXML: Final = "application/vnd.openxmlformats-officedocument."

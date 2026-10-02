@@ -334,3 +334,44 @@ async def test_recheck_of_a_key_tumnis_cannot_address_takes_nothing(
     assert taken is False
     assert log.requests == []
     assert await source_documents(ws, created.id) == {}
+
+
+@pytest.mark.req("FR-15.11")
+@pytest.mark.wp("P3-13")
+async def test_linked_reread_of_a_changed_object_keeps_the_version_hash(
+    db: DbUrls, knowledge_ws: WorkspaceHandle, minio: S3Endpoint, clock: FixedClock
+) -> None:
+    """#158 review: when a linked version's spool copy is gone and its object has changed
+    since, reading it again from the bucket fails rather than hand step 1 the new bytes,
+    so the version keeps the hash of what was taken in."""
+    from tumnis.modules.knowledge import pipeline  # noqa: PLC0415
+
+    s3_sync = importlib.import_module("tumnis.modules.knowledge.s3_sync")
+    ws = knowledge_ws
+    project_id = await _project(ws, clock, "Acme")
+    bucket = await new_bucket(minio)
+    original = b"# Brief\n\nThe first text.\n"
+    await put(minio, bucket, "acme/brief.md", original)
+    created = await create_source(ws, source_in(minio, bucket, {"acme/": project_id}))
+    log = ExtractLog([])
+    await _sync(ws, created.id, log)
+    version_id = log.requests[0][1]
+    pipeline.spool_path(version_id).unlink(missing_ok=True)
+    hashed = "SELECT encode(content_hash, 'hex') FROM document_versions WHERE id = %s"
+
+    def stored_hash() -> str:
+        with psycopg.connect(db.libpq(OWNER)) as conn:
+            row = conn.execute(hashed, (version_id,)).fetchone()
+        assert row is not None
+        return str(row[0])
+
+    before = stored_hash()
+    s3_sync.configure(SELF_HOSTED)
+    try:
+        assert b"".join([c async for c in s3_sync.read_linked(ws.ctx, version_id)]) == original
+        await put(minio, bucket, "acme/brief.md", b"# Brief\n\nSomething else entirely.\n")
+        with pytest.raises(pipeline.LinkedObjectChangedError):
+            _ = [c async for c in s3_sync.read_linked(ws.ctx, version_id)]
+    finally:
+        s3_sync.configure(None)
+    assert stored_hash() == before
