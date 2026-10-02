@@ -222,17 +222,18 @@ describe("ObsidianSection", () => {
     // CodeRabbit on #177: each click sends a new idempotency key, so a second click
     // while the first DELETE is in flight would answer 404 and show it as an error.
     const recorder = new Recorder();
-    let release = () => {};
+    let release: (() => void) | undefined;
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
+    // The first matching handler answers, so the held DELETE goes before the list's.
     server.use(
-      ...handlers(recorder, [BROKEN, DRAFT]),
       http.delete("*/v1/knowledge/obsidian/vaults/:id", async ({ request }) => {
         await recorder.record(request);
         await held;
         return new HttpResponse(null, { status: 204 });
       }),
+      ...handlers(recorder, [BROKEN, DRAFT]),
     );
     const { user } = renderWithProviders(<ObsidianSection />);
 
@@ -247,7 +248,7 @@ describe("ObsidianSection", () => {
     expect(discard).toBeDisabled();
     await user.click(disconnect);
     await user.click(discard);
-    release();
+    release?.();
     await waitFor(() => {
       expect(disconnect).toBeEnabled();
     });
