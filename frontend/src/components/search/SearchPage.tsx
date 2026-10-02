@@ -4,7 +4,7 @@
 // page, a project result the project, as in the Mod+K palette (SearchPalette).
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { searchSearchInfiniteOptions } from "../../api/@tanstack/react-query.gen";
 import type { SearchHit } from "../../api/types.gen";
@@ -75,7 +75,9 @@ function Results({ q, scope }: { q: string; scope: SearchScope }) {
   if (results.isPending) {
     return <p className={HINT}>Searching…</p>;
   }
-  if (results.isError) {
+  // A failed first page has nothing to show; a failed later page keeps the pages already
+  // loaded and offers to try that page again.
+  if (results.data === undefined) {
     return (
       <p role="alert" className="text-sm text-danger">
         Search is not available right now.
@@ -99,17 +101,35 @@ function Results({ q, scope }: { q: string; scope: SearchScope }) {
           ))}
         </ul>
       )}
-      {results.hasNextPage && (
-        <button
-          type="button"
-          className={`${BUTTON_SECONDARY} my-2 ml-2 px-3`}
-          disabled={results.isFetchingNextPage}
-          onClick={() => {
-            void results.fetchNextPage();
-          }}
+      {results.isFetchNextPageError && !results.isFetchingNextPage ? (
+        <p
+          role="alert"
+          className="mx-2 my-2 flex items-center gap-3 text-sm text-danger"
         >
-          {results.isFetchingNextPage ? "Loading…" : "Load more"}
-        </button>
+          More results could not be loaded.
+          <button
+            type="button"
+            className={`${BUTTON_SECONDARY} px-3`}
+            onClick={() => {
+              void results.fetchNextPage();
+            }}
+          >
+            Try again
+          </button>
+        </p>
+      ) : (
+        results.hasNextPage && (
+          <button
+            type="button"
+            className={`${BUTTON_SECONDARY} my-2 ml-2 px-3`}
+            disabled={results.isFetchingNextPage}
+            onClick={() => {
+              void results.fetchNextPage();
+            }}
+          >
+            {results.isFetchingNextPage ? "Loading…" : "Load more"}
+          </button>
+        )
       )}
     </Card>
   );
@@ -126,9 +146,20 @@ export function SearchPage({
   onSearch: (next: { q: string; scope: SearchScope }) => void;
 }) {
   const boxId = useId();
-  const [text, setText] = useState(q);
+  // The box's own text belongs to the `q` it was typed against: when the URL's `q` changes
+  // from outside (back, forward, a link), the box shows the new `q` instead.
+  const [draft, setDraft] = useState({ for: q, text: q });
+  const text = draft.for === q ? draft.text : q;
+  const setText = (next: string) => {
+    setDraft({ for: q, text: next });
+  };
   const settled = useDebounced(text.trim());
+  // Only a change of the settled text searches, so text left over from before an outside
+  // change never puts the old search back in the URL.
+  const lastSettled = useRef(settled);
   useEffect(() => {
+    if (settled === lastSettled.current) return;
+    lastSettled.current = settled;
     if (settled !== q) onSearch({ q: settled, scope });
   }, [settled, q, scope, onSearch]);
 

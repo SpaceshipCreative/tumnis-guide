@@ -111,3 +111,59 @@ test("[P0-24][FR-3.9] APP-02 typing and the scope update the URL and the results
   expect(await screen.findByText("Nothing found")).toBeVisible();
   expect(api.asked.at(-1)?.get("scope")).toBe("projects");
 });
+
+test("[P0-24][FR-3.9] APP-02 a search the URL changes from outside replaces the box and stays", async () => {
+  const api = searchApi();
+  server.use(api.handler);
+  const { router } = await renderRoute("/search?q=footer", {
+    viewport: "laptop",
+  });
+  expect(
+    await screen.findByRole("link", { name: /Fix footer link/ }),
+  ).toBeVisible();
+
+  await router.navigate({
+    to: "/search",
+    search: { q: "pricing", scope: "all" },
+    replace: true,
+  });
+  await waitFor(() => {
+    expect(screen.getByRole("searchbox")).toHaveValue("pricing");
+  });
+  // Past the typing pause: the old box text must not put "footer" back in the URL.
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  expect(router.state.location.search).toEqual({ q: "pricing", scope: "all" });
+  expect(await screen.findByText("Nothing found")).toBeVisible();
+});
+
+test("[P0-24][FR-3.9] APP-02 a later page that fails keeps the results and can be tried again", async () => {
+  let failPage2 = true;
+  server.use(
+    http.get("*/v1/search", ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (params.get("cursor") === "page-2") {
+        return failPage2
+          ? HttpResponse.json({ title: "Unavailable" }, { status: 503 })
+          : HttpResponse.json({ items: [PROJECT_HIT], next_cursor: null });
+      }
+      return HttpResponse.json({ items: [TASK_HIT], next_cursor: "page-2" });
+    }),
+  );
+  const { user } = await renderRoute("/search?q=footer", { viewport: "phone" });
+  const results = await screen.findByRole("list", { name: "Results" });
+
+  await user.click(screen.getByRole("button", { name: "Load more" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "More results could not be loaded.",
+  );
+  expect(
+    within(results).getByRole("link", { name: /Fix footer link/ }),
+  ).toBeVisible();
+
+  failPage2 = false;
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  expect(
+    await within(results).findByRole("link", { name: /Acme site/ }),
+  ).toBeVisible();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
