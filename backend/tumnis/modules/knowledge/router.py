@@ -777,7 +777,53 @@ MINIO_WEBHOOK = RoutePolicy(
 )
 
 
-@router.post("/webhooks/minio/{connection_id}", status_code=202)
+# The body is read raw (the token is checked before it is parsed), so its schema, MinIO's
+# S3-style event record, is declared through `openapi_extra` as for uploads; only
+# `Records[].s3.object.key` is read, and any other field MinIO sends is allowed.
+MINIO_NOTIFICATION_BODY: Final[dict[str, Any]] = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["Records"],
+                "properties": {
+                    "EventName": {"type": "string"},
+                    "Key": {"type": "string"},
+                    "Records": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "eventName": {"type": "string"},
+                                "s3": {
+                                    "type": "object",
+                                    "properties": {
+                                        "bucket": {
+                                            "type": "object",
+                                            "properties": {"name": {"type": "string"}},
+                                        },
+                                        "object": {
+                                            "type": "object",
+                                            "properties": {"key": {"type": "string"}},
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            }
+        }
+    },
+}
+
+
+@router.post(
+    "/webhooks/minio/{connection_id}",
+    status_code=202,
+    openapi_extra={"requestBody": MINIO_NOTIFICATION_BODY},
+)
 @route_policy(MINIO_WEBHOOK)
 async def minio_notification(connection_id: UUID, request: Request) -> api.NotificationAccepted:
     return await api.accept_minio_notification(

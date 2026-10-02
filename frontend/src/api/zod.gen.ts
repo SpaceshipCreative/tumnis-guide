@@ -4779,6 +4779,30 @@ export const zUsageGetUsageQuery = z.object({
  */
 export const zUsageGetUsageResponse = z.array(zUsageRow);
 
+export const zKnowledgeMinioNotificationBody = z.object({
+  EventName: z.string().optional(),
+  Key: z.string().optional(),
+  Records: z.array(
+    z.object({
+      eventName: z.string().optional(),
+      s3: z
+        .object({
+          bucket: z
+            .object({
+              name: z.string().optional(),
+            })
+            .optional(),
+          object: z
+            .object({
+              key: z.string().optional(),
+            })
+            .optional(),
+        })
+        .optional(),
+    }),
+  ),
+});
+
 export const zKnowledgeMinioNotificationPath = z.object({
   connection_id: z.uuid(),
 });

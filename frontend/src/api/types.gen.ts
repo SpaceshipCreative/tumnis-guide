@@ -17096,7 +17096,21 @@ export type UsageGetUsageResponse =
   UsageGetUsageResponses[keyof UsageGetUsageResponses];
 
 export type KnowledgeMinioNotificationData = {
-  body?: never;
+  body: {
+    EventName?: string;
+    Key?: string;
+    Records: Array<{
+      eventName?: string;
+      s3?: {
+        bucket?: {
+          name?: string;
+        };
+        object?: {
+          key?: string;
+        };
+      };
+    }>;
+  };
   path: {
     /**
      * Connection Id

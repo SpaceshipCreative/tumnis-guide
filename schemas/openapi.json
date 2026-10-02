@@ -33571,6 +33571,59 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "EventName": {
+                    "type": "string"
+                  },
+                  "Key": {
+                    "type": "string"
+                  },
+                  "Records": {
+                    "items": {
+                      "properties": {
+                        "eventName": {
+                          "type": "string"
+                        },
+                        "s3": {
+                          "properties": {
+                            "bucket": {
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "object": {
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "Records"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "202": {
             "content": {

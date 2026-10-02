@@ -4960,4 +4960,8 @@ export const knowledgeMinioNotification = <
       await zKnowledgeMinioNotificationResponse.parseAsync(data),
     url: "/v1/webhooks/minio/{connection_id}",
     ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
