@@ -217,4 +217,42 @@ describe("ObsidianSection", () => {
     });
     expect(screen.getByText(BROKEN.remote ?? "")).toBeInTheDocument();
   });
+
+  test("[P3-12][FR-15.10] removing a vault sends one DELETE however often it is clicked", async () => {
+    // CodeRabbit on #177: each click sends a new idempotency key, so a second click
+    // while the first DELETE is in flight would answer 404 and show it as an error.
+    const recorder = new Recorder();
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      ...handlers(recorder, [BROKEN, DRAFT]),
+      http.delete("*/v1/knowledge/obsidian/vaults/:id", async ({ request }) => {
+        await recorder.record(request);
+        await held;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { user } = renderWithProviders(<ObsidianSection />);
+
+    const item = (await screen.findByText(BROKEN.remote ?? "")).closest("li");
+    if (!item) throw new Error("the vault is listed");
+    const disconnect = within(item).getByRole("button", { name: "Disconnect" });
+    const discard = screen.getByRole("button", { name: "Discard" });
+    await user.click(disconnect);
+    await waitFor(() => {
+      expect(disconnect).toBeDisabled();
+    });
+    expect(discard).toBeDisabled();
+    await user.click(disconnect);
+    await user.click(discard);
+    release();
+    await waitFor(() => {
+      expect(disconnect).toBeEnabled();
+    });
+    expect(recorder.writes()).toEqual([
+      `DELETE /v1/knowledge/obsidian/vaults/${BROKEN.id}`,
+    ]);
+  });
 });
