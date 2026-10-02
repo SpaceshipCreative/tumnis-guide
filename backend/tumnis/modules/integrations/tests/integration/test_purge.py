@@ -326,7 +326,6 @@ async def test_archived_project_is_compressed_not_purged(world: PurgeWorld) -> N
 
 @pytest.mark.req("FR-14.2")
 @pytest.mark.wp("P3-09")
-@pytest.mark.xfail(strict=True, reason="spec:P3-09")
 async def test_tasks_keep_link_marked_purged(world: PurgeWorld) -> None:
     """T-P3-09-06
     A closed task's old message is purged by retention, but the task keeps its link: the
