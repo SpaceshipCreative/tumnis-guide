@@ -3272,6 +3272,10 @@ async def seed_agent(
 # The 409s a seed project agent meets when the worker's provision (`project.created` of
 # the seed's own project) wrote the project's profile first (APP-04).
 _SEED_PROVISION_RACE: Final = frozenset({"profile_exists", "project_agent_exists"})
+# The statuses only a provision writes: still running (`provisioning`), or already ended
+# without a runner (`not_provisioned`: the seed writes its projects before its runners, so
+# the provision can finish `no_runner` first). A registered agent starts `registered`.
+_SEED_ADOPTABLE: Final = ("provisioning", "not_provisioned")
 
 
 async def _seed_adopt_provisioned(
@@ -3279,8 +3283,9 @@ async def _seed_adopt_provisioned(
 ) -> UUID | None:
     """The id of the project's own live profile, made the seed's (its name, runner and
     transport), when `exc` is the seed losing the race to the project's provision; None
-    otherwise (the name is another project's, or the project's agent is not one a
-    provision is still making: `registered` or `ready`, say), and the caller re-raises."""
+    otherwise (the name is another project's, or the project's agent is not the
+    provision's: a `registered`, `ready` or `paused` agent keeps the conflict), and the
+    caller re-raises."""
     if exc.problem.code not in _SEED_PROVISION_RACE:
         return None
     found = await s.scalar(
@@ -3288,7 +3293,7 @@ async def _seed_adopt_provisioned(
         .where(
             _profiles.c.role == "project",
             _profiles.c.project_id == project_id,
-            _profiles.c.status == "provisioning",
+            _profiles.c.status.in_(_SEED_ADOPTABLE),
             _live_profiles(),
         )
         .with_for_update()

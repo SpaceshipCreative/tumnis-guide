@@ -42,7 +42,7 @@ def _owner(db: DbUrls, query: str, params: tuple[Any, ...] = ()) -> list[tuple[A
         return conn.execute(query.encode(), params).fetchall()
 
 
-@pytest.mark.parametrize("status", ["registered", "ready"])
+@pytest.mark.parametrize("status", ["registered", "ready", "paused"])
 @pytest.mark.parametrize("name", ["acme-site", "acme-live"])
 async def test_seed_agent_keeps_the_conflict_for_a_live_agent(
     session_client: SessionClient,
@@ -92,3 +92,45 @@ async def test_seed_agent_keeps_the_conflict_for_a_live_agent(
         (project_id,),
     ) == [(live, name, status, "daemon")]
     assert client.cancelled == []
+
+
+async def test_seed_agent_adopts_a_provision_that_ended_without_a_runner(
+    session_client: SessionClient, db: DbUrls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The seed writes its projects before its runners, so the project's provision can end
+    `not_provisioned` (`no_runner`) before the seed agent registers: that row is still the
+    provision's, and the seed takes it over, ready, as it does a `provisioning` one."""
+    from tumnis.core import deadletter  # noqa: PLC0415
+    from tumnis.modules.agents import api as agents  # noqa: PLC0415
+    from tumnis.seed import AgentSeed  # noqa: PLC0415
+
+    client = _Client()
+    monkeypatch.setattr(deadletter, "dbos_configured", lambda: True)
+    monkeypatch.setattr(deadletter, "dbos_client", lambda: client)
+    assert session_client.account is not None
+    workspace_id = session_client.account.workspace_id
+    made = await session_client.post("/v1/projects", json={"name": "Acme site"})
+    assert made.status_code == 201, made.text
+    project_id = UUID(made.json()["id"])
+    [(provisioned,)] = _owner(
+        db,
+        "INSERT INTO agent_profiles (workspace_id, name, role, project_id, transport, status,"
+        " provision_mode) SELECT workspace_id, 'acme-site', 'project', id, 'daemon',"
+        " 'not_provisioned', 'create' FROM projects WHERE id = %s RETURNING id",
+        (project_id,),
+    )
+
+    profile_id = await agents.seed_agent(
+        workspace_id,
+        None,
+        project_id,
+        AgentSeed(key="ag", name="acme-site", role="project", key_scopes=()),
+    )
+
+    assert profile_id == provisioned
+    assert _owner(
+        db,
+        "SELECT name, status FROM agent_profiles WHERE project_id = %s AND deleted_at IS NULL",
+        (project_id,),
+    ) == [("acme-site", "ready")]
+    assert client.cancelled == [f"provision:{project_id}"]
