@@ -69,7 +69,15 @@ def upgrade() -> None:
         "ALTER TABLE folder_files ADD CONSTRAINT fk_folder_files_connection_id_connections"
         " FOREIGN KEY (connection_id) REFERENCES connections (id) NOT VALID"
     )
-    op.alter_column("folder_files", "location_id", nullable=True)
+    # squawk's ban-drop-not-null guards readers that assume a value. Every reader of
+    # folder_files (the folder sync, the pipeline's placed records, archive) selects by
+    # `location_id = <a location>`, so a linked source's row (location NULL) never
+    # matches one; the previous release never writes such a row. Running both releases
+    # side by side is safe, and the drop is a catalog change (no table rewrite).
+    op.execute(
+        "-- squawk-ignore ban-drop-not-null\n"
+        "ALTER TABLE folder_files ALTER COLUMN location_id DROP NOT NULL"
+    )
     op.execute(
         "ALTER TABLE folder_files ADD CONSTRAINT ck_folder_files_location_or_connection"
         " CHECK ((location_id IS NULL) <> (connection_id IS NULL)) NOT VALID"
