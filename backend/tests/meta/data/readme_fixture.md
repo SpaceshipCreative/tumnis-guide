@@ -42,7 +42,7 @@ echo first-run
 ```
 
 ```bash
-echo "untagged outside Install: allowed"
+echo "untagged in First run: the Install check passes it"
 ```
 
 ## Upgrade

@@ -41,7 +41,6 @@ def _base_env() -> dict[str, str]:
 
 @pytest.mark.req("A4.4", "REL-4")
 @pytest.mark.wp("P4-06")
-@pytest.mark.xfail(strict=True, reason="spec:P4-06")
 def test_extract_blocks_and_order() -> None:
     """T-P4-06-01
     The fixture gives every tagged block in document order with its suite, order, language,
@@ -94,7 +93,6 @@ def test_extract_blocks_and_order() -> None:
 
 @pytest.mark.req("A4.4", "REL-4")
 @pytest.mark.wp("P4-06")
-@pytest.mark.xfail(strict=True, reason="spec:P4-06")
 def test_untagged_block_in_install_fails() -> None:
     """T-P4-06-02
     The coverage check lists the line of every untagged shell block inside the Install
@@ -104,7 +102,7 @@ def test_untagged_block_in_install_fails() -> None:
     """
     readme = _harness()
     assert readme.check_section_coverage(FIXTURE.read_text()) == [28]
-    assert readme.check_section_coverage(FIXTURE.read_text(), section="First run") == []
+    assert readme.check_section_coverage(FIXTURE.read_text(), section="First run") == [44]
 
     tagged = "## Install\n\n```bash readme:install:10\necho ok\n```\n\n## Next\n\n```bash\nx\n```\n"
     assert readme.check_section_coverage(tagged) == []
@@ -116,7 +114,6 @@ def test_untagged_block_in_install_fails() -> None:
 
 @pytest.mark.req("A4.4", "REL-4")
 @pytest.mark.wp("P4-06")
-@pytest.mark.xfail(strict=True, reason="spec:P4-06")
 def test_block_failure_stops_run_with_line_number(tmp_path: Path) -> None:
     """T-P4-06-03
     Each block runs in its own `bash -euo pipefail` process in the work directory; the
@@ -167,7 +164,6 @@ def test_block_failure_stops_run_with_line_number(tmp_path: Path) -> None:
 
 @pytest.mark.req("A4.4", "REL-4")
 @pytest.mark.wp("P4-06")
-@pytest.mark.xfail(strict=True, reason="spec:P4-06")
 def test_env_blocks_are_the_only_substitution(tmp_path: Path) -> None:
     """T-P4-06-04
     A `readme:env` block's KEY=value lines are exported, literally, to the blocks after it
