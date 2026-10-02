@@ -160,7 +160,14 @@ export function ProjectPage({
             }}
           />
         )}
-        <Composer projectId={projectId} />
+        <Composer
+          projectId={projectId}
+          onFileAdded={() => {
+            // Show the dropped file in the Knowledge section (the phone's Context sheet).
+            uiStore.trigger.requestContextSection({ section: "knowledge" });
+            if (!laptop) uiStore.trigger.setContextSheet({ open: true });
+          }}
+        />
         <ViewSwitcher
           view={view}
           laptop={laptop}

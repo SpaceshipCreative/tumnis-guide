@@ -3,6 +3,8 @@
 // its quota; open, it adds a text entry, an upload or a link, pins an item (with the
 // version read) and moves one to the trash with Undo. A text entry opens in the note
 // editor, which loads only then (LazyEditor), so Tiptap stays out of the initial bundle.
+// A file shows where it stands (Scanning, Extracting, Ready, ...), and the list polls
+// while one is still settling.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -13,13 +15,18 @@ import {
   knowledgeListDocumentsQueryKey,
 } from "../../../api/@tanstack/react-query.gen";
 import type { DocumentDto } from "../../../api/types.gen";
-import { zDocumentDto, zUploadAccepted } from "../../../api/zod.gen";
+import { zDocumentDto } from "../../../api/zod.gen";
 import { BUTTON_QUIET, ERROR_TEXT, FIELD_LABEL, HINT } from "../../common/ui";
-import { apiUpload, apiWrite } from "../../../lib/fetch";
+import { apiWrite } from "../../../lib/fetch";
 import { LazyEditor } from "../../../editor/LazyEditor";
 import { fieldClass, RailSection, saveClass } from "./RailSection";
+import {
+  knowledgeListArgs,
+  knowledgePollInterval,
+  knowledgeQuotaArgs,
+  useKnowledgeUpload,
+} from "./useKnowledgeUpload";
 
-const LIST_LIMIT = 100;
 const UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
 
 /** Bytes for people: 1024-based, at most one decimal, no trailing `.0` ("1.5 MB", "10 GB"). */
@@ -47,6 +54,20 @@ export function knowledgeSummary(
 }
 
 type Adding = "text" | "link" | null;
+
+/** A file (an upload or a folder file, of whatever type), not a text entry or a link. */
+function isFile(doc: DocumentDto): boolean {
+  return doc.kind !== "text" && doc.kind !== "link";
+}
+
+/** Where a file stands in the scan and extraction pipeline (P1-16), in plain words. */
+export const FILE_STATUS: Record<DocumentDto["status"], string> = {
+  pending_scan: "Scanning",
+  extracting: "Extracting",
+  ready: "Ready",
+  quarantined: "Quarantined",
+  failed: "Failed",
+};
 
 function AddText({
   projectId,
@@ -216,6 +237,11 @@ function ItemRow({
             {doc.title}
           </span>
         )}
+        {isFile(doc) && (
+          <span aria-live="polite" className="shrink-0 text-xs text-muted">
+            {FILE_STATUS[doc.status]}
+          </span>
+        )}
         <button
           type="button"
           aria-pressed={doc.pinned}
@@ -258,9 +284,13 @@ export function KnowledgeSection({
   onToggle: () => void;
 }) {
   const client = useQueryClient();
-  const listArgs = { query: { project_id: projectId, limit: LIST_LIMIT } };
-  const quotaArgs = { query: { project_id: projectId } };
-  const docs = useQuery(knowledgeListDocumentsOptions(listArgs));
+  const listArgs = knowledgeListArgs(projectId);
+  const quotaArgs = knowledgeQuotaArgs(projectId);
+  // While a file is being scanned or extracted, the list polls until it settles.
+  const docs = useQuery({
+    ...knowledgeListDocumentsOptions(listArgs),
+    refetchInterval: (query) => knowledgePollInterval(query.state.data),
+  });
   const quota = useQuery(knowledgeGetQuotaOptions(quotaArgs));
   const [adding, setAdding] = useState<Adding>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -300,19 +330,12 @@ export function KnowledgeSection({
         ? "Knowledge could not be loaded"
         : "Loading…";
 
+  const sendFile = useKnowledgeUpload(projectId);
   const upload = (file: File) => {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("project_id", projectId);
-    run(
-      apiUpload({
-        path: "/knowledge/documents",
-        form,
-        idempotencyKey: crypto.randomUUID(),
-        schema: zUploadAccepted,
-      }),
-      `Could not upload ${file.name}.`,
-    );
+    setProblem(null);
+    sendFile(file).catch(() => {
+      setProblem(`Could not upload ${file.name}.`);
+    });
   };
 
   return (

@@ -1,0 +1,68 @@
+{
+  "description": "A1.3 (J6): Monday 9 March squeezed so its largest free block is 60 minutes. With the acceptance seed's busy 09:00-10:00, 12:00-13:00 and 15:00-15:30, the day (09:00-18:00) keeps 11:00-12:00 (60), 14:30-15:00 (30) and 17:30-18:00 (30). Tuesday 10 March keeps its free afternoon. Account b answers no events.",
+  "calendars": {
+    "avery@example.com": {
+      "kind": "calendar#events",
+      "summary": "avery@example.com",
+      "timeZone": "America/New_York",
+      "accessRole": "owner",
+      "items": [
+        {
+          "kind": "calendar#event",
+          "id": "s-design-sync",
+          "status": "confirmed",
+          "htmlLink": "https://calendar.example.com/event?eid=s-design-sync",
+          "summary": "Design sync",
+          "start": {
+            "dateTime": "2026-03-09T10:00:00-04:00",
+            "timeZone": "America/New_York"
+          },
+          "end": {
+            "dateTime": "2026-03-09T11:00:00-04:00",
+            "timeZone": "America/New_York"
+          },
+          "eventType": "default"
+        },
+        {
+          "kind": "calendar#event",
+          "id": "s-workshop",
+          "status": "confirmed",
+          "htmlLink": "https://calendar.example.com/event?eid=s-workshop",
+          "summary": "Acme workshop",
+          "start": {
+            "dateTime": "2026-03-09T13:00:00-04:00",
+            "timeZone": "America/New_York"
+          },
+          "end": {
+            "dateTime": "2026-03-09T14:30:00-04:00",
+            "timeZone": "America/New_York"
+          },
+          "eventType": "default"
+        },
+        {
+          "kind": "calendar#event",
+          "id": "s-review",
+          "status": "confirmed",
+          "htmlLink": "https://calendar.example.com/event?eid=s-review",
+          "summary": "Quarterly review",
+          "start": {
+            "dateTime": "2026-03-09T15:30:00-04:00",
+            "timeZone": "America/New_York"
+          },
+          "end": {
+            "dateTime": "2026-03-09T17:30:00-04:00",
+            "timeZone": "America/New_York"
+          },
+          "eventType": "default"
+        }
+      ]
+    },
+    "blake@example.org": {
+      "kind": "calendar#events",
+      "summary": "blake@example.org",
+      "timeZone": "America/New_York",
+      "accessRole": "owner",
+      "items": []
+    }
+  }
+}

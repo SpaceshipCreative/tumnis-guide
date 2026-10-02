@@ -42,7 +42,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tumnis.core import audit, db, faults, workflows_ops
+from tumnis.core import audit, db, fake_scripts, faults, workflows_ops
 from tumnis.core.clock import SystemClock
 from tumnis.core.limits import WAIT_SLICE_S
 from tumnis.core.live import mark_changed
@@ -320,7 +320,7 @@ async def _record_outcome(
     workspace_id: str, task: TaskPacket, message: dict[str, Any] | None
 ) -> dict[str, Any]:
     outcome = _outcome(task, message)
-    now = SystemClock().now()
+    now = await fake_scripts.worker_now()  # the system clock but in fakes mode (decision 86)
     async with tenant_session(_ctx(workspace_id)) as s:
         # A run already cancelled (the protocol-1 fallback, whose message to this workflow
         # is best effort) stays cancelled: a lost message must not turn it into `timed_out`.
@@ -739,7 +739,7 @@ async def finish_run(
     ctx = _ctx(workspace_id)
     async with tenant_session(ctx) as s:
         done = await api.finish_run_in(
-            s, ctx, UUID(run_id), RunStatus(status), reason, now=SystemClock().now()
+            s, ctx, UUID(run_id), RunStatus(status), reason, now=await fake_scripts.worker_now()
         )
     return done.status.value, done.seq
 
@@ -2111,7 +2111,7 @@ async def fail_orphan_step(workspace_id: str, run_id: str, reason: str) -> bool:
             return False
         status = RunStatus.CANCELLED if current == RunStatus.HELD.value else RunStatus.FAILED
         done = await api.finish_run_in(
-            s, ctx, UUID(run_id), status, reason, now=SystemClock().now()
+            s, ctx, UUID(run_id), status, reason, now=await fake_scripts.worker_now()
         )
     return done.changed
 

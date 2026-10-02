@@ -19,6 +19,8 @@ export interface LastPacket {
 }
 
 export interface TestFakes {
+  /** The request context the hooks post on (the page's), for arranging state. */
+  readonly request: APIRequestContext;
   /** `POST /v1/test/tick/{schedule}`, e.g. `planner-tick`. */
   tick(schedule: string): Promise<void>;
   /** `POST /v1/test/fakes/{adapter}/script`, e.g. `decisions.jev`, `generation`. */
@@ -84,6 +86,7 @@ export function testFakes(request: APIRequestContext): TestFakes {
     return { packet: body.packet, runMessages: body.run_messages };
   };
   return {
+    request,
     tick: (schedule) =>
       post(request, `/v1/test/tick/${encodeURIComponent(schedule)}`),
     script,
