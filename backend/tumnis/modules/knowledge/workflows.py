@@ -452,8 +452,8 @@ async def move_verify_step(
 
 
 @DBOS.step(**STEP_RETRY)
-async def move_fail_step(workspace_id: str, move_id: str, reason: str) -> None:
-    await move.fail(workspace_id, move_id, reason)
+async def move_fail_step(workspace_id: str, move_id: str, reason: str) -> str | None:
+    return await move.fail(workspace_id, move_id, reason)
 
 
 @DBOS.step(**STEP_RETRY)
@@ -510,8 +510,9 @@ async def move_project_folder(
         failed = await move_switch_step(workspace_id, record, files, stats)
     except DBOSMaxStepRetriesExceeded:
         log.exception("knowledge: the move of project %s could not switch", record["project_id"])
-        failed = "switch_failed"
-        await move_fail_step(workspace_id, record["move_id"], failed)
+        status = await move_fail_step(workspace_id, record["move_id"], "switch_failed")
+        # Decision 91: a last attempt that committed before it raised left the move switched.
+        failed = None if status == "switched" else "switch_failed"
     if failed is not None:
         return {"status": "failed", "reason": failed, "move_id": record["move_id"]}
     return {"status": "switched", "move_id": record["move_id"], "verified": len(stats)}
