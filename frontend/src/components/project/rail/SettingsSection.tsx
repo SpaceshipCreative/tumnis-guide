@@ -4,10 +4,12 @@
 // model; nothing is sent to Jev. A toggle sends one PATCH /v1/projects/{id} with the
 // version it read; a 409 shows the current value with a notice (REL-2). P2-05 (FR-5.6):
 // the approval policy editor. P2-15 (FR-10.1): the focus check-in cadence. P2-18 (FR-2.1,
-// APP-13): Archive and Unarchive (ArchiveProject.tsx).
+// APP-13): Archive and Unarchive (ArchiveProject.tsx). P3-09 (FR-5.10): Purge project,
+// for an archived project only.
 // In the rail, RailSections opens one section at a time (`open`, `onToggle`); rendered on
 // its own, the section starts open and toggles itself.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import type * as z from "zod";
 
@@ -19,6 +21,8 @@ import {
   ConflictError,
   useWrite,
 } from "../../../lib/fetch";
+import { BUTTON_DANGER } from "../../common/ui";
+import { PurgeDialog } from "../../settings/connections/PurgeDialog";
 import { workspaceQuery } from "../../settings/queries";
 import { ArchiveControl } from "../ArchiveProject";
 import { FocusCadence } from "../FocusCadence";
@@ -193,6 +197,50 @@ function LocalDecisionsSwitch({ project }: { project: Project }) {
   );
 }
 
+// P3-09 (FR-5.10): an archived project can be purged for good, with a reason (audited);
+// the purge removes the email, chat and notes only it holds. The project then is gone,
+// so the page goes back to the project list.
+function ProjectPurge({ project }: { project: Project }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [purging, setPurging] = useState(false);
+  if (!project.archived_at) return null;
+  return (
+    <div className="flex min-w-0 flex-col gap-2 border-t border-border pt-3">
+      <p className="text-sm text-muted">
+        Purging deletes this archived project and the ingested content only it
+        holds. It cannot be undone.
+      </p>
+      <button
+        type="button"
+        className={BUTTON_DANGER}
+        onClick={() => {
+          setPurging(true);
+        }}
+      >
+        Purge project
+      </button>
+      {purging && (
+        <PurgeDialog
+          scope="project"
+          targetId={project.id}
+          name={project.name}
+          onCancel={() => {
+            setPurging(false);
+          }}
+          onDone={() => {
+            setPurging(false);
+            void queryClient.invalidateQueries({
+              queryKey: projectQuery(project.id).queryKey,
+            });
+            void navigate({ to: "/projects" });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function SettingsSection({
   project,
   open,
@@ -237,6 +285,7 @@ export function SettingsSection({
       <LocalDecisionsSwitch project={project} />
       <PolicyEditor project={project} />
       <ArchiveControl project={project} />
+      <ProjectPurge project={project} />
     </RailSection>
   );
 }

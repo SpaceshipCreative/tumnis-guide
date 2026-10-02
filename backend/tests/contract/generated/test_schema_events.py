@@ -115,6 +115,12 @@ CASES = [
     ),
     (
         "events",
+        "items.purged",
+        1,
+        "backend/tests/contract/fixtures/events/items.purged/v1.json",
+    ),
+    (
+        "events",
         "key.created",
         1,
         "backend/tests/contract/fixtures/events/key.created/v1.json",
@@ -166,6 +172,12 @@ CASES = [
         "project.updated",
         1,
         "backend/tests/contract/fixtures/events/project.updated/v1.json",
+    ),
+    (
+        "events",
+        "purge.requested",
+        1,
+        "backend/tests/contract/fixtures/events/purge.requested/v1.json",
     ),
     (
         "events",

@@ -44,6 +44,9 @@ ignore_imports =
 # (scripted models, recorded eval vectors, call logs). Module code reaches the slot only
 # through decisions.api.
     tumnis.modules.knowledge.tests.** -> tumnis.modules.decisions.adapters.embeddings.fake
+# P3-09: the purge tests (integrations' integration tests) archive projects with P2-18's
+# archive world. Module code never imports another module's tests.
+    tumnis.modules.integrations.tests.** -> tumnis.modules.projects.tests.**
 # Until modules call each other, the api ignore matches nothing; that is not an error.
 unmatched_ignore_imports_alerting = none
 
@@ -112,6 +115,9 @@ ancestors =
 ignore_imports =
     tumnis.modules.integrations.tests.** -> tumnis.modules.calendar.api
     tumnis.modules.integrations.tests.** -> tumnis.modules.knowledge.api
+# tasks builds on integrations; the purge tests (P3-09) make the tasks that hold context
+# items through tasks' api. Module code never does.
+    tumnis.modules.integrations.tests.** -> tumnis.modules.tasks.api
 # The review queue's tests (P1-13) run decisions' blocking-impact question against queued
 # items (T-P1-13-05, 06); tasks code itself never calls decisions.
     tumnis.modules.tasks.tests.** -> tumnis.modules.decisions.api

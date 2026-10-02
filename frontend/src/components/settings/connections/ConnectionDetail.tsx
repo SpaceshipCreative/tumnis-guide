@@ -1,6 +1,7 @@
 // A connection's details (P3-02, FR-14.4): its next sync, its name and sync settings
 // (PATCH at the version read, the other settings kept as they are), and Disconnect, which
-// asks for a reason (audited) and says that what it synced stays until purged.
+// asks for a reason (audited) and says that what it synced stays until purged. Purge
+// content (P3-09) deletes what it synced, with a reason, and keeps the connection.
 import { useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 
@@ -16,6 +17,7 @@ import {
   storeConnection,
   updateConnection,
 } from "./api";
+import { PurgeDialog } from "./PurgeDialog";
 import { relativeTime } from "./status";
 
 const MAX_BACKFILL_DAYS = 3650;
@@ -72,6 +74,7 @@ export function ConnectionDetail({
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
+  const [purging, setPurging] = useState(false);
 
   const save = useWrite<
     { body: Parameters<typeof updateConnection>[1]; idempotencyKey?: string },
@@ -228,8 +231,34 @@ export function ConnectionDetail({
           >
             Disconnect
           </button>
+          <button
+            type="button"
+            className={DANGER}
+            onClick={() => {
+              setError(null);
+              setPurging(true);
+            }}
+          >
+            Purge content
+          </button>
         </div>
       </form>
+      {purging && (
+        <PurgeDialog
+          scope="connection"
+          targetId={connection.id}
+          name={connection.account_label}
+          onCancel={() => {
+            setPurging(false);
+          }}
+          onDone={() => {
+            setPurging(false);
+            onMessage(
+              `Purging what ${connection.account_label} synced. It goes in the background.`,
+            );
+          }}
+        />
+      )}
       {confirming && (
         <ConfirmDialog
           title={`Disconnect ${connection.account_label}?`}

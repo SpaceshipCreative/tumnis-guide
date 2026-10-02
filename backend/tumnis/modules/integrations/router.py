@@ -62,6 +62,12 @@ async def purge(body: api.PurgeIn, request: Request, session: SessionDep) -> api
     return await api.purge(session, body, now=clock.now())
 
 
+@router.get("/purges/{purge_id}", tags=["purges"])
+@route_policy(READ)
+async def get_purge(purge_id: UUID, ctx: Session) -> api.PurgeStatusOut:
+    return await api.get_purge(ctx, purge_id)
+
+
 @router.get("/connections/providers", tags=["connections"])
 @route_policy(RoutePolicy(auth="session", unpaginated_reason="one row per registered provider"))
 async def list_providers(ctx: Session) -> list[api.ProviderOut]:

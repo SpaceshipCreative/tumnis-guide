@@ -954,6 +954,14 @@ async def dormant_projects(s: AsyncSession, project_ids: Iterable[UUID]) -> set[
     return set(found)
 
 
+async def archived_project_ids(s: AsyncSession) -> set[UUID]:
+    """The live projects that are archived (P3-09: retention keeps their content)."""
+    found: Iterable[UUID] = await s.scalars(
+        select(_projects.c.id).where(_live(), _projects.c.archived_at.is_not(None))
+    )
+    return set(found)
+
+
 async def move_archive_state(
     s: AsyncSession,
     project_id: UUID,
@@ -989,12 +997,18 @@ async def move_archive_state(
 
 
 async def purge_project(
-    s: AsyncSession, project_id: UUID, reason: str, *, now: datetime | None = None
+    s: AsyncSession,
+    project_id: UUID,
+    reason: str,
+    *,
+    now: datetime | None = None,
+    details: Mapping[str, Any] | None = None,
 ) -> None:
     """Purge an archived project for good (R-37, session only): 409 `not_archived` for one
     that is not archived, then the `data.purged` audit row with the reason, the project
     soft-deleted (reads answer 404) and `project.purged`, whose subscriber drops what the
-    archive kept (the profile archive on the agent server, packed folders, blobs)."""
+    archive kept (the profile archive on the agent server, packed folders, blobs).
+    `details` go into the audit row beside the scope (P3-09: the purge's id and counts)."""
     row = await _row(s, project_id, lock=True)
     if row.archived_at is None or await _archive_state(s, project_id) == "unarchiving":
         raise ProblemError(409, "not_archived", "Only an archived project can be purged")
@@ -1009,7 +1023,7 @@ async def purge_project(
         "data.purged",
         target=("project", project_id),
         reason=reason,
-        details={"scope": "project"},
+        details={**(details or {}), "scope": "project"},
         occurred_at=at,
     )
     await emit(s, ProjectPurgedV1(project_id=project_id), occurred_at=at)

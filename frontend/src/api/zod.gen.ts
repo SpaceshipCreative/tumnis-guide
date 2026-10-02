@@ -1431,7 +1431,7 @@ export const zPullRequestOut = z.object({
 export const zPurgeIn = z.object({
   id: z.uuid(),
   reason: z.string().min(1).max(500),
-  scope: z.literal("project"),
+  scope: z.enum(["project", "connection"]),
 });
 
 /**
@@ -1439,8 +1439,25 @@ export const zPurgeIn = z.object({
  */
 export const zPurgeOut = z.object({
   id: z.uuid(),
-  scope: z.literal("project"),
+  purge_id: z.uuid().nullish(),
+  scope: z.enum(["project", "connection"]),
   status: z.literal("accepted").optional().default("accepted"),
+});
+
+/**
+ * PurgeStatusOut
+ *
+ * `GET /v1/purges/{purge_id}`: where a purge stands, and what it removed so far.
+ */
+export const zPurgeStatusOut = z.object({
+  counts: z.record(z.string(), z.int()),
+  created_at: z.iso.datetime(),
+  finished_at: z.iso.datetime().nullable(),
+  id: z.uuid(),
+  reason: z.string(),
+  scope: z.enum(["retention", "project", "connection"]),
+  status: z.enum(["queued", "running", "done"]),
+  target_id: z.uuid().nullable(),
 });
 
 /**
@@ -4394,6 +4411,15 @@ export const zPurgesPurgeBody = zPurgeIn;
  * Successful Response
  */
 export const zPurgesPurgeResponse = zPurgeOut;
+
+export const zPurgesGetPurgePath = z.object({
+  purge_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zPurgesGetPurgeResponse = zPurgeStatusOut;
 
 export const zNotificationsSubscribeBody = zPushSubscriptionIn;
 

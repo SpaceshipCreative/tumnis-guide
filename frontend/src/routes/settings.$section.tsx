@@ -23,6 +23,7 @@ import {
   keysQuery,
   metricsSummaryQuery,
   profilesQuery,
+  retentionQuery,
   runnersQuery,
   sessionsQuery,
   storageQuery,
@@ -37,6 +38,7 @@ import {
 } from "../components/settings/sections";
 import { SessionsSection } from "../components/settings/SessionsSection";
 import { SettingsLayout } from "../components/settings/SettingsLayout";
+import { RetentionSection } from "../components/settings/retention/RetentionSection";
 import { StorageSection } from "../components/settings/StorageSection";
 import { ObsidianSection } from "../components/knowledge/ObsidianSection";
 import { S3SourceSetup } from "../components/knowledge/S3SourceSetup";
@@ -60,6 +62,7 @@ const SCREENS: Record<SettingsSection, () => React.JSX.Element> = {
   unattended: UnattendedSection,
   calendar: () => <CalendarSection />,
   connections: () => <Connections />,
+  retention: RetentionSection,
   storage: StorageSection,
   sources: S3SourceSetup,
   calibration: CalibrationSection,
@@ -114,6 +117,9 @@ export const Route = createFileRoute("/settings/$section")({
         break;
       case "connections":
         started(queryClient.query(connectionsQuery()));
+        break;
+      case "retention":
+        started(queryClient.query(retentionQuery()));
         break;
       case "storage":
         started(queryClient.query(storageQuery()));
