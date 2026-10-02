@@ -28,7 +28,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 @pytest.mark.req("FR-15.10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 async def test_pull_from_local_bare_repo(
     db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, tmp_path: Path
 ) -> None:

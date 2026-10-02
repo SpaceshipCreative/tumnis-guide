@@ -35,7 +35,6 @@ DIAGRAM = "Attachments/diagram.png"
 
 @pytest.mark.req("FR-15.10")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 async def test_fixture_vault_maps_to_projects_with_links(
     db: DbUrls,
     knowledge_ws: WorkspaceHandle,
@@ -127,7 +126,6 @@ async def test_fixture_vault_maps_to_projects_with_links(
 
 @pytest.mark.req("FR-15.8")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 async def test_edit_rename_delete_in_vault(
     db: DbUrls, knowledge_ws: WorkspaceHandle, clock: FixedClock, tmp_path: Path
 ) -> None:
@@ -187,7 +185,6 @@ async def test_edit_rename_delete_in_vault(
 
 @pytest.mark.req("FR-15.8")
 @pytest.mark.wp("P3-12")
-@pytest.mark.xfail(strict=True, reason="spec:P3-12")
 async def test_synced_notes_read_only(
     db: DbUrls,
     knowledge_ws: WorkspaceHandle,
