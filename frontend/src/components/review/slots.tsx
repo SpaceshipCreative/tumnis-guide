@@ -18,6 +18,10 @@ export interface KindSlot {
   name: string;
   summary: (item: ReviewItemOut) => ReactNode;
   edit?: Editor;
+  /** Button words for actions whose plain name would mislead ("Accept" by default). */
+  actionWords?: Partial<Record<string, string>>;
+  /** A badge beside the kind's name, such as "Overnight". */
+  tag?: string;
 }
 
 export const LABELS = [
@@ -88,6 +92,15 @@ const SLOTS: Record<string, KindSlot> = {
       const reason = text(payload.error) ?? text(payload.error_code);
       return `Provisioning failed${reason === undefined ? "" : `: ${reason}`}. Accept retries it.`;
     },
+  },
+  // A task queued to run unattended that the window refused (P4-04, FR-4.5, SAF-1): the
+  // reason in plain words; accept takes it off the queue, snooze asks again later.
+  unattended_refused: {
+    name: "Did not run overnight",
+    summary: ({ payload }) =>
+      `${text(payload.reason) ?? "It could not run unattended"}. Take it off the queue, or snooze to keep it queued.`,
+    actionWords: { accept: "Take off the queue" },
+    tag: "Overnight",
   },
   decision_unavailable: {
     name: "Decision",

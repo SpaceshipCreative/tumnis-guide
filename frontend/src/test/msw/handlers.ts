@@ -5,6 +5,7 @@ import { appOpen } from "./closeDay";
 import { dashboardDefaults } from "./dashboard";
 import { focusDefaults } from "./focus";
 import { workingHours } from "./planning";
+import { noUnattendedWindow } from "./unattended";
 
 /**
  * `GET /v1/review/kinds` answering these registered kinds (the P0-18 registry). The
@@ -108,4 +109,7 @@ export const handlers: RequestHandler[] = [
   ...dashboardDefaults,
   // The focus bar on every page (P2-15): Quiet, nothing to show.
   ...focusDefaults,
+  // Unattended runs (P4-04): the window the project's Schedule rail and Settings read;
+  // none by default.
+  noUnattendedWindow,
 ];

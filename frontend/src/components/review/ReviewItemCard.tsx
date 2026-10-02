@@ -197,7 +197,14 @@ export function ReviewItemCard({
         <h2 id={titleId} className={CARD_TITLE}>
           {item.target_title ?? slot.name}
         </h2>
-        <span className={badge("neutral")}>{slot.name}</span>
+        {slot.tag === undefined ? (
+          <span className={badge("neutral")}>{slot.name}</span>
+        ) : (
+          <span className="flex shrink-0 flex-wrap justify-end gap-1">
+            <span className={badge("info")}>{slot.tag}</span>
+            <span className={badge("neutral")}>{slot.name}</span>
+          </span>
+        )}
       </header>
       <div className={CARD_BODY}>
         <p className="text-sm text-muted">{slot.summary(item)}</p>
@@ -223,7 +230,7 @@ export function ReviewItemCard({
                   press(action as Action);
                 }}
               >
-                {actionText(action)}
+                {slot.actionWords?.[action] ?? actionText(action)}
               </button>
             ))}
             {canOpen(item) && (
