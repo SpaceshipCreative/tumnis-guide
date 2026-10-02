@@ -37,6 +37,14 @@ pytestmark = [
     pytest.mark.enable_socket,
     pytest.mark.slow,
     pytest.mark.filterwarnings("ignore:Using `httpx` with `starlette.testclient`"),
+    # The strategies draw nothing from `random`; DBOS's queue worker threads (the `dbos`
+    # fixture, dbos 3.1.0) call `random.uniform` for their polling jitter on the global
+    # generator, and when one does so during a draw Hypothesis takes it for the strategy's
+    # and warns, which fails the example only some of the time (a FlakyFailure).
+    pytest.mark.filterwarnings(
+        "ignore:Do not use the `random` module inside strategies"
+        ":hypothesis.errors.HypothesisDeprecationWarning"
+    ),
 ]
 
 KINDS: Final = ("item", "user_task", "linked_task", "subtask", "run", "run_task", "run_doc")
