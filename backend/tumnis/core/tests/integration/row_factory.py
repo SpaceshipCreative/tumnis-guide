@@ -87,6 +87,9 @@ COLUMN_VALUES: dict[tuple[str, str], Any] = {
     ("notifications", "decision"): "now",  # ck_notifications_decision
     ("delivery_attempts", "channel"): "push",  # ck_delivery_attempts_channel
     ("delivery_attempts", "status"): "sent",  # ck_delivery_attempts_status
+    ("unattended_windows", "weekdays"): [0],  # ck_unattended_windows_weekdays (P4-04)
+    ("unattended_windows", "start_local"): time(22, 0),  # ck_unattended_windows_span
+    ("unattended_windows", "end_local"): time(6, 0),
 }
 
 _MOMENT = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)

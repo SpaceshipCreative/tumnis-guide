@@ -233,6 +233,9 @@ function RichField({
     }),
     content: body,
     contentType: "markdown",
+    // No injected <style> tag: the CSP allows only same-origin stylesheets (SEC-4), so
+    // styles.css carries Tiptap's base rules instead (APP-08).
+    injectCSS: false,
     editorProps: {
       attributes: {
         role: "textbox",
