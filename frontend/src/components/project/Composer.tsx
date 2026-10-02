@@ -4,8 +4,10 @@
 // Ask the agent (P2-17): the toggle turns the same input into a question, sent to
 // POST /v1/projects/{id}/ask, which makes an AI task and starts its run; the answer
 // lands as the task's result. The composer goes back to task mode after sending.
+// Files (FR-15.2): a file dropped on the composer is uploaded to the project's knowledge
+// (scanned, then extracted); once the server accepts it, `onFileAdded` shows where it went.
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { type DragEvent, useState } from "react";
 
 import type { AskOut } from "../../api/types.gen";
 import { zAskOut } from "../../api/zod.gen";
@@ -14,6 +16,11 @@ import { invalidateTaskViews } from "../../lib/task-cache";
 import { uiStore } from "../../stores/uiStore";
 import { BUTTON_SECONDARY } from "../common/ui";
 import { useEnqueueTask } from "../quickadd/queue";
+import { useKnowledgeUpload } from "./rail/useKnowledgeUpload";
+
+function carriesFiles(event: DragEvent): boolean {
+  return Array.from(event.dataTransfer.types).includes("Files");
+}
 
 function askRefusal(error: unknown): string {
   if (error instanceof ApiError && error.problem.code === "no_ready_profile") {
@@ -22,9 +29,29 @@ function askRefusal(error: unknown): string {
   return "Could not ask the agent. Try again.";
 }
 
-export function Composer({ projectId }: { projectId: string }) {
+export function Composer({
+  projectId,
+  onFileAdded,
+}: {
+  projectId: string;
+  onFileAdded?: () => void;
+}) {
   const [title, setTitle] = useState("");
   const [asking, setAsking] = useState(false);
+  const [dropping, setDropping] = useState(false);
+  const upload = useKnowledgeUpload(projectId);
+  const dropFiles = (files: File[]) => {
+    for (const file of files) {
+      upload(file).then(
+        () => onFileAdded?.(),
+        () => {
+          uiStore.trigger.showNotice({
+            text: `Could not upload ${file.name}.`,
+          });
+        },
+      );
+    }
+  };
   const enqueue = useEnqueueTask();
   const queryClient = useQueryClient();
   const ask = useWrite<{ question: string; idempotencyKey?: string }, AskOut>({
@@ -49,7 +76,32 @@ export function Composer({ projectId }: { projectId: string }) {
   const label = asking ? "Ask the agent" : "New task";
   return (
     <form
-      className="flex gap-2"
+      aria-label="Composer"
+      className={`flex gap-2 rounded-md ${
+        dropping ? "outline-2 outline-offset-2 outline-accent" : ""
+      }`}
+      onDragEnter={(event) => {
+        if (!carriesFiles(event)) return;
+        event.preventDefault();
+        setDropping(true);
+      }}
+      onDragOver={(event) => {
+        if (!carriesFiles(event)) return;
+        event.preventDefault(); // allows the drop
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          return;
+        }
+        setDropping(false);
+      }}
+      onDrop={(event) => {
+        if (!carriesFiles(event)) return;
+        event.preventDefault();
+        setDropping(false);
+        dropFiles(Array.from(event.dataTransfer.files));
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         const trimmed = title.trim();

@@ -1,7 +1,7 @@
 // A1.2 · Morning plan (journey J1). Phase 1 acceptance, committed red on the
-// phase's first day. Turns green with P1-09 (calendar), P1-10 (free blocks)
-// and P1-11 (the plan and the Today panel); the `test.fail()` comes off when
-// P1-11, the last of them, merges.
+// phase's first day. Green with P1-09 (calendar), P1-10 (free blocks) and
+// P1-11 (the plan and the Today panel), plus the Swap fix in #164; its
+// `test.fail()` came off once CI run 36966799150 showed it passing.
 import { expect, section, setServerClock, test } from "../fixtures";
 import {
   estimateChip,
@@ -30,7 +30,6 @@ test(
   "A1.2 morning plan inside free blocks",
   { tag: ["@A1.2", "@J1", "@FR-4.3", "@FR-1.2", "@P1-11"] },
   async ({ signedInPage: page, fakes }) => {
-    test.fail();
     // Seed day: busy 09:00-10:00, 12:00-13:00 and 15:00-15:30 local across
     // two fake Google accounts; the master answers with 4 picks, one AI-only.
     await page.clock.install({ time: BEFORE_PLAN });

@@ -1,5 +1,7 @@
 // A1.3 · No gap big enough (journey J6). Phase 1 acceptance, committed red on
-// the phase's first day. Turns green with P1-11 (fit offers, split and move).
+// the phase's first day. Green with P1-11 (fit offers, split and move) and the
+// scriptable Google Calendar fake plus `calendar-sync` tick (#164, APP-05);
+// its `test.fail()` came off once CI run 36966799150 showed it passing.
 import { expect, test } from "../fixtures";
 import {
   ACME,
@@ -21,7 +23,6 @@ test(
   "A1.3 split or move offer",
   { tag: ["@A1.3", "@J6", "@P1-11"] },
   async ({ signedInPage: page, fakes }) => {
-    test.fail();
     await page.clock.install({ time: new Date("2026-03-09T12:25:00Z") });
     await squeezeMondayCalendar(fakes);
     const proposal = (await tasksOfProject(page.request, ACME)).find(
