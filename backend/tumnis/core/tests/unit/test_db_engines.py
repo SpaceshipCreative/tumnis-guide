@@ -8,7 +8,7 @@ import threading
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.pool import AsyncAdaptedQueuePool
+from sqlalchemy.pool import AsyncAdaptedQueuePool, NullPool
 
 from tumnis.core import db
 
@@ -103,3 +103,15 @@ def test_dispose_closes_only_the_running_loops_engines() -> None:
         assert asyncio.run_coroutine_threadsafe(_engines(), other).result(10)[0] is theirs
     finally:
         _stop(other, thread)
+
+
+@pytest.mark.req("ADR-0002")
+@pytest.mark.wp("P0-07")
+def test_an_engine_built_outside_a_loop_keeps_no_pool() -> None:
+    """Code outside any running loop gets one engine, which any loop may then use: it keeps
+    no pool (SQLAlchemy: a NullPool engine may be shared between loops), while a loop's own
+    engine stays pooled."""
+    unbound = db.app_engine()
+    assert db.app_engine() is unbound
+    assert isinstance(unbound.pool, NullPool)
+    assert isinstance(asyncio.run(_engines())[0].pool, AsyncAdaptedQueuePool)

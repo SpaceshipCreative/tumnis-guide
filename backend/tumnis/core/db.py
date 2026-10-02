@@ -85,9 +85,11 @@ def limit_pools(*, pool_size: int, max_overflow: int) -> None:
 def _build(url: str | None, role: str, loop: asyncio.AbstractEventLoop | None) -> AsyncEngine:
     if url is None:
         raise RuntimeError(f"tumnis.core.db has no {role} URL; call configure() first")
-    if not _state.pooled:
+    # Outside any loop no pool: whichever loops later use the engine share it, and only a
+    # NullPool engine may be shared between loops (SQLAlchemy asyncio docs).
+    if not _state.pooled or loop is None:
         return create_async_engine(url, poolclass=NullPool)
-    limits = _state.limits.get(loop) if loop is not None else None
+    limits = _state.limits.get(loop)
     if limits is None:
         return create_async_engine(url, pool_pre_ping=True)
     pool_size, max_overflow = limits
