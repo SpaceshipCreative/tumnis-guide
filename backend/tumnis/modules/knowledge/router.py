@@ -789,7 +789,7 @@ async def get_obsidian_preview(
     connection_id: UUID,
     preview_id: Annotated[str, StringConstraints(max_length=200)],
     ctx: Session,
-) -> vaults.PreviewOut:
+) -> vaults.VaultPreviewOut:
     return await vaults.preview_result(ctx, connection_id, preview_id)
 
 

@@ -87,6 +87,7 @@ __all__ = [
     "PreviewStarted",
     "VaultCreateIn",
     "VaultOut",
+    "VaultPreviewOut",
     "VaultSettingsIn",
     "VaultsOut",
     "connect",
@@ -188,10 +189,15 @@ class PreviewRowOut(BaseModel):
     untrusted: bool
 
 
-class PreviewOut(BaseModel):
+class VaultPreviewOut(BaseModel):
     status: Literal["running", "done", "failed"]
     rows: list[PreviewRowOut]
     error: str | None  # the refusal's code when the vault could not be read
+
+
+# The old name, which the P3-12 integration test still reads. The OpenAPI document and the
+# client use the class name, so `VaultPreviewOut` no longer clashes with Coolify's.
+PreviewOut = VaultPreviewOut
 
 
 # --- Test seam ---------------------------------------------------------------------------
@@ -404,7 +410,9 @@ async def start_preview(
     return PreviewStarted(preview_id=preview_id)
 
 
-async def preview_result(ctx: WorkspaceContext, connection_id: UUID, preview_id: str) -> PreviewOut:
+async def preview_result(
+    ctx: WorkspaceContext, connection_id: UUID, preview_id: str
+) -> VaultPreviewOut:
     """How the preview stands: running, done with its rows, or failed with a code."""
     async with tenant_session(ctx) as s:
         await _row(s, connection_id)
@@ -418,12 +426,12 @@ async def preview_result(ctx: WorkspaceContext, connection_id: UUID, preview_id:
         raise _no_preview() from None
     status = await handle.get_status()
     if status.status in ("ENQUEUED", "PENDING", "DELAYED"):
-        return PreviewOut(status="running", rows=[], error=None)
+        return VaultPreviewOut(status="running", rows=[], error=None)
     output = status.output if status.status == "SUCCESS" else None
     if not isinstance(output, dict) or output.get("error"):
         code = output.get("error") if isinstance(output, dict) else "preview_failed"
-        return PreviewOut(status="failed", rows=[], error=str(code))
-    return PreviewOut(
+        return VaultPreviewOut(status="failed", rows=[], error=str(code))
+    return VaultPreviewOut(
         status="done",
         rows=[PreviewRowOut.model_validate(item) for item in output.get("rows", [])],
         error=None,
