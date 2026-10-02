@@ -87,6 +87,10 @@ async def list_connections(ctx: Session) -> list[api.ConnectionOut]:
 async def create_connection(
     body: api.ConnectionCreate, request: Request, ctx: Session, session: SessionDep
 ) -> api.ConnectionOut:
+    # A fake-only provider exists for every mode but is offered only with fakes
+    # (list_providers); outside them it is as unknown as an unregistered one.
+    if body.provider not in {p.provider for p in api.list_providers()}:
+        raise ProblemError(422, "unknown_provider", f"No provider {body.provider!r}")
     try:
         return await api.create_connection(
             ctx,

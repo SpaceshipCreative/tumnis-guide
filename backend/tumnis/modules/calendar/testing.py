@@ -4,7 +4,8 @@ does what one run of the scheduled `calendar_sync_tick` does, now: it enqueues
 workspace, then waits, at most TICK_WAIT_S, for those syncs to end, so a journey reads the
 synced events (and the free blocks they leave) as soon as the tick answers. A sync that
 ends `busy` (the scheduled sync held the account) is enqueued again, BUSY_RETRIES times at
-most. Each call gets fresh workflow ids: a test fires it to sync again, whatever the
+most. A sync still running at TICK_WAIT_S, or still `busy`, answers 503 `sync_incomplete`
+instead of the count. Each call gets fresh workflow ids: a test fires it to sync again, whatever the
 server clock says. Registered at import; the router imports this module so the api process
 has it (the workflow is named, not imported: the api process never imports workflows)."""
 
@@ -16,6 +17,7 @@ from typing import Any, Final
 from uuid import UUID
 
 from tumnis.core import audit, db
+from tumnis.core.errors import ProblemError
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.core.ticks import register_tick
 from tumnis.core.types import SYSTEM_ACTOR
@@ -60,14 +62,29 @@ async def _sync(client: Any, workspace_id: UUID, connection_id: UUID, now: datet
 
 async def tick(client: Any, now: datetime) -> int:
     """Sync every connected account through `client` (a DBOSClient) and wait for the
-    syncs (see the module); how many accounts it synced."""
+    syncs (see the module); how many accounts it synced. 503 `sync_incomplete` when a sync
+    is still running after TICK_WAIT_S or still `busy` after its retries, so a journey
+    fails here rather than reading events that have not landed."""
     connections = await _connections()
-    if connections:
-        syncs = asyncio.gather(*(_sync(client, ws, conn, now) for ws, conn in connections))
-        try:
-            await asyncio.wait_for(syncs, TICK_WAIT_S)
-        except TimeoutError:
-            _log.info("calendar sync tick: %d sync(s) still running", len(connections))
+    if not connections:
+        return 0
+    syncs = asyncio.gather(*(_sync(client, ws, conn, now) for ws, conn in connections))
+    try:
+        statuses = await asyncio.wait_for(syncs, TICK_WAIT_S)
+    except TimeoutError:
+        _log.warning("calendar sync tick: sync(s) still running after %s s", TICK_WAIT_S)
+        raise ProblemError(
+            503,
+            "sync_incomplete",
+            f"calendar sync still running after {TICK_WAIT_S} s",
+        ) from None
+    busy = statuses.count("busy")
+    if busy:
+        raise ProblemError(
+            503,
+            "sync_incomplete",
+            f"{busy} calendar sync(s) still busy after {BUSY_RETRIES} retries",
+        )
     return len(connections)
 
 
