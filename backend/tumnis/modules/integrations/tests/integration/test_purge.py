@@ -421,3 +421,49 @@ async def test_purge_resumes_after_kill(
     assert end["status"] == "done"
     assert end["counts"] == _counts(messages=5, raw_payloads=5)
     assert len(world.audit_rows()) == 1
+
+
+@pytest.mark.req("SAAS-2", "REL-3")
+@pytest.mark.wp("P3-09")
+async def test_failed_retention_purge_resumes_on_the_next_run(
+    world: PurgeWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A retention purge whose workflow failed for good (a batch out of retries) stays
+    unfinished; the next scheduled run resumes that purge instead of skipping the
+    workspace, so it finishes once: the old content gone, one purge row, one audit row
+    (PR #169 review)."""
+    import asyncio  # noqa: PLC0415
+    from datetime import timedelta  # noqa: PLC0415
+
+    from tumnis.modules.integrations import api  # noqa: PLC0415
+
+    conn = world.connection("inbox-fail")
+    await world.ingest(conn, world.message("old-1", OLD), world.message("recent-1", RECENT))
+    await world.retention(30)
+
+    async def broken(*_args: Any, **_kwargs: Any) -> int:
+        raise RuntimeError("database away")
+
+    monkeypatch.setattr(api, "purge_batch", broken)
+    ticked = await world.client.post("/v1/test/tick/retention-purge")
+    ticked.raise_for_status()
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 30.0
+    while not await world.dbos_client.list_workflows_async(
+        name="integrations_purge_scope", status=["ERROR"]
+    ):
+        assert loop.time() < deadline, "the purge never failed"
+        await asyncio.sleep(0.1)
+    [stuck] = owner_rows(world.db, "SELECT status FROM purges")
+    assert stuck["status"] != "done"
+    assert world.external_ids("messages", conn) == {"old-1", "recent-1"}
+
+    monkeypatch.undo()
+    world.clock.advance(timedelta(hours=1))
+    await world.tick_retention()
+
+    assert world.external_ids("messages", conn) == {"recent-1"}
+    [purge] = owner_rows(world.db, "SELECT status, counts FROM purges")
+    assert purge["status"] == "done"
+    assert purge["counts"]["messages"] == 1
+    assert len(world.audit_rows()) == 1
