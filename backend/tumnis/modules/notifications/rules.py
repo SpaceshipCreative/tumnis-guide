@@ -25,7 +25,8 @@ from uuid import UUID
 from pydantic import AnyUrl, BaseModel, ValidationError
 
 Level = Literal["quiet", "nudge", "coach", "guardrail"]
-Decision = Literal["now", "batch"]
+# "overnight" (P4-04): held for the morning review until its release time, whatever the level.
+Decision = Literal["now", "batch", "overnight"]
 Channel = Literal["in_app", "push", "discord"]
 NotificationKind = str  # a registered review kind (R-05), or "focus.<event kind>"
 FOCUS_PREFIX: Final = "focus."
@@ -146,6 +147,31 @@ def batch_payload(count: int) -> PushPayload:
         body="Held while you were busy. Open Tumnis to review.",
         url="/review",
         tag="batch",
+    )
+
+
+OVERNIGHT: Final = "overnight"
+RESULT_KIND: Final = "result"
+
+
+def overnight_due(release_at: datetime | None, now: datetime) -> bool:
+    """An overnight row goes out with the morning release at or after its release time; one
+    without a release time goes with the first release."""
+    return release_at is None or release_at <= now
+
+
+def overnight_payload(results: int, others: int) -> PushPayload:
+    """The one push the morning release sends for an unattended night (P4-04, J7): how many
+    results came in overnight and how many other items need the person (refusals)."""
+    title = "1 result from overnight" if results == 1 else f"{results} results from overnight"
+    if others:
+        title = f"{title}, {others} need{'s' if others == 1 else ''} you"
+    return PushPayload(
+        kind="batch",
+        title=title,
+        body="Waiting in your morning review.",
+        url="/review",
+        tag="overnight",
     )
 
 
