@@ -51,7 +51,7 @@ TUMNIS_TIMEZONE=UTC
 
 ### 4. Create the keys
 
-Three secret files live in `/etc/tumnis/secrets`, readable only by the service user (uid 10001): the master key, which protects every secret Tumnis stores; the API key pepper, which protects sessions and API keys; and the token that guards `/metrics`. An existing file is never overwritten.
+Three secret files live in `/etc/tumnis/secrets`, readable only by the service user (uid 10001): the master key, which protects every secret Tumnis stores; the API key pepper, which protects sessions, API keys and runner and task tokens; and the token that guards `/metrics`. An existing file is never overwritten.
 
 ```bash readme:install:20
 sudo install -d -m 0711 /etc/tumnis/secrets
@@ -70,7 +70,7 @@ done
 sudo ls -l /etc/tumnis/secrets
 ```
 
-Copy the master key and the pepper to a password manager now. Without the master key, every secret Tumnis stores (and each sign-in's TOTP secret) is unreadable; without the pepper, every API key and session stops working ([docs/OPERATIONS.md](docs/OPERATIONS.md)).
+Copy the master key and the pepper to a password manager now. Without the master key, every secret Tumnis stores (and each sign-in's TOTP secret) is unreadable; without the pepper, every API key, runner and task token, and session stops working ([docs/OPERATIONS.md](docs/OPERATIONS.md)).
 
 ### 5. Write the settings
 
@@ -103,7 +103,12 @@ Tumnis is served over HTTPS only, by a small proxy (Caddy) that uses the certifi
 
 ```bash readme:manual
 sudo install -d -m 0755 /etc/tumnis/https
-sed -i "s|^TUMNIS_BIND_ADDRESS=.*|TUMNIS_BIND_ADDRESS=$(tailscale ip -4)|" .env
+address="$(tailscale ip -4)"
+if grep -q '^TUMNIS_BIND_ADDRESS=' .env; then
+  sed -i "s|^TUMNIS_BIND_ADDRESS=.*|TUMNIS_BIND_ADDRESS=$address|" .env
+else
+  printf 'TUMNIS_BIND_ADDRESS=%s\n' "$address" >> .env
+fi
 sudo tailscale cert --cert-file /etc/tumnis/https/tumnis.crt \
   --key-file /etc/tumnis/https/tumnis.key "$TUMNIS_HOST"
 TUMNIS_CA=/etc/ssl/certs/ca-certificates.crt  # a Let's Encrypt certificate: trust the system's roots
@@ -266,7 +271,7 @@ claude mcp add --transport http tumnis https://tumnis.example/mcp \
   --header "Authorization: Bearer $TUMNIS_API_KEY"
 ```
 
-A client that only speaks stdio runs `tumnis mcp-stdio`, which forwards each message to `$TUMNIS_URL/mcp` with `TUMNIS_API_KEY` as the bearer (it sends the key over plain `http://` only to `localhost` or a LAN address):
+A client that only speaks stdio runs `tumnis mcp-stdio`, which forwards each message to `$TUMNIS_URL/mcp` with `TUMNIS_API_KEY` as the bearer (it sends the key over plain `http://` only to `localhost` or a LAN address). Use an `https://` URL for anything but `localhost`: over plain `http://`, anyone who can watch your network can read and reuse the key. For Claude Code:
 
 ```bash
 claude mcp add --env TUMNIS_API_KEY=<your key> --env TUMNIS_URL=https://tumnis.example --transport stdio \
