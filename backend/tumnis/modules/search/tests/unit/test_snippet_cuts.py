@@ -22,7 +22,6 @@ BODY = (
 )
 
 
-@pytest.mark.xfail(strict=True, reason="spec:FIX-app-final-minor")
 @pytest.mark.parametrize(
     ("headline", "source", "expected"),
     [

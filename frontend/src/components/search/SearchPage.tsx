@@ -21,7 +21,34 @@ const SCOPES: readonly { value: SearchScope; text: string }[] = [
 ];
 const PAGE_SIZE = 20;
 
+// A snippet marks each match with <b> and </b> (ts_headline's defaults) and has "…"
+// where text was left out (APP-F07). The matches show as <mark>, built as React nodes:
+// the snippet is never parsed as HTML.
+const MATCH = /<b>(.*?)<\/b>/gs;
+
+function snippetText(snippet: string): string {
+  return snippet.replace(MATCH, "$1").replaceAll("…", "").trim();
+}
+
+function Snippet({ snippet }: { snippet: string }) {
+  const parts = snippet.split(MATCH);
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <mark key={i} className="rounded-sm bg-accent-soft text-text">
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 function Hit({ hit }: { hit: SearchHit }) {
+  const shown = snippetText(hit.snippet);
   const body = (
     <>
       <span className="flex items-baseline justify-between gap-2">
@@ -30,9 +57,9 @@ function Hit({ hit }: { hit: SearchHit }) {
           {hit.entity_type === "task" ? "Task" : "Project"}
         </span>
       </span>
-      {hit.snippet !== "" && hit.snippet !== hit.title && (
+      {shown !== "" && !hit.title.includes(shown) && (
         <span className="block text-sm break-words text-muted">
-          {hit.snippet}
+          <Snippet snippet={hit.snippet} />
         </span>
       )}
     </>

@@ -24,41 +24,38 @@ function hit(n: number, title: string, snippet: string): SearchHit {
   };
 }
 
-test.fails(
-  "[P0-24][FR-3.9] APP-F07 a snippet shows its matches highlighted and its cuts as …",
-  async () => {
-    server.use(
-      http.get("*/v1/search", () =>
-        HttpResponse.json({
-          items: [
-            hit(
-              1,
-              "Write Acme proposal",
-              "…Outline the three <b>proposal</b> sections and then send them…",
-            ),
-            hit(2, "Fix footer link", "…<b>footer</b> link"),
-          ],
-          next_cursor: null,
-        }),
-      ),
-    );
-    await renderRoute("/search?q=proposal", { viewport: "laptop" });
+test("[P0-24][FR-3.9] APP-F07 a snippet shows its matches highlighted and its cuts as …", async () => {
+  server.use(
+    http.get("*/v1/search", () =>
+      HttpResponse.json({
+        items: [
+          hit(
+            1,
+            "Write Acme proposal",
+            "…Outline the three <b>proposal</b> sections and then send them…",
+          ),
+          hit(2, "Fix footer link", "…<b>footer</b> link"),
+        ],
+        next_cursor: null,
+      }),
+    ),
+  );
+  await renderRoute("/search?q=proposal", { viewport: "laptop" });
 
-    const results = await screen.findByRole("list", { name: "Results" });
-    const proposal = within(results).getByRole("link", {
-      name: /Write Acme proposal/,
-    });
-    expect(proposal).not.toHaveTextContent("<b>");
-    expect(proposal).toHaveTextContent(
-      "…Outline the three proposal sections and then send them…",
-    );
-    const marked = within(proposal).getByText("proposal", { selector: "mark" });
-    expect(marked).toBeVisible();
+  const results = await screen.findByRole("list", { name: "Results" });
+  const proposal = within(results).getByRole("link", {
+    name: /Write Acme proposal/,
+  });
+  expect(proposal).not.toHaveTextContent("<b>");
+  expect(proposal).toHaveTextContent(
+    "…Outline the three proposal sections and then send them…",
+  );
+  const marked = within(proposal).getByText("proposal", { selector: "mark" });
+  expect(marked).toBeVisible();
 
-    // A snippet that is only a piece of the title adds nothing under it.
-    const footer = within(results).getByRole("link", {
-      name: /Fix footer link/,
-    });
-    expect(footer).toHaveTextContent(/^Fix footer linkTask$/);
-  },
-);
+  // A snippet that is only a piece of the title adds nothing under it.
+  const footer = within(results).getByRole("link", {
+    name: /Fix footer link/,
+  });
+  expect(footer).toHaveTextContent(/^Fix footer linkTask$/);
+});
