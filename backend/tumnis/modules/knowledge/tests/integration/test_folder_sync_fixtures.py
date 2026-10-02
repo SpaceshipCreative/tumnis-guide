@@ -74,7 +74,6 @@ P3_14_CASES = [
 
 @pytest.mark.req("FR-15.12")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 @pytest.mark.parametrize(
     ("backend", "scenario"),
     [pytest.param(b, scenario, id=f"{name}-{b}") for name, b, scenario in P3_14_CASES],

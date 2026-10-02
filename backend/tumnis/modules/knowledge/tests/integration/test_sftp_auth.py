@@ -15,7 +15,6 @@ LOOPBACK = "127.0.0.1"
 
 @pytest.mark.req("FR-15.7")
 @pytest.mark.wp("P3-14")
-@pytest.mark.xfail(strict=True, reason="spec:P3-14")
 async def test_password_auth_never_attempted(monkeypatch: pytest.MonkeyPatch) -> None:
     """T-P3-14-11
     An in-process SSH server on loopback (throwaway host and client keys made now) accepts
