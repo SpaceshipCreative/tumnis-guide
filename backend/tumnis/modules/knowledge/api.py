@@ -122,7 +122,7 @@ from tumnis.modules.knowledge.storage import Page as StoragePage
 from tumnis.modules.knowledge.sync_rules import dedupe_name, render_note
 from tumnis.modules.projects import api as projects
 from tumnis.modules.tasks import api as tasks
-from tumnis.seed import DocumentSeed, register_seed_writer
+from tumnis.seed import DocumentSeed, LocationSeed, register_seed_writer
 
 _documents: Table = Document.__table__  # type: ignore[assignment]
 
@@ -1801,6 +1801,23 @@ async def ensure_project_folder(
     except (StorageError, AdapterError):
         pass  # made by the next folder sync, once the location answers
     return folder
+
+
+async def seed_location(workspace_id: UUID, project_ids: Sequence[UUID], rec: LocationSeed) -> UUID:
+    """A seed storage location (the acceptance set's, so A1.5 can upload), saved as the
+    system actor, then a folder for each of the set's projects on it. In fakes mode the
+    location is a `FakeStorage` and comes up online; elsewhere a folder that is not a
+    location yet only saves it offline."""
+    net = deployment_net()
+    body = LocationIn(name=rec.name, kind=rec.kind, root=rec.root, is_default=rec.is_default)
+    async with tenant_session(WorkspaceContext(workspace_id, SYSTEM_ACTOR)) as s:
+        location = await create_location(s, body, net=net)
+        for project_id in project_ids:
+            await ensure_project_folder(s, project_id, net=net)
+    return location.id
+
+
+register_seed_writer("location", seed_location)
 
 
 def announce(s: AsyncSession | Session, project_id: UUID | None, document_id: UUID) -> None:
