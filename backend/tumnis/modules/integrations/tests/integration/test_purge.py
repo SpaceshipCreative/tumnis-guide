@@ -294,7 +294,6 @@ async def test_connection_purge_scoped_to_source(world: PurgeWorld) -> None:
 
 @pytest.mark.req("FR-5.10")
 @pytest.mark.wp("P3-09")
-@pytest.mark.xfail(strict=True, reason="spec:P3-09")
 async def test_archived_project_is_compressed_not_purged(world: PurgeWorld) -> None:
     """T-P3-09-05
     Retention skips an archived project's content: the old message its own (now archived)
