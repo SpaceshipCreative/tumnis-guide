@@ -12,6 +12,7 @@ fires a registered test tick (R-37, tumnis.core.ticks; P2-15's `focus-wake`)."""
 import asyncio
 import contextlib
 import logging
+import random
 import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timedelta
@@ -26,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tumnis.core import db, deadletter, fake_scripts, ticks
+from tumnis.core.backoff import full_jitter
 from tumnis.core.clock import OverridableClock
 from tumnis.core.errors import ProblemError
 from tumnis.core.ratelimit import RateLimiter
@@ -40,8 +42,14 @@ KEEP_TABLES = frozenset({"deployment_marker"})
 OUTBOX = "outbox"
 _LOCK_OUTBOX = text("LOCK TABLE outbox IN ACCESS EXCLUSIVE MODE")
 # SQLSTATE deadlock_detected, and how many times a reset runs its TRUNCATE before giving up.
+# Three was too few under the e2e suite's load: the reset lost to in-flight writers on all
+# three and answered 500 (APP-04). Between attempts it pauses a full-jitter moment (base
+# DEADLOCK_PAUSE_BASE_S, at most DEADLOCK_PAUSE_CAP_S), so the writer it collided with
+# commits before the next TRUNCATE queues behind it again.
 DEADLOCK_DETECTED = "40P01"
-DEADLOCK_ATTEMPTS = 3
+DEADLOCK_ATTEMPTS = 10
+DEADLOCK_PAUSE_BASE_S: Final = 0.05
+DEADLOCK_PAUSE_CAP_S: Final = 1.0
 # A reset whose TRUNCATE waits this long for one lock may be in a cycle Postgres cannot
 # see: a request holds a later table in its transaction and waits, in Python, on its own
 # second connection, which queues behind the TRUNCATE's lock on an earlier table (J1's swap
@@ -78,9 +86,10 @@ async def truncate_tables(owner_url: str) -> list[str]:
     The TRUNCATE locks the tables in name order, so a reader that holds a later table and
     then reads an earlier one closes a lock cycle; Postgres aborts the TRUNCATE (P0-29: a
     load-set reset in CI). The reader finishes once the TRUNCATE gives way, so the reset
-    tries again, up to `DEADLOCK_ATTEMPTS` times. A cycle Postgres cannot see ends at the
-    lock timeout instead (see RESET_LOCK_TIMEOUT_S): the reset logs the open transactions
-    and tries again, up to LOCK_WAIT_ATTEMPTS times, then raises ResetBlockedError."""
+    tries again after a short jittered pause, up to `DEADLOCK_ATTEMPTS` times (APP-04). A
+    cycle Postgres cannot see ends at the lock timeout instead (see RESET_LOCK_TIMEOUT_S):
+    the reset logs the open transactions and tries again, up to LOCK_WAIT_ATTEMPTS times,
+    then raises ResetBlockedError."""
     engine = create_async_engine(owner_url, poolclass=NullPool)
     attempt = lock_waits = 1
     try:
@@ -104,9 +113,23 @@ async def truncate_tables(owner_url: str) -> list[str]:
                     continue
                 if code != DEADLOCK_DETECTED or attempt == DEADLOCK_ATTEMPTS:
                     raise
+                _log.info("reset lost a deadlock (attempt %d of %d)", attempt, DEADLOCK_ATTEMPTS)
+                await _deadlock_pause(
+                    full_jitter(
+                        attempt,
+                        base=DEADLOCK_PAUSE_BASE_S,
+                        cap=DEADLOCK_PAUSE_CAP_S,
+                        rand=random.random,  # jitter, not a secret
+                    )
+                )
                 attempt += 1
     finally:
         await engine.dispose()
+
+
+async def _deadlock_pause(seconds: float) -> None:
+    """The pause before a reset retries a lost deadlock (a test replaces it)."""
+    await asyncio.sleep(seconds)
 
 
 async def _truncate_once(engine: AsyncEngine) -> list[str]:
