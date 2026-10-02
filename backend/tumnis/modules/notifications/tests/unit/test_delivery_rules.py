@@ -29,7 +29,6 @@ KINDS = (
 
 @pytest.mark.req("FR-8.4", "FR-8.1")
 @pytest.mark.wp("P2-16")
-@pytest.mark.xfail(strict=True, reason="spec:P2-16")
 def test_quiet_batches_while_in_progress() -> None:
     """T-P2-16-03
     The rule table: at Quiet with a task In progress every kind is batched; at every other
@@ -43,7 +42,7 @@ def test_quiet_batches_while_in_progress() -> None:
         decision = rules.delivery_decision(level, busy, kind)
         expected = "batch" if level == "quiet" and busy else "now"
         assert decision == expected, (level, busy, kind)
-        channels = rules.channels_now(decision)  # type: ignore[attr-defined]  # P2-16 adds it
+        channels = rules.channels_now(decision)
         assert "in_app" in channels, (level, busy, kind)
         assert ("discord" in channels) is (expected == "now"), (level, busy, kind)
         assert ("push" in channels) is (expected == "now"), (level, busy, kind)
