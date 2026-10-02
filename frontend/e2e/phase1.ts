@@ -354,8 +354,8 @@ async function acceptResult(
 
 /**
  * Polls `GET /v1/tasks/{id}` until `done(task)`, at most RESULT_WAIT_MS. The
- * server clock stands still at the plan time; moving it on with the wait
- * refills the per-principal rate limit (P0-10) the polling spends.
+ * server clock stands still at the plan time; the wait moves it on as well
+ * (the per-principal rate limit, P0-10, refills on real time either way).
  */
 async function waitForTask(
   request: APIRequestContext,

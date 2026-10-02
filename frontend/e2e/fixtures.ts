@@ -126,10 +126,10 @@ interface PageClockFollower {
  * Wraps the page clock's instant-setting calls so the server clock follows. Playwright's
  * `install({ time })` and `setSystemTime` leave the page's time flowing from that instant,
  * so the server clock flows with it: every second it moves on by the real time that passed.
- * Otherwise the server stands still for the whole test, and time-based state such as the
- * per-principal rate limit (P0-10: burst 50, refilled per second of server time) never
- * refills; a long journey like A0.1 ran out. `setFixedTime` and `pauseAt` stop the page
- * clock, and the server clock stays at their instant.
+ * Otherwise the server's "now" stands still for the whole test. (The per-principal rate
+ * limit, P0-10, reads real time on a fakes stack, not this clock: refilled in one-second
+ * steps, it ran out on A0.1 in main's run 36976166987.) `setFixedTime` and `pauseAt` stop
+ * the page clock, and the server clock stays at their instant.
  */
 function followPageClock(
   page: Page,
