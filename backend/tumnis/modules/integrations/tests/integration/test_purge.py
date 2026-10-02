@@ -82,7 +82,6 @@ def _counts(**found: int) -> dict[str, int]:
 
 @pytest.mark.req("SAAS-2", "Data flow rule 3")
 @pytest.mark.wp("P3-09")
-@pytest.mark.xfail(strict=True, reason="spec:P3-09")
 async def test_retention_purge_removes_old_content_and_raw_payloads(world: PurgeWorld) -> None:
     """T-P3-09-02
     `retention_purge` runs on the housekeeping schedule (`retention-purge`, `17 * * * *`,
