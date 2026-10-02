@@ -7045,7 +7045,10 @@
             "type": "string"
           },
           "scope": {
-            "const": "project",
+            "enum": [
+              "project",
+              "connection"
+            ],
             "title": "Scope",
             "type": "string"
           }
@@ -7065,8 +7068,23 @@
             "title": "Id",
             "type": "string"
           },
+          "purge_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purge Id"
+          },
           "scope": {
-            "const": "project",
+            "enum": [
+              "project",
+              "connection"
+            ],
             "title": "Scope",
             "type": "string"
           },

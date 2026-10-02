@@ -3710,7 +3710,7 @@ export type PurgeIn = {
   /**
    * Scope
    */
-  scope: "project";
+  scope: "project" | "connection";
 };
 
 /**
@@ -3722,9 +3722,13 @@ export type PurgeOut = {
    */
   id: string;
   /**
+   * Purge Id
+   */
+  purge_id?: string | null;
+  /**
    * Scope
    */
-  scope: "project";
+  scope: "project" | "connection";
   /**
    * Status
    */

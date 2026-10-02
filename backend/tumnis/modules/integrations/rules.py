@@ -155,3 +155,37 @@ def next_sync_at(
 def status_after(prev: ConnectionStatus, outcome: SyncOutcome) -> ConnectionStatus:
     """What a sync outcome makes of a connection's status (T-P3-02-08)."""
     return STATUS_TABLE[(prev, outcome)]
+
+
+# --- Retention (P3-09, SAAS-2) ----------------------------------------------------------------
+
+RETENTION_MIN_DAYS: Final = 7  # plan default
+
+
+class RetentionSetting(BaseModel):
+    """The workspace's retention of ingested email, chat and notes (Settings > Retention,
+    section `integrations.retention`). SAAS-2's default keeps content until its project
+    is purged; `days` is opt-in and needs a number of days, 7 at least."""
+
+    mode: Literal["keep_until_project_purged", "days"] = "keep_until_project_purged"
+    days: int | None = Field(default=None, ge=RETENTION_MIN_DAYS)
+
+
+@dataclass(frozen=True)
+class IngestedLite:
+    """What retention needs of one ingested record: its time (a message's send time, a
+    note's meeting time, a thread's last message, else when it was fetched) and whether an
+    open task links it."""
+
+    at: datetime
+    linked_to_open_task: bool = False
+
+
+def purge_cutoff(now: datetime, s: RetentionSetting) -> datetime | None:
+    raise NotImplementedError("P3-09")
+
+
+def purge_candidates(item: IngestedLite, cutoff: datetime | None, project_archived: bool) -> bool:
+    """True if older than cutoff, not archived, not linked to an open task (plan default:
+    keep while a task is open)."""
+    raise NotImplementedError("P3-09")

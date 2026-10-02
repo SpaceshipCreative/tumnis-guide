@@ -508,6 +508,9 @@ class ContextItemOut(BaseModel):
     added_by: str
     created_at: datetime
     version: int
+    # P3-09: what it points at was purged (retention or a purge); the item itself stays.
+    target_purged_at: datetime | None = None
+    purged: bool = False
 
 
 TaintLookup = Callable[[AsyncSession, UUID], Awaitable[bool | None]]
@@ -2334,20 +2337,23 @@ async def context_targets(
 
 # --- purge (P2-18, R-37) ----------------------------------------------------------------------
 
+PurgeScope = Literal["project", "connection"]  # what `POST /v1/purges` takes (P3-09 adds one)
+
 
 class PurgeIn(BaseModel):
     """`POST /v1/purges`: what to purge and why (the reason goes to the audit row).
     P2-18 purges an archived `project`; P3-09 adds `connection`."""
 
-    scope: Literal["project"]
+    scope: PurgeScope
     id: UUID
     reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 
 
 class PurgeOut(BaseModel):
-    scope: Literal["project"]
+    scope: PurgeScope
     id: UUID
     status: Literal["accepted"] = "accepted"
+    purge_id: UUID | None = None  # P3-09: `GET /v1/purges/{purge_id}` follows it
 
 
 async def purge(s: AsyncSession, body: PurgeIn, *, now: datetime) -> PurgeOut:
