@@ -17274,7 +17274,7 @@
     },
     "/v1/knowledge/documents/{document_id}": {
       "delete": {
-        "description": "To the trash: hidden from lists, reads and search until restored.",
+        "description": "To the trash: hidden from lists, reads and search until restored; 409\n`read_only_source` for a synced Document (delete it at its source).",
         "operationId": "knowledge_trash_document",
         "parameters": [
           {
@@ -17507,7 +17507,7 @@
         ]
       },
       "patch": {
-        "description": "Edit a document: a text entry's Markdown body (a new version, its note file\nrewritten), any document's title, tags or pin. 409 `stale_version` with the current\ndocument; 409 `not_text` for a body on anything but a text entry.",
+        "description": "Edit a document: a text entry's Markdown body (a new version, its note file\nrewritten), any document's title, tags or pin. 409 `stale_version` with the current\ndocument; 409 `not_text` for a body on anything but a text entry; 409\n`read_only_source` for a Document a connection syncs (an Obsidian note, P3-12).",
         "operationId": "knowledge_update_document",
         "parameters": [
           {

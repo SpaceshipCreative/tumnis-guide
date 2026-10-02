@@ -29,7 +29,8 @@ only `worker-extract` dequeues; workflow id `extract:<version_id>`):
 2. scan it with clamd: an infected file is quarantined and the workflow ends;
 3. sniff its type from the content: a refused type or size ends in `failed` with the
    refusal's code, before anything is placed or converted;
-3b. (uploads) place it at `uploads/<name>` in the project folder;
+3b. (uploads) place it at `uploads/<name>` in the project folder (an Obsidian attachment,
+    `source = "vault"`, stays in the vault and is never placed);
 4. convert it with the extractor;
 5. read each low-confidence PDF page with the vision model (a failed vision pass is skipped:
    the standard chunks stay);
@@ -57,6 +58,7 @@ from tumnis.core import faults
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.knowledge import api, embeddings, pipeline, sync
+from tumnis.modules.knowledge.obsidian import sync as vault_sync
 from tumnis.modules.knowledge.rules import EMBED_BATCH, EMBED_QUEUE, REEMBED_WORKFLOW
 
 log = logging.getLogger(__name__)
@@ -343,6 +345,23 @@ async def enqueue_folder_extraction(workspace_id: UUID, version_id: UUID, _path:
 
 
 sync.register_extraction(enqueue_folder_extraction)
+
+
+async def enqueue_vault_extraction(workspace_id: UUID, version_id: UUID, _path: str) -> None:
+    """The Obsidian sync's extraction of an embedded attachment (P3-12): the pipeline with
+    `source = "vault"`, reading the bytes the sync spooled and never placing them in a
+    project folder (the vault is the file's home); otherwise as `enqueue_folder_extraction`."""
+
+    async def enqueue() -> None:
+        with SetWorkflowID(f"extract:{version_id}"):
+            await DBOS.enqueue_workflow_async(
+                api.EXTRACT_QUEUE, extract_document, str(workspace_id), str(version_id), "vault"
+            )
+
+    await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
+
+
+vault_sync.register_extraction(enqueue_vault_extraction)
 
 
 # Re-embedding on a model change (P3-10, FR-11.10, REL-3)

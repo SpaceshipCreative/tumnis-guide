@@ -2816,6 +2816,35 @@ async def set_pinned(
     return await _set_fields(s, document_id, {"pinned": pinned}, expected_version)
 
 
+async def _refuse_synced(s: AsyncSession, document_id: UUID) -> None:
+    """A Document a connection syncs (an Obsidian note or attachment, P3-12) is read-only
+    in Tumnis (FR-15.8): its source is the one place to change it, and the next sync would
+    undo the change. 409 `read_only_source`; nothing is written."""
+    connection_id = await s.scalar(
+        select(_documents.c.connection_id).where(_documents.c.id == document_id)
+    )
+    if connection_id is not None:
+        raise ProblemError(
+            409, "read_only_source", "This document is synced from its source; change it there"
+        )
+
+
+async def write_synced_text(
+    s: AsyncSession, row: Row, body: str, *, expected_version: int, added: bool
+) -> DocumentDTO:
+    """A synced note's text as a new version (P3-12): versioned, indexed and announced like
+    a text entry (`document.added` for a new note, else `document.changed`), and never
+    written to a project folder (the vault is the note's home)."""
+    return await _write_text(
+        s,
+        row,
+        body,
+        expected_version=expected_version,
+        net=None,
+        event=DocumentAddedV1 if added else DocumentChangedV1,
+    )
+
+
 async def edit_document(  # the patchable fields, each optional
     s: AsyncSession,
     document_id: UUID,
@@ -2832,7 +2861,8 @@ async def edit_document(  # the patchable fields, each optional
     """One versioned edit of a document (the rail's PATCH): its metadata (title, tags,
     pin) first, then a text entry's body as a new version (`origin` and `tainted` as in
     `update_text_entry`). The first change takes `expected_version`; a body change after
-    it takes the version that change left."""
+    it takes the version that change left. A synced Document is 409 `read_only_source`."""
+    await _refuse_synced(s, document_id)
     values: dict[str, Any] = {}
     if title is not None:
         values["title"] = title
@@ -2867,7 +2897,9 @@ async def edit_document(  # the patchable fields, each optional
 
 
 async def trash(s: AsyncSession, document_id: UUID) -> None:
-    """To the trash (FR-15.6): hidden from lists, reads and search until restored."""
+    """To the trash (FR-15.6): hidden from lists, reads and search until restored. A
+    synced Document is 409 `read_only_source`: its sync owns its place (P3-12)."""
+    await _refuse_synced(s, document_id)
     await trash_document(s, document_id)
 
 

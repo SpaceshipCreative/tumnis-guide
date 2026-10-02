@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import subprocess
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -15,7 +16,6 @@ import pytest
 from tumnis.core.adapters.contract import AdapterContract
 from tumnis.modules.knowledge.adapters.obsidian.port import VaultReader
 from tumnis.modules.knowledge.storage import NotFound, PathRejected
-from tumnis.modules.knowledge.tests.integration._vault import git
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -31,6 +31,27 @@ VAULT: dict[str, bytes] = {
     "Welcome.md": b"# Welcome\n",
 }
 CONNECTION = UUID("0190a7a0-0000-7000-8000-0000000000c2")
+
+
+def git(*args: str, cwd: Path) -> None:
+    """git for test setup: a clean environment (no GIT_* from a hook or CI), a fixed
+    identity, no system or global config."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(
+        GIT_AUTHOR_NAME="Test",
+        GIT_AUTHOR_EMAIL="test@example.com",
+        GIT_COMMITTER_NAME="Test",
+        GIT_COMMITTER_EMAIL="test@example.com",
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_CONFIG_GLOBAL=os.devnull,
+    )
+    subprocess.run(  # noqa: S603  # fixed git argv, test setup only
+        ["git", *args],  # noqa: S607
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        check=True,
+    )
 
 
 def _write_vault(root: Path) -> None:

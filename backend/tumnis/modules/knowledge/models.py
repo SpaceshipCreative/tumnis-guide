@@ -1,5 +1,5 @@
 """knowledge SQLAlchemy tables owned by this module (mirrors of revisions knowledge_0001
-to knowledge_0008)."""
+to knowledge_0008, and knowledge_0010)."""
 
 from datetime import datetime
 from typing import Any
@@ -204,3 +204,19 @@ class Embedding(TenantBase, Base):
     project_id: Mapped[UUID | None]
     model: Mapped[str]
     embedding: Mapped[list[float]] = mapped_column(Vector())
+
+
+class DocumentLink(TenantBase, Base):
+    """knowledge_0010: a wikilink, Markdown link or embed in a synced Obsidian note (P3-12);
+    `to_document_id` stays NULL while `to_target` resolves to no Document."""
+
+    __tablename__ = "document_links"
+
+    from_document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
+    to_document_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL")
+    )
+    to_target: Mapped[str]
+    kind: Mapped[str]  # link | embed
+    heading: Mapped[str | None]
+    block: Mapped[str | None]

@@ -1866,7 +1866,8 @@ export const knowledgeCreateTextEntry = <ThrowOnError extends boolean = false>(
 /**
  * Trash Document
  *
- * To the trash: hidden from lists, reads and search until restored.
+ * To the trash: hidden from lists, reads and search until restored; 409
+ * `read_only_source` for a synced Document (delete it at its source).
  */
 export const knowledgeTrashDocument = <ThrowOnError extends boolean = false>(
   options: Options<KnowledgeTrashDocumentData, ThrowOnError>,
@@ -1916,7 +1917,8 @@ export const knowledgeGetDocument = <ThrowOnError extends boolean = false>(
  *
  * Edit a document: a text entry's Markdown body (a new version, its note file
  * rewritten), any document's title, tags or pin. 409 `stale_version` with the current
- * document; 409 `not_text` for a body on anything but a text entry.
+ * document; 409 `not_text` for a body on anything but a text entry; 409
+ * `read_only_source` for a Document a connection syncs (an Obsidian note, P3-12).
  */
 export const knowledgeUpdateDocument = <ThrowOnError extends boolean = false>(
   options: Options<KnowledgeUpdateDocumentData, ThrowOnError>,

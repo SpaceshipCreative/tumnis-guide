@@ -226,7 +226,8 @@ async def update_document(
 ) -> api.DocumentDTO:
     """Edit a document: a text entry's Markdown body (a new version, its note file
     rewritten), any document's title, tags or pin. 409 `stale_version` with the current
-    document; 409 `not_text` for a body on anything but a text entry."""
+    document; 409 `not_text` for a body on anything but a text entry; 409
+    `read_only_source` for a Document a connection syncs (an Obsidian note, P3-12)."""
     return await api.edit_document(
         session,
         document_id,
@@ -341,7 +342,8 @@ async def add_link(body: LinkIn, request: Request, session: SessionDep) -> api.D
 @router.delete("/knowledge/documents/{document_id}", status_code=204)
 @route_policy(_WRITE)
 async def trash_document(document_id: UUID, session: SessionDep) -> None:
-    """To the trash: hidden from lists, reads and search until restored."""
+    """To the trash: hidden from lists, reads and search until restored; 409
+    `read_only_source` for a synced Document (delete it at its source)."""
     await api.trash(session, document_id)
 
 
