@@ -71,7 +71,7 @@ class DeliveryWorld(PushWorld):
         """Discord delivery gives up after `attempts` attempts, a moment apart."""
         from tumnis.modules.notifications import workflows  # noqa: PLC0415
 
-        workflows.use_discord(max_attempts=attempts, base_delay_s=0.05)  # type: ignore[attr-defined]
+        workflows.use_discord(max_attempts=attempts, base_delay_s=0.05)
 
     def master_fails(self) -> None:
         """The master's focus skill fails every run from now on (the gateway is down)."""

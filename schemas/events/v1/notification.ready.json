@@ -1,0 +1,29 @@
+{
+  "$id": "https://tumnis.dev/schemas/events/v1/notification.ready.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "title": "Kind",
+      "type": "string"
+    },
+    "notification_id": {
+      "format": "uuid",
+      "title": "Notification Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "notification_id",
+    "kind"
+  ],
+  "title": "NotificationReadyV1",
+  "type": "object"
+}

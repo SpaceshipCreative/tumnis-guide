@@ -1,0 +1,26 @@
+{
+  "$id": "https://tumnis.dev/schemas/result/v1/focus_message.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The `focus` skill's reply: the message it posted to the channel, word for word.",
+  "properties": {
+    "message": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "message"
+  ],
+  "title": "FocusMessage",
+  "type": "object"
+}

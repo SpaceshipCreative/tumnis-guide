@@ -1,5 +1,5 @@
-"""notifications event payload models and subscribers (P4-05 on P2-16's seam, FR-8.3,
-FR-8.4). notifications emits no events of its own.
+"""notifications event subscribers (P4-05 and P2-16, FR-8.2, FR-8.3, FR-8.4). Its one
+event, `notification.ready`, is modelled in `payloads.py` and emitted by `api.py`.
 
 Subscribers (each idempotent: the notification row's dedupe key is the event id, and its
 push's workflow id is the row's id):
@@ -10,7 +10,10 @@ push's workflow id is the row's id):
   day's end (`day_end`) is also a natural break, so it releases what Quiet held;
 - `task.status_changed` leaving In progress -> `notifications.flush_on_break` and
   `focus.level_changed` -> `notifications.flush_on_level`: release what Quiet held once
-  `rules.flush_due` says the break came, or the level no longer batches.
+  `rules.flush_due` says the break came, or the level no longer batches;
+- `notification.ready` -> `notifications.deliver_notification` (P2-16): queue the
+  notification's Discord delivery through the master (`workflows.deliver_notification`);
+  a retry of its dead letter queues a fresh delivery.
 
 `speech` (P4-03) registers its own `focus.event` subscriber when it is imported here.
 """
@@ -23,14 +26,23 @@ from tumnis.core.tenancy import WorkspaceContext
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.notifications import (
     api,
+    rules,
     speech,  # noqa: F401  # P4-03: speak_focus_event
     workflows,
 )
 
-__all__ = ["flush_on_break", "flush_on_level", "push_focus_event", "push_review_item"]
+__all__ = [
+    "deliver_notification",
+    "flush_on_break",
+    "flush_on_level",
+    "push_focus_event",
+    "push_review_item",
+]
 
 IN_PROGRESS: Final = "in_progress"
 DAY_END: Final = "day_end"
+# What the master's message names of a focus event (P2-16), kept on its notification.
+FOCUS_DETAILS: Final = ("task_id", "level", "rule", "fired_at", "return_to_task_id")
 
 
 def _ctx(envelope: EventEnvelope) -> WorkspaceContext:
@@ -38,7 +50,7 @@ def _ctx(envelope: EventEnvelope) -> WorkspaceContext:
 
 
 async def _push_now(envelope: EventEnvelope, made: api.Recorded) -> None:
-    if made.decision == "now":
+    if api.CHANNEL_PUSH in rules.channels_now(made.decision):
         await workflows.start_push(envelope.workspace_id, made.id)
 
 
@@ -77,6 +89,7 @@ async def push_focus_event(envelope: EventEnvelope) -> None:
         kind=str(payload["kind"]),
         dedupe_key=str(envelope.event_id),
         now=envelope.occurred_at,
+        details={key: payload.get(key) for key in FOCUS_DETAILS},
     )
     await _push_now(envelope, made)
     if payload.get("kind") == DAY_END:
@@ -92,3 +105,8 @@ async def flush_on_break(envelope: EventEnvelope) -> None:
 @subscribe("focus.level_changed", name="notifications.flush_on_level")
 async def flush_on_level(envelope: EventEnvelope) -> None:
     await _flush(envelope)
+
+
+@subscribe("notification.ready", name=workflows.DISCORD_SUBSCRIBER)
+async def deliver_notification(envelope: EventEnvelope) -> None:
+    await workflows.start_discord(envelope)

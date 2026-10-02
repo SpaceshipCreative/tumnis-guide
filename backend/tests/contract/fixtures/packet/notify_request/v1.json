@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "notify",
+  "event": {
+    "id": "01a0ec82-72d7-7f23-8be6-203712701f31",
+    "kind": "check_in_due",
+    "level": "coach",
+    "rule": "Coach · check_in_due (25 min cadence)",
+    "fired_at": "2026-03-10T14:25:00Z"
+  },
+  "item": null,
+  "batch": null,
+  "task": {
+    "id": "01a0ec82-72d7-7f23-8be6-203712701f21",
+    "title": "Write proposal",
+    "first_action": "Open the proposal template"
+  },
+  "project": {
+    "id": "01a0ec82-72d7-7f23-8be6-203712701f11",
+    "name": "Acme site"
+  },
+  "return_to": null,
+  "answers": ["still_on_it", "switched", "stuck", "snooze"]
+}
