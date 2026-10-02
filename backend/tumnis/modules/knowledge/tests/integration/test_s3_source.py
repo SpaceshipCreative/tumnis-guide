@@ -383,3 +383,45 @@ async def test_linked_reread_of_a_changed_object_keeps_the_version_hash(
         s3_sync.configure(None)
     assert stored_hash() == before
     assert [p for p in extract_dirs.scratch.rglob("*") if p.is_file()] == []
+
+
+@pytest.mark.req("FR-15.11")
+@pytest.mark.wp("P3-13")
+async def test_failed_take_in_leaves_no_spool_file(
+    knowledge_ws: WorkspaceHandle,
+    minio: S3Endpoint,
+    clock: FixedClock,
+    extract_dirs: ExtractDirs,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#158 review: each attempt spools under a new name, so a read that fails mid-stream
+    or a take-in whose transaction fails removes its spool file instead of leaving it."""
+    from collections.abc import AsyncIterator  # noqa: PLC0415
+
+    from tumnis.modules.knowledge import store  # noqa: PLC0415
+
+    s3_sync = importlib.import_module("tumnis.modules.knowledge.s3_sync")
+
+    class Dropped:
+        async def read(self, key: str) -> AsyncIterator[bytes]:
+            yield b"# Half a file"
+            raise ConnectionError("the stream dropped")
+
+    half = extract_dirs.spool / "half"
+    with pytest.raises(ConnectionError):
+        await s3_sync._download(Dropped(), "acme/a.md", half)
+    assert not half.exists()
+
+    ws = knowledge_ws
+    project_id = await _project(ws, clock, "Acme")
+    bucket = await new_bucket(minio)
+    await put(minio, bucket, "acme/a.md", b"# A\n")
+    created = await create_source(ws, source_in(minio, bucket, {"acme/": project_id}))
+
+    async def failing_add_version(*args: object, **kwargs: object) -> int:
+        raise RuntimeError("the transaction failed")
+
+    monkeypatch.setattr(store, "add_version", failing_add_version)
+    with pytest.raises(RuntimeError):
+        await _sync(ws, created.id, ExtractLog([]))
+    assert [p for p in extract_dirs.spool.rglob("*") if p.is_file()] == []

@@ -159,20 +159,25 @@ async def _listed(reader: S3SourceReader, prefixes: Sequence[str]) -> dict[str, 
 
 
 async def _download(reader: S3SourceReader, key: str, dest: Path) -> str | None:
-    """The object into `dest`, hashed; None (and nothing kept) past the upload limit."""
+    """The object into `dest`, hashed; None (and nothing kept) past the upload limit, and
+    nothing kept when the read fails (each attempt spools under a new name)."""
     await asyncio.to_thread(dest.parent.mkdir, parents=True, exist_ok=True)
     digest = hashlib.sha256()
     size = 0
     handle = await asyncio.to_thread(dest.open, "wb")
     try:
-        async for chunk in reader.read(key):
-            size += len(chunk)
-            if size > MAX_UPLOAD_BYTES:
-                break
-            digest.update(chunk)
-            await asyncio.to_thread(handle.write, chunk)
-    finally:
-        await asyncio.to_thread(handle.close)
+        try:
+            async for chunk in reader.read(key):
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    break
+                digest.update(chunk)
+                await asyncio.to_thread(handle.write, chunk)
+        finally:
+            await asyncio.to_thread(handle.close)
+    except BaseException:
+        await asyncio.to_thread(dest.unlink, missing_ok=True)
+        raise
     if size > MAX_UPLOAD_BYTES:
         await asyncio.to_thread(dest.unlink, missing_ok=True)
         return None
@@ -280,41 +285,47 @@ async def _take_in(  # the source, the object, where it goes, and the record so 
         return None  # gone since the listing: the next one trashes it
     if sha256 is None:
         return None
-    async with tenant_session(ctx) as s:
-        if record is not None and record["content_hash"] == sha256 and record["document_id"]:
-            # The same bytes under a new ETag (a multipart re-upload): no new version.
+    try:
+        async with tenant_session(ctx) as s:
+            if record is not None and record["content_hash"] == sha256 and record["document_id"]:
+                # The same bytes under a new ETag (a multipart re-upload): no new version.
+                await _record(
+                    s,
+                    source.connection_id,
+                    stat,
+                    content_hash=sha256,
+                    document_id=record["document_id"],
+                    synced_version=record["synced_version"] or 1,
+                )
+                await asyncio.to_thread(spooled.unlink, missing_ok=True)
+                return None
+            project_id = source.projects[prefix]
+            digest = bytes.fromhex(sha256)
+            document_id = await _document(s, source, stat, project_id, digest)
+            await store.add_version(
+                s,
+                document_id,
+                version_id,
+                digest=digest,
+                size=stat.size,
+                source_name=PurePosixPath(stat.path).name,
+            )
+            version = await s.scalar(
+                select(_documents.c.version).where(_documents.c.id == document_id)
+            )
             await _record(
                 s,
                 source.connection_id,
                 stat,
                 content_hash=sha256,
-                document_id=record["document_id"],
-                synced_version=record["synced_version"] or 1,
+                document_id=document_id,
+                synced_version=int(version or 1),
             )
-            await asyncio.to_thread(spooled.unlink, missing_ok=True)
-            return None
-        project_id = source.projects[prefix]
-        digest = bytes.fromhex(sha256)
-        document_id = await _document(s, source, stat, project_id, digest)
-        await store.add_version(
-            s,
-            document_id,
-            version_id,
-            digest=digest,
-            size=stat.size,
-            source_name=PurePosixPath(stat.path).name,
-        )
-        version = await s.scalar(select(_documents.c.version).where(_documents.c.id == document_id))
-        await _record(
-            s,
-            source.connection_id,
-            stat,
-            content_hash=sha256,
-            document_id=document_id,
-            synced_version=int(version or 1),
-        )
-        if project_id is not None:
-            mark_changed(s, "project", project_id)
+            if project_id is not None:
+                mark_changed(s, "project", project_id)
+    except BaseException:  # nothing refers to the spooled copy: drop it
+        await asyncio.to_thread(spooled.unlink, missing_ok=True)
+        raise
     return version_id
 
 
