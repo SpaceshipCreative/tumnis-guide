@@ -110,7 +110,6 @@ def _tables_holding(db: DbUrls, needle: str) -> list[str]:
 
 @pytest.mark.req("FR-11.7", "FR-11.10", "SEC-6")
 @pytest.mark.wp("P4-03")
-@pytest.mark.xfail(strict=True, reason="spec:P4-03")
 async def test_hosted_keys_never_reach_db_responses_or_logs(  # noqa: PLR0917  # its fixtures
     core_db: None,
     db: DbUrls,
@@ -171,6 +170,7 @@ async def test_hosted_keys_never_reach_db_responses_or_logs(  # noqa: PLR0917  #
 @pytest.mark.xfail(strict=True, reason="spec:P4-03")
 async def test_hosted_speech_without_key_speaks_nothing(
     core_db: None,
+    master_key_file: Any,  # the voice setting is sealed with the workspace data key
     workspace: WorkspaceHandle,
     clock: FixedClock,
     slots: Any,

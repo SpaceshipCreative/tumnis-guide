@@ -25,8 +25,6 @@ EMBED_KEY = "hosted-embed-test-not-a-key"
 HOSTED_URL = "http://10.20.0.7:8080"  # an OpenAI-compatible server in the test (no socket)
 LOCAL_URL = "http://10.20.0.6:8000"
 TEXT = "Time for Write proposal. First step: open the proposal outline."
-SPEC_SPEECH = pytest.mark.xfail(strict=True, reason="spec:P4-03")
-SPEC_EMBED = pytest.mark.xfail(strict=True, reason="spec:P3-10")
 # Every variable these tests set or that would change what Settings builds.
 ENV = (
     "DEPLOYMENT_ENV",
@@ -129,7 +127,6 @@ def _no_key_in(key: str, logs: list[Any], *things: Any) -> None:
 
 @pytest.mark.req("FR-11.7", "SEC-6")
 @pytest.mark.wp("P4-03")
-@SPEC_SPEECH
 def test_hosted_speech_key_read_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """The hosted speech provider's endpoint, model, voice and key come from
     `SPEECH__HOSTED_*`; the key is a secret that no dump or repr shows."""
@@ -145,7 +142,6 @@ def test_hosted_speech_key_read_from_env(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.mark.req("FR-11.10", "SEC-6")
 @pytest.mark.wp("P3-10")
-@SPEC_EMBED
 def test_hosted_embedder_key_read_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """The hosted embedder's endpoint, model, dimension and key come from
     `EMBEDDINGS__HOSTED_*`; the key is a secret that no dump or repr shows."""
@@ -163,7 +159,6 @@ def test_hosted_embedder_key_read_from_env(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.req("FR-11.7", "FR-11.10")
 @pytest.mark.wp("P4-03")
-@SPEC_SPEECH
 def test_blank_hosted_variables_are_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     """Compose passes `${VAR:-}` as an empty string: a blank hosted variable is unset, not
     an empty key or URL."""
@@ -181,7 +176,6 @@ def test_blank_hosted_variables_are_unset(monkeypatch: pytest.MonkeyPatch) -> No
 @pytest.mark.req("REL-7", "SEC-6")
 @pytest.mark.wp("P4-03")
 @pytest.mark.parametrize("variable", ["SPEECH__HOSTED_API_KEY", "EMBEDDINGS__HOSTED_API_KEY"])
-@SPEC_SPEECH
 def test_preview_refuses_hosted_keys(monkeypatch: pytest.MonkeyPatch, variable: str) -> None:
     """A preview never holds a production secret: a hosted key in its environment is
     refused like the Jev key (`preview_has_production_secret`)."""
@@ -203,7 +197,6 @@ def test_preview_refuses_hosted_keys(monkeypatch: pytest.MonkeyPatch, variable: 
 
 @pytest.mark.req("FR-11.7", "SEC-6")
 @pytest.mark.wp("P4-03")
-@SPEC_SPEECH
 async def test_hosted_speech_client_gets_key_from_settings(
     monkeypatch: pytest.MonkeyPatch, slots: Any
 ) -> None:
@@ -237,7 +230,6 @@ async def test_hosted_speech_client_gets_key_from_settings(
 
 @pytest.mark.req("FR-11.7", "SEC-6")
 @pytest.mark.wp("P4-03")
-@SPEC_SPEECH
 def test_hosted_speech_without_key_is_not_configured(
     monkeypatch: pytest.MonkeyPatch, slots: Any
 ) -> None:
@@ -278,7 +270,6 @@ def _embedding_answer(request: httpx.Request) -> httpx.Response:
 
 @pytest.mark.req("FR-11.10", "SEC-6")
 @pytest.mark.wp("P3-10")
-@SPEC_EMBED
 async def test_hosted_embedder_client_gets_key_from_settings(
     monkeypatch: pytest.MonkeyPatch, slots: Any
 ) -> None:
@@ -319,7 +310,6 @@ async def test_hosted_embedder_client_gets_key_from_settings(
 
 @pytest.mark.req("FR-11.10", "SEC-6")
 @pytest.mark.wp("P3-10")
-@SPEC_EMBED
 def test_hosted_embedder_without_key_is_not_configured(
     monkeypatch: pytest.MonkeyPatch, slots: Any
 ) -> None:
@@ -360,7 +350,6 @@ def test_hosted_embedder_without_key_is_not_configured(
 @pytest.mark.req("FR-11.7", "FR-11.10", "SEC-6")
 @pytest.mark.wp("P4-03")
 @pytest.mark.parametrize("slot", ["speech", "embeddings"])
-@SPEC_SPEECH
 def test_provider_config_refuses_hosted_keys(slot: str) -> None:
     """The speech and embeddings slots' keys live only in the server's .env: the provider
     config writer refuses one, so nothing can seal it into `provider_configs`. The decisions
