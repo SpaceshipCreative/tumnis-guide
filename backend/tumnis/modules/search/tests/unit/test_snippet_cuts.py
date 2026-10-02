@@ -70,7 +70,6 @@ BODY = (
             "Write about the tag <b> stays put",
             "…the <b>tag</b> <b> stays…",
             id="source-with-literal-markup-still-shows-its-cuts",
-            marks=pytest.mark.xfail(strict=True, reason="spec:FIX-app-final-minor"),
         ),
         pytest.param(
             "Write about the <b>tag</b>",

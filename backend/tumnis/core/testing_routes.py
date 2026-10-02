@@ -60,8 +60,9 @@ DEADLOCK_PAUSE_CAP_S: Final = 1.0
 # waits for is bounded by RESET_LOCK_TIMEOUT_S, below the server's `deadlock_timeout`
 # (1 s by default), so the TRUNCATE gives way first (SQLSTATE lock_not_available) and
 # Postgres never picks it, or a request it blocked, as a deadlock victim. The reset logs
-# who held what (`blocked_report`), pauses, and tries again until LOCK_WAIT_BUDGET_S of
-# lock waits have gone by; then it answers 503 with the report (SEED).
+# who held what (`blocked_report`), pauses, and tries again until LOCK_WAIT_BUDGET_S have
+# gone by since it began (by the event loop's monotonic clock, pauses included; no pause
+# runs past that deadline); then it answers 503 with the report (SEED).
 RESET_LOCK_TIMEOUT_S: float = 0.25  # read per attempt (a test changes it)
 LOCK_WAIT_BUDGET_S: Final = 20.0
 LOCK_NOT_AVAILABLE: Final = "55P03"
@@ -93,12 +94,12 @@ async def truncate_tables(owner_url: str) -> list[str]:
     writer that emits (APP-F03). A transaction that takes its locks in another order and
     holds one the TRUNCATE waits for makes it give way at RESET_LOCK_TIMEOUT_S: the reset
     logs the open transactions, pauses a jittered moment and tries again, until
-    LOCK_WAIT_BUDGET_S of lock waits have gone by, then raises ResetBlockedError. A
+    LOCK_WAIT_BUDGET_S have gone by since it began, then raises ResetBlockedError. A
     deadlock Postgres reports anyway (P0-29, APP-04) is tried again too, up to
     `DEADLOCK_ATTEMPTS` times."""
     engine = create_async_engine(owner_url, poolclass=NullPool)
     attempt = lock_waits = 1
-    waited = 0.0
+    deadline = _monotonic() + LOCK_WAIT_BUDGET_S
     try:
         while True:
             try:
@@ -106,19 +107,19 @@ async def truncate_tables(owner_url: str) -> list[str]:
             except DBAPIError as error:
                 code = getattr(error.orig, "sqlstate", None)
                 if code == LOCK_NOT_AVAILABLE:
-                    waited += RESET_LOCK_TIMEOUT_S
                     report = blocked_report(await _open_transactions(engine), _parked_chains())
+                    left = deadline - _monotonic()
                     _log.warning(
-                        "reset blocked on a lock for %ss (give-way %d, %.2fs of %.0fs):\n%s",
+                        "reset blocked on a lock for %ss (give-way %d, %.1fs of %.0fs left):\n%s",
                         RESET_LOCK_TIMEOUT_S,
                         lock_waits,
-                        waited,
+                        max(left, 0.0),
                         LOCK_WAIT_BUDGET_S,
                         report,
                     )
-                    if waited >= LOCK_WAIT_BUDGET_S:
+                    if left <= 0:
                         raise ResetBlockedError(report) from error
-                    await _deadlock_pause(_jitter(lock_waits))
+                    await _deadlock_pause(min(_jitter(lock_waits), left))
                     lock_waits += 1
                     continue
                 if code != DEADLOCK_DETECTED or attempt == DEADLOCK_ATTEMPTS:
@@ -137,6 +138,12 @@ def _jitter(attempt: int) -> float:
         cap=DEADLOCK_PAUSE_CAP_S,
         rand=random.random,  # jitter, not a secret
     )
+
+
+def _monotonic() -> float:
+    """Seconds on the event loop's monotonic clock, for the reset's own deadline (a test
+    replaces it)."""
+    return asyncio.get_running_loop().time()
 
 
 async def _deadlock_pause(seconds: float) -> None:

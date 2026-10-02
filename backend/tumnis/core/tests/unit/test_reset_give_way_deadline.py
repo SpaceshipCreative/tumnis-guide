@@ -23,7 +23,6 @@ class _LockNotAvailableError(Exception):
     sqlstate = "55P03"
 
 
-@pytest.mark.xfail(strict=True, reason="spec:FIX-app-final-minor")
 async def test_app_f03_reset_gives_up_at_its_deadline_whatever_the_pauses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -75,21 +75,26 @@ def tsquery_parts(p: ParsedQuery) -> list[tuple[str, str]]:
 START_SEL: Final = "<b>"
 STOP_SEL: Final = "</b>"
 ELLIPSIS: Final = "…"
+_MARK: Final = re.compile(f"({re.escape(START_SEL)}|{re.escape(STOP_SEL)})")
 
 
 def mark_cuts(headline: str, source: str) -> str:
     """`headline` (one ts_headline fragment of `source`) with ELLIPSIS before it when it
     starts after the start of `source`, and after it when it stops before the end.
-    ts_headline returns the document's own text, so the fragment without its match marks
-    is a piece of `source`; when it is not (a document with marks of its own), the
-    headline is returned as it came. With one fragment, ts_headline's FragmentDelimiter
-    never shows, so this is the only sign of a cut (APP-F07)."""
-    fragment = headline.replace(START_SEL, "").replace(STOP_SEL, "")
-    if not fragment.strip():
+    ts_headline returns the document's own text with the marks added, so the headline is a
+    piece of `source` in which each mark may or may not be the document's own (a document
+    can hold `<b>` itself; ts_headline does not escape it). When it is not a piece of
+    `source`, the headline is returned as it came. With one fragment, ts_headline's
+    FragmentDelimiter never shows, so this is the only sign of a cut (APP-F07)."""
+    pieces = _MARK.split(headline)
+    if not "".join(p for p in pieces if p not in (START_SEL, STOP_SEL)).strip():
         return headline
-    start = source.find(fragment)
-    if start < 0:
+    pattern = "".join(
+        f"(?:{re.escape(p)})?" if p in (START_SEL, STOP_SEL) else re.escape(p) for p in pieces
+    )
+    found = re.search(pattern, source)
+    if found is None:
         return headline
-    before = ELLIPSIS if source[:start].strip() else ""
-    after = ELLIPSIS if source[start + len(fragment) :].strip() else ""
+    before = ELLIPSIS if source[: found.start()].strip() else ""
+    after = ELLIPSIS if source[found.end() :].strip() else ""
     return f"{before}{headline}{after}"
