@@ -20,8 +20,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [base, ncc, noiso, vonly, ponly]
-        rep: [1, 2, 3]
+        variant: [base, ncc, safe, vw2, noiso]
+        rep: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -41,7 +41,8 @@ jobs:
         run: |
           lscpu | grep -m1 "Model name"
           args=""
-          if [ "$VARIANT" = ncc ]; then export NODE_COMPILE_CACHE="$RUNNER_TEMP/ncc"; fi
+          if [ "$VARIANT" = ncc ] || [ "$VARIANT" = safe ]; then export NODE_COMPILE_CACHE="$RUNNER_TEMP/ncc"; fi
+          if [ "$VARIANT" = vw2 ]; then args="--maxWorkers=2"; fi
           if [ "$VARIANT" = noiso ]; then args="--no-isolate"; fi
           nohup sh -c "date -u +'Vitest started %T'; npm run test -- --run $args; code=\$?; date -u +'Vitest finished %T'; echo \"\$code\" > \"\$RUNNER_TEMP/vitest.exit.tmp\" && mv \"\$RUNNER_TEMP/vitest.exit.tmp\" \"\$RUNNER_TEMP/vitest.exit\"" > "$RUNNER_TEMP/vitest.log" 2>&1 < /dev/null &
           echo "$!" > "$RUNNER_TEMP/vitest.pid"
@@ -61,12 +62,15 @@ jobs:
       - name: Backend unit tests with coverage
         if: matrix.variant != 'vonly'
         working-directory: backend
+        env:
+          VARIANT: ${{ matrix.variant }}
         run: |
           lscpu | grep -m1 "Model name"
+          if [ "$VARIANT" = safe ]; then export UV_COMPILE_BYTECODE=1; fi
           uv sync
           uv run pytest -m "not integration and not contract" -n 3 --dist worksteal --durations=15 --cov --cov-report=json
       - name: Frontend unit tests
         if: ${{ !cancelled() && steps.vitest.outcome == 'success' }}
         run: |
           tail -n +1 -f --pid="$(cat "$RUNNER_TEMP/vitest.pid")" "$RUNNER_TEMP/vitest.log" | grep -a -E "Vitest (started|finished)|Test Files|Tests  |Duration|FAIL"
-          cat "$RUNNER_TEMP/vitest.exit"
+          echo "vitest exit $(cat "$RUNNER_TEMP/vitest.exit")"
