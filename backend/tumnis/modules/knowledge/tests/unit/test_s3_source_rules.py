@@ -63,7 +63,6 @@ CAPABILITY_TABLE: dict[str, tuple[dict[str, Any], bool, str | None]] = {
 
 @pytest.mark.req("FR-15.11")
 @pytest.mark.wp("P3-13")
-@pytest.mark.xfail(strict=True, reason="spec:P3-13")
 @pytest.mark.parametrize("case", list(CAPABILITY_TABLE))
 def test_capabilities_table(case: str) -> None:
     """T-P3-13-01
@@ -124,7 +123,6 @@ CHANGE_TABLE: dict[str, tuple[tuple[Any, ...] | None, tuple[Any, ...] | None, st
 
 @pytest.mark.req("FR-15.11")
 @pytest.mark.wp("P3-13")
-@pytest.mark.xfail(strict=True, reason="spec:P3-13")
 @pytest.mark.parametrize("case", list(CHANGE_TABLE))
 def test_change_detection_table(case: str) -> None:
     """T-P3-13-04

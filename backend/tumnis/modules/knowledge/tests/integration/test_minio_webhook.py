@@ -83,7 +83,6 @@ def _count(db: DbUrls, sql: str, *params: object) -> int:
 
 @pytest.mark.req("FR-15.11")
 @pytest.mark.wp("P3-13")
-@pytest.mark.xfail(strict=True, reason="spec:P3-13")
 async def test_notification_requires_token(
     extract_env: ExtractEnv,
     dbos: type[DBOS],
@@ -136,7 +135,6 @@ async def test_notification_requires_token(
 
 @pytest.mark.req("FR-15.11")
 @pytest.mark.wp("P3-13")
-@pytest.mark.xfail(strict=True, reason="spec:P3-13")
 async def test_forged_body_cannot_create_document(  # noqa: PLR0917
     db: DbUrls,
     extract_env: ExtractEnv,

@@ -33,7 +33,6 @@ def _replay(response: dict[str, Any], seen: list[httpx.Request]) -> httpx.MockTr
 @pytest.mark.contract
 @pytest.mark.req("FR-15.11")
 @pytest.mark.wp("P3-13")
-@pytest.mark.xfail(strict=True, reason="spec:P3-13")
 async def test_recorded_b2_keys(
     recordings: Callable[[str], list[tuple[dict[str, Any], Any]]],
 ) -> None:

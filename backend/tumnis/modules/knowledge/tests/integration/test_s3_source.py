@@ -73,7 +73,6 @@ async def _sync(ws: WorkspaceHandle, connection_id: UUID, extract: ExtractLog | 
 
 @pytest.mark.req("FR-15.11")
 @pytest.mark.wp("P3-13")
-@pytest.mark.xfail(strict=True, reason="spec:P3-13")
 async def test_writable_minio_key_refused(
     db: DbUrls, knowledge_ws: WorkspaceHandle, minio: S3Endpoint
 ) -> None:
@@ -110,7 +109,6 @@ async def test_writable_minio_key_refused(
 
 @pytest.mark.req("FR-15.11")
 @pytest.mark.wp("P3-13")
-@pytest.mark.xfail(strict=True, reason="spec:P3-13")
 async def test_only_latest_version_indexed(
     knowledge_ws: WorkspaceHandle, minio: S3Endpoint, clock: FixedClock
 ) -> None:
@@ -150,7 +148,6 @@ async def test_only_latest_version_indexed(
 
 @pytest.mark.req("FR-15.11", "SEC-10")
 @pytest.mark.wp("P3-13")
-@pytest.mark.xfail(strict=True, reason="spec:P3-13")
 async def test_prefix_maps_to_project_and_processes_like_upload(
     db: DbUrls,
     extract_env: ExtractEnv,
@@ -205,7 +202,6 @@ async def test_prefix_maps_to_project_and_processes_like_upload(
 
 @pytest.mark.req("SEC-5")
 @pytest.mark.wp("P3-13")
-@pytest.mark.xfail(strict=True, reason="spec:P3-13")
 async def test_ssrf_guard_on_endpoint(
     db: DbUrls, knowledge_ws: WorkspaceHandle, minio: S3Endpoint
 ) -> None:
