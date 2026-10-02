@@ -117,3 +117,16 @@ async def release_held(run_id: UUID, key: str) -> None:
         await DBOS.send_async(
             target, {"kind": "release"}, topic=api.run_topic(run_id), idempotency_key=key
         )
+
+
+async def deliver_stuck_outcome(focus_event_id: UUID, outcome: str, key: str) -> None:
+    """Wake the stuck request's `handle_stuck` with the stuck run's answer (P4-02), once per
+    key. A workflow already past its deadline (it showed the fallback and ended) or never
+    started has nothing to wake: the request row holds the answer either way."""
+    with contextlib.suppress(DBOSNonExistentWorkflowError):
+        await DBOS.send_async(
+            api.stuck_workflow_id(focus_event_id),
+            {"outcome": outcome},
+            topic=api.STUCK_TOPIC,
+            idempotency_key=key,
+        )

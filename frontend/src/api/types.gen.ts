@@ -1239,6 +1239,7 @@ export type FocusCurrentOut = {
    * Messages
    */
   messages: Array<FocusMessageOut>;
+  next_step: NextStepOut | null;
   /**
    * Override Level
    */
@@ -1993,6 +1994,54 @@ export type MoveIn = {
    * Version
    */
   version: number;
+};
+
+/**
+ * NextStepOut
+ *
+ * What the focus bar shows after "Stuck" (FR-10.5): `working` while the project agent
+ * works on a first step; `split` with the subtask it posted (`step`); `took_step` with
+ * its report (`summary`); `fallback` when no answer came within the deadline or the agent
+ * is down: the task's `first_action` with a `timer_minutes` timer.
+ */
+export type NextStepOut = {
+  /**
+   * Fallback At
+   */
+  fallback_at: string | null;
+  /**
+   * First Action
+   */
+  first_action: string | null;
+  /**
+   * Focus Event Id
+   */
+  focus_event_id: string;
+  /**
+   * Requested At
+   */
+  requested_at: string;
+  /**
+   * Run Id
+   */
+  run_id: string | null;
+  /**
+   * State
+   */
+  state: "working" | "split" | "took_step" | "fallback";
+  step: StuckStepOut | null;
+  /**
+   * Summary
+   */
+  summary: string | null;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Timer Minutes
+   */
+  timer_minutes?: number;
 };
 
 /**
@@ -3368,6 +3417,51 @@ export type PurgeOut = {
 };
 
 /**
+ * PushKeysIn
+ */
+export type PushKeysIn = {
+  /**
+   * Auth
+   */
+  auth: string;
+  /**
+   * P256Dh
+   */
+  p256dh: string;
+};
+
+/**
+ * PushSubscriptionIn
+ *
+ * A browser's `PushSubscription.toJSON()`: its endpoint and keys.
+ */
+export type PushSubscriptionIn = {
+  /**
+   * Endpoint
+   */
+  endpoint: string;
+  keys: PushKeysIn;
+};
+
+/**
+ * PushSubscriptionOut
+ */
+export type PushSubscriptionOut = {
+  /**
+   * Created At
+   */
+  created_at: string;
+  /**
+   * Endpoint
+   */
+  endpoint: string;
+  /**
+   * Id
+   */
+  id: string;
+};
+
+/**
  * Quota
  *
  * Bytes the workspace's knowledge uses (current file versions plus text entries,
@@ -3476,6 +3570,67 @@ export type RecurrenceOut = {
    * Weekday
    */
   weekday: number | null;
+};
+
+/**
+ * RelayReplyBody
+ *
+ * The REST twin's body: the item answered, the person's answer and the chat message
+ * it was typed in.
+ */
+export type RelayReplyBody = {
+  /**
+   * Answer
+   */
+  answer: string;
+  /**
+   * Channel Message Id
+   *
+   * For the audit
+   */
+  channel_message_id: string;
+  /**
+   * Item Id
+   *
+   * The question's review item id, or the focus message id
+   */
+  item_id: string;
+  /**
+   * Item Kind
+   *
+   * question or focus; approval and result are answered 403 needs_app
+   */
+  item_kind: "question" | "focus" | "approval" | "result";
+  /**
+   * Schema Version
+   */
+  schema_version?: number | null;
+};
+
+/**
+ * RelayReplyOut
+ */
+export type RelayReplyOut = {
+  /**
+   * Answer
+   */
+  answer: string;
+  /**
+   * Item Id
+   */
+  item_id: string;
+  /**
+   * Item Kind
+   */
+  item_kind: "question" | "focus";
+  /**
+   * Schema Version
+   */
+  schema_version?: 1;
+  /**
+   * Tainted
+   */
+  tainted?: boolean;
 };
 
 /**
@@ -4362,6 +4517,25 @@ export type StatusBody = {
    * Version
    */
   version: number;
+};
+
+/**
+ * StuckStepOut
+ */
+export type StuckStepOut = {
+  /**
+   * Estimate Minutes
+   */
+  estimate_minutes: number | null;
+  label: Label | null;
+  /**
+   * Task Id
+   */
+  task_id: string;
+  /**
+   * Title
+   */
+  title: string;
 };
 
 /**
@@ -5265,6 +5439,16 @@ export type UsageRow = {
    * Value
    */
   value: number;
+};
+
+/**
+ * VapidPublicKeyOut
+ */
+export type VapidPublicKeyOut = {
+  /**
+   * Public Key
+   */
+  public_key: string;
 };
 
 /**
@@ -11305,6 +11489,176 @@ export type PurgesPurgeResponses = {
 export type PurgesPurgeResponse =
   PurgesPurgeResponses[keyof PurgesPurgeResponses];
 
+export type NotificationsSubscribeData = {
+  body: PushSubscriptionIn;
+  path?: never;
+  query?: never;
+  url: "/v1/push/subscriptions";
+};
+
+export type NotificationsSubscribeErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type NotificationsSubscribeError =
+  NotificationsSubscribeErrors[keyof NotificationsSubscribeErrors];
+
+export type NotificationsSubscribeResponses = {
+  /**
+   * Successful Response
+   */
+  201: PushSubscriptionOut;
+};
+
+export type NotificationsSubscribeResponse =
+  NotificationsSubscribeResponses[keyof NotificationsSubscribeResponses];
+
+export type NotificationsUnsubscribeData = {
+  body?: never;
+  path: {
+    /**
+     * Push Subscription Id
+     */
+    push_subscription_id: string;
+  };
+  query?: never;
+  url: "/v1/push/subscriptions/{push_subscription_id}";
+};
+
+export type NotificationsUnsubscribeErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type NotificationsUnsubscribeError =
+  NotificationsUnsubscribeErrors[keyof NotificationsUnsubscribeErrors];
+
+export type NotificationsUnsubscribeResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type NotificationsUnsubscribeResponse =
+  NotificationsUnsubscribeResponses[keyof NotificationsUnsubscribeResponses];
+
+export type NotificationsGetVapidPublicKeyData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v1/push/vapid-public-key";
+};
+
+export type NotificationsGetVapidPublicKeyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type NotificationsGetVapidPublicKeyError =
+  NotificationsGetVapidPublicKeyErrors[keyof NotificationsGetVapidPublicKeyErrors];
+
+export type NotificationsGetVapidPublicKeyResponses = {
+  /**
+   * Successful Response
+   */
+  200: VapidPublicKeyOut;
+};
+
+export type NotificationsGetVapidPublicKeyResponse =
+  NotificationsGetVapidPublicKeyResponses[keyof NotificationsGetVapidPublicKeyResponses];
+
 export type TasksListRecurrenceData = {
   body?: never;
   path?: never;
@@ -11372,6 +11726,61 @@ export type TasksListRecurrenceResponses = {
 
 export type TasksListRecurrenceResponse =
   TasksListRecurrenceResponses[keyof TasksListRecurrenceResponses];
+
+export type AgentsRecordHumanReplyData = {
+  body: RelayReplyBody;
+  path?: never;
+  query?: never;
+  url: "/v1/relay/replies";
+};
+
+export type AgentsRecordHumanReplyErrors = {
+  /**
+   * Bad request (`idempotency_key_required`, `invalid_cursor`, ...)
+   */
+  400: Problem;
+  /**
+   * Unauthenticated (`unauthenticated`, `session_expired`)
+   */
+  401: Problem;
+  /**
+   * Forbidden (`csrf_failed`, `bad_origin`, `session_required`, `insufficient_scope`, ...)
+   */
+  403: Problem;
+  /**
+   * Not found
+   */
+  404: Problem;
+  /**
+   * Conflict (`stale_version` with `current`)
+   */
+  409: Problem;
+  /**
+   * Body too large
+   */
+  413: Problem;
+  /**
+   * Validation error or `idempotency_mismatch`
+   */
+  422: Problem;
+  /**
+   * Rate limited (`Retry-After`)
+   */
+  429: Problem;
+};
+
+export type AgentsRecordHumanReplyError =
+  AgentsRecordHumanReplyErrors[keyof AgentsRecordHumanReplyErrors];
+
+export type AgentsRecordHumanReplyResponses = {
+  /**
+   * Successful Response
+   */
+  200: RelayReplyOut;
+};
+
+export type AgentsRecordHumanReplyResponse =
+  AgentsRecordHumanReplyResponses[keyof AgentsRecordHumanReplyResponses];
 
 export type TasksListReviewData = {
   body?: never;

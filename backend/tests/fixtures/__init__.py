@@ -500,6 +500,7 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
     DBOS(config=config)
     DBOS.reset_system_database(truncate=True)
     _restore_queue_rows(dbos_sys_db)
+    _private_dbos_random()
     earlier = set(threading.enumerate())  # a destroyed instance's threads may linger
     DBOS.launch()
     # DBOS 3.1 persists queues in the system database, so they register after launch, and
@@ -517,6 +518,27 @@ def dbos(db: DbUrls, dbos_sys_db: DbUrls) -> Iterator[type[DBOS]]:
         _stop_queue_workers(earlier)
         closing.set()
         DBOS.destroy(destroy_registry=False)
+
+
+# DBOS modules whose background threads draw from the `random` module (dbos 3.1.0: the
+# queue workers' polling jitter and partition shuffle, the scheduler's jitter, the system
+# database's retry backoff).
+_DBOS_RANDOM_MODULES = ("dbos._queue", "dbos._scheduler", "dbos._sys_db")
+
+
+def _private_dbos_random() -> None:
+    """Give DBOS's background threads a generator of their own instead of the global one.
+    Hypothesis checks that the global generator's state is unchanged across each draw of a
+    strategy and warns (an error here) when it is not; a queue worker drawing its jitter
+    during a draw made property tests that run beside the `dbos` fixture fail now and
+    then (FlakyFailure, coordinator decision 69). Their draws stay just as random."""
+    import importlib  # noqa: PLC0415
+    import random  # noqa: PLC0415
+
+    for name in _DBOS_RANDOM_MODULES:
+        names = vars(importlib.import_module(name))
+        if names.get("random") is random:  # once per process
+            names["random"] = random.Random()  # noqa: S311  # jitter, not secrets
 
 
 # System database name -> its `dbos.queues` rows (JSON) as register_queues left them.

@@ -1,20 +1,12 @@
 // The review queue (P0-22 route, P1-13 screen). `kind` is a string checked against the
 // registry (R-05), not a closed enum: an unknown kind is dropped. `item` names the item
-// that takes focus first.
+// that takes focus first. The search schema lives in lib/reviewSearch, which the service
+// worker shares (P4-05).
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import * as z from "zod";
 
 import { ReviewQueue } from "../components/review/ReviewQueue";
 import { reviewKindsOptions } from "../lib/review-kinds";
-
-export const reviewSearch = z.object({
-  kind: z
-    .string()
-    .regex(/^[a-z][a-z0-9_]{2,40}$/)
-    .optional()
-    .catch(undefined),
-  item: z.uuid().optional().catch(undefined),
-});
+import { reviewSearch } from "../lib/reviewSearch";
 
 export const Route = createFileRoute("/review")({
   validateSearch: reviewSearch,

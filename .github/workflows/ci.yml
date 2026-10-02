@@ -1,4 +1,5 @@
-# CI: the architecture's nine jobs plus spec-guard, red-proof and traceability (P0-03, P1-04).
+# CI: the architecture's nine jobs (Integration runs as two) plus spec-guard, red-proof and
+# traceability (P0-03, P1-04).
 #
 # Job ids are the required-check names: .github/required-checks.txt lists them and
 # scripts/ci/branch_protection.sh requires them on main. Every job runs on every PR (no
@@ -168,7 +169,7 @@ jobs:
         working-directory: frontend
         run: npm ci --no-audit --no-fund
       # Schemas, generation, versions and the Schemathesis fuzzer (P0-11; it needs Docker
-      # for Postgres, and runs here only: the integration job skips contract tests).
+      # for Postgres, and runs here only: the integration jobs skip contract tests).
       # Spread over the runner's cores, like the unit and integration jobs: the fuzzer
       # alone takes about 40 s, and run one after another the layer no longer fits the
       # 2-minute budget once the storage suites (a MinIO container, 1050-file listings)
@@ -211,7 +212,13 @@ jobs:
           uv run mypy
           uv run pytest -q
 
-  integration:
+  # The integration layer runs as two parallel jobs split by path (Scott decision 65), each
+  # within the 15-minute budget. integration-a runs the modules listed below; integration-b
+  # runs everything else (pyproject's testpaths minus the same list, so a new module or test
+  # folder lands there) and then the serial step. Balanced by measured worker-seconds
+  # (about 1,650 each in #146's probe). T-P0-03-23 checks every test file runs in exactly
+  # one job: change both lists together.
+  integration-a:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -226,7 +233,24 @@ jobs:
           uv sync
           # Pull the service images while xdist starts, so no worker's first test waits on one.
           uv run python -c "from tests._services import CLAMD_IMAGE, MINIO_IMAGE, SFTP_IMAGE; from tests.fixtures import PG_IMAGE, PGBOUNCER_IMAGE; print(PG_IMAGE, PGBOUNCER_IMAGE, MINIO_IMAGE, SFTP_IMAGE, CLAMD_IMAGE)" | xargs -n1 -P5 docker pull -q > /dev/null &
-          uv run pytest -m "integration and not contract and not serial" -n auto --dist worksteal --durations=40
+          uv run pytest -m "integration and not contract and not serial" -n auto --dist worksteal --durations=40 tumnis/modules/agents tumnis/modules/focus tumnis/modules/knowledge tumnis/modules/planning tumnis/modules/projects tumnis/modules/search tumnis/modules/tasks
+
+  integration-b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Integration tests (Postgres 18, DBOS, MinIO, SFTP, clamd)
+        working-directory: backend
+        run: |
+          uv sync
+          # Pull the service images while xdist starts, so no worker's first test waits on one.
+          uv run python -c "from tests._services import CLAMD_IMAGE, MINIO_IMAGE, SFTP_IMAGE; from tests.fixtures import PG_IMAGE, PGBOUNCER_IMAGE; print(PG_IMAGE, PGBOUNCER_IMAGE, MINIO_IMAGE, SFTP_IMAGE, CLAMD_IMAGE)" | xargs -n1 -P5 docker pull -q > /dev/null &
+          uv run pytest -m "integration and not contract and not serial" -n auto --dist worksteal --durations=40 --ignore=tumnis/modules/agents --ignore=tumnis/modules/focus --ignore=tumnis/modules/knowledge --ignore=tumnis/modules/planning --ignore=tumnis/modules/projects --ignore=tumnis/modules/search --ignore=tumnis/modules/tasks
       # Timing budgets measured in one process (T-P1-07-01's label p95): alone, so they
       # measure the product rather than xdist workers sharing the runner's CPUs. Runs even
       # when the parallel step failed; either failing fails this required job.

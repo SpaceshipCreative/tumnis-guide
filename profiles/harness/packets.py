@@ -24,6 +24,15 @@ from typing import Any, Final
 from uuid import NAMESPACE_URL, uuid5
 
 from harness import REPO
+from tumnis.modules.agents.skill_io import (
+    NotifyBatch,
+    NotifyItem,
+    NotifyProject,
+    NotifyRequest,
+    NotifyTask,
+)
+from tumnis.modules.focus.rules import EventKind, Level, attribution
+from tumnis.modules.notifications.rules import ReviewItemLite, deep_link_for
 from tumnis.modules.projects.rules import ALLOWED_DEFAULT, GATED_DEFAULT
 
 GOLDEN: Final = REPO / "backend" / "tumnis" / "modules" / "agents" / "tests" / "contract" / "golden"
@@ -32,6 +41,11 @@ REDACTED: Final = "redacted"  # the golden packets' task token never reaches a c
 TASK_SCHEMA: Final = "result/task_result/1"  # what production names for a task run
 DIGEST_SCHEMA: Final[Mapping[str, Any]] = {"family": "harness", "name": "digest_run", "version": 1}
 INSTRUCTION: Final = "Use the skill"
+# A stuck packet (P4-02) as packet_builder emits it: one first step per run, the task's
+# newest comments and the first step's limits in the body.
+STUCK_TASKS_PER_RUN: Final = 1
+STUCK_RECENT_COMMENTS: Final = 5
+STUCK_MAX_MINUTES: Final = 10
 
 
 def render(head: str, body: Mapping[str, Any]) -> str:
@@ -55,6 +69,7 @@ class TaskSpec:
     label: str = "ai"
     estimate_minutes: int | None = None
     golden: str = "plain_ai"
+    kind: str = "task"  # "stuck" adds the stuck body fields (P4-02)
 
 
 @dataclass(frozen=True)
@@ -66,11 +81,68 @@ class DigestSpec:
     scope: str
 
 
+@dataclass(frozen=True)
+class NotifySpec:
+    """One notify packet for the master's focus skill (P2-16): a focus event as Tumnis
+    hands it over (its kind, level, rule attribution and one-tap answers), the task it is
+    about and, for a detour's return question (P4-01), the task to return to."""
+
+    kind: EventKind
+    level: Level
+    title: str
+    first_action: str | None
+    answers: tuple[str, ...] = ()
+    return_to: str | None = None
+    project: str = "Acme site"
+    skill: str = "focus"
+
+
+@dataclass(frozen=True)
+class NotifyItemSpec:
+    """One notify packet for a review item that waits on the person (P2-16), its body built
+    with agents' `NotifyRequest`, as `deliver_notification` builds it: the item's kind,
+    the task it is about and, for a question, its prompt and choices."""
+
+    kind: str
+    title: str
+    prompt: str | None = None
+    choices: tuple[str, ...] = ()
+    project: str = "Acme site"
+    skill: str = "focus"
+
+
+@dataclass(frozen=True)
+class NotifyBatchSpec:
+    """One notify packet for what Quiet held while a task was In progress (P2-16)."""
+
+    count: int
+    skill: str = "focus"
+
+
+@dataclass(frozen=True)
+class RelaySpec:
+    """One message from the person in the chat channel for the master's relay skill
+    (P2-16), and the earlier channel message it replies to, if any."""
+
+    content: str
+    reply_to: str | None = None
+    skill: str = "relay"
+
+
+Spec = TaskSpec | DigestSpec | NotifySpec | NotifyItemSpec | NotifyBatchSpec | RelaySpec
+
+
 def _gated(skill: str, title: str, acceptance: str) -> TaskSpec:
     return TaskSpec(skill=skill, title=title, acceptance=acceptance, golden="path_location")
 
 
-SPECS: Final[Mapping[str, TaskSpec | DigestSpec]] = {
+PROPOSAL: Final = "Write the spring proposal"
+PROPOSAL_STEP: Final = "Open the proposal template and fill in the client's name"
+CHECK_IN_ANSWERS: Final = ("still_on_it", "switched", "stuck", "snooze")  # FR-10.4
+QUESTION_ID: Final = _id("relay_question_answer", "item")
+APPROVAL_ID: Final = _id("relay_approval_reply", "item")
+
+SPECS: Final[Mapping[str, Spec]] = {
     "orchestrate_landing_page": TaskSpec(
         skill="orchestrate",
         title="Build the spring launch landing page",
@@ -137,10 +209,69 @@ SPECS: Final[Mapping[str, TaskSpec | DigestSpec]] = {
         label="hybrid",
         estimate_minutes=60,
     ),
+    "stuck_invoice": TaskSpec(
+        skill="stuck",
+        title="Send the March invoice to Acme",
+        acceptance="Acme has the March invoice, with the hours from the timesheet.",
+        label="human",
+        estimate_minutes=30,
+        kind="stuck",
+    ),
+    "stuck_faq_draft": TaskSpec(
+        skill="stuck",
+        title="Draft the FAQ answers from last week's support questions",
+        acceptance=(
+            "A draft FAQ answers the five most asked support questions from last week, "
+            "ready for the person to review."
+        ),
+        kind="stuck",
+    ),
     "project_digest": DigestSpec(
         skill="project-digest", profile="project-template", scope="project"
     ),
     "workspace_digest": DigestSpec(skill="workspace-digest", profile="master", scope="workspace"),
+    # P2-16: the master's focus messages and the chat channel's relay.
+    "focus_block_start": NotifySpec(
+        kind="block_start", level="nudge", title=PROPOSAL, first_action=PROPOSAL_STEP
+    ),
+    "focus_check_in": NotifySpec(
+        kind="check_in_due",
+        level="coach",
+        title=PROPOSAL,
+        first_action=PROPOSAL_STEP,
+        answers=CHECK_IN_ANSWERS,
+    ),
+    "focus_detour": NotifySpec(  # P4-01: a detour captured at Guardrail asks to return
+        kind="switched",
+        level="guardrail",
+        title="Reply to the venue about the booking",
+        first_action=None,
+        answers=("return", "stay"),
+        return_to=PROPOSAL,
+    ),
+    "focus_question_item": NotifyItemSpec(  # an agent's question, answerable in the chat
+        kind="question",
+        title=PROPOSAL,
+        prompt="Which client name goes on the cover page?",
+        choices=("Acme Ltd", "Acme Group"),
+    ),
+    "focus_batch": NotifyBatchSpec(count=3),  # released at the next break, at Quiet
+    "relay_kill_command": RelaySpec(content="stop all agents"),
+    "relay_question_answer": RelaySpec(
+        content="Spring",
+        reply_to=(
+            "Question from the Acme site agent: which name should the launch campaign "
+            f"use? Answers: Spring, Summer\nref question:{QUESTION_ID}"
+        ),
+    ),
+    "relay_approval_reply": RelaySpec(
+        content="approve",
+        reply_to=(
+            "Approval needed on Acme site: merge PR #12 into main. Decide it in Tumnis: "
+            f"https://tumnis.example/review?item={APPROVAL_ID}\nref approval:{APPROVAL_ID}"
+        ),
+    ),
+    "relay_chat_message": RelaySpec(content="FYI, this came in today. Nothing to do yet."),
 }
 
 
@@ -152,22 +283,30 @@ def _golden(name: str) -> dict[str, Any]:
 def task_packet(name: str, spec: TaskSpec) -> dict[str, Any]:
     golden = _golden(spec.golden)
     packet = copy.deepcopy(golden)
+    stuck = spec.kind == "stuck"
     policy = {
         **golden["policy"],
         "gated": list(GATED_DEFAULT),
         "allowed": list(ALLOWED_DEFAULT),
     }
+    if stuck:
+        policy["max_tasks_per_run"] = STUCK_TASKS_PER_RUN
     body = copy.deepcopy(golden["body"])
     task = body["task"]
     task.update(label=spec.label, estimate_minutes=spec.estimate_minutes)
     task["text"]["rendered"] = f"{spec.title}\n\nAcceptance criteria:\n{spec.acceptance}"
     run_id = _id(name, "run")
-    data = {"kind": golden["kind"], "run_id": run_id, "tainted": False, "policy": policy, **body}
+    kind = spec.kind if stuck else golden["kind"]
+    data = {"kind": kind, "run_id": run_id, "tainted": False, "policy": policy, **body}
+    if stuck:
+        data["recent_comments"] = task["comments"][-STUCK_RECENT_COMMENTS:]
+        data["stuck_step"] = {"max_minutes": STUCK_MAX_MINUTES}
     head = golden["prompt_text"].split(INSTRUCTION, 1)[0]
     instruction = (
         f"{INSTRUCTION} {spec.skill}. Reply with one JSON object matching {TASK_SCHEMA}.\n\n"
     )
     packet.update(
+        kind=kind,
         run_id=run_id,
         correlation_id=f"run:{run_id}",
         skill=spec.skill,
@@ -217,9 +356,129 @@ def digest_packet(name: str, spec: DigestSpec) -> dict[str, Any]:
     }
 
 
+MASTER_PROFILE: Final = _id("master", "profile")
+NOTIFY_SCHEMA: Final[Mapping[str, Any]] = {
+    "family": "harness",
+    "name": "focus_message",
+    "version": 1,
+}
+RELAY_SCHEMA: Final[Mapping[str, Any]] = {"family": "harness", "name": "relay_reply", "version": 1}
+NOTIFY_TIMEOUT_S: Final = 60  # the plan's notify run cap
+FIRED_AT: Final = "2026-03-09T09:00:00Z"
+CADENCE: Final = "25 min cadence"  # focus.rules DEFAULT_CADENCE_MIN, as attribution shows it
+
+
+def _schema_name(schema: Mapping[str, Any]) -> str:
+    return f"{schema['family']}/{schema['name']}/{schema['version']}"
+
+
+def _channel_id(name: str, what: str) -> str:
+    """A chat message id shaped like a Discord snowflake (19 digits)."""
+    return str(10**18 + uuid5(NAMESPACE_URL, f"tumnis:case-packet:{name}:{what}").int % 10**18)
+
+
+def _master_packet(
+    name: str,
+    spec: NotifySpec | NotifyItemSpec | NotifyBatchSpec | RelaySpec,
+    head: str,
+    body: dict[str, Any],
+    schema: Any,
+) -> dict[str, Any]:
+    run_id = _id(name, "run")
+    head += f"{INSTRUCTION} {spec.skill}. Reply with one JSON object matching "
+    head += f"{_schema_name(schema)}.\n\n"
+    return {
+        "schema_version": 1,
+        "kind": body["kind"],
+        "run_id": run_id,
+        "profile_id": MASTER_PROFILE,
+        "skill": spec.skill,
+        "output_schema": dict(schema),
+        "correlation_id": f"run:{run_id}",
+        "timeout_s": NOTIFY_TIMEOUT_S,
+        "prompt_text": render(head, body),
+        "body": body,
+        "tainted": False,
+    }
+
+
+def notify_packet(name: str, spec: NotifySpec) -> dict[str, Any]:
+    """A notify run's packet (P2-16): the event, its task and project, the level and rule
+    attribution (focus.rules.attribution) and the one-tap answers the message offers."""
+    rule = attribution(spec.level, spec.kind, CADENCE if spec.kind == "check_in_due" else None)
+    body: dict[str, Any] = {
+        "kind": "notify",
+        "event": {
+            "id": _id(name, "event"),
+            "kind": spec.kind,
+            "level": spec.level,
+            "rule": rule,
+            "fired_at": FIRED_AT,
+        },
+        "task": {"id": _id(name, "task"), "title": spec.title, "first_action": spec.first_action},
+        "project": {"id": _id(spec.project, "project"), "name": spec.project},
+        "return_to": None
+        if spec.return_to is None
+        else {"id": _id(name, "return-to"), "title": spec.return_to},
+        "answers": list(spec.answers),
+    }
+    head = "Tumnis has a focus message for the person.\n\n"
+    return _master_packet(name, spec, head, body, NOTIFY_SCHEMA)
+
+
+def notify_item_packet(name: str, spec: NotifyItemSpec | NotifyBatchSpec) -> dict[str, Any]:
+    """A notify run's packet for a review item or a batch (P2-16), its body exactly as
+    agents' `NotifyRequest` writes it."""
+    if isinstance(spec, NotifyBatchSpec):
+        request = NotifyRequest(batch=NotifyBatch(count=spec.count))
+    else:
+        item_id = _id(name, "item")
+        task = NotifyTask(id=_id(name, "task"), title=spec.title)
+        item = NotifyItem(
+            id=item_id,
+            kind=spec.kind,
+            title=spec.title,
+            link=deep_link_for(ReviewItemLite(id=item_id, kind=spec.kind)),
+            prompt=spec.prompt,
+            choices=list(spec.choices),
+        )
+        project = NotifyProject(id=_id(spec.project, "project"), name=spec.project)
+        request = NotifyRequest(item=item, task=task, project=project)
+    head = "Tumnis has a focus message for the person.\n\n"
+    return _master_packet(name, spec, head, request.model_dump(mode="json"), NOTIFY_SCHEMA)
+
+
+def relay_packet(name: str, spec: RelaySpec) -> dict[str, Any]:
+    """A message from the person in the chat channel (P2-16), as the harness hands it to
+    the relay skill; in production it arrives as chat in the Discord gateway session."""
+    reply_to = None
+    if spec.reply_to is not None:
+        reply_to = {"id": _channel_id(name, "replied"), "author": "tumnis-master"}
+        reply_to["content"] = spec.reply_to
+    body: dict[str, Any] = {
+        "kind": "relay",
+        "message": {
+            "id": _channel_id(name, "message"),
+            "author": "person",
+            "content": spec.content,
+            "reply_to": reply_to,
+        },
+    }
+    head = "A message from the person arrived in the chat channel.\n\n"
+    return _master_packet(name, spec, head, body, RELAY_SCHEMA)
+
+
 def build(name: str) -> dict[str, Any]:
     spec = SPECS[name]
-    return task_packet(name, spec) if isinstance(spec, TaskSpec) else digest_packet(name, spec)
+    if isinstance(spec, TaskSpec):
+        return task_packet(name, spec)
+    if isinstance(spec, NotifySpec):
+        return notify_packet(name, spec)
+    if isinstance(spec, NotifyItemSpec | NotifyBatchSpec):
+        return notify_item_packet(name, spec)
+    if isinstance(spec, RelaySpec):
+        return relay_packet(name, spec)
+    return digest_packet(name, spec)
 
 
 def path_of(name: str) -> Path:

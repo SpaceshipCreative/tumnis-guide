@@ -453,23 +453,6 @@ export const zGuardrailOut = z.object({
 });
 
 /**
- * FocusCurrentOut
- *
- * What the focus bar shows: the level in force, the open session and today's
- * messages, oldest first; at Guardrail also the one-task card's tasks, and an open
- * detour's return question (P4-01).
- */
-export const zFocusCurrentOut = z.object({
-  detour: zDetourOut.nullable(),
-  guardrail: zGuardrailOut.nullable(),
-  level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
-  messages: z.array(zFocusMessageOut),
-  override_level: z.enum(["quiet", "nudge", "coach", "guardrail"]).nullable(),
-  session: zFocusSessionOut.nullable(),
-  workspace_level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
-});
-
-/**
  * Health
  */
 export const zHealth = z.enum(["blocked", "at_risk", "on_track"]);
@@ -1236,6 +1219,33 @@ export const zPurgeOut = z.object({
 });
 
 /**
+ * PushKeysIn
+ */
+export const zPushKeysIn = z.object({
+  auth: z.string().min(1).max(64),
+  p256dh: z.string().min(1).max(128),
+});
+
+/**
+ * PushSubscriptionIn
+ *
+ * A browser's `PushSubscription.toJSON()`: its endpoint and keys.
+ */
+export const zPushSubscriptionIn = z.object({
+  endpoint: z.string().min(1).max(2048),
+  keys: zPushKeysIn,
+});
+
+/**
+ * PushSubscriptionOut
+ */
+export const zPushSubscriptionOut = z.object({
+  created_at: z.iso.datetime(),
+  endpoint: z.string(),
+  id: z.uuid(),
+});
+
+/**
  * Quota
  *
  * Bytes the workspace's knowledge uses (current file versions plus text entries,
@@ -1292,6 +1302,35 @@ export const zRecurrenceOut = z.object({
 export const zPageRecurrenceOut = z.object({
   items: z.array(zRecurrenceOut),
   next_cursor: z.string().nullable(),
+});
+
+/**
+ * RelayReplyBody
+ *
+ * The REST twin's body: the item answered, the person's answer and the chat message
+ * it was typed in.
+ */
+export const zRelayReplyBody = z.object({
+  answer: z.string().min(1).max(4000).regex(/\S/),
+  channel_message_id: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[A-Za-z0-9_.:-]+$/),
+  item_id: z.uuid(),
+  item_kind: z.enum(["question", "focus", "approval", "result"]),
+  schema_version: z.int().nullish(),
+});
+
+/**
+ * RelayReplyOut
+ */
+export const zRelayReplyOut = z.object({
+  answer: z.string(),
+  item_id: z.uuid(),
+  item_kind: z.enum(["question", "focus"]),
+  schema_version: z.literal(1).optional().default(1),
+  tainted: z.boolean().optional().default(false),
 });
 
 /**
@@ -1831,6 +1870,55 @@ export const zStatusBody = z.object({
   schema_version: z.int().nullish(),
   to: zStatus,
   version: z.int().gte(0).lte(2147483647),
+});
+
+/**
+ * StuckStepOut
+ */
+export const zStuckStepOut = z.object({
+  estimate_minutes: z.int().nullable(),
+  label: zLabel.nullable(),
+  task_id: z.uuid(),
+  title: z.string(),
+});
+
+/**
+ * NextStepOut
+ *
+ * What the focus bar shows after "Stuck" (FR-10.5): `working` while the project agent
+ * works on a first step; `split` with the subtask it posted (`step`); `took_step` with
+ * its report (`summary`); `fallback` when no answer came within the deadline or the agent
+ * is down: the task's `first_action` with a `timer_minutes` timer.
+ */
+export const zNextStepOut = z.object({
+  fallback_at: z.iso.datetime().nullable(),
+  first_action: z.string().nullable(),
+  focus_event_id: z.uuid(),
+  requested_at: z.iso.datetime(),
+  run_id: z.uuid().nullable(),
+  state: z.enum(["working", "split", "took_step", "fallback"]),
+  step: zStuckStepOut.nullable(),
+  summary: z.string().nullable(),
+  task_id: z.uuid(),
+  timer_minutes: z.int().optional().default(10),
+});
+
+/**
+ * FocusCurrentOut
+ *
+ * What the focus bar shows: the level in force, the open session and today's
+ * messages, oldest first; at Guardrail also the one-task card's tasks, and an open
+ * detour's return question (P4-01).
+ */
+export const zFocusCurrentOut = z.object({
+  detour: zDetourOut.nullable(),
+  guardrail: zGuardrailOut.nullable(),
+  level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
+  messages: z.array(zFocusMessageOut),
+  next_step: zNextStepOut.nullable(),
+  override_level: z.enum(["quiet", "nudge", "coach", "guardrail"]).nullable(),
+  session: zFocusSessionOut.nullable(),
+  workspace_level: z.enum(["quiet", "nudge", "coach", "guardrail"]),
 });
 
 /**
@@ -2402,6 +2490,13 @@ export const zUsageRow = z.object({
   counter: z.string(),
   day: z.iso.date(),
   value: z.int(),
+});
+
+/**
+ * VapidPublicKeyOut
+ */
+export const zVapidPublicKeyOut = z.object({
+  public_key: z.string(),
 });
 
 /**
@@ -3485,6 +3580,27 @@ export const zPurgesPurgeBody = zPurgeIn;
  */
 export const zPurgesPurgeResponse = zPurgeOut;
 
+export const zNotificationsSubscribeBody = zPushSubscriptionIn;
+
+/**
+ * Successful Response
+ */
+export const zNotificationsSubscribeResponse = zPushSubscriptionOut;
+
+export const zNotificationsUnsubscribePath = z.object({
+  push_subscription_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zNotificationsUnsubscribeResponse = z.void();
+
+/**
+ * Successful Response
+ */
+export const zNotificationsGetVapidPublicKeyResponse = zVapidPublicKeyOut;
+
 export const zTasksListRecurrenceQuery = z.object({
   project_id: z.uuid().nullish(),
   cursor: z.string().max(2048).nullish(),
@@ -3495,6 +3611,13 @@ export const zTasksListRecurrenceQuery = z.object({
  * Successful Response
  */
 export const zTasksListRecurrenceResponse = zPageRecurrenceOut;
+
+export const zAgentsRecordHumanReplyBody = zRelayReplyBody;
+
+/**
+ * Successful Response
+ */
+export const zAgentsRecordHumanReplyResponse = zRelayReplyOut;
 
 export const zTasksListReviewQuery = z.object({
   kind: z.string().max(41).nullish(),

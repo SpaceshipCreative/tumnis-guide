@@ -1,0 +1,30 @@
+# T-P4-02-08 (FR-10.5): stuck on a Human task, the agent splits off one first step for the
+# person, at most 10 minutes, under the task, then reports it.
+id: stuck-split
+profile: project-template
+skill: stuck
+input: ../../fixtures/packets/stuck_invoice.json
+output_schema: {tool: post_result}
+meta: {test_id: T-P4-02-08, req: [FR-10.5], wp: P4-02, xfail: "spec:P4-02"}
+mock:
+  responses:
+    create_task: {from: seed}
+    request_approval: {default: approved}
+expect:
+  calls:
+    - tool: create_task
+      min: 1
+      max: 1
+      each:
+        - {path: "$.parent_id", equals_input: "$.body.task.id"}
+        - {path: "$.project_id", equals_input: "$.body.project.id"}
+        - {path: "$.label", in: [human, hybrid]}
+        - {path: "$.estimate_minutes", type: integer, between: [1, 10]}
+        - {path: "$.first_action", type: string, nonempty: true}
+    - tool: post_result
+      each: [{path: "$.outcome", equals: done}]
+  forbid:
+    - {tool: update_task_status}
+  json:
+    - {path: "$.outcome", equals: done}
+    - {path: "$.summary", type: string, nonempty: true}

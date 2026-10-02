@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "kind": "notify",
+  "run_id": "fae036c8-9f85-5606-b240-de174085ca99",
+  "profile_id": "a118b87c-5c5b-5ad5-902c-e853237ee3de",
+  "skill": "focus",
+  "output_schema": {
+    "family": "harness",
+    "name": "focus_message",
+    "version": 1
+  },
+  "correlation_id": "run:fae036c8-9f85-5606-b240-de174085ca99",
+  "timeout_s": 60,
+  "prompt_text": "Tumnis has a focus message for the person.\n\nUse the skill focus. Reply with one JSON object matching harness/focus_message/1.\n\n<packet>\n{\n  \"schema_version\": 1,\n  \"kind\": \"notify\",\n  \"event\": null,\n  \"item\": {\n    \"id\": \"5c35eb86-807e-5966-891d-f170baed2d90\",\n    \"kind\": \"question\",\n    \"title\": \"Write the spring proposal\",\n    \"link\": \"/review?kind=question&item=5c35eb86-807e-5966-891d-f170baed2d90\",\n    \"prompt\": \"Which client name goes on the cover page?\",\n    \"choices\": [\n      \"Acme Ltd\",\n      \"Acme Group\"\n    ]\n  },\n  \"batch\": null,\n  \"task\": {\n    \"id\": \"587bd292-877b-5391-8956-f56b79af17a4\",\n    \"title\": \"Write the spring proposal\",\n    \"first_action\": null\n  },\n  \"project\": {\n    \"id\": \"784f329e-4863-5fdc-8bf1-0d58e13420c8\",\n    \"name\": \"Acme site\"\n  },\n  \"return_to\": null,\n  \"answers\": []\n}\n</packet>\n",
+  "body": {
+    "schema_version": 1,
+    "kind": "notify",
+    "event": null,
+    "item": {
+      "id": "5c35eb86-807e-5966-891d-f170baed2d90",
+      "kind": "question",
+      "title": "Write the spring proposal",
+      "link": "/review?kind=question&item=5c35eb86-807e-5966-891d-f170baed2d90",
+      "prompt": "Which client name goes on the cover page?",
+      "choices": [
+        "Acme Ltd",
+        "Acme Group"
+      ]
+    },
+    "batch": null,
+    "task": {
+      "id": "587bd292-877b-5391-8956-f56b79af17a4",
+      "title": "Write the spring proposal",
+      "first_action": null
+    },
+    "project": {
+      "id": "784f329e-4863-5fdc-8bf1-0d58e13420c8",
+      "name": "Acme site"
+    },
+    "return_to": null,
+    "answers": []
+  },
+  "tainted": false
+}

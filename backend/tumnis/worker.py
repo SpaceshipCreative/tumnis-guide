@@ -23,6 +23,7 @@ SYNC_WORKER_CONCURRENCY = 4  # plan default
 GITHUB_QUEUE = "github"  # pull request status reads (P2-13); its own queue: limiters are per queue
 GITHUB_REFRESHES_PER_MINUTE = 15  # each refresh makes four requests, 304s included
 FOCUS_QUEUE = "focus"  # focus_plan and focus_session (P2-15); each parks on its next instant
+NOTIFICATIONS_QUEUE = "notifications"  # browser pushes (P4-05); each retries on its own
 EXTRACT_QUEUE = "extract"  # upload scanning and extraction (P1-16); only `worker-extract` listens
 EMBED_QUEUE = "embed"  # re-embedding on a model change (P3-10; knowledge.rules.EMBED_QUEUE)
 EMBED_WORKER_CONCURRENCY = 2  # plan default
@@ -53,6 +54,7 @@ def main_queues() -> list[str]:
         _projects().ARCHIVE_QUEUE,
         FOCUS_QUEUE,
         EMBED_QUEUE,
+        NOTIFICATIONS_QUEUE,
     ]
 
 
@@ -93,6 +95,8 @@ def register_queues() -> None:
     DBOS.register_queue(FOCUS_QUEUE)
     # Re-embedding (P3-10): two batches at a time, so a build never starves the embedder.
     DBOS.register_queue(EMBED_QUEUE, worker_concurrency=EMBED_WORKER_CONCURRENCY)
+    # Browser pushes (P4-05): one workflow per notification, waiting between its retries.
+    DBOS.register_queue(NOTIFICATIONS_QUEUE)
 
 
 def register_schedules(settings: Settings) -> None:
@@ -172,6 +176,7 @@ def configure_agents(settings: Settings) -> None:
         active_cap_seconds=settings.agents.run_active_cap_seconds,
         wall_clock_ceiling_seconds=settings.agents.run_wall_clock_ceiling_seconds,
     )
+    agents.configure_stuck(deadline_seconds=settings.agents.stuck_deadline_seconds)
 
 
 def configure_folder_sync(settings: Settings) -> None:

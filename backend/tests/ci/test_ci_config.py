@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shlex
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +22,8 @@ BUDGETS = {
     "lint": 2,
     "unit": 4,
     "contract": 3,
-    "integration": 15,
+    "integration-a": 15,  # two parallel jobs split by path (Scott decision 65)
+    "integration-b": 15,
     "daemon": 3,  # runner daemon lint, types and tests (P1-04)
     "e2e": 10,
     "skills": 5,
@@ -51,6 +54,95 @@ def test_every_ci_job_is_required_and_budgeted() -> None:
     for name, job in jobs.items():
         assert "name" not in job, f"{name}: a display name would change the check name"
         assert job.get("timeout-minutes") == BUDGETS[name], name
+
+
+PYPROJECT = REPO / "backend" / "pyproject.toml"
+INTEGRATION = "integration and not contract"
+# pytest options that take their value as the next word.
+_VALUE_OPTIONS = {"-m", "-n", "-k", "-p", "--dist", "--ignore", "--durations"}
+
+
+def _pytest_steps() -> list[tuple[str, str, set[Path], set[Path]]]:
+    """(job, -m expression, selected roots, ignored roots) for every `pytest` line in ci.yml.
+
+    A command without paths selects pyproject's testpaths, as pytest does when it runs
+    from the rootdir (every pytest step runs in backend/).
+    """
+    backend = REPO / "backend"
+    pytest_ini = tomllib.loads(PYPROJECT.read_text())["tool"]["pytest"]["ini_options"]
+    jobs: dict[str, dict[str, Any]] = yaml.safe_load(CI_YML.read_text())["jobs"]
+    found = []
+    for job_name, job in jobs.items():
+        for step in job.get("steps", []):
+            for line in str(step.get("run", "")).splitlines():
+                if not line.strip().startswith("uv run pytest "):
+                    continue
+                words = shlex.split(line, comments=True)
+                marker, paths, ignored = "", set(), set()
+                rest = iter(words[3:])
+                for word in rest:
+                    option, _, value = word.partition("=")
+                    if option in _VALUE_OPTIONS and not value:
+                        value = next(rest)
+                    if option == "-m":
+                        marker = value
+                    elif option == "--ignore":
+                        ignored.add((backend / value).resolve())
+                    elif not word.startswith("-"):
+                        paths.add((backend / word).resolve())
+                roots = paths or {(backend / p).resolve() for p in pytest_ini["testpaths"]}
+                found.append((job_name, marker, roots, ignored))
+    return found
+
+
+def _test_files() -> set[Path]:
+    pytest_ini = tomllib.loads(PYPROJECT.read_text())["tool"]["pytest"]["ini_options"]
+    files: set[Path] = set()
+    for testpath in pytest_ini["testpaths"]:
+        root = (REPO / "backend" / testpath).resolve()
+        for pattern in ("test_*.py", "*_test.py"):
+            files.update(
+                f
+                for f in root.rglob(pattern)
+                if not {".venv", "node_modules", "__pycache__"} & set(f.parts)
+            )
+    return files
+
+
+def _selects(roots: set[Path], ignored: set[Path], file: Path) -> bool:
+    def under(parents: set[Path]) -> bool:
+        return any(file == p or p in file.parents for p in parents)
+
+    return under(roots) and not under(ignored)
+
+
+@pytest.mark.req("Quality rule 1", "Quality rule 2")
+@pytest.mark.wp("P0-03")
+def test_integration_jobs_run_every_test_file_once() -> None:
+    """T-P0-03-23
+    Scott decision 65: the integration layer runs as two parallel jobs split by path, and
+    the serial (timing budget) step runs in one of them. Every test file under testpaths
+    is selected by exactly one parallel step and exactly one serial step, so a new module
+    cannot fall out of both jobs or run twice.
+    """
+    steps = [s for s in _pytest_steps() if s[1].startswith(INTEGRATION)]
+    parallel = [s for s in steps if s[1] == f"{INTEGRATION} and not serial"]
+    serial = [s for s in steps if s[1] == f"{INTEGRATION} and serial"]
+
+    assert len(steps) == len(parallel) + len(serial), [s[:2] for s in steps]
+    assert sorted(job for job, *_ in parallel) == ["integration-a", "integration-b"]
+    assert len(serial) == 1, "the serial step runs in exactly one integration job"
+    assert serial[0][0] in {"integration-a", "integration-b"}
+    for job, _, roots, ignored in steps:
+        for path in roots | ignored:
+            assert path.exists(), f"{job}: {path} does not exist"
+
+    files = _test_files()
+    assert files
+    for stage in (parallel, serial):
+        for file in sorted(files):
+            jobs = [job for job, _, roots, ignored in stage if _selects(roots, ignored, file)]
+            assert len(jobs) == 1, f"{file.relative_to(REPO)} runs in {jobs or 'no job'}"
 
 
 @pytest.fixture(autouse=True)

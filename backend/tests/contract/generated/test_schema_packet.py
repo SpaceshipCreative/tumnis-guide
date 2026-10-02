@@ -13,6 +13,12 @@ from tumnis.core.schemas import parse_versioned
 CASES = [
     (
         "packet",
+        "notify_request",
+        1,
+        "backend/tests/contract/fixtures/packet/notify_request/v1.json",
+    ),
+    (
+        "packet",
         "task_packet",
         1,
         "backend/tests/contract/fixtures/packet/task_packet/v1.json",

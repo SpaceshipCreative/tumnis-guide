@@ -88,6 +88,39 @@ async def tenant_session(ctx: WorkspaceContext) -> AsyncIterator[AsyncSession]:
             yield session
 
 
+_ACTOR_NOW = text("SELECT app.current_workspace_id() AS ws, app.current_actor() AS actor")
+
+
+@asynccontextmanager
+async def act_as(session: AsyncSession, actor: ActorRef) -> AsyncIterator[WorkspaceContext]:
+    """Inside the block, what `session` writes is `actor`'s: the transaction's actor (and
+    `app.user_id`) and the context variable are switched, then put back, in the same
+    transaction. For a person's answer that an agent relays (P2-16: the master records a
+    reply typed in its chat channel), so it leaves the rows and events the person's own
+    answer in the app leaves; whatever the caller writes after the block is the caller's
+    again. The workspace stays the transaction's."""
+    before = (await session.execute(_ACTOR_NOW)).one()
+    if before.ws is None:
+        raise RuntimeError("act_as outside a workspace context")
+    ctx = WorkspaceContext(before.ws, actor)
+    previous = WorkspaceContext(before.ws, ActorRef(str(before.actor)))
+    await session.execute(
+        _APPLY, {"ws": str(ctx.workspace_id), "actor": str(actor), "user_id": _user_id(ctx)}
+    )
+    try:
+        with use_workspace(ctx):
+            yield ctx
+    finally:
+        await session.execute(
+            _APPLY,
+            {
+                "ws": str(previous.workspace_id),
+                "actor": str(previous.actor),
+                "user_id": _user_id(previous),
+            },
+        )
+
+
 @asynccontextmanager
 async def session_for(
     ctx: WorkspaceContext, session: AsyncSession | None

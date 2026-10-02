@@ -618,7 +618,9 @@ async def prepare_run(workspace_id: str, run_id: str) -> Prepared:
             )
         )
         actor = _requester(row["created_by"])
-        if actor is not None and task.status in ("backlog", "today"):
+        # A stuck run (P4-02) works on one step for the person: the task keeps its status.
+        stuck = row["kind"] == RunKind.STUCK.value
+        if actor is not None and not stuck and task.status in ("backlog", "today"):
             await tasks.change_status(
                 s, actor, task.id, tasks.Status.IN_PROGRESS, task.version, now=now
             )
@@ -885,7 +887,8 @@ async def start_dispatch(
     and DBOS refuses to start a workflow from one."""
 
     async def enqueue() -> None:
-        options = SetEnqueueOptions(queue_partition_key=str(project_id), priority=priority)
+        normal = api.RUN_PRIORITY_NORMAL if priority is None else priority  # 0 would jump
+        options = SetEnqueueOptions(queue_partition_key=str(project_id), priority=normal)
         with SetWorkflowID(dispatch_workflow_id(run_id)), options:
             await DBOS.enqueue_workflow_async(
                 RUNS_QUEUE, dispatch_run, str(workspace_id), str(run_id)
@@ -1987,7 +1990,9 @@ async def enrich_task(workspace_id: str, task_id: str, only: list[str] | None = 
         # Enqueued from the workflow, so a replay finds its child rather than adding one.
         with (
             SetWorkflowID(enrich_workflow_id(UUID(task_id), f"estimate:{run_id}")),
-            SetEnqueueOptions(queue_partition_key=str(snap.project_id)),
+            SetEnqueueOptions(
+                queue_partition_key=str(snap.project_id), priority=api.RUN_PRIORITY_NORMAL
+            ),
         ):
             await DBOS.enqueue_workflow_async(
                 RUNS_QUEUE, enrich_task, workspace_id, task_id, [ESTIMATE]
@@ -2015,7 +2020,9 @@ async def start_enrichment(
     async def enqueue() -> None:
         with (
             SetWorkflowID(enrich_workflow_id(task_id, key)),
-            SetEnqueueOptions(queue_partition_key=str(project_id)),
+            SetEnqueueOptions(
+                queue_partition_key=str(project_id), priority=api.RUN_PRIORITY_NORMAL
+            ),
         ):
             await DBOS.enqueue_workflow_async(
                 RUNS_QUEUE, enrich_task, str(workspace_id), str(task_id), only
@@ -2130,6 +2137,79 @@ async def reconcile_runs(scheduled_at: datetime, context: Any) -> list[str]:
             if await fail_orphan_step(workspace_id, workflow.workflow_id, reason):
                 ended.append(workflow.workflow_id)
     return ended
+
+
+# --- Stuck handling (P4-02, FR-10.5, R-30) -----------------------------------------------------
+#
+# `handle_stuck` runs on the `human` queue (no limit: it parks for an answer) under the id
+# `stuck:<focus event id>`, so a redelivered event or a second tap on the same check-in
+# starts nothing new (REL-2). Its step asks for the stuck run (`api.request_stuck_run`),
+# then the workflow waits on topic `stuck_outcome` for the run's answer (sent by the
+# `stuck.resolved` subscriber) for `api.stuck_deadline_s()`; with none, the focus bar falls
+# back to the task's first action. A late answer still updates the request itself.
+
+
+@DBOS.step()
+async def request_stuck_run_step(
+    workspace_id: str, task_id: str, focus_event_id: str, requested_at: str, actor: str
+) -> dict[str, Any]:
+    """The stuck run and its request (`api.request_stuck_run`), as the person who tapped."""
+    ctx = WorkspaceContext(UUID(workspace_id), ActorRef(actor))
+    start = await api.request_stuck_run(
+        ctx,
+        UUID(task_id),
+        UUID(focus_event_id),
+        requested_at=datetime.fromisoformat(requested_at),
+    )
+    return start.model_dump(mode="json")
+
+
+@DBOS.step()
+async def mark_fallback_step(workspace_id: str, focus_event_id: str) -> bool:
+    """No answer within the deadline: the focus bar shows the fallback."""
+    ctx = WorkspaceContext(UUID(workspace_id), SYSTEM_ACTOR)
+    return await api.mark_stuck_fallback(ctx, UUID(focus_event_id), now=SystemClock().now())
+
+
+@DBOS.workflow(name="handle_stuck")
+async def handle_stuck(
+    workspace_id: str, task_id: str, focus_event_id: str, requested_at: str, actor: str
+) -> str:
+    """The person tapped "Stuck" (FR-10.5): the project agent's stuck run, then its answer within
+    the deadline (`split` or `took_step`), else `pending` with the fallback shown. A request
+    that fell back at once (no agent to ask) answers `fallback`, and a replayed one its
+    recorded state."""
+    start = await request_stuck_run_step(workspace_id, task_id, focus_event_id, requested_at, actor)
+    if start["state"] != "working":
+        return str(start["state"])
+    message = await DBOS.recv_async(api.STUCK_TOPIC, timeout_seconds=api.stuck_deadline_s())
+    outcome = message.get("outcome") if isinstance(message, dict) else None
+    if outcome in ("split", "took_step"):
+        return str(outcome)
+    await mark_fallback_step(workspace_id, focus_event_id)
+    return "pending"
+
+
+async def start_stuck(
+    workspace_id: UUID, task_id: UUID, focus_event_id: UUID, requested_at: datetime, actor: str
+) -> None:
+    """Enqueue `handle_stuck` for a stuck focus event on the `human` queue. Started in a
+    fresh context: a subscriber runs inside a DBOS step, and DBOS refuses to start a
+    workflow from one."""
+
+    async def enqueue() -> None:
+        with SetWorkflowID(api.stuck_workflow_id(focus_event_id)):
+            await DBOS.enqueue_workflow_async(
+                HUMAN_QUEUE,
+                handle_stuck,
+                str(workspace_id),
+                str(task_id),
+                str(focus_event_id),
+                requested_at.isoformat(),
+                actor,
+            )
+
+    await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
 
 
 def schedules() -> list[Any]:

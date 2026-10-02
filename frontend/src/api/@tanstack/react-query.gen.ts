@@ -29,6 +29,7 @@ import {
   agentsPauseAgents,
   agentsPauseProject,
   agentsPostResult,
+  agentsRecordHumanReply,
   agentsRegisterProfile,
   agentsRequestApproval,
   agentsRequestRun,
@@ -91,6 +92,9 @@ import {
   knowledgeTrashDocument,
   knowledgeUpdateDocument,
   knowledgeUploadDocument,
+  notificationsGetVapidPublicKey,
+  notificationsSubscribe,
+  notificationsUnsubscribe,
   type Options,
   planningAcceptAll,
   planningAcceptItem,
@@ -216,6 +220,9 @@ import type {
   AgentsPostResultData,
   AgentsPostResultError,
   AgentsPostResultResponse,
+  AgentsRecordHumanReplyData,
+  AgentsRecordHumanReplyError,
+  AgentsRecordHumanReplyResponse,
   AgentsRegisterProfileData,
   AgentsRegisterProfileError,
   AgentsRegisterProfileResponse,
@@ -397,6 +404,15 @@ import type {
   KnowledgeUploadDocumentData,
   KnowledgeUploadDocumentError,
   KnowledgeUploadDocumentResponse,
+  NotificationsGetVapidPublicKeyData,
+  NotificationsGetVapidPublicKeyError,
+  NotificationsGetVapidPublicKeyResponse,
+  NotificationsSubscribeData,
+  NotificationsSubscribeError,
+  NotificationsSubscribeResponse,
+  NotificationsUnsubscribeData,
+  NotificationsUnsubscribeError,
+  NotificationsUnsubscribeResponse,
   PlanningAcceptAllData,
   PlanningAcceptAllError,
   PlanningAcceptAllResponse,
@@ -4047,6 +4063,88 @@ export const purgesPurgeMutation = (
   return mutationOptions;
 };
 
+/**
+ * Subscribe
+ */
+export const notificationsSubscribeMutation = (
+  options?: Partial<Options<NotificationsSubscribeData>>,
+): UseMutationOptions<
+  NotificationsSubscribeResponse,
+  NotificationsSubscribeError,
+  Options<NotificationsSubscribeData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    NotificationsSubscribeResponse,
+    NotificationsSubscribeError,
+    Options<NotificationsSubscribeData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await notificationsSubscribe({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Unsubscribe
+ */
+export const notificationsUnsubscribeMutation = (
+  options?: Partial<Options<NotificationsUnsubscribeData>>,
+): UseMutationOptions<
+  NotificationsUnsubscribeResponse,
+  NotificationsUnsubscribeError,
+  Options<NotificationsUnsubscribeData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    NotificationsUnsubscribeResponse,
+    NotificationsUnsubscribeError,
+    Options<NotificationsUnsubscribeData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await notificationsUnsubscribe({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const notificationsGetVapidPublicKeyQueryKey = (
+  options?: Options<NotificationsGetVapidPublicKeyData>,
+) => createQueryKey("notificationsGetVapidPublicKey", options);
+
+/**
+ * Get Vapid Public Key
+ */
+export const notificationsGetVapidPublicKeyOptions = (
+  options?: Options<NotificationsGetVapidPublicKeyData>,
+) =>
+  queryOptions<
+    NotificationsGetVapidPublicKeyResponse,
+    NotificationsGetVapidPublicKeyError,
+    NotificationsGetVapidPublicKeyResponse,
+    ReturnType<typeof notificationsGetVapidPublicKeyQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await notificationsGetVapidPublicKey({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: notificationsGetVapidPublicKeyQueryKey(options),
+  });
+
 export const tasksListRecurrenceQueryKey = (
   options?: Options<TasksListRecurrenceData>,
 ) => createQueryKey("tasksListRecurrence", options);
@@ -4130,6 +4228,38 @@ export const tasksListRecurrenceInfiniteOptions = (
     },
   );
   return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Record Human Reply
+ *
+ * A person's answer typed in the master's chat channel, recorded exactly as the same
+ * answer in the app (FR-8.2): a question (its review item) or a focus message. The
+ * `record_human_reply` tool's twin, for the master key only (403 `master_only`); the
+ * person answers in the app itself. Approvals and results: 403 `needs_app`.
+ */
+export const agentsRecordHumanReplyMutation = (
+  options?: Partial<Options<AgentsRecordHumanReplyData>>,
+): UseMutationOptions<
+  AgentsRecordHumanReplyResponse,
+  AgentsRecordHumanReplyError,
+  Options<AgentsRecordHumanReplyData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AgentsRecordHumanReplyResponse,
+    AgentsRecordHumanReplyError,
+    Options<AgentsRecordHumanReplyData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await agentsRecordHumanReply({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
 };
 
 export const tasksListReviewQueryKey = (
