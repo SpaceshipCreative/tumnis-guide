@@ -204,6 +204,48 @@ def normalize_estimate(label: Label | None, estimate: int | None, actor: ActorKi
     return estimate
 
 
+# --- The stuck run's step (P4-02, FR-10.5) -----------------------------------------------------
+
+STUCK_MAX_MINUTES: Final = 10  # FR-10.5: a first step the person takes fits in 10 minutes
+
+
+@dataclass(frozen=True, slots=True)
+class StuckRefusal:
+    code: str
+    status: int
+    detail: str
+
+
+def stuck_step_refusal(
+    stuck_task_id: UUID,
+    parent_id: UUID | None,
+    label: Label | None,
+    estimate_minutes: int | None,
+    steps_before: int,
+) -> StuckRefusal | None:
+    """Why a task made with a stuck run's token is refused (P4-02); None when allowed. The
+    run posts one subtask, under the stuck task (`steps_before` counts the tasks the run
+    already made); a step the person takes (any estimate given, so every Human or Hybrid
+    step) fits in STUCK_MAX_MINUTES; an AI step carries no estimate (FR-3.1)."""
+    if parent_id != stuck_task_id:
+        return StuckRefusal(
+            "stuck_step_parent", 422, "A stuck run's step is a subtask of the stuck task"
+        )
+    if steps_before > 0:
+        return StuckRefusal("stuck_step_taken", 409, "A stuck run posts one first step")
+    if (
+        label is not Label.AI
+        and estimate_minutes is not None
+        and (estimate_minutes > STUCK_MAX_MINUTES)
+    ):
+        return StuckRefusal(
+            "stuck_step_too_long",
+            422,
+            f"A first step takes {STUCK_MAX_MINUTES} minutes or less; split it smaller",
+        )
+    return None
+
+
 # --- Layout (FR-3.4, FR-3.8) -------------------------------------------------------------------
 
 

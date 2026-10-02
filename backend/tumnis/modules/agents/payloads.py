@@ -14,6 +14,9 @@ live apart so `api.py` and `workflows.py` can emit them while `events.py` calls 
   waiting run in scope.
 - `agents.resumed` (P2-09): a person resumed it in the app; the `agents.release_held_runs`
   subscriber sends `release` to the held runs nothing holds any more.
+- `stuck.resolved` (P4-02): a stuck run answered, with a first step (`split`, the subtask
+  in `step_task_id`) or by taking the step itself (`took_step`); the
+  `agents.deliver_stuck_outcome` subscriber wakes its `handle_stuck` workflow.
 """
 
 from datetime import datetime
@@ -136,3 +139,17 @@ class AgentsResumedV1(EventPayload):
     scope: PauseScope
     project_id: UUID | None = None
     resumed_at: datetime
+
+
+StuckOutcome = Literal["split", "took_step"]
+
+
+@event_type("stuck.resolved", 1)
+class StuckResolvedV1(EventPayload):
+    event_name: ClassVar[str] = "stuck.resolved"
+    schema_version: Literal[1] = 1
+    focus_event_id: UUID
+    task_id: UUID
+    run_id: UUID
+    outcome: StuckOutcome
+    step_task_id: UUID | None = None

@@ -18,6 +18,7 @@ export function quietFocus(): FocusCurrentOut {
     messages: [],
     guardrail: null,
     detour: null,
+    next_step: null,
   };
 }
 

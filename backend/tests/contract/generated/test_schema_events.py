@@ -193,6 +193,12 @@ CASES = [
     ),
     (
         "events",
+        "stuck.resolved",
+        1,
+        "backend/tests/contract/fixtures/events/stuck.resolved/v1.json",
+    ),
+    (
+        "events",
         "task.commented",
         1,
         "backend/tests/contract/fixtures/events/task.commented/v1.json",

@@ -130,9 +130,12 @@ BUILT_KINDS: Final = frozenset({RunKind.TASK, RunKind.PROPOSAL, RunKind.STUCK})
 SKILLS: Final[dict[RunKind, str]] = {
     RunKind.TASK: "work",
     RunKind.PROPOSAL: "propose",
-    RunKind.STUCK: "unstick",
+    RunKind.STUCK: "stuck",  # P4-02: the template's stuck skill
 }
 COMMENTS_LIMIT: Final = 50  # the task's newest comments a packet carries (plan default)
+STUCK_RECENT_COMMENTS: Final = 5  # a stuck packet's `recent_comments` (P4-02, plan default)
+STUCK_MAX_MINUTES: Final = 10  # a stuck run's first step for the person (FR-10.5)
+STUCK_TASKS_PER_RUN: Final = 1  # a stuck run posts one first step (SAF-5 style limit)
 CONTEXT_BUDGET_BYTES: Final = PACKET_MAX_BYTES // 2  # context blocks, as rendered (escaped)
 _LT_ESCAPED: Final = "\\" + "u003c"  # "<" inside the JSON, the same JSON (P1-05)
 _PREAMBLE_FILE: Final = Path(__file__).with_name("packet_preamble.md")
@@ -317,15 +320,31 @@ class TaskMetadata(BaseModel):
     declared_workers: list[dict[str, Any]] = []
 
 
+class StuckStep(BaseModel):
+    """What a stuck run's first step may be (P4-02, FR-10.5): the person's part fits in
+    `max_minutes`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_minutes: int = Field(ge=1)
+
+
 @versioned("packet", "task_run_request", 1)
 class TaskRunRequest(VersionedPayload):
-    """The body of a task, proposal or stuck packet (P2-02)."""
+    """The body of a task, proposal or stuck packet (P2-02). A stuck packet (P4-02) also
+    carries the task's newest comments (`recent_comments`, at most 5, the comments' own
+    blocks) and the first step's limits (`stuck_step`); other kinds leave both out."""
 
     schema_version: Literal[1] = 1
     task: TaskSection
     project: ProjectSection
     context_items: list[ContextBlock] = Field(default_factory=list)
     metadata: TaskMetadata = Field(default_factory=TaskMetadata)
+    recent_comments: list[Block] | None = None
+    stuck_step: StuckStep | None = None
+
+
+STUCK_ONLY: Final = frozenset({"recent_comments", "stuck_step"})
 
 
 # --- Inputs (what build_packet gathers; golden packets write them by hand) ------------------
@@ -525,6 +544,12 @@ def assemble(
         item=str(task_in.id),
     )
     comments = [_comment(c, nonce) for c in inputs.comments]
+    stuck = kind == RunKind.STUCK
+    policy = (
+        inputs.policy.model_copy(update={"max_tasks_per_run": STUCK_TASKS_PER_RUN})
+        if stuck
+        else inputs.policy
+    )
     brief = _block(project_in.brief_md, nonce=nonce, source="brief", trusted=True, tainted=False)
     passages = [_passage(p, nonce) for p in inputs.passages]
     context = _context_items(inputs.context_items, nonce)
@@ -554,6 +579,8 @@ def assemble(
             capability_hints=inputs.capability_hints,
             declared_workers=inputs.declared_workers,
         ),
+        recent_comments=comments[-STUCK_RECENT_COMMENTS:] if stuck else None,
+        stuck_step=StuckStep(max_minutes=STUCK_MAX_MINUTES) if stuck else None,
     )
     blocks = [task_block, *comments, brief, *passages, *context]
     tainted = packet_tainted(blocks)
@@ -570,9 +597,11 @@ def assemble(
         "tainted": tainted,
         "task": body.task.model_dump(mode="json", exclude={"text", "comments"}),
         "project": body.project.model_dump(mode="json", exclude={"brief", "passages"}),
-        "policy": inputs.policy.model_dump(mode="json"),
+        "policy": policy.model_dump(mode="json"),
         "metadata": body.metadata.model_dump(mode="json"),
     }
+    if body.stuck_step is not None:
+        data["stuck_step"] = body.stuck_step.model_dump(mode="json")
     sections = [
         ("Task", [task_block.rendered]),
         ("Comments", [c.rendered for c in comments]),
@@ -583,7 +612,7 @@ def assemble(
     prompt = render_task_prompt(preamble(), instruction, sections, _json(data))
     if _utf8_len(prompt) > PACKET_MAX_BYTES:
         raise PacketTooLargeError(f"task packet prompt exceeds {PACKET_MAX_BYTES} bytes")
-    time_cap_s = inputs.policy.time_cap_minutes * 60
+    time_cap_s = policy.time_cap_minutes * 60
     return TaskPacket(
         kind=kind,
         run_id=run,
@@ -593,10 +622,10 @@ def assemble(
         correlation_id=f"run:{run}",
         timeout_s=min(max(time_cap_s, 10), 3600),
         prompt_text=prompt,
-        body=body.model_dump(mode="json"),
+        body=body.model_dump(mode="json", exclude=None if stuck else set(STUCK_ONLY)),
         tainted=tainted,
         block_nonce=nonce,
-        policy=inputs.policy,
+        policy=policy,
         callback=Callback(mcp_url=MCP_PATH, rest_base_url=REST_BASE, task_token=token),
     )
 
