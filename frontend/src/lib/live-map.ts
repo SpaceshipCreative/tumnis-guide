@@ -175,6 +175,11 @@ export const NOT_LIVE = [
   // refetches after each connect or remove; a sync's progress shows on the next open.
   "knowledgeListS3Sources",
   "knowledgeGetS3Source",
+  // Obsidian vaults (P3-12) are read when Settings > Obsidian opens, which refetches after
+  // each create, connect or remove and polls a preview until the worker answers it.
+  "knowledgeListObsidianVaults",
+  "knowledgeGetObsidianVault",
+  "knowledgeGetObsidianPreview",
   // An upload's status is polled until extraction settles (P1-16; no document live message
   // yet), and a file is a download, never a cached query.
   "knowledgeGetDocument",

@@ -29,7 +29,8 @@ only `worker-extract` dequeues; workflow id `extract:<version_id>`):
 2. scan it with clamd: an infected file is quarantined and the workflow ends;
 3. sniff its type from the content: a refused type or size ends in `failed` with the
    refusal's code, before anything is placed or converted;
-3b. (uploads) place it at `uploads/<name>` in the project folder;
+3b. (uploads) place it at `uploads/<name>` in the project folder (an Obsidian attachment,
+    `source = "vault"`, stays in the vault and is never placed);
 4. convert it with the extractor;
 5. read each low-confidence PDF page with the vision model (a failed vision pass is skipped:
    the standard chunks stay);
@@ -58,6 +59,8 @@ from tumnis.core import faults
 from tumnis.core.tenancy import WorkspaceContext
 from tumnis.core.types import SYSTEM_ACTOR
 from tumnis.modules.knowledge import api, embeddings, move, pipeline, s3_sync, sync
+from tumnis.modules.knowledge.obsidian import sync as vault_sync
+from tumnis.modules.knowledge.obsidian import vaults
 from tumnis.modules.knowledge.rules import EMBED_BATCH, EMBED_QUEUE, REEMBED_WORKFLOW
 
 log = logging.getLogger(__name__)
@@ -68,6 +71,7 @@ TICK_SCHEDULE_NAME: Final = "knowledge-folder-sync-tick"
 S3_TICK_SCHEDULE_NAME: Final = "knowledge-s3-source-tick"
 S3_SYNC_WORKFLOW: Final = "knowledge_s3_source_sync"
 S3_RECHECK_WORKFLOW: Final = "knowledge_s3_source_recheck"
+VAULT_TICK_SCHEDULE_NAME: Final = "knowledge-obsidian-sync-tick"  # P3-12
 TICK_EVERY_MINUTES: Final = 15  # plan default
 TICK_SCHEDULE: Final = f"*/{TICK_EVERY_MINUTES} * * * *"
 WATCH_DEBOUNCE_MS: Final = 5_000  # plan default (partial files from Syncthing and the like)
@@ -154,6 +158,12 @@ def schedules() -> list[Any]:
             "schedule": TICK_SCHEDULE,
             "queue_name": SYNC_QUEUE,
         },
+        {
+            "schedule_name": VAULT_TICK_SCHEDULE_NAME,
+            "workflow_fn": vault_tick,
+            "schedule": TICK_SCHEDULE,
+            "queue_name": SYNC_QUEUE,
+        },
     ]
 
 
@@ -204,6 +214,120 @@ async def local_watch(stop: asyncio.Event) -> None:
                     break
         except Exception:  # a failing watcher must not stop the worker
             log.exception("local folder watch failed; starting again")
+            await _sleep_until(stop, WATCH_REFRESH_S)
+
+
+# --- Obsidian vaults (P3-12, FR-15.10) ---------------------------------------------------
+#
+# `knowledge_obsidian_preview(workspace_id, connection_id, settings)`: ObsidianSetup's
+# mapping preview, read on the worker (the vault folder is mounted here, and a Git remote is
+# cloned here). `knowledge_obsidian_connect(workspace_id, connection_id)`: Git's fresh clone
+# and write probe, then the first sync. `knowledge_obsidian_sync(workspace_id,
+# connection_id)`: one scan (`obsidian.sync.sync_vault`), every 15 minutes from
+# `knowledge-obsidian-sync-tick` and soon after a change in a folder vault (`vault_watch`),
+# deduplicated per vault. Each is one step on the `sync` queue: a scan compares everything,
+# so a retried step only compares again.
+
+
+@DBOS.step(name="knowledge_obsidian_preview_step", **STEP_RETRY)
+async def vault_preview_step(
+    workspace_id: str, connection_id: str, settings: dict[str, Any]
+) -> dict[str, Any]:
+    return await vaults.run_preview(workspace_id, connection_id, settings, net=sync.net())
+
+
+@DBOS.workflow(name=vaults.PREVIEW_WORKFLOW)
+async def vault_preview(
+    workspace_id: str, connection_id: str, settings: dict[str, Any]
+) -> dict[str, Any]:
+    return await vault_preview_step(workspace_id, connection_id, settings)
+
+
+@DBOS.step(name="knowledge_obsidian_connect_step")
+async def vault_connect_step(workspace_id: str, connection_id: str) -> dict[str, Any]:
+    return await vaults.run_connect(workspace_id, connection_id, net=sync.net())
+
+
+@DBOS.workflow(name=vaults.CONNECT_WORKFLOW)
+async def vault_connect(workspace_id: str, connection_id: str) -> dict[str, Any]:
+    return await vault_connect_step(workspace_id, connection_id)
+
+
+@DBOS.step(name="knowledge_obsidian_sync_step", **STEP_RETRY)
+async def vault_sync_step(workspace_id: str, connection_id: str) -> dict[str, Any]:
+    return await vaults.run_sync(workspace_id, connection_id, net=sync.net())
+
+
+@DBOS.workflow(name=vaults.SYNC_WORKFLOW)
+async def vault_sync_workflow(workspace_id: str, connection_id: str) -> dict[str, Any]:
+    return await vault_sync_step(workspace_id, connection_id)
+
+
+async def enqueue_vault_sync(workspace_id: str, connection_id: str, *, workflow_id: str) -> None:
+    """Queue a scan of the vault unless one is queued already."""
+    with (
+        SetWorkflowID(workflow_id),
+        SetEnqueueOptions(
+            deduplication_id=f"obsidian-sync:{connection_id}",
+            duplication_policy="return-existing",
+        ),
+    ):
+        await DBOS.enqueue_workflow_async(
+            SYNC_QUEUE, vault_sync_workflow, workspace_id, connection_id
+        )
+
+
+@DBOS.step()
+async def vaults_step() -> list[tuple[str, str]]:
+    return await vaults.vaults_to_sync()
+
+
+@DBOS.workflow(name="knowledge_obsidian_sync_tick")
+async def vault_tick(scheduled_at: datetime, context: Any) -> None:
+    """Every 15 minutes on the sync queue: one scan per connected vault."""
+    for workspace_id, connection_id in await vaults_step():
+        await enqueue_vault_sync(
+            workspace_id,
+            connection_id,
+            workflow_id=f"obsidian-sync:{connection_id}:{scheduled_at.isoformat()}",
+        )
+
+
+async def vault_watch(stop: asyncio.Event) -> None:
+    """Watch every connected folder vault until `stop`, as `local_watch` watches server
+    paths: a change queues a scan of its vault once changes settle (5 s debounce, for
+    Syncthing's partial files). Events are only a hint; the 15-minute tick is the backstop."""
+    from watchfiles import awatch  # noqa: PLC0415  # only the worker watches files
+
+    while not stop.is_set():
+        try:
+            roots = [
+                found
+                for found in await vaults.watched_vaults()
+                if await asyncio.to_thread(os.path.isdir, found[2])
+            ]
+            if not roots:
+                await _sleep_until(stop, WATCH_REFRESH_S)
+                continue
+            refresh_at = time.monotonic() + WATCH_REFRESH_S
+            async for changes in awatch(
+                *{root for _ws, _cid, root in roots},
+                stop_event=stop,
+                debounce=WATCH_DEBOUNCE_MS,
+                rust_timeout=WATCH_WAKE_MS,
+                yield_on_timeout=True,
+            ):
+                touched = {vaults.watched_vault(path, roots) for _change, path in changes}
+                for workspace_id, connection_id in sorted(t for t in touched if t is not None):
+                    await enqueue_vault_sync(
+                        workspace_id,
+                        connection_id,
+                        workflow_id=f"obsidian-sync:{connection_id}:watch:{uuid.uuid4()}",
+                    )
+                if time.monotonic() >= refresh_at:
+                    break
+        except Exception:  # a failing watcher must not stop the worker
+            log.exception("Obsidian vault watch failed; starting again")
             await _sleep_until(stop, WATCH_REFRESH_S)
 
 
@@ -353,6 +477,23 @@ async def enqueue_folder_extraction(workspace_id: UUID, version_id: UUID, _path:
 
 
 sync.register_extraction(enqueue_folder_extraction)
+
+
+async def enqueue_vault_extraction(workspace_id: UUID, version_id: UUID, _path: str) -> None:
+    """The Obsidian sync's extraction of an embedded attachment (P3-12): the pipeline with
+    `source = "vault"`, reading the bytes the sync spooled and never placing them in a
+    project folder (the vault is the file's home); otherwise as `enqueue_folder_extraction`."""
+
+    async def enqueue() -> None:
+        with SetWorkflowID(f"extract:{version_id}"):
+            await DBOS.enqueue_workflow_async(
+                api.EXTRACT_QUEUE, extract_document, str(workspace_id), str(version_id), "vault"
+            )
+
+    await asyncio.get_running_loop().create_task(enqueue(), context=contextvars.Context())
+
+
+vault_sync.register_extraction(enqueue_vault_extraction)
 
 
 # Re-embedding on a model change (P3-10, FR-11.10, REL-3)

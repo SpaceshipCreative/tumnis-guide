@@ -75,7 +75,8 @@ STEPS: Final = (
     "emit",
     "fail",
 )
-Source = Literal["spool", "storage", "linked"]
+# linked: an S3 linked source's object (P3-13); vault: an Obsidian attachment (P3-12)
+Source = Literal["spool", "storage", "linked", "vault"]
 LinkedReader = Callable[[WorkspaceContext, UUID], AsyncGenerator[bytes]]
 
 
@@ -121,6 +122,11 @@ def configure(settings: KnowledgeSettings, *, net: NetPolicy | None = None) -> K
     if net is not None:
         _net = net
     return previous
+
+
+def current() -> KnowledgeSettings:
+    """The settings `configure` set (P3-12: where the worker keeps Obsidian Git clones)."""
+    return _settings
 
 
 def use(**parts: Any) -> dict[str, Any]:
@@ -188,8 +194,12 @@ def _spool_file(version_id: str) -> Path:
     return Path(_settings.spool_dir) / version_id
 
 
-def spool_path(version_id: UUID) -> Path:
-    """Where a version's file waits for step 1 (`<spool>/<version_id>`)."""
+def spool_file(version_id: UUID) -> Path:
+    """Where a version's bytes wait for the extract worker: an upload (the api writes it)
+    or an Obsidian attachment (the vault sync writes it, P3-12; `source = "vault"` reads it
+    from here and never places it in a project folder), or an S3 linked source's object (the
+    bucket sync writes it, P3-13; `source = "linked"`, read again from the bucket when the
+    spool copy is gone)."""
     return _spool_file(str(version_id))
 
 
@@ -256,7 +266,7 @@ async def _fetch(
     """Copy the version's file to `dest`: the spool file when there is one, else the file
     on its location (a folder file, or an upload that was already placed)."""
     spool = _spool_file(version_id)
-    if source in ("spool", "linked") and spool.is_file():
+    if source in {"spool", "linked", "vault"} and spool.is_file():
         return await _copy(_file_chunks(spool), dest)
     if source == "linked":
         reader = _linked[0]

@@ -360,7 +360,7 @@ async def test_linked_reread_of_a_changed_object_keeps_the_version_hash(
     log = ExtractLog([])
     await _sync(ws, created.id, log)
     version_id = log.requests[0][1]
-    pipeline.spool_path(version_id).unlink(missing_ok=True)
+    pipeline.spool_file(version_id).unlink(missing_ok=True)
     hashed = "SELECT encode(content_hash, 'hex') FROM document_versions WHERE id = %s"
 
     def stored_hash() -> str:

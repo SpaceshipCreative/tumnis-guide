@@ -47,6 +47,7 @@ from tumnis.core.versioning import Version
 from tumnis.modules.knowledge import api, move, uploads
 from tumnis.modules.knowledge import mcp as tools
 from tumnis.modules.knowledge.mcp import Markdown, TextEntryIn, Title
+from tumnis.modules.knowledge.obsidian import vaults
 from tumnis.modules.knowledge.rules import MAX_UPLOAD_BYTES, ActorKind
 
 # `POST /knowledge/documents/text` and `.../link` (R-36) sit at the same depth as the
@@ -264,7 +265,8 @@ async def delete_document(document_id: UUID, request: Request) -> DeleteOut | Re
     search until restored; this is every text entry, link and upload, and Tumnis's own
     folder file. An outside file in an existing folder (FR-15.12, P3-14) is only unindexed
     and stays where it is: 200 `{"outcome": "index_only"}`. An agent may not delete an
-    outside file (403, audited)."""
+    outside file (403, audited). A Document a connection syncs (an Obsidian note, P3-12)
+    is 409 `read_only_source`: delete it at its source."""
     principal = principal_of(request)
     ctx = principal.workspace_context()
     actor = ActorKind.user if principal.kind == "session" else ActorKind.agent
@@ -362,7 +364,8 @@ async def update_document(
 ) -> api.DocumentDTO:
     """Edit a document: a text entry's Markdown body (a new version, its note file
     rewritten), any document's title, tags or pin. 409 `stale_version` with the current
-    document; 409 `not_text` for a body on anything but a text entry."""
+    document; 409 `not_text` for a body on anything but a text entry; 409
+    `read_only_source` for a Document a connection syncs (an Obsidian note, P3-12)."""
     return await api.edit_document(
         session,
         document_id,
@@ -829,3 +832,104 @@ async def minio_notification(connection_id: UUID, request: Request) -> api.Notif
     return await api.accept_minio_notification(
         connection_id, request.headers.get("Authorization"), await request.body()
     )
+
+
+# --- P3-12: Obsidian vaults ----------------------------------------------------------------
+#
+# Settings > Obsidian (ObsidianSetup), all `auth="session"`: `GET /knowledge/obsidian/vaults`
+# (the vaults, and whether a folder vault is offered: never in hosted mode), `POST
+# /knowledge/obsidian/vaults` (201: a pending vault; Git answers its deploy key's public
+# half), `POST /knowledge/obsidian/host-key/probe` (the Git host's key to confirm; nothing
+# stored), `POST .../vaults/{id}/preview` (202: the worker computes the mapping preview) and
+# `GET .../vaults/{id}/preview/{preview_id}` (poll), `POST .../vaults/{id}/connect` (202:
+# the settings and pinned host key saved, then the connect and first sync on the worker),
+# `GET` and `DELETE .../vaults/{id}`.
+
+
+@router.get("/knowledge/obsidian/vaults")
+@route_policy(RoutePolicy(auth="session"))
+async def list_obsidian_vaults(request: Request, ctx: Session) -> vaults.VaultsOut:
+    async with tenant_session(ctx) as s:
+        return await vaults.list_vaults(s, net=_net(request))
+
+
+@router.post("/knowledge/obsidian/vaults", status_code=201)
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason="each call makes a new vault with a new deploy key",
+    )
+)
+async def create_obsidian_vault(
+    body: vaults.VaultCreateIn, request: Request, ctx: Session
+) -> vaults.VaultOut:
+    async with tenant_session(ctx) as s:
+        return await vaults.create_vault(ctx, s, body, net=_net(request))
+
+
+@router.post("/knowledge/obsidian/host-key/probe")
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason="the host key is read from the server again, never replayed",
+    )
+)
+async def probe_obsidian_host_key(
+    body: vaults.HostKeyProbeIn, request: Request, _ctx: Session
+) -> vaults.HostKeyOut:
+    return await vaults.probe_host_key(body, net=_net(request))
+
+
+@router.get("/knowledge/obsidian/vaults/{connection_id}")
+@route_policy(RoutePolicy(auth="session"))
+async def get_obsidian_vault(connection_id: UUID, ctx: Session) -> vaults.VaultOut:
+    async with tenant_session(ctx) as s:
+        return await vaults.get_vault(s, connection_id)
+
+
+@router.post("/knowledge/obsidian/vaults/{connection_id}/preview", status_code=202)
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason="each preview reads the vault as it is now",
+    )
+)
+async def preview_obsidian_vault(
+    connection_id: UUID, body: vaults.VaultSettingsIn, request: Request, ctx: Session
+) -> vaults.PreviewStarted:
+    return await vaults.start_preview(ctx, connection_id, body, net=_net(request))
+
+
+@router.get("/knowledge/obsidian/vaults/{connection_id}/preview/{preview_id}")
+@route_policy(RoutePolicy(auth="session"))
+async def get_obsidian_preview(
+    connection_id: UUID,
+    preview_id: Annotated[str, StringConstraints(max_length=200)],
+    ctx: Session,
+) -> vaults.PreviewOut:
+    return await vaults.preview_result(ctx, connection_id, preview_id)
+
+
+@router.post("/knowledge/obsidian/vaults/{connection_id}/connect", status_code=202)
+@route_policy(
+    RoutePolicy(
+        auth="session",
+        idempotent=False,
+        not_idempotent_reason="connecting clones the vault and probes the key again",
+    )
+)
+async def connect_obsidian_vault(
+    connection_id: UUID, body: vaults.VaultSettingsIn, request: Request, ctx: Session
+) -> vaults.VaultOut:
+    return await vaults.connect(ctx, connection_id, body, net=_net(request))
+
+
+@router.delete("/knowledge/obsidian/vaults/{connection_id}", status_code=204)
+@route_policy(RoutePolicy(auth="session", idempotent=True))
+async def delete_obsidian_vault(connection_id: UUID, ctx: Session) -> Response:
+    async with tenant_session(ctx) as s:
+        await vaults.delete_vault(ctx, s, connection_id)
+    return Response(status_code=204)

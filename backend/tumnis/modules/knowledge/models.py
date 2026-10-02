@@ -1,5 +1,5 @@
 """knowledge SQLAlchemy tables owned by this module (mirrors of revisions knowledge_0001
-to knowledge_0009, and knowledge_0011)."""
+to knowledge_0011)."""
 
 from datetime import datetime
 from typing import Any
@@ -256,3 +256,37 @@ class DeleteConfirmation(TenantBase, Base):
     issued_to: Mapped[UUID]
     expires_at: Mapped[datetime]
     used_at: Mapped[datetime | None]
+
+
+class DocumentLink(TenantBase, Base):
+    """knowledge_0010: a wikilink, Markdown link or embed in a synced Obsidian note (P3-12);
+    `to_document_id` stays NULL while `to_target` resolves to no Document."""
+
+    __tablename__ = "document_links"
+
+    from_document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
+    to_document_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL")
+    )
+    to_target: Mapped[str]
+    kind: Mapped[str]  # link | embed
+    heading: Mapped[str | None]
+    block: Mapped[str | None]
+
+
+class ObsidianVault(TenantBase, Base):
+    """knowledge_0010: an Obsidian vault connection's settings and status (P3-12)."""
+
+    __tablename__ = "obsidian_vaults"
+
+    connection_id: Mapped[UUID] = mapped_column(ForeignKey("connections.id"))
+    mode: Mapped[str]  # folder | git
+    folder_path: Mapped[str | None]
+    remote: Mapped[str | None]
+    branch: Mapped[str]
+    mapping: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    known_hosts: Mapped[str | None]
+    deploy_public_key: Mapped[str | None]
+    status: Mapped[str]  # pending | connecting | ok | error
+    last_error: Mapped[str | None]
+    last_sync_at: Mapped[datetime | None]

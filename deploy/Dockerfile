@@ -41,9 +41,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/backend
 
-# libmagic reads an upload's real type from its content (P1-16, SEC-10).
+# libmagic reads an upload's real type from its content (P1-16, SEC-10). git and the ssh
+# client pull an Obsidian vault from its Git remote with a read-only deploy key (P3-12).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libmagic1 \
+    && apt-get install -y --no-install-recommends libmagic1 git openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Dependencies first (cached until uv.lock changes), then the project itself. The source

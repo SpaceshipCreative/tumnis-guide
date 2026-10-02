@@ -87,24 +87,32 @@ import {
   healthReady,
   knowledgeAddLink,
   knowledgeConfirmHostKey,
+  knowledgeConnectObsidianVault,
   knowledgeCreateLocation,
+  knowledgeCreateObsidianVault,
   knowledgeCreateS3Source,
   knowledgeCreateTextEntry,
   knowledgeDeleteAtSource,
   knowledgeDeleteDocument,
+  knowledgeDeleteObsidianVault,
   knowledgeDeleteS3Source,
   knowledgeGetBrief,
   knowledgeGetDocument,
   knowledgeGetFile,
+  knowledgeGetObsidianPreview,
+  knowledgeGetObsidianVault,
   knowledgeGetQuota,
   knowledgeGetS3Source,
   knowledgeIssueDeleteConfirmation,
   knowledgeListDocuments,
   knowledgeListLocations,
+  knowledgeListObsidianVaults,
   knowledgeListS3Sources,
   knowledgeListVersions,
   knowledgeMinioNotification,
   knowledgeMoveProjectFolder,
+  knowledgePreviewObsidianVault,
+  knowledgeProbeObsidianHostKey,
   knowledgeRestoreDocument,
   knowledgeSearch,
   knowledgeSetDefaultLocation,
@@ -416,9 +424,15 @@ import type {
   KnowledgeConfirmHostKeyData,
   KnowledgeConfirmHostKeyError,
   KnowledgeConfirmHostKeyResponse,
+  KnowledgeConnectObsidianVaultData,
+  KnowledgeConnectObsidianVaultError,
+  KnowledgeConnectObsidianVaultResponse,
   KnowledgeCreateLocationData,
   KnowledgeCreateLocationError,
   KnowledgeCreateLocationResponse,
+  KnowledgeCreateObsidianVaultData,
+  KnowledgeCreateObsidianVaultError,
+  KnowledgeCreateObsidianVaultResponse,
   KnowledgeCreateS3SourceData,
   KnowledgeCreateS3SourceError,
   KnowledgeCreateS3SourceResponse,
@@ -431,6 +445,9 @@ import type {
   KnowledgeDeleteDocumentData,
   KnowledgeDeleteDocumentError,
   KnowledgeDeleteDocumentResponse,
+  KnowledgeDeleteObsidianVaultData,
+  KnowledgeDeleteObsidianVaultError,
+  KnowledgeDeleteObsidianVaultResponse,
   KnowledgeDeleteS3SourceData,
   KnowledgeDeleteS3SourceError,
   KnowledgeDeleteS3SourceResponse,
@@ -443,6 +460,12 @@ import type {
   KnowledgeGetFileData,
   KnowledgeGetFileError,
   KnowledgeGetFileResponse,
+  KnowledgeGetObsidianPreviewData,
+  KnowledgeGetObsidianPreviewError,
+  KnowledgeGetObsidianPreviewResponse,
+  KnowledgeGetObsidianVaultData,
+  KnowledgeGetObsidianVaultError,
+  KnowledgeGetObsidianVaultResponse,
   KnowledgeGetQuotaData,
   KnowledgeGetQuotaError,
   KnowledgeGetQuotaResponse,
@@ -458,6 +481,9 @@ import type {
   KnowledgeListLocationsData,
   KnowledgeListLocationsError,
   KnowledgeListLocationsResponse,
+  KnowledgeListObsidianVaultsData,
+  KnowledgeListObsidianVaultsError,
+  KnowledgeListObsidianVaultsResponse,
   KnowledgeListS3SourcesData,
   KnowledgeListS3SourcesError,
   KnowledgeListS3SourcesResponse,
@@ -470,6 +496,12 @@ import type {
   KnowledgeMoveProjectFolderData,
   KnowledgeMoveProjectFolderError,
   KnowledgeMoveProjectFolderResponse,
+  KnowledgePreviewObsidianVaultData,
+  KnowledgePreviewObsidianVaultError,
+  KnowledgePreviewObsidianVaultResponse,
+  KnowledgeProbeObsidianHostKeyData,
+  KnowledgeProbeObsidianHostKeyError,
+  KnowledgeProbeObsidianHostKeyResponse,
   KnowledgeRestoreDocumentData,
   KnowledgeRestoreDocumentError,
   KnowledgeRestoreDocumentResponse,
@@ -2986,7 +3018,8 @@ export const knowledgeCreateTextEntryMutation = (
  * search until restored; this is every text entry, link and upload, and Tumnis's own
  * folder file. An outside file in an existing folder (FR-15.12, P3-14) is only unindexed
  * and stays where it is: 200 `{"outcome": "index_only"}`. An agent may not delete an
- * outside file (403, audited).
+ * outside file (403, audited). A Document a connection syncs (an Obsidian note, P3-12)
+ * is 409 `read_only_source`: delete it at its source.
  */
 export const knowledgeDeleteDocumentMutation = (
   options?: Partial<Options<KnowledgeDeleteDocumentData>>,
@@ -3049,7 +3082,8 @@ export const knowledgeGetDocumentOptions = (
  *
  * Edit a document: a text entry's Markdown body (a new version, its note file
  * rewritten), any document's title, tags or pin. 409 `stale_version` with the current
- * document; 409 `not_text` for a body on anything but a text entry.
+ * document; 409 `not_text` for a body on anything but a text entry; 409
+ * `read_only_source` for a Document a connection syncs (an Obsidian note, P3-12).
  */
 export const knowledgeUpdateDocumentMutation = (
   options?: Partial<Options<KnowledgeUpdateDocumentData>>,
@@ -3359,6 +3393,225 @@ export const knowledgeTestLocationMutation = (
   };
   return mutationOptions;
 };
+
+/**
+ * Probe Obsidian Host Key
+ */
+export const knowledgeProbeObsidianHostKeyMutation = (
+  options?: Partial<Options<KnowledgeProbeObsidianHostKeyData>>,
+): UseMutationOptions<
+  KnowledgeProbeObsidianHostKeyResponse,
+  KnowledgeProbeObsidianHostKeyError,
+  Options<KnowledgeProbeObsidianHostKeyData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeProbeObsidianHostKeyResponse,
+    KnowledgeProbeObsidianHostKeyError,
+    Options<KnowledgeProbeObsidianHostKeyData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeProbeObsidianHostKey({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const knowledgeListObsidianVaultsQueryKey = (
+  options?: Options<KnowledgeListObsidianVaultsData>,
+) => createQueryKey("knowledgeListObsidianVaults", options);
+
+/**
+ * List Obsidian Vaults
+ */
+export const knowledgeListObsidianVaultsOptions = (
+  options?: Options<KnowledgeListObsidianVaultsData>,
+) =>
+  queryOptions<
+    KnowledgeListObsidianVaultsResponse,
+    KnowledgeListObsidianVaultsError,
+    KnowledgeListObsidianVaultsResponse,
+    ReturnType<typeof knowledgeListObsidianVaultsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeListObsidianVaults({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeListObsidianVaultsQueryKey(options),
+  });
+
+/**
+ * Create Obsidian Vault
+ */
+export const knowledgeCreateObsidianVaultMutation = (
+  options?: Partial<Options<KnowledgeCreateObsidianVaultData>>,
+): UseMutationOptions<
+  KnowledgeCreateObsidianVaultResponse,
+  KnowledgeCreateObsidianVaultError,
+  Options<KnowledgeCreateObsidianVaultData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeCreateObsidianVaultResponse,
+    KnowledgeCreateObsidianVaultError,
+    Options<KnowledgeCreateObsidianVaultData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeCreateObsidianVault({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Delete Obsidian Vault
+ */
+export const knowledgeDeleteObsidianVaultMutation = (
+  options?: Partial<Options<KnowledgeDeleteObsidianVaultData>>,
+): UseMutationOptions<
+  KnowledgeDeleteObsidianVaultResponse,
+  KnowledgeDeleteObsidianVaultError,
+  Options<KnowledgeDeleteObsidianVaultData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeDeleteObsidianVaultResponse,
+    KnowledgeDeleteObsidianVaultError,
+    Options<KnowledgeDeleteObsidianVaultData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeDeleteObsidianVault({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const knowledgeGetObsidianVaultQueryKey = (
+  options: Options<KnowledgeGetObsidianVaultData>,
+) => createQueryKey("knowledgeGetObsidianVault", options);
+
+/**
+ * Get Obsidian Vault
+ */
+export const knowledgeGetObsidianVaultOptions = (
+  options: Options<KnowledgeGetObsidianVaultData>,
+) =>
+  queryOptions<
+    KnowledgeGetObsidianVaultResponse,
+    KnowledgeGetObsidianVaultError,
+    KnowledgeGetObsidianVaultResponse,
+    ReturnType<typeof knowledgeGetObsidianVaultQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetObsidianVault({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetObsidianVaultQueryKey(options),
+  });
+
+/**
+ * Connect Obsidian Vault
+ */
+export const knowledgeConnectObsidianVaultMutation = (
+  options?: Partial<Options<KnowledgeConnectObsidianVaultData>>,
+): UseMutationOptions<
+  KnowledgeConnectObsidianVaultResponse,
+  KnowledgeConnectObsidianVaultError,
+  Options<KnowledgeConnectObsidianVaultData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeConnectObsidianVaultResponse,
+    KnowledgeConnectObsidianVaultError,
+    Options<KnowledgeConnectObsidianVaultData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeConnectObsidianVault({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Preview Obsidian Vault
+ */
+export const knowledgePreviewObsidianVaultMutation = (
+  options?: Partial<Options<KnowledgePreviewObsidianVaultData>>,
+): UseMutationOptions<
+  KnowledgePreviewObsidianVaultResponse,
+  KnowledgePreviewObsidianVaultError,
+  Options<KnowledgePreviewObsidianVaultData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgePreviewObsidianVaultResponse,
+    KnowledgePreviewObsidianVaultError,
+    Options<KnowledgePreviewObsidianVaultData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgePreviewObsidianVault({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const knowledgeGetObsidianPreviewQueryKey = (
+  options: Options<KnowledgeGetObsidianPreviewData>,
+) => createQueryKey("knowledgeGetObsidianPreview", options);
+
+/**
+ * Get Obsidian Preview
+ */
+export const knowledgeGetObsidianPreviewOptions = (
+  options: Options<KnowledgeGetObsidianPreviewData>,
+) =>
+  queryOptions<
+    KnowledgeGetObsidianPreviewResponse,
+    KnowledgeGetObsidianPreviewError,
+    KnowledgeGetObsidianPreviewResponse,
+    ReturnType<typeof knowledgeGetObsidianPreviewQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetObsidianPreview({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetObsidianPreviewQueryKey(options),
+  });
 
 /**
  * Use Existing Folder

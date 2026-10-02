@@ -278,7 +278,7 @@ async def _take_in(  # the source, the object, where it goes, and the record so 
         log.info("s3 source %s: %s is over the upload limit", source.connection_id, stat.path)
         return None
     version_id = uuid7()
-    spooled = pipeline.spool_path(version_id)
+    spooled = pipeline.spool_file(version_id)
     try:
         sha256 = await _download(reader, stat.path, spooled)
     except NotFound:

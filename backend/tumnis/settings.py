@@ -169,6 +169,7 @@ class KnowledgeSettings(BaseModel):
     chunk_tokenizer: str = "sentence-transformers/all-MiniLM-L6-v2"  # plan default
     vision_base_url: str | None = None
     vision_model: str | None = None
+    obsidian_dir: str = "/var/lib/tumnis/obsidian"  # P3-12: the worker's Git vault clones
 
 
 class AgentsSettings(BaseModel):
