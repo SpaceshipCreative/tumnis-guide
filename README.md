@@ -237,6 +237,7 @@ Then, in the app:
 - **Focus.** The focus bar shows the one next step. Pick how hard Tumnis keeps you on it: quiet, nudge, coach or guardrail (guardrail notices detours and offers the way back). Press **Stuck** and the project's agent works on a first step: it splits off a small subtask or takes the step itself, and if nothing comes back in time you get the task's first action with a 10-minute timer.
 - **Review.** `/review` is the queue of what waits for you, such as agent results to accept. Accepting the result of a run started from **Stuck** marks that step done and keeps the task in progress; rejecting it reopens the step with your reason.
 - **Inbox and Activity.** Per project, the Inbox shows what arrived and Activity what happened; **Ask the agent** sends a question to the project's agent.
+- **Search.** The Search page (`/search`), or Ctrl+K (Cmd+K on a Mac) on any screen, finds tasks and projects.
 
 ## Connect sources
 
@@ -304,7 +305,7 @@ These are planned but not in this release:
 - **Inbox Zero, Granola and chat connectors**, matching what they bring in to your tasks, and proposal runs on it; **Google Docs** as a source. They wait for recorded tests against the real services. Discord is the chosen first chat provider (an ADR, 0014, will record it); today Discord already reaches the master agent through its Hermes profile ([Agents](#agents)). **Settings > Connections**, where these accounts will be connected, synced and signed in again, is in place, but it has no provider to connect yet.
 - **More sources:** Obsidian vaults and S3 buckets as knowledge sources (beyond S3 as a storage location). Coming in a later update.
 - **Unattended run windows** (agents working through your tasks on a schedule while you're away) and **retention rules** for old data. Coming in a later update.
-- **A search page and Settings screens for GitHub and Coolify.** Today Ctrl+K (Cmd+K on a Mac) searches tasks and projects, agents and the API search knowledge (`GET /v1/knowledge/search`), and GitHub and Coolify are set through the API ([Connect sources](#connect-sources)).
+- **Settings screens for GitHub and Coolify, and knowledge in search results.** Today GitHub and Coolify are set through the API ([Connect sources](#connect-sources)), and agents and the API search knowledge (`GET /v1/knowledge/search`).
 - **Hosted mode** (Tumnis run for several customers) is v2.
 
 ## Develop
