@@ -46,6 +46,17 @@ function percent(value: unknown): string | undefined {
     : undefined;
 }
 
+/** `Thu 1 Oct` for a calendar day (`YYYY-MM-DD`), as the Today panel's offers read. */
+function shortDay(day: string): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return day;
+  const format = (options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("en-GB", { ...options, timeZone: "UTC" }).format(
+      date,
+    );
+  return `${format({ weekday: "short" })} ${format({ day: "numeric", month: "short" })}`;
+}
+
 function minutes(value: unknown): string | undefined {
   return typeof value === "number" ? formatMinutes(value) : undefined;
 }
@@ -101,6 +112,34 @@ const SLOTS: Record<string, KindSlot> = {
       `${text(payload.reason) ?? "It could not run unattended"}. Take it off the queue, or snooze to keep it queued.`,
     actionWords: { accept: "Take off the queue" },
     tag: "Overnight",
+  },
+  plan_issue: {
+    // P1-11's PlanIssuePayload: accept takes the split, edit the move, reject keeps the
+    // task off the day (APP-12: a sentence, not the payload's fields).
+    name: "Plan",
+    summary: ({ payload }) => {
+      const day = text(payload.day);
+      const reason = text(payload.reason);
+      const split = Array.isArray(payload.split)
+        ? payload.split.filter((n): n is number => typeof n === "number")
+        : [];
+      const moveTo = text(payload.move_to);
+      const offers = [
+        ...(split.length > 0
+          ? [`Accept splits it into ${split.join(" + ")} min`]
+          : []),
+        ...(moveTo === undefined
+          ? []
+          : [`Edit moves it to ${shortDay(moveTo)}`]),
+        "Reject keeps it off that day",
+      ];
+      const why =
+        reason === undefined
+          ? ""
+          : ` (${reason.charAt(0).toLowerCase()}${reason.slice(1)})`;
+      return `Doesn't fit ${day === undefined ? "the day" : shortDay(day)}${why}. ${offers.join("; ")}.`;
+    },
+    edit: { type: "text", field: "value", label: "Value" },
   },
   decision_unavailable: {
     name: "Decision",
