@@ -2,8 +2,9 @@
 # previous tag (N), this commit (N+1), then N again on the homelab runner and fails on any
 # unhealthy step; only then does the release job check the changelog, push the image built
 # with VERSION=<tag>, write a CycloneDX SBOM of it (scripts/ci/sbom.sh, P0-16) and attach
-# the SBOM and schemas/openapi.json to a GitHub release whose notes are the tag's
-# CHANGELOG.md section. The process: README, "Releases and rollback".
+# the SBOM, schemas/openapi.json and the schemas/ archive to a GitHub release whose notes
+# are the tag's CHANGELOG.md section, then checks the release holds all three (P4-06).
+# The process: docs/OPERATIONS.md, Releases, and docs/RELEASE-CHECKLIST.md.
 #
 # Actions are pinned by commit SHA; Renovate bumps the SHA and the version comment.
 name: release
@@ -68,6 +69,8 @@ jobs:
         run: scripts/ci/sbom.sh "${IMAGE}:${GITHUB_REF_NAME}" sbom.cdx.json
       - name: OpenAPI spec at this tag (the contract job keeps it equal to the code)
         run: cp schemas/openapi.json "openapi-${GITHUB_REF_NAME}.json"
+      - name: JSON Schemas at this tag (every family and version, P4-06)
+        run: tar -czf "schemas-${GITHUB_REF_NAME}.tar.gz" schemas
       - name: Release notes from CHANGELOG.md
         run: python3 scripts/release/check_changelog.py --extract "${GITHUB_REF_NAME}" > notes.md
       - name: GitHub release
@@ -75,4 +78,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "$GITHUB_REF_NAME" sbom.cdx.json "openapi-${GITHUB_REF_NAME}.json"
-          --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+          "schemas-${GITHUB_REF_NAME}.tar.gz"
+          --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag --draft
+      # P4-06 (SEC-7): read the draft release back; fail unless the SBOM, the OpenAPI spec and
+      # the schemas archive are all attached and not empty. A failed check leaves it a draft.
+      - name: Verify the release assets
+        id: verify-assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --json assets > "$RUNNER_TEMP/assets.json"
+          python3 scripts/release/verify_assets.py "$GITHUB_REF_NAME" "$RUNNER_TEMP/assets.json"
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
