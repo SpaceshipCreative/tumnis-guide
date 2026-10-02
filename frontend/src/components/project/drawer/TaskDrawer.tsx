@@ -176,7 +176,7 @@ function PacketToggle({ taskId }: { taskId: string }) {
         }}
         className={saveClass}
       >
-        {open ? "Hide packet" : "Preview packet"}
+        Packet preview
       </button>
       {open && <PacketPreview taskId={taskId} />}
     </div>

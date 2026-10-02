@@ -405,13 +405,17 @@ class ClockOut(BaseModel):
 async def set_clock(request: Request, body: ClockIn) -> ClockOut:
     """Fixes the server clock (every route, TOTP checks and rate limits read it) until the
     next `POST /v1/test/reset`. The Playwright fixtures call it when a test installs
-    `page.clock`, so both clocks show the same instant."""
+    `page.clock`, so both clocks show the same instant. The instant is also stored for the
+    worker, which stamps a run's end with it (`fake_scripts.worker_now`, decision 86)."""
     clock = request.app.state.clock
     if not isinstance(clock, OverridableClock):  # create_app wraps it whenever fakes are on
         raise HTTPException(status_code=500, detail="the app clock cannot be overridden")
     if body.time is not None:
-        return ClockOut(now=clock.set(body.time))
-    return ClockOut(now=clock.advance(timedelta(seconds=body.advance_seconds or 0)))
+        now = clock.set(body.time)
+    else:
+        now = clock.advance(timedelta(seconds=body.advance_seconds or 0))
+    await fake_scripts.store_fixed_clock(now)
+    return ClockOut(now=now)
 
 
 @router.post("/fakes/{adapter}/script", status_code=204)
