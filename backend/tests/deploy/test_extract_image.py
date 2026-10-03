@@ -112,7 +112,6 @@ def _env(chain: list[str]) -> dict[str, str]:
 
 @pytest.mark.req("FR-15.2", "ADR-0007")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 def test_extract_stage_adds_docling_and_its_models_to_the_slim_image_only() -> None:
     """The Dockerfile has an `app-extract` stage that installs the `docling` group, fetches
     the models at build time and turns Hugging Face's network access off at run time, as
@@ -170,12 +169,14 @@ peak = pathlib.Path("/sys/fs/cgroup/memory.peak")
 out["memory_peak"] = int(peak.read_text()) if peak.exists() else None
 print("RESULT " + json.dumps(out))
 """
-# file -> (kind, snippets one chunk must hold); from the fixtures' expected files.
-IMAGE_FILES: dict[str, tuple[str, list[str]]] = {
-    "rate-card-table.pdf": ("pdf", ["Senior designer", "160"]),  # a table (TableFormer)
-    "scanned-1p.pdf": ("pdf", ["Delivery note", "Twelve chairs"]),  # OCR (RapidOCR)
-    "receipt.png": ("image", ["Flat white", "Croissant"]),
-    "courier-rates.docx": ("docx", ["Zephyrine Couriers", "45"]),
+# file -> (kind, snippets one chunk holds, the end of its heading path, its first page);
+# from the fixtures' expected files. A PDF whose base fonts are not embedded renders its
+# headings in bold only with system fonts in the image: without them "Rates" is body text.
+IMAGE_FILES: dict[str, tuple[str, list[str], list[str], int | None]] = {
+    "rate-card-table.pdf": ("pdf", ["Senior designer", "160"], ["Rates"], 2),  # TableFormer
+    "scanned-1p.pdf": ("pdf", ["Delivery note", "Twelve chairs"], [], 1),  # RapidOCR
+    "receipt.png": ("image", ["Flat white", "Croissant"], [], 1),
+    "courier-rates.docx": ("docx", ["Zephyrine Couriers", "45"], ["Courier rates", "Rates"], None),
 }
 
 
@@ -199,7 +200,7 @@ def test_extract_image_converts_offline_as_its_user(tmp_path: Path) -> None:
         source = DATA / name if (DATA / name).exists() else FIXTURES / name
         shutil.copy(source, data / name)
     data.chmod(0o755)
-    files = json.dumps({name: kind for name, (kind, _) in IMAGE_FILES.items()})
+    files = json.dumps({name: spec[0] for name, spec in IMAGE_FILES.items()})
     command = [docker, "run", "--rm", "--network", "none", "--read-only"]
     command += ["--tmpfs", "/tmp", "--tmpfs", "/scratch", "--memory", MEM_LIMIT]  # noqa: S108
     command += ["-v", f"{data}:/data:ro", "-e", f"FILES={files}", image, "python", "-c", CONVERT]
@@ -209,9 +210,14 @@ def test_extract_image_converts_offline_as_its_user(tmp_path: Path) -> None:
     result: dict[str, Any] = json.loads(line.removeprefix("RESULT "))
 
     assert result["uid"] == 10001
-    for name, (_, snippets) in IMAGE_FILES.items():
-        texts = [text for text, _, _ in result["chunks"][name]]
-        assert any(all(s in text for s in snippets) for text in texts), (name, texts)
+    for name, (_, snippets, heading_tail, page) in IMAGE_FILES.items():
+        chunks = result["chunks"][name]
+        assert any(
+            all(s in text for s in snippets)
+            and headings[len(headings) - len(heading_tail) :] == heading_tail
+            and page_from == page
+            for text, headings, page_from in chunks
+        ), (name, chunks)
     if result["memory_peak"] is not None:
         print(f"extract image memory peak: {result['memory_peak'] / GiB:.2f} GiB")
         assert result["memory_peak"] < 4 * GiB
