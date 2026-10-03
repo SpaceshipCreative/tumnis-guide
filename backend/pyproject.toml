@@ -119,6 +119,7 @@ markers = [
   "serial: timing-sensitive; runs alone (-n 0) after the parallel integration run",
   "drill: restore drill only, never on PRs",
   "docling: runs the real Docling pipeline; set in conftest.py, run by the docling CI job",
+  "extract_image: needs the built extract worker image or the real-adapter stack; run by the docling CI job",
 ]
 
 [tool.ruff]

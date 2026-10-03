@@ -1,6 +1,11 @@
-# Docling: the tests that run the real Docling pipeline (Scott decision 85). Docling, torch
-# (CPU wheels) and their models are too heavy for the integration jobs and stay out of the
-# image, so they are the optional `docling` dependency group, installed here only.
+# Docling: the tests that run the real Docling pipeline (Scott decision 85), then the
+# production images with Docling end to end (Scott decision 97). Docling, torch (CPU wheels)
+# and their models are too heavy for the integration jobs and for the app image, so they are
+# the optional `docling` dependency group, installed here and in worker-extract's image (the
+# Dockerfile's app-extract stage) only. After the tests below, this job builds both images,
+# converts the fixtures in the extract image with networking off, and runs compose.yaml with
+# real adapters (deploy/compose.test-real.yaml): upload -> clamd -> Docling -> search
+# (backend/tests/deploy/test_extract_image.py, the `extract_image` marker).
 # backend/conftest.py marks the tests (REAL_DOCLING_TESTS) `docling`, and skips them where
 # Docling is not installed, so the integration jobs leave them to this job.
 #
@@ -33,7 +38,13 @@ env:
 jobs:
   docling:
     runs-on: ubuntu-latest
-    timeout-minutes: 15 # cold model cache about 3.5 min, warm less (PR #166)
+    # Cold model cache about 3.5 min, warm less (PR #166). The images, the offline conversion
+    # and the stack add about 4 min (decision 97, PR #185: 6.3 min in all, warm caches).
+    timeout-minutes: 30
+    env:
+      TUMNIS_IMAGE: tumnis:ci
+      TUMNIS_EXTRACT_IMAGE: tumnis:ci-extract
+      TUMNIS_EXTRACT_TESTS: require
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -85,6 +96,65 @@ jobs:
           # Pull the service images while xdist starts, so no worker's first test waits on one.
           uv run --group docling python -c "from tests._services import CLAMD_IMAGE, MINIO_IMAGE, SFTP_IMAGE; from tests.fixtures import PG_IMAGE, PGBOUNCER_IMAGE; print(PG_IMAGE, PGBOUNCER_IMAGE, MINIO_IMAGE, SFTP_IMAGE, CLAMD_IMAGE)" | xargs -n1 -P5 docker pull -q > /dev/null &
           uv run --group docling pytest -m docling -n 2 --dist worksteal --durations=20 -rA
+      # Scott decision 97: worker-extract's production image. Both images are built from this
+      # checkout as a deploy builds them (deploy/Dockerfile: the app, the default target, and
+      # the app-extract stage with the docling group, CPU torch and the models fetched at
+      # build time). No layer cache: the torch and model layers (about 2.5 GB) would push
+      # the other jobs' caches out of the repository's 10 GB, and a cold build takes a few
+      # minutes.
+      - name: Build the production images
+        run: |
+          df -h /
+          start=$SECONDS
+          docker build -q -f deploy/Dockerfile --build-arg VERSION=ci -t "$TUMNIS_IMAGE" .
+          echo "app image built in $((SECONDS - start)) s"
+          start=$SECONDS
+          docker build -q -f deploy/Dockerfile --build-arg VERSION=ci --target app-extract \
+            -t "$TUMNIS_EXTRACT_IMAGE" .
+          echo "extract image built in $((SECONDS - start)) s"
+          # tumnis-postgres:18 (postgres, db-tls, backup) is built by compose, from deploy/postgres.
+          docker compose -p tumnis-real -f deploy/compose.yaml -f deploy/compose.test-real.yaml \
+            --env-file deploy/test.env build --quiet postgres
+          docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' tumnis
+          df -h /
+      # As the security job scans the app image (ci.yml): fixable high and critical findings,
+      # less .trivyignore.
+      - name: Extract image (Trivy, high and critical findings that have a fix)
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          -v "$PWD/.trivyignore:/.trivyignore:ro"
+          aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+          image --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /.trivyignore --exit-code 1
+          "$TUMNIS_EXTRACT_IMAGE"
+      # TUMNIS_EXTRACT_TESTS=require: a test whose image or stack is missing fails, never skips.
+      - name: The extract image converts with networking off, as tumnis, in 4 GiB
+        working-directory: backend
+        run: uv run --group docling pytest -m extract_image -k offline -p no:randomly -rA -s tests/deploy
+      - name: Start the production stack with real adapters
+        run: >-
+          docker compose -p tumnis-real -f deploy/compose.yaml -f deploy/compose.test-real.yaml
+          --env-file deploy/test.env up -d --no-build --quiet-pull --wait --wait-timeout 600
+      - name: Upload, scan, extract and search on that stack (end to end)
+        working-directory: backend
+        env:
+          TUMNIS_REAL_STACK_URL: http://127.0.0.1:8090
+        run: uv run --group docling pytest -m extract_image -k real_stack -p no:randomly -rA -s tests/deploy
+      - name: Stack memory and worker-extract's log
+        if: ${{ !cancelled() }}
+        run: |
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' || true
+          echo "worker-extract memory peak (bytes): $(docker compose -p tumnis-real -f deploy/compose.yaml \
+            -f deploy/compose.test-real.yaml --env-file deploy/test.env exec -T worker-extract \
+            cat /sys/fs/cgroup/memory.peak)" || true
+          docker compose -p tumnis-real -f deploy/compose.yaml -f deploy/compose.test-real.yaml \
+            --env-file deploy/test.env logs --no-color --tail=100 worker-extract || true
+      - name: Stack state and logs on failure
+        if: failure()
+        run: |
+          docker compose -p tumnis-real -f deploy/compose.yaml -f deploy/compose.test-real.yaml \
+            --env-file deploy/test.env ps --all || true
+          docker compose -p tumnis-real -f deploy/compose.yaml -f deploy/compose.test-real.yaml \
+            --env-file deploy/test.env logs --no-color --timestamps --tail=300 || true
       - name: Model cache size
         if: ${{ !cancelled() }}
         run: du -sh ~/.cache/huggingface "${{ steps.models.outputs.rapidocr }}" || true

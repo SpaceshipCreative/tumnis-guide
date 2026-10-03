@@ -21,6 +21,10 @@ if TYPE_CHECKING:
     from docling_core.types.doc.document import DoclingDocument
 
 DEFAULT_MAX_TOKENS = 512  # plan default
+# Pages Docling's threaded PDF pipeline queues between its stages (its default is 100).
+# Under worker-extract's 4 GiB limit the default held so many pages at once that a 210-page
+# PDF was killed for memory; with 8, 210 pages peaked at 2.4 GiB in the same time.
+PAGES_IN_FLIGHT = 8
 
 # Docling reads the format from the file; these are the kinds it converts from a file.
 FILE_KINDS: frozenset[DocKind] = frozenset(
@@ -53,6 +57,7 @@ def standard_converter() -> "DocumentConverter":
     pdf.do_ocr = True  # OCR applies to bitmap regions; text-layer pages are parsed
     pdf.do_table_structure = True
     pdf.table_structure_options = TableStructureOptions(do_cell_matching=True)
+    pdf.queue_max_size = PAGES_IN_FLIGHT  # bounded memory on a long PDF
     return DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(pipeline_options=pdf),
