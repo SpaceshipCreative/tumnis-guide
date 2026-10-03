@@ -37,14 +37,21 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-      - name: Build and push the image
+      # Two images (Scott decision 97): the app, and worker-extract's (the app-extract stage,
+      # with Docling and its models), which compose.yaml pulls as the same tag plus `-extract`.
+      # Both are pushed before Coolify is pointed at the commit.
+      - name: Build and push the images
         run: |
           set -euo pipefail
           image="${IMAGE,,}"
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker build -f deploy/Dockerfile --build-arg "VERSION=sha-$SHA" -t "$image:sha-$SHA" -t "$image:main" .
+          docker build -f deploy/Dockerfile --build-arg "VERSION=sha-$SHA" --target app-extract \
+            -t "$image:sha-$SHA-extract" -t "$image:main-extract" .
           docker push "$image:sha-$SHA"
           docker push "$image:main"
+          docker push "$image:sha-$SHA-extract"
+          docker push "$image:main-extract"
       - name: Point Coolify at this commit's image
         run: scripts/deploy/coolify.sh set-env TUMNIS_VERSION "sha-$SHA"
       - name: Deploy and wait

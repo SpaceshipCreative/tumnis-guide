@@ -133,11 +133,13 @@ openssl x509 -in /etc/tumnis/https/tumnis.crt -noout -subject -enddate
 
 ### 7. Build and start
 
-Build the Tumnis image from this checkout (the first build takes a while), then start the stack. Database migrations run first. `--wait` returns once the services with a health check are healthy (the api's is its own `/health/ready`) and the others are running; step 8 then checks readiness through the proxy.
+Build the Tumnis images from this checkout, then start the stack. There are two: the app image, and the extract worker's image (`-extract`), which adds Docling, CPU PyTorch and Docling's models (about 4.7 GB; its first build downloads about 1 GB of packages and models from PyPI, the PyTorch index, Hugging Face and ModelScope, so it takes a while). Only the build reaches those sites: the running worker reads the models from its image. Database migrations run first. `--wait` returns once the services with a health check are healthy (the api's is its own `/health/ready`) and the others are running; step 8 then checks readiness through the proxy.
 
 ```bash readme:install:50 timeout=2400
 docker build -f deploy/Dockerfile --build-arg VERSION=local \
   -t ghcr.io/spaceshipcreative/tumnis:local .
+docker build -f deploy/Dockerfile --build-arg VERSION=local --target app-extract \
+  -t ghcr.io/spaceshipcreative/tumnis:local-extract .
 ```
 
 ```bash readme:install:60 timeout=1800
@@ -242,7 +244,7 @@ Then, in the app:
 
 ## Connect sources
 
-Everything a project knows lives in its knowledge base: documents, notes and links, searched by you and quoted to agents. Files go through a virus scan (ClamAV) before anyone reads them. Text extraction (Docling) is not in this release's image yet: on an install, an uploaded or synced file is scanned and then marked failed (`extraction_failed`), so its text is not searchable or quoted to agents ([Not yet available](#not-yet-available)). Notes written in the editor are indexed without Docling and stay searchable.
+Everything a project knows lives in its knowledge base: documents, notes and links, searched by you and quoted to agents. Files go through a virus scan (ClamAV) before anyone reads them. Docling then reads its text and tables (scanned pages and photos through OCR) in the extract worker, whose image carries Docling's models, so extraction needs no internet access. Notes written in the editor are indexed without Docling.
 
 - **Upload** files in a project's Knowledge section (or drop one on the project's composer), up to 50 MiB each: PDF, Word, Excel, PowerPoint, text, Markdown, CSV, HTML and images (PNG, JPEG, TIFF, WebP).
 - **Notes and links** written in the editor, or saved from a URL.
@@ -319,7 +321,6 @@ Tumnis is a PWA: open `https://<TUMNIS_HOST>` on your phone over Tailscale and a
 
 These are planned but not in this release:
 
-- **Text extraction from files.** Docling, which reads the text and tables out of uploaded and synced files, is not installed in the v1 image, so on an install every file ends `extraction_failed` after its virus scan. Notes and links are not affected.
 - **Inbox Zero, Granola and chat connectors**, matching what they bring in to your tasks, and proposal runs on it; **Google Docs** as a source. These are deferred: they wait for recorded tests against the real services, and none of them works in this release. Discord is the chosen first chat provider (an ADR, 0014, will record it); today Discord already reaches the master agent through its Hermes profile ([Agents](#agents)). **Settings > Connections**, where these accounts will be connected, synced and signed in again, is in place, but it has no provider to connect yet. Its rules already hold: the sign-in page must use https (otherwise Tumnis says "The sign-in page is not secure (it must use https), so it was not opened."), the other OAuth endpoints must use https or plain http to a LAN address, a connection whose sync stopped half way recovers on the next sync cycle, and a settings save that crosses someone else's edit is refused (409) and the form reloads their version to edit again.
 - **Settings screens for GitHub and Coolify, and knowledge in search results.** Today GitHub and Coolify are set through the API ([Connect sources](#connect-sources)), and agents and the API search knowledge (`GET /v1/knowledge/search`).
 - **Hosted mode** (Tumnis run for several customers) is v2.
@@ -350,7 +351,7 @@ make up     # build and start deploy/compose.test.yaml; api on 127.0.0.1:8080 (T
 make down   # stop it and delete its volumes
 ```
 
-The tests that run the real Docling pipeline (the `docling` marker: A1.5's integration tests and the extraction set) are skipped unless the optional `docling` dependency group is installed: `cd backend && uv sync --group docling`, then `uv run --group docling pytest -m docling`. It takes torch's CPU wheels from `https://download.pytorch.org/whl/cpu` and, on the first run, about 570 MB of models from Hugging Face and ModelScope. CI runs them in their own workflow (`.github/workflows/docling.yml`), which is not a required check. The group needs typer below 0.27, so Renovate holds typer there.
+The tests that run the real Docling pipeline (the `docling` marker: A1.5's integration tests and the extraction set) are skipped unless the optional `docling` dependency group is installed: `cd backend && uv sync --group docling`, then `uv run --group docling pytest -m docling`. It takes torch's CPU wheels from `https://download.pytorch.org/whl/cpu` and, on the first run, about 570 MB of models from Hugging Face and ModelScope. CI runs them in their own workflow (`.github/workflows/docling.yml`), which is not a required check; it then builds both images and runs the `extract_image` tests: a conversion in the extract image with networking off, and an upload through clamd, Docling and search on compose.yaml with real adapters ([deploy/README.md, Images](deploy/README.md#images-scott-decision-97)). The group needs typer below 0.27, so Renovate holds typer there.
 
 Every process refuses to start (exit 78) on a configuration that would put a preview near production: `DEPLOYMENT_ENV=preview` needs `TUMNIS_ADAPTERS=fake` and no Jev key, and every process checks the database's `deployment_marker` against `DEPLOYMENT_ENV`.
 

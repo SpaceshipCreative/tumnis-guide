@@ -1,0 +1,110 @@
+# The production stack with real adapters, for the extract image's end-to-end test (Scott
+# decision 97; backend/tests/deploy/test_extract_image.py), layered on compose.yaml only:
+# no preview overrides, so real clamd scans and real Docling extracts. What it changes:
+#   - the images are built from this checkout: TUMNIS_IMAGE (slim) and TUMNIS_EXTRACT_IMAGE
+#     (the app-extract stage) for worker-extract;
+#   - throwaway secrets (master key, pepper, metrics token) made in a volume, not the host's
+#     /etc/tumnis/secrets; no pgBackRest secrets and no backups;
+#   - clamd uses the signatures in its image and never runs freshclam (no egress, as in the
+#     integration tests' clamd);
+#   - a server-folder storage location's root, /srv/tumnis-files, on a volume the api and
+#     both workers share;
+#   - the api published on loopback only (127.0.0.1:8090; TUMNIS_REAL_PORT moves it).
+#
+#   docker compose -p tumnis-real -f deploy/compose.yaml -f deploy/compose.test-real.yaml \
+#     --env-file deploy/test.env up -d --build --wait
+#   docker compose -p tumnis-real -f deploy/compose.yaml -f deploy/compose.test-real.yaml \
+#     --env-file deploy/test.env down -v
+x-image: &image
+  image: ${TUMNIS_IMAGE:-tumnis:test}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+
+x-secrets: &secrets
+  depends_on:
+    secrets: { condition: service_completed_successfully }
+
+services:
+  # Throwaway secrets for this stack, and the storage root, owned by tumnis (10001).
+  secrets:
+    <<: *image
+    user: "0"
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import base64, json, os
+        for name in ("tumnis_master_key", "tumnis_pepper", "tumnis_metrics_token"):
+            path = "/run/secrets/" + name
+            if not os.path.exists(path):
+                if name == "tumnis_metrics_token":
+                    value = base64.b16encode(os.urandom(32)).decode().lower()
+                else:
+                    key = base64.b64encode(os.urandom(32)).decode()
+                    value = json.dumps({"active": 1, "keys": {"1": key}})
+                with open(path, "w") as out:
+                    out.write(value + "\n")
+            os.chown(path, 10001, 10001)
+            os.chmod(path, 0o400)
+        # The storage root and its `.tumnis-root` marker (a server folder is online only
+        # with it), both the tumnis user's.
+        marker = "/srv/tumnis-files/.tumnis-root"
+        open(marker, "a").close()
+        for path in ("/srv/tumnis-files", marker):
+            os.chown(path, 10001, 10001)
+    volumes:
+      - real_secrets:/run/secrets
+      - real_files:/srv/tumnis-files
+    restart: "no"
+  migrate:
+    <<: [*image, *secrets]
+    volumes:
+      - real_secrets:/run/secrets:ro
+      - db_tls_ca:/etc/tumnis/tls:ro
+  api:
+    <<: [*image, *secrets]
+    ports:
+      - "127.0.0.1:${TUMNIS_REAL_PORT:-8090}:8080"
+    volumes:
+      - real_secrets:/run/secrets:ro
+      - db_tls_ca:/etc/tumnis/tls:ro
+      - spool:/var/lib/tumnis/spool
+      - real_files:/srv/tumnis-files
+  worker:
+    <<: [*image, *secrets]
+    volumes:
+      - real_secrets:/run/secrets:ro
+      - db_tls_ca:/etc/tumnis/tls:ro
+      - spool:/var/lib/tumnis/spool
+      - obsidian:/var/lib/tumnis/obsidian
+      - real_files:/srv/tumnis-files
+  worker-extract:
+    <<: *secrets
+    image: ${TUMNIS_EXTRACT_IMAGE:-tumnis:test-extract}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: app-extract
+    volumes:
+      - real_secrets:/run/secrets:ro
+      - db_tls_ca:/etc/tumnis/tls:ro
+      - spool:/var/lib/tumnis/spool
+      - scratch:/scratch
+      - real_files:/srv/tumnis-files
+  clamd:
+    environment:
+      CLAMAV_NO_FRESHCLAMD: "true"
+  # No archiving and no backup service: this stack has no pgBackRest repository.
+  postgres:
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "archive_mode=off"]
+    volumes:
+      - real_pgbackrest:/etc/pgbackrest/conf.d:ro
+  backup:
+    profiles: [backups] # never started here, so `up --wait` waits only for the app
+    volumes:
+      - real_pgbackrest:/etc/pgbackrest/conf.d:ro
+
+volumes:
+  real_secrets: {}
+  real_files: {}
+  real_pgbackrest: {}

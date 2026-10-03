@@ -110,9 +110,12 @@ services:
   # `extract` queue, and the only one that runs Docling. It reads the uploads the api spooled,
   # works in its own scratch volume and asks clamd to scan each file before anything else
   # reads it. One conversion at a time, under a memory limit so a large PDF cannot take the
-  # host down.
+  # host down. Its own image (Scott decision 97): the release's tag with `-extract`, built
+  # from deploy/Dockerfile's app-extract stage, which adds Docling, CPU torch and the models
+  # Docling reads, fetched at build time, so it reaches neither Hugging Face nor ModelScope.
   worker-extract:
     <<: *app
+    image: ghcr.io/spaceshipcreative/tumnis:${TUMNIS_VERSION:-latest}-extract
     command: ["tumnis", "worker", "--queues", "extract"]
     mem_limit: 4g
     environment:

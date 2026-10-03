@@ -58,9 +58,12 @@ services:
     <<: *secrets
     environment: *preview
   # The extract worker scans with the fake scanner in previews, so clamd (which needs a
-  # signature download) stays off unless its profile is asked for.
+  # signature download) stays off unless its profile is asked for. It extracts with the
+  # fake Docling too, so it runs the slim image the preview workflow builds, not the
+  # extract image compose.yaml names.
   worker-extract:
     <<: *secrets
+    image: ghcr.io/spaceshipcreative/tumnis:${TUMNIS_VERSION:-latest}
     environment:
       <<: *preview
       KNOWLEDGE__CLAMD_HOST: clamd

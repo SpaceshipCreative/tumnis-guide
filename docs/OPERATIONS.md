@@ -98,19 +98,24 @@ The drill only ever restores into its own scratch volume (`tumnis-drill-pgdata`)
 
 Releases are tags `vX.Y.Z` with a [CHANGELOG.md](../CHANGELOG.md) section each; read it first, including its migration notes. Migrations expand the schema first (squawk checks them in CI), and a later contract migration, such as `integrations_0004`, removes only what the previous release no longer uses. The rollback rehearsal deploys N, N+1, then N again on one database for every release, and that tested path is what the rollback below follows. Back up first if backups are not on.
 
-Set `TUMNIS_RELEASE` to the release you are moving to, for example `export TUMNIS_RELEASE=v1.1.0`, and `TUMNIS_PREVIOUS` to the release you are running now, for example `export TUMNIS_PREVIOUS=v1.0.0` (a rollback checks it out again). Keep the running image as `previous`, so a rollback needs no build:
+Set `TUMNIS_RELEASE` to the release you are moving to, for example `export TUMNIS_RELEASE=v1.1.0`, and `TUMNIS_PREVIOUS` to the release you are running now, for example `export TUMNIS_PREVIOUS=v1.0.0` (a rollback checks it out again). Keep the running images as `previous`, so a rollback needs no build (a release older than the extract worker's own image has only the app image):
 
 ```bash readme:upgrade:10
 docker image tag ghcr.io/spaceshipcreative/tumnis:local ghcr.io/spaceshipcreative/tumnis:previous
+if docker image inspect ghcr.io/spaceshipcreative/tumnis:local-extract >/dev/null 2>&1; then
+  docker image tag ghcr.io/spaceshipcreative/tumnis:local-extract ghcr.io/spaceshipcreative/tumnis:previous-extract
+fi
 ```
 
-Check out the release, build its image and restart. `migrate` runs first (the api and the workers wait for it), and `--wait` returns once the api answers `/health/ready`:
+Check out the release, build its two images (the app and the extract worker's) and restart. `migrate` runs first (the api and the workers wait for it), and `--wait` returns once the api answers `/health/ready`:
 
 ```bash readme:upgrade:20 timeout=2700
 git fetch --tags origin
 git checkout --detach "$TUMNIS_RELEASE"
 docker build -f deploy/Dockerfile --build-arg VERSION="$TUMNIS_RELEASE" \
   -t ghcr.io/spaceshipcreative/tumnis:local .
+docker build -f deploy/Dockerfile --build-arg VERSION="$TUMNIS_RELEASE" --target app-extract \
+  -t ghcr.io/spaceshipcreative/tumnis:local-extract .
 docker compose up -d --build --wait --wait-timeout 1500
 ```
 
@@ -120,11 +125,14 @@ Compare `.env.example` with your `.env` after an upgrade: a new variable has a d
 
 Rollback is "redeploy the previous image" (REL-4). Never roll the database back: the previous release's `tumnis migrate` exits 0 with "database is ahead of this release (rollback)", and readiness treats a database ahead of the release as ready.
 
-Check out the previous release first, so `deploy/` (the compose file and its config) matches the previous image, then put that image back and restart:
+Check out the previous release first, so `deploy/` (the compose file and its config) matches the previous images, then put those images back and restart (a release older than the extract worker's own image runs worker-extract on the app image, so it has no `previous-extract`):
 
 ```bash readme:upgrade:30 timeout=900
 git checkout --detach "$TUMNIS_PREVIOUS"
 docker image tag ghcr.io/spaceshipcreative/tumnis:previous ghcr.io/spaceshipcreative/tumnis:local
+if docker image inspect ghcr.io/spaceshipcreative/tumnis:previous-extract >/dev/null 2>&1; then
+  docker image tag ghcr.io/spaceshipcreative/tumnis:previous-extract ghcr.io/spaceshipcreative/tumnis:local-extract
+fi
 docker compose up -d --wait --wait-timeout 600
 ```
 
@@ -177,6 +185,6 @@ Versions follow [SemVer](https://semver.org), and every release has a dated sect
 2. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add an empty `## [Unreleased]` above it, and merge.
 3. Check the tag locally: `python3 scripts/release/check_changelog.py vX.Y.Z`.
 4. Tag `main` and push the tag: `git tag -s vX.Y.Z -m "..." && git push origin vX.Y.Z`.
-5. `.github/workflows/release.yml` rehearses the rollback from the previous tag on the homelab runner, then pushes `ghcr.io/spaceshipcreative/tumnis:vX.Y.Z` and creates the GitHub release, as a draft, with the changelog section as notes and three assets: the CycloneDX SBOM (`sbom.cdx.json`), the OpenAPI spec (`openapi-vX.Y.Z.json`) and the JSON Schemas (`schemas-vX.Y.Z.tar.gz`). It then reads the draft back and fails if any of the three is missing or empty, leaving the release a draft; only when all three are there does it publish the release. The README job also runs on the tag.
+5. `.github/workflows/release.yml` rehearses the rollback from the previous tag on the homelab runner, then pushes `ghcr.io/spaceshipcreative/tumnis:vX.Y.Z` and the extract worker's `ghcr.io/spaceshipcreative/tumnis:vX.Y.Z-extract` and creates the GitHub release, as a draft, with the changelog section as notes, the extract image's SBOM (`sbom-extract.cdx.json`) and three required assets: the CycloneDX SBOM (`sbom.cdx.json`), the OpenAPI spec (`openapi-vX.Y.Z.json`) and the JSON Schemas (`schemas-vX.Y.Z.tar.gz`). It then reads the draft back and fails if any of the three is missing or empty, leaving the release a draft; only when all three are there does it publish the release. The README job also runs on the tag.
 
 Rehearse any release locally with `scripts/release/rollback_rehearsal.sh <previous tag> HEAD` (Docker; the stack is `deploy/compose.test.yaml` as project `tumnis-skew` on 127.0.0.1:18080). Every pull request that changes a migration runs the same rehearsal from the latest `main` image (`.github/workflows/version-skew.yml`).
