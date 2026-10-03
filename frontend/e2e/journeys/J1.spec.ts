@@ -83,12 +83,25 @@ test(
     // 3. Accept the first with its button, the second with the `a` key: both
     // show the accepted state and their tasks move to Today.
     const [first, second, third, fourth] = ordered;
+    // The accepted state is optimistic: wait for both accept POSTs to answer
+    // before reading the tasks from the server (APP-F06, decision 99).
+    const acceptsDone = Promise.all(
+      [first, second].map((item) =>
+        page.waitForResponse(
+          (r) =>
+            r.request().method() === "POST" &&
+            new URL(r.url()).pathname ===
+              `/v1/plan/${MONDAY}/items/${item?.task_id ?? ""}/accept`,
+        ),
+      ),
+    );
     await items.nth(0).getByRole("button", { name: "Accept" }).click();
     await items.nth(1).focus();
     await page.keyboard.press("a");
     for (const index of [0, 1]) {
       await expect(items.nth(index)).toHaveAttribute("data-state", "accepted");
     }
+    await acceptsDone;
     for (const item of [first, second]) {
       expect((await getTask(page.request, item?.task_id ?? "")).status).toBe(
         "today",
