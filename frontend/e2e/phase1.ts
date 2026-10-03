@@ -128,12 +128,16 @@ async function sendJson(
   return text ? (JSON.parse(text) as Json) : {};
 }
 
-/** `GET /v1/plan/{day}`: the published plan, its items and issues. */
-export function getPlan(
+/** `GET /v1/plan/{day}`: the published plan, its items and issues. The read answers
+ * 200 with `null` while no plan is published (APP-F05); that is an error here. */
+export async function getPlan(
   request: APIRequestContext,
   day: string = MONDAY,
 ): Promise<Plan> {
-  return getJson<Plan>(request, `/v1/plan/${day}`);
+  const plan = await getJson<Plan | null>(request, `/v1/plan/${day}`);
+  if (plan === null)
+    throw new Error(`GET /v1/plan/${day} -> no plan published`);
+  return plan;
 }
 
 /** `GET /v1/plan/{day}/calendar`: window, events and free blocks (P1-10). */

@@ -21,18 +21,15 @@ function planNotYetPublished() {
   return http.get("*/v1/plan/:day", () => HttpResponse.json(null));
 }
 
-test.fails(
-  "[P1-11][FR-4.3] APP-F05 the client reads a 200 null plan as no plan, not an error",
-  async () => {
-    server.use(planNotYetPublished());
-    const answer = await planningGetPlan({
-      path: { day: MONDAY },
-      throwOnError: true,
-    });
-    expect(answer.response.status).toBe(200);
-    expect(answer.data).toBeNull();
-  },
-);
+test("[P1-11][FR-4.3] APP-F05 the client reads a 200 null plan as no plan, not an error", async () => {
+  server.use(planNotYetPublished());
+  const answer = await planningGetPlan({
+    path: { day: MONDAY },
+    throwOnError: true,
+  });
+  expect(answer.response.status).toBe(200);
+  expect(answer.data).toBeNull();
+});
 
 test("[P1-11][FR-1.2] APP-F05 with no plan yet the Today panel shows its Today tasks", async () => {
   server.use(planNotYetPublished());
@@ -55,25 +52,22 @@ test("[P1-11][FR-1.2] APP-F05 with no plan yet the Today panel shows its Today t
   expect(today).not.toHaveTextContent("could not be loaded");
 });
 
-test.fails(
-  "[P4-01][FR-10.6] APP-F05 with no plan yet Guardrail offers a re-plan, not unavailable",
-  async () => {
-    server.use(
-      focusCurrent({
-        ...quietFocus(),
-        level: "guardrail",
-        workspace_level: "guardrail",
-      }),
-      planNotYetPublished(),
-    );
-    await renderRoute("/", { viewport: "laptop" });
+test("[P4-01][FR-10.6] APP-F05 with no plan yet Guardrail offers a re-plan, not unavailable", async () => {
+  server.use(
+    focusCurrent({
+      ...quietFocus(),
+      level: "guardrail",
+      workspace_level: "guardrail",
+    }),
+    planNotYetPublished(),
+  );
+  await renderRoute("/", { viewport: "laptop" });
 
-    const now = await screen.findByRole("region", { name: "Now" });
-    expect(
-      await within(now).findByText("Nothing planned. Re-plan?"),
-    ).toBeInTheDocument();
-    expect(
-      within(now).queryByText("Today's plan could not be loaded."),
-    ).toBeNull();
-  },
-);
+  const now = await screen.findByRole("region", { name: "Now" });
+  expect(
+    await within(now).findByText("Nothing planned. Re-plan?"),
+  ).toBeInTheDocument();
+  expect(
+    within(now).queryByText("Today's plan could not be loaded."),
+  ).toBeNull();
+});

@@ -12571,9 +12571,11 @@ export type PlanningGetPlanError =
 
 export type PlanningGetPlanResponses = {
   /**
+   * Response Planning Get Plan
+   *
    * Successful Response
    */
-  200: PlanOut;
+  200: PlanOut | null;
 };
 
 export type PlanningGetPlanResponse =

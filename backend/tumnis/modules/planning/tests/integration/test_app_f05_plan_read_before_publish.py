@@ -26,7 +26,6 @@ pytestmark = [
 ]
 
 
-@pytest.mark.xfail(strict=True, reason="spec:APP-F05")
 async def test_plan_read_before_publish_answers_200_null(session_client: SessionClient) -> None:
     """APP-F05: a day with no published plan answers 200 with `null`, not 404."""
     response = await session_client.get(f"/v1/plan/{MONDAY.isoformat()}")

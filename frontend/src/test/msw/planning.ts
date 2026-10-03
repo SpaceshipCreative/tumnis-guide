@@ -207,19 +207,10 @@ export function ninetyMinuteIssue(
   };
 }
 
-/** `GET /v1/plan/{day}`: 404, no plan published for the day. */
+/** `GET /v1/plan/{day}`: 200 with `null`, no plan published for the day yet (APP-F05,
+ * decision 98). */
 export function noPlan(): RequestHandler {
-  return http.get("*/v1/plan/:day", () =>
-    HttpResponse.json(
-      {
-        type: "about:blank",
-        title: "Not found",
-        status: 404,
-        code: "not_found",
-      },
-      { status: 404 },
-    ),
-  );
+  return http.get("*/v1/plan/:day", () => HttpResponse.json(null));
 }
 
 /** The alternates a swap offers (`GET /v1/plan/{day}/alternates`). */

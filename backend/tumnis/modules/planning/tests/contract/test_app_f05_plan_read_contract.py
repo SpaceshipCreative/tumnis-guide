@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 pytestmark = [pytest.mark.contract, pytest.mark.req("FR-4.3", "FR-1.2"), pytest.mark.wp("P1-11")]
 
 
-@pytest.mark.xfail(strict=True, reason="spec:APP-F05")
 def test_plan_read_declares_a_nullable_plan(repo_root: Path) -> None:
     """APP-F05: the 200 answer of `planning_get_plan` is a `PlanOut` or `null`."""
     spec = json.loads((repo_root / "schemas/openapi.json").read_text())

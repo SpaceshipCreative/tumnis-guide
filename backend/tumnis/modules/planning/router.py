@@ -112,8 +112,9 @@ async def replan(body: api.ReplanIn, request: Request, ctx: Session) -> api.Repl
 
 @router.get("/{day}")
 @route_policy(RoutePolicy(auth="session"))
-async def get_plan(day: date, ctx: Session) -> api.PlanOut:
-    return await api.get_plan(ctx, day)
+async def get_plan(day: date, ctx: Session) -> api.PlanOut | None:
+    # 200 with null before the planner publishes the day's plan (APP-F05, decision 98).
+    return await api.read_plan(ctx, day)
 
 
 @router.get("/{day}/alternates")
