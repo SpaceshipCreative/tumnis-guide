@@ -38,9 +38,9 @@ env:
 jobs:
   docling:
     runs-on: ubuntu-latest
-    # Cold model cache about 3.5 min, warm less (PR #166); the image build, the offline
-    # conversion and the stack add about NN min (decision 97).
-    timeout-minutes: 40
+    # Cold model cache about 3.5 min, warm less (PR #166). The images, the offline conversion
+    # and the stack add about 4 min (decision 97, PR #185: 6.3 min in all, warm caches).
+    timeout-minutes: 30
     env:
       TUMNIS_IMAGE: tumnis:ci
       TUMNIS_EXTRACT_IMAGE: tumnis:ci-extract
