@@ -258,7 +258,7 @@ Integration tests carry `@pytest.mark.enable_socket` through a module-level `pyt
 | Unit | `uv run pytest -m "not integration and not contract"` | `rules.py`, pure code, sockets disabled | 4 min (PRD: backend rules under 30 s) | GitHub-hosted |
 | Contract | `uv run pytest -m contract` + `make gen && git diff --exit-code` + Schemathesis | Schemas, adapters, connectors | 3 min | GitHub-hosted |
 | Integration | `uv run pytest -m integration -n auto`, as two parallel CI jobs split by module (`integration-a`, `integration-b`; Scott decision 65) | Postgres, DBOS, MinIO, SFTP, clamd, RLS, workflows | 15 min per job | GitHub-hosted |
-| Frontend | `npm run test` (Vitest) | Components, machines, stores, lib | inside Unit budget | GitHub-hosted |
+| Frontend | `npm run test` (Vitest), as its own CI job `unit-frontend` in parallel with `unit` (Scott decision 96) | Components, machines, stores, lib | 4 min | GitHub-hosted |
 | End to end | `npx playwright test` | Journeys and acceptance, phone and laptop | 10 min | GitHub-hosted, against compose.test with fakes |
 | Skills | `uv run python -m profiles.harness run` | Hermes skills, hostile set | 5 min | Homelab self-hosted runner |
 | Security | pip-audit, npm audit, Trivy, Semgrep, gitleaks | Dependencies, image, code, secrets | 5 min | GitHub-hosted |
@@ -1596,7 +1596,7 @@ cd ../frontend && npm run test -- --run && npx playwright test e2e/harness.spec.
 
 **Done checklist**
 
-- [ ] Each test layer runs its (harness-only) suite green in CI inside its budget (unit 4 min, contract 3 min, integration 15 min, frontend inside unit, e2e 10 min)
+- [ ] Each test layer runs its (harness-only) suite green in CI inside its budget (unit 4 min, contract 3 min, integration 15 min, frontend 4 min in its own `unit-frontend` job, e2e 10 min)
 - [ ] `xfail_strict`, strict markers, random order and the socket block are on by default
 - [ ] T-P0-02-03 is committed with `reason="spec:P0-18"`
 - [ ] AGENTS.md "Tests and markers" section updated with the fixture list
