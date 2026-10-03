@@ -527,7 +527,7 @@ The PRD's test layers (Quality and testing) run from the first commit; this sect
 | Job | Runs | Budget |
 | --- | --- | --- |
 | Lint | Ruff, the Python type checker, import-linter boundaries, the frontend linter, TypeScript `tsc` | 2 min |
-| Unit | pytest on `rules.py` and pure code (no network or database); Vitest on components and XState machines | 4 min |
+| Unit (two parallel jobs: `unit` runs pytest, `unit-frontend` runs Vitest; Scott decision 96) | pytest on `rules.py` and pure code (no network or database); Vitest on components and XState machines | 4 min each |
 | Contract | Regenerate OpenAPI, JSON Schemas and the openapi-ts client; fail on any diff from what is committed; schema tests for every tool, endpoint and runner message | 3 min |
 | Daemon | The runner daemon's own Ruff, type checker and pytest, including its contract test against `schemas/runner/v1/` | 3 min |
 | Integration (two parallel jobs, `integration-a` and `integration-b`, split by module; every test runs in exactly one) | pytest with the disposable services; task state machine, DBOS workflows (dispatch, delegate and wait, approvals, sync, extraction, folder sync), RLS isolation suite, query-count assertions | 15 min each |

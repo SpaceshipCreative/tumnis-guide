@@ -3,6 +3,7 @@
 # in .github/workflows/ci.yml.
 lint
 unit
+unit-frontend
 contract
 integration-a
 integration-b

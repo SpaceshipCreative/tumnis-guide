@@ -21,6 +21,7 @@ REQUIRED_CHECKS = REPO / ".github" / "required-checks.txt"
 BUDGETS = {
     "lint": 2,
     "unit": 4,
+    "unit-frontend": 4,  # frontend Vitest, split out of unit (Scott decision 96)
     "contract": 3,
     "integration-a": 15,  # two parallel jobs split by path (Scott decision 65)
     "integration-b": 15,
