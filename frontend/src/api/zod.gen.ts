@@ -4102,9 +4102,11 @@ export const zPlanningGetPlanPath = z.object({
 });
 
 /**
+ * Response Planning Get Plan
+ *
  * Successful Response
  */
-export const zPlanningGetPlanResponse = zPlanOut;
+export const zPlanningGetPlanResponse = zPlanOut.nullable();
 
 export const zPlanningAcceptAllPath = z.object({
   day: z.iso.date(),

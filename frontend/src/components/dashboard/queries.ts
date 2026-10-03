@@ -59,9 +59,10 @@ export function justAddedQuery() {
   });
 }
 
-/** The day's published plan (P1-11); a 404 (no plan for the day) is not retried, and the
- * page does not ask again on mount after the loader's answer (the live socket refreshes it
- * when a plan is published), so a day without a plan shows its Today tasks at once. */
+/** The day's published plan (P1-11), or `null` while none is published (200, APP-F05);
+ * the page does not ask again on mount after the loader's answer (the live socket
+ * refreshes it when a plan is published), so a day without a plan shows its Today tasks
+ * at once. */
 export function planQuery(day: string) {
   return queryOptions({
     ...planningGetPlanOptions({ path: { day } }),

@@ -135,13 +135,12 @@ async def get_task(http: SessionClient, task_id: str) -> Json:
 
 
 async def published_plan(http: SessionClient, day: date) -> Json | None:
-    """`GET /v1/plan/{day}` once a plan is published for the day, else None."""
+    """`GET /v1/plan/{day}` once a plan is published for the day, else None (the read
+    answers 200 with null until then, APP-F05)."""
     response = await http.get(f"/v1/plan/{day.isoformat()}")
-    if response.status_code == 404:
-        return None
     response.raise_for_status()
-    body: Json = response.json()
-    return body if body.get("status") == "published" else None
+    body: Json | None = response.json()
+    return body if body is not None and body.get("status") == "published" else None
 
 
 async def day_calendar(http: SessionClient, day: date) -> Json:

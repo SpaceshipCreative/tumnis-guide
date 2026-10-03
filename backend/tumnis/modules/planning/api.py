@@ -1104,14 +1104,18 @@ class PlanOut(BaseModel):
     issues: list[PlanIssueOut]
 
 
-async def _published(s: AsyncSession, day: date) -> Any:
-    row = (
+async def _published_or_none(s: AsyncSession, day: date) -> Any:
+    return (
         await s.execute(
             select(_PLANS).where(
                 _PLANS.c.day == day, _PLANS.c.status == "published", _PLANS.c.deleted_at.is_(None)
             )
         )
     ).first()
+
+
+async def _published(s: AsyncSession, day: date) -> Any:
+    row = await _published_or_none(s, day)
     if row is None:
         raise ProblemError(404, "not_found", f"No plan is published for {day.isoformat()}.")
     return row
@@ -1204,6 +1208,15 @@ async def get_plan(
     zone = await _timezone(ctx, session)
     async with session_for(ctx, session) as s:
         return await _plan_out(s, await _published(s, day), zone)
+
+
+async def read_plan(ctx: WorkspaceContext, day: date) -> PlanOut | None:
+    """`GET /v1/plan/{day}`: the day's published plan, or None while the planner has not
+    published one (APP-F05, decision 98: "no plan yet" is an answer, not a 404)."""
+    zone = await _timezone(ctx, None)
+    async with session_for(ctx, None) as s:
+        plan = await _published_or_none(s, day)
+        return None if plan is None else await _plan_out(s, plan, zone)
 
 
 # --- What the person does with the plan --------------------------------------------------
