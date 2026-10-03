@@ -1,12 +1,12 @@
 # Owner actions
 
-What the build still needs from the project owner: settings only the owner can change, and decisions the build agents left open. Last updated 2026-10-03, on main at f29bd555.
+What the build still needs from the project owner: settings only the owner can change, and decisions the build agents left open. Last updated 2026-10-03, on main at c6a69b3f.
 
-Build status: 79 of 86 work packages are merged. The other 7 are the Phase 3 connectors deferred on purpose. The final application test's findings are fixed, except APP-F05 and APP-F06 below. #186 (Vitest in its own CI job) is open and should merge shortly.
+Build status: 79 of 86 work packages are merged. The other 7 are the Phase 3 connectors deferred on purpose. The final application test's findings are fixed, except APP-F05 and APP-F06 below. #186 moved frontend Vitest into its own `unit-frontend` CI job.
 
 ## 1. Do these (only you can)
 
-- [ ] **Make `unit-frontend` a required check** once #186 merges. It's a branch protection or ruleset setting. `scripts/ci/branch_protection.sh` applies `.github/required-checks.txt`, which #186 updates.
+- [ ] **Make `unit-frontend` a required check** (added by #186). It's a branch protection or ruleset setting. `scripts/ci/branch_protection.sh` applies `.github/required-checks.txt`, which #186 updated.
 - [ ] **Decide whether `docling` becomes a required check.** It now builds the extract image and runs real extraction end to end on the production compose stack, in about 7 minutes. It isn't required today. Making it required is a spec change to the locked CI budget table.
 - [ ] **Allow build-time network access for the extract image** (#185). Building `worker-extract`'s image downloads from Hugging Face, ModelScope and the PyTorch CPU index. At runtime it needs none of them (`HF_HUB_OFFLINE=1`). The image is about 4.7 GB; the slim image for the api and the other workers is unchanged.
 - [ ] **Deploy host:** Docker Compose 2.24.0 or later. Coolify needs a route for the gitignored `deploy/hosted-keys.env` (a file mount or an absolute host path).
