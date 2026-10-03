@@ -1,5 +1,5 @@
-# CI: the architecture's nine jobs (Integration runs as two) plus spec-guard, red-proof and
-# traceability (P0-03, P1-04).
+# CI: the architecture's nine jobs (Integration runs as two; Unit as `unit` and
+# `unit-frontend`) plus spec-guard, red-proof and traceability (P0-03, P1-04).
 #
 # Job ids are the required-check names: .github/required-checks.txt lists them and
 # scripts/ci/branch_protection.sh requires them on main. Every job runs on every PR (no
@@ -81,40 +81,19 @@ jobs:
     timeout-minutes: 4
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Node first, so Vitest starts as early as it can; setup-uv follows it.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      # Before pytest: the spec-guard tests parse TypeScript with frontend/node_modules.
+      # Before pytest: the spec-guard and traceability tests parse TypeScript with
+      # frontend/node_modules. Vitest itself runs in `unit-frontend` (Scott decision 96).
+      # The CPU model is logged because runner hardware varies, and so do the timings.
       - name: Install frontend
         working-directory: frontend
-        run: npm ci --no-audit --no-fund
-      # Vitest runs in the background, alongside the backend steps below, instead of after
-      # them. The runner's 4 vCPUs are 2 cores with 2 threads each, and each half alone
-      # leaves CPU idle (pytest's start-up and slow tail, Vitest's start-up), so together
-      # they finish sooner. Every stream is redirected, so this step ends at once.
-      # `Frontend unit tests` streams the log until Vitest exits and then exits with
-      # Vitest's code. The code is written to a temporary file and renamed, so it is never
-      # read half written. No pytest test writes under frontend/: spec-guard and
-      # traceability only read *.test.ts files and node_modules/typescript. The CPU model
-      # is logged because runner hardware varies, and so do the timings.
-      # Node's compile cache keeps V8 code cache on disk. Every test file runs in a fresh
-      # worker thread, which compiles jsdom, React and the rest again, so a cache a finished
-      # worker wrote spares the next one that work. It cut the job by about 8% on the
-      # slowest runners (EPYC 7763) in #184's bench (Node docs, module.html, "Module
-      # compile cache"). Vitest here runs without coverage, which the cache can make less
-      # precise.
-      - name: Start frontend unit tests
-        id: vitest
-        working-directory: frontend
-        env:
-          NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
         run: |
           lscpu | grep -m1 "Model name"
-          nohup sh -c 'date -u +"Vitest started %T"; npm run test -- --run; code=$?; date -u +"Vitest finished %T"; echo "$code" > "$RUNNER_TEMP/vitest.exit.tmp" && mv "$RUNNER_TEMP/vitest.exit.tmp" "$RUNNER_TEMP/vitest.exit"' > "$RUNNER_TEMP/vitest.log" 2>&1 < /dev/null &
-          echo "$!" > "$RUNNER_TEMP/vitest.pid"
+          npm ci --no-audit --no-fund
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
@@ -132,9 +111,6 @@ jobs:
             mypy-${{ runner.os }}-
       # worksteal lets idle workers take queued tests from busy ones, which shortens the
       # slow tail (the contract job already uses it); --durations shows the slowest tests.
-      # Three workers, not one per vCPU (`auto`): Vitest shares the CPUs, and each xdist
-      # worker collects the whole suite first (15-25 s of CPU), so a fourth costs more than
-      # it gives. With two, pytest becomes the slower half.
       - name: Backend unit tests with coverage
         working-directory: backend
         run: |
@@ -142,19 +118,36 @@ jobs:
           uv run pytest -m "not integration and not contract" -n 3 --dist worksteal --durations=15 --cov --cov-report=json
       - name: Coverage gates
         run: uv run --project backend python scripts/ci/coverage_gates.py backend/coverage.json
-      # Also runs when a backend step failed, so that failure doesn't hide Vitest's result.
-      # `tail --pid` prints the log as it grows and returns once Vitest's shell has exited,
-      # so the log shows even if the job times out. A missing exit code means the shell
-      # was killed before Vitest finished.
-      - name: Frontend unit tests
-        if: ${{ !cancelled() && steps.vitest.outcome == 'success' }}
+
+  # Frontend Vitest, in parallel with `unit` and with its own budget (Scott decision 96).
+  # Together they ran past unit's 4 minutes on the slowest runners (EPYC 7763); each half
+  # alone takes under 3.
+  unit-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend
+        working-directory: frontend
         run: |
-          tail -n +1 -f --pid="$(cat "$RUNNER_TEMP/vitest.pid")" "$RUNNER_TEMP/vitest.log"
-          if [ ! -f "$RUNNER_TEMP/vitest.exit" ]; then
-            echo "::error::Vitest stopped without an exit code"
-            exit 1
-          fi
-          exit "$(cat "$RUNNER_TEMP/vitest.exit")"
+          lscpu | grep -m1 "Model name"
+          npm ci --no-audit --no-fund
+      # Node's compile cache keeps V8 code cache on disk. Every test file runs in a fresh
+      # worker thread, which compiles jsdom, React and the rest again, so a cache a finished
+      # worker wrote spares the next one that work. It cut the job by about 8% on the
+      # slowest runners (EPYC 7763) in #184's bench (Node docs, module.html, "Module
+      # compile cache"). Vitest here runs without coverage, which the cache can make less
+      # precise.
+      - name: Frontend unit tests
+        working-directory: frontend
+        env:
+          NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
+        run: npm run test -- --run
 
   contract:
     runs-on: ubuntu-latest
