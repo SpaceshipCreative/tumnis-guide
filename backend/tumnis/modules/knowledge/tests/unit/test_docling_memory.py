@@ -21,7 +21,6 @@ MAX_PAGES_IN_FLIGHT = 8
 
 @pytest.mark.req("FR-15.2", "ADR-0007")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 def test_converter_keeps_few_pages_in_flight() -> None:
     """The standard converter's PDF and image pipelines queue at most 8 pages between
     stages, so a long PDF converts in bounded memory."""
