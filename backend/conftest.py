@@ -36,6 +36,9 @@ REAL_DOCLING_TESTS: dict[str, frozenset[str]] = {
     "tumnis/modules/knowledge/tests/integration/test_extraction_set.py": frozenset(
         {"test_expected_chunks"}
     ),
+    "tumnis/modules/knowledge/tests/unit/test_docling_memory.py": frozenset(
+        {"test_converter_keeps_few_pages_in_flight"}
+    ),
 }
 NO_DOCLING = pytest.mark.skip(
     reason="needs Docling: `uv sync --group docling` (the docling CI job, Scott decision 85)"
