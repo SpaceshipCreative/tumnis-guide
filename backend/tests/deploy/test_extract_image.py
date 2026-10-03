@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import time
 import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -141,7 +142,6 @@ def test_extract_stage_adds_docling_and_its_models_to_the_slim_image_only() -> N
 
 @pytest.mark.req("FR-15.2", "ADR-0007")
 @pytest.mark.wp("P1-16")
-@pytest.mark.xfail(strict=True, reason="spec:P1-16")
 def test_only_worker_extract_runs_the_extract_image() -> None:
     """compose.yaml runs worker-extract on the extract image (the release's tag with
     `-extract`), and every other app service on the slim one. Previews run fakes, so
@@ -270,20 +270,27 @@ def _ok(response: httpx.Response) -> Any:
     return response.json() if response.content else None
 
 
+@pytest.fixture
+def real_stack() -> Iterator[_Session]:
+    """A client for the real-adapter stack's api (TUMNIS_REAL_STACK_URL)."""
+    session = _Session(_needs("TUMNIS_REAL_STACK_URL").rstrip("/"))
+    with session.client:
+        yield session
+
+
 @pytest.mark.req("FR-15.2", "FR-15.3", "ADR-0007")
 @pytest.mark.wp("P1-16")
 @pytest.mark.integration
 @pytest.mark.enable_socket
 @pytest.mark.slow
 @pytest.mark.extract_image
-def test_real_stack_extracts_uploads_and_finds_their_passages() -> None:
+def test_real_stack_extracts_uploads_and_finds_their_passages(real_stack: _Session) -> None:
     """On compose.yaml with real adapters (clamd, Docling in worker-extract's image): set
     up the workspace, add a server-folder location and a project, upload a PDF with a table
     and a DOCX with a table. Each is scanned, extracted and chunked and ends `ready` (never
     `extraction_failed`), and `GET /v1/knowledge/search` finds its table passage, citing
     the document, its heading path and (for the PDF) the page."""
-    base = _needs("TUMNIS_REAL_STACK_URL").rstrip("/")
-    call = _Session(base)
+    call = real_stack
 
     started = call(
         "POST",
@@ -301,17 +308,23 @@ def test_real_stack_extracts_uploads_and_finds_their_passages() -> None:
     project = _ok(call("POST", "/v1/projects", json={"name": "Extraction check"}))
 
     documents: dict[str, str] = {}
+    folder_deadline = time.monotonic() + 120
     for name, (mime, *_rest) in UPLOADS.items():
         source = DATA / name if (DATA / name).exists() else FIXTURES / name
-        accepted = _ok(
-            call(
+        while True:
+            answer = call(
                 "POST",
                 "/v1/knowledge/documents",
                 data={"project_id": project["id"]},
                 files={"file": (name, source.read_bytes(), mime)},
             )
-        )
-        documents[name] = accepted["id"]
+            # The worker makes the new project's folder after `project.created`; until then
+            # the upload has nowhere to go (409 no_location).
+            if answer.status_code != 409 or time.monotonic() > folder_deadline:
+                break
+            assert answer.json()["code"] == "no_location", answer.text
+            time.sleep(2)
+        documents[name] = _ok(answer)["id"]
 
     deadline = time.monotonic() + 600
     final: dict[str, dict[str, Any]] = {}
