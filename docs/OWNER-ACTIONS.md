@@ -1,8 +1,8 @@
 # Owner actions
 
-What the build still needs from the project owner: settings only the owner can change, and decisions the build agents left open. Last updated 2026-10-03, on main at c6a69b3f.
+What the build still needs from the project owner: settings only the owner can change, and decisions the build agents left open. Last updated 2026-10-03, on main at c0372c92.
 
-Build status: 79 of 86 work packages are merged. The other 7 are the Phase 3 connectors deferred on purpose. The final application test's findings are fixed, except APP-F05 and APP-F06 below. #186 moved frontend Vitest into its own `unit-frontend` CI job.
+Build status: 79 of 86 work packages are merged. The other 7 are the Phase 3 connectors deferred on purpose. All of the final application test's findings are fixed: #188 closed the last two (APP-F05, the plan read now answers 200 with null before a plan exists; APP-F06, J1 waits for the accept requests). #186 moved frontend Vitest into its own `unit-frontend` CI job.
 
 ## 1. Do these (only you can)
 
@@ -20,7 +20,6 @@ Build status: 79 of 86 work packages are merged. The other 7 are the Phase 3 con
 
 ## 3. Product and UX decisions
 
-- [ ] **APP-F05:** `GET /v1/plan/{today}` answers 404 until the planner publishes a plan, which shows as a console error on the dashboard. Options: (a) return 200 with an empty plan (a contract change); (b) the client treats 404 as "no plan yet"; (c) leave it.
 - [ ] **Rate limit (#176):** is the per-user limit (burst 50, then 10/s) enough? J1 sends about 84 requests in 3.4 s. Every plan change triggers a duplicate refetch. When the plan read fails with anything other than 404, the Today panel quietly falls back to the Today tasks instead of saying the plan couldn't load.
 - [ ] **Settings screens (APP-13):** GitHub, Coolify, planning, focus and triage settings can only be changed through the API. The plan specifies no screens for them.
 - [ ] **Plan issues (APP-12):** Edit on a plan issue still opens the generic "Value" form.
@@ -41,7 +40,6 @@ Build status: 79 of 86 work packages are merged. The other 7 are the Phase 3 con
 
 ## 5. Tests and CI
 
-- [ ] **APP-F06 (J1 A1.2 flake):** the journey reads the task before the accept request commits. The app is correct. The fix changes a journey step in `J1.spec.ts:86-96` (wait for the response) and no assertion, but spec tests are locked, so it needs your OK.
 - [ ] **Performance budget:** a median of 5 Lighthouse runs doesn't fit the 5-minute job budget. Raise the budget (spec change), or keep 3 runs and accept occasional dashboard TBT noise (50-220 ms against a 200 ms budget).
 - [ ] **Locked deadlock tests:** after #183, the docstrings of `test_reset_deadlock_worker_write.py` and `test_reset_deadlock_attempts.py` describe the old lock order. Docstring only, but the files are locked.
 - [ ] **Red-proof:** `test_s3_source_worker` (#182) and P3-13's LinkedObjectChangedError test were never shown failing in CI against the old code. Red-proof needs a `bug`-labelled issue and a `test_issue_<n>_` name.
