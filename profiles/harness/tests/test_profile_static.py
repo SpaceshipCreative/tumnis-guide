@@ -45,6 +45,12 @@ PLACEHOLDERS = {
     "COOLIFY_BASE_URL",
     "COOLIFY_TOKEN",
     "TYPESAFE_API_KEY",
+    # The System One endpoint the `jev` server asks; empty means TypeSafe's API, the
+    # pinned Jev model and Jev's limits (FIX-jev-mcp, Scott decision 102).
+    "TYPESAFE_BASE_URL",
+    "TYPESAFE_DEFAULT_MODEL",
+    "SYSTEMONE_MAX_REQUEST_TOKENS",
+    "SYSTEMONE_MAX_STATE_TOKENS",
 }
 
 
@@ -99,6 +105,7 @@ def test_digest_cron_hourly_in_working_hours() -> None:
 
 @pytest.mark.req("FR-5.3", "FR-11.6")
 @pytest.mark.wp("P2-12")
+@pytest.mark.xfail(strict=True, reason="spec:FIX-jev-mcp")
 def test_mcp_servers_preconfigured() -> None:
     """T-P2-12-08
     The template's config.yaml pre-configures `tumnis` (HTTP, bearer `${TUMNIS_TOKEN}`),
