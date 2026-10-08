@@ -39,16 +39,18 @@ import sys
 import time
 from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import anyio
 import httpx2
 import pytest
-from mcp import Client
-from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult, TextContent
 
 from harness import REPO
+
+if TYPE_CHECKING:
+    from mcp import Client
+    from mcp.server.mcpserver import MCPServer
 
 pytestmark = [pytest.mark.req("FR-11.6"), pytest.mark.wp("P1-05")]
 
@@ -130,6 +132,14 @@ def _payload(result: CallToolResult) -> Any:
     return json.loads(text)
 
 
+def _client(server: MCPServer) -> Client:
+    """An in-memory MCP client on `server`. Imported here, not at the top: traceability
+    collects these tests with the backend's venv, whose mcp 1.x has no `Client`."""
+    from mcp import Client
+
+    return Client(server)
+
+
 def _server(**kwargs: Any) -> MCPServer:
     """`create_server(**kwargs)`, imported at call time so a missing seam fails the test,
     not the collection. The ignore stays valid once the seam exists (`unused-ignore`)."""
@@ -162,7 +172,7 @@ async def test_one_client_serves_every_call_and_closes_at_shutdown() -> None:
     the calls go to TypeSafe's API with the pinned Jev model, and answers come back as the
     endpoint reports them."""
     fake = FakeEndpoint()
-    async with Client(_server(transport=fake)) as client:
+    async with _client(_server(transport=fake)) as client:
         first = await client.call_tool("ask", _args())
         second = await client.call_tool("ask", _args())
         assert fake.closed == 0
@@ -193,7 +203,7 @@ async def test_a_local_system_one_endpoint_serves_the_calls(
     monkeypatch.setenv("TYPESAFE_BASE_URL", LOCAL_BASE)
     monkeypatch.setenv("TYPESAFE_DEFAULT_MODEL", "clef-flash")
     fake = FakeEndpoint()
-    async with Client(_server(transport=fake)) as client:
+    async with _client(_server(transport=fake)) as client:
         result = await client.call_tool("ask", _args())
     assert _payload(result)["model"] == "clef-flash"
     assert [str(r.url) for r in fake.requests] == [f"{LOCAL_BASE}/v1/systemone"]
@@ -212,7 +222,7 @@ async def test_a_call_that_hangs_ends_as_provider_timeout() -> None:
 
     started = time.monotonic()
     with anyio.fail_after(10):
-        async with Client(_server(transport=FakeEndpoint(hang), timeout_s=0.2)) as client:
+        async with _client(_server(transport=FakeEndpoint(hang), timeout_s=0.2)) as client:
             result = await client.call_tool("ask", _args())
     assert "provider_timeout:" in _error_text(result)
     assert time.monotonic() - started < 5
@@ -243,7 +253,7 @@ async def test_failures_reach_the_agent_as_stable_codes(handler: Handler, code: 
     not `Error executing tool ask`. One attempt per call: the SDK's own retries are off,
     so a rate-limited key is not hit again behind the agent's back."""
     fake = FakeEndpoint(handler)
-    async with Client(_server(transport=fake)) as client:
+    async with _client(_server(transport=fake)) as client:
         result = await client.call_tool("ask", _args())
     assert f"{code}:" in _error_text(result)
     assert len(fake.requests) == 1
@@ -255,7 +265,7 @@ async def test_a_rate_limit_says_when_to_retry() -> None:
     """FIX-jev-mcp-05: a 429 carries the endpoint's own wait (`retry-after-ms`), in
     seconds."""
     fake = FakeEndpoint(lambda r: httpx2.Response(429, headers={"retry-after-ms": "1500"}, json={}))
-    async with Client(_server(transport=fake)) as client:
+    async with _client(_server(transport=fake)) as client:
         result = await client.call_tool("ask", _args())
     assert "retry_after_s=1.5" in _error_text(result)
 
@@ -269,7 +279,7 @@ async def test_an_unpinned_model_is_refused_on_typesafes_api(model: str) -> None
     (today a ValueError, which the agent sees only as `Error executing tool ask`); nothing
     is sent. Another endpoint takes the ids it serves (FIX-jev-mcp-02)."""
     fake = FakeEndpoint()
-    async with Client(_server(transport=fake)) as client:
+    async with _client(_server(transport=fake)) as client:
         result = await client.call_tool("ask", _args(model=model))
     assert "model_not_pinned:" in _error_text(result)
     assert fake.requests == []
@@ -295,7 +305,7 @@ async def test_a_malformed_question_is_refused_without_echoing_it(
     naming its id but never its text, in the answer or in any log; nothing is sent."""
     caplog.set_level(logging.DEBUG)
     fake = FakeEndpoint()
-    async with Client(_server(transport=fake)) as client:
+    async with _client(_server(transport=fake)) as client:
         result = await client.call_tool("ask", _args(questions={"kind": question}))
     text = _error_text(result)
     assert "invalid_question:" in text
@@ -336,7 +346,7 @@ async def test_an_oversized_request_is_refused_before_sending(
     for name, value in limits.items():
         monkeypatch.setenv(name, value)
     fake = FakeEndpoint()
-    async with Client(_server(transport=fake)) as client:
+    async with _client(_server(transport=fake)) as client:
         result = await client.call_tool("ask", _args(state=state))
     assert "decision_request_too_large:" in _error_text(result)
     assert fake.requests == []
@@ -365,7 +375,7 @@ async def test_logs_carry_typed_facts_never_the_state_or_questions(
         return next(calls)(request)
 
     fake = FakeEndpoint(first_answers_then_fails)
-    async with Client(_server(transport=fake)) as client:
+    async with _client(_server(transport=fake)) as client:
         await client.call_tool("ask", _args())
         await client.call_tool("ask", _args())
 
