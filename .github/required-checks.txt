@@ -1,6 +1,7 @@
 # Required status checks on main, one CI job id per line (P0-03).
 # scripts/ci/branch_protection.sh applies this list; T-P0-03-16 checks it equals the jobs
-# in .github/workflows/ci.yml.
+# in .github/workflows/ci.yml plus the `docling` job of .github/workflows/docling.yml
+# (Scott decision 101).
 lint
 unit
 unit-frontend
@@ -15,3 +16,4 @@ performance
 spec-guard
 red-proof
 traceability
+docling
