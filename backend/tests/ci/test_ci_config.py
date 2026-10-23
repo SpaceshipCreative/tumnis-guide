@@ -14,6 +14,7 @@ import yaml
 from tests.ci._scripts import REPO, load
 
 CI_YML = REPO / ".github" / "workflows" / "ci.yml"
+DOCLING_YML = REPO / ".github" / "workflows" / "docling.yml"
 REQUIRED_CHECKS = REPO / ".github" / "required-checks.txt"
 
 # Minutes per job: the A4 layer budgets (ARCHITECTURE.md CI table) and the guards' budgets
@@ -40,10 +41,14 @@ BUDGETS = {
 @pytest.mark.wp("P0-03")
 def test_every_ci_job_is_required_and_budgeted() -> None:
     """T-P0-03-16
-    Job names in ci.yml equal required-checks.txt; each job has timeout-minutes at its
-    budget.
+    Job names in ci.yml plus docling.yml's `docling` job equal required-checks.txt; each
+    ci.yml job has timeout-minutes at its budget, and `docling` has a timeout-minutes.
+
+    Scott decision 101 widened only the list check, to admit `docling`; the rest is as
+    before.
     """
     jobs: dict[str, dict[str, Any]] = yaml.safe_load(CI_YML.read_text())["jobs"]
+    docling: dict[str, Any] = yaml.safe_load(DOCLING_YML.read_text())["jobs"]["docling"]
     required = [
         line.strip()
         for line in REQUIRED_CHECKS.read_text().splitlines()
@@ -51,10 +56,12 @@ def test_every_ci_job_is_required_and_budgeted() -> None:
     ]
 
     assert len(required) == len(set(required)), "duplicate names in required-checks.txt"
-    assert set(jobs) == set(required) == set(BUDGETS)
+    assert set(jobs) == set(BUDGETS)
+    assert set(required) == set(jobs) | {"docling"}
     for name, job in jobs.items():
         assert "name" not in job, f"{name}: a display name would change the check name"
         assert job.get("timeout-minutes") == BUDGETS[name], name
+    assert "timeout-minutes" in docling, "docling: no timeout-minutes"
 
 
 PYPROJECT = REPO / "backend" / "pyproject.toml"
