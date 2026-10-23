@@ -21,12 +21,18 @@ dev = [
   "mypy==2.3.1",
   "pytest==9.1.1",
   "ruff==0.16.9",
+  # The Jev MCP server, from source, so its tests (harness/tests/test_jev_mcp.py) run the
+  # code the profiles ship, with its pinned typesafe-sdk.
+  "tumnis-jev-mcp",
   "types-jsonschema==4.26.0.20260518",
   "types-pyyaml==6.0.12.20260906",
 ]
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+tumnis-jev-mcp = { path = "shared/jev-mcp", editable = true }
 
 [tool.pytest.ini_options]
 minversion = "8.3"
@@ -66,3 +72,8 @@ files = ["harness"]
 mypy_path = ["../backend", "../daemon"]
 # The backend and daemon sources are type-checked by their own projects.
 follow_imports = "silent"
+
+[[tool.mypy.overrides]]
+# The Jev MCP server ships no py.typed marker; its tests import it typed all the same.
+module = ["jev_mcp", "jev_mcp.*"]
+follow_untyped_imports = true
