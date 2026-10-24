@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Extract image (SEC-7): docling-slim 2.132.0 to 2.142.1 and pillow 12.3.0 to 13.0.0, clearing the 27 pillow findings (4 critical, 23 high) that failed the `docling` workflow's Trivy scan on main. The api and worker image does not ship pillow.
+- Extract image (SEC-7): docling-slim 2.132.0 to 2.142.1 and pillow 12.3.0 to 13.0.0, clearing the 27 pillow findings (4 critical, 23 high) that failed the `docling` workflow's Trivy scan on main. The api and worker image does not ship pillow. filelock 4.0.9 to 4.2.4 (CVE-2026-112940, high; docling group only, via huggingface-hub and torch) for the finding Trivy reported next.
 - Frontend dev dependencies: undici 8.11.2 to 8.12.3 (GHSA-4qv8-2p9j-2685, high), serialize-javascript 7.1.2 to 7.1.4 and fast-uri 3.1.8 to 3.1.9, clearing the `npm audit` advisories published 2026-10-24 that fail the `security` job.
 
 ### Not in this release
