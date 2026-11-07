@@ -33,16 +33,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 #   - DSA-6530-1 pcre2 (CVE-2026-103111): libpcre2-8-0 10.46-1~deb13u3
 #   - DSA-6531-1 OpenSSL (CVE-2026-75804, CVE-2026-84782): libssl3t64, openssl and
 #     openssl-provider-legacy 3.5.7-1~deb13u3
+#   - apt (CVE-2026-109518): apt and libapt-pkg7.0 3.0.4
+#   - zlib (CVE-2026-76844, CVE-2026-85091): zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1
 # --only-upgrade installs nothing new. Unpinned on purpose: the security suite keeps only the
 # current version, so a pin would break the build at the next DSA. Once Renovate bumps the
 # digest above to one that ships these versions or later, drop the package from this list;
 # when the list is empty, delete the layer.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --only-upgrade \
+        apt \
+        libapt-pkg7.0 \
         libpcre2-8-0 \
         libssl3t64 \
         openssl \
         openssl-provider-legacy \
+        zlib1g \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/backend
 
