@@ -69,7 +69,7 @@ dev = [
 # would be websockets<17 (it would hold DBOS's websockets back). torch and torchvision are
 # listed so they resolve from the PyTorch CPU index below (no CUDA wheels).
 docling = [
-  "docling-slim[cli,extract-core,feat-chunking,feat-ocr-rapidocr,format-email,format-latex,format-markdown,format-office,format-pdf,models-local]==2.132.0",
+  "docling-slim[cli,extract-core,feat-chunking,feat-ocr-rapidocr,format-email,format-latex,format-markdown,format-office,format-pdf,models-local]==2.142.1",
   "torch==2.14.1",
   "torchvision==0.29.1",
 ]
