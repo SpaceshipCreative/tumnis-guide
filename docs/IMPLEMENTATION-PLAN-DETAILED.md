@@ -18064,7 +18064,7 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 held by an
 **Goal.** `install.sh backups` turns on backups with one command once the B2 bucket and key exist.
 
 **Scope.**
-- In: prompting for the B2 bucket name, region, key ID and secret; writing the bucket, region and derived endpoint to `.env` as `PGBACKREST_REPO2_S3_BUCKET`, `_REGION` and `_ENDPOINT`, passed by `deploy/compose.yaml` to both the `postgres` and `backup` services (as `compose.test-backups.yaml` passes `rehearsal.env` to both), where they override the values in `pgbackrest.conf`; checking the key cannot delete; generating the passphrase; writing `secrets.conf` (owned `root:999`, mode 0640); `TUMNIS_BACKUPS=on`; the restart; waiting for the first full backup in both repositories; showing the passphrase once; printing the B2 console steps.
+- In: prompting for the B2 bucket name, region, key ID and secret; writing the bucket, region and derived endpoint to `.env` as `PGBACKREST_REPO2_S3_BUCKET`, `_REGION` and `_ENDPOINT`, passed by `deploy/compose.yaml` to both the `postgres` and `backup` services (as `compose.test-backups.yaml` passes `rehearsal.env` to both), where they override the values in `pgbackrest.conf`; the same settings in the drills, `scripts/drill/restore_drill.sh --mode prod` (passed to its scratch containers) and `scripts/drill/b2_no_delete_check.sh` (its `B2_BUCKET`, `B2_REGION` and `B2_ENDPOINT` defaults read from `.env`); checking the key cannot delete; generating the passphrase; writing `secrets.conf` (owned `root:999`, mode 0640); `TUMNIS_BACKUPS=on`; the restart; waiting for the first full backup in both repositories; showing the passphrase once; printing the B2 console steps.
 - Out: creating the bucket or key through B2's API; local-only backups (K1 row 27).
 
 **Spec tests (commit first as expected failures)**
@@ -18075,6 +18075,7 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 held by an
 | T-P5-05-02 | `deploy/tests/install/test_backups.sh::test_delete_capable_key_refused` | integration | A key that can delete exits non-zero before any file or setting changes | REL-1 |
 | T-P5-05-03 | `deploy/tests/install/test_backups.sh::test_passphrase_never_logged` | integration | The passphrase is not in the install log or `docker compose logs` | SEC-9 |
 | T-P5-05-04 | `deploy/tests/install/test_backups.sh::test_bucket_and_region_used` | integration | With a bucket name and region other than the baked defaults, `pgbackrest info` in both the `postgres` and `backup` containers reports that bucket and endpoint, and the first full backup lands in that bucket | REL-1 |
+| T-P5-05-05 | `deploy/tests/install/test_backups.sh::test_drills_use_configured_bucket` | integration | With the same non-default bucket, `restore_drill.sh --mode prod` restores from that bucket and `b2_no_delete_check.sh` checks that bucket | REL-1 |
 
 **Implementation notes**
 - Reuse the delete-capability check P3-13 built for S3 linked sources (MinIO and B2), called through `tumnis admin check-s3-key` so the script does not reimplement it. If no such CLI exists, add it as a thin wrapper over the existing function.
@@ -18600,7 +18601,7 @@ Every row has a default the plan already builds on. Rows 1 to 4 are due in week 
 | 27 | Local-only backups (repo1 only) so a new install can show backups ok without B2 | P5-05 | No: keep ADR-0006; a change needs a new ADR |
 | 28 | Tailscale required by the installer | P5-02 | Installed unless `--no-tailscale`, which means a local-only install with the self-signed certificate |
 | 29 | Where the install script downloads from | P5-01 | The `SpaceshipCreative/tumnis-install` release asset URL; a short domain later |
-| 30 | Database passwords in compose's `.env` and profile keys in each Hermes profile's `.env`, which AGENTS.md's no-secrets-in-environment rule does not list as exceptions | P5-02, P5-03 | Decided (Scott, 2026-11-07): keep today's design; both are in AGENTS.md's documented exception, the files mode 0600 and owned by the service user |
+| 30 | Database passwords in compose's `.env` and profile keys in each Hermes profile's `.env`, which AGENTS.md's no-secrets-in-environment rule does not list as exceptions | P5-02, P5-03 | Decided (Scott, 2026-11-07): keep today's design; both are in AGENTS.md's documented exception, the files mode 0600, compose's `.env` owned by the operator who runs `docker compose` and each profile's by `tumnis-agent` |
 
 ### K2 · Sources
 
