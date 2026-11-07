@@ -18027,20 +18027,21 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 held by an
 | T-P5-02-09 | `.github/workflows/readme.yml` job `one-command` | clean VM | A5.1 steps 1 to 4 | REL-4 |
 | T-P5-02-10 | `scripts/release/tests/test_bundle.py::test_assets_check_requires_install_sh` | unit | Removing `install.sh` from a release fails the assets check by name | REL-4 |
 | T-P5-02-11 | `deploy/tests/install/test_install.bats::upgrade writes the new tag and keeps the rest of .env` | container | After `upgrade v1.2.0`, `.env` has `TUMNIS_VERSION=v1.2.0` and every other line unchanged | REL-4 |
+| T-P5-02-12 | `deploy/tests/install/test_install.bats::a fresh install writes the release tag` | container | After installing `v1.1.0`, `.env` has `TUMNIS_VERSION=v1.1.0` and `docker compose config` names that tag for every Tumnis image | REL-4 |
 
 **TDD sequence**
 1. T-P5-02-01 to 03 red: the argument parsing, the OS check and the step plan behind `--dry-run`; green.
 2. T-P5-02-04 to 08 red: the guards and the secret, `.env` and certificate steps (moved from the README blocks); green.
 3. Caddy's Tailscale block, tried by hand on Scott's tailnet. No CI test reaches a tailnet: the certificate path is a manual check in the done list.
 4. T-P5-02-09 red: the `one-command` job; the start and readiness steps; green.
-5. The subcommands `upgrade` (T-P5-02-11 red, then green), `status` and `uninstall`, each with a bats case for its dry run.
+5. T-P5-02-12 red with the `.env` step, then green. The subcommands `upgrade` (T-P5-02-11 red, then green), `status` and `uninstall`, each with a bats case for its dry run.
 
 **Implementation notes**
 - Docker: Docker's apt repository as documented for Ubuntu and Debian, not the convenience script, so the install is repeatable. Tailscale: its documented apt repository. Check both in this WP against their current install pages (the third-party docs rule).
 - Caddy gets certificates for `*.ts.net` names from the local `tailscaled` when it can reach its socket. Confirm against the pinned Caddy version's docs and test it on Scott's tailnet before removing the monthly renewal from OPERATIONS.md (P5-08).
 - `tailscale up` prints a sign-in URL. The script shows it, renders it as a QR code with `qrencode -t ANSIUTF8` so it can be scanned from a phone, and waits up to 10 minutes.
 - The time zone defaults to `timedatectl show -p Timezone --value` and is confirmed in interactive mode.
-- `.env` is written from `.env.example` with the generated database passwords, the Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values, except that `upgrade` writes the new tag to `TUMNIS_VERSION`; to change one later, edit `.env` and run `install.sh` again, which starts again only the services the change affects (`docker compose up -d`).
+- `.env` is written from `.env.example` with the generated database passwords, the release tag being installed as `TUMNIS_VERSION` (`.env.example` has `local`), the Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values, except that `upgrade` writes the new tag to `TUMNIS_VERSION`; to change one later, edit `.env` and run `install.sh` again, which starts again only the services the change affects (`docker compose up -d`).
 - The recovery keys (master key and pepper) are shown once with a keypress to continue (skipped with `--yes`, where the log says where they live).
 
 **Done checklist**
