@@ -17931,7 +17931,7 @@ The script can only stay simple if everything it needs is published, so the rele
 
 | Path | Change | Purpose |
 | --- | --- | --- |
-| `.github/workflows/release.yml` | edit | Build and push `tumnis-postgres:<tag>`, add `platforms: linux/amd64,linux/arm64`, attach the bundle, copy every asset to the release of the same tag on `SpaceshipCreative/tumnis-install`, extend the assets check |
+| `.github/workflows/release.yml` | edit | Build and push `tumnis-postgres:<tag>`; publish each image for `linux/amd64,linux/arm64` (the default runner's Docker cannot `load` a multi-platform image, so each image's `load: true` build for Trivy and the SBOM stays `linux/amd64` with `push: false`, and a second build step pushes both platforms from the same cache), attach the bundle, copy every asset to the release of the same tag on `SpaceshipCreative/tumnis-install`, extend the assets check |
 | `deploy/compose.yaml` | edit | `image: ghcr.io/spaceshipcreative/tumnis-postgres:${TUMNIS_VERSION:-latest}` beside the existing `build:` (the build stays for `--source checkout`) |
 | `scripts/release/bundle.sh` | new | Writes `tumnis-deploy-<tag>.tar.gz`: `deploy/` without test compose files, `.env.example`, and a `SHA256SUMS` |
 | `scripts/release/check_assets.py` | edit (or new, if the check lives in the workflow) | The assets list in one place |
@@ -18074,7 +18074,7 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 held by an
 | T-P5-05-01 | `deploy/tests/install/test_backups.sh::test_backups_on_against_minio` | integration (`compose.test-backups.yaml`) | Ends with a full backup in repo1 and repo2 and readiness `backups: ok` | REL-1 |
 | T-P5-05-02 | `deploy/tests/install/test_backups.sh::test_delete_capable_key_refused` | integration | A key that can delete exits non-zero before any file or setting changes | REL-1 |
 | T-P5-05-03 | `deploy/tests/install/test_backups.sh::test_passphrase_never_logged` | integration | The passphrase is not in the install log or `docker compose logs` | SEC-9 |
-| T-P5-05-04 | `deploy/tests/install/test_backups.sh::test_bucket_and_region_used` | integration | With a bucket name and region other than the baked defaults, `pgbackrest info` in both the `postgres` and `backup` containers reports that bucket and endpoint, and the first full backup lands in that bucket | REL-1 |
+| T-P5-05-04 | `deploy/tests/install/test_backups.sh::test_bucket_and_region_used` | integration | With a bucket name and region other than the baked defaults, the effective pgBackRest configuration in both the `postgres` and `backup` containers has that bucket and endpoint (`pgbackrest info` does not show them), `pgbackrest info` reports a full backup, and the first full backup lands in that bucket | REL-1 |
 | T-P5-05-05 | `deploy/tests/install/test_backups.sh::test_drills_use_configured_bucket` | integration | With the same non-default bucket, `restore_drill.sh --mode prod` restores from that bucket and `b2_no_delete_check.sh` checks that bucket | REL-1 |
 
 **Implementation notes**
