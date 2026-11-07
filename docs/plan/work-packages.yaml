@@ -1134,9 +1134,9 @@ phases:
       size: M
       traces: [REL-4, SEC-7]
       red:
-      - "The release workflow fails when any asset is missing: the app, -extract and Postgres images, install.sh, install-agent.sh and tumnis-deploy-<tag>.tar.gz"
+      - "The release workflow fails when any asset is missing: the app, -extract and Postgres images and tumnis-deploy-<tag>.tar.gz (P5-02 adds install.sh to the list and P5-03 adds install-agent.sh)"
       - "compose.yaml names the Postgres image by registry and tag, and an install from the bundle alone, with no git checkout, reaches /health/ready"
-      - "Every image is published for linux/amd64 and linux/arm64, and an anonymous docker pull of each works"
+      - "Every image is published for linux/amd64 and linux/arm64, and an anonymous docker pull of each works; every release asset downloads without signing in from the public SpaceshipCreative/tumnis-install release of the same tag"
       green: "Release workflow changes, the Postgres image pushed beside the app images, the deploy bundle, and a latest pointer the script can resolve."
       done: "The next release carries every asset and its images pull without signing in."
     - id: P5-02
@@ -1147,9 +1147,9 @@ phases:
       red:
       - "On a fresh Ubuntu 24.04 VM, install.sh --yes --no-tailscale --email <address> installs what is missing, starts the stack and completes first run"
       - "A second run changes no file's checksum or mtime and restarts no container"
-      - "With --dry-run, it plans the right steps on debian:12 and refuses fedora with the documented message; with port 443 taken it exits before touching anything"
+      - "With --dry-run, it plans the right steps on debian:12 and refuses fedora with the documented message; with port 443 taken by another process it exits before touching anything, while its own proxy on 443 does not stop a rerun"
       - "shellcheck is clean, the generated secrets never appear in the install log, and no secret, certificate or .env is overwritten"
-      green: "deploy/install.sh with install, upgrade, status and uninstall; Caddy getting and renewing the Tailscale certificate from tailscaled; the README job running the script."
+      green: "deploy/install.sh with install, upgrade, status and uninstall, published as a release asset and added to the assets check; Caddy getting and renewing the Tailscale certificate from tailscaled; the README job running the script."
       done: "Scott installs a fresh VM on his tailnet with one command and opens it on his phone."
     - id: P5-05
       title: Backups in one step
@@ -1158,7 +1158,7 @@ phases:
       traces: [REL-1, SEC-9]
       red:
       - "Against MinIO standing in for B2, install.sh backups ends with a full backup in both repositories and readiness shows backups ok"
-      - "A key that can delete is refused before anything changes, and the passphrase is shown once and never logged"
+      - "A key that can delete is refused before anything changes, and the passphrase is shown once and never logged; the bucket and region it asks for are the ones pgBackRest uses"
       green: "The backups subcommand."
       done: "OPERATIONS.md, Backups, steps 3 and 4 become one command."
     - id: P5-08
@@ -1184,7 +1184,7 @@ phases:
       - "A pairing code redeems once and expires after 10 minutes (410 pairing_expired); it is stored as a keyed hash, rate-limited and audited"
       - "Redeeming creates the runner and mints profile keys holding exactly the scopes each profile needs"
       - "install-agent.sh installs Hermes and the daemon, writes daemon.toml, the token file and each profile's .env, and waits until the runner is connected; a second run keeps the profiles' memories and changes nothing"
-      green: "Pairing routes and table, the Add agent server screen, daemon/install-agent.sh, install.sh --with-agent and the daemon in the release."
+      green: "Pairing routes and table, the Add agent server screen, daemon/install-agent.sh, install.sh --with-agent, and the daemon and install-agent.sh in the release (added to the assets check)."
       done: "A5.2 passes and Scott adds his agent server in one paste."
     - id: P5-04
       title: Finish-setup checklist
@@ -1214,7 +1214,7 @@ phases:
       size: S
       traces: [FR-15.3, FR-3.9]
       red:
-      - "A query that matches an uploaded document shows its passage under Knowledge on the Search page (which Ctrl+K opens), linking to the document; a project-limited session sees only its projects' passages"
+      - "A query that matches an uploaded document shows its passage under Knowledge on the Search page (which Ctrl+K opens), linking to the document; a project-limited API key sees only its projects' passages"
       green: "Search page and Ctrl+K reading GET /v1/knowledge/search."
       done: "Knowledge search no longer needs the API."
 

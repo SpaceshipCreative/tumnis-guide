@@ -17924,14 +17924,14 @@ The script can only stay simple if everything it needs is published, so the rele
 **Goal.** A release carries everything an install needs, and its images pull without signing in, so an install never needs a git checkout or a local build.
 
 **Scope.**
-- In: the Postgres image published beside the app images; the deploy bundle; `install.sh` and `install-agent.sh` as release assets; images for `linux/amd64` and `linux/arm64`; a `latest` release pointer; the assets check extended to all of them.
+- In: the Postgres image published beside the app images; the deploy bundle; publishing each release's assets to the public `SpaceshipCreative/tumnis-install` repository; images for `linux/amd64` and `linux/arm64`; a `latest` release pointer; the assets check extended to all of them. P5-02 adds `install.sh` to the assets list and P5-03 adds `install-agent.sh`, because each script is written in that package.
 - Out: a custom download domain (K1 row 29); signing the images (SEC-7 follow-up).
 
 **Files**
 
 | Path | Change | Purpose |
 | --- | --- | --- |
-| `.github/workflows/release.yml` | edit | Build and push `tumnis-postgres:<tag>`, add `platforms: linux/amd64,linux/arm64`, attach the bundle and scripts, extend the assets check |
+| `.github/workflows/release.yml` | edit | Build and push `tumnis-postgres:<tag>`, add `platforms: linux/amd64,linux/arm64`, attach the bundle, copy every asset to the release of the same tag on `SpaceshipCreative/tumnis-install`, extend the assets check |
 | `deploy/compose.yaml` | edit | `image: ghcr.io/spaceshipcreative/tumnis-postgres:${TUMNIS_VERSION:-latest}` beside the existing `build:` (the build stays for `--source checkout`) |
 | `scripts/release/bundle.sh` | new | Writes `tumnis-deploy-<tag>.tar.gz`: `deploy/` without test compose files, `.env.example`, and a `SHA256SUMS` |
 | `scripts/release/check_assets.py` | edit (or new, if the check lives in the workflow) | The assets list in one place |
@@ -17942,18 +17942,18 @@ The script can only stay simple if everything it needs is published, so the rele
 | ID | Location :: name | Layer | Proves | Req |
 | --- | --- | --- | --- | --- |
 | T-P5-01-01 | `scripts/release/tests/test_bundle.py::test_bundle_has_everything_compose_mounts` | unit | Every file `compose.yaml` mounts or builds from is in the bundle; no test compose file or `test.env` is | REL-4 |
-| T-P5-01-02 | `scripts/release/tests/test_bundle.py::test_assets_check_fails_on_missing_asset` | unit | Removing any of the 6 asset kinds fails the check by name | REL-4 |
+| T-P5-01-02 | `scripts/release/tests/test_bundle.py::test_assets_check_fails_on_missing_asset` | unit | Removing any of the 4 asset kinds (the 3 images and the bundle) fails the check by name; P5-02 and P5-03 add their scripts to the same list | REL-4 |
 | T-P5-01-03 | `scripts/release/tests/test_bundle.py::test_compose_pins_every_image_to_the_release` | unit | Every Tumnis image in `compose.yaml` uses `${TUMNIS_VERSION}`; third-party images keep their digests | SEC-7 |
-| T-P5-01-04 | `.github/workflows/release.yml`, step `anonymous-pull` | release | `docker logout ghcr.io` then `docker pull` of each image and each platform succeeds | REL-4 |
-| T-P5-01-05 | `.github/workflows/release.yml`, step `bundle-install` | release | Unpacking the bundle alone on the runner and running `docker compose up --wait` reaches `/health/ready` | REL-4 |
+| T-P5-01-04 | `.github/workflows/release.yml`, step `anonymous-pull` | release | `docker logout ghcr.io` then `docker pull` of each image and each platform succeeds, and an unauthenticated `curl -fL` of each asset from the `SpaceshipCreative/tumnis-install` release succeeds | REL-4 |
+| T-P5-01-05 | `.github/workflows/release.yml`, step `bundle-install` | release | Unpacking the bundle alone on the runner, then provisioning it as README steps 3 to 6 do (`.env` from `.env.example` with generated database passwords, and the host secret files under `/etc/tumnis/secrets` with their owner and mode; a release-job helper until P5-02's `install.sh` replaces it), then running `docker compose up --wait` reaches `/health/ready` | REL-4 |
 
 **TDD sequence**
 1. T-P5-01-01 to 03 red: `bundle.sh` and the compose change; green.
-2. T-P5-01-04 and 05 red on a release candidate tag (`v1.0.0-rc.N`); release workflow changes; green.
+2. T-P5-01-04 and 05 red on a release candidate tag of the first release after v1.0.0 (P4-06 tags v1.0.0); release workflow changes; green.
 
 **Implementation notes**
 - Multi-arch with `docker/setup-qemu-action` and `docker/setup-buildx-action`. The extract image's CPU PyTorch has arm64 wheels. Check Docling's models on arm64 in this WP before relying on them (the third-party docs rule in AGENTS.md).
-- Making the packages public is a GitHub package setting, done once by Scott (K1 row 24). The repository can stay private.
+- Making the packages public is a GitHub package setting, done once by Scott (K1 row 24). The repository can stay private, but a private repository's release assets always need a token, so the release workflow copies them to the public `SpaceshipCreative/tumnis-install` repository with a token scoped to that repository only.
 
 **Done checklist**
 - [ ] The next release carries every asset (YAML done-when)
@@ -18008,7 +18008,7 @@ install.sh status               # health, certificate expiry, disk, runner, back
 install.sh backups              # P5-05
 install.sh uninstall [--purge]  # stops the stack; --purge (typed confirmation) also removes data and secrets
 
-Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 in use, 5 a download failed its checksum,
+Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 held by another process, 5 a download failed its checksum,
 6 health never ready (the log names the failing check).
 ```
 
@@ -18019,12 +18019,13 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 in use, 5 
 | T-P5-02-01 | `deploy/tests/install/test_install.bats::dry run plans every step on ubuntu 24.04` | container | The plan lists Docker, Tailscale, bundle, secrets, certificate, start, in order | REL-4 |
 | T-P5-02-02 | `deploy/tests/install/test_install.bats::dry run on debian 12 uses the debian repositories` | container | Docker's and Tailscale's Debian sources are chosen | REL-4 |
 | T-P5-02-03 | `deploy/tests/install/test_install.bats::fedora is refused with the documented message` | container | Exit 3 and a link to `docs/INSTALL-MANUAL.md` | REL-4 |
-| T-P5-02-04 | `deploy/tests/install/test_install.bats::port 443 in use stops before any change` | container | Exit 4, the process named, nothing under `/etc/tumnis` | REL-4 |
+| T-P5-02-04 | `deploy/tests/install/test_install.bats::port 443 in use stops before any change` | container | Exit 4, the process named, nothing under `/etc/tumnis`; with this install's own proxy container on 443 (a rerun), no exit 4 | REL-4 |
 | T-P5-02-05 | `deploy/tests/install/test_install.bats::existing secrets are never overwritten` | container | Pre-made secret files, certificate and `.env` keep their checksums | SEC-6 |
 | T-P5-02-06 | `deploy/tests/install/test_install.bats::the log holds no secret` | container | After a dry run that generates secrets, none of their values is in the log | SEC-6 |
 | T-P5-02-07 | `deploy/tests/install/test_install.bats::a bad checksum stops the install` | container | A tampered bundle exits 5 and leaves `/opt/tumnis` unchanged | SEC-7 |
 | T-P5-02-08 | `deploy/tests/install/test_install.bats::the proxy binds only to the tailscale or loopback address` | container | The generated `.env` never holds `0.0.0.0` or a public address, and `docker compose config` rendered with every profile publishes each port only on the Tailscale address or `127.0.0.1` | SEC-9 |
 | T-P5-02-09 | `.github/workflows/readme.yml` job `one-command` | clean VM | A5.1 steps 1 to 4 | REL-4 |
+| T-P5-02-10 | `scripts/release/tests/test_bundle.py::test_assets_check_requires_install_sh` | unit | Removing `install.sh` from a release fails the assets check by name | REL-4 |
 
 **TDD sequence**
 1. T-P5-02-01 to 03 red: the argument parsing, the OS check and the step plan behind `--dry-run`; green.
@@ -18063,7 +18064,7 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 in use, 5 
 **Goal.** `install.sh backups` turns on backups with one command once the B2 bucket and key exist.
 
 **Scope.**
-- In: prompting for the B2 key ID and secret; checking the key cannot delete; generating the passphrase; writing `secrets.conf` (owned `root:999`, mode 0640); `TUMNIS_BACKUPS=on`; the restart; waiting for the first full backup in both repositories; showing the passphrase once; printing the B2 console steps.
+- In: prompting for the B2 bucket name, region, key ID and secret; writing the bucket, region and derived endpoint to `.env` as `PGBACKREST_REPO2_S3_BUCKET`, `_REGION` and `_ENDPOINT`, passed by `deploy/compose.yaml` to the Postgres container, where they override the values in `pgbackrest.conf`; checking the key cannot delete; generating the passphrase; writing `secrets.conf` (owned `root:999`, mode 0640); `TUMNIS_BACKUPS=on`; the restart; waiting for the first full backup in both repositories; showing the passphrase once; printing the B2 console steps.
 - Out: creating the bucket or key through B2's API; local-only backups (K1 row 27).
 
 **Spec tests (commit first as expected failures)**
@@ -18073,6 +18074,7 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 in use, 5 
 | T-P5-05-01 | `deploy/tests/install/test_backups.sh::test_backups_on_against_minio` | integration (`compose.test-backups.yaml`) | Ends with a full backup in repo1 and repo2 and readiness `backups: ok` | REL-1 |
 | T-P5-05-02 | `deploy/tests/install/test_backups.sh::test_delete_capable_key_refused` | integration | A key that can delete exits non-zero before any file or setting changes | REL-1 |
 | T-P5-05-03 | `deploy/tests/install/test_backups.sh::test_passphrase_never_logged` | integration | The passphrase is not in the install log or `docker compose logs` | SEC-9 |
+| T-P5-05-04 | `deploy/tests/install/test_backups.sh::test_bucket_and_region_used` | integration | With a bucket name and region other than the baked defaults, `pgbackrest info` inside the Postgres container reports that bucket and endpoint | REL-1 |
 
 **Implementation notes**
 - Reuse the delete-capability check P3-13 built for S3 linked sources (MinIO and B2), called through `tumnis admin check-s3-key` so the script does not reimplement it. If no such CLI exists, add it as a thin wrapper over the existing function.
@@ -18193,6 +18195,7 @@ def profile_key_scopes(role: Literal["master", "project-template"]) -> frozenset
 | T-P5-03-10 | `daemon/tests/install/test_install_agent.bats::no secret in argv or log` | container | The code is read from `/dev/tty`, or from file descriptor 3 when `install.sh --with-agent` runs it (`--pair-code-fd 3`; AGENTS.md keeps secrets out of environment variables), never from an argument. The code, the token and the keys never reach argv, the environment (`/proc/<pid>/environ`), the log or `ps` output | SEC-6 |
 | T-P5-03-11 | `frontend/src/components/settings/AgentsSection.pairing.test.tsx::[P5-03][FR-5.11] add agent server shows the command and the countdown` | frontend | MSW: the command, copy, expiry, and the runner appearing | FR-5.11 |
 | T-P5-03-12 | `backend/tests/acceptance/test_a5_2_paired_run.py::test_paired_runner_run_reaches_review` | acceptance | A5.2 | FR-5.11 |
+| T-P5-03-13 | `scripts/release/tests/test_bundle.py::test_assets_check_requires_install_agent_sh` | unit | Removing `install-agent.sh` from a release fails the assets check by name | REL-4 |
 
 **TDD sequence**
 1. T-P5-03-01 and 02 red: rules; green.
@@ -18591,12 +18594,13 @@ Every row has a default the plan already builds on. Rows 1 to 4 are due in week 
 | 21 | Minimal A2A endpoint in v1 | Phase 2 | Not in v1 |
 | 22 | First chat provider (PRD open question 2) | P3-01 | Decided in P3-01 |
 | 23 | Fallback if Inbox Zero or Granola refuse refresh tokens | P3-01 | `ingest_items` push from Hermes, a PRD deviation |
-| 24 | Publish the container images publicly while the repository stays private (an install that needs a GitHub token is not one command) | P5-01 | Public packages |
+| 24 | Publish the container images and release assets publicly while the repository stays private (an install that needs a GitHub token is not one command) | P5-01 | Public packages, and the assets copied to a public `SpaceshipCreative/tumnis-install` repository |
 | 25 | Systems `install.sh` supports | P5-02 | Ubuntu 22.04 and 24.04, Debian 12; macOS servers stay manual |
 | 26 | arm64 images | P5-01 | Yes, for the app, extract and Postgres images |
 | 27 | Local-only backups (repo1 only) so a new install can show backups ok without B2 | P5-05 | No: keep ADR-0006; a change needs a new ADR |
 | 28 | Tailscale required by the installer | P5-02 | Installed unless `--no-tailscale`, which means a local-only install with the self-signed certificate |
-| 29 | Where the install script downloads from | P5-01 | The GitHub release asset URL; a short domain later |
+| 29 | Where the install script downloads from | P5-01 | The `SpaceshipCreative/tumnis-install` release asset URL; a short domain later |
+| 30 | Database passwords in compose's `.env` and profile keys in each Hermes profile's `.env`, which AGENTS.md's no-secrets-in-environment rule does not list as exceptions | P5-02, P5-03 | Keep today's design and add both to the documented exception, the files mode 0600 and owned by the service user; otherwise P5-02 moves the passwords to `*_FILE` settings and P5-03 waits until Hermes reads keys from files |
 
 ### K2 · Sources
 

@@ -1512,9 +1512,9 @@ Size M · Traces REL-4, SEC-7
 
 **Red first**
 
-- The release workflow fails when any asset is missing: the app, -extract and Postgres images, install.sh, install-agent.sh and tumnis-deploy-<tag>.tar.gz
+- The release workflow fails when any asset is missing: the app, -extract and Postgres images and tumnis-deploy-<tag>.tar.gz (P5-02 adds install.sh to the list and P5-03 adds install-agent.sh)
 - compose.yaml names the Postgres image by registry and tag, and an install from the bundle alone, with no git checkout, reaches /health/ready
-- Every image is published for linux/amd64 and linux/arm64, and an anonymous docker pull of each works
+- Every image is published for linux/amd64 and linux/arm64, and an anonymous docker pull of each works; every release asset downloads without signing in from the public SpaceshipCreative/tumnis-install release of the same tag
 
 **Green.** Release workflow changes, the Postgres image pushed beside the app images, the deploy bundle, and a latest pointer the script can resolve.
 
@@ -1528,10 +1528,10 @@ Size L · Traces SEC-6, SEC-9, REL-4
 
 - On a fresh Ubuntu 24.04 VM, install.sh --yes --no-tailscale --email <address> installs what is missing, starts the stack and completes first run
 - A second run changes no file's checksum or mtime and restarts no container
-- With --dry-run, it plans the right steps on debian:12 and refuses fedora with the documented message; with port 443 taken it exits before touching anything
+- With --dry-run, it plans the right steps on debian:12 and refuses fedora with the documented message; with port 443 taken by another process it exits before touching anything, while its own proxy on 443 does not stop a rerun
 - shellcheck is clean, the generated secrets never appear in the install log, and no secret, certificate or .env is overwritten
 
-**Green.** deploy/install.sh with install, upgrade, status and uninstall; Caddy getting and renewing the Tailscale certificate from tailscaled; the README job running the script.
+**Green.** deploy/install.sh with install, upgrade, status and uninstall, published as a release asset and added to the assets check; Caddy getting and renewing the Tailscale certificate from tailscaled; the README job running the script.
 
 **Done when:** Scott installs a fresh VM on his tailnet with one command and opens it on his phone.
 
@@ -1542,7 +1542,7 @@ Size S · Traces REL-1, SEC-9
 **Red first**
 
 - Against MinIO standing in for B2, install.sh backups ends with a full backup in both repositories and readiness shows backups ok
-- A key that can delete is refused before anything changes, and the passphrase is shown once and never logged
+- A key that can delete is refused before anything changes, and the passphrase is shown once and never logged; the bucket and region it asks for are the ones pgBackRest uses
 
 **Green.** The backups subcommand.
 
@@ -1574,7 +1574,7 @@ Size L · Traces FR-5.11, SEC-2, SEC-3, SEC-8
 - Redeeming creates the runner and mints profile keys holding exactly the scopes each profile needs
 - install-agent.sh installs Hermes and the daemon, writes daemon.toml, the token file and each profile's .env, and waits until the runner is connected; a second run keeps the profiles' memories and changes nothing
 
-**Green.** Pairing routes and table, the Add agent server screen, daemon/install-agent.sh, install.sh --with-agent and the daemon in the release.
+**Green.** Pairing routes and table, the Add agent server screen, daemon/install-agent.sh, install.sh --with-agent, and the daemon and install-agent.sh in the release (added to the assets check).
 
 **Done when:** A5.2 passes and Scott adds his agent server in one paste.
 
@@ -1613,7 +1613,7 @@ Size S · Traces FR-15.3, FR-3.9
 
 **Red first**
 
-- A query that matches an uploaded document shows its passage under Knowledge on the Search page (which Ctrl+K opens), linking to the document; a project-limited session sees only its projects' passages
+- A query that matches an uploaded document shows its passage under Knowledge on the Search page (which Ctrl+K opens), linking to the document; a project-limited API key sees only its projects' passages
 
 **Green.** Search page and Ctrl+K reading GET /v1/knowledge/search.
 

@@ -22,7 +22,7 @@ The Phase 5 work packages follow the usual spec PR, then implementation PR flow 
 | Build two images locally (about 1 GB of downloads, a 4.7 GB extract image, a long wait) | Pull the release images |
 | Run `curl` checks by hand | The script waits for `/health/ready` and prints the `/setup` link and a QR code for the phone |
 | Agent server: install uv, Hermes and the daemon, create a user, write `daemon.toml`, copy a token, install a systemd unit, install 2 profiles, write each profile's `.env` with API keys minted by hand | Paste one command from Settings > Agents. A one-time pairing code sets up the token and the profile keys |
-| Backups: write a pgBackRest secrets file by hand, flip a variable, restart | `install.sh backups` asks for the B2 key and does the rest |
+| Backups: write a pgBackRest secrets file by hand, flip a variable, restart | `install.sh backups` asks for the B2 bucket and key and does the rest |
 | GitHub and Coolify connected through the API with `curl` | Settings screens |
 
 ## Track A: Phase 5, easy setup
@@ -36,11 +36,12 @@ Exit: on a fresh Ubuntu 24.04 VM with nothing installed, `install.sh --yes --ema
 The script can only be simple if everything it needs is published.
 
 - **Red**
-  - The release workflow fails when any of these is missing from the release: the app image, the `-extract` image, the Postgres image (today `tumnis-postgres:18` is built from `deploy/postgres` on the server), `install.sh`, `install-agent.sh`, and `tumnis-deploy-<tag>.tar.gz` (compose files, Caddy, pgBouncer, pgBackRest and Prometheus config, `.env.example`).
+  - The release workflow fails when any of these is missing from the release: the app image, the `-extract` image, the Postgres image (today `tumnis-postgres:18` is built from `deploy/postgres` on the server), and `tumnis-deploy-<tag>.tar.gz` (compose files, Caddy, pgBouncer, pgBackRest and Prometheus config, `.env.example`). P5-02 adds `install.sh` to this list and P5-03 adds `install-agent.sh`, each in the package that writes the script.
+  - The release assets download without signing in, from the public `SpaceshipCreative/tumnis-install` repository's release of the same tag (open question 1).
   - `compose.yaml` names the Postgres image by registry and tag, and an install from the bundle alone (no git checkout) reaches `/health/ready`.
   - Images are published for `linux/amd64` and `linux/arm64` (see open question 3).
 - **Green:** release workflow changes, the bundle tarball, the Postgres image pushed beside the app images, and a `latest` pointer the script can resolve.
-- **Done:** v1.0.0 is tagged with every asset, and an anonymous `docker pull` of each image works (open question 1).
+- **Done:** the first release after v1.0.0 (which P4-06 tags) carries every asset, and an anonymous `docker pull` of each image and an anonymous download of each asset work (open question 1).
 
 ### P5-02 One-command server install (L)
 
@@ -53,7 +54,7 @@ What it does, in order. Each step is skipped when its result already exists:
 3. Runs `tailscale up` if the machine is not on a tailnet: it prints the sign-in link, waits, then reads the MagicDNS name. It checks that HTTPS certificates are on for the tailnet, and if not, says where to switch them on and waits.
 4. Asks for the sign-in email (or takes `--email`) and reads the time zone from `timedatectl` (or `--timezone`).
 5. Downloads and checks the release bundle into `/opt/tumnis`.
-6. Creates the 3 secret files with today's README steps: owned by uid 10001, mode 0400, never overwritten. It writes `.env` from `.env.example` with the generated database passwords, the detected Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values. To change a value later, edit `.env` and run `install.sh` again.
+6. Creates the 3 secret files with today's README steps: owned by uid 10001, mode 0400, never overwritten. It writes `.env` (mode 0600) from `.env.example` with the generated database passwords (open question 7), the detected Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values. To change a value later, edit `.env` and run `install.sh` again.
 7. Certificates. With Tailscale, Caddy gets the `*.ts.net` certificate from `tailscaled` itself (its socket is mounted into the proxy) and renews it, and the proxy binds only to the Tailscale address. Without Tailscale, the script makes the self-signed certificate as today and binds to `127.0.0.1`.
 8. Pulls the images, showing their sizes, runs `docker compose up -d --wait`, and waits for `/health/ready`.
 9. Prints the `https://<name>/setup` link and its QR code, and shows the master key and pepper once with "save these in your password manager", continuing only after a keypress (or `--yes`).
@@ -64,16 +65,16 @@ Safety rules the script keeps:
 
 - It never opens a port to the internet: it binds only to the Tailscale or loopback address.
 - It never overwrites a secret, a certificate or `.env`.
-- It refuses to start when port 443 on the chosen address is already in use, and names the process.
+- It refuses to start when port 443 on the chosen address is held by anything other than this install's own proxy container, and names the process. On a rerun, its own proxy holding the port is expected.
 - It writes a log to `/var/log/tumnis-install.log` with secrets left out.
 
 - **Red**
   - The README job runs `install.sh --yes --no-tailscale --email ...` on a fresh Ubuntu 24.04 VM, then reaches `/health/ready` and completes first run.
   - A second run makes no changes: no file's checksum or mtime changes, and no container restarts.
   - Run in `debian:12` and `fedora` containers with `--dry-run`, it plans the right steps on Debian and refuses Fedora with the documented message.
-  - With 443 already taken, it exits non-zero before touching anything.
+  - With 443 taken by another process, it exits non-zero before touching anything; a rerun with its own proxy on 443 goes ahead.
   - `shellcheck` is clean, and the install log contains none of the generated secrets.
-- **Green:** `deploy/install.sh`, the Caddy Tailscale configuration (bind address, mounted `tailscaled` socket), and changes to the README job.
+- **Green:** `deploy/install.sh` (a release asset, added to the assets check), the Caddy Tailscale configuration (bind address, mounted `tailscaled` socket), and changes to the README job.
 - **Done:** Scott installs a fresh VM on his tailnet with one command and opens it on his phone.
 
 ### P5-03 Agent server pairing and one-command install (L)
@@ -86,7 +87,7 @@ The goal is that no token is ever copied by hand.
   - Each redemption is written to the audit log.
 - **Script side (`install-agent.sh`):**
   - Installs uv, Python 3.13 and Hermes (Hermes's own installer), creates the `tumnis-agent` user, and installs the daemon from the release into `/opt/tumnis-daemon`.
-  - Writes `daemon.toml` and the token file, installs the profiles of the same release, and writes each profile's `.env` with `TUMNIS_URL` and its key.
+  - Writes `daemon.toml` and the token file, installs the profiles of the same release, and writes each profile's `.env` (mode 0600, owned by `tumnis-agent`) with `TUMNIS_URL` and its key (open question 7).
   - Installs and starts the systemd unit, and waits until Settings > Agents shows the runner connected.
   - Asks only for what Tumnis cannot mint: `TYPESAFE_API_KEY` and, optionally, the Discord bot settings.
 - **Same machine:** `install.sh --with-agent` runs both on one server, pairing itself.
@@ -97,7 +98,7 @@ The goal is that no token is ever copied by hand.
   - Redemption is rate-limited and audited (SEC-3 case).
   - On a fresh VM, `install.sh --with-agent` followed by a task run on the fake runner ends with a result in `/review`.
   - A second `install-agent.sh` run changes nothing and keeps the existing profiles' memories.
-- **Green:** pairing routes and table (agents module, with its migration), the Settings > Agents screen, `daemon/install-agent.sh`, and release packaging of the daemon.
+- **Green:** pairing routes and table (agents module, with its migration), the Settings > Agents screen, `daemon/install-agent.sh` (a release asset, added to the assets check), and release packaging of the daemon.
 - **Done:** Scott adds his agent server from the phone in one paste.
 
 ### P5-04 Finish-setup checklist (M)
@@ -119,7 +120,7 @@ Each item is worked out from existing state (rules function), not stored as a fl
 
 ### P5-05 Backups in one step (S)
 
-`install.sh backups` asks for the B2 key ID and secret, checks that the key cannot delete (the same check S3 linked sources use), and generates the encryption passphrase. It then writes `secrets.conf` with the right owner and mode, sets `TUMNIS_BACKUPS=on`, restarts, waits for the first full backup and shows the passphrase once. Creating the bucket, the lifecycle rule and the limited key stays in the B2 console, with the exact settings printed.
+`install.sh backups` asks for the B2 bucket name and region (the S3 endpoint follows from the region) and the key ID and secret. It writes the bucket, region and endpoint to `.env` as `PGBACKREST_REPO2_S3_BUCKET`, `PGBACKREST_REPO2_S3_REGION` and `PGBACKREST_REPO2_S3_ENDPOINT`, which compose passes to the Postgres container and which override the values baked into `pgbackrest.conf` (as the rehearsal stack does). It checks that the key cannot delete (the same check S3 linked sources use), and generates the encryption passphrase. It then writes `secrets.conf` with the right owner and mode, sets `TUMNIS_BACKUPS=on`, restarts, waits for the first full backup and shows the passphrase once. Creating the bucket, the lifecycle rule and the limited key stays in the B2 console, with the exact settings printed.
 
 - **Red:** with the backups test compose file (`compose.test-backups.yaml`) and MinIO standing in for B2, the command ends with a backup in both repositories and readiness shows `backups: ok`; a key that can delete is refused before anything changes.
 - **Done:** OPERATIONS.md, Backups, steps 3 and 4 become one command.
@@ -134,7 +135,7 @@ Settings screens over the existing `PUT /v1/settings/github` and `PUT /v1/settin
 
 The Search page and Ctrl+K include knowledge passages from `GET /v1/knowledge/search` beside tasks and projects, each linking to its document. This removes the other "Not yet available" item.
 
-- **Red:** Vitest and Playwright: a query that matches an uploaded document shows it under Knowledge; a project-limited session sees only its own projects' passages.
+- **Red:** Vitest and Playwright: a query that matches an uploaded document shows it under Knowledge; a project-limited API key sees only its own projects' passages.
 
 ### P5-08 Docs (S)
 
@@ -182,9 +183,10 @@ Rough size: 8 to 10 agent-assisted days after P3-01, with P3-03 to P3-05 in para
 
 Each has a default the plan assumes. Say if you want a different one.
 
-1. **Can the images be pulled without signing in?** The repository is private, so its GitHub container images probably are too (not checked: the sandbox blocked the GitHub API). A one-script install needs anonymous pulls. *Default:* make the `tumnis` container packages public and keep the repository private. The alternative, `install.sh --token`, adds a GitHub token step for every user.
+1. **Can the images and release assets be downloaded without signing in?** The repository is private, so its GitHub container images probably are too (not checked: the sandbox blocked the GitHub API), and a private repository's release assets always need a token. A one-script install needs both anonymously. *Default:* make the `tumnis` container packages public, keep the repository private, and have the release workflow also publish `install.sh`, `install-agent.sh` and the bundle to a release of the same tag on a public `SpaceshipCreative/tumnis-install` repository that holds nothing else. The alternatives are making the repository public, or `install.sh --token`, which adds a GitHub token step for every user.
 2. **Which systems does `install.sh` support?** *Default:* Ubuntu 22.04 and 24.04 and Debian 12. macOS stays manual for the server. The agent server gets macOS support later (the launchd file exists).
 3. **arm64 images?** They double release build time, and they would let Tumnis run on a Raspberry Pi 5, a Mac mini under Linux or a DGX Spark. *Default:* yes, for all three images.
 4. **Backups without B2?** Today, turning backups on needs Backblaze B2 (ADR-0006). Allowing a local-only repository (repo1 only, on the server's disk) would let a new install show `backups: ok` on day one, with a warning that the backups live on the same disk. *Default:* no, keep ADR-0006. Changing it needs a new ADR.
 5. **Tailscale required?** *Default:* the script installs it unless `--no-tailscale` is given, since the phone needs it. Without it, the install is local-only with the self-signed certificate.
-6. **Where does the script download from?** *Default:* the GitHub release asset URL (`.../releases/latest/download/install.sh`). A short domain such as `get.tumnis.app` can come later.
+6. **Where does the script download from?** *Default:* the public install repository's release asset URL (`github.com/SpaceshipCreative/tumnis-install/releases/latest/download/install.sh`). A short domain such as `get.tumnis.app` can come later.
+7. **Database passwords and profile keys in `.env` files?** AGENTS.md says never to store secrets in environment variables and lists one exception, the hosted speech and embedding keys. Today compose reads the database passwords from `.env` and hands them to the containers as variables, and each Hermes profile reads its Tumnis key from its own `.env`. The installers only automate that design. *Default:* keep it and add both to the documented exception, with each file mode 0600 and owned by its service user. The alternative moves the passwords to `*_FILE` settings in P5-02 and holds P5-03 until Hermes can read keys from files.
