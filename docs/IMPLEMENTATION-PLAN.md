@@ -1584,7 +1584,7 @@ Size M · Traces FR-4.7, FR-5.9
 
 **Red first**
 
-- Each item's done condition comes from existing state: working hours, a first project, a connected runner, a calendar, backups ok, the app installed on a phone
+- Each item's done condition comes from existing state: working hours, a first project, a connected runner, a calendar, backups ok, push turned on from a phone
 - The card lists only the items not yet done, a dismissed item stays dismissed, and the card goes away when nothing is left
 
 **Green.** Rules function, read route and dashboard card.

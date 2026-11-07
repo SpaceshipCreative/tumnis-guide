@@ -17873,7 +17873,7 @@ Steps:
 2. Assert Docker and the Compose plugin are installed, `/health/ready` answers `ok` or `degraded` (backups off), and the README's first-run script signs in.
 3. Record checksums and mtimes of `/etc/tumnis/**`, `/opt/tumnis/**` and `.env`, and the start time of each container.
 4. Run the same command again. Assert every checksum, mtime and container start time is unchanged and the output says "Nothing to change".
-5. On the release workflow only, repeat steps 1 and 2 on a second clean VM with `--source release --version <tag>`, pulling the published images without signing in.
+5. On the release workflow only, repeat steps 1 to 4 (including the second-run check) on a second clean VM with `--source release --version <tag>`, pulling the published images without signing in.
 
 **A5.2 · Pairing on the same VM, then a run ends in review**
 
@@ -17889,7 +17889,7 @@ Steps:
 1. Run `sudo deploy/install.sh --yes --with-agent`. Assert no token was passed on the command line, written to the log or printed.
 2. Assert `GET /v1/runners` lists one runner, connected, and that the master and project-template profiles exist under `/home/tumnis-agent/.hermes/profiles` with a `.env` of mode 0600.
 3. Create a project and an AI task, press Run, and assert a result review item appears within 60 seconds.
-4. Run `install-agent.sh` again with the same pairing code. Assert it answers "already paired" without redeeming, and the profiles' `memories/` folders are untouched.
+4. Run `install-agent.sh` again on the same server. It finds its token file and the runner connected, so it does not ask for a code or redeem anything. Assert nothing changes and the profiles' `memories/` folders are untouched. Then redeem the used code again with `curl`: it answers 410 `pairing_expired` (T-P5-03-03).
 
 **A5.3 · The finish-setup card**
 
@@ -18023,7 +18023,7 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 in use, 5 
 | T-P5-02-05 | `deploy/tests/install/test_install.bats::existing secrets are never overwritten` | container | Pre-made secret files, certificate and `.env` keep their checksums | SEC-6 |
 | T-P5-02-06 | `deploy/tests/install/test_install.bats::the log holds no secret` | container | After a dry run that generates secrets, none of their values is in the log | SEC-6 |
 | T-P5-02-07 | `deploy/tests/install/test_install.bats::a bad checksum stops the install` | container | A tampered bundle exits 5 and leaves `/opt/tumnis` unchanged | SEC-7 |
-| T-P5-02-08 | `deploy/tests/install/test_install.bats::the proxy binds only to the tailscale or loopback address` | container | The generated `.env` never holds `0.0.0.0` or a public address | SEC-9 |
+| T-P5-02-08 | `deploy/tests/install/test_install.bats::the proxy binds only to the tailscale or loopback address` | container | The generated `.env` never holds `0.0.0.0` or a public address, and `docker compose config` rendered with every profile publishes each port only on the Tailscale address or `127.0.0.1` | SEC-9 |
 | T-P5-02-09 | `.github/workflows/readme.yml` job `one-command` | clean VM | A5.1 steps 1 to 4 | REL-4 |
 
 **TDD sequence**
@@ -18038,6 +18038,7 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 in use, 5 
 - Caddy gets certificates for `*.ts.net` names from the local `tailscaled` when it can reach its socket. Confirm against the pinned Caddy version's docs and test it on Scott's tailnet before removing the monthly renewal from OPERATIONS.md (P5-08).
 - `tailscale up` prints a sign-in URL. The script shows it, renders it as a QR code with `qrencode -t ANSIUTF8` so it can be scanned from a phone, and waits up to 10 minutes.
 - The time zone defaults to `timedatectl show -p Timezone --value` and is confirmed in interactive mode.
+- `.env` is written from `.env.example` with the generated database passwords, the Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values; to change one later, edit `.env` and run `install.sh` again, which starts again only the services the change affects (`docker compose up -d`).
 - The recovery keys (master key and pepper) are shown once with a keypress to continue (skipped with `--yes`, where the log says where they live).
 
 **Done checklist**
@@ -18131,7 +18132,7 @@ Pairing replaces every token a person used to copy by hand.
 **Scope.**
 - In:
   - The `runner_pairings` table and routes; redeeming a code (runner, device token and profile keys in one transaction).
-  - The screen with the command and a 10-minute countdown.
+  - The screen with the command, the code and a 10-minute countdown.
   - `install-agent.sh`: uv, Python 3.13, Hermes, the `tumnis-agent` user, the daemon into `/opt/tumnis-daemon`, `daemon.toml`, the token file, the profiles and their `.env`, the systemd unit, and waiting for the connection.
   - `install.sh --with-agent` for one machine.
 - Out: macOS agent servers (the launchd plist exists; a follow-up); minting third-party keys (`TYPESAFE_API_KEY`, GitHub, Coolify, Discord stay prompts or later settings).
@@ -18143,7 +18144,7 @@ Pairing replaces every token a person used to copy by hand.
 | `backend/tumnis/modules/agents/models.py` | edit | `runner_pairings(code_hash, expires_at, redeemed_at, runner_id, created_by)` through `create_tenant_table` |
 | `backend/tumnis/modules/agents/migrations/` | new revision | `phase = "expand"` |
 | `backend/tumnis/modules/agents/rules.py` | edit | `pairing_state(pairing, now)`, `profile_key_scopes(role)` |
-| `backend/tumnis/modules/agents/api.py` | edit | `start_pairing`, `redeem_pairing` |
+| `backend/tumnis/modules/agents/api.py` | edit | `start_pairing`, `redeem_pairing`. Redeeming claims the code in one statement, `UPDATE runner_pairings SET redeemed_at = now() WHERE code_hash = :h AND redeemed_at IS NULL AND expires_at > now() RETURNING id`, so two concurrent requests cannot both win. No row back means 410 `pairing_expired` |
 | `backend/tumnis/modules/agents/router.py` | edit | `POST /v1/runners/pairings` (session), `POST /v1/runners/pairings/redeem` (no session; the code is the credential; rate-limited) |
 | `backend/tests/audit_cases.py` | edit | `runner.paired` |
 | `frontend/src/components/settings/AgentsSection.tsx` | edit | Add agent server: the command, a copy button, the countdown, and the runner appearing live |
@@ -18157,7 +18158,7 @@ Pairing replaces every token a person used to copy by hand.
 class PairingOut(BaseModel):
     code: str             # 8 characters from an unambiguous alphabet, shown as ABCD-EFGH
     expires_at: datetime  # created_at + 10 minutes
-    command: str          # the exact line to paste, with this install's URL
+    command: str          # the exact line to paste, with this install's URL; the code is not in it: the script asks for it on /dev/tty
 
 class RedeemIn(BaseModel):
     code: str
@@ -18182,14 +18183,14 @@ def profile_key_scopes(role: Literal["master", "project-template"]) -> frozenset
 | --- | --- | --- | --- | --- |
 | T-P5-03-01 | `backend/tumnis/modules/agents/tests/unit/test_pairing_rules.py::test_pairing_states` | unit | Fresh, expired at 10 minutes, redeemed; Hypothesis over clock offsets | SEC-2 |
 | T-P5-03-02 | `backend/tumnis/modules/agents/tests/unit/test_pairing_rules.py::test_profile_key_scopes` | unit | Exact scope sets per role; `delegate` only for master | SEC-2 |
-| T-P5-03-03 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_redeem_once` | integration | A second redemption answers 410 `pairing_expired`; so does one after expiry | SEC-2 |
+| T-P5-03-03 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_redeem_once` | integration | A second redemption answers 410 `pairing_expired`; so does one after expiry; two concurrent redemptions of one code give exactly one success and one 410 | SEC-2 |
 | T-P5-03-04 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_code_stored_as_keyed_hash` | integration | No column holds the code; lookup goes through the ADR-0010 keyed hash | SEC-2 |
 | T-P5-03-05 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_redeem_rate_limited` | integration | The route policy's rate limit answers 429 | SEC-5 |
 | T-P5-03-06 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_redeem_audited` | integration | `runner.paired` with the runner and key prefixes, never the secrets | SEC-3 |
 | T-P5-03-07 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_redeem_is_one_transaction` | integration | A killpoint between runner and keys leaves neither | REL-2 |
 | T-P5-03-08 | `daemon/tests/install/test_install_agent.bats::refuses root as the run user and installs as tumnis-agent` | container | The unit's `User=tumnis-agent`; files owned by it | SEC-8 |
 | T-P5-03-09 | `daemon/tests/install/test_install_agent.bats::second run keeps memories` | container | An existing profile's `memories/` and `.env` keep their checksums | FR-5.10 |
-| T-P5-03-10 | `daemon/tests/install/test_install_agent.bats::no secret in argv or log` | container | The code is read from the argument once and redeemed; the token and keys never reach the log or `ps` output | SEC-6 |
+| T-P5-03-10 | `daemon/tests/install/test_install_agent.bats::no secret in argv or log` | container | The code is read from `/dev/tty` (or from `TUMNIS_PAIR_CODE` in the environment `install.sh --with-agent` gives it), never from an argument; the code, the token and the keys never reach argv, the log or `ps` output | SEC-6 |
 | T-P5-03-11 | `frontend/src/components/settings/AgentsSection.pairing.test.tsx::[P5-03][FR-5.11] add agent server shows the command and the countdown` | frontend | MSW: the command, copy, expiry, and the runner appearing | FR-5.11 |
 | T-P5-03-12 | `backend/tests/acceptance/test_a5_2_paired_run.py::test_paired_runner_run_reaches_review` | acceptance | A5.2 | FR-5.11 |
 
@@ -18226,7 +18227,7 @@ def profile_key_scopes(role: Literal["master", "project-template"]) -> frozenset
 
 **Scope.**
 - In:
-  - Six items, each worked out from existing state: working hours set; a first project; a connected runner (the pairing command inline); a calendar connected; backups ok in readiness; the app installed on a phone.
+  - Six items, each worked out from existing state: working hours set; a first project; a connected runner (the pairing command inline); a calendar connected; backups ok in readiness; push turned on from a phone.
   - Dismissing an item, stored as one workspace setting.
   - The card goes away when nothing is left.
 - Out: a separate wizard route; the connector item, which joins when P3-03 and P3-04 land (Part H3).
@@ -18240,7 +18241,7 @@ def profile_key_scopes(role: Literal["master", "project-template"]) -> frozenset
 | `backend/tumnis/modules/planning/router.py` | edit | `GET /v1/setup/checklist`, `PUT /v1/setup/checklist/dismissed` |
 | `frontend/src/components/dashboard/SetupCard.tsx`, `DashboardPage.tsx` | edit | The card |
 
-The phone item is done when a push subscription or a standalone-mode visit (a `display-mode: standalone` beacon from the PWA) has been recorded.
+The phone item is done when the owner has a push subscription whose user agent is a phone browser. P4-05's `push_subscriptions` table already stores the user agent, so the item needs no new state or endpoint. Its text says to add Tumnis to the Home Screen and turn on push.
 
 **Spec tests (commit first as expected failures)**
 
@@ -18310,6 +18311,7 @@ These are the two items the README lists under "Not yet available", each a thin 
 | ID | Location :: name | Layer | Proves | Req |
 | --- | --- | --- | --- | --- |
 | T-P5-07-01 | `frontend/src/components/search/SearchPage.knowledge.test.tsx::[P5-07][FR-15.3] knowledge hits under their own heading` | frontend | MSW: hits render with title, project and passage; a 500 from knowledge keeps the task results | FR-15.3 |
+| T-P5-07-03 | `backend/tumnis/modules/knowledge/tests/integration/test_search_scope.py::test_project_limited_principal_sees_own_passages` (tag the existing test instead if one covers it) | integration | A project-limited key gets passages only from its projects | FR-15.3 |
 | T-P5-07-02 | `frontend/e2e/P5-07-knowledge-search.spec.ts` | e2e | An uploaded seed document is found from the Search page at phone width | FR-15.3 |
 
 **Done checklist**

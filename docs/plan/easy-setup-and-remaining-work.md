@@ -53,7 +53,7 @@ What it does, in order. Each step is skipped when its result already exists:
 3. Runs `tailscale up` if the machine is not on a tailnet: it prints the sign-in link, waits, then reads the MagicDNS name. It checks that HTTPS certificates are on for the tailnet, and if not, says where to switch them on and waits.
 4. Asks for the sign-in email (or takes `--email`) and reads the time zone from `timedatectl` (or `--timezone`).
 5. Downloads and checks the release bundle into `/opt/tumnis`.
-6. Creates the 3 secret files and `.env`. These are today's README blocks moved into the script unchanged, so the existing rules hold: an existing file is never overwritten, and the files are owned by uid 10001 with mode 0400.
+6. Creates the 3 secret files with today's README steps: owned by uid 10001, mode 0400, never overwritten. It writes `.env` from `.env.example` with the generated database passwords, the detected Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values. To change a value later, edit `.env` and run `install.sh` again.
 7. Certificates. With Tailscale, Caddy gets the `*.ts.net` certificate from `tailscaled` itself (its socket is mounted into the proxy) and renews it, and the proxy binds only to the Tailscale address. Without Tailscale, the script makes the self-signed certificate as today and binds to `127.0.0.1`.
 8. Pulls the images, showing their sizes, runs `docker compose up -d --wait`, and waits for `/health/ready`.
 9. Prints the `https://<name>/setup` link and its QR code, and shows the master key and pepper once with "save these in your password manager", continuing only after a keypress (or `--yes`).
@@ -81,7 +81,7 @@ Safety rules the script keeps:
 The goal is that no token is ever copied by hand.
 
 - **Server side (agents module):**
-  - Settings > Agents > **Add agent server** shows a one-time pairing command, for example `curl -fsSL <release>/install-agent.sh | sudo bash -s -- --server https://<name> --pair ABCD-EFGH`.
+  - Settings > Agents > **Add agent server** shows a one-time pairing command, for example `curl -fsSL <release>/install-agent.sh | sudo bash -s -- --server https://<name>`. The script asks for the pairing code shown on the screen and reads it from the terminal, so the code never appears in the command line or `ps` output.
   - A pairing code works once and expires after 10 minutes. Redeeming it creates the runner, returns its device token, and mints the profile API keys with only the scopes each profile needs: `delegate` for the master profile, and the project scopes for the project template.
   - Each redemption is written to the audit log.
 - **Script side (`install-agent.sh`):**
@@ -92,7 +92,7 @@ The goal is that no token is ever copied by hand.
 - **Same machine:** `install.sh --with-agent` runs both on one server, pairing itself.
 
 - **Red**
-  - A pairing code redeems once; a second redemption or one after 10 minutes answers 410 `pairing_expired`. The codes are stored hashed, the same way as API keys (ADR-0010).
+  - A pairing code redeems once; a second redemption, one after 10 minutes, or the loser of two concurrent redemptions answers 410 `pairing_expired`. The codes are stored hashed, the same way as API keys (ADR-0010).
   - The minted keys hold exactly the scopes listed above (authorization matrix).
   - Redemption is rate-limited and audited (SEC-3 case).
   - On a fresh VM, `install.sh --with-agent` followed by a task run on the fake runner ends with a result in `/review`.
@@ -109,7 +109,7 @@ After `/setup`, the dashboard shows a **Finish setup** card until every item is 
 - Agent server connected (with the pairing command inline)
 - Google Calendar
 - Backups on
-- App installed on the phone, with a QR code of the URL
+- Push turned on from a phone (after adding Tumnis to its Home Screen), with a QR code of the URL
 
 Each item is worked out from existing state (rules function), not stored as a flag.
 
@@ -134,7 +134,7 @@ Settings screens over the existing `PUT /v1/settings/github` and `PUT /v1/settin
 
 The Search page and Ctrl+K include knowledge passages from `GET /v1/knowledge/search` beside tasks and projects, each linking to its document. This removes the other "Not yet available" item.
 
-- **Red:** Vitest and Playwright: a query that matches an uploaded document shows it under Knowledge; a local-only project's passages show only to its own scopes.
+- **Red:** Vitest and Playwright: a query that matches an uploaded document shows it under Knowledge; a project-limited session sees only its own projects' passages.
 
 ### P5-08 Docs (S)
 
