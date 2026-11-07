@@ -18601,7 +18601,7 @@ Every row has a default the plan already builds on. Rows 1 to 4 are due in week 
 | 27 | Local-only backups (repo1 only) so a new install can show backups ok without B2 | P5-05 | No: keep ADR-0006; a change needs a new ADR |
 | 28 | Tailscale required by the installer | P5-02 | Installed unless `--no-tailscale`, which means a local-only install with the self-signed certificate |
 | 29 | Where the install script downloads from | P5-01 | The `SpaceshipCreative/tumnis-install` release asset URL; a short domain later |
-| 30 | Database passwords in compose's `.env` and profile keys in each Hermes profile's `.env`, which AGENTS.md's no-secrets-in-environment rule does not list as exceptions | P5-02, P5-03 | Decided (Scott, 2026-11-07): keep today's design; both are in AGENTS.md's documented exception, the files mode 0600, compose's `.env` owned by the operator who runs `docker compose` and each profile's by `tumnis-agent` |
+| 30 | Database passwords in compose's `.env` and the credentials in each Hermes profile's `.env` (Tumnis key, `TYPESAFE_API_KEY`, GitHub, Coolify and Discord tokens), which AGENTS.md's no-secrets-in-environment rule does not list as exceptions | P5-02, P5-03 | Decided (Scott, 2026-11-07): keep today's design; both are in AGENTS.md's documented exception, the files mode 0600, compose's `.env` owned by the operator who runs `docker compose` and each profile's by `tumnis-agent` |
 
 ### K2 · Sources
 
