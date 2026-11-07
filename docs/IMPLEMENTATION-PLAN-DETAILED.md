@@ -18064,7 +18064,7 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 held by an
 **Goal.** `install.sh backups` turns on backups with one command once the B2 bucket and key exist.
 
 **Scope.**
-- In: prompting for the B2 bucket name, region, key ID and secret; writing the bucket, region and derived endpoint to `.env` as `PGBACKREST_REPO2_S3_BUCKET`, `_REGION` and `_ENDPOINT`, passed by `deploy/compose.yaml` to the Postgres container, where they override the values in `pgbackrest.conf`; checking the key cannot delete; generating the passphrase; writing `secrets.conf` (owned `root:999`, mode 0640); `TUMNIS_BACKUPS=on`; the restart; waiting for the first full backup in both repositories; showing the passphrase once; printing the B2 console steps.
+- In: prompting for the B2 bucket name, region, key ID and secret; writing the bucket, region and derived endpoint to `.env` as `PGBACKREST_REPO2_S3_BUCKET`, `_REGION` and `_ENDPOINT`, passed by `deploy/compose.yaml` to both the `postgres` and `backup` services (as `compose.test-backups.yaml` passes `rehearsal.env` to both), where they override the values in `pgbackrest.conf`; checking the key cannot delete; generating the passphrase; writing `secrets.conf` (owned `root:999`, mode 0640); `TUMNIS_BACKUPS=on`; the restart; waiting for the first full backup in both repositories; showing the passphrase once; printing the B2 console steps.
 - Out: creating the bucket or key through B2's API; local-only backups (K1 row 27).
 
 **Spec tests (commit first as expected failures)**
@@ -18074,7 +18074,7 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 held by an
 | T-P5-05-01 | `deploy/tests/install/test_backups.sh::test_backups_on_against_minio` | integration (`compose.test-backups.yaml`) | Ends with a full backup in repo1 and repo2 and readiness `backups: ok` | REL-1 |
 | T-P5-05-02 | `deploy/tests/install/test_backups.sh::test_delete_capable_key_refused` | integration | A key that can delete exits non-zero before any file or setting changes | REL-1 |
 | T-P5-05-03 | `deploy/tests/install/test_backups.sh::test_passphrase_never_logged` | integration | The passphrase is not in the install log or `docker compose logs` | SEC-9 |
-| T-P5-05-04 | `deploy/tests/install/test_backups.sh::test_bucket_and_region_used` | integration | With a bucket name and region other than the baked defaults, `pgbackrest info` inside the Postgres container reports that bucket and endpoint | REL-1 |
+| T-P5-05-04 | `deploy/tests/install/test_backups.sh::test_bucket_and_region_used` | integration | With a bucket name and region other than the baked defaults, `pgbackrest info` in both the `postgres` and `backup` containers reports that bucket and endpoint, and the first full backup lands in that bucket | REL-1 |
 
 **Implementation notes**
 - Reuse the delete-capability check P3-13 built for S3 linked sources (MinIO and B2), called through `tumnis admin check-s3-key` so the script does not reimplement it. If no such CLI exists, add it as a thin wrapper over the existing function.
