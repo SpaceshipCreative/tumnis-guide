@@ -18150,7 +18150,7 @@ Pairing replaces every token a person used to copy by hand.
 | `frontend/src/components/settings/AgentsSection.tsx` | edit | Add agent server: the command, a copy button, the countdown, and the runner appearing live |
 | `daemon/install-agent.sh` | new | The agent server script, same script rules |
 | `daemon/tests/install/test_install_agent.bats` | new | Dry-run and guard tests |
-| `deploy/install.sh` | edit | `--with-agent`: starts a pairing through the local admin CLI and runs `install-agent.sh` |
+| `deploy/install.sh` | edit | `--with-agent`: starts a pairing through the local admin CLI and runs `install-agent.sh --pair-code-fd 3` with the code on that descriptor |
 
 **Interfaces**
 
@@ -18190,7 +18190,7 @@ def profile_key_scopes(role: Literal["master", "project-template"]) -> frozenset
 | T-P5-03-07 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_redeem_is_one_transaction` | integration | A killpoint between runner and keys leaves neither | REL-2 |
 | T-P5-03-08 | `daemon/tests/install/test_install_agent.bats::refuses root as the run user and installs as tumnis-agent` | container | The unit's `User=tumnis-agent`; files owned by it | SEC-8 |
 | T-P5-03-09 | `daemon/tests/install/test_install_agent.bats::second run keeps memories` | container | An existing profile's `memories/` and `.env` keep their checksums | FR-5.10 |
-| T-P5-03-10 | `daemon/tests/install/test_install_agent.bats::no secret in argv or log` | container | The code is read from `/dev/tty` (or from `TUMNIS_PAIR_CODE` in the environment `install.sh --with-agent` gives it), never from an argument; the code, the token and the keys never reach argv, the log or `ps` output | SEC-6 |
+| T-P5-03-10 | `daemon/tests/install/test_install_agent.bats::no secret in argv or log` | container | The code is read from `/dev/tty`, or from file descriptor 3 when `install.sh --with-agent` runs it (`--pair-code-fd 3`; AGENTS.md keeps secrets out of environment variables), never from an argument. The code, the token and the keys never reach argv, the environment (`/proc/<pid>/environ`), the log or `ps` output | SEC-6 |
 | T-P5-03-11 | `frontend/src/components/settings/AgentsSection.pairing.test.tsx::[P5-03][FR-5.11] add agent server shows the command and the countdown` | frontend | MSW: the command, copy, expiry, and the runner appearing | FR-5.11 |
 | T-P5-03-12 | `backend/tests/acceptance/test_a5_2_paired_run.py::test_paired_runner_run_reaches_review` | acceptance | A5.2 | FR-5.11 |
 
