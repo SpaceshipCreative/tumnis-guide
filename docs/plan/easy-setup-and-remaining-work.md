@@ -36,7 +36,7 @@ Exit: on a fresh Ubuntu 24.04 VM with nothing installed, `install.sh --yes --ema
 The script can only be simple if everything it needs is published.
 
 - **Red**
-  - The release workflow fails when any of these is missing from the release: the app image, the `-extract` image, the Postgres image (today `tumnis-postgres:18` is built from `deploy/postgres` on the server), and `tumnis-deploy-<tag>.tar.gz` (compose files, Caddy, pgBouncer, pgBackRest and Prometheus config, `.env.example`). P5-02 adds `install.sh` to this list and P5-03 adds `install-agent.sh`, each in the package that writes the script.
+  - The release workflow fails when any of these is missing from the release: the app image, the `-extract` image, the Postgres image (today `tumnis-postgres:18` is built from `deploy/postgres` on the server), and `tumnis-deploy-<tag>.tar.gz` (compose files, Caddy, pgBouncer, pgBackRest and Prometheus config, `.env.example`, and the scripts OPERATIONS.md runs: `scripts/drill/restore_drill.sh`, `scripts/drill/b2_no_delete_check.sh` and `scripts/backup/folders.sh`). P5-02 adds `install.sh` to this list and P5-03 adds `install-agent.sh`, each in the package that writes the script.
   - The release assets download without signing in, from the public `SpaceshipCreative/tumnis-install` repository's release of the same tag (open question 1).
   - `compose.yaml` names the Postgres image by registry and tag, and an install from the bundle alone (no git checkout) reaches `/health/ready`.
   - Images are published for `linux/amd64` and `linux/arm64` (see open question 3).
@@ -50,11 +50,11 @@ The script can only be simple if everything it needs is published.
 What it does, in order. Each step is skipped when its result already exists:
 
 1. Checks the OS (Ubuntu 22.04 or 24.04, Debian 12) and the architecture, and that it can use `sudo`. Anything else gets a clear refusal that links to the manual install.
-2. Installs whatever is missing: Docker Engine and the Compose plugin (Docker's apt repository), `curl`, `openssl` and `qrencode`. Tailscale comes from its apt repository unless `--no-tailscale` is given.
+2. Installs whatever is missing: Docker Engine and the Compose plugin (Docker's apt repository), `curl`, `openssl`, `qrencode` and `jq` (the restore drill reads JSON with it). Tailscale comes from its apt repository unless `--no-tailscale` is given.
 3. Runs `tailscale up` if the machine is not on a tailnet: it prints the sign-in link, waits, then reads the MagicDNS name. It checks that HTTPS certificates are on for the tailnet, and if not, says where to switch them on and waits.
 4. Asks for the sign-in email (or takes `--email`) and reads the time zone from `timedatectl` (or `--timezone`).
 5. Downloads and checks the release bundle into `/opt/tumnis`.
-6. Creates the 3 secret files with today's README steps: owned by uid 10001, mode 0400, never overwritten. It writes `.env` (mode 0600, owned by the operator who runs `docker compose`) from `.env.example` with the generated database passwords (open question 7), the detected Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values. To change a value later, edit `.env` and run `install.sh` again.
+6. Creates the 3 secret files with today's README steps: owned by uid 10001, mode 0400, never overwritten. It writes `.env` (mode 0600, owned by the operator who runs `docker compose`) from `.env.example` with the generated database passwords (open question 7), the detected Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values, except that `upgrade` writes the new tag to `TUMNIS_VERSION` so a later `docker compose up` runs it. To change a value later, edit `.env` and run `install.sh` again.
 7. Certificates. With Tailscale, Caddy gets the `*.ts.net` certificate from `tailscaled` itself (its socket is mounted into the proxy) and renews it, and the proxy binds only to the Tailscale address. Without Tailscale, the script makes the self-signed certificate as today and binds to `127.0.0.1`.
 8. Pulls the images, showing their sizes, runs `docker compose up -d --wait`, and waits for `/health/ready`.
 9. Prints the `https://<name>/setup` link and its QR code, and shows the master key and pepper once with "save these in your password manager", continuing only after a keypress (or `--yes`).

@@ -17933,7 +17933,7 @@ The script can only stay simple if everything it needs is published, so the rele
 | --- | --- | --- |
 | `.github/workflows/release.yml` | edit | Build and push `tumnis-postgres:<tag>`; publish each image for `linux/amd64,linux/arm64` (the default runner's Docker cannot `load` a multi-platform image, so each image's `load: true` build for Trivy and the SBOM stays `linux/amd64` with `push: false`, and a second build step pushes both platforms from the same cache), attach the bundle, copy every asset to the release of the same tag on `SpaceshipCreative/tumnis-install`, extend the assets check |
 | `deploy/compose.yaml` | edit | `image: ghcr.io/spaceshipcreative/tumnis-postgres:${TUMNIS_VERSION:-latest}` beside the existing `build:` (the build stays for `--source checkout`) |
-| `scripts/release/bundle.sh` | new | Writes `tumnis-deploy-<tag>.tar.gz`: `deploy/` without test compose files, `.env.example`, and a `SHA256SUMS` |
+| `scripts/release/bundle.sh` | new | Writes `tumnis-deploy-<tag>.tar.gz`: `deploy/` without test compose files, `.env.example`, the scripts OPERATIONS.md runs (`scripts/drill/restore_drill.sh`, `scripts/drill/b2_no_delete_check.sh`, `scripts/backup/folders.sh`), and a `SHA256SUMS` |
 | `scripts/release/check_assets.py` | edit (or new, if the check lives in the workflow) | The assets list in one place |
 | `scripts/release/tests/test_bundle.py` | new | Bundle contents |
 
@@ -17941,7 +17941,7 @@ The script can only stay simple if everything it needs is published, so the rele
 
 | ID | Location :: name | Layer | Proves | Req |
 | --- | --- | --- | --- | --- |
-| T-P5-01-01 | `scripts/release/tests/test_bundle.py::test_bundle_has_everything_compose_mounts` | unit | Every file `compose.yaml` mounts or builds from is in the bundle; no test compose file or `test.env` is | REL-4 |
+| T-P5-01-01 | `scripts/release/tests/test_bundle.py::test_bundle_has_everything_compose_mounts` | unit | Every file `compose.yaml` mounts or builds from is in the bundle, and so are the scripts OPERATIONS.md runs; no test compose file or `test.env` is | REL-4 |
 | T-P5-01-02 | `scripts/release/tests/test_bundle.py::test_assets_check_fails_on_missing_asset` | unit | Removing any of the 4 asset kinds (the 3 images and the bundle) fails the check by name; P5-02 and P5-03 add their scripts to the same list | REL-4 |
 | T-P5-01-03 | `scripts/release/tests/test_bundle.py::test_compose_pins_every_image_to_the_release` | unit | Every Tumnis image in `compose.yaml` uses `${TUMNIS_VERSION}`; third-party images keep their digests | SEC-7 |
 | T-P5-01-04 | `.github/workflows/release.yml`, step `anonymous-pull` | release | `docker logout ghcr.io` then `docker pull` of each image and each platform succeeds, and an unauthenticated `curl -fL` of each asset from the `SpaceshipCreative/tumnis-install` release succeeds | REL-4 |
@@ -17977,7 +17977,7 @@ The script can only stay simple if everything it needs is published, so the rele
 
 **Scope.**
 - In:
-  - The OS and architecture checks and the dependency installs: Docker Engine and the Compose plugin from Docker's apt repository, `curl`, `openssl`, `qrencode`, and Tailscale from its apt repository.
+  - The OS and architecture checks and the dependency installs: Docker Engine and the Compose plugin from Docker's apt repository, `curl`, `openssl`, `qrencode`, `jq` (for the restore drill), and Tailscale from its apt repository.
   - `tailscale up` with the sign-in link, and the MagicDNS name and HTTPS-certificate check.
   - Downloading and checking the bundle into `/opt/tumnis`; secrets and `.env`.
   - Caddy fetching the `*.ts.net` certificate from `tailscaled`; the self-signed path without Tailscale.
@@ -18026,20 +18026,21 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 held by an
 | T-P5-02-08 | `deploy/tests/install/test_install.bats::the proxy binds only to the tailscale or loopback address` | container | The generated `.env` never holds `0.0.0.0` or a public address, and `docker compose config` rendered with every profile publishes each port only on the Tailscale address or `127.0.0.1` | SEC-9 |
 | T-P5-02-09 | `.github/workflows/readme.yml` job `one-command` | clean VM | A5.1 steps 1 to 4 | REL-4 |
 | T-P5-02-10 | `scripts/release/tests/test_bundle.py::test_assets_check_requires_install_sh` | unit | Removing `install.sh` from a release fails the assets check by name | REL-4 |
+| T-P5-02-11 | `deploy/tests/install/test_install.bats::upgrade writes the new tag and keeps the rest of .env` | container | After `upgrade v1.2.0`, `.env` has `TUMNIS_VERSION=v1.2.0` and every other line unchanged | REL-4 |
 
 **TDD sequence**
 1. T-P5-02-01 to 03 red: the argument parsing, the OS check and the step plan behind `--dry-run`; green.
 2. T-P5-02-04 to 08 red: the guards and the secret, `.env` and certificate steps (moved from the README blocks); green.
 3. Caddy's Tailscale block, tried by hand on Scott's tailnet. No CI test reaches a tailnet: the certificate path is a manual check in the done list.
 4. T-P5-02-09 red: the `one-command` job; the start and readiness steps; green.
-5. The subcommands `upgrade`, `status` and `uninstall`, each with a bats case for its dry run.
+5. The subcommands `upgrade` (T-P5-02-11 red, then green), `status` and `uninstall`, each with a bats case for its dry run.
 
 **Implementation notes**
 - Docker: Docker's apt repository as documented for Ubuntu and Debian, not the convenience script, so the install is repeatable. Tailscale: its documented apt repository. Check both in this WP against their current install pages (the third-party docs rule).
 - Caddy gets certificates for `*.ts.net` names from the local `tailscaled` when it can reach its socket. Confirm against the pinned Caddy version's docs and test it on Scott's tailnet before removing the monthly renewal from OPERATIONS.md (P5-08).
 - `tailscale up` prints a sign-in URL. The script shows it, renders it as a QR code with `qrencode -t ANSIUTF8` so it can be scanned from a phone, and waits up to 10 minutes.
 - The time zone defaults to `timedatectl show -p Timezone --value` and is confirmed in interactive mode.
-- `.env` is written from `.env.example` with the generated database passwords, the Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values; to change one later, edit `.env` and run `install.sh` again, which starts again only the services the change affects (`docker compose up -d`).
+- `.env` is written from `.env.example` with the generated database passwords, the Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values, except that `upgrade` writes the new tag to `TUMNIS_VERSION`; to change one later, edit `.env` and run `install.sh` again, which starts again only the services the change affects (`docker compose up -d`).
 - The recovery keys (master key and pepper) are shown once with a keypress to continue (skipped with `--yes`, where the log says where they live).
 
 **Done checklist**
