@@ -1113,6 +1113,111 @@ phases:
       green: "Install and operations docs, v1.0.0 with SBOM and OpenAPI attached, a second person's install checklist."
       done: "A4.4 passes and v1 is tagged."
 
+- id: 5
+  name: Easy setup
+  status: planned
+  weeks: 17 to 19
+  lead: Phase 5 turns the install into one command. One script installs everything a fresh server needs, Docker and Tailscale included, and one pasted command adds the agent server.
+  exit: On a fresh Ubuntu 24.04 VM with nothing installed, one install command and one pairing command give a working Tumnis whose fake-runner task ends in review, and running the install again changes nothing.
+  acceptance:
+  - {id: A5.1, test: "On a fresh Ubuntu 24.04 VM, install.sh --yes installs Docker, starts Tumnis from the release images and reaches /health/ready; first run completes; a second run changes no file and restarts no container", layer: "README job, clean VM", traces: "REL-4, SEC-6, Phase 5 exit"}
+  - {id: A5.2, test: "install.sh --with-agent pairs a runner on the same VM without copying a token, and a task run on the fake runner ends with a result in /review", layer: "README job, clean VM", traces: "FR-5.11, SEC-2, SEC-8"}
+  - {id: A5.3, test: "After /setup the dashboard's Finish setup card lists only the steps not yet done, each item ticks as its step is done, and the card goes away when all are done or dismissed", layer: "Playwright, 375 and 1280 px", traces: "FR-4.7, FR-5.9"}
+  milestones:
+  - id: M5.1
+    name: Publish and install
+    weeks: weeks 17 to 18
+    intro: The script can only stay simple if everything it needs is published, so the release comes first.
+    wps:
+    - id: P5-01
+      title: Release bundle and public images
+      size: M
+      traces: [REL-4, SEC-7]
+      red:
+      - "The release workflow fails when any asset is missing: the app, -extract and Postgres images, install.sh, install-agent.sh and tumnis-deploy-<tag>.tar.gz"
+      - "compose.yaml names the Postgres image by registry and tag, and an install from the bundle alone, with no git checkout, reaches /health/ready"
+      - "Every image is published for linux/amd64 and linux/arm64, and an anonymous docker pull of each works"
+      green: "Release workflow changes, the Postgres image pushed beside the app images, the deploy bundle, and a latest pointer the script can resolve."
+      done: "The next release carries every asset and its images pull without signing in."
+    - id: P5-02
+      title: One-command server install
+      size: L
+      needs: [P5-01]
+      traces: [SEC-6, SEC-9, REL-4]
+      red:
+      - "On a fresh Ubuntu 24.04 VM, install.sh --yes --no-tailscale --email <address> installs what is missing, starts the stack and completes first run"
+      - "A second run changes no file's checksum or mtime and restarts no container"
+      - "With --dry-run, it plans the right steps on debian:12 and refuses fedora with the documented message; with port 443 taken it exits before touching anything"
+      - "shellcheck is clean, the generated secrets never appear in the install log, and no secret, certificate or .env is overwritten"
+      green: "deploy/install.sh with install, upgrade, status and uninstall; Caddy getting and renewing the Tailscale certificate from tailscaled; the README job running the script."
+      done: "Scott installs a fresh VM on his tailnet with one command and opens it on his phone."
+    - id: P5-05
+      title: Backups in one step
+      size: S
+      needs: [P5-02]
+      traces: [REL-1, SEC-9]
+      red:
+      - "Against MinIO standing in for B2, install.sh backups ends with a full backup in both repositories and readiness shows backups ok"
+      - "A key that can delete is refused before anything changes, and the passphrase is shown once and never logged"
+      green: "The backups subcommand."
+      done: "OPERATIONS.md, Backups, steps 3 and 4 become one command."
+    - id: P5-08
+      title: Install docs for the one-command path
+      size: S
+      needs: [P5-02, P5-03, P5-05]
+      traces: [REL-4]
+      red:
+      - "The README job runs the README's one-command install and, separately, docs/INSTALL-MANUAL.md's tagged steps, both reaching a healthy app"
+      green: "README Install rewritten around install.sh, today's steps moved to docs/INSTALL-MANUAL.md, OPERATIONS.md without the monthly renewal for Tailscale installs."
+      done: "A5.1 passes."
+  - id: M5.2
+    name: Agents and first run
+    weeks: weeks 18 to 19
+    intro: Pairing replaces every token a person used to copy by hand.
+    wps:
+    - id: P5-03
+      title: Agent server pairing and one-command install
+      size: L
+      needs: [P5-02]
+      traces: [FR-5.11, SEC-2, SEC-3, SEC-8]
+      red:
+      - "A pairing code redeems once and expires after 10 minutes (410 pairing_expired); it is stored as a keyed hash, rate-limited and audited"
+      - "Redeeming creates the runner and mints profile keys holding exactly the scopes each profile needs"
+      - "install-agent.sh installs Hermes and the daemon, writes daemon.toml, the token file and each profile's .env, and waits until the runner is connected; a second run keeps the profiles' memories and changes nothing"
+      green: "Pairing routes and table, the Add agent server screen, daemon/install-agent.sh, install.sh --with-agent and the daemon in the release."
+      done: "A5.2 passes and Scott adds his agent server in one paste."
+    - id: P5-04
+      title: Finish-setup checklist
+      size: M
+      needs: [P5-03]
+      traces: [FR-4.7, FR-5.9]
+      red:
+      - "Each item's done condition comes from existing state: working hours, a first project, a connected runner, a calendar, backups ok, the app installed on a phone"
+      - "The card lists only the items not yet done, a dismissed item stays dismissed, and the card goes away when nothing is left"
+      green: "Rules function, read route and dashboard card."
+      done: "A5.3 passes."
+  - id: M5.3
+    name: Close the gaps
+    weeks: week 17
+    intro: The two items the README lists under Not yet available, each a thin screen over a route that already exists.
+    wps:
+    - id: P5-06
+      title: GitHub and Coolify settings screens
+      size: S
+      traces: [FR-12.1, FR-12.2]
+      red:
+      - "Saving, reloading and seeing the values works with the token masked; Test connection reports reachable or the error code; a stale save reloads the other version"
+      green: "Settings screens over PUT /v1/settings/github and PUT /v1/settings/coolify."
+      done: "GitHub and Coolify connect without curl."
+    - id: P5-07
+      title: Knowledge in search results
+      size: S
+      traces: [FR-15.3, FR-3.9]
+      red:
+      - "A query that matches an uploaded document shows its passage under Knowledge on the Search page (which Ctrl+K opens), linking to the document; a project-limited session sees only its projects' passages"
+      green: "Search page and Ctrl+K reading GET /v1/knowledge/search."
+      done: "Knowledge search no longer needs the API."
+
 out_of_scope:
 - "v1.1: Tauri desktop client (FR-7.2), screen awareness (FR-10.7c), desktop voice and voice replies (FR-10.8), filters and saved views, budgets, export and import, admin page, WCAG AA pass, run-log audit of gated actions, webhooks"
 - "v1.x: MCP gateway, Gmail label write-back, A2A, Outlook, calendar write-back"

@@ -20,7 +20,9 @@ flowchart TD
   G3{{"Gate 3: under 30 s of human time per captured task<br/>A3: J4, J5, one-key accept"}}
   P4["Phase 4 · Hardening · week 15, plan for 16<br/>Guardrail, stuck, voice, unattended windows,<br/>push, README tested by a second person"]
   G4{{"Gate 4: v1 tagged<br/>A second freelancer installs from the README alone"}}
-  P0 --> G0 --> P1 --> G1 --> P2 --> G2 --> P3 --> G3 --> P4 --> G4
+  P5["Phase 5 · Easy setup · weeks 17 to 19<br/>Release bundle, one-command install,<br/>agent pairing, finish-setup card"]
+  G5{{"Gate 5: one command on a clean VM<br/>A5: install, pair, run, finish setup"}}
+  P0 --> G0 --> P1 --> G1 --> P2 --> G2 --> P3 --> G3 --> P4 --> G4 --> P5 --> G5
 ```
 
 Phases follow the PRD's phasing table and exit criteria. A phase starts only when the previous gate's acceptance suite is green and its usage criterion is met.
@@ -67,7 +69,7 @@ From phase 2 the same loop can run inside Tumnis: a WP becomes a task on the Tum
 
 ## Phases at a glance
 
-86 work packages in 22 milestones. Phase 0 carries 30 of them, because every later phase leans on its harness, tenancy and security sweeps.
+94 work packages in 25 milestones. Phase 0 carries 30 of them, because every later phase leans on its harness, tenancy and security sweeps.
 
 | Phase | Weeks | Milestones | WPs | Acceptance suite, red on day 1 |
 | --- | --- | --- | --- | --- |
@@ -76,6 +78,7 @@ From phase 2 the same loop can run inside Tumnis: a WP becomes a task on the Tum
 | [Phase 2 · Agent layer](#phase-2--agent-layer-weeks-8-to-11) | 8 to 11 | Agent surface; runs, questions, approvals and delegation; agent safety; skills and homelab status; focus and notifications | 18 | J3, questions, approvals and taint, delegation, kill switch, J8 at Nudge and Coach, hostile content set |
 | [Phase 3 · Capture](#phase-3--capture-weeks-12-to-14) | 12 to 14 | Verify then connect; item to proposal; wider knowledge | 14 | J4, J5, one-keystroke accept, hybrid search |
 | [Phase 4 · Hardening](#phase-4--hardening-week-15-plan-for-16) | 15, plan for 16 | Finish the loop | 6 | Guardrail, stuck, unattended windows, README install |
+| [Phase 5 · Easy setup](#phase-5--easy-setup-weeks-17-to-19) | 17 to 19 | Publish and install; agents and first run; close the gaps | 8 | One-command install and rerun on a clean VM, pairing to a run in review, finish-setup card |
 
 Every PRD requirement ID maps to a work package or acceptance test: see [Traceability](#traceability).
 
@@ -1484,6 +1487,137 @@ Size M · Traces REL-4, SEC-7
 **Green.** Install and operations docs, v1.0.0 with SBOM and OpenAPI attached, a second person's install checklist.
 
 **Done when:** A4.4 passes and v1 is tagged.
+
+## Phase 5 · Easy setup (weeks 17 to 19)
+
+Phase 5 turns the install into one command. One script installs everything a fresh server needs, Docker and Tailscale included, and one pasted command adds the agent server.
+
+**Exit gate.** On a fresh Ubuntu 24.04 VM with nothing installed, one install command and one pairing command give a working Tumnis whose fake-runner task ends in review, and running the install again changes nothing.
+
+### Acceptance suite (written red on day 1)
+
+| ID | Test | Layer | Traces |
+| --- | --- | --- | --- |
+| A5.1 | On a fresh Ubuntu 24.04 VM, install.sh --yes installs Docker, starts Tumnis from the release images and reaches /health/ready; first run completes; a second run changes no file and restarts no container | README job, clean VM | REL-4, SEC-6, Phase 5 exit |
+| A5.2 | install.sh --with-agent pairs a runner on the same VM without copying a token, and a task run on the fake runner ends with a result in /review | README job, clean VM | FR-5.11, SEC-2, SEC-8 |
+| A5.3 | After /setup the dashboard's Finish setup card lists only the steps not yet done, each item ticks as its step is done, and the card goes away when all are done or dismissed | Playwright, 375 and 1280 px | FR-4.7, FR-5.9 |
+
+### M5.1 · Publish and install (weeks 17 to 18)
+
+The script can only stay simple if everything it needs is published, so the release comes first.
+
+#### P5-01 · Release bundle and public images
+
+Size M · Traces REL-4, SEC-7
+
+**Red first**
+
+- The release workflow fails when any asset is missing: the app, -extract and Postgres images, install.sh, install-agent.sh and tumnis-deploy-<tag>.tar.gz
+- compose.yaml names the Postgres image by registry and tag, and an install from the bundle alone, with no git checkout, reaches /health/ready
+- Every image is published for linux/amd64 and linux/arm64, and an anonymous docker pull of each works
+
+**Green.** Release workflow changes, the Postgres image pushed beside the app images, the deploy bundle, and a latest pointer the script can resolve.
+
+**Done when:** The next release carries every asset and its images pull without signing in.
+
+#### P5-02 · One-command server install
+
+Size L · Traces SEC-6, SEC-9, REL-4
+
+**Red first**
+
+- On a fresh Ubuntu 24.04 VM, install.sh --yes --no-tailscale --email <address> installs what is missing, starts the stack and completes first run
+- A second run changes no file's checksum or mtime and restarts no container
+- With --dry-run, it plans the right steps on debian:12 and refuses fedora with the documented message; with port 443 taken it exits before touching anything
+- shellcheck is clean, the generated secrets never appear in the install log, and no secret, certificate or .env is overwritten
+
+**Green.** deploy/install.sh with install, upgrade, status and uninstall; Caddy getting and renewing the Tailscale certificate from tailscaled; the README job running the script.
+
+**Done when:** Scott installs a fresh VM on his tailnet with one command and opens it on his phone.
+
+#### P5-05 · Backups in one step
+
+Size S · Traces REL-1, SEC-9
+
+**Red first**
+
+- Against MinIO standing in for B2, install.sh backups ends with a full backup in both repositories and readiness shows backups ok
+- A key that can delete is refused before anything changes, and the passphrase is shown once and never logged
+
+**Green.** The backups subcommand.
+
+**Done when:** OPERATIONS.md, Backups, steps 3 and 4 become one command.
+
+#### P5-08 · Install docs for the one-command path
+
+Size S · Traces REL-4
+
+**Red first**
+
+- The README job runs the README's one-command install and, separately, docs/INSTALL-MANUAL.md's tagged steps, both reaching a healthy app
+
+**Green.** README Install rewritten around install.sh, today's steps moved to docs/INSTALL-MANUAL.md, OPERATIONS.md without the monthly renewal for Tailscale installs.
+
+**Done when:** A5.1 passes.
+
+### M5.2 · Agents and first run (weeks 18 to 19)
+
+Pairing replaces every token a person used to copy by hand.
+
+#### P5-03 · Agent server pairing and one-command install
+
+Size L · Traces FR-5.11, SEC-2, SEC-3, SEC-8
+
+**Red first**
+
+- A pairing code redeems once and expires after 10 minutes (410 pairing_expired); it is stored as a keyed hash, rate-limited and audited
+- Redeeming creates the runner and mints profile keys holding exactly the scopes each profile needs
+- install-agent.sh installs Hermes and the daemon, writes daemon.toml, the token file and each profile's .env, and waits until the runner is connected; a second run keeps the profiles' memories and changes nothing
+
+**Green.** Pairing routes and table, the Add agent server screen, daemon/install-agent.sh, install.sh --with-agent and the daemon in the release.
+
+**Done when:** A5.2 passes and Scott adds his agent server in one paste.
+
+#### P5-04 · Finish-setup checklist
+
+Size M · Traces FR-4.7, FR-5.9
+
+**Red first**
+
+- Each item's done condition comes from existing state: working hours, a first project, a connected runner, a calendar, backups ok, the app installed on a phone
+- The card lists only the items not yet done, a dismissed item stays dismissed, and the card goes away when nothing is left
+
+**Green.** Rules function, read route and dashboard card.
+
+**Done when:** A5.3 passes.
+
+### M5.3 · Close the gaps (week 17)
+
+The two items the README lists under Not yet available, each a thin screen over a route that already exists.
+
+#### P5-06 · GitHub and Coolify settings screens
+
+Size S · Traces FR-12.1, FR-12.2
+
+**Red first**
+
+- Saving, reloading and seeing the values works with the token masked; Test connection reports reachable or the error code; a stale save reloads the other version
+
+**Green.** Settings screens over PUT /v1/settings/github and PUT /v1/settings/coolify.
+
+**Done when:** GitHub and Coolify connect without curl.
+
+#### P5-07 · Knowledge in search results
+
+Size S · Traces FR-15.3, FR-3.9
+
+**Red first**
+
+- A query that matches an uploaded document shows its passage under Knowledge on the Search page (which Ctrl+K opens), linking to the document; a project-limited session sees only its projects' passages
+
+**Green.** Search page and Ctrl+K reading GET /v1/knowledge/search.
+
+**Done when:** Knowledge search no longer needs the API.
 
 ## Traceability
 
