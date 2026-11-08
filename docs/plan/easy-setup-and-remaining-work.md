@@ -59,7 +59,7 @@ What it does, in order. Each step is skipped when its result already exists:
 8. Pulls the images, showing their sizes, runs `docker compose up -d --wait`, and waits for `/health/ready`.
 9. Prints the `https://<name>/setup` link and its QR code, and shows the master key and pepper once with "save these in your password manager", continuing only after a keypress (or `--yes`).
 
-Subcommands, all in the same script: `install.sh upgrade [<tag>]` (wraps OPERATIONS.md, Upgrade), `install.sh status` (health, certificate expiry, disk space, daemon connected, backups), `install.sh backups` (P5-05) and `install.sh uninstall` (stops the stack and keeps the data and secrets unless `--purge` is given and confirmed).
+Subcommands, all in the same script: `install.sh upgrade [<tag>]` (wraps OPERATIONS.md, Upgrade, and keeps the running bundle and tag), `install.sh rollback` (puts that bundle back and writes its tag to `TUMNIS_VERSION`, OPERATIONS.md, Rollback), `install.sh status` (health, certificate expiry, disk space, daemon connected, backups), `install.sh backups` (P5-05) and `install.sh uninstall` (stops the stack and keeps the data and secrets unless `--purge` is given and confirmed).
 
 Safety rules the script keeps:
 
