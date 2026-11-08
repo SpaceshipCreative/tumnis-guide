@@ -18030,12 +18030,13 @@ Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 held by an
 | T-P5-02-11 | `deploy/tests/install/test_install.bats::upgrade writes the new tag and keeps the rest of .env` | container | After `upgrade v1.2.0`, `.env` has `TUMNIS_VERSION=v1.2.0` and every other line unchanged | REL-4 |
 | T-P5-02-12 | `deploy/tests/install/test_install.bats::a fresh install writes the release tag` | container | After installing `v1.1.0`, `.env` has `TUMNIS_VERSION=v1.1.0` and `docker compose config` names `tumnis:v1.1.0` for the app services and `tumnis:v1.1.0-extract` for worker-extract | REL-4 |
 | T-P5-02-13 | `deploy/tests/install/test_install.bats::rollback restores the previous bundle and tag` | container | After `upgrade v1.2.0` then `rollback`, `/opt/tumnis` is the `v1.1.0` bundle, `.env` has `TUMNIS_VERSION=v1.1.0` and every other line unchanged, and `docker compose config` names the `v1.1.0` images | REL-4 |
+| T-P5-02-14 | `.github/workflows/readme.yml` job `one-command`, step `rollback` | clean VM | On the release-sourced install from the previous release, `install.sh upgrade` to the candidate then `install.sh rollback`: `install.sh status` exits 0, `/health/ready` is 200, and the `Tumnis-Version` header on `/health/live` names the previous release | REL-4 |
 
 **TDD sequence**
 1. T-P5-02-01 to 03 red: the argument parsing, the OS check and the step plan behind `--dry-run`; green.
 2. T-P5-02-04 to 08 red: the guards and the secret, `.env` and certificate steps (moved from the README blocks); green.
 3. Caddy's Tailscale block, tried by hand on Scott's tailnet. No CI test reaches a tailnet: the certificate path is a manual check in the done list.
-4. T-P5-02-09 red: the `one-command` job; the start and readiness steps; green.
+4. T-P5-02-09 red: the `one-command` job; the start and readiness steps; green. T-P5-02-14 red once `rollback` exists (step 5), then green.
 5. T-P5-02-12 red with the `.env` step, then green. The subcommands `upgrade` (T-P5-02-11 red, then green), `rollback` (T-P5-02-13 red, then green), `status` and `uninstall`, each with a bats case for its dry run.
 
 **Implementation notes**
