@@ -9,8 +9,11 @@
 # backend/conftest.py marks the tests (REAL_DOCLING_TESTS) `docling`, and skips them where
 # Docling is not installed, so the integration jobs leave them to this job.
 #
-# Its own workflow, not a ci.yml job: it is not a required check (.github/required-checks.txt
-# lists ci.yml's jobs only), so it runs beside the required path without holding it up.
+# Its own workflow, not a ci.yml job, but a required check (Scott decision 101):
+# .github/required-checks.txt lists ci.yml's jobs plus this `docling` job, and T-P0-03-16
+# checks that, and that this job keeps a timeout-minutes. It runs on every PR and push to
+# main (no `paths:` filter, no job `if:`): a required check that never reports blocks a
+# merge forever. Its id is the check name, so the job takes no display `name:`.
 #
 # Models come from Hugging Face (layout, TableFormer, the chunking tokenizer; HF_HOME) and
 # ModelScope (RapidOCR's weights, saved inside the rapidocr package in the venv), about
