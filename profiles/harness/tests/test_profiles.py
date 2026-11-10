@@ -35,12 +35,13 @@ def _frontmatter(text: str) -> dict[str, Any]:
 
 @pytest.mark.req("FR-5.10", "FR-11.6")
 @pytest.mark.wp("P1-05")
+@pytest.mark.xfail(strict=True, reason="spec:FIX-jev-mcp")
 def test_distribution_layout() -> None:
     """T-P1-05-12
     Both profiles have a distribution.yaml whose version equals VERSION, a SOUL, a config,
     an mcp.json whose `jev` server runs profiles/shared/jev-mcp at its pinned version with
-    TYPESAFE_API_KEY from the profile's .env, and the phase 1 skill; no credentials or
-    user data are in the repo.
+    the System One endpoint variables (key, base URL, model, limits) from the profile's
+    .env, and the phase 1 skill; no credentials or user data are in the repo.
     """
     jev_mcp = tomllib.loads((REPO / "profiles/shared/jev-mcp/pyproject.toml").read_text())
     jev_version = jev_mcp["project"]["version"]
@@ -63,7 +64,16 @@ def test_distribution_layout() -> None:
         args = " ".join(jev["args"])
         assert "#subdirectory=profiles/shared/jev-mcp" in args
         assert f"@jev-mcp-v{jev_version}#" in args
-        assert jev["env"] == {"TYPESAFE_API_KEY": "${TYPESAFE_API_KEY}"}
+        assert jev["env"] == {
+            name: f"${{{name}}}"
+            for name in (
+                "TYPESAFE_API_KEY",
+                "TYPESAFE_BASE_URL",
+                "TYPESAFE_DEFAULT_MODEL",
+                "SYSTEMONE_MAX_REQUEST_TOKENS",
+                "SYSTEMONE_MAX_STATE_TOKENS",
+            )
+        }
 
         front = _frontmatter((root / "skills" / skill / "SKILL.md").read_text())
         assert front["name"] == skill
