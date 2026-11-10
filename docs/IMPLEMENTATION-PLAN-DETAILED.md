@@ -60,6 +60,11 @@ Code in this document is specification, not finished code: it fixes names, shape
 - [Part G · Phase 4 · Hardening (weeks 15 to 16)](#part-g--phase-4--hardening-weeks-15-to-16)
   - [Phase 4 acceptance suite detail](#phase-4-acceptance-suite-detail)
   - [M4.1 · Finish the loop (weeks 15 to 16)](#m41--finish-the-loop-weeks-15-to-16)
+- [Part G2 · Phase 5 · Easy setup (weeks 17 to 19)](#part-g2--phase-5--easy-setup-weeks-17-to-19)
+  - [Phase 5 acceptance suite detail](#phase-5-acceptance-suite-detail)
+  - [M5.1 · Publish and install (weeks 17 to 18)](#m51--publish-and-install-weeks-17-to-18)
+  - [M5.2 · Agents and first run (weeks 18 to 19)](#m52--agents-and-first-run-weeks-18-to-19)
+  - [M5.3 · Close the gaps (week 17)](#m53--close-the-gaps-week-17)
 - [Part H · Schedule and capacity](#part-h--schedule-and-capacity)
   - [H1 · Effort against the calendar](#h1--effort-against-the-calendar)
   - [H2 · Week by week (two streams, middle sizes)](#h2--week-by-week-two-streams-middle-sizes)
@@ -17832,6 +17837,495 @@ gh release view v1.0.0 --json assets
 - TLS setup differs per network: the README shows the self-signed path (tested) and the Tailscale path (manual), and the health check accepts the README's own CA file.
 - Tagging slips because of one open blocker: the phase 4 buffer week absorbs it; nothing else waits on the tag.
 
+## Part G2 · Phase 5 · Easy setup (weeks 17 to 19)
+
+Phase 5 turns the install into one command. One script installs everything a fresh server needs, Docker and Tailscale included, and one pasted command adds the agent server. Before it, an install took 8 manual steps, a local build of a 4.7 GB image, a separate daemon and profile install with hand-copied tokens, and a certificate renewal every month.
+
+**Exit gate.** On a fresh Ubuntu 24.04 VM with nothing installed, one install command and one pairing command give a working Tumnis whose fake-runner task ends in review, and running the install again changes nothing.
+
+**Script rules (every Phase 5 shell script).**
+- Plain bash and the tools it installs, with no other dependency.
+- `set -euo pipefail` and `shellcheck` clean.
+- Every step checks its result first and skips when it is already there, so a second run is a no-op.
+- It never overwrites a secret, a certificate or `.env`.
+- It never binds to anything but the Tailscale address or loopback.
+- It logs to `/var/log/tumnis-install.log` with secrets left out.
+- Each flag has an environment twin (`--email` and `TUMNIS_EMAIL`), so the README job and unattended installs need no prompts.
+
+The steps the scripts take are today's README blocks moved into the script, so their rules (owners, modes, never overwrite) are kept as they are.
+
+### Phase 5 acceptance suite detail
+
+Phase 5's three acceptance tests are committed red on the phase's first day in one PR (`[P5-00] spec: phase 5 acceptance suite`, folded into P5-01's spec PR). A5.1 and A5.2 run in the README workflow because they need a clean VM.
+
+**A5.1 · One command installs Tumnis on a clean VM, and again changes nothing**
+
+| Field | Value |
+| --- | --- |
+| File | `.github/workflows/readme.yml`, job `one-command`, through `scripts/readme_test.py --suite install`; tagged for the acceptance inventory by `backend/tests/meta/test_install_script.py::test_one_command_job_runs_install_twice` (`req("A5.1")`), as A4.4 is by `test_readme_test.py` |
+| Tags | `@REL-4 @SEC-6 @A5.1` |
+| Turns green with | P5-02 (P5-08 moves the README onto it) |
+
+Preconditions: a fresh Ubuntu 24.04 runner VM with no Docker; the commit under test checked out.
+
+Steps:
+1. Run `sudo deploy/install.sh --yes --no-tailscale --source checkout --email ci@example.com --timezone UTC`. `--source checkout` builds the images from the checkout instead of pulling a release, since a PR's images are not published.
+2. Assert Docker and the Compose plugin are installed, `/health/ready` answers `ok` or `degraded` (backups off), and the README's first-run script signs in.
+3. Record checksums and mtimes of `/etc/tumnis/**`, `/opt/tumnis/**` and `.env`, and the start time of each container.
+4. Run the same command again. Assert every checksum, mtime and container start time is unchanged and the output says "Nothing to change".
+5. On the release workflow only, repeat steps 1 to 4 (including the second-run check) on a second clean VM with `--source release --version <tag>`, pulling the published images without signing in.
+
+**A5.2 · Pairing on the same VM, then a run ends in review**
+
+| Field | Value |
+| --- | --- |
+| File | `.github/workflows/readme.yml`, job `one-command`, step `pair`, then `backend/tests/acceptance/test_a5_2_paired_run.py::test_paired_runner_run_reaches_review` against the installed stack |
+| Tags | `@FR-5.11 @SEC-2 @SEC-8 @A5.2` |
+| Turns green with | P5-03 |
+
+Preconditions: A5.1 done; `TUMNIS_HERMES_BIN` pointing at the fake Hermes from `profiles/harness` (CI never calls a model).
+
+Steps:
+1. Run `sudo deploy/install.sh --yes --with-agent`. Assert no token was passed on the command line, written to the log or printed.
+2. Assert `GET /v1/runners` lists one runner, connected, and that the master and project-template profiles exist under `/home/tumnis-agent/.hermes/profiles` with a `.env` of mode 0600.
+3. Create a project and an AI task, press Run, and assert a result review item appears within 60 seconds.
+4. Run `install-agent.sh` again on the same server. It finds its token file and the runner connected, so it does not ask for a code or redeem anything. Assert nothing changes and the profiles' `memories/` folders are untouched. Then redeem the used code again with `curl`: it answers 410 `pairing_expired` (T-P5-03-03).
+
+**A5.3 · The finish-setup card**
+
+| Field | Value |
+| --- | --- |
+| File | `frontend/e2e/acceptance/A5.3-finish-setup.spec.ts` |
+| Tags | `@FR-4.7 @FR-5.9 @A5.3` |
+| Projects | phone and laptop |
+| Turns green with | P5-04 |
+
+Steps:
+1. A fresh workspace right after `/setup`: the dashboard shows Finish setup with six items, none done.
+2. Set working hours in Settings and return: that item is ticked. Create a project: ticked.
+3. Seed a connected runner through the test fixture route (fakes only): the agent item ticks.
+4. Dismiss the calendar item: it goes and stays gone after a reload.
+5. Tick the rest through fixtures: the card goes away.
+
+### M5.1 · Publish and install (weeks 17 to 18)
+
+The script can only stay simple if everything it needs is published, so the release comes first.
+
+#### P5-01 · Release bundle and public images
+
+| Field | Value |
+| --- | --- |
+| Milestone | M5.1 Publish and install (weeks 17 to 18) |
+| Size | M (1 to 2 agent-assisted days), PRs: spec + impl |
+| Needs | none |
+| Unblocks | P5-02 |
+| Traces | REL-4, SEC-7 |
+
+**Goal.** A release carries everything an install needs, and its images pull without signing in, so an install never needs a git checkout or a local build.
+
+**Scope.**
+- In: the Postgres image published beside the app images; the deploy bundle; publishing each release's assets to the public `SpaceshipCreative/tumnis-install` repository; images for `linux/amd64` and `linux/arm64`; a `latest` release pointer; the assets check extended to all of them. P5-02 adds `install.sh` to the assets list and P5-03 adds `install-agent.sh`, because each script is written in that package.
+- Out: a custom download domain (K1 row 29); signing the images (SEC-7 follow-up).
+
+**Files**
+
+| Path | Change | Purpose |
+| --- | --- | --- |
+| `.github/workflows/release.yml` | edit | Build and push `tumnis-postgres:<tag>`; publish each image for `linux/amd64,linux/arm64` (the default runner's Docker cannot `load` a multi-platform image, so each image's `load: true` build for Trivy and the SBOM stays `linux/amd64` with `push: false`, and a second build step pushes both platforms from the same cache), attach the bundle, copy every asset to the release of the same tag on `SpaceshipCreative/tumnis-install`, extend the assets check |
+| `deploy/compose.yaml` | edit | `image: ghcr.io/spaceshipcreative/tumnis-postgres:${TUMNIS_VERSION:-latest}` beside the existing `build:` (the build stays for `--source checkout`) |
+| `scripts/release/bundle.sh` | new | Writes `tumnis-deploy-<tag>.tar.gz`: `deploy/` without test compose files, `.env.example`, the scripts OPERATIONS.md runs (`scripts/drill/restore_drill.sh`, `scripts/drill/b2_no_delete_check.sh`, `scripts/backup/folders.sh`), and a `SHA256SUMS` |
+| `scripts/release/check_assets.py` | edit (or new, if the check lives in the workflow) | The assets list in one place |
+| `scripts/release/tests/test_bundle.py` | new | Bundle contents |
+
+**Spec tests (commit first as expected failures)**
+
+| ID | Location :: name | Layer | Proves | Req |
+| --- | --- | --- | --- | --- |
+| T-P5-01-01 | `scripts/release/tests/test_bundle.py::test_bundle_has_everything_compose_mounts` | unit | Every file `compose.yaml` mounts or builds from is in the bundle, and so are the scripts OPERATIONS.md runs; no test compose file or `test.env` is | REL-4 |
+| T-P5-01-02 | `scripts/release/tests/test_bundle.py::test_assets_check_fails_on_missing_asset` | unit | Removing any of the 4 asset kinds (the 3 images and the bundle) fails the check by name; P5-02 and P5-03 add their scripts to the same list | REL-4 |
+| T-P5-01-03 | `scripts/release/tests/test_bundle.py::test_compose_pins_every_image_to_the_release` | unit | Every Tumnis image in `compose.yaml` uses `${TUMNIS_VERSION}`; third-party images keep their digests | SEC-7 |
+| T-P5-01-04 | `.github/workflows/release.yml`, step `anonymous-pull` | release | `docker logout ghcr.io` then `docker pull` of each image and each platform succeeds, and an unauthenticated `curl -fL` of each asset from the `SpaceshipCreative/tumnis-install` release succeeds | REL-4 |
+| T-P5-01-05 | `.github/workflows/release.yml`, step `bundle-install` | release | Unpacking the bundle alone on the runner, then provisioning it as README steps 3 to 6 do (`.env` from `.env.example` with generated database passwords, and the host secret files under `/etc/tumnis/secrets` with their owner and mode; a release-job helper until P5-02's `install.sh` replaces it), then running `docker compose up --wait` reaches `/health/ready` | REL-4 |
+
+**TDD sequence**
+1. T-P5-01-01 to 03 red: `bundle.sh` and the compose change; green.
+2. T-P5-01-04 and 05 red on a release candidate tag of the first release after v1.0.0 (P4-06 tags v1.0.0); release workflow changes; green.
+
+**Implementation notes**
+- Multi-arch with `docker/setup-qemu-action` and `docker/setup-buildx-action`. The extract image's CPU PyTorch has arm64 wheels. Check Docling's models on arm64 in this WP before relying on them (the third-party docs rule in AGENTS.md).
+- Making the packages public is a GitHub package setting, done once by Scott (K1 row 24). The repository can stay private, but a private repository's release assets always need a token, so the release workflow copies them to the public `SpaceshipCreative/tumnis-install` repository with a token scoped to that repository only.
+
+**Done checklist**
+- [ ] The next release carries every asset (YAML done-when)
+- [ ] Anonymous pulls work on both platforms
+- [ ] `docs/RELEASE-CHECKLIST.md` lists the new assets
+
+**Risks and fallbacks**
+- arm64 builds of the extract image are too slow for the release job: build arm64 nightly and attach it to the release when done, or ship arm64 for the app and Postgres images only (Part I row 20).
+
+#### P5-02 · One-command server install
+
+| Field | Value |
+| --- | --- |
+| Milestone | M5.1 Publish and install (weeks 17 to 18) |
+| Size | L (3 to 4 agent-assisted days), PRs: spec + impl + impl-2 |
+| Needs | P5-01 |
+| Unblocks | P5-03, P5-05, P5-08 |
+| Traces | SEC-6, SEC-9, REL-4 |
+
+**Goal.** `install.sh` replaces README install steps 1 to 8. On a fresh supported server it installs every dependency, asks for one thing (the sign-in email), and ends with the `/setup` link and a QR code for the phone.
+
+**Scope.**
+- In:
+  - The OS and architecture checks and the dependency installs: Docker Engine and the Compose plugin from Docker's apt repository, `curl`, `openssl`, `qrencode`, `jq` (for the restore drill), and Tailscale from its apt repository.
+  - `tailscale up` with the sign-in link, and the MagicDNS name and HTTPS-certificate check.
+  - Downloading and checking the bundle into `/opt/tumnis`; secrets and `.env`.
+  - Caddy fetching the `*.ts.net` certificate from `tailscaled`; the self-signed path without Tailscale.
+  - Pull, start and the readiness wait; showing the recovery keys once.
+  - The subcommands `upgrade`, `rollback`, `status`, `uninstall`, and `backups` (P5-05).
+- Out: macOS servers; distributions other than Ubuntu 22.04 and 24.04 and Debian 12 (K1 row 25); an install that opens a port to the internet (never).
+
+**Files**
+
+| Path | Change | Purpose |
+| --- | --- | --- |
+| `deploy/install.sh` | new | The script; one function per step, `main` dispatching subcommands |
+| `deploy/caddy/Caddyfile` | edit | A Tailscale host block with no `tls` file lines (Caddy gets `*.ts.net` certificates from `tailscaled`); the file-based block kept for the self-signed path, chosen by `TUMNIS_TLS=tailscale\|file` |
+| `deploy/compose.yaml` | edit | The proxy mounts `/var/run/tailscale/tailscaled.sock` when `TUMNIS_TLS=tailscale` (a compose profile `tailscale`) |
+| `.env.example` | edit | `TUMNIS_TLS`, documented |
+| `deploy/tests/install/test_install.bats` | new | bats tests run in throwaway containers |
+| `deploy/tests/install/Dockerfile.{ubuntu24,debian12,fedora}` | new | Images for `--dry-run` tests |
+| `.github/workflows/readme.yml` | edit | Job `one-command` (A5.1) |
+| `.github/workflows/ci.yml` | edit | `shellcheck` and the bats suite in the Lint job |
+
+**Interfaces**
+
+```text
+install.sh [install] [--yes] [--email ADDR] [--timezone TZ] [--no-tailscale] [--with-agent]
+           [--source release|checkout] [--version TAG] [--dry-run]
+install.sh upgrade [TAG]        # OPERATIONS.md, Upgrade, as one command
+install.sh rollback             # OPERATIONS.md, Rollback: the previous bundle and tag back, then up
+install.sh status               # health, certificate expiry, disk, runner, backups; exit 0 only when all ok
+install.sh backups              # P5-05
+install.sh uninstall [--purge]  # stops the stack; --purge (typed confirmation) also removes data and secrets
+
+Exit codes: 0 done, 2 bad arguments, 3 unsupported system, 4 port 443 held by another process, 5 a download failed its checksum,
+6 health never ready (the log names the failing check).
+```
+
+**Spec tests (commit first as expected failures)**
+
+| ID | Location :: name | Layer | Proves | Req |
+| --- | --- | --- | --- | --- |
+| T-P5-02-01 | `deploy/tests/install/test_install.bats::dry run plans every step on ubuntu 24.04` | container | The plan lists Docker, Tailscale, bundle, secrets, certificate, start, in order | REL-4 |
+| T-P5-02-02 | `deploy/tests/install/test_install.bats::dry run on debian 12 uses the debian repositories` | container | Docker's and Tailscale's Debian sources are chosen | REL-4 |
+| T-P5-02-03 | `deploy/tests/install/test_install.bats::fedora is refused with the documented message` | container | Exit 3 and a link to `docs/INSTALL-MANUAL.md` | REL-4 |
+| T-P5-02-04 | `deploy/tests/install/test_install.bats::port 443 in use stops before any change` | container | Exit 4, the process named, nothing under `/etc/tumnis`; with this install's own proxy container on 443 (a rerun), no exit 4 | REL-4 |
+| T-P5-02-05 | `deploy/tests/install/test_install.bats::existing secrets are never overwritten` | container | Pre-made secret files, certificate and `.env` keep their checksums | SEC-6 |
+| T-P5-02-06 | `deploy/tests/install/test_install.bats::the log holds no secret` | container | After a dry run that generates secrets, none of their values is in the log | SEC-6 |
+| T-P5-02-07 | `deploy/tests/install/test_install.bats::a bad checksum stops the install` | container | A tampered bundle exits 5 and leaves `/opt/tumnis` unchanged | SEC-7 |
+| T-P5-02-08 | `deploy/tests/install/test_install.bats::the proxy binds only to the tailscale or loopback address` | container | The generated `.env` never holds `0.0.0.0` or a public address, and `docker compose config` rendered with every profile publishes each port only on the Tailscale address or `127.0.0.1` | SEC-9 |
+| T-P5-02-09 | `.github/workflows/readme.yml` job `one-command` | clean VM | A5.1 steps 1 to 4 | REL-4 |
+| T-P5-02-10 | `scripts/release/tests/test_bundle.py::test_assets_check_requires_install_sh` | unit | Removing `install.sh` from a release fails the assets check by name | REL-4 |
+| T-P5-02-11 | `deploy/tests/install/test_install.bats::upgrade writes the new tag and keeps the rest of .env` | container | After `upgrade v1.2.0`, `.env` has `TUMNIS_VERSION=v1.2.0` and every other line unchanged | REL-4 |
+| T-P5-02-12 | `deploy/tests/install/test_install.bats::a fresh install writes the release tag` | container | After installing `v1.1.0`, `.env` has `TUMNIS_VERSION=v1.1.0` and `docker compose config` names `tumnis:v1.1.0` for the app services and `tumnis:v1.1.0-extract` for worker-extract | REL-4 |
+| T-P5-02-13 | `deploy/tests/install/test_install.bats::rollback restores the previous bundle and tag` | container | After `upgrade v1.2.0` then `rollback`, `/opt/tumnis` is the `v1.1.0` bundle, `.env` has `TUMNIS_VERSION=v1.1.0` and every other line unchanged, and `docker compose config` names the `v1.1.0` images | REL-4 |
+| T-P5-02-14 | `.github/workflows/readme.yml` job `one-command`, step `rollback` | clean VM | On the release-sourced install from the previous release, `install.sh upgrade` to the candidate then `install.sh rollback`: `install.sh status` exits 0, `/health/ready` is 200, and the `Tumnis-Version` header on `/health/live` names the previous release | REL-4 |
+
+**TDD sequence**
+1. T-P5-02-01 to 03 red: the argument parsing, the OS check and the step plan behind `--dry-run`; green.
+2. T-P5-02-04 to 08 red: the guards and the secret, `.env` and certificate steps (moved from the README blocks); green.
+3. Caddy's Tailscale block, tried by hand on Scott's tailnet. No CI test reaches a tailnet: the certificate path is a manual check in the done list.
+4. T-P5-02-09 red: the `one-command` job; the start and readiness steps; green. T-P5-02-14 red once `rollback` exists (step 5), then green.
+5. T-P5-02-12 red with the `.env` step, then green. The subcommands `upgrade` (T-P5-02-11 red, then green), `rollback` (T-P5-02-13 red, then green), `status` and `uninstall`, each with a bats case for its dry run.
+
+**Implementation notes**
+- Docker: Docker's apt repository as documented for Ubuntu and Debian, not the convenience script, so the install is repeatable. Tailscale: its documented apt repository. Check both in this WP against their current install pages (the third-party docs rule).
+- Caddy gets certificates for `*.ts.net` names from the local `tailscaled` when it can reach its socket. Confirm against the pinned Caddy version's docs and test it on Scott's tailnet before removing the monthly renewal from OPERATIONS.md (P5-08).
+- `tailscale up` prints a sign-in URL. The script shows it, renders it as a QR code with `qrencode -t ANSIUTF8` so it can be scanned from a phone, and waits up to 10 minutes.
+- The time zone defaults to `timedatectl show -p Timezone --value` and is confirmed in interactive mode.
+- `.env` is written from `.env.example` with the generated database passwords, the release tag being installed as `TUMNIS_VERSION` (`.env.example` has `local`), the Tailscale name and the time zone. A rerun or `upgrade` keeps an existing `.env` and its values, except that `upgrade` writes the new tag to `TUMNIS_VERSION`. Before it does, `upgrade` moves the running bundle to `/opt/tumnis.previous` and records the running tag there, and `rollback` puts that bundle back and writes its tag to `TUMNIS_VERSION` (the release images are pulled by tag, so no retagging); to change one later, edit `.env` and run `install.sh` again, which starts again only the services the change affects (`docker compose up -d`).
+- The recovery keys (master key and pepper) are shown once with a keypress to continue (skipped with `--yes`, where the log says where they live).
+
+**Done checklist**
+- [ ] Scott installs a fresh VM on his tailnet with one command and opens it on his phone (YAML done-when)
+- [ ] The Tailscale certificate renews without a person (checked by setting Caddy's renewal window short on a test install)
+- [ ] `shellcheck` and bats run in the Lint job
+
+**Risks and fallbacks**
+- Caddy cannot read the `tailscaled` socket from inside its container: run `tailscale cert` from a systemd timer that `install.sh` installs (the OPERATIONS.md renewal, automated) (Part I row 21).
+- An apt repository changes its key or path: the step fails with the URL it tried, and the README job's nightly run catches it.
+
+#### P5-05 · Backups in one step
+
+| Field | Value |
+| --- | --- |
+| Milestone | M5.1 Publish and install (weeks 17 to 18) |
+| Size | S (up to 1 agent-assisted day), PRs: spec + impl |
+| Needs | P5-02 |
+| Unblocks | P5-08 |
+| Traces | REL-1, SEC-9 |
+
+**Goal.** `install.sh backups` turns on backups with one command once the B2 bucket and key exist.
+
+**Scope.**
+- In: prompting for the B2 bucket name, region, key ID and secret; writing the bucket, region and derived endpoint to `.env` as `PGBACKREST_REPO2_S3_BUCKET`, `_REGION` and `_ENDPOINT`, passed by `deploy/compose.yaml` to both the `postgres` and `backup` services (as `compose.test-backups.yaml` passes `rehearsal.env` to both), where they override the values in `pgbackrest.conf`; the same settings in the drills, `scripts/drill/restore_drill.sh --mode prod` (passed to its scratch containers) and `scripts/drill/b2_no_delete_check.sh` (its `B2_BUCKET`, `B2_REGION` and `B2_ENDPOINT` defaults read from `.env`); checking the key cannot delete; generating the passphrase; writing `secrets.conf` (owned `root:999`, mode 0640); `TUMNIS_BACKUPS=on`; the restart; waiting for the first full backup in both repositories; showing the passphrase once; printing the B2 console steps.
+- Out: creating the bucket or key through B2's API; local-only backups (K1 row 27).
+
+**Spec tests (commit first as expected failures)**
+
+| ID | Location :: name | Layer | Proves | Req |
+| --- | --- | --- | --- | --- |
+| T-P5-05-01 | `deploy/tests/install/test_backups.sh::test_backups_on_against_minio` | integration (`compose.test-backups.yaml`) | Ends with a full backup in repo1 and repo2 and readiness `backups: ok` | REL-1 |
+| T-P5-05-02 | `deploy/tests/install/test_backups.sh::test_delete_capable_key_refused` | integration | A key that can delete exits non-zero before any file or setting changes | REL-1 |
+| T-P5-05-03 | `deploy/tests/install/test_backups.sh::test_passphrase_never_logged` | integration | The passphrase is not in the install log or `docker compose logs` | SEC-9 |
+| T-P5-05-04 | `deploy/tests/install/test_backups.sh::test_bucket_and_region_used` | integration | With a bucket name and region other than the baked defaults, the effective pgBackRest configuration in both the `postgres` and `backup` containers has that bucket and endpoint (`pgbackrest info` does not show them), `pgbackrest info` reports a full backup, and the first full backup lands in that bucket | REL-1 |
+| T-P5-05-05 | `deploy/tests/install/test_backups.sh::test_drills_use_configured_bucket` | integration | With the same non-default bucket, `restore_drill.sh --mode prod` restores from that bucket and `b2_no_delete_check.sh` checks that bucket | REL-1 |
+
+**Implementation notes**
+- Reuse the delete-capability check P3-13 built for S3 linked sources (MinIO and B2), called through `tumnis admin check-s3-key` so the script does not reimplement it. If no such CLI exists, add it as a thin wrapper over the existing function.
+
+**Done checklist**
+- [ ] OPERATIONS.md, Backups, steps 3 and 4 become one command (YAML done-when)
+
+#### P5-08 · Install docs for the one-command path
+
+| Field | Value |
+| --- | --- |
+| Milestone | M5.1 Publish and install (weeks 17 to 18) |
+| Size | S (up to 1 agent-assisted day), PRs: spec + impl |
+| Needs | P5-02, P5-03, P5-05 |
+| Unblocks | none |
+| Traces | REL-4 |
+
+**Goal.** The README's Install is the one-command path. Today's step-by-step install moves, still tested, to `docs/INSTALL-MANUAL.md` for anyone who wants it and for Coolify.
+
+**Files**
+
+| Path | Change | Purpose |
+| --- | --- | --- |
+| `README.md` | edit | Install: requirements (a Linux server and a Tailscale account), the one command, what it asks, the agent paste; Agents section shortened to the pairing flow |
+| `docs/INSTALL-MANUAL.md` | new | Today's steps 1 to 8 and the Coolify path, with their `readme:` tags |
+| `docs/OPERATIONS.md` | edit | Upgrade as `install.sh upgrade` and Rollback as `install.sh rollback` for a release-sourced install (the checkout steps stay for `--source checkout`); Certificates without the monthly renewal for Tailscale installs; Backups through `install.sh backups` |
+| `docs/INSTALL-CHECKLIST.md` | edit | Timed run of the one-command path |
+| `scripts/readme_test.py` | edit | Takes `--doc` so the same harness runs `INSTALL-MANUAL.md` |
+
+**Spec tests**
+
+| ID | Location :: name | Layer | Proves | Req |
+| --- | --- | --- | --- | --- |
+| T-P5-08-01 | `scripts/tests/test_readme_test.py::test_doc_flag_runs_another_file` | unit | `--doc docs/INSTALL-MANUAL.md` finds its tagged blocks and the section coverage check | REL-4 |
+| T-P5-08-02 | `.github/workflows/readme.yml` jobs `one-command` and `manual` | clean VM | Both paths reach a healthy app | REL-4 |
+
+**Done checklist**
+- [ ] A5.1 passes (YAML done-when)
+- [ ] A second person installs from the README with one command and records the time in `INSTALL-CHECKLIST.md`
+
+### M5.2 · Agents and first run (weeks 18 to 19)
+
+Pairing replaces every token a person used to copy by hand.
+
+#### P5-03 · Agent server pairing and one-command install
+
+| Field | Value |
+| --- | --- |
+| Milestone | M5.2 Agents and first run (weeks 18 to 19) |
+| Size | L (3 to 4 agent-assisted days), PRs: spec + impl + impl-2 |
+| Needs | P5-02 |
+| Unblocks | P5-04, P5-08 |
+| Traces | FR-5.11, SEC-2, SEC-3, SEC-8 |
+
+**Goal.** Settings > Agents > **Add agent server** shows one command to paste on the agent server. It installs Hermes, the daemon and the profiles, and a one-time pairing code sets up the runner token and every profile key. Nobody copies a token.
+
+**Scope.**
+- In:
+  - The `runner_pairings` table and routes; redeeming a code (runner, device token and profile keys in one transaction).
+  - The screen with the command, the code and a 10-minute countdown.
+  - `install-agent.sh`: uv, Python 3.13, Hermes, the `tumnis-agent` user, the daemon into `/opt/tumnis-daemon`, `daemon.toml`, the token file, the profiles and their `.env`, the systemd unit, and waiting for the connection.
+  - `install.sh --with-agent` for one machine.
+- Out: macOS agent servers (the launchd plist exists; a follow-up); minting third-party keys (`TYPESAFE_API_KEY`, GitHub, Coolify, Discord stay prompts or later settings).
+
+**Files**
+
+| Path | Change | Purpose |
+| --- | --- | --- |
+| `backend/tumnis/modules/agents/models.py` | edit | `runner_pairings(code_hash, expires_at, redeemed_at, runner_id, created_by)` through `create_tenant_table` |
+| `backend/tumnis/modules/agents/migrations/` | new revision | `phase = "expand"` |
+| `backend/tumnis/modules/agents/rules.py` | edit | `pairing_state(pairing, now)`, `profile_key_scopes(role)` |
+| `backend/tumnis/modules/agents/api.py` | edit | `start_pairing`, `redeem_pairing`. Redeeming claims the code in one statement, `UPDATE runner_pairings SET redeemed_at = now() WHERE code_hash = :h AND redeemed_at IS NULL AND expires_at > now() RETURNING id`, so two concurrent requests cannot both win. No row back means 410 `pairing_expired` |
+| `backend/tumnis/modules/agents/router.py` | edit | `POST /v1/runners/pairings` (session), `POST /v1/runners/pairings/redeem` (no session; the code is the credential; rate-limited) |
+| `backend/tests/audit_cases.py` | edit | `runner.paired` |
+| `frontend/src/components/settings/AgentsSection.tsx` | edit | Add agent server: the command, a copy button, the countdown, and the runner appearing live |
+| `daemon/install-agent.sh` | new | The agent server script, same script rules |
+| `daemon/tests/install/test_install_agent.bats` | new | Dry-run and guard tests |
+| `deploy/install.sh` | edit | `--with-agent`: starts a pairing through the local admin CLI and runs `install-agent.sh --pair-code-fd 3` with the code on that descriptor |
+
+**Interfaces**
+
+```python
+class PairingOut(BaseModel):
+    code: str             # 8 characters from an unambiguous alphabet, shown as ABCD-EFGH
+    expires_at: datetime  # created_at + 10 minutes
+    command: str          # the exact line to paste, with this install's URL; the code is not in it: the script asks for it on /dev/tty
+
+class RedeemIn(BaseModel):
+    code: str
+    runner_name: str      # defaults to the agent server's hostname
+
+class RedeemOut(BaseModel):
+    runner_id: UUID
+    device_token: str               # shown once, written to the token file
+    profile_keys: dict[str, str]    # {"master": "...", "project-template": "..."}; each a SEC-2 key
+    server_url: str
+    template_version: str           # the profiles to install, matched to this release
+
+def profile_key_scopes(role: Literal["master", "project-template"]) -> frozenset[str]:
+    """master: the workspace scopes plus delegate. project-template: the project scopes
+    a provisioned profile needs (FR-5.10); each provisioned profile still gets its own
+    project-limited key at provision time (P1-06), as today."""
+```
+
+**Spec tests (commit first as expected failures)**
+
+| ID | Location :: name | Layer | Proves | Req |
+| --- | --- | --- | --- | --- |
+| T-P5-03-01 | `backend/tumnis/modules/agents/tests/unit/test_pairing_rules.py::test_pairing_states` | unit | Fresh, expired at 10 minutes, redeemed; Hypothesis over clock offsets | SEC-2 |
+| T-P5-03-02 | `backend/tumnis/modules/agents/tests/unit/test_pairing_rules.py::test_profile_key_scopes` | unit | Exact scope sets per role; `delegate` only for master | SEC-2 |
+| T-P5-03-03 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_redeem_once` | integration | A second redemption answers 410 `pairing_expired`; so does one after expiry; two concurrent redemptions of one code give exactly one success and one 410 | SEC-2 |
+| T-P5-03-04 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_code_stored_as_keyed_hash` | integration | No column holds the code; lookup goes through the ADR-0010 keyed hash | SEC-2 |
+| T-P5-03-05 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_redeem_rate_limited` | integration | The route policy's rate limit answers 429 | SEC-5 |
+| T-P5-03-06 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_redeem_audited` | integration | `runner.paired` with the runner and key prefixes, never the secrets | SEC-3 |
+| T-P5-03-07 | `backend/tumnis/modules/agents/tests/integration/test_pairing.py::test_redeem_is_one_transaction` | integration | A killpoint between runner and keys leaves neither | REL-2 |
+| T-P5-03-08 | `daemon/tests/install/test_install_agent.bats::refuses root as the run user and installs as tumnis-agent` | container | The unit's `User=tumnis-agent`; files owned by it | SEC-8 |
+| T-P5-03-09 | `daemon/tests/install/test_install_agent.bats::second run keeps memories` | container | An existing profile's `memories/` and `.env` keep their checksums | FR-5.10 |
+| T-P5-03-10 | `daemon/tests/install/test_install_agent.bats::no secret in argv or log` | container | The code is read from `/dev/tty`, or from file descriptor 3 when `install.sh --with-agent` runs it (`--pair-code-fd 3`; AGENTS.md keeps secrets out of environment variables), never from an argument. The code, the token and the keys never reach argv, the environment (`/proc/<pid>/environ`), the log or `ps` output | SEC-6 |
+| T-P5-03-11 | `frontend/src/components/settings/AgentsSection.pairing.test.tsx::[P5-03][FR-5.11] add agent server shows the command and the countdown` | frontend | MSW: the command, copy, expiry, and the runner appearing | FR-5.11 |
+| T-P5-03-12 | `backend/tests/acceptance/test_a5_2_paired_run.py::test_paired_runner_run_reaches_review` | acceptance | A5.2 | FR-5.11 |
+| T-P5-03-13 | `scripts/release/tests/test_bundle.py::test_assets_check_requires_install_agent_sh` | unit | Removing `install-agent.sh` from a release fails the assets check by name | REL-4 |
+
+**TDD sequence**
+1. T-P5-03-01 and 02 red: rules; green.
+2. T-P5-03-03 to 07 red: table, migration, `api` and routes; green. The authorization matrix and route registry pick up the new routes.
+3. T-P5-03-11 red: the screen; green.
+4. T-P5-03-08 to 10 red: `install-agent.sh`; green.
+5. T-P5-03-12 red: `--with-agent` and the A5.2 job; green.
+
+**Implementation notes**
+- Hermes is installed with its own documented installer, run as `tumnis-agent`. Check the current install page in this WP (the third-party docs rule).
+- `install-agent.sh` reuses what the daemon already does: `provision.py` installs profiles from `template_dir`, and the systemd unit is today's `daemon/systemd/tumnis-daemon.service`.
+- The code alone pairs, so its 10-minute life, single use and rate limit are the safety. It travels only over HTTPS to this install's URL. The command shows the URL, so a person can see where it points.
+
+**Done checklist**
+- [ ] A5.2 passes, and Scott adds his agent server in one paste (YAML done-when)
+- [ ] `systemd-analyze security tumnis-daemon.service` score unchanged
+
+**Risks and fallbacks**
+- Hermes's installer needs an interactive step: run it with its documented non-interactive flags, or install the pinned release from its package directly.
+
+#### P5-04 · Finish-setup checklist
+
+| Field | Value |
+| --- | --- |
+| Milestone | M5.2 Agents and first run (weeks 18 to 19) |
+| Size | M (1 to 2 agent-assisted days), PRs: spec + impl |
+| Needs | P5-03 |
+| Unblocks | none |
+| Traces | FR-4.7, FR-5.9 |
+
+**Goal.** After `/setup`, the dashboard shows a **Finish setup** card that walks the owner through the rest without the README.
+
+**Scope.**
+- In:
+  - Six items, each worked out from existing state: working hours set; a first project; a connected runner (the pairing command inline); a calendar connected; backups ok in readiness; push turned on from a phone.
+  - Dismissing an item, stored as one workspace setting.
+  - The card goes away when nothing is left.
+- Out: a separate wizard route; the connector item, which joins when P3-03 and P3-04 land (Part H3).
+
+**Files**
+
+| Path | Change | Purpose |
+| --- | --- | --- |
+| `backend/tumnis/modules/planning/rules.py` | edit | `setup_items(state) -> list[SetupItem]` (pure) |
+| `backend/tumnis/modules/planning/api.py` | edit | Gathers the state through other modules' `api` |
+| `backend/tumnis/modules/planning/router.py` | edit | `GET /v1/setup/checklist`, `PUT /v1/setup/checklist/dismissed` |
+| `frontend/src/components/dashboard/SetupCard.tsx`, `DashboardPage.tsx` | edit | The card |
+
+The phone item is done when the owner has a push subscription whose user agent is a phone browser. P4-05's `push_subscriptions` table already stores the user agent, so the item needs no new state or endpoint. Its text says to add Tumnis to the Home Screen and turn on push.
+
+**Spec tests (commit first as expected failures)**
+
+| ID | Location :: name | Layer | Proves | Req |
+| --- | --- | --- | --- | --- |
+| T-P5-04-01 | `backend/tumnis/modules/planning/tests/unit/test_setup_items.py::test_each_item_done_condition` | unit | One table-driven case per item | FR-4.7 |
+| T-P5-04-02 | `backend/tumnis/modules/planning/tests/unit/test_setup_items.py::test_dismissed_items_hidden` | unit | Dismissed items never return | FR-4.7 |
+| T-P5-04-03 | `backend/tumnis/modules/planning/tests/integration/test_setup_checklist.py::test_runner_item_follows_health` | integration | A disconnected runner unticks the item | FR-5.9 |
+| T-P5-04-04 | `frontend/src/components/dashboard/SetupCard.test.tsx::[P5-04] lists only open items` | frontend | MSW states: some open, all done (no card) | FR-4.7 |
+| T-P5-04-05 | `frontend/e2e/acceptance/A5.3-finish-setup.spec.ts` | acceptance | A5.3 | FR-4.7 |
+
+**Done checklist**
+- [ ] A5.3 passes (YAML done-when)
+- [ ] The card adds no request to the dashboard's first paint budget (A0.6): it loads after first paint
+
+### M5.3 · Close the gaps (week 17)
+
+These are the two items the README lists under "Not yet available", each a thin screen over a route that already exists. They have no `needs` and can start on the phase's first day.
+
+#### P5-06 · GitHub and Coolify settings screens
+
+| Field | Value |
+| --- | --- |
+| Milestone | M5.3 Close the gaps (week 17) |
+| Size | S (up to 1 agent-assisted day), PRs: spec + impl |
+| Needs | none |
+| Unblocks | none |
+| Traces | FR-12.1, FR-12.2 |
+
+**Goal.** Settings > GitHub and Settings > Coolify replace the `curl` calls to `PUT /v1/settings/github` and `PUT /v1/settings/coolify`.
+
+**Scope.**
+- In: forms with the token masked after saving; the allowed repositories list; the webhook secret, generated with a copy button; and a **Test connection** button.
+- Test connection calls a new `POST /v1/settings/{github,coolify}/test`, run in the worker because the api cannot call out.
+- Out: a GitHub App flow (v1.x).
+
+**Spec tests (commit first as expected failures)**
+
+| ID | Location :: name | Layer | Proves | Req |
+| --- | --- | --- | --- | --- |
+| T-P5-06-01 | `frontend/src/components/settings/GitHubSection.test.tsx::[P5-06][FR-12.1] save, reload, token masked` | frontend | Values round-trip; the token never comes back | FR-12.1 |
+| T-P5-06-02 | `frontend/src/components/settings/CoolifySection.test.tsx::[P5-06][FR-12.2] stale save reloads the other version` | frontend | 409 `stale_version` reloads the form as Settings > Connections does | FR-12.2 |
+| T-P5-06-03 | `backend/tumnis/modules/github/tests/integration/test_settings_test.py::test_connection_check` | integration | The fake answers ok, 401 and unreachable as stable codes | FR-12.1 |
+| T-P5-06-04 | `backend/tumnis/modules/coolify/tests/integration/test_settings_test.py::test_connection_check` | integration | Same for Coolify, with the SEC-5 outbound URL rules | SEC-5 |
+
+**Done checklist**
+- [ ] GitHub and Coolify connect without `curl`; the README's "Not yet available" loses the item
+
+#### P5-07 · Knowledge in search results
+
+| Field | Value |
+| --- | --- |
+| Milestone | M5.3 Close the gaps (week 17) |
+| Size | S (up to 1 agent-assisted day), PRs: spec + impl |
+| Needs | none |
+| Unblocks | none |
+| Traces | FR-15.3, FR-3.9 |
+
+**Goal.** The Search page (which Ctrl+K opens) shows knowledge passages from `GET /v1/knowledge/search` beside tasks and projects.
+
+**Scope.**
+- In: a Knowledge group on the Search page, each hit showing document title, project and passage with the match marked, linking to the document. The two requests are made in parallel, and a failing knowledge search leaves the other results in place.
+- Out: merging the two rankings into one list.
+
+**Spec tests (commit first as expected failures)**
+
+| ID | Location :: name | Layer | Proves | Req |
+| --- | --- | --- | --- | --- |
+| T-P5-07-01 | `frontend/src/components/search/SearchPage.knowledge.test.tsx::[P5-07][FR-15.3] knowledge hits under their own heading` | frontend | MSW: hits render with title, project and passage; a 500 from knowledge keeps the task results | FR-15.3 |
+| T-P5-07-03 | `backend/tumnis/modules/knowledge/tests/integration/test_search_scope.py::test_project_limited_principal_sees_own_passages` (tag the existing test instead if one covers it) | integration | A project-limited key gets passages only from its projects | FR-15.3 |
+| T-P5-07-02 | `frontend/e2e/P5-07-knowledge-search.spec.ts` | e2e | An uploaded seed document is found from the Search page at phone width | FR-15.3 |
+
+**Done checklist**
+- [ ] Knowledge search no longer needs the API; the README's "Not yet available" section goes away
+
 ## Part H · Schedule and capacity
 
 The PRD's week counts are sequencing, not commitments. Detailing every WP makes the effort measurable, and the numbers say phase 0 will not fit in four weeks with one reviewer. Plan on it.
@@ -17897,6 +18391,7 @@ A WP is listed in the week it starts; L-sized WPs run into the next week.
 - **Phase 2:** MCP surface and the packet first (everything calls them), then runs and approvals, then safety, then skills and focus. Draft P2-11's hostile set during P2-02, since packet escaping and the skills face the same inputs.
 - **Phase 3:** learning tests before any connector (P3-01), because the connectors depend on provider behavior nobody has confirmed.
 - **Phase 4:** the YAML lists no `needs` for P4 WPs, but they depend on P2-08, P2-15, P2-16 and P1-18; start them only after those merge.
+- **Phase 5:** P5-06 and P5-07 have no `needs` and start on the first day beside P5-01. Then P5-02, then P5-03 and P5-05 in parallel, then P5-04 and P5-08. Phase 5 touches deploy scripts, the release workflow, the agents module and settings screens, none of which the deferred Phase 3 work (P3-01, P3-03 to P3-07, P3-11) touches, so the two run side by side. P3-01 still comes before any connector. When P3-03 and P3-04 land, P5-04's checklist gains a "Connect email and meeting notes" item, and P3-11 reuses the Google Calendar OAuth client (one client, both scopes) behind a guided setup page.
 
 ## Part I · Risk register
 
@@ -17923,6 +18418,8 @@ Each WP carries its own risks and fallbacks. These are the ones that can move a 
 | 17 | Tiptap's Markdown extension changes output between versions | P1-17 | Round-trip suite fails on a Renovate PR | Pin; upgrade only with the suite green; CodeMirror 6 was the recorded alternative (ADR-0008) |
 | 18 | Performance budgets fail on phone hardware over the VPN | P0-29 | Lighthouse or cold-open test over budget | Route splitting, lazy editor, smaller initial payload; budget changes need Scott |
 | 19 | Scope creep into an agent framework | Phases 2 and 3 | A WP not traceable to J1 to J8 | Traceability job; new work enters as a WP with a requirement or not at all |
+| 20 | arm64 images of the extract worker are too slow or too large to build in the release job | P5-01 | The release job passes its time limit on the arm64 extract build | Build arm64 nightly and attach it when done, or ship arm64 for the app and Postgres images only |
+| 21 | Caddy cannot get Tailscale certificates from inside its container | P5-02 | The certificate check on Scott's tailnet fails | A systemd timer that `install.sh` installs runs `tailscale cert` (the OPERATIONS.md renewal, automated) |
 
 ## Part J · Traceability
 
@@ -18103,6 +18600,13 @@ Every row has a default the plan already builds on. Rows 1 to 4 are due in week 
 | 21 | Minimal A2A endpoint in v1 | Phase 2 | Not in v1 |
 | 22 | First chat provider (PRD open question 2) | P3-01 | Decided in P3-01 |
 | 23 | Fallback if Inbox Zero or Granola refuse refresh tokens | P3-01 | `ingest_items` push from Hermes, a PRD deviation |
+| 24 | Publish the container images and release assets publicly while the repository stays private (an install that needs a GitHub token is not one command) | P5-01 | Public packages, and the assets copied to a public `SpaceshipCreative/tumnis-install` repository |
+| 25 | Systems `install.sh` supports | P5-02 | Ubuntu 22.04 and 24.04, Debian 12; macOS servers stay manual |
+| 26 | arm64 images | P5-01 | Yes, for the app, extract and Postgres images |
+| 27 | Local-only backups (repo1 only) so a new install can show backups ok without B2 | P5-05 | No: keep ADR-0006; a change needs a new ADR |
+| 28 | Tailscale required by the installer | P5-02 | Installed unless `--no-tailscale`, which means a local-only install with the self-signed certificate |
+| 29 | Where the install script downloads from | P5-01 | The `SpaceshipCreative/tumnis-install` release asset URL; a short domain later |
+| 30 | Database passwords in compose's `.env` and the credentials in each Hermes profile's `.env` (Tumnis key, `TYPESAFE_API_KEY`, GitHub, Coolify and Discord tokens), which AGENTS.md's no-secrets-in-environment rule does not list as exceptions | P5-02, P5-03 | Decided (Scott, 2026-11-07): keep today's design; both are in AGENTS.md's documented exception, the files mode 0600, compose's `.env` owned by the operator who runs `docker compose` and each profile's by `tumnis-agent` |
 
 ### K2 · Sources
 

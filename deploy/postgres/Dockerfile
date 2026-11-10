@@ -19,7 +19,7 @@ FROM supercronic-${TARGETARCH} AS supercronic
 FROM base
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends pgbackrest=2.59.1-1.pgdg12+1 \
+    && apt-get install -y --no-install-recommends pgbackrest=2.59.3-1.pgdg12+1 \
     && rm -rf /var/lib/apt/lists/* /etc/pgbackrest.conf \
     && install -d -o postgres -g postgres -m 0750 \
         /etc/pgbackrest /etc/pgbackrest/conf.d /var/lib/pgbackrest /var/spool/pgbackrest
