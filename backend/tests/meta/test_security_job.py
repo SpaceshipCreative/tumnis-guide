@@ -158,7 +158,6 @@ def test_security_job_blocks_on_high_findings() -> None:
 
 @pytest.mark.req("SEC-7")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:FIX-npm-audit-ignore")
 def test_npm_audit_ignores_carry_an_issue_link_and_an_expiry() -> None:
     """FIX-npm-audit-ignore-03
     The Security job hands a failing `npm audit` report to scripts/ci/npm_audit_ignore.py,

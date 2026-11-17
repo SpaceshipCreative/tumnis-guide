@@ -48,7 +48,6 @@ def _audit(tmp_path: Path, report: str, ignores: str, today: dt.date) -> int:
 
 @pytest.mark.req("SEC-7")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:FIX-npm-audit-ignore")
 def test_an_ignored_high_advisory_stops_blocking_until_its_expiry(tmp_path: Path) -> None:
     """FIX-npm-audit-ignore-01
     Given a report whose only high advisory is in the ignore file, the script exits 0 until
@@ -69,7 +68,6 @@ def test_an_ignored_high_advisory_stops_blocking_until_its_expiry(tmp_path: Path
 
 @pytest.mark.req("SEC-7")
 @pytest.mark.wp("P0-16")
-@pytest.mark.xfail(strict=True, reason="spec:FIX-npm-audit-ignore")
 def test_a_report_npm_could_not_produce_blocks(tmp_path: Path) -> None:
     """FIX-npm-audit-ignore-02
     Given output that is not an audit report (npm's error object when the registry cannot
