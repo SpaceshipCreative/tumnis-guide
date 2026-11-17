@@ -154,3 +154,18 @@ def test_security_job_blocks_on_high_findings() -> None:
     assert trivyignore_problems(f"{linked} exp:2026-05-01\n", today) == [
         "line 1: CVE-2026-0002 expires more than 30 days out"
     ]
+
+
+@pytest.mark.req("SEC-7")
+@pytest.mark.wp("P0-16")
+@pytest.mark.xfail(strict=True, reason="spec:FIX-npm-audit-ignore")
+def test_npm_audit_ignores_carry_an_issue_link_and_an_expiry() -> None:
+    """FIX-npm-audit-ignore-03
+    The Security job hands a failing `npm audit` report to scripts/ci/npm_audit_ignore.py,
+    and each `.npmauditignore` entry carries an issue link and an expiry at most 30 days out.
+    """
+    npm = next(step for step in security_steps() if "npm audit" in step)
+    assert "scripts/ci/npm_audit_ignore.py" in npm
+
+    ignores = (REPO / ".npmauditignore").read_text()
+    assert trivyignore_problems(ignores, dt.datetime.now(dt.UTC).date()) == []
