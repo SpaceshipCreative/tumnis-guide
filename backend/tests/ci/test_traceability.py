@@ -123,7 +123,6 @@ phases:
 
 @pytest.mark.req("Quality rule 4")
 @pytest.mark.wp("P0-03")
-@pytest.mark.xfail(strict=True, reason="spec:FIX-trace-daemon")
 def test_daemon_tests_count_towards_their_requirements(tmp_path: Path) -> None:
     """FIX-trace-daemon-01
     Given a done phase that traces SEC-8 and a repo whose only SEC-8 tests are the runner

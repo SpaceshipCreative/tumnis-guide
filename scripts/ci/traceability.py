@@ -87,15 +87,19 @@ def _load_refs(raw: list[dict[str, Any]]) -> list[TestRef]:
     ]
 
 
-def _collect(project: Path, prefix: str) -> list[TestRef]:
-    """Collect one pytest project with the pytest_trace plugin; node ids get `prefix`."""
+def _collect(
+    project: Path, prefix: str, python: tuple[str, ...] = (sys.executable,)
+) -> list[TestRef]:
+    """Collect one pytest project with the pytest_trace plugin; node ids get `prefix`.
+    `python` is the interpreter command that has the project's dependencies."""
     with tempfile.TemporaryDirectory() as tmp:
         target = Path(tmp) / "trace.json"
         path = os.pathsep.join(
             filter(None, [str(Path(__file__).parent), os.environ.get("PYTHONPATH")])
         )
         env = {**os.environ, "TRACE_JSON": str(target), "PYTHONPATH": path}
-        argv = [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "pytest_trace"]
+        env.pop("VIRTUAL_ENV", None)  # ours, not the project's: `uv run` would warn about it
+        argv = [*python, "-m", "pytest", "--collect-only", "-q", "-p", "pytest_trace"]
         result = subprocess.run(  # noqa: S603 (fixed argv, no shell)
             argv, cwd=project, env=env, capture_output=True, text=True, check=False
         )
@@ -106,13 +110,17 @@ def _collect(project: Path, prefix: str) -> list[TestRef]:
 
 
 def pytest_refs(repo: Path, trace_json: Path | None) -> list[TestRef]:
-    """From a trace.json, or by collecting backend/ and profiles/ (the harness tests and
-    the skill cases, P1-05) with the pytest_trace plugin."""
+    """From a trace.json, or by collecting backend/, profiles/ (the harness tests and the
+    skill cases, P1-05) and daemon/ with the pytest_trace plugin. The daemon is its own uv
+    project that this interpreter cannot import, so `uv run` collects it in its own
+    environment."""
     if trace_json is not None:
         return _load_refs(json.loads(trace_json.read_text()))
     refs = _collect(repo / "backend", "")
     if (repo / "profiles" / "conftest.py").is_file():
         refs += _collect(repo / "profiles", "profiles/")
+    if (repo / "daemon" / "pyproject.toml").is_file():
+        refs += _collect(repo / "daemon", "daemon/", ("uv", "run", "--quiet", "python"))
     return refs
 
 
@@ -203,7 +211,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--repo", type=Path, default=REPO)
     parser.add_argument("--plan", type=Path, help="default: <repo>/docs/plan/work-packages.yaml")
     parser.add_argument("--prd", type=Path, help="default: <repo>/docs/PRD.md")
-    parser.add_argument("--trace-json", type=Path, help="pytest refs; default: collect backend/")
+    parser.add_argument("--trace-json", type=Path, help="pytest refs; default: collect them")
     parser.add_argument("--out", type=Path, default=Path("trace.md"))
     parser.add_argument("--json", type=Path, help="also write the matrix as JSON")
     return parser.parse_args(argv)
