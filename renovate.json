@@ -39,6 +39,15 @@
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n[^\\n]*?(?<currentValue>\\d+\\.\\d+\\.\\d+[^\\s\"']*)"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "pgBackRest, pinned by apt version in deploy/postgres/Dockerfile. PGDG drops old versions, so a pin nobody bumps breaks the image build.",
+      "managerFilePatterns": ["/^deploy/postgres/Dockerfile$/"],
+      "matchStrings": ["pgbackrest=(?<currentValue>\\S+)"],
+      "depNameTemplate": "pgbackrest",
+      "datasourceTemplate": "deb",
+      "registryUrlTemplate": "https://apt.postgresql.org/pub/repos/apt?suite=bookworm-pgdg&components=main&binaryArch=amd64"
     }
   ]
 }

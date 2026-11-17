@@ -88,7 +88,6 @@ def test_renovate_pins_and_groups() -> None:
 
 @pytest.mark.req("SEC-7")
 @pytest.mark.wp("P0-28")
-@pytest.mark.xfail(strict=True, reason="spec:FIX-renovate-pgbackrest")
 def test_renovate_tracks_the_pgbackrest_apt_pin() -> None:
     """FIX-renovate-pgbackrest-01
     renovate.json has one regex manager for deploy/postgres/Dockerfile, on the `deb`
