@@ -102,3 +102,56 @@ def test_unknown_requirement_id_fails(tmp_path: Path) -> None:
 
     assert code == 1
     assert "FR-3.33" in _section(markdown, "Unknown")
+
+
+REPO = Path(__file__).resolve().parents[3]
+DAEMON_ONLY_PLAN = """\
+schema_version: 1
+phases:
+- id: 2
+  name: Agent layer
+  status: done
+  milestones:
+  - id: M2.1
+    name: Runner
+    wps:
+    - id: P2-07
+      title: Runner daemon
+      traces: [SEC-8]
+"""
+
+
+@pytest.mark.req("Quality rule 4")
+@pytest.mark.wp("P0-03")
+def test_daemon_tests_count_towards_their_requirements(tmp_path: Path) -> None:
+    """FIX-trace-daemon-01
+    Given a done phase that traces SEC-8 and a repo whose only SEC-8 tests are the runner
+    daemon's (its own uv project, which the backend's interpreter cannot collect), when
+    traceability collects the tests itself, then it exits 0 and SEC-8 has passing tests.
+    """
+    traceability = load("traceability")
+    (tmp_path / "backend").mkdir()
+    (tmp_path / "backend" / "test_nothing.py").write_text("def test_nothing() -> None: ...\n")
+    (tmp_path / "daemon").symlink_to(REPO / "daemon", target_is_directory=True)
+    plan, out = tmp_path / "plan.yaml", tmp_path / "trace.md"
+    plan.write_text(DAEMON_ONLY_PLAN)
+
+    code: int = traceability.main(
+        [
+            "--repo",
+            str(tmp_path),
+            "--plan",
+            str(plan),
+            "--prd",
+            str(REPO / "docs" / "PRD.md"),
+            "--out",
+            str(out),
+        ]
+    )
+
+    markdown = out.read_text()
+    assert code == 0, markdown
+    assert "SEC-8" not in _section(markdown, "Missing")
+    row = re.search(r"^\| SEC-8 \| 2 \| done \| (\d+) \| 0 \|$", markdown, re.MULTILINE)
+    assert row is not None, markdown
+    assert int(row.group(1)) >= 1
