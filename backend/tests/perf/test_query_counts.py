@@ -37,9 +37,10 @@ ENDPOINTS = {
 # Statements per request, the session check included (its lookup, then `set_config` and
 # the endpoint's own queries). Measured in CI (PR #88): projects 6 and board 9 at both
 # sizes; the others within their ceilings. A count above its ceiling, or one that differs
-# between the sizes, is a new query per row.
+# between the sizes, is a new query per row. projects is 7 since FIX-project-activity: one
+# more statement for the card's last agent activity (FR-1.1), approved by Scott 2026-11-11.
 CEILINGS = {
-    "projects": 6,
+    "projects": 7,
     "today": 5,
     "project_tasks": 5,
     "board": 9,

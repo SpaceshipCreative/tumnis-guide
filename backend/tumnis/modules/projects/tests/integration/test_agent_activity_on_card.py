@@ -31,7 +31,6 @@ pytestmark = [
 
 @pytest.mark.req("FR-1.1")
 @pytest.mark.wp("P0-17")
-@pytest.mark.xfail(strict=True, reason="spec:FIX-project-activity")
 async def test_project_shows_when_its_agent_was_last_active(  # noqa: PLR0917
     app: FastAPI,
     dbos: type[DBOS],

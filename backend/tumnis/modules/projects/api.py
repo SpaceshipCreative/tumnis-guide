@@ -8,6 +8,7 @@ there and marks the project changed for live clients.
 Health needs task facts, but tasks imports projects, so projects cannot import tasks: the
 tasks module registers a `ProjectStatsSource` at import (P0-18). Until then every project
 counts zero tasks and is on track. Reads ask the source once per page for every id on it.
+The agents module registers the card's last agent activity the same way (FR-1.1).
 """
 
 import re
@@ -124,7 +125,7 @@ class ProjectOut(ProjectCreate):
     health: Health
     open_count: int
     next_milestone: date | None
-    last_agent_activity_at: datetime | None = None  # always None until P2-04
+    last_agent_activity_at: datetime | None = None  # from agents' activity source
     subtask_threshold_min: int | None = None  # None: the workspace's threshold (FR-3.8)
     local_decisions_only: bool = False  # decisions never go to Jev (P1-02, Data flow rule 6)
     focus_cadence_min: int | None = None  # None: the default check-in cadence (P2-15)
@@ -218,6 +219,20 @@ def stats_source() -> ProjectStatsSource:
     return _source[0]
 
 
+# --- Agent activity (registered by agents, FR-1.1) ----------------------------------------
+
+# Per project id asked, when one of its agents' runs last started or finished; a project no
+# agent has worked in is absent. agents imports projects, so it registers this at import.
+ActivitySource = Callable[[AsyncSession, Sequence[UUID]], Awaitable[Mapping[UUID, datetime]]]
+_activity: list[ActivitySource | None] = [None]
+
+
+def register_activity_source(src: ActivitySource) -> None:
+    """The agents module registers its source at import; without one no project shows
+    agent activity."""
+    _activity[0] = src
+
+
 # --- Reading -------------------------------------------------------------------------------
 
 
@@ -272,13 +287,15 @@ async def _links_of(s: AsyncSession, ids: Sequence[UUID]) -> dict[UUID, list[Pro
 
 
 async def _outs(s: AsyncSession, rows: Sequence[_Row], now: datetime | None) -> list[ProjectOut]:
-    """Rows as ProjectOut: one links query and one stats call for them all."""
+    """Rows as ProjectOut: one links query, one stats call and one activity call for them
+    all."""
     ids = [row.id for row in rows]
     if not ids:
         return []
     today = await _today(now)
     stats = await stats_source().stats(s, ids, today)
     links = await _links_of(s, ids)
+    active = await _activity[0](s, ids) if _activity[0] else {}
     out = []
     for row in rows:
         st = stats.get(row.id, ZERO_STATS)
@@ -289,6 +306,7 @@ async def _outs(s: AsyncSession, rows: Sequence[_Row], now: datetime | None) -> 
                 health=project_health(st.health_facts),
                 open_count=st.open_count,
                 next_milestone=next_milestone(row.deadline, st.next_open_due, today),
+                last_agent_activity_at=active.get(row.id),
             )
         )
     return out
