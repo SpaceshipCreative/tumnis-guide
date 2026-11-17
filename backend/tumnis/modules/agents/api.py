@@ -3191,6 +3191,32 @@ async def agent_feed(s: AsyncSession) -> AgentFeedOut:
     )
 
 
+# --- A project's last agent activity (projects' card, FR-1.1) --------------------------------
+
+
+async def _project_activity(s: AsyncSession, project_ids: Sequence[UUID]) -> dict[UUID, datetime]:
+    """projects' activity source: per project, when a run of one of its agents (the run's
+    profile's project, as `project_of_run`) last started or finished, in one query for every
+    id asked. A project with no started run is absent."""
+    rows = await s.execute(
+        select(
+            _profiles.c.project_id,
+            func.max(func.greatest(_runs.c.started_at, _runs.c.finished_at)).label("at"),
+        )
+        .join(_runs, _runs.c.profile_id == _profiles.c.id)
+        .where(
+            _profiles.c.project_id.in_(project_ids),
+            _runs.c.started_at.is_not(None),  # a run cancelled in the queue did nothing
+            _runs.c.deleted_at.is_(None),
+        )
+        .group_by(_profiles.c.project_id)
+    )
+    return {row.project_id: row.at for row in rows}
+
+
+projects.register_activity_source(_project_activity)
+
+
 # --- Seed writers (the acceptance seed, Scott decision 37) -----------------------------------
 
 
