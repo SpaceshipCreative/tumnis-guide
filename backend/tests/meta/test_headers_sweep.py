@@ -239,3 +239,33 @@ async def test_error_responses_send_security_headers(error_app: FastAPI) -> None
     for response in responses.values():
         for name in ("content-security-policy", "strict-transport-security", "permissions-policy"):
             assert response.headers.get(name) == reference.get(name)
+
+
+@pytest.mark.req("SAAS-1")
+@pytest.mark.wp("P0-10")
+async def test_issue_48_wrong_method_on_v1_is_405_with_the_shell_mounted(
+    swept_app: FastAPI,
+) -> None:
+    """Issue #48
+    Given the built frontend is mounted, a wrong method on a `/v1` route still answers 405
+    `method_not_allowed` with `Allow` (DELETE on a GET/POST route, GET on a POST-only one);
+    an unknown `/v1` path stays 404 and a page path and a hashed asset still get the shell.
+    """
+    from tumnis.core.tests.integration._demo import client_at  # noqa: PLC0415
+
+    async with client_at(swept_app) as http:
+        wrong_write = await http.delete("/v1/projects")
+        wrong_read = await http.get("/v1/auth/login")
+        unknown = await http.delete("/v1/no-such-route")
+        page = await http.get("/login")
+        asset = await http.get("/assets/index-abc123.js")
+
+    for response in (wrong_write, wrong_read):
+        assert response.status_code == 405, response.text
+        assert response.json()["code"] == "method_not_allowed"
+        assert response.headers["allow"]
+    assert unknown.status_code == 404, unknown.text
+    assert unknown.json()["code"] == "not_found"
+    assert page.status_code == 200
+    assert '<div id="root">' in page.text
+    assert asset.status_code == 200

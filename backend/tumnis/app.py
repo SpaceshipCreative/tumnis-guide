@@ -13,9 +13,10 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
+from starlette.routing import Match, Mount
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
@@ -60,14 +61,10 @@ IMMUTABLE = "public, max-age=31536000, immutable"
 
 
 class ShellFiles(StaticFiles):
-    """The built frontend. Anything but GET/HEAD is 404, not 405, so unknown API routes
-    (for example the test routes with real adapters) are not found rather than refused.
-    An unknown page path (`/login`, `/setup`, P0-13) gets the shell's index.html, so the
-    app's own router takes it."""
+    """The built frontend. An unknown page path (`/login`, `/setup`, P0-13) gets the
+    shell's index.html, so the app's own router takes it."""
 
     async def get_response(self, path: str, scope: Scope) -> Response:
-        if scope["method"] not in ("GET", "HEAD"):
-            raise HTTPException(status_code=404)
         try:
             response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
@@ -80,6 +77,21 @@ class ShellFiles(StaticFiles):
         hashed = path.startswith("assets/")
         response.headers["Cache-Control"] = IMMUTABLE if hashed else "no-cache"
         return response
+
+
+class ShellMount(Mount):
+    """The shell's mount at `/`. It takes only what the single-page app can answer: a GET
+    or HEAD outside the API's paths. Anything else is left to the router, so a wrong
+    method on a `/v1` route keeps its 405 with `Allow` and an unknown API path its 404
+    (issue #48: a mount at `/` matches every request, and a full match beats a route's
+    wrong-method match)."""
+
+    def matches(self, scope: Scope) -> tuple[Match, Scope]:
+        if scope["type"] == "http":
+            first = scope["path"].lstrip("/").partition("/")[0]
+            if scope["method"] not in ("GET", "HEAD") or (first in NOT_SHELL and first != "assets"):
+                return Match.NONE, {}
+        return super().matches(scope)
 
 
 @asynccontextmanager
@@ -270,5 +282,7 @@ def create_app(
     _mount_agent_doors(app, settings)
     shell = shell_dir or SHELL_DIR
     if shell.is_dir():
-        app.mount("/", ShellFiles(directory=shell, html=True), name="shell")
+        app.router.routes.append(
+            ShellMount("/", app=ShellFiles(directory=shell, html=True), name="shell")
+        )
     return app
