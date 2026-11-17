@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -83,3 +84,36 @@ def test_renovate_pins_and_groups() -> None:
         and any("profiles" in pattern for pattern in manager.get("managerFilePatterns", []))
         for manager in managers
     ), "profiles/*/VERSION pins need a regex manager"
+
+
+@pytest.mark.req("SEC-7")
+@pytest.mark.wp("P0-28")
+def test_renovate_tracks_the_pgbackrest_apt_pin() -> None:
+    """FIX-renovate-pgbackrest-01
+    renovate.json has one regex manager for deploy/postgres/Dockerfile, on the `deb`
+    datasource against the PGDG repository, whose match string finds the pgBackRest apt
+    pin there (PGDG drops old versions, so a pin nobody bumps breaks the image build).
+    """
+    config = json.loads((REPO / "renovate.json").read_text())
+    dockerfile = (REPO / "deploy" / "postgres" / "Dockerfile").read_text()
+    pins = re.findall(r"pgbackrest=(\S+)", dockerfile)
+    assert len(pins) == 1, pins
+
+    managers = [
+        manager
+        for manager in config["customManagers"]
+        if any("deploy/postgres/Dockerfile" in p for p in manager["managerFilePatterns"])
+    ]
+    assert len(managers) == 1, managers
+    [manager] = managers
+    assert manager["customType"] == "regex"
+    assert manager["datasourceTemplate"] == "deb"
+    assert manager["depNameTemplate"] == "pgbackrest"
+    assert manager["registryUrlTemplate"].startswith("https://apt.postgresql.org/pub/repos/apt?")
+    found = [
+        match.group("currentValue")
+        for pattern in manager["matchStrings"]
+        # Renovate's named groups are JavaScript's `(?<name>`; Python spells them `(?P<name>`
+        for match in re.finditer(pattern.replace("(?<", "(?P<"), dockerfile)
+    ]
+    assert found == pins
