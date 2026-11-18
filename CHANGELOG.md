@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Frontend dev dependencies: undici 8.11.2 to 8.12.3 (GHSA-4qv8-2p9j-2685, high), serialize-javascript 7.1.2 to 7.1.4 and fast-uri 3.1.8 to 3.1.9, clearing the `npm audit` advisories published 2026-10-24 that fail the `security` job.
 - OpenTelemetry 1.45.1 to 1.45.2 (contrib 0.66b1 to 0.66b2) for CVE-2026-126360, a denial of service through a long `traceparent` header in opentelemetry-api, which fails the `security` job since the advisory was published 2026-11-05.
 - npm audit ignores (SEC-7): a high or critical npm advisory with no fixed version can be listed in `.npmauditignore` with an issue link and an expiry at most 30 days out, as `.trivyignore` already allows for the image; `scripts/ci/npm_audit_ignore.py` applies it in the `security` job. picomatch GHSA-fc5q-39xc-vjpf (ReDoS, build and test tooling only, no fixed version) is ignored until 2026-12-17.
+- Extract image (SEC-7): soupsieve 2.10 to 4.1.1 (CVE-2026-126190 and CVE-2026-126191, high; docling group only, through beautifulsoup4), clearing the two findings published 2026-11-13 that fail the `docling` workflow's Trivy scan.
 
 ### Not in this release
 
