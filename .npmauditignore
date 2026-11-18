@@ -1,0 +1,8 @@
+# npm audit findings accepted for a while (P0-16, SEC-7), read by scripts/ci/npm_audit_ignore.py.
+# Same rule as .trivyignore: only a HIGH or CRITICAL advisory with no fix yet, one GHSA id per
+# line, with an issue link (on the line or in the comment right above it) and an expiry no
+# more than 30 days out, written exp:YYYY-MM-DD. An entry stops working the day after its
+# expiry. backend/tests/meta/test_security_job.py checks the format.
+
+# https://github.com/SpaceshipCreative/tumnis-guide/issues/204 picomatch ReDoS, no fixed version yet; build and test tooling only
+GHSA-fc5q-39xc-vjpf exp:2026-12-17

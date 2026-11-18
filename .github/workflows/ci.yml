@@ -382,7 +382,8 @@ jobs:
 
   # Security (P0-16, SEC-7): every tool exits non-zero on a high or critical finding, and
   # the job is required, so such a finding blocks the merge. A finding with no fix yet goes
-  # in .trivyignore with an issue link and an expiry at most 30 days out (T-P0-16-17).
+  # in .trivyignore (image) or .npmauditignore (npm) with an issue link and an expiry at most
+  # 30 days out (T-P0-16-17, FIX-npm-audit-ignore).
   security:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -399,9 +400,13 @@ jobs:
         run: |
           uv export --frozen --no-emit-project -o "$RUNNER_TEMP/requirements.txt"
           uvx pip-audit==2.10.1 --strict --disable-pip --progress-spinner off -r "$RUNNER_TEMP/requirements.txt"
+      # npm audit has no ignore list: when it fails, npm_audit_ignore.py reads the saved report
+      # and blocks unless .npmauditignore lists every high or critical advisory, unexpired.
       - name: npm dependencies (npm audit, high and critical)
         working-directory: frontend
-        run: npm audit --audit-level=high
+        run: >-
+          npm audit --audit-level=high --json > "$RUNNER_TEMP/npm-audit.json"
+          || python3 ../scripts/ci/npm_audit_ignore.py "$RUNNER_TEMP/npm-audit.json"
       - name: Secrets (gitleaks over the commits this change adds)
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
